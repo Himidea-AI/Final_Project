@@ -1,0 +1,28 @@
+graph TD
+    Client[Streamlit Frontend] --> API[FastAPI Backend]
+    API --> Graph[LangGraph Workflow]
+
+    Graph --> Commercial[상권분석 Agent]
+    Graph --> Population[유동인구 Agent]
+    Graph --> Demographics[인구통계 Agent]
+    Graph --> Cost[비용산정 Agent]
+    Graph --> Competition[경쟁분석 Agent]
+    Graph --> Trend[트렌드 Agent]
+    Graph --> Legal[법규검토 Agent]
+    Graph --> Supervisor[Supervisor]
+    Graph --> Report[리포트 Agent]
+
+    Commercial --> SEMAS[소상공인 API]
+    Commercial --> Golmok[우리마을가게 API]
+    Population --> Seoul[서울 열린데이터]
+    Demographics --> SGIS[통계청 SGIS]
+    Cost --> MOLIT[국토교통부 API]
+    Competition --> SEMAS
+    Legal --> VectorDB[ChromaDB / RAG]
+    Trend --> SNS[SNS 크롤링]
+
+    Supervisor -->|재분석| Commercial
+    Supervisor -->|완료| Report
+
+    Report --> PostgreSQL[(PostgreSQL)]
+    API --> Redis[(Redis Cache)]

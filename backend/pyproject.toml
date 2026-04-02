@@ -1,0 +1,12 @@
+[project]
+name = "mapo-franchise-simulator"
+version = "0.1.0"
+description = "AI Agent 기반 마포구 프랜차이즈 상권분석 시뮬레이터"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["../tests"]
