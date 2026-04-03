@@ -43,8 +43,21 @@ async def _simulate_digital_twin_mangwon(business_type: str) -> str:
     log_agent("MiroFishAdapter", "THINKING", "망원1동 미로피쉬 디지털 트윈 시뮬레이션 환경(Ollama-Phi3)을 초기화합니다.")
     
     # 가상의 에이전트 2명: A(저가형 프랜차이즈 사장), B(인스타 감성 개인카페/음식점 사장)
-    prompt_a = f"당신은 망원1동에서 저가형 매장을 운영중인 사장입니다. 근방에 새로운 '{business_type}' 점포가 개업했습니다. 매출 방어를 위해 어떤 구체적인 할인이나 마케팅 전략을 취할 것인지 1문장으로 짧게 답하세요."
-    prompt_b = f"당신은 망원1동의 힙한 감성 매장 사장입니다. 근방에 새로운 '{business_type}' 점포가 개업했습니다. 단골 고객을 뺏기지 않기 위해 서비스를 어떻게 강화할 것인지 1문장으로 짧게 답하세요."
+    # Phi-3 등 소형 모델의 추론 성능(특히 한국어)을 높이기 위해 프롬프트를 영어로 주고, 생각(Thought) 과정을 영어로 거친 뒤 한국어로 번역해 발화하게 합니다.
+    prompt_a = (
+        f"You are the owner of a low-cost franchise store in Mangwon 1-dong. "
+        f"A new '{business_type}' store just opened nearby. "
+        f"1. First, think step by step in English about your aggressive marketing or discount strategy to defend your sales. "
+        f"2. Then, provide your final answer in ONE short Korean sentence.\n"
+        f"Format:\nThought: [Your English thoughts]\nKorean Answer: [Your final Korean sentence]"
+    )
+    prompt_b = (
+        f"You are the owner of a hip boutique store in Mangwon 1-dong. "
+        f"A new '{business_type}' store just opened nearby. "
+        f"1. First, think step by step in English about how to improve service and keep your regular customers. "
+        f"2. Then, provide your final answer in ONE short Korean sentence.\n"
+        f"Format:\nThought: [Your English thoughts]\nKorean Answer: [Your final Korean sentence]"
+    )
     
     log_agent("Competitor_Agent_A", "TOOL_CALL", "프랜차이즈 점주의 반응을 시뮬레이션 중 (Phi-3 호출)...")
     response_a = await ask_ollama_phi3(prompt_a)
