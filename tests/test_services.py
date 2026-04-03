@@ -1,21 +1,39 @@
 """
 API 클라이언트 검증 — 외부 API 연동 테스트
+모든 테스트는 외부 API를 호출하지 않고 httpx mock으로 검증.
 """
+import pytest
+import httpx
+from unittest.mock import AsyncMock, patch
+
+from src.services.base_client import BaseAPIClient
 
 
-def test_base_client_retry():
-    """BaseAPIClient 재시도 로직 테스트"""
-    # TODO: 3회 재시도 동작 검증
-    pass
+def _mock_response(status_code: int = 200, json_data: dict = None) -> httpx.Response:
+    """테스트용 mock response 생성 (request 인스턴스 포함)"""
+    response = httpx.Response(
+        status_code,
+        json=json_data,
+        request=httpx.Request("GET", "https://example.com"),
+    )
+    return response
 
 
-def test_semas_api_client():
-    """소상공인 API 클라이언트 테스트"""
-    # TODO: 정상 응답 파싱 검증
-    pass
+@pytest.mark.asyncio
+async def test_base_client_get():
+    """BaseAPIClient GET 요청 동작 검증"""
+    client = BaseAPIClient(base_url="https://example.com", timeout=5)
+
+    with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=_mock_response(json_data={"status": "ok"})):
+        result = await client.get("/test")
+        assert result == {"status": "ok"}
 
 
-def test_seoul_opendata_client():
-    """서울 열린데이터 API 클라이언트 테스트"""
-    # TODO: 정상 응답 파싱 검증
-    pass
+@pytest.mark.asyncio
+async def test_base_client_post():
+    """BaseAPIClient POST 요청 동작 검증"""
+    client = BaseAPIClient(base_url="https://example.com", timeout=5)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=_mock_response(json_data={"result": "created"})):
+        result = await client.post("/test", json_data={"key": "value"})
+        assert result == {"result": "created"}

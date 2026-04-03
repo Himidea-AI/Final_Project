@@ -38,3 +38,14 @@ class BaseAPIClient:
     async def get(self, endpoint: str, params: Optional[dict] = None) -> dict:
         """GET 요청"""
         return await self._request("GET", endpoint, params=params)
+
+    async def post(self, endpoint: str, json_data: dict = None, params: dict = None) -> dict:
+        """POST 요청"""
+        url = f"{self.base_url}{endpoint}"
+        self._log("TOOL_CALL", f"POST {url}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(url, json=json_data, params=params)
+            response.raise_for_status()
+            self._log("SUCCESS", f"Status {response.status_code}")
+            return response.json()
