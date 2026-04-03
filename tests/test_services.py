@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 from src.services.base_client import BaseAPIClient
 from src.services.seoul_opendata import SeoulOpendataClient
 from src.services.sgis_api import SgisAPIClient
+from src.services.semas_api import SemasAPIClient
 
 
 def _mock_response(status_code: int = 200, json_data: dict = None) -> httpx.Response:
@@ -178,3 +179,23 @@ async def test_sgis_get_resident_population():
     with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
         result = await client.get_resident_population(adm_cd="11440101")
         assert result[0]["population"] == 15000
+
+
+# ---------------------------------------------------------------------------
+# SemasAPIClient 테스트
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_semas_get_business_density():
+    client = SemasAPIClient(api_key="test_key")
+    mock = _mock_response(json_data={
+        "body": {
+            "items": [{"adongNm": "망원1동", "storCnt": 150, "bsnsCdNm": "커피전문점/카페"}],
+            "totalCount": 1,
+        }
+    })
+    with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
+        result = await client.get_business_density(adong_cd="11440101", business_code="Q01A01")
+        assert result["total_count"] == 1
+        assert result["items"][0]["store_count"] == 150
