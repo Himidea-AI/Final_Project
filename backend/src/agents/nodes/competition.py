@@ -19,6 +19,7 @@ async def ask_ollama_phi3(prompt: str) -> str:
     url = "http://localhost:11434/api/generate"
     payload = {
         "model": "phi3",
+        "system": "You are a realistic local franchise owner and a hardcore market analyst in Seoul. Answer in simple, plain Korean. Focus ONLY on realistic business survival, revenue, and marketing strategies. DO NOT use any IT jargon, code, or technology terms under any circumstances.",
         "prompt": prompt,
         "stream": False
     }
