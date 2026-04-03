@@ -18,11 +18,11 @@ async def ask_ollama_local(prompt: str) -> str:
     """로컬 Ollama 모델에게 직접 질의하는 비동기 브릿지"""
     url = "http://localhost:11434/api/generate"
     payload = {
-        "model": "qwen3.5:9b",
+        "model": "qwen3.5:0.8b",
         "system": (
             "너는 망원동에서 10년 넘게 카페를 운영한 베테랑 사장님이야. IT 용어나 번역체는 절대 쓰지 마.\n\n"
             "[답변 가이드라인]\n"
-            "1. 생각은 영어(Thought)로 하되, 출력(Answer)은 반드시 한국어 구어체로 한다.\n"
+            "1. 생각하는 과정 서술이나 영어 문장을 일절 생략하고, 즉시 한국어 구어체 답변만 짧게 말해.\n"
             "2. '계약발샵', '카팡가' 같은 없는 단어는 절대 쓰지 마.\n"
             "3. 실제 장사꾼들이 쓰는 '단골', '할인', '홍보', '입소문' 같은 단어만 사용해.\n\n"
             "[말투 예시 - 반드시 이 톤을 따라할 것]\n"
@@ -51,29 +51,25 @@ async def ask_ollama_local(prompt: str) -> str:
 
 async def _simulate_digital_twin_mangwon(business_type: str) -> str:
     """미로피쉬 쇼규모 테스트: 망원1동 경쟁자 AI의 창발적 동적 반응 시뮬레이션"""
-    log_agent("MiroFishAdapter", "THINKING", "망원1동 미로피쉬 디지털 트윈 시뮬레이션 환경(Ollama Qwen-3.5-9B)을 초기화합니다.")
+    log_agent("MiroFishAdapter", "THINKING", "망원1동 미로피쉬 디지털 트윈 시뮬레이션 환경(Ollama Qwen-3.5-0.8B)을 초기화합니다.")
     
     # 가상의 에이전트 2명: A(저가형 프랜차이즈 사장), B(인스타 감성 개인카페/음식점 사장)
     prompt_a = (
         f"You are the owner of a low-cost franchise store in Mangwon 1-dong. "
         f"A new '{business_type}' store just opened nearby. "
-        f"1. First, think step by step in English about your aggressive marketing or discount strategy to defend your sales. "
-        f"2. Then, provide your final answer in ONE short Korean sentence.\n"
-        f"Format:\nThought: [Your English thoughts]\nKorean Answer: [Your final Korean sentence]"
+        f"What is your immediate, aggressive marketing strategy? Provide your FINAL answer directly in ONE short Korean sentence starting with '[발화]'. No English, no thinking process."
     )
     prompt_b = (
         f"You are the owner of a hip boutique store in Mangwon 1-dong. "
         f"A new '{business_type}' store just opened nearby. "
-        f"1. First, think step by step in English about how to improve service and keep your regular customers. "
-        f"2. Then, provide your final answer in ONE short Korean sentence.\n"
-        f"Format:\nThought: [Your English thoughts]\nKorean Answer: [Your final Korean sentence]"
+        f"How will you keep your regular customers? Provide your FINAL answer directly in ONE short Korean sentence starting with '[발화]'. No English, no thinking process."
     )
     
-    log_agent("Competitor_Agent_A", "TOOL_CALL", "프랜차이즈 점주의 반응을 시뮬레이션 중 (Qwen 9B 호출)...")
+    log_agent("Competitor_Agent_A", "TOOL_CALL", "프랜차이즈 점주의 반응을 시뮬레이션 중 초경량 0.8B...")
     response_a = await ask_ollama_local(prompt_a)
     log_agent("Competitor_Agent_A", "SUCCESS", f"발화: \"{response_a}\"")
     
-    log_agent("Competitor_Agent_B", "TOOL_CALL", "개인 매장 점주의 반응을 시뮬레이션 중 (Qwen 9B 호출)...")
+    log_agent("Competitor_Agent_B", "TOOL_CALL", "개인 매장 점주의 반응을 시뮬레이션 중 초경량 0.8B...")
     response_b = await ask_ollama_local(prompt_b)
     log_agent("Competitor_Agent_B", "SUCCESS", f"발화: \"{response_b}\"")
     

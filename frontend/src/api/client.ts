@@ -8,7 +8,7 @@ const USE_MOCK = false; // 프론트엔드 테스트를 위해 강제 Mock 모�
 
 const apiClient = axios.create({
   baseURL: "http://localhost:8000",
-  timeout: 120000, // 시뮬레이션 최대 120초 (Ollama 추론 고려)
+  timeout: 300000, // 시뮬레이션 넉넉하게 최대 300초 보호
   headers: {
     "Content-Type": "application/json",
   },
