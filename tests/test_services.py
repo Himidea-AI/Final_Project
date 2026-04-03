@@ -10,6 +10,7 @@ from src.services.base_client import BaseAPIClient
 from src.services.seoul_opendata import SeoulOpendataClient
 from src.services.sgis_api import SgisAPIClient
 from src.services.semas_api import SemasAPIClient
+from src.services.golmok_api import GolmokAPIClient
 
 
 def _mock_response(status_code: int = 200, json_data: dict = None) -> httpx.Response:
@@ -199,3 +200,27 @@ async def test_semas_get_business_density():
         result = await client.get_business_density(adong_cd="11440101", business_code="Q01A01")
         assert result["total_count"] == 1
         assert result["items"][0]["store_count"] == 150
+
+
+# ---------------------------------------------------------------------------
+# GolmokAPIClient 테스트
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_golmok_get_estimated_sales():
+    client = GolmokAPIClient(api_key="test_key")
+    mock = _mock_response(json_data={
+        "VwsmTrdarSelng": {
+            "list_total_count": 1,
+            "row": [{
+                "STDR_YR_CD": "2025", "STDR_QU_CD": "4", "TRDAR_CD": "1001",
+                "SVC_INDUTY_CD": "CS100001", "THSMON_SELNG_AMT": 50000000,
+                "THSMON_SELNG_CO": 3000, "MDW_SELNG_AMT": 8000000, "WKN_SELNG_AMT": 4000000,
+            }],
+        }
+    })
+    with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
+        result = await client.get_estimated_sales(trdar_cd="1001", svc_induty_cd="CS100001")
+        assert result["monthly_sales"] == 50000000
+        assert result["weekday_sales"] == 8000000
