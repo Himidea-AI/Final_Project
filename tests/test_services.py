@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from src.services.base_client import BaseAPIClient
 from src.services.seoul_opendata import SeoulOpendataClient
+from src.services.sgis_api import SgisAPIClient
 
 
 def _mock_response(status_code: int = 200, json_data: dict = None) -> httpx.Response:
@@ -142,3 +143,38 @@ async def test_seoul_opendata_parse_subway():
     assert result["station"] == "합정"
     assert result["total_ride"] == 30000
     assert result["total_alight"] == 28000
+
+
+# ---------------------------------------------------------------------------
+# SgisAPIClient 테스트
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sgis_authenticate():
+    """SgisAPIClient.authenticate OAuth2 토큰 발급 검증"""
+    client = SgisAPIClient(consumer_key="test_key", consumer_secret="test_secret")
+    mock = _mock_response(
+        json_data={"errMsg": "Success", "errCd": 0, "result": {"accessToken": "mock_token_12345"}}
+    )
+    with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
+        token = await client.authenticate()
+        assert token == "mock_token_12345"
+        assert client._access_token == "mock_token_12345"
+
+
+@pytest.mark.asyncio
+async def test_sgis_get_resident_population():
+    """SgisAPIClient.get_resident_population 응답 파싱 검증"""
+    client = SgisAPIClient(consumer_key="test_key", consumer_secret="test_secret")
+    client._access_token = "mock_token"
+    mock = _mock_response(
+        json_data={
+            "errMsg": "Success",
+            "errCd": 0,
+            "result": [{"adm_cd": "11440101", "population": 15000}],
+        }
+    )
+    with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
+        result = await client.get_resident_population(adm_cd="11440101")
+        assert result[0]["population"] == 15000
