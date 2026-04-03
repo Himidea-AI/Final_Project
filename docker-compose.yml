@@ -1,16 +1,22 @@
+# 마포구 프랜차이즈 상권분석 시뮬레이터 — Docker Compose 구성
+# 실행: docker compose up --build
+# 접속: Frontend http://localhost | Backend API http://localhost:8000
+
 version: "3.8"
 
 services:
+  # React 프론트엔드 — Nginx로 정적 파일 서빙 + API 리버스 프록시
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "80:80"
-      - "443:443"
+      - "80:80"       # HTTP
+      - "443:443"     # HTTPS (추후 SSL 적용 시)
     depends_on:
       - backend
 
+  # FastAPI 백엔드 — AI Agent 오케스트레이션 + API 서버
   backend:
     build:
       context: ./backend
@@ -24,6 +30,7 @@ services:
       - redis
       - chromadb
 
+  # PostgreSQL — 상권통계, 시뮬레이션 결과 저장
   db:
     image: postgres:16-alpine
     environment:
@@ -35,18 +42,20 @@ services:
     ports:
       - "5432:5432"
 
+  # Redis — 시뮬레이션 결과 캐시 + Job 상태 관리
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
 
+  # ChromaDB — 법률 문서 Vector DB (RAG용, OpenAI 임베딩)
   chromadb:
     image: chromadb/chroma:latest
     ports:
-      - "8001:8000"
+      - "8001:8000"   # 호스트 8001 → 컨테이너 8000
     volumes:
       - chroma_data:/chroma/chroma
 
 volumes:
-  postgres_data:
-  chroma_data:
+  postgres_data:    # PostgreSQL 데이터 영속화
+  chroma_data:      # ChromaDB 벡터 데이터 영속화
