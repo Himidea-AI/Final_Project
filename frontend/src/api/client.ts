@@ -4,11 +4,11 @@
 import axios from "axios";
 import type { SimulationInput, SimulationOutput, JobStatus } from "../types";
 
-const USE_MOCK = true; // 프론트엔드 테스트를 위해 강제 Mock 모드 활성화
+const USE_MOCK = false; // 프론트엔드 테스트를 위해 강제 Mock 모드 (해제 완료)
 
 const apiClient = axios.create({
-  baseURL: "/api",
-  timeout: 60000, // 시뮬레이션 최대 60초
+  baseURL: "http://localhost:8000",
+  timeout: 120000, // 시뮬레이션 최대 120초 (Ollama 추론 고려)
   headers: {
     "Content-Type": "application/json",
   },

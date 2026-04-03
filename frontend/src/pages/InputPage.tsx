@@ -87,11 +87,11 @@ function InputPage() {
     try {
       const result = await runSimulation(inputData);
       console.log("Simulation Result:", result);
-      alert("시뮬레이션 완료! (결과: " + result.ai_recommendation + ")");
-      navigate('/map');
+      // alert() 팝업(Mock용) 제거, 응답 데이터를 프론트 Router state로 Map 화면에 전달
+      navigate('/map', { state: { simData: result } });
     } catch (error) {
       console.error(error);
-      alert("오류가 발생했습니다.");
+      alert("백엔드 에이전트 실행 중 오류가 발생했습니다. (UVicorn 터미널 확인)");
     }
   };
 
