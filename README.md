@@ -34,8 +34,8 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 
 | 역할 | 담당자 | 담당 디렉토리 |
 |------|--------|-------------|
-| A1 — 데이터 엔지니어 | 혁 | `backend/src/services/`, `backend/src/database/`, `data/` |
-| A2 — RAG + 법률 | 혁 | `backend/src/chains/`, `backend/src/database/vector_db.py` |
+| A1 — 데이터 엔지니어 | 찬영 | `backend/src/services/`, `backend/src/database/`, `data/` |
+| A2 — RAG + 법률 | 봉환 | `backend/src/chains/`, `backend/src/database/vector_db.py` |
 
 ### 트랙 B — AI 엔진
 

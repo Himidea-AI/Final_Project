@@ -17,8 +17,8 @@
 
 | 역할 | 담당자 | 담당 디렉토리 |
 |------|--------|-------------|
-| A1 — 데이터 엔지니어 | 혁 | `backend/src/services/`, `backend/src/database/`, `data/` |
-| A2 — RAG + 법률 | 혁 | `backend/src/chains/`, `backend/src/database/vector_db.py`, `backend/src/services/ftc_franchise.py` |
+| A1 — 데이터 엔지니어 | 찬영 | `backend/src/services/`, `backend/src/database/`, `data/` |
+| A2 — RAG + 법률 | 봉환 | `backend/src/chains/`, `backend/src/database/vector_db.py`, `backend/src/services/ftc_franchise.py` |
 
 ### 트랙 B — AI 엔진 (2명)
 
