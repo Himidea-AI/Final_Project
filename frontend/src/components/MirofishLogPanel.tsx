@@ -10,8 +10,12 @@ export const MirofishLogPanel: React.FC<Props> = ({ rawSummary, threatLevel }) =
   const [isTyping, setIsTyping] = useState(true);
 
   useEffect(() => {
+    // 이전 타이머들 취소 및 로그 초기화 (React StrictMode 중복 실행 방지)
+    setLogs([]);
+    setIsTyping(true);
+    let timeouts: number[] = [];
+    
     // Parse the rawSummary string from backend into log lines
-    // Expected format: "[디지털트윈 경고] ... \n- 저가매장 대응: ... \n- 감성매장 대응: ..."
     const lines = rawSummary.split('\n').filter(line => line.trim() !== '');
     
     let delay = 500;
@@ -44,14 +48,20 @@ export const MirofishLogPanel: React.FC<Props> = ({ rawSummary, threatLevel }) =
 
     // Animate rendering
     parsedLogs.forEach((log, index) => {
-      setTimeout(() => {
+      const timer = window.setTimeout(() => {
         setLogs(prev => [...prev, log]);
         if (index === parsedLogs.length - 1) {
           setIsTyping(false);
         }
       }, delay);
+      timeouts.push(timer);
       delay += 1200;
     });
+
+    // Cleanup function
+    return () => {
+      timeouts.forEach(clearTimeout);
+    };
   }, [rawSummary]);
 
   return (
