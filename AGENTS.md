@@ -1,0 +1,94 @@
+# AGENTS.md — 마포구 프랜차이즈 상권분석 시뮬레이터
+
+> 이 파일은 모든 AI 코딩 에이전트(Claude, Gemini, Cursor, Copilot, Antigravity, Codex 등)가 읽는 공통 규칙입니다.
+
+## 프로젝트 개요
+
+마포구 내 프랜차이즈 신규 출점 시뮬레이션 플랫폼. LangGraph 기반 멀티 에이전트가 상권, 인구, 경쟁, 법률 등을 분석합니다.
+
+## 팀원별 담당 영역 (절대 준수)
+
+| 역할 | 담당 디렉토리 | 수정 가능 범위 |
+|------|-------------|--------------|
+| A — 데이터 엔지니어 | `backend/src/services/`, `backend/src/database/`, `data/` | 본인 영역만 |
+| B — AI Agent 개발자 | `backend/src/agents/`, `backend/src/schemas/` | 본인 영역만 |
+| C — 딥러닝 모델 | `models/` | 본인 영역만 |
+| D — RAG + 법률 | `backend/src/chains/` | 본인 영역만 |
+| E — 프론트엔드 | `frontend/` | 본인 영역만 |
+| F — PM / 검증 | `validation/`, `models/lstm_forecast/`, `docs/` | 본인 영역만 |
+
+**공통 파일** (`backend/src/config/`, `docker-compose.yml`, `.env.example`, `README.md`)은 팀 협의 후에만 수정합니다.
+
+### 핵심 규칙
+
+- **다른 팀원의 디렉토리에 있는 파일을 수정하지 마세요.**
+- 인터페이스(스키마, API 엔드포인트)를 변경해야 할 경우 **기존 인터페이스를 유지하면서 확장**하세요.
+- 기존 함수의 시그니처를 변경하면 다른 팀원의 코드가 깨집니다.
+
+## 코드 컨벤션
+
+### Python (Backend)
+
+- **포매터/린터**: Ruff (설정: `pyproject.toml`, line-length=120, target=py312)
+- **네이밍**: 모듈/함수 `snake_case`, 클래스 `PascalCase`, 상수 `UPPER_CASE`
+- **타입 힌트**: 모든 함수에 파라미터/리턴 타입 명시
+- **주석**: 도메인 용어는 한국어 주석 허용, 코드 로직 설명은 영어
+- **import 순서**: stdlib → third-party → local (Ruff isort가 자동 정렬)
+
+### TypeScript (Frontend)
+
+- **포매터**: Prettier (설정: `frontend/.prettierrc`)
+- **린터**: ESLint (설정: `frontend/.eslintrc.cjs`)
+- **네이밍**: 컴포넌트/페이지 `PascalCase`, 함수/변수 `camelCase`, 타입/인터페이스 `PascalCase`
+- **스타일링**: Tailwind CSS 유틸리티 클래스 사용, 인라인 스타일 금지
+- **API 타입**: `src/types/index.ts`에 정의, 백엔드 스키마와 일치시킬 것
+
+### Git
+
+- **브랜치 네이밍**: `feature/<담당영역>-<설명>` (예: `feature/agents-add-supervisor-retry`)
+- **커밋 메시지**: 한국어 또는 영어, 동사로 시작 (예: "추가: 경쟁분석 노드 재시도 로직")
+- **PR**: 본인 담당 디렉토리 외 파일이 포함되면 반드시 해당 팀원 리뷰 요청
+
+## 기술 스택 (변경 금지)
+
+변경이 필요하면 팀 협의 후 진행합니다.
+
+| 영역 | 스택 |
+|------|------|
+| Backend | FastAPI + Pydantic v2 + SQLAlchemy |
+| AI/Agent | LangChain + LangGraph + Anthropic SDK |
+| RAG | ChromaDB + OpenAI Embeddings |
+| Deep Learning | PyTorch + scikit-learn |
+| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
+| Database | PostgreSQL 16 + Redis 7 + ChromaDB |
+
+## 파일 생성/수정 규칙
+
+1. **새 파일 생성 시** 해당 디렉토리의 `__init__.py` 또는 `index.ts`에 export 추가
+2. **새 의존성 추가 시** `requirements.txt` 또는 `package.json`에 버전 명시
+3. **환경변수 추가 시** `.env.example`에 반드시 추가
+4. **API 엔드포인트 추가/변경 시** `backend/src/main.py` 라우트 등록 확인
+5. **README.md, docker-compose.yml** 등 공통 파일은 단독 수정 금지
+
+## 에러 핸들링 패턴
+
+```python
+# Backend — 서비스 레이어에서 예외 처리
+from fastapi import HTTPException
+
+# 외부 API 호출 실패 시 base_client.py의 retry 로직 활용
+# 직접 try/except 남발하지 말 것
+```
+
+## 테스트
+
+- 테스트 파일 위치: `tests/` (백엔드), `frontend/` 내 (프론트엔드)
+- 새 기능 추가 시 최소 1개 이상의 테스트 작성
+- `pytest` (백엔드), 프론트엔드 테스트 도구는 추후 결정
+
+## 주의사항
+
+- `.env` 파일을 절대 커밋하지 마세요
+- `data/raw/` 디렉토리의 원본 데이터를 수정하지 마세요
+- 모델 가중치 파일(`.pt`, `.pth`, `.onnx`)은 커밋하지 마세요
+- LLM 모델명은 `backend/src/config/constants.py`에서 관리합니다. 하드코딩 금지.

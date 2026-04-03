@@ -26,6 +26,14 @@ data/cache/
 .DS_Store
 Thumbs.db
 
+# AI Agent local configs
+.claude/
+.cursor/
+.antigravity/
+.gemini/
+.copilot/
+.codex/
+
 # Jupyter
 .ipynb_checkpoints/
 
