@@ -53,21 +53,20 @@ async def _simulate_digital_twin_mangwon(business_type: str) -> str:
     """미로피쉬 쇼규모 테스트: 망원1동 경쟁자 AI의 창발적 동적 반응 시뮬레이션"""
     log_agent("MiroFishAdapter", "THINKING", "망원1동 미로피쉬 디지털 트윈 시뮬레이션 환경(Ollama-Phi3)을 초기화합니다.")
     
-    # 가상의 에이전트 2명: A(저가형 프랜차이즈 사장), B(인스타 감성 개인카페/음식점 사장)
-    # Phi-3 등 소형 모델의 추론 성능(특히 한국어)을 높이기 위해 프롬프트를 영어로 주고, 생각(Thought) 과정을 영어로 거친 뒤 한국어로 번역해 발화하게 합니다.
+    # Phi-3 모델의 한국어 환각(Hallucination) 방지를 위해 응답을 극단적으로 단순화합니다.
     prompt_a = (
-        f"You are the owner of a low-cost franchise store in Mangwon 1-dong. "
-        f"A new '{business_type}' store just opened nearby. "
-        f"1. First, think step by step in English about your aggressive marketing or discount strategy to defend your sales. "
-        f"2. Then, provide your final answer in ONE short Korean sentence.\n"
-        f"Format:\nThought: [Your English thoughts]\nKorean Answer: [Your final Korean sentence]"
+        f"Target: 망원1동 저가 프랜차이즈\n"
+        f"Event: 신규 '{business_type}' 점포 개업\n"
+        f"Mission: Write exactly ONE short ACTION you will take to survive. Do not explain. Use simple words.\n"
+        f"Format: Action: [YOUR SHORT KOREAN ACTION]\n"
+        f"Example: Action: 아침 출근길 아메리카노 1+1 할인 단행."
     )
     prompt_b = (
-        f"You are the owner of a hip boutique store in Mangwon 1-dong. "
-        f"A new '{business_type}' store just opened nearby. "
-        f"1. First, think step by step in English about how to improve service and keep your regular customers. "
-        f"2. Then, provide your final answer in ONE short Korean sentence.\n"
-        f"Format:\nThought: [Your English thoughts]\nKorean Answer: [Your final Korean sentence]"
+        f"Target: 망원1동 감성 개인매장\n"
+        f"Event: 신규 '{business_type}' 점포 개업\n"
+        f"Mission: Write exactly ONE short ACTION you will take to keep your regular customers. Do not explain. Use simple words.\n"
+        f"Format: Action: [YOUR SHORT KOREAN ACTION]\n"
+        f"Example: Action: 단골 손님 대상 신메뉴 시식회 개최 및 방어."
     )
     
     log_agent("Competitor_Agent_A", "TOOL_CALL", "프랜차이즈 점주의 반응을 시뮬레이션 중 (Phi-3 호출)...")
