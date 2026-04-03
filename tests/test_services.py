@@ -11,6 +11,7 @@ from src.services.seoul_opendata import SeoulOpendataClient
 from src.services.sgis_api import SgisAPIClient
 from src.services.semas_api import SemasAPIClient
 from src.services.golmok_api import GolmokAPIClient
+from src.services.molit_api import MolitAPIClient
 
 
 def _mock_response(status_code: int = 200, json_data: dict = None) -> httpx.Response:
@@ -224,3 +225,26 @@ async def test_golmok_get_estimated_sales():
         result = await client.get_estimated_sales(trdar_cd="1001", svc_induty_cd="CS100001")
         assert result["monthly_sales"] == 50000000
         assert result["weekday_sales"] == 8000000
+
+
+# ---------------------------------------------------------------------------
+# MolitAPIClient 테스트
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_molit_get_commercial_trade():
+    client = MolitAPIClient(api_key="test_key")
+    mock = _mock_response(json_data={
+        "response": {
+            "header": {"resultCode": "00"},
+            "body": {
+                "items": {"item": [{"dealAmount": "150,000", "buildingMainPurps": "제1종근린생활시설", "sggCd": "11440", "umdNm": "서교동", "dealYear": "2026", "dealMonth": "3", "excluUseAr": 45.5}]},
+                "totalCount": 1,
+            }
+        }
+    })
+    with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
+        result = await client.get_commercial_trade(sgg_cd="11440", deal_ymd="202603")
+        assert len(result["items"]) == 1
+        assert result["items"][0]["deal_amount"] == 150000
