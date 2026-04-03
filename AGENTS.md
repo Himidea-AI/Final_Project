@@ -6,6 +6,11 @@
 
 마포구 내 프랜차이즈 신규 출점 시뮬레이션 플랫폼. LangGraph 기반 멀티 에이전트가 상권, 인구, 경쟁, 법률 등을 분석합니다.
 
+- 아키텍처 & 디렉토리 구조: [`docs/architecture.md`](docs/architecture.md)
+- API 엔드포인트 & 스키마: [`docs/api-contract.md`](docs/api-contract.md)
+- 환경변수 & 설정 파일: [`docs/env-guide.md`](docs/env-guide.md)
+- 도메인 용어집: [`docs/glossary.md`](docs/glossary.md)
+
 ## 팀원별 담당 영역 (절대 준수)
 
 | 역할 | 담당 디렉토리 | 수정 가능 범위 |
@@ -51,8 +56,6 @@
 
 ## 기술 스택 (변경 금지)
 
-변경이 필요하면 팀 협의 후 진행합니다.
-
 | 영역 | 스택 |
 |------|------|
 | Backend | FastAPI + Pydantic v2 + SQLAlchemy |
@@ -70,21 +73,14 @@
 4. **API 엔드포인트 추가/변경 시** `backend/src/main.py` 라우트 등록 확인
 5. **README.md, docker-compose.yml** 등 공통 파일은 단독 수정 금지
 
-## 에러 핸들링 패턴
+## 에러 핸들링
 
-```python
-# Backend — 서비스 레이어에서 예외 처리
-from fastapi import HTTPException
-
-# 외부 API 호출 실패 시 base_client.py의 retry 로직 활용
-# 직접 try/except 남발하지 말 것
-```
+- 외부 API 호출 실패 시 `base_client.py`의 retry 로직 활용, 직접 try/except 남발 금지
 
 ## 테스트
 
 - 테스트 파일 위치: `tests/` (백엔드), `frontend/` 내 (프론트엔드)
 - 새 기능 추가 시 최소 1개 이상의 테스트 작성
-- `pytest` (백엔드), 프론트엔드 테스트 도구는 추후 결정
 
 ## 주의사항
 
