@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     chroma_host: str = "chromadb"
     chroma_port: int = 8000
+    chroma_persist_dir: str = ""    # 로컬 개발용 경로 설정 시 PersistentClient로 전환 (Docker 불필요)
+    embedding_mode: str = "openai"  # "openai" | "local" — local은 sentence-transformers 사용 (무료)
 
     # External API Keys
     seoul_opendata_key: str = ""
@@ -22,6 +24,7 @@ class Settings(BaseSettings):
     sgis_api_key: str = ""
     sgis_secret_key: str = ""       # SGIS OAuth2 인증용 시크릿 키
     molit_api_key: str = ""
+    ftc_api_key: str = ""           # 공정위 가맹사업 정보공개서 API
 
     # Naver DataLab API (SNS 트렌드 대체)
     naver_client_id: str = ""
