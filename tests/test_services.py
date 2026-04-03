@@ -267,3 +267,30 @@ async def test_naver_get_search_trend():
         result = await client.get_search_trend(keywords=["망원동 카페"], start_date="2025-04-01", end_date="2026-04-01")
         assert result["results"][0]["title"] == "망원동 카페"
         assert result["results"][0]["data"][0]["ratio"] == 85.5
+
+
+# ---------------------------------------------------------------------------
+# CsvDataLoader 테스트
+# ---------------------------------------------------------------------------
+
+import os
+import tempfile
+from src.services.csv_loader import CsvDataLoader
+
+
+def test_csv_loader_living_population():
+    csv_content = "stdr_de_id,tmzon_pd_se,adstrd_code_se,tot_lvpop_co\n"
+    csv_content += "20260101,00,1144055,12345.67\n"
+    csv_content += "20260101,00,1130051,99999.99\n"
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(csv_content)
+        tmp_path = f.name
+
+    try:
+        loader = CsvDataLoader(data_dir=os.path.dirname(tmp_path))
+        df = loader.load_living_population(file_path=tmp_path, district_prefix="11440")
+        assert len(df) == 1
+        assert df.iloc[0]["tot_lvpop_co"] == 12345.67
+    finally:
+        os.unlink(tmp_path)
