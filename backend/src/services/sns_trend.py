@@ -5,6 +5,10 @@ Instagram/블로그 크롤링 대신 Naver DataLab API를 사용.
 "망원동 카페", "연남동 맛집" 등 키워드 검색량 추이를 조회하여 힙지수 산출.
 Naver Developers에서 무료 API 키 발급 가능.
 """
+from datetime import date, timedelta
+
+import httpx
+
 from src.services.base_client import BaseAPIClient
 
 
@@ -43,10 +47,20 @@ class NaverTrendClient(BaseAPIClient):
         Returns:
             dict: 기간별 상대 검색량 (0~100)
         """
-        # TODO: POST /search 엔드포인트 호출
-        # TODO: keywordGroups 파라미터 구성
-        # TODO: 응답에서 period별 ratio 추출
-        pass
+        url = f"{self.base_url}/search"
+        body = {
+            "startDate": start_date,
+            "endDate": end_date,
+            "timeUnit": time_unit,
+            "keywordGroups": [
+                {"groupName": kw, "keywords": [kw]} for kw in keywords
+            ],
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(url, json=body, headers=self._get_headers())
+            response.raise_for_status()
+            return response.json()
 
     async def get_district_trend(self, district: str, business_type: str) -> dict:
         """
@@ -59,10 +73,36 @@ class NaverTrendClient(BaseAPIClient):
         Returns:
             dict: 최근 12개월 검색량 추이, 전월 대비 증감률
         """
-        # TODO: "{동명} {업종}" 형태로 키워드 구성
-        # TODO: 최근 12개월 데이터 조회
-        # TODO: 전월 대비 증감률 계산
-        pass
+        keyword = f"{district} {business_type}"
+
+        end = date.today()
+        start = end - timedelta(days=365)
+        start_date = start.strftime("%Y-%m-%d")
+        end_date = end.strftime("%Y-%m-%d")
+
+        response = await self.get_search_trend(
+            keywords=[keyword],
+            start_date=start_date,
+            end_date=end_date,
+            time_unit="month",
+        )
+
+        trend_data = []
+        if response.get("results"):
+            trend_data = response["results"][0].get("data", [])
+
+        growth_rate = 0.0
+        if len(trend_data) >= 2:
+            last_ratio = trend_data[-1]["ratio"]
+            prev_ratio = trend_data[-2]["ratio"]
+            if prev_ratio != 0:
+                growth_rate = (last_ratio - prev_ratio) / prev_ratio * 100
+
+        return {
+            "keyword": keyword,
+            "trend_data": trend_data,
+            "growth_rate": round(growth_rate, 2),
+        }
 
     async def calculate_hipness_score(self, district: str) -> float:
         """
@@ -74,7 +114,40 @@ class NaverTrendClient(BaseAPIClient):
         Returns:
             float: 0~100 힙지수 (검색량 증가율 + 절대량 종합)
         """
-        # TODO: 복수 키워드 트렌드 조회 (맛집, 카페, 핫플 등)
-        # TODO: 검색량 절대 수준 + 증감률 가중 합산
-        # TODO: 0~100 점수 정규화
-        pass
+        base_keywords = ["맛집", "카페", "핫플", "데이트"]
+        keywords = [f"{district} {kw}" for kw in base_keywords]
+
+        end = date.today()
+        start = end - timedelta(days=365)
+        start_date = start.strftime("%Y-%m-%d")
+        end_date = end.strftime("%Y-%m-%d")
+
+        response = await self.get_search_trend(
+            keywords=keywords,
+            start_date=start_date,
+            end_date=end_date,
+            time_unit="month",
+        )
+
+        scores = []
+        for result in response.get("results", []):
+            data = result.get("data", [])
+            if not data:
+                continue
+
+            latest_ratio = data[-1]["ratio"]
+
+            growth = 0.0
+            if len(data) >= 2:
+                prev_ratio = data[-2]["ratio"]
+                if prev_ratio != 0:
+                    growth = (data[-1]["ratio"] - prev_ratio) / prev_ratio * 100
+
+            clamped_growth = max(0.0, min(100.0, growth + 50))
+            score = latest_ratio * 0.5 + clamped_growth * 0.5
+            scores.append(score)
+
+        if not scores:
+            return 0.0
+
+        return round(sum(scores) / len(scores), 2)

@@ -12,6 +12,7 @@ from src.services.sgis_api import SgisAPIClient
 from src.services.semas_api import SemasAPIClient
 from src.services.golmok_api import GolmokAPIClient
 from src.services.molit_api import MolitAPIClient
+from src.services.sns_trend import NaverTrendClient
 
 
 def _mock_response(status_code: int = 200, json_data: dict = None) -> httpx.Response:
@@ -248,3 +249,21 @@ async def test_molit_get_commercial_trade():
         result = await client.get_commercial_trade(sgg_cd="11440", deal_ymd="202603")
         assert len(result["items"]) == 1
         assert result["items"][0]["deal_amount"] == 150000
+
+
+# ---------------------------------------------------------------------------
+# NaverTrendClient 테스트
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_naver_get_search_trend():
+    client = NaverTrendClient(client_id="test_id", client_secret="test_secret")
+    mock = _mock_response(json_data={
+        "startDate": "2025-04-01", "endDate": "2026-04-01", "timeUnit": "month",
+        "results": [{"title": "망원동 카페", "keywords": ["망원동 카페"], "data": [{"period": "2026-03-01", "ratio": 85.5}, {"period": "2026-02-01", "ratio": 78.2}]}],
+    })
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock):
+        result = await client.get_search_trend(keywords=["망원동 카페"], start_date="2025-04-01", end_date="2026-04-01")
+        assert result["results"][0]["title"] == "망원동 카페"
+        assert result["results"][0]["data"][0]["ratio"] == 85.5
