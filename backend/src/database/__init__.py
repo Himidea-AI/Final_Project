@@ -10,3 +10,35 @@ Docker Compose 환경에서 서비스명:
 
 담당: A — 데이터 엔지니어
 """
+
+from .models import (
+    Base,
+    DistrictSales,
+    DongMapping,
+    GolmokCommercial,
+    LivingPopulation,
+    RentCost,
+    SgisBusiness,
+    SgisHousehold,
+    SgisPopulation,
+    SimulationResult,
+    StoreInfo,
+    StoreQuarterly,
+)
+from .postgres import PostgresClient
+
+__all__ = [
+    "Base",
+    "LivingPopulation",
+    "SgisPopulation",
+    "SgisHousehold",
+    "SgisBusiness",
+    "GolmokCommercial",
+    "DistrictSales",
+    "StoreInfo",
+    "StoreQuarterly",
+    "RentCost",
+    "DongMapping",
+    "SimulationResult",
+    "PostgresClient",
+]
