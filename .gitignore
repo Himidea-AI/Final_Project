@@ -28,7 +28,11 @@ data/processed/golmok_worker_pop_seoul.csv
 data/processed/golmok_index_seoul.csv
 data/processed/living_population_mapo.csv
 data/processed/living_population_dong_mapo.csv
-data/processed/golmok_worker_pop_seoul.csv
+data/chroma_local/
+data/legal/raw/
+data/legal/processed/chunks.json
+backend/data/legal/raw/
+backend/data/legal/processed/chunks.json
 
 # OS
 .DS_Store
