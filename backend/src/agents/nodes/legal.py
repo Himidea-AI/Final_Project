@@ -117,7 +117,7 @@ def check_franchise_law(state: AgentState, retriever: LegalDocumentRetriever) ->
     district = state.target_district
 
     query = f"{brand} 영업지역 보장 동일 브랜드 출점 제한 가맹사업법"
-    docs = _run_async(retriever.search(query, top_k=5))
+    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES))
 
     question = (
         f"'{brand}' 브랜드가 '{district}'에 신규 출점할 때 가맹사업법상 영업지역 침해 리스크는 어떻게 됩니까? "
@@ -163,7 +163,7 @@ def check_commercial_lease_law(state: AgentState, retriever: LegalDocumentRetrie
     district = state.target_district
 
     query = "권리금 회수 기회 보호 계약갱신요구권 환산보증금 상가임대차보호법"
-    docs = _run_async(retriever.search(query, top_k=5))
+    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES))
 
     question = (
         f"'{district}'에서 프랜차이즈 점포를 임차할 때 상가임대차보호법상 주요 리스크는 무엇입니까? "

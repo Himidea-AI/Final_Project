@@ -101,23 +101,26 @@ class VectorDBClient:
                 metadatas=metadatas,
             )
 
-    async def search(self, query: str, top_k: int = 5) -> list[dict]:
+    async def search(self, query: str, top_k: int = 5, where: Optional[dict] = None) -> list[dict]:
         """
         유사 문서 검색
 
         Args:
             query: 검색 쿼리
             top_k: 반환할 문서 수
+            where: ChromaDB 메타데이터 필터 (예: {"source": "가맹사업법"})
+                   None이면 필터 없이 전체 검색
 
         Returns:
             list[dict]: [{text, metadata, distance}, ...]
         """
         query_embedding = await asyncio.to_thread(self._embed, [query])
-        results = await asyncio.to_thread(
-            self._collection.query,
-            query_embeddings=query_embedding,
-            n_results=top_k,
-        )
+
+        query_kwargs: dict = {"query_embeddings": query_embedding, "n_results": top_k}
+        if where:
+            query_kwargs["where"] = where
+
+        results = await asyncio.to_thread(self._collection.query, **query_kwargs)
 
         return [
             {
