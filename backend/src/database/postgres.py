@@ -1,31 +1,55 @@
 """
-PostgreSQL 연결 — 상권통계, 유동인구, 시나리오 데이터 관리
+PostgreSQL 비동기 클라이언트 — SQLAlchemy 2.0 async engine + session
 """
+
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from .models import Base
 
 
 class PostgresClient:
-    """PostgreSQL 데이터베이스 클라이언트"""
+    """PostgreSQL async 클라이언트."""
 
-    def __init__(self, connection_url: str):
-        self.connection_url = connection_url
-        # TODO: 커넥션 풀 초기화
+    def __init__(self, database_url: str):
+        self.database_url = database_url
+        self.engine = None
+        self._session_factory = None
 
     async def connect(self) -> None:
-        """데이터베이스 연결"""
-        # TODO: asyncpg 또는 psycopg2로 연결
-        pass
+        """async engine + session factory 초기화."""
+        async_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://")
+        self.engine = create_async_engine(async_url, echo=False, pool_size=5)
+        self._session_factory = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
 
     async def disconnect(self) -> None:
-        """데이터베이스 연결 해제"""
-        # TODO: 커넥션 풀 정리
-        pass
+        """엔진 종료."""
+        if self.engine:
+            await self.engine.dispose()
+            self.engine = None
+            self._session_factory = None
 
-    async def save_simulation_result(self, request_id: str, result: dict) -> None:
-        """시뮬레이션 결과 저장"""
-        # TODO: 결과 데이터 INSERT
-        pass
+    @asynccontextmanager
+    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
+        """async session context manager."""
+        if self._session_factory is None:
+            raise RuntimeError("Not connected. Call connect() first.")
+        async with self._session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
-    async def get_simulation_result(self, request_id: str) -> dict:
-        """시뮬레이션 결과 조회"""
-        # TODO: request_id로 결과 SELECT
-        pass
+    async def create_tables(self) -> None:
+        """모든 테이블 생성 (개발/테스트용)."""
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    async def drop_tables(self) -> None:
+        """모든 테이블 삭제 (테스트용)."""
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)

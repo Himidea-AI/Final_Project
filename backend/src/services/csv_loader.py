@@ -3,6 +3,7 @@ CSV 데이터 로더 — 오프라인 폴백용 유틸리티
 
 외부 API 장애 시 디스크에 저장된 CSV 파일을 로드하는 클래스.
 """
+
 from pathlib import Path
 
 import pandas as pd
@@ -43,6 +44,13 @@ class CsvDataLoader:
         """점포 정보 CSV 로드 후 시군구명으로 필터링."""
         df = pd.read_csv(file_path, encoding=encoding, low_memory=False)
         return df[df["시군구명"] == sgg_name].reset_index(drop=True)
+
+    def load_rent_building(
+        self,
+        file_path: str = "data/processed/rent_building_mapo.csv",
+    ) -> pd.DataFrame:
+        """매장용빌딩 임대료·공실률·수익률 CSV 로드."""
+        return pd.read_csv(file_path, encoding="utf-8-sig")
 
     def load_commercial_change(
         self,
