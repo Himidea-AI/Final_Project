@@ -22,6 +22,8 @@ venv/
 data/raw/
 data/cache/
 data/chroma_local/
+data/legal/raw/
+data/legal/processed/chunks.json
 
 # OS
 .DS_Store
