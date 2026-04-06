@@ -6,7 +6,7 @@
   - vector_db.py    : ChromaDB 연결 + OpenAI 임베딩 (법률 문서 RAG)
 
 Docker Compose 환경에서 서비스명:
-  PostgreSQL → db:5432 | Redis → redis:6379 | ChromaDB → chromadb:8000
+  PostgreSQL → localhost:5432 | Redis → localhost:6379 | ChromaDB → localhost:8000
 
 담당: A — 데이터 엔지니어
 """

@@ -5,11 +5,12 @@ Instagram/블로그 크롤링 대신 Naver DataLab API를 사용.
 "망원동 카페", "연남동 맛집" 등 키워드 검색량 추이를 조회하여 힙지수 산출.
 Naver Developers에서 무료 API 키 발급 가능.
 """
+
 from datetime import date, timedelta
 
 import httpx
 
-from src.services.base_client import BaseAPIClient
+from .base_client import BaseAPIClient
 
 
 class NaverTrendClient(BaseAPIClient):
@@ -52,9 +53,7 @@ class NaverTrendClient(BaseAPIClient):
             "startDate": start_date,
             "endDate": end_date,
             "timeUnit": time_unit,
-            "keywordGroups": [
-                {"groupName": kw, "keywords": [kw]} for kw in keywords
-            ],
+            "keywordGroups": [{"groupName": kw, "keywords": [kw]} for kw in keywords],
         }
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:

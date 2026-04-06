@@ -5,8 +5,8 @@ RAG 문서 검색 — 가맹사업법/상가임대차보호법 문서를 Vector 
 import json
 from pathlib import Path
 
-from src.config.settings import settings
-from src.database.vector_db import VectorDBClient
+from ..config.settings import settings
+from ..database.vector_db import VectorDBClient
 
 # 거리 임계값 (cosine distance 기준: 0=동일, 1=직교, 2=반대)
 # 1.0 초과 = 반대 방향 벡터, 사실상 무관한 문서

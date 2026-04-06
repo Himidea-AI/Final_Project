@@ -1,13 +1,10 @@
 /**
  * 조건 입력 화면 — 업종, 브랜드, 예산, 위치 선택 → 시뮬레이션 실행
- *
- * 사용자가 시뮬레이션 조건(업종, 브랜드명, 후보 행정동, 기존 매장, 투자금, 임대료,
- * What-if 시나리오)을 입력하고 실행 버튼을 누르면 POST /api/simulate 호출.
- * 결과 수신 후 /map 페이지로 이동.
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { runSimulation } from '../api/client';
+import { analyzeLocation } from '../api/client';
+import { useSimulation } from '../contexts/SimulationContext';
 import type { SimulationInput } from '../types';
 
 const DONG_LIST = [
@@ -18,6 +15,8 @@ const DONG_LIST = [
 
 function InputPage() {
   const navigate = useNavigate();
+  const { setSimulationResult } = useSimulation();
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     industry: '카페',
     brandName: '',
@@ -61,6 +60,7 @@ function InputPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     
     // Map formData to SimulationInput
     let businessType: "cafe" | "restaurant" | "convenience" = "cafe";
@@ -78,20 +78,36 @@ function InputPage() {
       existing_stores: formData.existingStores.map(addr => ({ district: "", address: addr, monthly_revenue: 0 })),
       initial_investment: Number(formData.budget) || 0,
       monthly_rent: Number(formData.rent) || 0,
-      simulation_months: 12, // default 12 months
+      simulation_months: 12,
       scenarios: scenarios
     };
 
     console.log("Submitting Simulation Form: ", inputData);
     
+    if (!inputData.brand_name) {
+      console.warn("경고: 브랜드명이 비어 있어 제출이 중단될 수 있습니다.");
+    }
+
     try {
-      const result = await runSimulation(inputData);
-      console.log("Simulation Result:", result);
-      alert("시뮬레이션 완료! (결과: " + result.ai_recommendation + ")");
-      navigate('/map');
+      console.log("서버에 요청 보냄! (POST /api/analyze)");
+      console.log("전송 데이터 상세: ", JSON.stringify(inputData, null, 2));
+
+      const result = await analyzeLocation(inputData);
+      console.log("Analysis Result Received:", result);
+      
+      if (result.status === "success") {
+        // 결과 상태 업데이트
+        setSimulationResult(result.data);
+        // 즉시 지도 페이지로 이동
+        navigate('/map');
+      } else {
+        alert("분석 실패: " + result.message);
+      }
     } catch (error) {
-      console.error(error);
-      alert("오류가 발생했습니다.");
+      console.error("서버 통신 오류 상세: ", error);
+      alert("서버 통신 중 오류가 발생했습니다. 개발자 도구(F12) 콘솔을 확인하세요.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -244,9 +260,12 @@ function InputPage() {
         <div className="pt-6 border-t flex justify-end">
           <button
             type="submit"
-            className="px-6 py-3 font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
+            disabled={loading}
+            className={`px-6 py-3 font-semibold text-white rounded-md shadow focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 ${
+              loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+            }`}
           >
-            시뮬레이션 실행하기
+            {loading ? 'AI 분석 중...' : '시뮬레이션 실행하기'}
           </button>
         </div>
       </form>
