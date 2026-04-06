@@ -4,7 +4,8 @@
 주요 데이터 소스:
   - 서울 열린데이터광장 (유동인구, 지하철 승하차)
 """
-from src.agents.state import AgentState
+
+from ..state import AgentState
 
 
 def analyze_floating_population(state: AgentState) -> dict:

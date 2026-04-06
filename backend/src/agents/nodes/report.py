@@ -4,7 +4,8 @@
 LLM을 활용하여 분석 데이터를 자연어 보고서로 변환하고,
 동별 비교표, 추천 의견, 리스크 요약을 포함
 """
-from src.agents.state import AgentState
+
+from ..state import AgentState
 
 
 def generate_summary(state: AgentState) -> str:
