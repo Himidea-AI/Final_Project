@@ -46,7 +46,7 @@ def build_legal_prompt(context_docs: list[dict], question: str) -> str:
 
     Args:
         context_docs: retriever.search() 반환값
-                      [{"text": str, "metadata": dict, "score": float}, ...]
+                      [{"content": str, "metadata": {"source": str, "relevance": float, ...}}, ...]
         question: 사용자 질문 또는 Agent 쿼리
 
     Returns:
@@ -60,10 +60,11 @@ def build_legal_prompt(context_docs: list[dict], question: str) -> str:
             source = doc["metadata"].get("source", "")
             article = doc["metadata"].get("article", "")
             label = f"[{i}] {source} {article}".strip()
-            parts.append(f"{label}\n{doc['text']}")
+            parts.append(f"{label}\n{doc['content']}")
         context_str = "\n\n".join(parts)
 
     return _LEGAL_USER_TEMPLATE.format(context=context_str, question=question)
+
 
 REPORT_AGENT_PROMPT = """
 당신은 프랜차이즈 컨설턴트입니다.

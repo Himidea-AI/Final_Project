@@ -29,7 +29,6 @@ from src.chains.prompts import build_legal_prompt  # noqa: E402
 sys.path.insert(0, str(ROOT / "data" / "legal"))
 from parse_pdfs import _split_long_chunk, parse_articles  # noqa: E402
 
-
 # ── 1. PDF 파싱 유닛 테스트 ────────────────────────────────────────────────────
 
 
@@ -137,8 +136,8 @@ class TestRetrieverPipeline:
             results = await retriever.search("영업지역 보호", top_k=1)
 
         assert len(results) == 1
-        assert results[0]["score"] > 0.9  # distance=0.1 → score=0.95
-        assert "제12조" in results[0]["text"]
+        assert results[0]["metadata"]["relevance"] > 0.9  # distance=0.1 → relevance=0.95
+        assert "제12조" in results[0]["content"]
 
     @pytest.mark.asyncio
     async def test_search_filters_low_relevance(self):
@@ -245,9 +244,8 @@ class TestBuildLegalPrompt:
         """docs가 있을 때 출처와 조문 번호가 포함되는지 확인."""
         docs = [
             {
-                "text": "제3조(가맹금 예치) 가맹본부는 가맹금을 예치기관에 예치해야 합니다.",
-                "metadata": {"source": "가맹사업법", "article": "제3조"},
-                "score": 0.95,
+                "content": "제3조(가맹금 예치) 가맹본부는 가맹금을 예치기관에 예치해야 합니다.",
+                "metadata": {"source": "가맹사업법", "article": "제3조", "relevance": 0.95},
             }
         ]
         result = build_legal_prompt(docs, "가맹금 예치 의무는 무엇인가요?")

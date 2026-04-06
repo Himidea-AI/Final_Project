@@ -15,6 +15,7 @@ ChromaDB 실행 모드 (CHROMA_PERSIST_DIR 환경변수로 전환):
 """
 
 import asyncio
+import concurrent.futures
 import json
 from typing import Optional
 
@@ -149,10 +150,10 @@ class PGVectorDBClient:
     B1(에이전트 팀) 코드 변경 없이 교체 가능.
 
     테이블 컬럼:
-        id       TEXT PRIMARY KEY
-        content  TEXT            — 원문 텍스트 (documents의 "text" 필드)
-        embedding vector(N)     — 임베딩 벡터 (N: 모드별 차원)
-        metadata JSONB          — 법률명, 조문번호 등 메타데이터
+        id        TEXT PRIMARY KEY
+        content   TEXT              — 원문 텍스트 (documents의 "text" 필드)
+        embedding vector(N)         — 임베딩 벡터 (N: 모드별 차원)
+        metadata  JSONB             — 법률명, 조문번호 등 메타데이터
 
     사용 예:
         client = PGVectorDBClient(connection_url=settings.postgres_url)
@@ -169,7 +170,7 @@ class PGVectorDBClient:
         self._connection_url = connection_url
         self._table_name = table_name
         self._embedding_mode = settings.embedding_mode
-        self._pool = None  # lazy init — asyncpg.create_pool()은 async이므로 첫 호출 시 생성
+        self._pool = None  # 연산용 pool은 lazy init (asyncpg.create_pool이 async이므로)
 
         self._embedding_dim = (
             self.OPENAI_EMBEDDING_DIM if self._embedding_mode == "openai" else self.LOCAL_EMBEDDING_DIM
@@ -185,50 +186,51 @@ class PGVectorDBClient:
             self._local_model = SentenceTransformer(self.LOCAL_EMBEDDING_MODEL)
             self._openai = None
 
-    def _embed(self, texts: list[str]) -> list[list[float]]:
-        """임베딩 생성 — VectorDBClient._embed()와 동일 로직."""
-        if self._embedding_mode == "openai":
-            response = self._openai.embeddings.create(model=self.OPENAI_EMBEDDING_MODEL, input=texts)
-            return [item.embedding for item in response.data]
-        else:
-            return self._local_model.encode(texts).tolist()
+        # 생성자에서 테이블 자동 생성 — 별도 스레드에서 새 이벤트 루프로 실행
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(asyncio.run, self._create_table()).result()
 
-    @staticmethod
-    def _vec_to_str(vector: list[float]) -> str:
-        """pgvector 입력용 문자열 변환. 예) [0.1, 0.2] → '[0.1,0.2]'"""
-        return "[" + ",".join(str(x) for x in vector) + "]"
+    async def _create_table(self) -> None:
+        """
+        단일 asyncpg 연결로 테이블/인덱스 생성.
 
-    async def _get_pool(self):
-        """연결풀 lazy init + 테이블/인덱스 자동 생성."""
-        if self._pool is None:
-            import asyncpg
+        생성자에서 호출되며 별도 스레드(새 이벤트 루프)에서 실행된다.
+        pool이 아닌 단일 connect()를 사용해 생성자 시점에 안전하게 처리.
+        """
+        import asyncpg
 
-            self._pool = await asyncpg.create_pool(self._connection_url)
-            await self._setup_table()
-        return self._pool
-
-    async def _setup_table(self) -> None:
-        """pgvector extension, 테이블, HNSW 인덱스를 존재하지 않을 경우에만 생성."""
-        async with self._pool.acquire() as conn:
+        conn = await asyncpg.connect(self._connection_url)
+        try:
             await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
             await conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {self._table_name} (
-                    id       TEXT PRIMARY KEY,
-                    content  TEXT NOT NULL,
+                    id        TEXT PRIMARY KEY,
+                    content   TEXT NOT NULL,
                     embedding vector({self._embedding_dim}),
-                    metadata JSONB
+                    metadata  JSONB
                 )
                 """
             )
-            # HNSW 인덱스 — ivfflat과 달리 빈 테이블에서도 생성 가능
+            # ivfflat 인덱스 — 코사인 거리 기반 ANN 검색
             await conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS {self._table_name}_embedding_hnsw_idx
+                CREATE INDEX IF NOT EXISTS {self._table_name}_embedding_ivfflat_idx
                 ON {self._table_name}
-                USING hnsw (embedding vector_cosine_ops)
+                USING ivfflat (embedding vector_cosine_ops)
+                WITH (lists = 100)
                 """
             )
+        finally:
+            await conn.close()
+
+    async def _get_pool(self):
+        """연산용 연결풀 lazy init — 테이블은 __init__에서 이미 생성됨."""
+        if self._pool is None:
+            import asyncpg
+
+            self._pool = await asyncpg.create_pool(self._connection_url)
+        return self._pool
 
     def _build_where_sql(self, where: dict, start_param: int) -> tuple[str, list]:
         """

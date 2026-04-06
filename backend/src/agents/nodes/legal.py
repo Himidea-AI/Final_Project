@@ -21,6 +21,7 @@ from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.constants import LLM_MODEL, LLM_TIMEOUT
 
+
 def _run_async(coro):
     """
     동기 컨텍스트에서 비동기 코루틴 실행.
@@ -130,7 +131,7 @@ def check_franchise_law(state: AgentState, retriever: LegalDocumentRetriever) ->
     try:
         response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("article", "") for d in docs]
+        articles = [d["metadata"].get("law_article", "") for d in docs]
         return {
             "type": "franchise_law",
             "level": level,
@@ -176,7 +177,7 @@ def check_commercial_lease_law(state: AgentState, retriever: LegalDocumentRetrie
     try:
         response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("article", "") for d in docs]
+        articles = [d["metadata"].get("law_article", "") for d in docs]
         return {
             "type": "commercial_lease_law",
             "level": level,
@@ -210,9 +211,7 @@ def check_zoning_regulation(state: AgentState) -> dict:
     rules = _ZONING_RULES.get(zone, {"허용": [], "제한": []})
 
     # business_type 코드 → 한글 매핑
-    type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(
-        business_type, business_type
-    )
+    type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(business_type, business_type)
 
     if type_label in rules["제한"]:
         level = "danger"
