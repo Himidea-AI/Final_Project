@@ -109,7 +109,7 @@ def parse_articles(raw_text: str, source_name: str, start_seq: int = 0) -> list[
             {
                 "id": f"{source_name}_preamble_{seq}",
                 "text": preamble,
-                "metadata": {"source": source_name, "article": "전문", "title": "전문"},
+                "metadata": {"source": source_name, "article": "전문", "law_article": "전문", "title": "전문"},
             }
         )
         seq += 1
@@ -140,6 +140,7 @@ def parse_articles(raw_text: str, source_name: str, start_seq: int = 0) -> list[
                     "metadata": {
                         "source": source_name,
                         "article": article_num,
+                        "law_article": article_num,
                         "title": title,
                     },
                 }
