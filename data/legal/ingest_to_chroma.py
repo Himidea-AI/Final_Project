@@ -24,7 +24,8 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from src.chains.retriever import LegalDocumentRetriever  # noqa: E402
 
-CHUNKS_PATH = Path(__file__).parent / "processed" / "chunks.json"
+ROOT = Path(__file__).resolve().parents[2]  # Final_Project/
+CHUNKS_PATH = ROOT / "backend" / "data" / "legal" / "processed" / "chunks.json"
 
 
 async def main() -> None:

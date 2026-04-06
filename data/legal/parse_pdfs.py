@@ -5,15 +5,15 @@
     python data/legal/parse_pdfs.py
 
 동작 흐름:
-    1. data/legal/raw/ 에 있는 PDF 파일들을 읽음
+    1. backend/data/legal/raw/ 에 있는 PDF 파일들을 읽음
     2. pdfplumber로 텍스트 추출
     3. "제N조" 패턴으로 조문 단위 청킹
-    4. data/legal/processed/chunks.json 저장
+    4. backend/data/legal/processed/chunks.json 저장
     5. 이후 retriever.ingest_from_json()으로 ChromaDB에 적재
 
 PDF 파일 준비:
-    - data/legal/raw/가맹사업법.pdf
-    - data/legal/raw/상가임대차보호법.pdf
+    - backend/data/legal/raw/가맹사업법.pdf
+    - backend/data/legal/raw/상가임대차보호법.pdf
     (파일명에 법률 이름이 포함되어 있으면 자동으로 source 메타데이터에 반영됨)
 """
 
@@ -25,9 +25,9 @@ from pathlib import Path
 import pdfplumber
 
 # ── 경로 설정 ──────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).parent  # data/legal/
-RAW_DIR = ROOT / "raw"
-PROCESSED_DIR = ROOT / "processed"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # Final_Project/
+RAW_DIR = PROJECT_ROOT / "backend" / "data" / "legal" / "raw"
+PROCESSED_DIR = PROJECT_ROOT / "backend" / "data" / "legal" / "processed"
 OUTPUT_PATH = PROCESSED_DIR / "chunks.json"
 
 # 조문 하나가 이 글자 수를 초과하면 슬라이딩 윈도우로 추가 분할
@@ -80,13 +80,14 @@ def _split_long_chunk(text: str, max_chars: int, overlap: int) -> list[str]:
     return chunks
 
 
-def parse_articles(raw_text: str, source_name: str) -> list[dict]:
+def parse_articles(raw_text: str, source_name: str, start_seq: int = 0) -> list[dict]:
     """
     조문 단위로 텍스트를 분할하여 청크 리스트 반환.
 
     Args:
         raw_text: PDF에서 추출한 전체 텍스트
         source_name: 법률 이름 (메타데이터 source 필드)
+        start_seq: 전역 시퀀스 시작값 (동일 문서 내 중복 조문번호 방지)
 
     Returns:
         [{"id": str, "text": str, "metadata": dict}, ...]
@@ -99,17 +100,19 @@ def parse_articles(raw_text: str, source_name: str) -> list[dict]:
     # 인덱스: 0=전문, 1=조번호, 2=내용, 3=조번호, 4=내용 ...
 
     chunks: list[dict] = []
+    seq = start_seq  # 전역 시퀀스 — 파일 내 중복 조문번호가 있어도 ID 충돌 방지
 
     # 전문(제1조 이전 텍스트)이 있으면 별도 청크로 추가
     preamble = splits[0].strip()
     if preamble:
         chunks.append(
             {
-                "id": f"{source_name}_preamble",
+                "id": f"{source_name}_preamble_{seq}",
                 "text": preamble,
                 "metadata": {"source": source_name, "article": "전문", "title": "전문"},
             }
         )
+        seq += 1
 
     # 조번호 + 내용 쌍을 순회
     i = 1
@@ -130,10 +133,9 @@ def parse_articles(raw_text: str, source_name: str) -> list[dict]:
         # 긴 조문은 슬라이딩 윈도우로 추가 분할
         sub_chunks = _split_long_chunk(full_text, MAX_CHARS, OVERLAP_CHARS)
         for idx, sub in enumerate(sub_chunks):
-            suffix = f"_{idx}" if len(sub_chunks) > 1 else ""
             chunks.append(
                 {
-                    "id": f"{source_name}_{article_num}{suffix}",
+                    "id": f"{source_name}_{article_num}_{seq}_{idx}",
                     "text": sub,
                     "metadata": {
                         "source": source_name,
@@ -142,6 +144,7 @@ def parse_articles(raw_text: str, source_name: str) -> list[dict]:
                     },
                 }
             )
+        seq += 1
 
     return chunks
 
@@ -162,13 +165,15 @@ def main() -> None:
         sys.exit(1)
 
     all_chunks: list[dict] = []
+    global_seq = 0  # 파일 간 시퀀스 연속 — 전체에서 ID 중복 완전 차단
 
     for pdf_path in pdf_files:
         source_name = _infer_source_name(pdf_path)
         print(f"[파싱 중] {pdf_path.name} ...")
 
         raw_text = extract_text_from_pdf(pdf_path)
-        chunks = parse_articles(raw_text, source_name)
+        chunks = parse_articles(raw_text, source_name, start_seq=global_seq)
+        global_seq += len(chunks)
 
         print(f"  → {len(chunks)}개 청크 생성")
         all_chunks.extend(chunks)
