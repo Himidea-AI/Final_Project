@@ -2,8 +2,6 @@
 # 실행: docker compose up --build
 # 접속: Frontend http://localhost | Backend API http://localhost:8000
 
-version: "3.8"
-
 services:
   # React 프론트엔드 — Nginx로 정적 파일 서빙 + API 리버스 프록시
   frontend:

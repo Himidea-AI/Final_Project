@@ -78,3 +78,7 @@ def compile_graph():
     """그래프를 컴파일하여 실행 가능한 형태로 반환"""
     graph = build_graph()
     return graph.compile()
+
+if __name__ == "__main__":
+    app = compile_graph()
+    print(app.get_graph().draw_mermaid())

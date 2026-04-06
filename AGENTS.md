@@ -13,14 +13,26 @@
 
 ## 팀원별 담당 영역 (절대 준수)
 
-| 역할 | 담당 디렉토리 | 수정 가능 범위 |
-|------|-------------|--------------|
-| A — 데이터 엔지니어 | `backend/src/services/`, `backend/src/database/`, `data/` | 본인 영역만 |
-| B — AI Agent 개발자 | `backend/src/agents/`, `backend/src/schemas/` | 본인 영역만 |
-| C — 딥러닝 모델 | `models/` | 본인 영역만 |
-| D — RAG + 법률 | `backend/src/chains/` | 본인 영역만 |
-| E — 프론트엔드 | `frontend/` | 본인 영역만 |
-| F — PM / 검증 | `validation/`, `models/lstm_forecast/`, `docs/` | 본인 영역만 |
+### 트랙 A — 데이터 + RAG (2명)
+
+| 역할 | 담당자 | 담당 디렉토리 |
+|------|--------|-------------|
+| A1 — 데이터 엔지니어 | 찬영 | `backend/src/services/`, `backend/src/database/`, `data/` |
+| A2 — RAG + 법률 | 봉환 | `backend/src/chains/`, `backend/src/database/vector_db.py`, `backend/src/services/ftc_franchise.py` |
+
+### 트랙 B — AI 엔진 (2명)
+
+| 역할 | 담당자 | 담당 디렉토리 |
+|------|--------|-------------|
+| B1 — LangGraph Agent | 예진 | `backend/src/agents/`, `backend/src/schemas/` |
+| B2 — 딥러닝 모델 | 수지니 | `models/`, `validation/` |
+
+### 트랙 C — 프론트엔드 + 배포 (2명)
+
+| 역할 | 담당자 | 담당 디렉토리 |
+|------|--------|-------------|
+| C1 — 프론트엔드 | 강민 | `frontend/` |
+| C2 — 인프라 + PM | 혁 | Docker, Nginx, `docs/`, `tests/` |
 
 **공통 파일** (`backend/src/config/`, `docker-compose.yml`, `.env.example`, `README.md`)은 팀 협의 후에만 수정합니다.
 
@@ -48,10 +60,12 @@
 - **스타일링**: Tailwind CSS 유틸리티 클래스 사용, 인라인 스타일 금지
 - **API 타입**: `src/types/index.ts`에 정의, 백엔드 스키마와 일치시킬 것
 
-### Git
+### Git (Jira 연동)
 
-- **브랜치 네이밍**: `feature/<담당영역>-<설명>` (예: `feature/agents-add-supervisor-retry`)
-- **커밋 메시지**: 한국어 또는 영어, 동사로 시작 (예: "추가: 경쟁분석 노드 재시도 로직")
+- **Jira 프로젝트 키**: `IM3`
+- **브랜치 네이밍**: `IM3-<이슈번호>-<담당영역>-<설명>` (예: `IM3-28-agents-add-supervisor-retry`) — **영어만 사용 (한글 브랜치명은 push 불가)**
+- **커밋 메시지**: Jira 이슈 키로 시작 (예: `IM3-28: 경쟁분석 노드 재시도 로직 추가`)
+- **PR 제목**: Jira 이슈 키 포함 (예: `IM3-28: 경쟁분석 노드 재시도 로직 추가`)
 - **PR**: 본인 담당 디렉토리 외 파일이 포함되면 반드시 해당 팀원 리뷰 요청
 
 ## 기술 스택 (변경 금지)
@@ -80,7 +94,9 @@
 ## 테스트
 
 - 테스트 파일 위치: `tests/` (백엔드), `frontend/` 내 (프론트엔드)
+- **본인 담당 코드의 테스트는 본인이 작성** (`tests/` 디렉토리 내 본인 관련 테스트 파일 수정 가능)
 - 새 기능 추가 시 최소 1개 이상의 테스트 작성
+- 테스트 함수명은 `test_<기능>_<시나리오>` 형식으로 작성
 
 ## 주의사항
 
