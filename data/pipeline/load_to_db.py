@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -24,7 +25,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend" / "src"))
 from database.models import Base  # noqa: E402
 
 PROC = Path(__file__).resolve().parents[1] / "processed"
-DB_URL = "postgresql://postgres:ghdcksdud1@localhost:5432/mapo_simulator"
+
+# DB 접속 정보: 환경변수 → .env → 기본값 (docker-compose 기준)
+_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
+DB_URL = os.environ.get(
+    "POSTGRES_URL",
+    f"postgresql://postgres:{_pw}@localhost:5432/mapo_simulator",
+)
 
 
 # ---------------------------------------------------------------------------
