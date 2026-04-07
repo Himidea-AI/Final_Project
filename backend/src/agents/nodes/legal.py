@@ -363,3 +363,7 @@ def legal_node(state: AgentState) -> AgentState:
 
     updated_results = state.analysis_results.model_copy(update={"legal_risks": risks})
     return state.model_copy(update={"analysis_results": updated_results})
+
+
+# graph.py(B1) 호환성 별칭
+legal_analyst_node = legal_node
