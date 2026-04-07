@@ -30,7 +30,7 @@ services:
 
   # PostgreSQL — 상권통계, 시뮬레이션 결과 저장
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: mapo_simulator
       POSTGRES_USER: postgres
