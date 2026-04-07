@@ -1,84 +1,134 @@
-"""
-LangGraph StateGraph 정의 및 컴파일
-8개 분석 노드 + supervisor 노드를 연결하는 워크플로우 그래프
-"""
+import asyncio
+from typing import Literal
 from langgraph.graph import StateGraph, END
+from langchain_core.messages import HumanMessage
 
-from src.agents.state import AgentState
-from src.agents.nodes.commercial import commercial_node
-from src.agents.nodes.population import population_node
-from src.agents.nodes.demographics import demographics_node
-from src.agents.nodes.cost import cost_node
-from src.agents.nodes.competition import competition_node
-from src.agents.nodes.trend import trend_node
-from src.agents.nodes.legal import legal_node
-from src.agents.nodes.report import report_node
+from src.schemas.state import AgentState
 from src.agents.nodes.supervisor import supervisor_node
-from src.agents.edges import should_reanalyze
+from src.agents.nodes.market_analyst import market_analyst_node
+from src.agents.nodes.legal import legal_analyst_node
 
 
 def build_graph() -> StateGraph:
     """
-    상권분석 워크플로우 그래프 빌드
-
-    흐름:
-    1. 데이터 수집 (commercial, population, demographics — 병렬)
-    2. 분석 (cost, competition, trend — 병렬)
-    3. 법률 검토 (legal)
-    4. Supervisor 판단 → 재분석 or 리포트 생성
-    5. 리포트 생성 (report)
+    상권분석 워크플로우 그래프 빌드 (Supervisor 기반 순환 구조)
     """
-    graph = StateGraph(AgentState)
+    workflow = StateGraph(AgentState)
 
-    # ── 노드 등록 ──
-    graph.add_node("commercial", commercial_node)
-    graph.add_node("population", population_node)
-    graph.add_node("demographics", demographics_node)
-    graph.add_node("cost", cost_node)
-    graph.add_node("competition", competition_node)
-    graph.add_node("trend", trend_node)
-    graph.add_node("legal", legal_node)
-    graph.add_node("supervisor", supervisor_node)
-    graph.add_node("report", report_node)
+    workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("market_analyst", market_analyst_node)
+    workflow.add_node("legal_analyst", legal_analyst_node)
 
-    # ── 엣지 연결 ──
-    # Phase 1: 데이터 수집 (병렬)
-    graph.set_entry_point("commercial")
-    graph.add_edge("commercial", "population")
-    graph.add_edge("population", "demographics")
+    workflow.set_entry_point("supervisor")
 
-    # Phase 2: 분석
-    graph.add_edge("demographics", "cost")
-    graph.add_edge("cost", "competition")
-    graph.add_edge("competition", "trend")
-
-    # Phase 3: 법률 검토
-    graph.add_edge("trend", "legal")
-
-    # Phase 4: Supervisor 판단
-    graph.add_edge("legal", "supervisor")
-
-    # Phase 5: 조건부 분기 — 재분석 or 리포트 생성
-    graph.add_conditional_edges(
+    workflow.add_conditional_edges(
         "supervisor",
-        should_reanalyze,
+        lambda x: x["next_step"],
         {
-            "reanalyze": "commercial",
-            "generate_report": "report",
+            "market_analyst": "market_analyst",
+            "legal_analyst": "legal_analyst",
+            "FINISH": END,
         },
     )
 
-    # Phase 6: 리포트 → 종료
-    graph.add_edge("report", END)
+    workflow.add_edge("market_analyst", "supervisor")
+    workflow.add_edge("legal_analyst", "supervisor")
 
-    return graph
+    return workflow
 
 
 def compile_graph():
-    """그래프를 컴파일하여 실행 가능한 형태로 반환"""
-    graph = build_graph()
-    return graph.compile()
+    """그래프 컴파일"""
+    builder = build_graph()
+    return builder.compile()
+
+
+# --- 로컬 테스트 코드 ---
+async def test_run():
+    app = compile_graph()
+
+    # 셈플 입력값: 홍대(서교동) 카페 창업 시나리오
+    initial_state = {
+        "messages": [
+            HumanMessage(
+                content="홍대(서교동) 구역에 카페를 차리려고 합니다. 상권 분석과 주의해야 할 법률 정보를 알려주세요."
+            )
+        ],
+        "business_type": "카페",
+        "brand_name": "Antigravity Coffee",
+        "target_district": "서교동",
+        "market_data": {},
+        "legal_info": [],
+        "analysis_results": {},
+        "current_agent": "start",
+        "next_step": "",
+        "errors": [],
+    }
+
+    print("\n" + "=" * 50)
+    print("🚀 [LANGGRAPH SIMULATION START] 홍대 카페 창업 시나리오")
+    print("=" * 50)
+    print(f"사용자 질문: {initial_state['messages'][0].content}")
+
+    final_state = initial_state
+
+    async for event in app.astream(initial_state):
+        for node_name, output in event.items():
+            print(f"\n▶ [실행 중인 노드: {node_name}]")
+
+            # 1. Supervisor의 의사결정 로그 출력
+            if node_name == "supervisor":
+                print(
+                    f"   - Supervisor의 다음 결정: {output.get('next_step', 'Unknown')}"
+                )
+
+            # 2. Worker 노드의 작업 로그 출력
+            if node_name == "market_analyst":
+                print(
+                    f"   - 상권 데이터 수집 완료: {output.get('market_data', {}).get('district_name')}"
+                )
+
+            if node_name == "legal_analyst":
+                print(
+                    f"   - 법률 정보 분석 완료: {len(output.get('legal_info', []))}건 검색됨"
+                )
+
+            # 상태 업데이트 추적 (최종 리포트용)
+            final_state.update(output)
+
+    # -----------------------------------------------------
+    # 최종 리포트 출력 (Final Report)
+    # -----------------------------------------------------
+    print("\n" + "=" * 50)
+    print("📋 [FINAL ANALYSIS REPORT: 홍대 카페 창업]")
+    print("=" * 50)
+
+    # 1. 상권 요약
+    market_summary = final_state.get("analysis_results", {}).get(
+        "market_summary", "데이터 없음"
+    )
+    print(f"📍 [상권 분석 요약]\n   {market_summary}")
+
+    # 2. 법률 리스크 요약
+    legal_risks = final_state.get("analysis_results", {}).get(
+        "legal_risks", "데이터 없음"
+    )
+    print(f"\n⚖️ [법률 리스크 요약]\n   {legal_risks}")
+
+    # 3. 상세 지표 (상권)
+    md = final_state.get("market_data", {})
+    if md:
+        print(f"\n📊 [상세 지표]")
+        print(f"   - 구역: {md.get('district_name')}")
+        print(f"   - 유동 인구: {md.get('floating_pop', {}).get('total', 0):,}명")
+        print(f"   - 경쟁 매장: {md.get('store_count')}개")
+        print(f"   - 예상 매출: {md.get('avg_revenue', 0):,}원")
+
+    print("\n" + "=" * 50)
+    print("✨ [시뮬레이션 종료]")
+    print("=" * 50)
+
 
 if __name__ == "__main__":
-    app = compile_graph()
-    print(app.get_graph().draw_mermaid())
+    # 비동기 실행
+    asyncio.run(test_run())
