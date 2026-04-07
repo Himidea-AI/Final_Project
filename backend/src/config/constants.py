@@ -41,7 +41,7 @@ COMPETITION_RADIUS = {
 
 # ── LLM 설정 ──
 LLM_MODEL = "claude-sonnet-4-20250514"
-LLM_TIMEOUT = 10
+LLM_TIMEOUT = 60
 LLM_MAX_RETRIES = 2
 
 # ── 소상공인진흥공단 업종코드 체계 (2024년 개편: 837개 → 247개) ──

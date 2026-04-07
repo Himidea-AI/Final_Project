@@ -8,6 +8,7 @@
 출력:
     backend/data/legal/processed/chunks.json
 """
+
 import json
 import re
 from pathlib import Path
@@ -82,7 +83,7 @@ MIN_CHUNK_LENGTH = 20
 # PDF 페이지 헤더/푸터에 자주 등장하는 노이즈 패턴
 _HEADER_NOISE_PATTERNS = re.compile(
     r"법제처\s*\d*\s*국가법령정보센터|"
-    r"^\s*\d+\s*$|"           # 페이지 번호만 있는 줄
+    r"^\s*\d+\s*$|"  # 페이지 번호만 있는 줄
     r"공정거래위원회$"
 )
 
@@ -188,11 +189,13 @@ def parse_all() -> list[dict]:
 
         print(f"[PARSE] {filename}")
         text = extract_text(pdf_path)
+        # source는 확장자 제거한 stem — retriever.py의 *_SOURCES 상수와 일치
+        source_name = Path(filename).stem
 
         if strategy == "article":
-            chunks = split_by_article(text, category, filename)
+            chunks = split_by_article(text, category, source_name)
         else:
-            chunks = split_by_sliding_window(text, category, filename)
+            chunks = split_by_sliding_window(text, category, source_name)
 
         # 전체 순번을 ID에 추가해 중복 방지 (같은 조문 번호가 여러 번 나타날 수 있음)
         global_offset = len(all_chunks)

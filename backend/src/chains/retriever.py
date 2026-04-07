@@ -5,7 +5,6 @@ RAG 문서 검색 — 가맹사업법/상가임대차보호법 문서를 Vector 
 import json
 from pathlib import Path
 
-from ..config.settings import settings
 from ..database.vector_db import LegalVectorDB
 
 
@@ -65,9 +64,7 @@ class LegalDocumentRetriever:
         if vs is None:
             return []
 
-        docs_with_score = await vs.asimilarity_search_with_relevance_scores(
-            query, k=top_k, filter=filter_dict
-        )
+        docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k, filter=filter_dict)
 
         results = [
             {
@@ -101,10 +98,7 @@ class LegalDocumentRetriever:
 
         from langchain_core.documents import Document
 
-        docs = [
-            Document(page_content=c["text"], metadata=c["metadata"])
-            for c in chunks
-        ]
+        docs = [Document(page_content=c["text"], metadata=c["metadata"]) for c in chunks]
 
         vs = self._db.vectorstore
         await vs.aadd_documents(docs)

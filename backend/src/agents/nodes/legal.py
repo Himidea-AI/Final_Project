@@ -20,6 +20,8 @@ from src.agents.state import AgentState, AnalysisResults
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.constants import LLM_MODEL, LLM_TIMEOUT
+from src.config.settings import settings
+from src.services.ftc_franchise import FtcFranchiseClient
 
 
 def _run_async(coro):
@@ -288,6 +290,103 @@ def check_safety_regulation(state: AgentState, retriever: LegalDocumentRetriever
         }
 
 
+def check_ftc_franchise(state: AgentState) -> dict:
+    """
+    공정위 가맹사업 정보공개서 검토 — 브랜드 폐점률·매출·가맹금 리스크 판정.
+
+    주요 검토 항목:
+    - 폐점률 (10% 초과 시 위험, 5% 초과 시 주의)
+    - 평균 매출액 (1억 미만 시 주의)
+    - 가맹금 수준 (1000만 원 초과 시 주의)
+
+    Returns:
+        dict: {type, level, summary, articles, recommendation}
+    """
+    brand = state.brand_name or ""
+
+    if not brand:
+        return {
+            "type": "ftc_franchise",
+            "level": "caution",
+            "summary": "브랜드명이 입력되지 않아 공정위 정보공개서 조회를 건너뜁니다.",
+            "articles": [],
+            "recommendation": "브랜드명 입력 후 재검토 권장",
+        }
+
+    if not settings.ftc_api_key:
+        return {
+            "type": "ftc_franchise",
+            "level": "caution",
+            "summary": "FTC_API_KEY가 설정되지 않아 공정위 정보공개서 조회를 건너뜁니다.",
+            "articles": [],
+            "recommendation": "환경변수 FTC_API_KEY 설정 후 재검토 권장",
+        }
+
+    try:
+        client = FtcFranchiseClient(api_key=settings.ftc_api_key)
+        detail = _run_async(client.get_brand_detail(brand))
+
+        if not detail:
+            return {
+                "type": "ftc_franchise",
+                "level": "caution",
+                "summary": f"'{brand}' 브랜드의 공정위 정보공개서를 찾을 수 없습니다.",
+                "articles": [],
+                "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
+            }
+
+        churn_rate = detail.get("churn_rate", 0.0)
+        avg_sales = detail.get("avg_sales_amount", 0)
+        franchise_fee = detail.get("franchise_fee", 0)
+        store_count = detail.get("store_count_total", 0)
+
+        # 리스크 레벨 판정
+        if churn_rate > 0.10:
+            level = "danger"
+        elif churn_rate > 0.05 or avg_sales < 100_000_000:
+            level = "caution"
+        else:
+            level = "safe"
+
+        summary = (
+            f"'{detail.get('brand_name', brand)}' ({detail.get('corp_name', '')}) "
+            f"정보공개서 기준 — "
+            f"전체 가맹점 수: {store_count}개, "
+            f"폐점률: {churn_rate:.1%}, "
+            f"평균 매출액: {avg_sales:,}원, "
+            f"가입비: {franchise_fee:,}원. "
+        )
+        if level == "danger":
+            summary += "폐점률이 10%를 초과하여 사업 안정성 리스크가 높습니다."
+        elif level == "caution":
+            summary += "폐점률 또는 매출 수준에서 주의가 필요합니다."
+        else:
+            summary += "공정위 지표 기준 안정적인 브랜드로 판단됩니다."
+
+        recommendation = ""
+        if level == "danger":
+            recommendation = "가맹본부 재무 상태 및 폐점 원인 심층 확인 필수"
+        elif level == "caution":
+            recommendation = "가맹 계약 전 정보공개서 원문 직접 검토 권장"
+
+        return {
+            "type": "ftc_franchise",
+            "level": level,
+            "summary": summary,
+            "articles": [],
+            "recommendation": recommendation,
+        }
+
+    except Exception as e:
+        return {
+            "type": "ftc_franchise",
+            "level": "caution",
+            "summary": f"공정위 정보공개서 조회 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
+        }
+
+
 def check_zoning_regulation(state: AgentState) -> dict:
     """
     용도지역 규제 검토 — 대상 행정동의 용도지역에서 해당 업종 영업 가능 여부.
@@ -356,6 +455,10 @@ def legal_node(state: AgentState) -> AgentState:
     # 5. 다중이용업소 안전관리법 검토
     safety_result = check_safety_regulation(state, retriever)
     risks.append(safety_result)
+
+    # 6. 공정위 가맹사업 정보공개서 검토
+    ftc_result = check_ftc_franchise(state)
+    risks.append(ftc_result)
 
     # state 업데이트 — analysis_results가 없으면 초기화
     if state.analysis_results is None:
