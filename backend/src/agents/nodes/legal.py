@@ -13,13 +13,11 @@
 
 import asyncio
 import concurrent.futures
-
-import anthropic
+import os
 
 from src.agents.state import AgentState
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
-from src.config.constants import LLM_MODEL, LLM_TIMEOUT
 from src.config.settings import settings
 from src.services.ftc_franchise import FtcFranchiseClient
 
@@ -74,19 +72,47 @@ _DISTRICT_ZONE_MAP: dict[str, str] = {
 
 def _call_llm(system_prompt: str, user_message: str) -> str:
     """
-    Claude API 호출 — 법률 텍스트 해석용.
+    LLM 호출 — LLM_PROVIDER 환경변수로 백엔드를 선택.
 
-    LLM_TIMEOUT, LLM_MAX_RETRIES는 constants.py에서 관리.
+    LLM_PROVIDER=ollama     : 로컬 Ollama (기본값, 무료)
+    LLM_PROVIDER=anthropic  : Anthropic Claude API (유료)
+    LLM_PROVIDER=gemini     : Google Gemini API (유료)
     """
-    client = anthropic.Anthropic()
-    message = client.messages.create(
-        model=LLM_MODEL,
-        max_tokens=1024,
-        timeout=LLM_TIMEOUT,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_message}],
-    )
-    return message.content[0].text
+    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+
+    if provider == "anthropic":
+        import anthropic as _anthropic
+        from src.config.constants import LLM_MODEL, LLM_TIMEOUT
+
+        client = _anthropic.Anthropic()
+        message = client.messages.create(
+            model=LLM_MODEL,
+            max_tokens=1024,
+            timeout=LLM_TIMEOUT,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        return message.content[0].text
+
+    if provider == "gemini":
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from src.agents.llms import get_fast_llm
+
+        llm = get_fast_llm()
+        response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
+        return response.content if isinstance(response.content, str) else str(response.content)
+
+    # 기본값: Ollama
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_ollama import ChatOllama
+
+    ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
+    llm = ChatOllama(model=ollama_model, temperature=0.1)
+    # qwen3.5 thinking 모델 — /no_think 프리픽스로 추론 단계 스킵해 속도 향상
+    prefixed_message = f"/no_think\n{user_message}"
+    response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=prefixed_message)])
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    return content
 
 
 def _extract_risk_level(llm_response: str) -> str:
