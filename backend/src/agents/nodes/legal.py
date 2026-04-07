@@ -465,9 +465,13 @@ def legal_node(state) -> dict:
     ftc_result = check_ftc_franchise(state)
     risks.append(ftc_result)
 
-    # legal_info: 이번 검토에서 참조한 RAG 문서 수집 (graph.py 로그용)
+    # legal_info: 이번 검토에서 참조한 RAG 문서 수집 (graph.py 로그 + supervisor 완료 신호용)
     query = f"{state.get('business_type', '')} {state.get('target_district', '')} 프랜차이즈 법률 검토"
     legal_info = _run_async(retriever.search(query, top_k=10))
+
+    # RAG 문서가 없는 경우(DEV 모드 등)에도 supervisor가 완료로 인식하도록 risks를 fallback으로 사용
+    if not legal_info:
+        legal_info = [{"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks]
 
     # analysis_results dict 업데이트
     analysis = dict(state.get("analysis_results") or {})
