@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
@@ -7,7 +6,7 @@ current_dir = Path(__file__).parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
 import uuid
@@ -42,9 +41,7 @@ DEFAULT_LAT = 37.5663
 DEFAULT_LNG = 126.9015
 
 
-def map_state_to_simulation_output(
-    state: Dict[str, Any], request_id: str
-) -> Dict[str, Any]:
+def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Dict[str, Any]:
     """
     LangGraph AgentState를 프론트엔드 SimulationOutput 스키마로 변환
     """
@@ -57,25 +54,21 @@ def map_state_to_simulation_output(
     lng = md.get("lng") if md.get("lng") else DEFAULT_LNG
 
     # 법률 리스크 리스트 변환
-    legal_risks = []
-    if analysis.get("legal_risks"):
-        legal_risks.append(
-            {
-                "type": "Legal Assessment",
-                "risk_level": (
-                    "WARNING"
-                    if any(
-                        word in analysis["legal_risks"]
-                        for word in ["주의", "위험", "제한", "불가"]
-                    )
-                    else "SAFE"
-                ),
-                "detail": analysis["legal_risks"],
-            }
-        )
+    legal_risks_raw = analysis.get("legal_risks") or []
+    legal_risks = [
+        {
+            "type": r["type"],
+            "risk_level": r["level"].upper(),  # "safe"→"SAFE", "caution"→"CAUTION", "danger"→"DANGER"
+            "detail": r["summary"],
+        }
+        for r in legal_risks_raw
+    ]
 
     # 공통 추천 메시지
-    recommendation = f"[{target_dist}] 에이전트 분석 결과: {analysis.get('market_summary', '상권 데이터 수집 중')} {analysis.get('legal_risks', '')}"
+    legal_summaries = " ".join([r["summary"] for r in legal_risks_raw])
+    recommendation = (
+        f"[{target_dist}] 에이전트 분석 결과: {analysis.get('market_summary', '상권 데이터 수집 중')} {legal_summaries}"
+    )
 
     response_data = {
         "request_id": request_id,
@@ -135,16 +128,10 @@ async def health_check():
 async def analyze_location(input_data: SimulationInput):
     """상권 분석 및 지도 데이터 요청"""
     request_id = str(uuid.uuid4())
-    print(
-        f"--- [API] /analyze 요청 수신: {input_data.target_district} ({input_data.business_type}) ---"
-    )
+    print(f"--- [API] /analyze 요청 수신: {input_data.target_district} ({input_data.business_type}) ---")
 
     initial_state = {
-        "messages": [
-            HumanMessage(
-                content=f"{input_data.target_district} {input_data.brand_name} 분석 시작"
-            )
-        ],
+        "messages": [HumanMessage(content=f"{input_data.target_district} {input_data.brand_name} 분석 시작")],
         "business_type": input_data.business_type,
         "brand_name": input_data.brand_name,
         "target_district": input_data.target_district,
@@ -157,9 +144,7 @@ async def analyze_location(input_data: SimulationInput):
     }
 
     try:
-        final_state = await asyncio.wait_for(
-            app_graph.ainvoke(initial_state), timeout=45.0
-        )
+        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=45.0)
         result = map_state_to_simulation_output(final_state, request_id)
         return {"status": "success", "data": result}
     except Exception as e:
@@ -172,9 +157,7 @@ async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
     request_id = str(uuid.uuid4())
     initial_state = {
-        "messages": [
-            HumanMessage(content=f"{input_data.target_district} 시뮬레이션 시작")
-        ],
+        "messages": [HumanMessage(content=f"{input_data.target_district} 시뮬레이션 시작")],
         "business_type": input_data.business_type,
         "brand_name": input_data.brand_name,
         "target_district": input_data.target_district,
@@ -186,9 +169,7 @@ async def run_simulation(input_data: SimulationInput):
         "errors": [],
     }
     try:
-        final_state = await asyncio.wait_for(
-            app_graph.ainvoke(initial_state), timeout=45.0
-        )
+        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=45.0)
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
         return {"status": "error", "message": str(e)}
