@@ -195,6 +195,99 @@ def check_commercial_lease_law(state: AgentState, retriever: LegalDocumentRetrie
         }
 
 
+def check_food_hygiene(state: AgentState, retriever: LegalDocumentRetriever) -> dict:
+    """
+    식품위생법 검토 — 업종별 영업신고/허가 및 위생 기준 검토.
+
+    주요 검토 항목:
+    - 영업 종류별 신고·허가 의무 (식품위생법 시행규칙)
+    - 위생교육 이수 의무
+    - 영업장 시설 기준
+
+    Returns:
+        dict: {type, level, summary, articles, recommendation}
+    """
+    business_type = state.business_type
+    district = state.target_district
+
+    query = f"{business_type} 영업신고 허가 위생교육 시설기준 식품위생법"
+    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES))
+
+    question = (
+        f"'{district}'에서 '{business_type}' 업종으로 프랜차이즈 창업 시 식품위생법상 "
+        "영업신고·허가 의무, 위생교육 이수 요건, 시설 기준을 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+
+    user_message = build_legal_prompt(docs, question)
+
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        articles = [d["metadata"].get("law_article", "") for d in docs]
+        return {
+            "type": "food_hygiene",
+            "level": level,
+            "summary": response,
+            "articles": articles,
+            "recommendation": "영업신고 전 관할 보건소 위생과 확인 권장" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "food_hygiene",
+            "level": "caution",
+            "summary": f"식품위생법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_safety_regulation(state: AgentState, retriever: LegalDocumentRetriever) -> dict:
+    """
+    다중이용업소 안전관리법 검토 — 소방·안전 시설 의무 검토.
+
+    주요 검토 항목:
+    - 다중이용업소 해당 여부 (면적·업종 기준)
+    - 소방시설 설치 의무 (간이스프링클러, 비상구 등)
+    - 안전시설 완비증명서 발급 의무
+
+    Returns:
+        dict: {type, level, summary, articles, recommendation}
+    """
+    business_type = state.business_type
+
+    query = f"{business_type} 다중이용업소 소방시설 안전시설 완비증명 의무"
+    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.SAFETY_SOURCES))
+
+    question = (
+        f"'{business_type}' 업종 프랜차이즈 창업 시 다중이용업소의 안전관리에 관한 특별법상 "
+        "다중이용업소 해당 여부, 소방시설 설치 의무, 안전시설 완비증명서 발급 요건을 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+
+    user_message = build_legal_prompt(docs, question)
+
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        articles = [d["metadata"].get("law_article", "") for d in docs]
+        return {
+            "type": "safety_regulation",
+            "level": level,
+            "summary": response,
+            "articles": articles,
+            "recommendation": "소방서 안전시설 완비증명서 사전 확인 필수" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "safety_regulation",
+            "level": "caution",
+            "summary": f"다중이용업소 안전관리법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
 def check_zoning_regulation(state: AgentState) -> dict:
     """
     용도지역 규제 검토 — 대상 행정동의 용도지역에서 해당 업종 영업 가능 여부.
@@ -255,6 +348,14 @@ def legal_node(state: AgentState) -> AgentState:
     # 3. 용도지역 규제 검토 (LLM 없이 규칙 기반)
     zoning_result = check_zoning_regulation(state)
     risks.append(zoning_result)
+
+    # 4. 식품위생법 검토
+    food_hygiene_result = check_food_hygiene(state, retriever)
+    risks.append(food_hygiene_result)
+
+    # 5. 다중이용업소 안전관리법 검토
+    safety_result = check_safety_regulation(state, retriever)
+    risks.append(safety_result)
 
     # state 업데이트 — analysis_results가 없으면 초기화
     if state.analysis_results is None:

@@ -37,6 +37,14 @@ class LegalDocumentRetriever:
     MAPO_SOURCES = [
         "서울특별시 마포구 지역상권 상생협력에 관한 조례",
     ]
+    FOOD_HYGIENE_SOURCES = [
+        "식품위생법 시행규칙(총리령)(제02077호)(20260301)",
+        "[한국외식업중앙회] 2026 위생교육교재 (표지 포함)",
+    ]
+    SAFETY_SOURCES = [
+        "210226_ 「다중이용업소의 안전관리에 관한 특별법」업무처리 지침",
+        "제4차(2024~2028) 다중이용업소 안전관리 기본계획(전문)",
+    ]
 
     async def search(
         self,
