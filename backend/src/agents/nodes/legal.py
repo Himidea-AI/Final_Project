@@ -16,7 +16,7 @@ import concurrent.futures
 
 import anthropic
 
-from src.agents.state import AgentState, AnalysisResults
+from src.agents.state import AgentState
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.constants import LLM_MODEL, LLM_TIMEOUT
@@ -116,8 +116,8 @@ def check_franchise_law(state: AgentState, retriever: LegalDocumentRetriever) ->
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
-    brand = state.brand_name or "해당 브랜드"
-    district = state.target_district
+    brand = state.get("brand_name") or "해당 브랜드"
+    district = state.get("target_district", "")
 
     query = f"{brand} 영업지역 보장 동일 브랜드 출점 제한 가맹사업법"
     docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES))
@@ -163,7 +163,7 @@ def check_commercial_lease_law(state: AgentState, retriever: LegalDocumentRetrie
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
-    district = state.target_district
+    district = state.get("target_district", "")
 
     query = "권리금 회수 기회 보호 계약갱신요구권 환산보증금 상가임대차보호법"
     docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES))
@@ -209,8 +209,8 @@ def check_food_hygiene(state: AgentState, retriever: LegalDocumentRetriever) -> 
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
-    business_type = state.business_type
-    district = state.target_district
+    business_type = state.get("business_type", "")
+    district = state.get("target_district", "")
 
     query = f"{business_type} 영업신고 허가 위생교육 시설기준 식품위생법"
     docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES))
@@ -256,7 +256,7 @@ def check_safety_regulation(state: AgentState, retriever: LegalDocumentRetriever
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
-    business_type = state.business_type
+    business_type = state.get("business_type", "")
 
     query = f"{business_type} 다중이용업소 소방시설 안전시설 완비증명 의무"
     docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.SAFETY_SOURCES))
@@ -302,7 +302,7 @@ def check_ftc_franchise(state: AgentState) -> dict:
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
-    brand = state.brand_name or ""
+    brand = state.get("brand_name") or ""
 
     if not brand:
         return {
@@ -396,8 +396,8 @@ def check_zoning_regulation(state: AgentState) -> dict:
     Returns:
         dict: {type, level, zone, business_type, allowed, summary}
     """
-    district = state.target_district
-    business_type = state.business_type  # "cafe" | "restaurant" | "convenience"
+    district = state.get("target_district", "")
+    business_type = state.get("business_type", "")  # "cafe" | "restaurant" | "convenience"
 
     zone = _DISTRICT_ZONE_MAP.get(district, "근린상업지역")  # 알 수 없는 동은 상업지역으로 가정
     rules = _ZONING_RULES.get(zone, {"허용": [], "제한": []})
@@ -425,13 +425,18 @@ def check_zoning_regulation(state: AgentState) -> dict:
     }
 
 
-def legal_node(state: AgentState) -> AgentState:
+def legal_node(state) -> dict:
     """
     법규검토 Agent 메인 노드 — LangGraph에서 호출되는 진입점.
 
-    3가지 법률 검토를 수행하고 결과를 state.analysis_results.legal_risks에 저장.
+    Pydantic AgentState / TypedDict AgentState 양쪽 모두 지원.
+    결과는 analysis_results["legal_risks"]에 저장하고 dict로 반환.
     검토 중 오류가 발생해도 다른 검토는 계속 진행 (부분 실패 허용).
     """
+    # Pydantic 모델이 넘어온 경우 dict로 정규화 (TypedDict는 이미 dict)
+    if not isinstance(state, dict):
+        state = state.model_dump()
+
     retriever = LegalDocumentRetriever()
 
     risks: list[dict] = []
@@ -460,12 +465,15 @@ def legal_node(state: AgentState) -> AgentState:
     ftc_result = check_ftc_franchise(state)
     risks.append(ftc_result)
 
-    # state 업데이트 — analysis_results가 없으면 초기화
-    if state.analysis_results is None:
-        state = state.model_copy(update={"analysis_results": AnalysisResults()})
+    # legal_info: 이번 검토에서 참조한 RAG 문서 수집 (graph.py 로그용)
+    query = f"{state.get('business_type', '')} {state.get('target_district', '')} 프랜차이즈 법률 검토"
+    legal_info = _run_async(retriever.search(query, top_k=10))
 
-    updated_results = state.analysis_results.model_copy(update={"legal_risks": risks})
-    return state.model_copy(update={"analysis_results": updated_results})
+    # analysis_results dict 업데이트
+    analysis = dict(state.get("analysis_results") or {})
+    analysis["legal_risks"] = risks
+
+    return {**state, "analysis_results": analysis, "legal_info": legal_info}
 
 
 # graph.py(B1) 호환성 별칭
