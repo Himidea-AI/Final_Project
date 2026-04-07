@@ -2,7 +2,7 @@
 비용산정 Agent — 임대료, 인건비, 원가율 등 운영비 산출
 
 주요 데이터 소스:
-  - 국토교통부 실거래가 API (임대료 추이)
+  - rent_cost 테이블 (임대료, 공실률, 수익률)
   - 소상공인 데이터 (인건비, 원가율)
 """
 from src.agents.state import AgentState
