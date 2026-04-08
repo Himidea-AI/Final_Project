@@ -27,8 +27,8 @@ function formatPhone(v: string) {
 }
 
 const fieldClass =
-  "w-full px-4 py-3 rounded-xl bg-[#1c1c1c] border border-[#333333] text-[#fafafa] text-sm placeholder-[#555] outline-none transition-colors duration-200 focus:border-[#818cf8]";
-const labelClass = "block text-xs text-[#a1a1aa] font-medium mb-1.5";
+  "w-full px-4 py-3 rounded-xl bg-[#1e1b18] border border-[#3a3633] text-[#e2e8f0] text-sm placeholder-[#9ca3af] outline-none transition-colors duration-200 focus:border-[#818cf8]";
+const labelClass = "block text-xs text-[#9ca3af] font-medium mb-1.5";
 
 interface Props {
   onSuccess: () => void;
@@ -115,7 +115,7 @@ export default function EnterpriseContactForm({ onSuccess }: Props) {
         className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
           allValid
             ? "bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
-            : "bg-[#262626] text-[#555] cursor-not-allowed"
+            : "bg-[#2c2825] text-[#9ca3af] cursor-not-allowed"
         }`}
       >
         문의 제출
