@@ -384,7 +384,7 @@ function IntroScene({
             return (
               <button
                 key={item}
-                className="relative text-left group"
+                className="relative text-left group w-fit self-start"
                 onMouseEnter={() => setActiveMenuIndex(i)}
                 onClick={() => {
                   if (i === 0) onAboutClick();
