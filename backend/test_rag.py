@@ -1,4 +1,10 @@
 import asyncio
+import sys
+
+# Windows ProactorEventLoop + psycopg3 비호환 문제 해결
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from src.agents.graph import compile_graph
 from langchain_core.messages import HumanMessage
 from src.config.settings import settings

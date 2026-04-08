@@ -12,60 +12,18 @@ import concurrent.futures
 import json
 from typing import List, Dict, Any, Optional
 
-import chromadb
 import openai
 from langchain_community.vectorstores import PGVector
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from src.config.settings import settings
 from dotenv import load_dotenv
 
 # [보강] settings 모듈에서 이미 로드했을 수 있으나, 만약을 위해 호출 유지
 load_dotenv()
 
-class VectorDBClient:
-    """
-    ChromaDB 기반 벡터 DB 클라이언트.
-    """
-    def __init__(
-        self,
-        collection_name: str,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        persist_dir: Optional[str] = None,
-    ):
-        self.collection_name = collection_name
-        self._embedding_mode = settings.embedding_mode
+_LOCAL_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 
-        # DEV 모드에서는 HttpClient 사용 시도 자체를 건너뜁니다.
-        if settings.app_mode == "DEV":
-            print("DEBUG: [VectorDBClient] DEV 모드 - ChromaDB 연결을 건너뜁니다.")
-            self._client = None
-            self._collection = None
-            return
 
-        if persist_dir:
-            self._client = chromadb.PersistentClient(path=persist_dir)
-        else:
-            self._client = chromadb.HttpClient(
-                host=host or settings.chroma_host, 
-                port=port or settings.chroma_port
-            )
-        self._collection = self._client.get_or_create_collection(name=collection_name)
-
-        # 임베딩 초기화
-        if self._embedding_mode == "openai":
-            self._openai = openai.OpenAI(api_key=settings.openai_api_key)
-            self._local_model = None
-        else:
-            from sentence_transformers import SentenceTransformer
-            self._local_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-            self._openai = None
-
-    async def search(self, query: str, top_k: int = 5) -> list:
-        if settings.app_mode == "DEV": 
-            return [{"text": "Mock Data", "metadata": {}, "distance": 0.1}]
-        # ... (이후 로직 생략)
-        return []
 
 class LegalVectorDB:
     """
@@ -79,11 +37,10 @@ class LegalVectorDB:
     @property
     def embeddings(self):
         if self._embeddings is None:
-            # 설정에서 API 키를 가져옵니다.
-            google_api_key = settings.google_api_key
-            self._embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/text-embedding-004",
-                google_api_key=google_api_key,
+            self._embeddings = HuggingFaceEmbeddings(
+                model_name=_LOCAL_EMBEDDING_MODEL,
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
             )
         return self._embeddings
 

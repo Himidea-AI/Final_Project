@@ -258,7 +258,7 @@ class RentCost(Base):
     __tablename__ = "rent_cost"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
-    data_type = Column(String(20), index=True, comment="데이터 유형 (rent/transaction)")
+    data_type = Column(String(20), index=True, comment="데이터 유형 (building_rent/rent_small_store)")
     area_name = Column(String(50), comment="지역명")
     year = Column(SmallInteger, comment="기준 연도")
     quarter = Column(SmallInteger, comment="기준 분기")
@@ -267,11 +267,23 @@ class RentCost(Base):
     investment_return = Column(Float, comment="투자 수익률")
     income_return = Column(Float, comment="소득 수익률")
     capital_return = Column(Float, comment="자본 수익률")
-    transaction_date = Column(String(10), comment="거래 일자 (YYYY-MM-DD)")
-    price = Column(BigInteger, comment="거래 금액 (만원)")
-    floor_area = Column(Float, comment="전용 면적 (m²)")
-    floor = Column(String(10), comment="층 정보")
     source = Column(String(20), comment="데이터 출처")
+
+
+class GolmokRent(Base):
+    """행정동별 환산임대료 — 서울 상권분석서비스(신용보증재단 기반)"""
+
+    __tablename__ = "golmok_rent"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    year = Column(SmallInteger, index=True, comment="기준 연도")
+    quarter = Column(SmallInteger, comment="기준 분기")
+    dong_code = Column(String(10), index=True, comment="행정동코드")
+    dong_name = Column(String(20), comment="행정동명")
+    gubun = Column(String(10), comment="구분 (gu/dong)")
+    rent_1f = Column(Integer, comment="1층 환산임대료 (원/3.3㎡)")
+    rent_other = Column(Integer, comment="1층 외 환산임대료 (원/3.3㎡)")
+    rent_total = Column(Integer, comment="전체 환산임대료 (원/3.3㎡)")
 
 
 # ---------------------------------------------------------------------------

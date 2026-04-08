@@ -1,0 +1,247 @@
+import { useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import type { SignupFormData } from "../types";
+
+const INITIAL: SignupFormData = {
+  companyName: "",
+  bizNumber: "",
+  contactName: "",
+  position: "",
+  email: "",
+  phone: "",
+  storeCount: "",
+  password: "",
+  passwordConfirm: "",
+  agreeTerms: false,
+};
+
+function formatBizNumber(v: string) {
+  const n = v.replace(/\D/g, "").slice(0, 10);
+  if (n.length <= 3) return n;
+  if (n.length <= 5) return `${n.slice(0, 3)}-${n.slice(3)}`;
+  return `${n.slice(0, 3)}-${n.slice(3, 5)}-${n.slice(5)}`;
+}
+
+function formatPhone(v: string) {
+  const n = v.replace(/\D/g, "").slice(0, 11);
+  if (n.length <= 3) return n;
+  if (n.length <= 7) return `${n.slice(0, 3)}-${n.slice(3)}`;
+  return `${n.slice(0, 3)}-${n.slice(3, 7)}-${n.slice(7)}`;
+}
+
+function getPasswordStrength(pw: string): { level: number; label: string; color: string } {
+  if (pw.length === 0) return { level: 0, label: "", color: "" };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (/[a-zA-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^a-zA-Z0-9]/.test(pw)) score++;
+  const map = [
+    { level: 1, label: "약함", color: "bg-red-500" },
+    { level: 2, label: "보통", color: "bg-amber-500" },
+    { level: 3, label: "강함", color: "bg-emerald-400" },
+    { level: 4, label: "매우 강함", color: "bg-emerald-500" },
+  ];
+  return map[Math.min(score, 4) - 1] || map[0];
+}
+
+const fieldClass =
+  "w-full px-4 py-3 rounded-xl bg-[#1c1c1c] border text-[#fafafa] text-sm placeholder-[#555] outline-none transition-colors duration-200";
+const labelClass = "block text-xs text-[#a1a1aa] font-medium mb-1.5";
+const errorClass = "text-[10px] text-red-400 mt-1";
+
+interface Props {
+  planName: string;
+  onSuccess: () => void;
+}
+
+export default function SignupForm({ planName, onSuccess }: Props) {
+  const [form, setForm] = useState(INITIAL);
+  const [showPw, setShowPw] = useState(false);
+  const [showPwC, setShowPwC] = useState(false);
+  const [bizLoading, setBizLoading] = useState(false);
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+
+  const set = useCallback(
+    (key: keyof SignupFormData, val: string | boolean) =>
+      setForm((p) => ({ ...p, [key]: val })),
+    []
+  );
+  const touch = (key: string) => setTouched((p) => new Set(p).add(key));
+
+  // Biz number auto-complete simulation
+  const handleBizChange = (v: string) => {
+    const formatted = formatBizNumber(v);
+    set("bizNumber", formatted);
+    const digits = formatted.replace(/\D/g, "");
+    if (digits.length === 10 && !bizLoading) {
+      setBizLoading(true);
+      setTimeout(() => {
+        set("companyName", "(주)SPOTTER DEMO");
+        setBizLoading(false);
+      }, 500);
+    }
+  };
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
+  const pwStrength = getPasswordStrength(form.password);
+  const pwMatch = form.password === form.passwordConfirm && form.passwordConfirm.length > 0;
+  const storeNum = parseInt(form.storeCount) || 0;
+  const allValid =
+    form.companyName &&
+    form.bizNumber.replace(/\D/g, "").length === 10 &&
+    form.contactName &&
+    form.position &&
+    emailValid &&
+    form.phone.replace(/\D/g, "").length >= 10 &&
+    form.storeCount &&
+    form.password.length >= 8 &&
+    pwMatch &&
+    form.agreeTerms;
+
+  const handleSubmit = () => {
+    if (!allValid) return;
+    console.log("Signup:", { ...form, plan: planName });
+    onSuccess();
+  };
+
+  const fields = [
+    // Each field rendered with stagger delay
+    { key: "companyName", label: "기업명 (프랜차이즈 본부명)", type: "text", value: form.companyName, onChange: (v: string) => set("companyName", v), placeholder: "사업자등록번호 입력 시 자동완성", suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#f59e0b]" /> : form.companyName ? <CheckCircle size={14} className="text-emerald-400" /> : null },
+    { key: "bizNumber", label: "사업자등록번호", type: "text", value: form.bizNumber, onChange: handleBizChange, placeholder: "000-00-00000" },
+    { key: "contactName", label: "담당자명", type: "text", value: form.contactName, onChange: (v: string) => set("contactName", v), placeholder: "홍길동" },
+    { key: "position", label: "직책", type: "text", value: form.position, onChange: (v: string) => set("position", v), placeholder: "영업기획팀장" },
+    { key: "email", label: "업무용 이메일", type: "email", value: form.email, onChange: (v: string) => set("email", v), placeholder: "name@company.com", error: touched.has("email") && form.email && !emailValid ? "올바른 이메일 형식을 입력하세요" : "" },
+    { key: "phone", label: "연락처", type: "tel", value: form.phone, onChange: (v: string) => set("phone", formatPhone(v)), placeholder: "010-0000-0000" },
+    { key: "storeCount", label: "현재 가맹점 수", type: "number", value: form.storeCount, onChange: (v: string) => set("storeCount", v), placeholder: "0" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4 w-full">
+      {fields.map((f, i) => (
+        <motion.div
+          key={f.key}
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.05, duration: 0.4 }}
+        >
+          <label className={labelClass}>{f.label}</label>
+          <div className="relative">
+            <input
+              type={f.type}
+              value={f.value}
+              onChange={(e) => f.onChange(e.target.value)}
+              onBlur={() => touch(f.key)}
+              placeholder={f.placeholder}
+              className={`${fieldClass} ${
+                f.error ? "border-red-500" : "border-[#333333] focus:border-[#f59e0b]"
+              }`}
+            />
+            {f.suffix && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">{f.suffix}</div>
+            )}
+          </div>
+          {f.error && <p className={errorClass}>{f.error}</p>}
+          {f.key === "storeCount" && storeNum >= 30 && (
+            <p className="text-[10px] text-[#fbbf24] mt-1">
+              30호점 이상 — Enterprise 요금제를 추천합니다
+            </p>
+          )}
+        </motion.div>
+      ))}
+
+      {/* Password */}
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35, duration: 0.4 }}>
+        <label className={labelClass}>비밀번호</label>
+        <div className="relative">
+          <input
+            type={showPw ? "text" : "password"}
+            value={form.password}
+            onChange={(e) => set("password", e.target.value)}
+            placeholder="영문+숫자+특수문자 8자 이상"
+            className={`${fieldClass} border-[#333333] focus:border-[#f59e0b] pr-10`}
+          />
+          <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555] hover:text-[#a1a1aa]">
+            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+        {form.password && (
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex-1 h-1 rounded-full bg-[#262626] overflow-hidden flex gap-0.5">
+              {[1, 2, 3, 4].map((n) => (
+                <div key={n} className={`flex-1 rounded-full transition-colors ${n <= pwStrength.level ? pwStrength.color : "bg-[#262626]"}`} />
+              ))}
+            </div>
+            <span className="text-[10px] text-[#a1a1aa]">{pwStrength.label}</span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Password confirm */}
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.4 }}>
+        <label className={labelClass}>비밀번호 확인</label>
+        <div className="relative">
+          <input
+            type={showPwC ? "text" : "password"}
+            value={form.passwordConfirm}
+            onChange={(e) => set("passwordConfirm", e.target.value)}
+            onBlur={() => touch("passwordConfirm")}
+            placeholder="비밀번호 재입력"
+            className={`${fieldClass} pr-10 ${
+              touched.has("passwordConfirm") && form.passwordConfirm
+                ? pwMatch ? "border-emerald-500" : "border-red-500"
+                : "border-[#333333] focus:border-[#f59e0b]"
+            }`}
+          />
+          <button type="button" onClick={() => setShowPwC(!showPwC)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555] hover:text-[#a1a1aa]">
+            {showPwC ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+          {touched.has("passwordConfirm") && form.passwordConfirm && (
+            <div className="absolute right-10 top-1/2 -translate-y-1/2">
+              {pwMatch ? <CheckCircle size={14} className="text-emerald-400" /> : <XCircle size={14} className="text-red-400" />}
+            </div>
+          )}
+        </div>
+        {touched.has("passwordConfirm") && form.passwordConfirm && !pwMatch && (
+          <p className={errorClass}>비밀번호가 일치하지 않습니다</p>
+        )}
+      </motion.div>
+
+      {/* Terms */}
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45, duration: 0.4 }}>
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <div
+            className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${
+              form.agreeTerms ? "bg-[#f59e0b] border-[#f59e0b]" : "border-[#404040] group-hover:border-[#555]"
+            }`}
+            onClick={() => set("agreeTerms", !form.agreeTerms)}
+          >
+            {form.agreeTerms && (
+              <svg width="10" height="10" viewBox="0 0 8 8" fill="none">
+                <path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </div>
+          <span className="text-xs text-[#a1a1aa]">이용약관 및 개인정보처리방침에 동의합니다</span>
+        </label>
+      </motion.div>
+
+      {/* Submit */}
+      <motion.button
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5, duration: 0.4 }}
+        onClick={handleSubmit}
+        disabled={!allValid}
+        className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
+          allValid
+            ? "bg-gradient-to-r from-[#d97706] to-[#f59e0b] text-white shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-[0.98]"
+            : "bg-[#262626] text-[#555] cursor-not-allowed"
+        }`}
+      >
+        가입 완료
+      </motion.button>
+    </div>
+  );
+}

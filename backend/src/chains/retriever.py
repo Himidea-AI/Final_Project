@@ -5,24 +5,14 @@ RAG 문서 검색 — 가맹사업법/상가임대차보호법 문서를 Vector 
 import json
 from pathlib import Path
 
-from ..config.settings import settings
-from ..database.vector_db import VectorDBClient
-
-# 거리 임계값 (cosine distance 기준: 0=동일, 1=직교, 2=반대)
-# 1.0 초과 = 반대 방향 벡터, 사실상 무관한 문서
-DISTANCE_THRESHOLD = 1.0
+from ..database.vector_db import LegalVectorDB
 
 
 class LegalDocumentRetriever:
-    """법률 문서 검색기 — Vector DB 기반 RAG"""
+    """법률 문서 검색기 — pgvector 기반 RAG"""
 
     def __init__(self):
-        self._db = VectorDBClient(
-            collection_name="legal_documents",
-            host=settings.chroma_host,
-            port=settings.chroma_port,
-            persist_dir=settings.chroma_persist_dir or None,
-        )
+        self._db = LegalVectorDB()
 
     # 청크가 인덱싱된 source 메타데이터 값 (parse_pdfs.py의 파일명 stem과 일치)
     FRANCHISE_LAW_SOURCES = [
@@ -36,6 +26,14 @@ class LegalDocumentRetriever:
     ]
     MAPO_SOURCES = [
         "서울특별시 마포구 지역상권 상생협력에 관한 조례",
+    ]
+    FOOD_HYGIENE_SOURCES = [
+        "식품위생법 시행규칙(총리령)(제02077호)(20260301)",
+        "[한국외식업중앙회] 2026 위생교육교재 (표지 포함)",
+    ]
+    SAFETY_SOURCES = [
+        "210226_ 「다중이용업소의 안전관리에 관한 특별법」업무처리 지침",
+        "제4차(2024~2028) 다중이용업소 안전관리 기본계획(전문)",
     ]
 
     async def search(
@@ -58,47 +56,32 @@ class LegalDocumentRetriever:
             반환 형식: {"content": str, "metadata": {"source": ..., "relevance": float, ...}}
             relevance는 0~1 범위, 1에 가까울수록 관련도 높음
         """
-        where: dict | None = None
-        if source_filter and len(source_filter) == 1:
-            # 단일 소스 — ChromaDB $eq 연산자
-            where = {"source": {"$eq": source_filter[0]}}
-        elif source_filter and len(source_filter) > 1:
-            # 복수 소스 — ChromaDB $in 연산자
-            where = {"source": {"$in": source_filter}}
+        filter_dict = None
+        if source_filter:
+            filter_dict = {"source": {"$in": source_filter}}
 
-        results = await self._db.search(query, top_k=top_k, where=where)
+        vs = self._db.vectorstore
+        if vs is None:
+            return []
 
-        # 거리 임계값 초과 항목 제거 후 relevance로 변환
-        filtered = [
+        docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k, filter=filter_dict)
+
+        results = [
             {
-                "content": r["text"],
-                # 기존 metadata 필드 유지 + relevance 추가
+                "content": doc.page_content,
                 "metadata": {
-                    **r["metadata"],
-                    # cosine distance → similarity score (0~1)
-                    "relevance": round(1 - r["distance"] / 2, 4),
+                    **doc.metadata,
+                    "relevance": round(score, 4),
                 },
             }
-            for r in results
-            if r["distance"] < DISTANCE_THRESHOLD
+            for doc, score in docs_with_score
         ]
-
-        # relevance 내림차순 정렬
-        filtered.sort(key=lambda x: x["metadata"]["relevance"], reverse=True)
-        return filtered
-
-    async def add_documents(self, documents: list[dict]) -> None:
-        """
-        법률 문서 추가 — Vector DB에 새 문서 인덱싱
-
-        Args:
-            documents: [{"id": str, "text": str, "metadata": dict}, ...]
-        """
-        await self._db.add_documents(documents)
+        results.sort(key=lambda x: x["metadata"]["relevance"], reverse=True)
+        return results
 
     async def ingest_from_json(self, json_path: str | Path) -> int:
         """
-        processed/chunks.json을 읽어 ChromaDB에 일괄 적재
+        processed/chunks.json을 읽어 pgvector에 일괄 적재
 
         parse_pdfs.py 실행 후 이 메서드로 인덱싱하는 흐름:
             1. python data/legal/parse_pdfs.py
@@ -113,5 +96,10 @@ class LegalDocumentRetriever:
         with open(json_path, encoding="utf-8") as f:
             chunks = json.load(f)
 
-        await self.add_documents(chunks)
-        return len(chunks)
+        from langchain_core.documents import Document
+
+        docs = [Document(page_content=c["text"], metadata=c["metadata"]) for c in chunks]
+
+        vs = self._db.vectorstore
+        await vs.aadd_documents(docs)
+        return len(docs)

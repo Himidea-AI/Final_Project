@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -24,7 +25,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend" / "src"))
 from database.models import Base  # noqa: E402
 
 PROC = Path(__file__).resolve().parents[1] / "processed"
-DB_URL = "postgresql://postgres:ghdcksdud1@localhost:5432/mapo_simulator"
+
+# DB 접속 정보: 환경변수 → .env → 기본값 (docker-compose 기준)
+_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
+DB_URL = os.environ.get(
+    "POSTGRES_URL",
+    f"postgresql://postgres:{_pw}@localhost:5432/mapo_simulator",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -640,9 +647,7 @@ def load_store_quarterly(engine) -> int:
 
 
 def load_rent_cost(engine) -> int:
-    """Load rent_building_mapo.csv + commercial_trade_mapo.csv → rent_cost table."""
-    frames = []
-
+    """Load rent_building_mapo.csv → rent_cost table."""
     # rent_building_mapo.csv — area_name, year, quarter, rent, vacancy_rate, etc.
     df_rent = _read_csv("rent_building_mapo.csv")
     df_rent["data_type"] = df_rent.get(
@@ -675,64 +680,7 @@ def load_rent_cost(engine) -> int:
         "capital_return",
         "source",
     ]
-    frames.append(df_rent[[c for c in keep_rent if c in df_rent.columns]])
-
-    # commercial_trade_mapo.csv
-    df_trade = _read_csv("commercial_trade_mapo.csv", dtype=str)
-
-    # Map columns
-    df_trade = df_trade.rename(
-        columns={
-            "시군구": "area_name",
-            "계약년월": "transaction_date",
-            "거래금액(만원)": "price_raw",
-            "전용/연면적(㎡)": "floor_area",
-            "층": "floor",
-            "도로명": "road_name",
-        }
-    )
-
-    df_trade["data_type"] = "trade"
-    df_trade["source"] = "molit_trade"
-
-    # Clean price — remove commas and convert
-    if "price_raw" in df_trade.columns:
-        df_trade["price"] = pd.to_numeric(
-            df_trade["price_raw"].str.replace(",", "", regex=False), errors="coerce"
-        ).astype("Int64")
-    if "floor_area" in df_trade.columns:
-        df_trade["floor_area"] = pd.to_numeric(df_trade["floor_area"], errors="coerce")
-
-    # Parse transaction_date YYYYMM → YYYY-MM
-    if "transaction_date" in df_trade.columns:
-        df_trade["transaction_date"] = df_trade["transaction_date"].apply(
-            lambda x: f"{x[:4]}-{x[4:6]}" if pd.notna(x) and len(str(x)) >= 6 else None
-        )
-
-    # Extract year and quarter from transaction_date
-    if "transaction_date" in df_trade.columns:
-        df_trade["year"] = df_trade["transaction_date"].apply(
-            lambda x: (
-                int(x[:4])
-                if pd.notna(x) and isinstance(x, str) and len(x) >= 4
-                else None
-            )
-        )
-        df_trade["year"] = pd.array(df_trade["year"], dtype="Int64")
-
-    keep_trade = [
-        "data_type",
-        "area_name",
-        "year",
-        "price",
-        "floor_area",
-        "floor",
-        "transaction_date",
-        "source",
-    ]
-    frames.append(df_trade[[c for c in keep_trade if c in df_trade.columns]])
-
-    combined = pd.concat(frames, ignore_index=True)
+    combined = df_rent[[c for c in keep_rent if c in df_rent.columns]]
     combined.to_sql(
         "rent_cost",
         engine,
@@ -814,6 +762,40 @@ def load_dong_mapping(engine) -> int:
     return len(result)
 
 
+def load_golmok_rent(engine) -> int:
+    """Load golmok_rent_mapo.csv → golmok_rent table."""
+    df = _read_csv("golmok_rent_mapo.csv")
+
+    for col in ["year", "quarter"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+    for col in ["rent_1f", "rent_other", "rent_total"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+
+    keep = [
+        "year",
+        "quarter",
+        "dong_code",
+        "dong_name",
+        "gubun",
+        "rent_1f",
+        "rent_other",
+        "rent_total",
+    ]
+    df = df[[c for c in keep if c in df.columns]]
+
+    df.to_sql(
+        "golmok_rent",
+        engine,
+        if_exists="replace",
+        index=False,
+        method="multi",
+        chunksize=1000,
+    )
+    return len(df)
+
+
 # ---------------------------------------------------------------------------
 # LOADERS registry
 # ---------------------------------------------------------------------------
@@ -828,6 +810,7 @@ LOADERS: dict = {
     "store_info": load_store_info,
     "store_quarterly": load_store_quarterly,
     "rent_cost": load_rent_cost,
+    "golmok_rent": load_golmok_rent,
     "dong_mapping": load_dong_mapping,
 }
 

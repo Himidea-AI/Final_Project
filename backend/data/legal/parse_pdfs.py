@@ -8,6 +8,7 @@
 출력:
     backend/data/legal/processed/chunks.json
 """
+
 import json
 import re
 from pathlib import Path
@@ -40,6 +41,36 @@ PDF_TARGETS: list[tuple[str, str, str]] = [
         "마포구_조례",
         "article",
     ),
+    (
+        "상가건물 임대차보호법(법률)(제21065호)(20260102).pdf",
+        "상가임대차보호법",
+        "article",
+    ),
+    (
+        "상가건물 임대차보호법 시행령(대통령령)(제35947호)(20260102).pdf",
+        "상가임대차보호법_시행령",
+        "article",
+    ),
+    (
+        "[한국외식업중앙회] 2026 위생교육교재 (표지 포함).pdf",
+        "위생교육교재",
+        "sliding",
+    ),
+    (
+        "210226_ 「다중이용업소의 안전관리에 관한 특별법」업무처리 지침.pdf",
+        "다중이용업소_업무처리지침",
+        "sliding",
+    ),
+    (
+        "제4차(2024~2028) 다중이용업소 안전관리 기본계획(전문).pdf",
+        "다중이용업소_안전관리기본계획",
+        "sliding",
+    ),
+    (
+        "식품위생법 시행규칙(총리령)(제02077호)(20260301).pdf",
+        "식품위생법_시행규칙",
+        "article",
+    ),
 ]
 
 # 조문 단위 분리 시 단일 청크 최대 길이 (초과 시 추가 분할)
@@ -52,7 +83,7 @@ MIN_CHUNK_LENGTH = 20
 # PDF 페이지 헤더/푸터에 자주 등장하는 노이즈 패턴
 _HEADER_NOISE_PATTERNS = re.compile(
     r"법제처\s*\d*\s*국가법령정보센터|"
-    r"^\s*\d+\s*$|"           # 페이지 번호만 있는 줄
+    r"^\s*\d+\s*$|"  # 페이지 번호만 있는 줄
     r"공정거래위원회$"
 )
 
@@ -158,11 +189,13 @@ def parse_all() -> list[dict]:
 
         print(f"[PARSE] {filename}")
         text = extract_text(pdf_path)
+        # source는 확장자 제거한 stem — retriever.py의 *_SOURCES 상수와 일치
+        source_name = Path(filename).stem
 
         if strategy == "article":
-            chunks = split_by_article(text, category, filename)
+            chunks = split_by_article(text, category, source_name)
         else:
-            chunks = split_by_sliding_window(text, category, filename)
+            chunks = split_by_sliding_window(text, category, source_name)
 
         # 전체 순번을 ID에 추가해 중복 방지 (같은 조문 번호가 여러 번 나타날 수 있음)
         global_offset = len(all_chunks)
