@@ -195,7 +195,9 @@ def backtest_revenue(test_year: int = 2024) -> dict:
     pred_vals = pred_df["predicted_annual_sales"].values
 
     # 4. 전체 정확도
-    overall_report = generate_accuracy_report(actual_vals, pred_vals)
+    full_report = generate_accuracy_report(actual_vals, pred_vals)
+    overall_report = full_report["overall"]
+    overall_report["n_samples"] = len(actual_vals)
 
     # 5. 동별 MAPE
     by_dong: dict = {}
