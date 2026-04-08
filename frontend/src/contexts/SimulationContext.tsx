@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 /** [B1-C1 연동] 분석 결과 데이터를 전역으로 관리하는 컨텍스트 */
 interface SimulationContextType {
