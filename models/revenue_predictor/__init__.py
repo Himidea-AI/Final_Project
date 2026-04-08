@@ -1,12 +1,18 @@
 """
-매출 예측 모델 — PyTorch 기반 딥러닝 모델
+생존률/폐업률 예측 모델 — LSTM 기반 시계열 예측
 
-상권 데이터(유동인구, 경쟁도, 임대료 등)를 입력받아 예상 월매출을 예측.
+특정 동×업종의 점포 시계열 데이터(점포수, 폐업률, 프랜차이즈 비율 등)를
+입력받아 향후 생존 확률을 예측한다.
+B2(수지니)의 12개월 시뮬레이션 입력으로 활용.
 
-  - model.py     : 모델 아키텍처 정의 (PyTorch nn.Module)
-  - train.py     : 학습 스크립트 (데이터 로드 → 학습 → 모델 저장)
-  - predict.py   : 추론 함수 (학습된 모델로 매출 예측)
-  - data_prep.py : 학습 데이터 전처리 (피처 엔지니어링, 정규화, train/val 분할)
+  - model.py     : SurvivalPredictor (LSTM + Attention)
+  - train.py     : 서울 사전학습 → 마포구 파인튜닝
+  - predict.py   : predict(dong_code, industry_code) → 생존률 예측
+  - data_prep.py : 시계열 전처리 (피처 엔지니어링, sliding window, 정규화)
 
-담당: C — 딥러닝 모델 개발자
+담당: B2 — 딥러닝 모델 개발자
 """
+
+from models.revenue_predictor.predict import predict
+
+__all__ = ["predict"]
