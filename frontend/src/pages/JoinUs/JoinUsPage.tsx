@@ -75,7 +75,7 @@ export default function JoinUsPage({ onBack }: Props) {
                 transition={{ duration: 0.6 }}
                 className="text-center mb-16"
               >
-                <span className="font-mono text-[#f59e0b] tracking-widest text-xs uppercase">
+                <span className="font-mono text-[#818cf8] tracking-widest text-xs uppercase">
                   Pricing
                 </span>
                 <h1 className="text-4xl md:text-6xl font-black mt-4 tracking-tight">
@@ -155,8 +155,8 @@ export default function JoinUsPage({ onBack }: Props) {
               transition={{ duration: 0.6, ease: [0.19, 1, 0.22, 1] }}
               className="flex flex-col items-center justify-center text-center py-20"
             >
-              <div className="w-20 h-20 rounded-full bg-[#f59e0b]/10 flex items-center justify-center mb-6">
-                <CheckCircle size={40} className="text-[#f59e0b]" />
+              <div className="w-20 h-20 rounded-full bg-[#818cf8]/10 flex items-center justify-center mb-6">
+                <CheckCircle size={40} className="text-[#818cf8]" />
               </div>
               <h2 className="text-3xl font-black mb-3">
                 {selectedPlan === "enterprise" ? "문의가 접수되었습니다" : "가입이 완료되었습니다"}
@@ -168,7 +168,7 @@ export default function JoinUsPage({ onBack }: Props) {
               </p>
               <button
                 onClick={onBack}
-                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#d97706] to-[#f59e0b] text-white font-bold text-sm tracking-wider hover:scale-[1.02] active:scale-[0.98] transition-all"
+                className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white font-bold text-sm tracking-wider hover:scale-[1.02] active:scale-[0.98] transition-all"
               >
                 SPOTTER 시작하기
               </button>

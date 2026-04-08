@@ -24,7 +24,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
       transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}
       className={`relative w-[340px] shrink-0 rounded-2xl border p-8 flex flex-col transition-all duration-300 hover:-translate-y-1 ${
         isGrowth
-          ? "bg-[#141414] border-[#f59e0b] shadow-[0_0_30px_rgba(245,158,11,0.15)]"
+          ? "bg-[#141414] border-[#818cf8] shadow-[0_0_30px_rgba(99,102,241,0.15)]"
           : "bg-[#141414] border-[#262626] hover:border-[#404040]"
       }`}
     >
@@ -33,7 +33,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         <span className="text-lg">{plan.badge}</span>
         <span className="text-[#fafafa] font-bold text-lg">{plan.name}</span>
         {plan.badgeLabel && (
-          <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#fbbf24] text-[10px] font-bold tracking-wider uppercase">
+          <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-[#a5b4fc] text-[10px] font-bold tracking-wider uppercase">
             {plan.badgeLabel}
           </span>
         )}
@@ -56,7 +56,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         {plan.features.map((f, i) => (
           <div key={i} className="flex items-center gap-3 text-sm leading-relaxed">
             {f.included ? (
-              <Check size={14} className="text-[#fbbf24] shrink-0" />
+              <Check size={14} className="text-[#a5b4fc] shrink-0" />
             ) : (
               <Minus size={14} className="text-[#404040] shrink-0" />
             )}
@@ -72,7 +72,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         onClick={() => onSelect(plan.id)}
         className={`w-full py-3 rounded-xl font-bold text-sm tracking-wider transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${
           isGrowth
-            ? "bg-gradient-to-r from-[#d97706] to-[#f59e0b] text-white shadow-[0_0_20px_rgba(245,158,11,0.3)]"
+            ? "bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)]"
             : "bg-[#262626] text-[#fafafa] border border-[#333333] hover:bg-[#333333]"
         }`}
       >
@@ -85,7 +85,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
           className="absolute -inset-px rounded-2xl pointer-events-none"
           style={{
             background:
-              "linear-gradient(135deg, rgba(245,158,11,0.08), transparent, rgba(245,158,11,0.05))",
+              "linear-gradient(135deg, rgba(99,102,241,0.08), transparent, rgba(99,102,241,0.05))",
             animation: "energy-pulse 3s ease-in-out infinite",
           }}
         />
