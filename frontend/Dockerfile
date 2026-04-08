@@ -3,7 +3,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+# [C2-핫픽스] package-lock.json과 package.json 불일치 대응: npm install 사용
+RUN npm install
 COPY . .
 # [C2-핫픽스] 로컬 컨테이너 테스트 목적: tsc의 lint 에러 무시하고 vite build만 실행
 RUN npx vite build
