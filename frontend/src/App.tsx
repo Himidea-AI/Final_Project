@@ -1075,69 +1075,122 @@ function ContactPage({ onBack }: { onBack: () => void }) {
           <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Card 1: Workspace — full width */}
             <div
-              className="md:col-span-2 bg-[#2c2825] border border-[#3a3633] rounded-2xl p-5 md:p-6 hover:border-indigo-500/50 transition-colors flex flex-col justify-center"
+              className="group/card md:col-span-2 relative rounded-2xl overflow-hidden p-[2px]"
               style={{ animation: "fadeSlideIn 1s ease-out 100ms both" }}
             >
+              <div
+                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
+                style={{
+                  background:
+                    "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                }}
+              />
+              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
               <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
                 Workspace
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <a
-                  href="https://github.com/Himidea-AI/Final_Project"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-xl p-4 flex justify-between items-center group transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <GitFork size={18} className="text-[#9ca3af] group-hover:text-[#e2e8f0] transition-colors" />
-                    <span className="font-bold text-[#e2e8f0] text-sm">GitHub</span>
-                  </div>
-                  <ExternalLink size={14} className="text-[#3a3633] group-hover:text-indigo-400 transition-colors" />
-                </a>
-                <a
-                  href="https://www.notion.so/333ac2a0181b802b807cf7de2447b890"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-xl p-4 flex justify-between items-center group transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <ExternalLink size={18} className="text-[#9ca3af] group-hover:text-[#e2e8f0] transition-colors" />
-                    <span className="font-bold text-[#e2e8f0] text-sm">Notion</span>
-                  </div>
-                  <ExternalLink size={14} className="text-[#3a3633] group-hover:text-indigo-400 transition-colors" />
-                </a>
-                <a
-                  href="https://www.figma.com/board/lkjvfmKP4FU5XWBAyWR52a/%EC%A0%9C%EB%AA%A9-%EC%97%86%EC%9D%8C?node-id=0-1&p=f&t=ZITF88ooGHZ2rrHV-0"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-xl p-4 flex justify-between items-center group transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <ExternalLink size={18} className="text-[#9ca3af] group-hover:text-[#e2e8f0] transition-colors" />
-                    <span className="font-bold text-[#e2e8f0] text-sm">Figma</span>
-                  </div>
-                  <ExternalLink size={14} className="text-[#3a3633] group-hover:text-indigo-400 transition-colors" />
-                </a>
-                <a
-                  href="https://bat981120.atlassian.net/jira/software/projects/IM3/boards/2"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-xl p-4 flex justify-between items-center group transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <ExternalLink size={18} className="text-[#9ca3af] group-hover:text-[#e2e8f0] transition-colors" />
-                    <span className="font-bold text-[#e2e8f0] text-sm">Jira</span>
-                  </div>
-                  <ExternalLink size={14} className="text-[#3a3633] group-hover:text-indigo-400 transition-colors" />
-                </a>
+                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                  <div
+                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                    }}
+                  />
+                  <a
+                    href="https://github.com/Himidea-AI/Final_Project"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                  >
+                    <div className="flex items-center gap-3">
+                      <GitFork size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">GitHub</span>
+                    </div>
+                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                  </a>
+                </div>
+                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                  <div
+                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                    }}
+                  />
+                  <a
+                    href="https://www.notion.so/333ac2a0181b802b807cf7de2447b890"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Notion</span>
+                    </div>
+                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                  </a>
+                </div>
+                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                  <div
+                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                    }}
+                  />
+                  <a
+                    href="https://www.figma.com/board/lkjvfmKP4FU5XWBAyWR52a/%EC%A0%9C%EB%AA%A9-%EC%97%86%EC%9D%8C?node-id=0-1&p=f&t=ZITF88ooGHZ2rrHV-0"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Figma</span>
+                    </div>
+                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                  </a>
+                </div>
+                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                  <div
+                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                    }}
+                  />
+                  <a
+                    href="https://bat981120.atlassian.net/jira/software/projects/IM3/boards/2"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Jira</span>
+                    </div>
+                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                  </a>
+                </div>
+              </div>
               </div>
             </div>
 
             {/* Card 2: Team Info */}
             <div
-              className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-5 md:p-6 hover:border-indigo-500/50 transition-colors flex flex-col justify-center"
+              className="group/card relative rounded-2xl overflow-hidden p-[2px]"
               style={{ animation: "fadeSlideIn 1s ease-out 200ms both" }}
             >
+              <div
+                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
+                style={{
+                  background:
+                    "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                }}
+              />
+              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
               <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-2 block">
                 Team
               </span>
@@ -1148,13 +1201,22 @@ function ContactPage({ onBack }: { onBack: () => void }) {
                 Mentor
               </span>
               <p className="text-lg font-bold text-white">황태림</p>
+              </div>
             </div>
 
             {/* Card 3: Location */}
             <div
-              className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-5 md:p-6 hover:border-indigo-500/50 transition-colors flex flex-col justify-center"
+              className="group/card relative rounded-2xl overflow-hidden p-[2px]"
               style={{ animation: "fadeSlideIn 1s ease-out 300ms both" }}
             >
+              <div
+                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
+                style={{
+                  background:
+                    "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                }}
+              />
+              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
               <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
                 Location
               </span>
@@ -1166,13 +1228,22 @@ function ContactPage({ onBack }: { onBack: () => void }) {
                   아카데미
                 </span>
               </div>
+              </div>
             </div>
 
             {/* Card 4: Direct Inquiry — full width */}
             <div
-              className="md:col-span-2 bg-[#2c2825] border border-[#3a3633] rounded-2xl p-5 md:p-6 hover:border-indigo-500/50 transition-colors flex flex-col justify-center"
+              className="group/card md:col-span-2 relative rounded-2xl overflow-hidden p-[2px]"
               style={{ animation: "fadeSlideIn 1s ease-out 400ms both" }}
             >
+              <div
+                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
+                style={{
+                  background:
+                    "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                }}
+              />
+              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
               <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
                 Direct Inquiry
               </span>
@@ -1191,6 +1262,7 @@ function ContactPage({ onBack }: { onBack: () => void }) {
                   <Phone className="w-5 h-5 text-[#9ca3af] shrink-0" />
                   010.6779.0080
                 </a>
+              </div>
               </div>
             </div>
           </div>
