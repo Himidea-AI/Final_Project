@@ -96,16 +96,28 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
         return message.content[0].text
 
     if provider == "gemini":
+        import time
+
         from langchain_core.messages import HumanMessage, SystemMessage
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0.1,
         )
-        response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
-        return response.content if isinstance(response.content, str) else str(response.content)
+        # 429 RESOURCE_EXHAUSTED 시 최대 2회 재시도 (지수 백오프)
+        for attempt in range(3):
+            try:
+                response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
+                return response.content if isinstance(response.content, str) else str(response.content)
+            except Exception as e:
+                if "429" in str(e) and attempt < 2:
+                    wait = 30 * (2**attempt)  # 30s → 60s
+                    print(f"[Gemini] 429 발생, {wait}초 후 재시도 ({attempt + 1}/2)")
+                    time.sleep(wait)
+                else:
+                    raise
 
     # 기본값: Ollama
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -321,6 +333,330 @@ def check_safety_regulation(state: AgentState, docs: list[dict]) -> dict:
         }
 
 
+def check_building_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    건축법 검토 — 용도변경 및 건축물 용도 적합성 검토.
+
+    주요 검토 항목:
+    - 영업장 건축물 용도 적합 여부 (근린생활시설 등)
+    - 용도변경 신고·허가 의무
+    - 무허가·불법건축물 임차 리스크
+
+    Args:
+        docs: _fetch_all_docs_parallel()에서 병렬 검색된 건축법 문서
+
+    Returns:
+        dict: {type, level, summary, articles, recommendation}
+    """
+    business_type = state.get("business_type", "")
+    district = state.get("target_district", "")
+
+    question = (
+        f"'{district}'에서 '{business_type}' 업종으로 창업할 때 건축법상 "
+        "건축물 용도 적합성, 용도변경 신고·허가 의무, 불법건축물 임차 리스크를 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+
+    user_message = build_legal_prompt(docs, question)
+
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        articles = [d["metadata"].get("law_article", "") for d in docs]
+        return {
+            "type": "building_law",
+            "level": level,
+            "summary": response,
+            "articles": articles,
+            "recommendation": "관할 구청 건축과에서 건축물 대장 및 용도 확인 필수" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "building_law",
+            "level": "caution",
+            "summary": f"건축법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_fire_safety_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    소방시설법 검토 — 소방시설 설치·유지 의무 검토.
+
+    주요 검토 항목:
+    - 업종·면적별 소방시설 설치 의무 (스프링클러, 소화기, 감지기 등)
+    - 소방안전관리자 선임 의무
+    - 소방시설 완공검사 및 정기점검 의무
+
+    Args:
+        docs: _fetch_all_docs_parallel()에서 병렬 검색된 소방시설법 문서
+
+    Returns:
+        dict: {type, level, summary, articles, recommendation}
+    """
+    business_type = state.get("business_type", "")
+
+    question = (
+        f"'{business_type}' 업종 창업 시 소방시설 설치 및 관리에 관한 법률상 "
+        "소방시설 설치·유지 의무, 소방안전관리자 선임 요건, 완공검사 및 정기점검 의무를 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+
+    user_message = build_legal_prompt(docs, question)
+
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        articles = [d["metadata"].get("law_article", "") for d in docs]
+        return {
+            "type": "fire_safety_law",
+            "level": level,
+            "summary": response,
+            "articles": articles,
+            "recommendation": "관할 소방서에서 소방시설 설치계획 사전 협의 권장" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "fire_safety_law",
+            "level": "caution",
+            "summary": f"소방시설법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_labor_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    근로기준법 검토 — 직원 고용 시 필수 준수 사항 검토.
+
+    주요 검토 항목:
+    - 근로계약서 작성·교부 의무
+    - 최저임금 준수 의무
+    - 주휴수당, 연장·야간근로 가산임금 의무
+    - 4대 보험 가입 의무
+
+    Args:
+        docs: _fetch_all_docs_parallel()에서 병렬 검색된 근로기준법 문서
+
+    Returns:
+        dict: {type, level, summary, articles, recommendation}
+    """
+    business_type = state.get("business_type", "")
+
+    question = (
+        f"'{business_type}' 프랜차이즈 창업 시 직원 고용과 관련하여 근로기준법상 "
+        "근로계약서 작성 의무, 최저임금 준수, 주휴수당 및 가산임금, 4대 보험 가입 의무를 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+
+    user_message = build_legal_prompt(docs, question)
+
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        articles = [d["metadata"].get("law_article", "") for d in docs]
+        return {
+            "type": "labor_law",
+            "level": level,
+            "summary": response,
+            "articles": articles,
+            "recommendation": "고용노동부 표준근로계약서 양식 사용 및 노무사 상담 권장" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "labor_law",
+            "level": "caution",
+            "summary": f"근로기준법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_vat_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    부가가치세법 검토 — 사업자 유형 및 세금계산서 의무.
+
+    주요 검토 항목:
+    - 사업자등록 의무 (개업 전 등록)
+    - 일반과세자 vs 간이과세자 기준 (연 매출 8천만 원)
+    - 세금계산서·영수증 발행 의무
+    """
+    business_type = state.get("business_type", "")
+
+    question = (
+        f"'{business_type}' 프랜차이즈 창업 시 부가가치세법상 사업자등록 의무, "
+        "일반과세자·간이과세자 판단 기준, 세금계산서 발행 의무를 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+    user_message = build_legal_prompt(docs, question)
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        return {
+            "type": "vat_law",
+            "level": level,
+            "summary": response,
+            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "recommendation": "세무사 상담을 통해 과세 유형 사전 결정 권장" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "vat_law",
+            "level": "caution",
+            "summary": f"부가가치세법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_privacy_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    개인정보 보호법 검토 — 고객 데이터 수집·처리 의무.
+
+    주요 검토 항목:
+    - 개인정보 수집 시 동의 의무
+    - 개인정보 처리방침 공개 의무
+    - CCTV 설치 시 안내판 부착 의무
+    """
+    business_type = state.get("business_type", "")
+
+    question = (
+        f"'{business_type}' 프랜차이즈 창업 시 개인정보 보호법상 "
+        "고객 정보 수집·처리 동의 의무, 개인정보 처리방침 공개, CCTV 설치 요건을 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+    user_message = build_legal_prompt(docs, question)
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        return {
+            "type": "privacy_law",
+            "level": level,
+            "summary": response,
+            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "recommendation": "개인정보 처리방침 및 CCTV 안내문 사전 준비 필요" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "privacy_law",
+            "level": "caution",
+            "summary": f"개인정보 보호법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_accessibility_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    장애인편의증진법 검토 — 편의시설 설치 의무.
+
+    주요 검토 항목:
+    - 대상 시설 해당 여부 (면적 300㎡ 이상 등)
+    - 장애인 주차구역, 경사로, 점자블록 등 편의시설 설치 의무
+    """
+    business_type = state.get("business_type", "")
+
+    question = (
+        f"'{business_type}' 프랜차이즈 창업 시 장애인·노인·임산부 등의 편의증진 보장에 관한 법률상 "
+        "편의시설(경사로, 장애인 화장실, 점자블록 등) 설치 의무 대상 여부와 설치 기준을 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+    user_message = build_legal_prompt(docs, question)
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        return {
+            "type": "accessibility_law",
+            "level": level,
+            "summary": response,
+            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "recommendation": "인테리어 설계 전 편의시설 설치 의무 여부 관할 구청 확인 권장" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "accessibility_law",
+            "level": "caution",
+            "summary": f"장애인편의증진법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_sewage_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    하수도법/물환경보전법 검토 — 음식점 오수처리 및 유류분리기 설치 의무.
+
+    주요 검토 항목:
+    - 오수처리시설 설치 의무 (음식점)
+    - 유류분리기(그리스 트랩) 설치 의무
+    - 폐수 배출 허용 기준
+    """
+    business_type = state.get("business_type", "")
+
+    question = (
+        f"'{business_type}' 창업 시 하수도법 및 물환경보전법상 "
+        "오수처리시설 설치 의무, 유류분리기(그리스 트랩) 설치 의무, 폐수 배출 기준을 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+    user_message = build_legal_prompt(docs, question)
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        return {
+            "type": "sewage_law",
+            "level": level,
+            "summary": response,
+            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "recommendation": "인테리어 공사 전 유류분리기 설치 계획 포함 여부 확인 필요" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "sewage_law",
+            "level": "caution",
+            "summary": f"하수도법/물환경보전법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
+def check_fair_trade_law(state: AgentState, docs: list[dict]) -> dict:
+    """
+    공정거래법 검토 — 불공정 가맹 계약 조항 리스크.
+
+    주요 검토 항목:
+    - 가맹본부의 불공정 거래 행위 금지
+    - 부당한 거래 강제 (필수 물품 고가 공급 등)
+    - 공정거래위원회 신고 가능 사항
+    """
+    brand = state.get("brand_name") or "해당 브랜드"
+
+    question = (
+        f"'{brand}' 프랜차이즈 가맹 계약 시 독점규제 및 공정거래에 관한 법률상 "
+        "가맹본부의 불공정 거래 행위, 부당한 거래 강제, 필수 물품 공급 관련 리스크를 검토해 주세요. "
+        "마지막 줄에 리스크 수준을 '안전', '주의', '위험' 중 하나로 명시하세요."
+    )
+    user_message = build_legal_prompt(docs, question)
+    try:
+        response = _call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
+        level = _extract_risk_level(response)
+        return {
+            "type": "fair_trade_law",
+            "level": level,
+            "summary": response,
+            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "recommendation": "가맹 계약서 내 불공정 조항 법무사 검토 권장" if level != "safe" else "",
+        }
+    except Exception as e:
+        return {
+            "type": "fair_trade_law",
+            "level": "caution",
+            "summary": f"공정거래법 검토 중 오류 발생: {e}",
+            "articles": [],
+            "recommendation": "수동 법률 검토 필요",
+        }
+
+
 def check_ftc_franchise(state: AgentState) -> dict:
     """
     공정위 가맹사업 정보공개서 검토 — 브랜드 폐점률·매출·가맹금 리스크 판정.
@@ -460,12 +796,14 @@ def check_zoning_regulation(state: AgentState) -> dict:
 
 async def _fetch_all_docs_parallel(state: dict, retriever: LegalDocumentRetriever) -> tuple:
     """
-    RAG 검색 5개 + 판례 API 검색 4개를 asyncio.gather()로 병렬 실행.
+    RAG 검색 13개 + 판례 API 검색 4개를 asyncio.gather()로 병렬 실행.
 
     순차 실행 대비 응답 시간을 대폭 단축.
 
     Returns:
         tuple: (franchise_docs, lease_docs, food_docs, safety_docs, summary_docs,
+                building_docs, fire_docs, labor_docs,
+                vat_docs, privacy_docs, accessibility_docs, sewage_docs, fair_trade_docs,
                 franchise_prec, lease_prec, food_prec, safety_prec)
     """
     brand = state.get("brand_name") or "해당 브랜드"
@@ -477,17 +815,33 @@ async def _fetch_all_docs_parallel(state: dict, retriever: LegalDocumentRetrieve
     food_q = f"{business_type} 영업신고 허가 위생교육 시설기준 식품위생법"
     safety_q = f"{business_type} 다중이용업소 소방시설 안전시설 완비증명 의무"
     summary_q = f"{business_type} {district} 프랜차이즈 법률 검토"
+    building_q = f"{business_type} 건축물 용도 근린생활시설 용도변경 건축법"
+    fire_q = f"{business_type} 소방시설 스프링클러 소화기 소방안전관리자 설치의무"
+    labor_q = "근로계약서 최저임금 주휴수당 가산임금 4대보험 근로기준법"
+    vat_q = "사업자등록 일반과세자 간이과세자 세금계산서 부가가치세"
+    privacy_q = "개인정보 수집 동의 처리방침 CCTV 고객정보"
+    accessibility_q = f"{business_type} 편의시설 경사로 장애인 설치의무"
+    sewage_q = f"{business_type} 오수처리 유류분리기 그리스트랩 폐수 하수도"
+    fair_trade_q = f"{brand} 가맹본부 불공정거래 거래강제 필수물품 공급"
 
     law_client = LawApiClient()
 
     return await asyncio.gather(
-        # pgvector RAG 검색
+        # pgvector RAG 검색 (13개)
         retriever.search(franchise_q, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),
         retriever.search(lease_q, top_k=5, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES),
         retriever.search(food_q, top_k=5, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES),
         retriever.search(safety_q, top_k=5, source_filter=LegalDocumentRetriever.SAFETY_SOURCES),
         retriever.search(summary_q, top_k=10),
-        # 국가법령정보 판례 검색 (단일 핵심 키워드로 검색)
+        retriever.search(building_q, top_k=5, source_filter=LegalDocumentRetriever.BUILDING_LAW_SOURCES),
+        retriever.search(fire_q, top_k=5, source_filter=LegalDocumentRetriever.FIRE_SAFETY_SOURCES),
+        retriever.search(labor_q, top_k=5, source_filter=LegalDocumentRetriever.LABOR_LAW_SOURCES),
+        retriever.search(vat_q, top_k=5, source_filter=LegalDocumentRetriever.VAT_LAW_SOURCES),
+        retriever.search(privacy_q, top_k=5, source_filter=LegalDocumentRetriever.PRIVACY_LAW_SOURCES),
+        retriever.search(accessibility_q, top_k=5, source_filter=LegalDocumentRetriever.ACCESSIBILITY_LAW_SOURCES),
+        retriever.search(sewage_q, top_k=5, source_filter=LegalDocumentRetriever.SEWAGE_LAW_SOURCES),
+        retriever.search(fair_trade_q, top_k=5, source_filter=LegalDocumentRetriever.FAIR_TRADE_SOURCES),
+        # 국가법령정보 판례 검색 (4개)
         law_client.search_precedents("가맹사업", display=3),
         law_client.search_precedents("권리금", display=3),
         law_client.search_precedents("식품위생", display=3),
@@ -512,13 +866,21 @@ def legal_node(state) -> dict:
 
     retriever = LegalDocumentRetriever()
 
-    # RAG 검색 5개 + 판례 검색 4개 병렬 실행 (핵심 최적화)
+    # RAG 검색 13개 + 판례 검색 4개 병렬 실행 (핵심 최적화)
     (
         franchise_docs,
         lease_docs,
         food_docs,
         safety_docs,
         legal_info_docs,
+        building_docs,
+        fire_docs,
+        labor_docs,
+        vat_docs,
+        privacy_docs,
+        accessibility_docs,
+        sewage_docs,
+        fair_trade_docs,
         franchise_prec,
         lease_prec,
         food_prec,
@@ -544,6 +906,30 @@ def legal_node(state) -> dict:
 
     # 6. 공정위 가맹사업 정보공개서 검토
     risks.append(check_ftc_franchise(state))
+
+    # 7. 건축법 검토
+    risks.append(check_building_law(state, building_docs))
+
+    # 8. 소방시설법 검토
+    risks.append(check_fire_safety_law(state, fire_docs))
+
+    # 9. 근로기준법 검토
+    risks.append(check_labor_law(state, labor_docs))
+
+    # 10. 부가가치세법 검토
+    risks.append(check_vat_law(state, vat_docs))
+
+    # 11. 개인정보 보호법 검토
+    risks.append(check_privacy_law(state, privacy_docs))
+
+    # 12. 장애인편의증진법 검토
+    risks.append(check_accessibility_law(state, accessibility_docs))
+
+    # 13. 하수도법/물환경보전법 검토
+    risks.append(check_sewage_law(state, sewage_docs))
+
+    # 14. 공정거래법 검토
+    risks.append(check_fair_trade_law(state, fair_trade_docs))
 
     # legal_info: RAG 문서 + 판례 합산 (graph.py 로그 + supervisor 완료 신호용)
     precedents = franchise_prec + lease_prec + food_prec + safety_prec
