@@ -1,4 +1,13 @@
 /**
+ * 🚨 [AI 개발 규칙: ROUTE STRUCTURE PROTECTED]
+ * ─────────────────────────────────────────────────────────────
+ * 1. 이 파일의 <Routes> 구조와 "/" 경로(IntroScene)는 절대 수정/삭제 금지.
+ * 2. 신규 대시보드 기능은 오직 "/simulator" 경로 내에서만 수정할 것.
+ * 3. 'Cleanup' 명목으로 기존 import나 Route를 제거하지 마시오.
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/**
  * ═══════════════════════════════════════════════════════
  * SPOTTER — 프랜차이즈 상권분석 시뮬레이터 (Frontend)
  * ═══════════════════════════════════════════════════════
@@ -37,49 +46,37 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import JoinUsPage from "./pages/JoinUs/JoinUsPage";
-import { runSimulation, analyzeLocation } from "./api/client";
 import React from "react";
+import { runSimulation, analyzeLocation } from "./api/client";
 
-/**
- * 시뮬레이션 결과 — UI 바인딩용
- * 백엔드 SimulationOutput + AnalysisResult를 프론트 UI에 맞게 변환한 구조.
- * runSim() 함수에서 API 응답을 이 형태로 매핑하여 simResult state에 저장.
- */
-interface SimResult {
-  score: number;        // 상권 종합 매력도 (0~100)
-  revenue: number;      // 예상 월 매출 (만원 단위)
-  riskLevel: string;    // 카니발리제이션 위험도 ("LOW" | "MEDIUM" | "HIGH")
-  recommendation: string; // AI 추천 코멘트 (에이전트 생성)
-  chartData: { label: string; value: number }[]; // 7개 항목별 점수 (레이더 차트 데이터)
-}
 import {
   ChevronRight,
-  Sliders,
-  Activity,
   MapPin,
-  BarChart3,
-  Play,
   ExternalLink,
   Mail,
   Phone,
   GitFork,
   Users,
-  AlertTriangle,
   TrendingUp,
-  TrendingDown,
-  Download,
-  Calendar,
-  Store,
-  Crosshair,
-  Zap,
-  Scale,
-  FileText,
-  Database,
+  Activity,
+  Play,
   ChevronDown,
   User,
   Shield,
   Bell,
   Settings,
+  Store,
+  Scale,
+  Zap,
+  BarChart3,
+  Crosshair,
+  AlertTriangle,
+  Calendar,
+  Download,
+  FileText,
+  Database,
+  Sliders,
+  TrendingDown,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
@@ -119,32 +116,34 @@ const MAPO_IDX = 12;
 const MENU_ITEMS = ["ABOUT SPOTTER", "JOIN US", "SIMULATOR", "CONTACT"];
 
 const DONG_DATA: Record<string, string[]> = {
-  "강남구": ["신사동","논현1동","논현2동","압구정동","청담동","삼성1동","삼성2동","대치1동","대치2동","대치4동","역삼1동","역삼2동","도곡1동","도곡2동","개포1동","개포2동","개포3동","개포4동","일원본동","일원1동","수서동","세곡동"],
-  "강동구": ["강일동","상일1동","상일2동","명일1동","명일2동","고덕1동","고덕2동","암사1동","암사2동","암사3동","천호1동","천호2동","천호3동","성내1동","성내2동","성내3동","둔촌1동","둔촌2동"],
-  "강북구": ["삼양동","미아동","송중동","송천동","삼각산동","번1동","번2동","번3동","수유1동","수유2동","수유3동","우이동","인수동"],
-  "강서구": ["염창동","등촌1동","등촌2동","등촌3동","화곡1동","화곡2동","화곡3동","화곡4동","화곡6동","화곡8동","가양1동","가양2동","가양3동","발산1동","공항동","방화1동","방화2동","방화3동"],
-  "관악구": ["보라매동","청림동","행운동","낙성대동","중앙동","인헌동","남현동","서원동","신원동","서림동","신사동","신림동","난향동","조원동","대학동","은천동","성현동","청룡동","난곡동","삼성동","미성동"],
-  "광진구": ["중곡1동","중곡2동","중곡3동","중곡4동","능동","구의1동","구의2동","구의3동","광장동","자양1동","자양2동","자양3동","자양4동","화양동","군자동"],
-  "구로구": ["신도림동","구로1동","구로2동","구로3동","구로4동","구로5동","가리봉동","고척1동","고척2동","개봉1동","개봉2동","개봉3동","오류1동","오류2동","항동"],
-  "금천구": ["가산동","독산1동","독산2동","독산3동","독산4동","시흥1동","시흥2동","시흥3동","시흥4동","시흥5동"],
-  "노원구": ["월계1동","월계2동","월계3동","공릉1동","공릉2동","하계1동","하계2동","중계본동","중계1동","중계2동","중계3동","상계1동","상계2동","상계3·4동","상계5동","상계6·7동","상계8동","상계9동","상계10동"],
-  "도봉구": ["쌍문1동","쌍문2동","쌍문3동","쌍문4동","방학1동","방학2동","방학3동","창1동","창2동","창3동","창4동","창5동","도봉1동","도봉2동"],
-  "동대문구": ["용신동","제기동","전농1동","전농2동","답십리1동","답십리2동","장안1동","장안2동","청량리동","회기동","휘경1동","휘경2동","이문1동","이문2동"],
-  "동작구": ["노량진1동","노량진2동","상도1동","상도2동","상도3동","상도4동","흑석동","사당1동","사당2동","사당3동","사당4동","사당5동","대방동","신대방1동","신대방2동"],
-  "마포구": ["공덕동","아현동","도화동","용강동","대흥동","염리동","신수동","서강동","서교동","합정동","망원1동","망원2동","연남동","성산1동","성산2동","상암동"],
-  "서대문구": ["충현동","천연동","북아현동","신촌동","연희동","홍제1동","홍제2동","홍제3동","홍은1동","홍은2동","남가좌1동","남가좌2동","북가좌1동","북가좌2동"],
-  "서초구": ["서초1동","서초2동","서초3동","서초4동","잠원동","반포본동","반포1동","반포2동","반포3동","반포4동","방배본동","방배1동","방배2동","방배3동","방배4동","양재1동","양재2동","내곡동"],
-  "성동구": ["왕십리2동","왕십리도선동","마장동","사근동","행당1동","행당2동","응봉동","금호1가동","금호2·3가동","금호4가동","옥수동","성수1가1동","성수1가2동","성수2가1동","성수2가3동","송정동","용답동"],
-  "성북구": ["성북동","삼선동","동선동","돈암1동","돈암2동","안암동","보문동","정릉1동","정릉2동","정릉3동","정릉4동","길음1동","길음2동","종암동","월곡1동","월곡2동","장위1동","장위2동","장위3동","석관동"],
-  "송파구": ["풍납1동","풍납2동","거여1동","거여2동","마천1동","마천2동","방이1동","방이2동","오륜동","오금동","송파1동","송파2동","석촌동","삼전동","가락본동","가락1동","가락2동","문정1동","문정2동","장지동","위례동","잠실본동","잠실2동","잠실3동","잠실4동","잠실6동","잠실7동"],
-  "양천구": ["목1동","목2동","목3동","목4동","목5동","신월1동","신월2동","신월3동","신월4동","신월5동","신월6동","신월7동","신정1동","신정2동","신정3동","신정4동","신정6동","신정7동"],
-  "영등포구": ["영등포본동","영등포동","여의동","당산1동","당산2동","도림동","문래동","양평1동","양평2동","신길1동","신길3동","신길4동","신길5동","신길6동","신길7동","대림1동","대림2동","대림3동"],
-  "용산구": ["후암동","용산2가동","남영동","청파동","원효로1동","원효로2동","효창동","용문동","한강로동","이촌1동","이촌2동","이태원1동","이태원2동","한남동","서빙고동","보광동"],
-  "은평구": ["녹번동","불광1동","불광2동","갈현1동","갈현2동","구산동","대조동","응암1동","응암2동","응암3동","역촌동","신사1동","신사2동","증산동","수색동","진관동"],
-  "종로구": ["청운효자동","사직동","삼청동","부암동","평창동","무악동","교남동","가회동","종로1·2·3·4가동","종로5·6가동","이화동","혜화동","창신1동","창신2동","창신3동","숭인1동","숭인2동"],
-  "중구": ["소공동","회현동","명동","필동","장충동","광희동","을지로동","신당동","다산동","약수동","청구동","신당5동","동화동","황학동","중림동"],
-  "중랑구": ["면목본동","면목2동","면목3·8동","면목4동","면목5동","면목7동","상봉1동","상봉2동","중화1동","중화2동","묵1동","묵2동","망우본동","망우3동","신내1동","신내2동"],
+  "강남구": ["신사동", "논현1동", "논현2동", "압구정동", "청담동", "삼성1동", "삼성2동", "대치1동", "대치2동", "대치4동", "역삼1동", "역삼2동", "도곡1동", "도곡2동", "개포1동", "개포2동", "개포3동", "개포4동", "일원본동", "일원1동", "수서동", "세곡동"],
+  "강동구": ["강일동", "상일1동", "상일2동", "명일1동", "명일2동", "고덕1동", "고덕2동", "암사1동", "암사2동", "암사3동", "천호1동", "천호2동", "천호3동", "성내1동", "성내2동", "성내3동", "둔촌1동", "둔촌2동"],
+  "강북구": ["삼양동", "미아동", "송중동", "송천동", "삼각산동", "번1동", "번2동", "번3동", "수유1동", "수유2동", "수유3동", "우이동", "인수동"],
+  "강서구": ["염창동", "등촌1동", "등촌2동", "등촌3동", "화곡1동", "화곡2동", "화곡3동", "화곡4동", "화곡6동", "화곡8동", "가양1동", "가양2동", "가양3동", "발산1동", "공항동", "방화1동", "방화2동", "방화3동"],
+  "관악구": ["보라매동", "청림동", "행운동", "낙성대동", "중앙동", "인헌동", "남현동", "서원동", "신원동", "서림동", "신사동", "신림동", "난향동", "조원동", "대학동", "은천동", "성현동", "청룡동", "난곡동", "삼성동", "미성동"],
+  "광진구": ["중곡1동", "중곡2동", "중곡3동", "중곡4동", "능동", "구의1동", "구의2동", "구의3동", "광장동", "자양1동", "자양2동", "자양3동", "자양4동", "화양동", "군자동"],
+  "구로구": ["신도림동", "구로1동", "구로2동", "구로3동", "구로4동", "구로5동", "가리봉동", "고척1동", "고척2동", "개봉1동", "개봉2동", "개봉3동", "오류1동", "오류2동", "항동"],
+  "금천구": ["가산동", "독산1동", "독산2동", "독산3동", "독산4동", "시흥1동", "시흥2동", "시흥3동", "시흥4동", "시흥5동"],
+  "노원구": ["월계1동", "월계2동", "월계3동", "공릉1동", "공릉2동", "하계1동", "하계2동", "중계본동", "중계1동", "중계2동", "중계3동", "상계1동", "상계2동", "상계3·4동", "상계5동", "상계6·7동", "상계8동", "상계9동", "상계10동"],
+  "도봉구": ["쌍문1동", "쌍문2동", "쌍문3동", "쌍문4동", "방학1동", "방학2동", "방학3동", "창1동", "창2동", "창3동", "창4동", "창5동", "도봉1동", "도봉2동"],
+  "동대문구": ["용신동", "제기동", "전농1동", "전농2동", "답십리1동", "답십리2동", "장안1동", "장안2동", "청량리동", "회기동", "휘경1동", "휘경2동", "이문1동", "이문2동"],
+  "동작구": ["노량진1동", "노량진2동", "상도1동", "상도2동", "상도3동", "상도4동", "흑석동", "사당1동", "사당2동", "사당3동", "사당4동", "사당5동", "대방동", "신대방1동", "신대방2동"],
+  "마포구": ["공덕동", "아현동", "도화동", "용강동", "대흥동", "염리동", "신수동", "서강동", "서교동", "합정동", "망원1동", "망원2동", "연남동", "성산1동", "성산2동", "상암동"],
+  "서대문구": ["충현동", "천연동", "북아현동", "신촌동", "연희동", "홍제1동", "홍제2동", "홍제3동", "홍은1동", "홍은2동", "남가좌1동", "남가좌2동", "북가좌1동", "북가좌2동"],
+  "서초구": ["서초1동", "서초2동", "서초3동", "서초4동", "잠원동", "반포본동", "반포1동", "반포2동", "반포3동", "반포4동", "방배본동", "방배1동", "방배2동", "방배3동", "방배4동", "양재1동", "양재2동", "내곡동"],
+  "성동구": ["왕십리2동", "왕십리도선동", "마장동", "사근동", "행당1동", "행당2동", "응봉동", "금호1가동", "금호2·3가동", "금호4가동", "옥수동", "성수1가1동", "성수1가2동", "성수2가1동", "성수2가3동", "송정동", "용답동"],
+  "성북구": ["성북동", "삼선동", "동선동", "돈암1동", "돈암2동", "안암동", "보문동", "정릉1동", "정릉2동", "정릉3동", "정릉4동", "길음1동", "길음2동", "종암동", "월곡1동", "월곡2동", "장위1동", "장위2동", "장위3동", "석관동"],
+  "송파구": ["풍납1동", "풍납2동", "거여1동", "거여2동", "마천1동", "마천2동", "방이1동", "방이2동", "오륜동", "오금동", "송파1동", "송파2동", "석촌동", "삼전동", "가락본동", "가락1동", "가락2동", "문정1동", "문정2동", "장지동", "위례동", "잠실본동", "잠실2동", "잠실3동", "잠실4동", "잠실6동", "잠실7동"],
+  "양천구": ["목1동", "목2동", "목3동", "목4동", "목5동", "신월1동", "신월2동", "신월3동", "신월4동", "신월5동", "신월6동", "신월7동", "신정1동", "신정2동", "신정3동", "신정4동", "신정6동", "신정7동"],
+  "영등포구": ["영등포본동", "영등포동", "여의동", "당산1동", "당산2동", "도림동", "문래동", "양평1동", "양평2동", "신길1동", "신길3동", "신길4동", "신길5동", "신길6동", "신길7동", "대림1동", "대림2동", "대림3동"],
+  "용산구": ["후암동", "용산2가동", "남영동", "청파동", "원효로1동", "원효로2동", "효창동", "용문동", "한강로동", "이촌1동", "이촌2동", "이태원1동", "이태원2동", "한남동", "서빙고동", "보광동"],
+  "은평구": ["녹번동", "불광1동", "불광2동", "갈현1동", "갈현2동", "구산동", "대조동", "응암1동", "응암2동", "응암3동", "역촌동", "신사1동", "신사2동", "증산동", "수색동", "진관동"],
+  "종로구": ["청운효자동", "사직동", "삼청동", "부암동", "평창동", "무악동", "교남동", "가회동", "종로1·2·3·4가동", "종로5·6가동", "이화동", "혜화동", "창신1동", "창신2동", "창신3동", "숭인1동", "숭인2동"],
+  "중구": ["소공동", "회현동", "명동", "필동", "장충동", "광희동", "을지로동", "신당동", "다산동", "약수동", "청구동", "신당5동", "동화동", "황학동", "중림동"],
+  "중랑구": ["면목본동", "면목2동", "면목3·8동", "면목4동", "면목5동", "면목7동", "상봉1동", "상봉2동", "중화1동", "중화2동", "묵1동", "묵2동", "망우본동", "망우3동", "신내1동", "신내2동"],
 };
+
+const GU_NAMES = Object.keys(DONG_DATA);
 
 const CHART_DATA = [
   { label: "유동인구", value: 82 },
@@ -155,32 +154,6 @@ const CHART_DATA = [
   { label: "성장성", value: 56 },
   { label: "접근성", value: 78 },
 ];
-
-/* ═══════════════════════════════════════════════════════
-   BUSINESS TYPE DATA — 시뮬레이터 입력 옵션 (Frontend Mockup)
-   ⚠️ 백엔드 연동 전 디자인 전용. SimulationInput 페이로드 확장 합의 필요.
-   ═══════════════════════════════════════════════════════ */
-const BUSINESS_TYPES = ["카페", "음식점", "베이커리", "디저트", "주점", "분식", "패스트푸드", "기타"];
-
-const BUSINESS_SUBTYPES: Record<string, string[]> = {
-  "카페": ["저가형 커피", "프리미엄 커피", "디저트 카페", "로스터리", "북카페"],
-  "음식점": ["한식", "일식", "양식", "중식", "퓨전"],
-  "베이커리": ["빵집", "케이크 전문", "샌드위치"],
-  "디저트": ["아이스크림", "도넛", "마카롱"],
-  "주점": ["호프", "이자카야", "와인바"],
-  "분식": ["떡볶이", "김밥", "라면"],
-  "패스트푸드": ["햄버거", "치킨", "피자"],
-  "기타": ["기타"],
-};
-
-const PRICE_RANGES = [
-  { label: "5천원 이하", value: "under5k" },
-  { label: "5천-1만", value: "5to10k" },
-  { label: "1-2만", value: "10to20k" },
-  { label: "2만 이상", value: "over20k" },
-];
-
-const OPERATING_HOURS_OPTIONS = ["오전", "점심", "저녁", "심야"];
 
 /* ═══════════════════════════════════════════════════════
    NetworkBackground — Canvas 파티클 네트워크 배경
@@ -449,16 +422,14 @@ function IntroScene({
               >
                 {/* Indicator bar */}
                 <div
-                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
-                    isActive ? "scale-x-100" : "scale-x-0"
-                  }`}
+                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${isActive ? "scale-x-100" : "scale-x-0"
+                    }`}
                 />
                 <span
-                  className={`inline-block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                    isActive
+                  className={`block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isActive
                       ? "text-[#e2e8f0] translate-x-0"
                       : "text-[#3a3633] -translate-x-2 group-hover:text-[#9ca3af]"
-                  }`}
+                    }`}
                 >
                   {item}
                 </span>
@@ -632,11 +603,10 @@ function AccordionGallery({
             {DISTRICTS.map((d, i) => (
               <div
                 key={d.eng}
-                className={`w-1 h-3 rounded-full transition-all duration-300 ${
-                  hoveredIdx === i
-                    ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                    : "bg-white/20"
-                }`}
+                className={`w-1 h-3 rounded-full transition-all duration-300 ${hoveredIdx === i
+                  ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                  : "bg-white/20"
+                  }`}
               />
             ))}
           </div>
@@ -659,167 +629,140 @@ function AccordionGallery({
       {/* Gallery track */}
       <div
         ref={trackRef}
-        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${
-          isDragging ? "cursor-grabbing" : "cursor-grab"
-        }`}
+        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${isDragging ? "cursor-grabbing" : "cursor-grab"
+          }`}
         onMouseDown={handleMouseDown}
       >
-          {DISTRICTS.map((d, i) => {
-            const isHovered = hoveredIdx === i;
-            const isMapo = i === MAPO_IDX;
+        {DISTRICTS.map((d, i) => {
+          const isHovered = hoveredIdx === i;
+          const isMapo = i === MAPO_IDX;
 
-            return (
-              <div
-                key={d.eng}
-                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                  isHovered
-                    ? "w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(129,140,248,0.3)]"
-                    : "w-[70px] md:w-[80px] z-0"
+          return (
+            <div
+              key={d.eng}
+              className={`relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer border transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                  ? "w-[320px] md:w-[480px] border-indigo-500/40 shadow-[0_0_20px_rgba(99,102,241,0.15)] bg-[#2c2825]"
+                  : "w-[70px] md:w-[80px] border-[#3a3633] bg-[#1e1b18]"
                 }`}
-                onMouseEnter={() => setHoveredIdx(i)}
-                onMouseLeave={() => setHoveredIdx(null)}
-                onClick={() => {
-                  if (isMapo && !isDragging) onMapoClick();
-                }}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onClick={() => {
+                if (isMapo && !isDragging) onMapoClick();
+              }}
+            >
+              {/* Parallax background image */}
+              <div
+                className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                    ? "scale-100 opacity-80 grayscale-0"
+                    : "scale-[0.9] opacity-30 grayscale-0"
+                  }`}
+                style={{ backgroundImage: `url(${d.img})` }}
+              />
+
+              {/* Gradient mask */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18] via-[#1e1b18]/60 to-transparent opacity-90 transition-opacity duration-1000" />
+
+              {/* District number */}
+              <div
+                className={`absolute top-6 left-0 right-0 text-center font-mono text-xs transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered ? "text-gray-400 opacity-100" : "text-gray-600 opacity-0"
+                  }`}
               >
-                {/* 1. Animated Gradient Border — 호버 시에만 회전 빛 표시 */}
-                <div
-                  className={`absolute inset-[-50%] z-0 animate-spin-slow transition-opacity duration-500 ${
-                    isHovered ? "opacity-100" : "opacity-0"
-                  }`}
-                  style={{
-                    background:
-                      "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                  }}
-                />
+                {String(i + 1).padStart(2, "0")}
+              </div>
 
-                {/* 2. 실제 컨텐츠 컨테이너 (2px 인셋으로 테두리만 노출) */}
-                <div
-                  className={`absolute inset-[2px] z-10 overflow-hidden rounded-[14px] transition-colors duration-500 ${
-                    isHovered ? "bg-[#2c2825]" : "bg-[#1e1b18]"
+              {/* English name (shown on hover) */}
+              <div
+                className={`absolute top-12 left-6 right-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-4"
                   }`}
+              >
+                <span className="text-xs tracking-[0.3em] text-gray-400 font-light uppercase">
+                  {d.eng}-GU
+                </span>
+              </div>
+
+              {/* Mapo badge (shown on hover) */}
+              {isMapo && (
+                <div
+                  className={`absolute top-24 left-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                    ? "opacity-100 translate-y-0"
+                    : "opacity-0 translate-y-4"
+                    }`}
                 >
-                {/* Parallax background image */}
-                <div
-                  className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered
-                      ? "scale-100 opacity-80 grayscale-0"
-                      : "scale-[0.9] opacity-30 grayscale-0"
-                  }`}
-                  style={{ backgroundImage: `url(${d.img})` }}
-                />
-
-                {/* Gradient mask */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18] via-[#1e1b18]/60 to-transparent opacity-90 transition-opacity duration-1000" />
-
-                {/* District number */}
-                <div
-                  className={`absolute top-6 left-0 right-0 text-center font-mono text-xs transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered ? "text-gray-400 opacity-100" : "text-gray-600 opacity-0"
-                  }`}
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </div>
-
-                {/* English name (shown on hover) */}
-                <div
-                  className={`absolute top-12 left-6 right-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-4"
-                  }`}
-                >
-                  <span className="text-xs tracking-[0.3em] text-gray-400 font-light uppercase">
-                    {d.eng}-GU
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
+                    <Activity size={12} />
+                    분석 가능
                   </span>
                 </div>
+              )}
 
-                {/* Mapo badge (shown on hover) */}
-                {isMapo && (
+              {/* ★ Staggered Letter Animation ★ */}
+              <div className="absolute inset-0 pointer-events-none p-4 md:p-8">
+                <div className="relative w-full h-full">
+                  {/* Hover: horizontal staggered text */}
+                  <h2 className="absolute left-6 md:left-8 bottom-24 md:bottom-20 flex gap-[2px]">
+                    {d.name.split("").map((char, ci) => (
+                      <span
+                        key={ci}
+                        className={`font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-[#a3a3a3] transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                          ? "text-4xl md:text-5xl opacity-100 translate-y-0 blur-0"
+                          : "text-4xl md:text-5xl opacity-0 translate-y-10 blur-[4px]"
+                          }`}
+                        style={{
+                          transitionDelay: isHovered
+                            ? `${ci * 40 + 100}ms`
+                            : "0ms",
+                        }}
+                      >
+                        {char}
+                      </span>
+                    ))}
+                  </h2>
+
+                  {/* Default: vertical stacked staggered text */}
+                  <h2 className="absolute left-1/2 -translate-x-1/2 bottom-10 md:bottom-12 flex flex-col items-center gap-1">
+                    {d.name.split("").map((char, ci) => (
+                      <span
+                        key={ci}
+                        className={`font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-[#a3a3a3] leading-none transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                          ? "text-2xl md:text-3xl opacity-0 -translate-y-10 blur-[4px]"
+                          : "text-2xl md:text-3xl opacity-60 translate-y-0 blur-0"
+                          }`}
+                        style={{
+                          transitionDelay: isHovered
+                            ? "0ms"
+                            : `${ci * 40 + 100}ms`,
+                        }}
+                      >
+                        {char}
+                      </span>
+                    ))}
+                  </h2>
+
+                  {/* Bottom info (shown on hover) */}
                   <div
-                    className={`absolute top-24 left-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                      isHovered
-                        ? "opacity-100 translate-y-0"
-                        : "opacity-0 translate-y-4"
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
-                      <Activity size={12} />
-                      분석 가능
-                    </span>
-                  </div>
-                )}
-
-                {/* ★ Staggered Letter Animation ★ */}
-                <div className="absolute inset-0 pointer-events-none p-4 md:p-8">
-                  <div className="relative w-full h-full">
-                    {/* Hover: horizontal staggered text */}
-                    <h2 className="absolute left-6 md:left-8 bottom-24 md:bottom-20 flex gap-[2px]">
-                      {d.name.split("").map((char, ci) => (
-                        <span
-                          key={ci}
-                          className={`font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-[#a3a3a3] transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                            isHovered
-                              ? "text-4xl md:text-5xl opacity-100 translate-y-0 blur-0"
-                              : "text-4xl md:text-5xl opacity-0 translate-y-10 blur-[4px]"
-                          }`}
-                          style={{
-                            transitionDelay: isHovered
-                              ? `${ci * 40 + 100}ms`
-                              : "0ms",
-                          }}
-                        >
-                          {char}
-                        </span>
-                      ))}
-                    </h2>
-
-                    {/* Default: vertical stacked staggered text */}
-                    <h2 className="absolute left-1/2 -translate-x-1/2 bottom-10 md:bottom-12 flex flex-col items-center gap-1">
-                      {d.name.split("").map((char, ci) => (
-                        <span
-                          key={ci}
-                          className={`font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-[#a3a3a3] leading-none transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                            isHovered
-                              ? "text-2xl md:text-3xl opacity-0 -translate-y-10 blur-[4px]"
-                              : "text-2xl md:text-3xl opacity-60 translate-y-0 blur-0"
-                          }`}
-                          style={{
-                            transitionDelay: isHovered
-                              ? "0ms"
-                              : `${ci * 40 + 100}ms`,
-                          }}
-                        >
-                          {char}
-                        </span>
-                      ))}
-                    </h2>
-
-                    {/* Bottom info (shown on hover) */}
-                    <div
-                      className={`absolute left-0 bottom-0 flex flex-col items-start transition-all duration-[1000ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                        isHovered
-                          ? "opacity-100 translate-y-0 delay-[300ms]"
-                          : "opacity-0 translate-y-4 pointer-events-none"
+                    className={`absolute left-0 bottom-0 flex flex-col items-start transition-all duration-[1000ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                      ? "opacity-100 translate-y-0 delay-[300ms]"
+                      : "opacity-0 translate-y-4 pointer-events-none"
                       }`}
-                    >
-                      {isMapo ? (
-                        <div className="flex items-center gap-2 text-indigo-300 text-sm">
-                          <Play size={14} />
-                          <span>클릭하여 시뮬레이션 시작</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-500">
-                          서비스 준비 중
-                        </span>
-                      )}
-                    </div>
+                  >
+                    {isMapo ? (
+                      <div className="flex items-center gap-2 text-indigo-300 text-sm">
+                        <Play size={14} />
+                        <span>클릭하여 시뮬레이션 시작</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-500">
+                        서비스 준비 중
+                      </span>
+                    )}
                   </div>
-                </div>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
       </div>
 
     </div>
@@ -1131,95 +1074,95 @@ function ContactPage({ onBack }: { onBack: () => void }) {
                 }}
               />
               <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-              <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
-                Workspace
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                  <div
-                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                    style={{
-                      background:
-                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                    }}
-                  />
-                  <a
-                    href="https://github.com/Himidea-AI/Final_Project"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                  >
-                    <div className="flex items-center gap-3">
-                      <GitFork size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
-                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">GitHub</span>
-                    </div>
-                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
-                  </a>
+                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
+                  Workspace
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                    <div
+                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                      style={{
+                        background:
+                          "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                      }}
+                    />
+                    <a
+                      href="https://github.com/Himidea-AI/Final_Project"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                    >
+                      <div className="flex items-center gap-3">
+                        <GitFork size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">GitHub</span>
+                      </div>
+                      <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                    </a>
+                  </div>
+                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                    <div
+                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                      style={{
+                        background:
+                          "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                      }}
+                    />
+                    <a
+                      href="https://www.notion.so/333ac2a0181b802b807cf7de2447b890"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                    >
+                      <div className="flex items-center gap-3">
+                        <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Notion</span>
+                      </div>
+                      <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                    </a>
+                  </div>
+                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                    <div
+                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                      style={{
+                        background:
+                          "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                      }}
+                    />
+                    <a
+                      href="https://www.figma.com/board/lkjvfmKP4FU5XWBAyWR52a/%EC%A0%9C%EB%AA%A9-%EC%97%86%EC%9D%8C?node-id=0-1&p=f&t=ZITF88ooGHZ2rrHV-0"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                    >
+                      <div className="flex items-center gap-3">
+                        <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Figma</span>
+                      </div>
+                      <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                    </a>
+                  </div>
+                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
+                    <div
+                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
+                      style={{
+                        background:
+                          "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                      }}
+                    />
+                    <a
+                      href="https://bat981120.atlassian.net/jira/software/projects/IM3/boards/2"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                    >
+                      <div className="flex items-center gap-3">
+                        <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
+                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Jira</span>
+                      </div>
+                      <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
+                    </a>
+                  </div>
                 </div>
-                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                  <div
-                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                    style={{
-                      background:
-                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                    }}
-                  />
-                  <a
-                    href="https://www.notion.so/333ac2a0181b802b807cf7de2447b890"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                  >
-                    <div className="flex items-center gap-3">
-                      <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
-                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Notion</span>
-                    </div>
-                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
-                  </a>
-                </div>
-                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                  <div
-                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                    style={{
-                      background:
-                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                    }}
-                  />
-                  <a
-                    href="https://www.figma.com/board/lkjvfmKP4FU5XWBAyWR52a/%EC%A0%9C%EB%AA%A9-%EC%97%86%EC%9D%8C?node-id=0-1&p=f&t=ZITF88ooGHZ2rrHV-0"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                  >
-                    <div className="flex items-center gap-3">
-                      <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
-                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Figma</span>
-                    </div>
-                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
-                  </a>
-                </div>
-                <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                  <div
-                    className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                    style={{
-                      background:
-                        "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                    }}
-                  />
-                  <a
-                    href="https://bat981120.atlassian.net/jira/software/projects/IM3/boards/2"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                  >
-                    <div className="flex items-center gap-3">
-                      <ExternalLink size={18} className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors" />
-                      <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">Jira</span>
-                    </div>
-                    <ExternalLink size={14} className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors" />
-                  </a>
-                </div>
-              </div>
               </div>
             </div>
 
@@ -1236,16 +1179,16 @@ function ContactPage({ onBack }: { onBack: () => void }) {
                 }}
               />
               <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-              <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-2 block">
-                Team
-              </span>
-              <p className="text-lg font-bold text-white mb-4">
-                AI 심화과정 6인 팀 프로젝트 (3조)
-              </p>
-              <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-2 block">
-                Mentor
-              </span>
-              <p className="text-lg font-bold text-white">황태림</p>
+                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-2 block">
+                  Team
+                </span>
+                <p className="text-lg font-bold text-white mb-4">
+                  AI 심화과정 6인 팀 프로젝트 (3조)
+                </p>
+                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-2 block">
+                  Mentor
+                </span>
+                <p className="text-lg font-bold text-white">황태림</p>
               </div>
             </div>
 
@@ -1262,17 +1205,17 @@ function ContactPage({ onBack }: { onBack: () => void }) {
                 }}
               />
               <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-              <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
-                Location
-              </span>
-              <div className="flex items-center gap-3">
-                <MapPin className="text-indigo-400 w-6 h-6 shrink-0" />
-                <span className="text-lg font-bold text-white leading-tight">
-                  강남 하이미디어
-                  <br />
-                  아카데미
+                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
+                  Location
                 </span>
-              </div>
+                <div className="flex items-center gap-3">
+                  <MapPin className="text-indigo-400 w-6 h-6 shrink-0" />
+                  <span className="text-lg font-bold text-white leading-tight">
+                    강남 하이미디어
+                    <br />
+                    아카데미
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1289,25 +1232,25 @@ function ContactPage({ onBack }: { onBack: () => void }) {
                 }}
               />
               <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-              <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
-                Direct Inquiry
-              </span>
-              <div className="flex flex-wrap gap-8">
-                <a
-                  href="mailto:bat981120@gmail.com"
-                  className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
-                >
-                  <Mail className="w-5 h-5 text-[#9ca3af] shrink-0" />
-                  bat981120@gmail.com
-                </a>
-                <a
-                  href="tel:01067790080"
-                  className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
-                >
-                  <Phone className="w-5 h-5 text-[#9ca3af] shrink-0" />
-                  010.6779.0080
-                </a>
-              </div>
+                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
+                  Direct Inquiry
+                </span>
+                <div className="flex flex-wrap gap-8">
+                  <a
+                    href="mailto:bat981120@gmail.com"
+                    className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
+                  >
+                    <Mail className="w-5 h-5 text-[#9ca3af] shrink-0" />
+                    bat981120@gmail.com
+                  </a>
+                  <a
+                    href="tel:01067790080"
+                    className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
+                  >
+                    <Phone className="w-5 h-5 text-[#9ca3af] shrink-0" />
+                    010.6779.0080
+                  </a>
+                </div>
               </div>
             </div>
           </div>
@@ -1337,6 +1280,14 @@ function ContactPage({ onBack }: { onBack: () => void }) {
    AnalysisResult.data.market_report → 7개 항목별 차트 데이터
 */
 
+interface SimResult {
+  score: number;
+  revenue: number;
+  riskLevel: string;
+  recommendation: string;
+  chartData: { label: string; value: number }[];
+}
+
 function SimulatorDashboard({
   reportState,
   setReportState,
@@ -1345,54 +1296,30 @@ function SimulatorDashboard({
   setReportState: (s: "idle" | "loading" | "result") => void;
 }) {
   const [radius, setRadius] = useState(500);
-  const [budget, setBudget] = useState(200);
+  const [budget, setBudget] = useState(250);
   const [weighted, setWeighted] = useState(true);
+  const [storeArea, setStoreArea] = useState(15);
+  const [targetPrice, setTargetPrice] = useState(12000);
+  const [operatingHours, setOperatingHours] = useState("10:00 - 22:00");
+  const [initialCapital, setInitialCapital] = useState(15000);
   const [loadingText, setLoadingText] = useState("INITIALIZING AI ENGINE...");
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [chartView, setChartView] = useState<"daily" | "monthly">("daily");
   const [tableView, setTableView] = useState<"cannibalization" | "neighborhoods">("cannibalization");
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
-  const [selectedGu] = useState("마포구");
+  const [selectedGu, setSelectedGu] = useState("마포구");
   const [selectedDongs, setSelectedDongs] = useState<string[]>(
-    () => [...DONG_DATA["마포구"]]
+    () => ["서교동"]
   );
+  const [guDropdownOpen, setGuDropdownOpen] = useState(false);
   const [dongDropdownOpen, setDongDropdownOpen] = useState(false);
 
-  // [Frontend Mockup] 백엔드 연동 보류 — SimulationInput 확장 후 페이로드 매핑 필요
-  const [businessType, setBusinessType] = useState("카페");
-  const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [businessSubtype, setBusinessSubtype] = useState<string>("");
-  const [storeArea, setStoreArea] = useState(15); // 평
-  const [targetPrice, setTargetPrice] = useState("5to10k");
-  const [operatingHours, setOperatingHours] = useState<string[]>(["점심", "저녁"]);
-  const [initialCapital, setInitialCapital] = useState(5000); // 만원
-
-  const toggleOperatingHour = useCallback((hour: string) => {
-    setOperatingHours((prev) =>
-      prev.includes(hour) ? prev.filter((h) => h !== hour) : [...prev, hour]
-    );
+  const handleGuChange = useCallback((gu: string) => {
+    setSelectedGu(gu);
+    setSelectedDongs([...DONG_DATA[gu]]);
+    setGuDropdownOpen(false);
+    setDongDropdownOpen(false);
   }, []);
-
-  // 결과 화면 진입 시 스크롤을 맨 위로 리셋 (리포트 최상단부터 보이도록)
-  const dashboardRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (reportState === "result" && dashboardRef.current) {
-      dashboardRef.current.scrollTop = 0;
-    }
-  }, [reportState]);
-
-  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀
-  useEffect(() => {
-    if (reportState !== "result") return;
-    // 가짜 history 엔트리 추가 → 뒤로가기 시 popstate 발생
-    window.history.pushState({ simResult: true }, "");
-    const handlePopState = () => {
-      setReportState("idle");
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [reportState, setReportState]);
 
   const toggleDong = useCallback((dong: string) => {
     setSelectedDongs((prev) => {
@@ -1419,23 +1346,36 @@ function SimulatorDashboard({
       const [simRes, analysisRes] = await Promise.all([
         runSimulation({
           business_type: "cafe",
-          brand_name: "",
+          business_subtype: "coffee",
+          brand_name: "메가커피",
           target_district: selectedDongs[0] || "서교동",
           existing_stores: [],
-          initial_investment: budget * 10000,
+          initial_investment: initialCapital * 10000,
           monthly_rent: budget * 10000,
           simulation_months: 12,
-          scenarios: [],
+          scenarios: ["standard"],
+          store_area: storeArea,
+          target_price_range: String(targetPrice),
+          operating_hours: operatingHours.split(" - "),
+          initial_capital: initialCapital * 10000,
+          use_weighted_population: weighted,
+          radius_m: radius,
         }),
         analyzeLocation({
           business_type: "cafe",
-          brand_name: "",
+          brand_name: "메가커피",
           target_district: selectedDongs[0] || "서교동",
           existing_stores: [],
-          initial_investment: budget * 10000,
+          initial_investment: initialCapital * 10000,
           monthly_rent: budget * 10000,
           simulation_months: 12,
-          scenarios: [],
+          scenarios: ["standard"],
+          store_area: storeArea,
+          target_price_range: String(targetPrice),
+          operating_hours: operatingHours.split(" - "),
+          initial_capital: initialCapital * 10000,
+          use_weighted_population: weighted,
+          radius_m: radius,
         }),
       ]);
 
@@ -1450,14 +1390,14 @@ function SimulatorDashboard({
         recommendation: simRes.ai_recommendation || "",
         chartData: mr
           ? [
-              { label: "유동인구", value: mr.floating_population },
-              { label: "임대료", value: mr.rent_index },
-              { label: "경쟁강도", value: mr.competition_intensity },
-              { label: "매출추정", value: mr.estimated_revenue },
-              { label: "생존율", value: mr.survival_rate },
-              { label: "성장성", value: mr.growth_potential },
-              { label: "접근성", value: mr.accessibility },
-            ]
+            { label: "유동인구", value: mr.floating_population },
+            { label: "임대료", value: mr.rent_index },
+            { label: "경쟁강도", value: mr.competition_intensity },
+            { label: "매출추정", value: mr.estimated_revenue },
+            { label: "생존율", value: mr.survival_rate },
+            { label: "성장성", value: mr.growth_potential },
+            { label: "접근성", value: mr.accessibility },
+          ]
           : CHART_DATA,
       });
       setReportState("result");
@@ -1503,7 +1443,7 @@ function SimulatorDashboard({
   const inputTrack = "accent-[#818cf8]";
 
   return (
-    <div ref={dashboardRef} className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar">
+    <div className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar">
       {/* Top bar */}
       <div className="sticky top-0 z-30 flex items-center px-8 py-4 mt-14 border-b border-[#3a3633] bg-[#1e1b18]/80 backdrop-blur-xl">
         <span className={`text-xs font-medium tracking-wider ${textSecondary}`}>
@@ -1513,28 +1453,195 @@ function SimulatorDashboard({
 
       {/* Dashboard body */}
       <div className="flex flex-col lg:flex-row gap-6 p-8 max-w-7xl mx-auto">
-        {/* Left panel — Controls (result 상태일 땐 숨김 → 우측 리포트가 full-width로 확장) */}
-        <div className={`lg:w-[380px] shrink-0 rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === "result" ? "hidden" : ""}`}>
+        {/* Left panel — Controls */}
+        <div className={`lg:w-[380px] shrink-0 rounded-2xl border p-6 transition-all duration-700 ${panel}`}>
           <h3
-            className={`flex items-center gap-2 text-sm font-bold tracking-wider mb-6 ${textPrimary}`}
+            className={`flex items-center gap-2 text-sm font-bold tracking-wider mb-8 ${textPrimary}`}
           >
             <Sliders size={16} className={accent} />
             SIMULATION CONTROLS
           </h3>
 
-          {/* ─────────── BASIC: 분석 대상 (지역) ─────────── */}
-          <div className="mb-5">
-            <div className="flex items-center gap-2 mb-2">
-              <MapPin size={13} className={accent} />
+          {/* Radius slider */}
+          <div className="mb-8">
+            <div className="flex justify-between mb-2">
               <label className={`text-xs font-medium ${textSecondary}`}>
-                분석 대상
+                상권 반경
               </label>
+              <span className={`text-xs font-mono ${accent}`}>{radius}m</span>
+            </div>
+            <input
+              type="range"
+              min={100}
+              max={1500}
+              value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
+              className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} ${"bg-[#3a3633]"
+                }`}
+            />
+            <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
+              <span>100m</span>
+              <span>1500m</span>
+            </div>
+          </div>
+
+          {/* Budget slider */}
+          <div className="mb-8">
+            <div className="flex justify-between mb-2">
+              <label className={`text-xs font-medium ${textSecondary}`}>
+                임대료 예산
+              </label>
+              <span className={`text-xs font-mono ${accent}`}>{budget}만원</span>
+            </div>
+            <input
+              type="range"
+              min={50}
+              max={1000}
+              value={budget}
+              onChange={(e) => setBudget(Number(e.target.value))}
+              className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} ${"bg-[#3a3633]"
+                }`}
+            />
+            <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
+              <span>50만</span>
+              <span>1000만</span>
+            </div>
+          </div>
+
+          {/* Toggle switch */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between">
+              <label className={`text-xs font-medium ${textSecondary}`}>
+                유동인구 가중치
+              </label>
+              <button
+                onClick={() => setWeighted(!weighted)}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${weighted ? accentBg : "bg-[#3a3633]"
+                  }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${weighted ? "translate-x-[22px]" : "translate-x-0.5"
+                    }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* New Advanced Fields */}
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div>
+              <label className={`text-[10px] font-bold uppercase tracking-wider mb-2 block ${textSecondary}`}>
+                점포 면적 (평)
+              </label>
+              <input
+                type="number"
+                value={storeArea}
+                onChange={(e) => setStoreArea(Number(e.target.value))}
+                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-3 py-2 text-xs text-white focus:border-[#818cf8]/50 outline-none transition-colors"
+                id="store_area"
+                name="store_area"
+              />
+            </div>
+            <div>
+              <label className={`text-[10px] font-bold uppercase tracking-wider mb-2 block ${textSecondary}`}>
+                평균 객단가 (₩)
+              </label>
+              <input
+                type="number"
+                value={targetPrice}
+                onChange={(e) => setTargetPrice(Number(e.target.value))}
+                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-3 py-2 text-xs text-white focus:border-[#818cf8]/50 outline-none transition-colors"
+                id="target_price"
+                name="target_price"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div>
+              <label className={`text-[10px] font-bold uppercase tracking-wider mb-2 block ${textSecondary}`}>
+                영업 시간
+              </label>
+              <input
+                type="text"
+                value={operatingHours}
+                onChange={(e) => setOperatingHours(e.target.value)}
+                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-3 py-2 text-xs text-white focus:border-[#818cf8]/50 outline-none transition-colors"
+                id="operating_hours"
+                name="operating_hours"
+                placeholder="10:00 - 22:00"
+              />
+            </div>
+            <div>
+              <label className={`text-[10px] font-bold uppercase tracking-wider mb-2 block ${textSecondary}`}>
+                초기 자본 (만원)
+              </label>
+              <input
+                type="number"
+                value={initialCapital}
+                onChange={(e) => setInitialCapital(Number(e.target.value))}
+                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-3 py-2 text-xs text-white focus:border-[#818cf8]/50 outline-none transition-colors"
+                id="initial_capital"
+                name="initial_capital"
+              />
+            </div>
+          </div>
+
+          {/* Run button */}
+          <button
+            onClick={runSim}
+            disabled={reportState === "loading"}
+            className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${reportState === "loading"
+                ? "opacity-50 cursor-not-allowed"
+                : "hover:scale-[1.02] active:scale-[0.98]"
+              } ${"bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:from-[#4f46e5] hover:to-[#6366f1]"
+              }`}
+          >
+            <Play size={16} />
+            RUN SIMULATION
+          </button>
+
+          {/* Location selector */}
+          <div className="mt-6 p-4 rounded-xl border bg-[#1e1b18] border-[#3a3633]">
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin size={14} className={accent} />
+              <span className={`text-xs font-medium ${textPrimary}`}>
+                분석 대상
+              </span>
             </div>
 
-            {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
-            <div className="mb-2 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/50 flex items-center justify-between">
-              <span className="text-sm text-[#e2e8f0]">{selectedGu}</span>
-              <span className="text-[10px] text-[#9ca3af] uppercase tracking-wider opacity-70">선택됨</span>
+            {/* 구 선택 드롭다운 */}
+            <div className="relative mb-3">
+              <button
+                onClick={() => {
+                  setGuDropdownOpen(!guDropdownOpen);
+                  setDongDropdownOpen(false);
+                }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#2c2825] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+              >
+                <span>{selectedGu}</span>
+                <ChevronRight
+                  size={14}
+                  className={`text-[#9ca3af] transition-transform duration-200 ${guDropdownOpen ? "rotate-90" : ""
+                    }`}
+                />
+              </button>
+              {guDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                  {GU_NAMES.map((gu) => (
+                    <button
+                      key={gu}
+                      onClick={() => handleGuChange(gu)}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${gu === selectedGu
+                          ? "text-[#818cf8] bg-[#818cf8]/10"
+                          : "text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]"
+                        }`}
+                    >
+                      {gu}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 행정동 선택 드롭다운 */}
@@ -1542,9 +1649,9 @@ function SimulatorDashboard({
               <button
                 onClick={() => {
                   setDongDropdownOpen(!dongDropdownOpen);
-                  setBusinessTypeOpen(false);
+                  setGuDropdownOpen(false);
                 }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#2c2825] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
               >
                 <span className="truncate">
                   {selectedDongs.length === DONG_DATA[selectedGu].length
@@ -1553,13 +1660,13 @@ function SimulatorDashboard({
                 </span>
                 <ChevronRight
                   size={14}
-                  className={`text-[#9ca3af] transition-transform duration-200 shrink-0 ${
-                    dongDropdownOpen ? "rotate-90" : ""
-                  }`}
+                  className={`text-[#9ca3af] transition-transform duration-200 shrink-0 ${dongDropdownOpen ? "rotate-90" : ""
+                    }`}
                 />
               </button>
               {dongDropdownOpen && (
                 <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                  {/* 전체 선택 */}
                   <button
                     onClick={toggleAllDongs}
                     className="w-full text-left px-3 py-2 text-xs font-medium border-b border-[#3a3633] transition-colors text-[#818cf8] hover:bg-[#818cf8]/10"
@@ -1574,22 +1681,20 @@ function SimulatorDashboard({
                       <button
                         key={dong}
                         onClick={() => toggleDong(dong)}
-                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                          checked
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${checked
                             ? "text-[#e2e8f0] hover:bg-[#3a3633]"
                             : "text-[#666666] hover:bg-[#3a3633] hover:text-[#9ca3af]"
-                        }`}
+                          }`}
                       >
                         <div
-                          className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                            checked
+                          className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${checked
                               ? "bg-[#818cf8] border-[#818cf8]"
                               : "border-[#3a3633] bg-transparent"
-                          }`}
+                            }`}
                         >
                           {checked && (
                             <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                              <path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           )}
                         </div>
@@ -1601,300 +1706,6 @@ function SimulatorDashboard({
               )}
             </div>
           </div>
-
-          {/* ─────────── BASIC: 업종 ─────────── */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Store size={13} className={accent} />
-              <label className={`text-xs font-medium ${textSecondary}`}>
-                업종
-              </label>
-            </div>
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setBusinessTypeOpen(!businessTypeOpen);
-                  setDongDropdownOpen(false);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
-              >
-                <span>{businessType}</span>
-                <ChevronRight
-                  size={14}
-                  className={`text-[#9ca3af] transition-transform duration-200 ${
-                    businessTypeOpen ? "rotate-90" : ""
-                  }`}
-                />
-              </button>
-              {businessTypeOpen && (
-                <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
-                  {BUSINESS_TYPES.map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => {
-                        setBusinessType(type);
-                        setBusinessSubtype("");
-                        setBusinessTypeOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                        type === businessType
-                          ? "text-[#818cf8] bg-[#818cf8]/10"
-                          : "text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]"
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ─────────── 분석 조건 (기존 sliders) ─────────── */}
-          <div className="pt-5 border-t border-[#3a3633]">
-            {/* Radius slider */}
-            <div className="mb-6">
-              <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary}`}>
-                  상권 반경
-                </label>
-                <span className={`text-xs font-mono ${accent}`}>{radius}m</span>
-              </div>
-              <input
-                type="range"
-                min={100}
-                max={1500}
-                value={radius}
-                onChange={(e) => setRadius(Number(e.target.value))}
-                className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-              />
-              <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                <span>100m</span>
-                <span>1500m</span>
-              </div>
-            </div>
-
-            {/* Budget slider */}
-            <div className="mb-6">
-              <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary}`}>
-                  임대료 예산
-                </label>
-                <span className={`text-xs font-mono ${accent}`}>{budget}만원</span>
-              </div>
-              <input
-                type="range"
-                min={50}
-                max={1000}
-                value={budget}
-                onChange={(e) => setBudget(Number(e.target.value))}
-                className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-              />
-              <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                <span>50만</span>
-                <span>1000만</span>
-              </div>
-            </div>
-
-            {/* Toggle switch */}
-            <div className="mb-2">
-              <div className="flex items-center justify-between">
-                <label className={`text-xs font-medium ${textSecondary}`}>
-                  유동인구 가중치
-                </label>
-                <button
-                  onClick={() => setWeighted(!weighted)}
-                  className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
-                    weighted ? accentBg : "bg-[#3a3633]"
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
-                      weighted ? "translate-x-[22px]" : "translate-x-0.5"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* ─────────── ADVANCED 토글 ─────────── */}
-          <div className="mt-5 pt-5 border-t border-[#3a3633]">
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-dashed border-[#3a3633] bg-transparent hover:bg-[#1e1b18] hover:border-[#818cf8]/40 transition-colors group"
-            >
-              <span className="flex items-center gap-2">
-                <Settings size={13} className="text-[#9ca3af] group-hover:text-[#818cf8] transition-colors" />
-                <span className={`text-xs font-medium ${textSecondary} group-hover:text-[#e2e8f0] transition-colors`}>
-                  더 정확한 분석을 원하시나요?
-                </span>
-              </span>
-              <ChevronDown
-                size={14}
-                className={`text-[#9ca3af] transition-transform duration-300 ${
-                  showAdvanced ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-            <p className={`text-[10px] mt-1.5 ${textSecondary} opacity-60 px-1`}>
-              미입력 항목은 평균값으로 자동 추정됩니다
-            </p>
-          </div>
-
-          {/* ─────────── ADVANCED 펼침 영역 ─────────── */}
-          <div
-            className={`overflow-hidden transition-all duration-500 ease-out ${
-              showAdvanced ? "max-h-[1200px] opacity-100 mt-5" : "max-h-0 opacity-0 mt-0"
-            }`}
-          >
-            <div className="p-4 rounded-xl border border-[#3a3633] bg-[#1e1b18]/50 space-y-6">
-              {/* 1. 업종 소분류 */}
-              <div>
-                <label className={`block text-xs font-medium mb-2 ${textSecondary}`}>
-                  업종 소분류
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {BUSINESS_SUBTYPES[businessType]?.map((sub) => {
-                    const active = businessSubtype === sub;
-                    return (
-                      <button
-                        key={sub}
-                        onClick={() => setBusinessSubtype(active ? "" : sub)}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
-                          active
-                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
-                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
-                        }`}
-                      >
-                        {sub}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 2. 매장 면적 */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className={`text-xs font-medium ${textSecondary}`}>
-                    매장 면적
-                  </label>
-                  <span className={`text-xs font-mono ${accent}`}>{storeArea}평</span>
-                </div>
-                <input
-                  type="range"
-                  min={5}
-                  max={100}
-                  value={storeArea}
-                  onChange={(e) => setStoreArea(Number(e.target.value))}
-                  className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-                />
-                <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                  <span>5평</span>
-                  <span>100평</span>
-                </div>
-              </div>
-
-              {/* 3. 목표 객단가 */}
-              <div>
-                <label className={`block text-xs font-medium mb-2 ${textSecondary}`}>
-                  목표 객단가
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {PRICE_RANGES.map((range) => {
-                    const active = targetPrice === range.value;
-                    return (
-                      <button
-                        key={range.value}
-                        onClick={() => setTargetPrice(range.value)}
-                        className={`px-2 py-2 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
-                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
-                        }`}
-                      >
-                        {range.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 4. 운영 시간대 (멀티 선택) */}
-              <div>
-                <div className="flex items-baseline justify-between mb-2">
-                  <label className={`text-xs font-medium ${textSecondary}`}>
-                    주 타겟 시간대
-                  </label>
-                  <span className="text-[10px] text-[#9ca3af] opacity-60">복수 선택 가능</span>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {OPERATING_HOURS_OPTIONS.map((hour) => {
-                    const active = operatingHours.includes(hour);
-                    return (
-                      <button
-                        key={hour}
-                        onClick={() => toggleOperatingHour(hour)}
-                        className={`py-2 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
-                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
-                        }`}
-                      >
-                        {hour}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 5. 초기 자본금 */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className={`text-xs font-medium ${textSecondary}`}>
-                    초기 자본금
-                  </label>
-                  <span className={`text-xs font-mono ${accent}`}>
-                    {initialCapital >= 10000
-                      ? `${(initialCapital / 10000).toFixed(1)}억`
-                      : `${initialCapital}만`}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={1000}
-                  max={50000}
-                  step={500}
-                  value={initialCapital}
-                  onChange={(e) => setInitialCapital(Number(e.target.value))}
-                  className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-                />
-                <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                  <span>1천만</span>
-                  <span>5억</span>
-                </div>
-              </div>
-
-              <p className={`text-[10px] ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}>
-                * 권리금/보증금 제외, 인테리어·초기 운영비 기준
-              </p>
-            </div>
-          </div>
-
-          {/* ─────────── RUN SIMULATION (맨 아래) ─────────── */}
-          <button
-            onClick={runSim}
-            disabled={reportState === "loading"}
-            className={`w-full mt-6 py-3.5 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${
-              reportState === "loading"
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:scale-[1.02] active:scale-[0.98]"
-            } bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:from-[#4f46e5] hover:to-[#6366f1]`}
-          >
-            <Play size={16} />
-            RUN SIMULATION
-          </button>
         </div>
 
         {/* Right panel — Visualization */}
@@ -1902,9 +1713,8 @@ function SimulatorDashboard({
           {reportState === "idle" && (
             <div className="h-full flex flex-col items-center justify-center gap-4">
               <div
-                className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
-                  "bg-[#1e1b18]"
-                }`}
+                className={`w-16 h-16 rounded-2xl flex items-center justify-center ${"bg-[#1e1b18]"
+                  }`}
               >
                 <BarChart3 size={28} className={textSecondary} />
               </div>
@@ -1937,8 +1747,8 @@ function SimulatorDashboard({
           )}
 
           {reportState === "result" && (
-            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-28 md:pt-32 overflow-y-auto custom-scrollbar flex flex-col pb-12">
-              <div className="max-w-[1600px] w-full mx-auto flex flex-col gap-6">
+            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-28 md:pt-32 lg:overflow-hidden overflow-y-auto flex flex-col">
+              <div className="max-w-[1600px] w-full mx-auto flex flex-col h-full gap-4">
 
                 {/* Header & Nav */}
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
@@ -1949,7 +1759,7 @@ function SimulatorDashboard({
                   <div className="flex items-center gap-3">
                     <button className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"><Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> 2026. 04.</button>
                     <div className="relative">
-                      <button onClick={() => setIsDownloadOpen(!isDownloadOpen)} className="flex items-center gap-2 px-3 py-2 bg-transparent border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500 rounded-lg text-[11px] font-bold transition-colors">
+                      <button onClick={() => setIsDownloadOpen(!isDownloadOpen)} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-[0_0_15px_rgba(99,102,241,0.3)]">
                         <Download className="w-3.5 h-3.5" /> 다운로드 <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
                       </button>
                       {isDownloadOpen && (
@@ -1974,11 +1784,11 @@ function SimulatorDashboard({
                 </div>
 
                 {/* Main Dashboard Body */}
-                <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
                   {/* Left Column */}
-                  <div className="lg:flex-[2] flex flex-col gap-6">
+                  <div className="flex-1 lg:flex-[2] flex flex-col gap-4 min-h-0">
                     {/* Chart */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 pb-10 shadow-xl flex flex-col h-[320px]">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col shrink-0 h-[220px]">
                       <div className="flex justify-between items-end mb-4">
                         <div>
                           <h2 className="text-sm font-bold text-white">{chartView === "daily" ? "시간대별 유동인구 및 매출 (24H)" : "LSTM 12개월 매출 추이 예측 (12M)"}</h2>
@@ -2009,22 +1819,22 @@ function SimulatorDashboard({
                             <linearGradient id="grayGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#a3a3a3" stopOpacity="0.5" /><stop offset="100%" stopColor="#a3a3a3" stopOpacity="0" /></linearGradient>
                           </defs>
                         </svg>
-                        <div className="absolute -bottom-3 left-0 w-full flex justify-between text-[10px] text-[#d1d5db] font-mono pl-2">
+                        <div className="absolute bottom-0 left-0 w-full flex justify-between text-[10px] text-[#d1d5db] font-mono pl-2">
                           {chartView === "daily" ? <><span>06:00</span><span>10:00</span><span>14:00</span><span>18:00</span><span>22:00</span><span>02:00</span></> : <><span>1M</span><span>3M</span><span>6M</span><span>9M</span><span>12M</span></>}
                         </div>
                       </div>
                     </div>
 
                     {/* Table */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col flex-1">
-                      <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col flex-1 min-h-0">
+                      <div className="p-4 border-b border-[#3a3633] shrink-0 flex justify-between items-center">
                         <h2 className="text-sm font-bold text-white">상세 데이터 테이블</h2>
                         <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
                           <button onClick={() => setTableView("cannibalization")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "cannibalization" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>가맹점 간섭도</button>
                           <button onClick={() => setTableView("neighborhoods")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "neighborhoods" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>행정동 비교</button>
                         </div>
                       </div>
-                      <div className="flex-1">
+                      <div className="overflow-y-auto flex-1">
                         <table className="w-full text-left border-collapse">
                           <thead className="sticky top-0 bg-[#1e1b18]/90 backdrop-blur-sm z-10">
                             <tr className="text-[11px] font-mono text-[#9ca3af] uppercase tracking-wider">
@@ -2054,18 +1864,13 @@ function SimulatorDashboard({
                           </tbody>
                         </table>
                       </div>
-                      {/* Footer — 빈 공간을 채우는 메타 정보 */}
-                      <div className="px-5 py-3 border-t border-[#3a3633] flex justify-between items-center text-[10px] font-mono text-[#9ca3af]">
-                        <span>총 4건 · {tableView === "cannibalization" ? "가맹점 간섭도 분석" : "행정동 비교 분석"}</span>
-                        <span className="opacity-70">UPDATED 2026.04.08</span>
-                      </div>
                     </div>
                   </div>
 
                   {/* Right Column */}
-                  <div className="lg:flex-[1] flex flex-col gap-6">
+                  <div className="flex-1 lg:flex-[1] flex flex-col gap-4 min-h-0">
                     {/* Radar Chart */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center shrink-0">
                       <div className="w-full text-left mb-2">
                         <h2 className="text-sm font-bold text-white">상권 종합 지표 분석 (7 Core Metrics)</h2>
                         <p className="text-[11px] text-indigo-400">에이전트 노드 분석 결과 통합 데이터</p>
@@ -2089,9 +1894,9 @@ function SimulatorDashboard({
                     </div>
 
                     {/* Insights */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col flex-1">
-                      <h2 className="text-sm font-bold text-white mb-3">SPOTTER AI 인사이트</h2>
-                      <div className="space-y-3">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col flex-1 min-h-0">
+                      <h2 className="text-sm font-bold text-white mb-1">SPOTTER AI 인사이트</h2>
+                      <div className="overflow-y-auto flex-1 space-y-3 pr-1 mt-3">
                         <InsightCard icon={<TrendingUp className="w-4 h-4 text-indigo-400" />} title="저녁 시간대 매출 집중형" desc="18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다." />
                         <div className="flex gap-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
                           <div className="shrink-0 mt-0.5"><Scale className="w-4 h-4 text-rose-500" /></div>
@@ -2102,7 +1907,7 @@ function SimulatorDashboard({
                         </div>
                         <InsightCard icon={<Users className="w-4 h-4 text-indigo-400" />} title="2030 여성 타겟 구역" desc="SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가." />
                       </div>
-                      <button className="w-full mt-auto py-2.5 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-md text-xs font-bold text-white transition-colors flex items-center justify-center gap-2 group">
+                      <button className="w-full mt-3 py-2 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-md text-xs font-bold text-white transition-colors flex items-center justify-center gap-2 group shrink-0">
                         상세 리포트 보기 <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                       </button>
                     </div>
@@ -2186,7 +1991,7 @@ function StatCard({ title, value, trend, trendUp, icon, sparkline }: {
   icon: React.ReactElement; sparkline: string;
 }) {
   return (
-    <div className="bg-[#2c2825] border border-[#3a3633] p-6 rounded-xl flex flex-col justify-between gap-3 group hover:border-indigo-500/50 transition-colors min-h-[130px]">
+    <div className="bg-[#2c2825] border border-[#3a3633] p-4 rounded-xl flex flex-col justify-between group hover:border-indigo-500/50 transition-colors h-[110px]">
       <div className="flex justify-between items-start">
         <p className="text-[#9ca3af] text-xs font-medium">{title}</p>
         <div className="text-[#9ca3af] opacity-50 group-hover:opacity-100 group-hover:text-indigo-400 transition-colors">
@@ -2247,7 +2052,6 @@ function InsightCard({ icon, title, desc }: {
    [글로벌 상태]
    - isDark: Light/Dark 테마 토글 (SkyThemeToggle 연결)
    - isTransitioning: 씬 전환 시 800ms 암전 오버레이
-   - reportState: Simulator idle/loading/result 상태
    - isAppLoaded: 프리로더 완료 여부
 
    [글로벌 헤더]
@@ -2276,13 +2080,11 @@ export default function App() {
   const scene = pathToScene(location.pathname);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [reportState, setReportState] = useState<"idle" | "loading" | "result">(
-    "idle"
-  );
   const [activeMenuIndex, setActiveMenuIndex] = useState(2);
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(
     null
   );
+  const [reportState, setReportState] = useState<"idle" | "loading" | "result">("idle");
 
   // Preloader
   const [loadProgress, setLoadProgress] = useState(0);
@@ -2331,7 +2133,6 @@ export default function App() {
         };
         const path = pathMap[next] || "/";
         navigate(path);
-        setReportState("idle");
         setTimeout(() => setIsTransitioning(false), 100);
       }, 800);
     },
@@ -2409,10 +2210,7 @@ export default function App() {
         <Route
           path="/simulator"
           element={
-            <SimulatorDashboard
-              reportState={reportState}
-              setReportState={setReportState}
-            />
+            <SimulatorDashboard reportState={reportState} setReportState={setReportState} />
           }
         />
       </Routes>
@@ -2455,9 +2253,8 @@ export default function App() {
 
       {/* Transition overlay */}
       <div
-        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
-          isTransitioning ? "opacity-100" : "opacity-0"
-        }`}
+        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${isTransitioning ? "opacity-100" : "opacity-0"
+          }`}
       />
 
       {/* 3D Hologram Preloader */}

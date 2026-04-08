@@ -31,6 +31,7 @@ class AgentState(TypedDict):
     
     # 4. 분석 결과 및 상태 제어
     analysis_results: dict[str, Any]
+    analysis_metrics: dict[str, Any]  # 추가: 시각화 및 정량적 평가를 위한 고도화 데이터 (growth_rate, grade 등)
     current_agent: str        # 현재 작업을 수행 중인 에이전트명
     next_step: str            # Supervisor가 결정한 다음 단계
     errors: list[str]
