@@ -14,6 +14,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from src.config.settings import settings
 from dotenv import load_dotenv
 
+# 커넥션 풀 설정 — 동시 요청 대응
+_POOL_SIZE = 10  # 기본 커넥션 수
+_MAX_OVERFLOW = 20  # 초과 허용 커넥션 수 (최대 30개 동시 접속)
+_POOL_TIMEOUT = 30  # 커넥션 대기 타임아웃(초)
+_POOL_PRE_PING = True  # 끊긴 커넥션 자동 재연결
+
 load_dotenv()
 
 _LOCAL_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
@@ -49,7 +55,13 @@ class LegalVectorDB:
 
         if self._vectorstore is None:
             conn_string = settings.postgres_url.replace("postgresql://", "postgresql+psycopg://", 1)
-            async_engine = create_async_engine(conn_string)
+            async_engine = create_async_engine(
+                conn_string,
+                pool_size=_POOL_SIZE,
+                max_overflow=_MAX_OVERFLOW,
+                pool_timeout=_POOL_TIMEOUT,
+                pool_pre_ping=_POOL_PRE_PING,
+            )
             self._vectorstore = PGVector(
                 connection=async_engine,
                 embeddings=self.embeddings,
@@ -68,9 +80,10 @@ class LegalVectorDB:
                     "metadata": {"source": "법률 가이드", "relevance": 1.0},
                 }
             ]
-            
+
         vs = self.vectorstore
-        if vs is None: return []
+        if vs is None:
+            return []
 
         try:
             docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=search_k)
@@ -87,10 +100,12 @@ class LegalVectorDB:
 
     def get_total_count(self) -> int:
         # DEV 모드에서는 DB 접속 없이 즉시 반환
-        if settings.app_mode == "DEV": return 42 # Mock count
+        if settings.app_mode == "DEV":
+            return 42  # Mock count
 
         try:
             import psycopg2
+
             # settings에서 주소를 가져옵니다.
             conn = psycopg2.connect(settings.postgres_url)
             cur = conn.cursor()
@@ -98,7 +113,7 @@ class LegalVectorDB:
                 "SELECT COUNT(*) FROM langchain_pg_embedding e "
                 "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
                 "WHERE c.name = %s",
-                (self.collection_name,)
+                (self.collection_name,),
             )
             count = cur.fetchone()[0]
             cur.close()
@@ -107,6 +122,7 @@ class LegalVectorDB:
         except Exception as e:
             print(f"DEBUG: DB Count 조회 실패 - {str(e)}")
             return 0
+
 
 # 싱글톤 인터페이스 제공
 legal_db = LegalVectorDB()

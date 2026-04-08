@@ -456,13 +456,13 @@ def check_zoning_regulation(state: AgentState) -> dict:
 
 async def _fetch_all_docs_parallel(state: dict, retriever: LegalDocumentRetriever) -> tuple:
     """
-    RAG 검색 5개 + 판례 API 검색 2개를 asyncio.gather()로 병렬 실행.
+    RAG 검색 5개 + 판례 API 검색 4개를 asyncio.gather()로 병렬 실행.
 
     순차 실행 대비 응답 시간을 대폭 단축.
 
     Returns:
         tuple: (franchise_docs, lease_docs, food_docs, safety_docs, summary_docs,
-                franchise_prec, lease_prec)
+                franchise_prec, lease_prec, food_prec, safety_prec)
     """
     brand = state.get("brand_name") or "해당 브랜드"
     district = state.get("target_district", "")
@@ -486,6 +486,8 @@ async def _fetch_all_docs_parallel(state: dict, retriever: LegalDocumentRetrieve
         # 국가법령정보 판례 검색 (단일 핵심 키워드로 검색)
         law_client.search_precedents("가맹사업", display=3),
         law_client.search_precedents("권리금", display=3),
+        law_client.search_precedents("식품위생", display=3),
+        law_client.search_precedents("다중이용업소", display=3),
     )
 
 
@@ -506,10 +508,18 @@ def legal_node(state) -> dict:
 
     retriever = LegalDocumentRetriever()
 
-    # RAG 검색 5개 + 판례 검색 2개 병렬 실행 (핵심 최적화)
-    franchise_docs, lease_docs, food_docs, safety_docs, legal_info_docs, franchise_prec, lease_prec = _run_async(
-        _fetch_all_docs_parallel(state, retriever)
-    )
+    # RAG 검색 5개 + 판례 검색 4개 병렬 실행 (핵심 최적화)
+    (
+        franchise_docs,
+        lease_docs,
+        food_docs,
+        safety_docs,
+        legal_info_docs,
+        franchise_prec,
+        lease_prec,
+        food_prec,
+        safety_prec,
+    ) = _run_async(_fetch_all_docs_parallel(state, retriever))
 
     risks: list[dict] = []
 
@@ -522,17 +532,17 @@ def legal_node(state) -> dict:
     # 3. 용도지역 규제 검토 (LLM 없이 규칙 기반)
     risks.append(check_zoning_regulation(state))
 
-    # 4. 식품위생법 검토 (pre-fetched docs 사용)
-    risks.append(check_food_hygiene(state, food_docs))
+    # 4. 식품위생법 검토 (RAG docs + 판례 병합)
+    risks.append(check_food_hygiene(state, food_docs + food_prec))
 
-    # 5. 다중이용업소 안전관리법 검토 (pre-fetched docs 사용)
-    risks.append(check_safety_regulation(state, safety_docs))
+    # 5. 다중이용업소 안전관리법 검토 (RAG docs + 판례 병합)
+    risks.append(check_safety_regulation(state, safety_docs + safety_prec))
 
     # 6. 공정위 가맹사업 정보공개서 검토
     risks.append(check_ftc_franchise(state))
 
     # legal_info: RAG 문서 + 판례 합산 (graph.py 로그 + supervisor 완료 신호용)
-    precedents = franchise_prec + lease_prec
+    precedents = franchise_prec + lease_prec + food_prec + safety_prec
     legal_info = (legal_info_docs + precedents) or [
         {"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks
     ]
