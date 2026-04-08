@@ -1063,7 +1063,7 @@ function ContactPage({ onBack }: { onBack: () => void }) {
             <h1 className="text-5xl lg:text-7xl xl:text-8xl font-black uppercase leading-none mb-8">
               GET IN
               <br />
-              TOUCH.
+              <span className="text-[#818cf8]">TOUCH.</span>
             </h1>
             <p className="text-[#d1d5db] leading-relaxed text-sm max-w-sm">
               AI 기반 프랜차이즈 상권분석 시뮬레이터 프로젝트에 대한 상세한
