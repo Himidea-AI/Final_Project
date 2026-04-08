@@ -2,7 +2,7 @@
 
 > **Jira 프로젝트 키**: `IM3`  
 > **담당 영역**: Docker, Nginx, `docs/`, `tests/`  
-> **최종 업데이트**: 2026-04-07  
+> **최종 업데이트**: 2026-04-08  
 > **프로젝트 기간**: 04/02 ~ 05/07 (5주)
 
 ---
@@ -18,10 +18,10 @@
 | 2 | IM3-C2-02 | Dockerfile (backend/frontend) 작성 | 1주차 | P0 | 🟢 | 0.5d | — | ✅ 완료 |
 | 3 | IM3-C2-03 | GitHub 레포 초기 세팅 + README | 1주차 | P0 | 🟢 | 0.5d | — | ✅ 완료 |
 | 4 | IM3-C2-04 | 팀 규칙 문서 (AGENTS/GEMINI/CLAUDE.md) | 1주차 | P0 | 🟢 | 0.5d | — | ✅ 완료 |
-| 5 | IM3-C2-05 | Nginx 리버스 프록시 고도화 | 2주차 | P1 | 🟡 | 1d | #1, #2 | 🔲 |
-| 6 | IM3-C2-06 | Docker 통합 빌드 검증 + DB 초기화 설정 | 2주차 | P0 | 🟡 | 1.5d | #5 | 🔲 |
-| 7 | IM3-C2-07 | 백엔드 ↔ 프론트 API 연결 E2E 검증 | 2주차 | P1 | 🟡 | 1d | #6 | 🔲 |
-| 8 | IM3-C2-08 | 헬스체크 + depends_on condition 추가 | 2주차 | P1 | 🟢 | 0.5d | #6 | 🔲 |
+| 5 | IM3-C2-05 | Nginx 리버스 프록시 고도화 | 2주차 | P1 | 🟡 | 1d | #1, #2 | ✅ 완료 |
+| 6 | IM3-C2-06 | Docker 통합 빌드 검증 + DB 초기화 설정 | 2주차 | P0 | 🟡 | 1.5d | #5 | ✅ 완료 |
+| 7 | IM3-C2-07 | 백엔드 ↔ 프론트 API 연결 E2E 검증 | 2주차 | P1 | 🟡 | 1d | #6 | ✅ 완료 |
+| 8 | IM3-C2-08 | 헬스체크 + depends_on condition 추가 | 2주차 | P1 | 🟢 | 0.5d | #6 | ✅ 완료 |
 | 9 | IM3-C2-09 | 통합 테스트 파이프라인 구축 | 3주차 | P1 | 🔴 | 2d | #7 | 🔲 |
 | 10 | IM3-C2-10 | 도메인 연결 + SSL/TLS 인증서 | 3주차 | P2 | 🟡 | 1d | #5 | 🔲 |
 | 11 | IM3-C2-11 | Docker 프로덕션 최적화 | 3주차 | P2 | 🟡 | 1d | #6 | 🔲 |
@@ -51,7 +51,7 @@
 ### ✅ 1주차 완료 (04/02 ~ 04/06)
 
 #### IM3-C2-01: Docker Compose 초기 세팅
-- **완료**: PostgreSQL 16, Redis 7, ChromaDB, Backend, Frontend 5개 서비스 구성
+- **완료**: PostgreSQL 16, Redis 7, Backend, Frontend 4개 서비스 구성
 - **PR**: #11 머지됨
 - **커밋**: `583349a` (version 속성 제거)
 
@@ -83,7 +83,7 @@
 - **확인 사항**:
   - [ ] `docker compose build` 전체 성공 여부
   - [ ] `requirements.txt` 의존성 충돌 확인
-  - [ ] 각 서비스 간 네트워크 연결 (backend → db, backend → chromadb, frontend → backend)
+  - [ ] 각 서비스 간 네트워크 연결 (backend → db, frontend → backend)
   - [ ] 환경변수 누락 확인 (`.env.example` vs 실제 코드)
 - **DB 초기화** (기존 Alembic 티켓 흡수):
   - [ ] `docker-compose.yml`의 backend `command`에 `alembic upgrade head` 추가
@@ -108,7 +108,6 @@
 - **작업**:
   - [ ] PostgreSQL 헬스체크 (`pg_isready`)
   - [ ] Redis 헬스체크 (`redis-cli ping`)
-  - [ ] ChromaDB 헬스체크 (HTTP `/api/v1/heartbeat`)
   - [ ] `depends_on` → `condition: service_healthy`로 변경
 - **난이도**: 🟢 쉬움 — 정형화된 패턴
 - **선행**: #6
