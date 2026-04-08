@@ -10,7 +10,7 @@ from ..state import AgentState
 
 def analyze_floating_population(state: AgentState) -> dict:
     """
-    유동인구 분석 — 시간대/요일별 유동인구 패턴
+    유동인구 분석 — 시간대/요일별 유동인구 패턴 
 
     Returns:
         dict: 평일/주말 유동인구, 시간대별 분포, 피크 시간

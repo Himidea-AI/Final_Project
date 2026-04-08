@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Extract Jira ID from branch name and prepend it to the commit message
+# Pattern: IM3-123
+
+# Get the current branch name
+BRANCH_NAME=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# Extract the Jira ID (case-insensitive search for IM3- followed by digits)
+JIRA_ID=$(echo "$BRANCH_NAME" | grep -Ei "IM3-[0-9]+" -o | tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' | head -n 1)
+
+# If a Jira ID was found, check if it's already at the beginning of the commit message
+if [ -n "$JIRA_ID" ]; then
+  COMMIT_MSG_FILE=$1
+  COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+  # If the message doesn't already start with the Jira ID, prepend it
+  if [[ ! "$COMMIT_MSG" =~ ^"$JIRA_ID" ]]; then
+    echo "$JIRA_ID: $COMMIT_MSG" > "$COMMIT_MSG_FILE"
+  fi
+fi
