@@ -9,8 +9,6 @@ interface Props {
 }
 
 export default function PricingCard({ plan, onSelect, isVisible }: Props) {
-  const isGrowth = plan.highlighted;
-
   return (
     <motion.div
       layout
@@ -21,75 +19,68 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         y: isVisible ? 0 : 20,
         scale: isVisible ? 1 : 0.95,
       }}
+      whileHover={{ y: -8 }}
       transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}
-      className={`relative w-[340px] shrink-0 rounded-2xl border p-8 flex flex-col transition-all duration-300 hover:-translate-y-1 ${
-        isGrowth
-          ? "bg-[#141414] border-[#f59e0b] shadow-[0_0_30px_rgba(245,158,11,0.15)]"
-          : "bg-[#141414] border-[#262626] hover:border-[#404040]"
-      }`}
+      className="group relative w-[340px] shrink-0 rounded-2xl overflow-hidden p-[2px]"
     >
-      {/* Badge */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-lg">{plan.badge}</span>
-        <span className="text-[#fafafa] font-bold text-lg">{plan.name}</span>
-        {plan.badgeLabel && (
-          <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#fbbf24] text-[10px] font-bold tracking-wider uppercase">
-            {plan.badgeLabel}
-          </span>
-        )}
-      </div>
+      {/* 1. 회전하는 그라데이션 배경 (호버 시) */}
+      <div
+        className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{
+          background:
+            "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+        }}
+      />
 
-      <p className="text-[#a1a1aa] text-xs mb-6">{plan.target}</p>
-
-      {/* Price */}
-      <div className="flex items-baseline gap-1 mb-8">
-        <span className="text-4xl font-bold text-[#fafafa] tabular-nums">
-          {plan.price}
-        </span>
-        {plan.priceNote && (
-          <span className="text-[#a1a1aa] text-sm">{plan.priceNote}</span>
-        )}
-      </div>
-
-      {/* Features */}
-      <div className="flex flex-col gap-3 mb-8 flex-1">
-        {plan.features.map((f, i) => (
-          <div key={i} className="flex items-center gap-3 text-sm leading-relaxed">
-            {f.included ? (
-              <Check size={14} className="text-[#fbbf24] shrink-0" />
-            ) : (
-              <Minus size={14} className="text-[#404040] shrink-0" />
-            )}
-            <span className={f.included ? "text-[#a1a1aa]" : "text-[#404040]"}>
-              {f.text}
+      {/* 2. 내부 카드 컨텐츠 */}
+      <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] flex flex-col p-8 transition-colors duration-500">
+        {/* Badge — 이름 + MOST POPULAR (Growth만) */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">{plan.badge}</span>
+          <span className="text-[#e2e8f0] font-bold text-lg">{plan.name}</span>
+          {plan.badgeLabel && (
+            <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-[#a5b4fc] text-[10px] font-bold tracking-wider uppercase">
+              {plan.badgeLabel}
             </span>
-          </div>
-        ))}
+          )}
+        </div>
+
+        <p className="text-[#9ca3af] text-xs mb-6">{plan.target}</p>
+
+        {/* Price */}
+        <div className="flex items-baseline gap-1 mb-8">
+          <span className="text-4xl font-bold text-[#e2e8f0] tabular-nums">
+            {plan.price}
+          </span>
+          {plan.priceNote && (
+            <span className="text-[#9ca3af] text-sm">{plan.priceNote}</span>
+          )}
+        </div>
+
+        {/* Features */}
+        <div className="flex flex-col gap-3 mb-8 flex-1">
+          {plan.features.map((f, i) => (
+            <div key={i} className="flex items-center gap-3 text-sm leading-relaxed">
+              {f.included ? (
+                <Check size={14} className="text-[#a5b4fc] shrink-0" />
+              ) : (
+                <Minus size={14} className="text-[#3a3633] shrink-0" />
+              )}
+              <span className={f.included ? "text-[#9ca3af]" : "text-[#3a3633]"}>
+                {f.text}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA — 기본 스톤톤, 호버 시 인디고 점등 */}
+        <button
+          onClick={() => onSelect(plan.id)}
+          className="w-full py-4 rounded-xl font-bold text-sm tracking-wider transition-all duration-300 bg-[#1e1b18] text-[#9ca3af] border border-[#3a3633] group-hover:bg-[#818cf8] group-hover:text-[#1e1b18] group-hover:border-transparent group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)] active:scale-[0.98]"
+        >
+          {plan.cta}
+        </button>
       </div>
-
-      {/* CTA */}
-      <button
-        onClick={() => onSelect(plan.id)}
-        className={`w-full py-3 rounded-xl font-bold text-sm tracking-wider transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${
-          isGrowth
-            ? "bg-gradient-to-r from-[#d97706] to-[#f59e0b] text-white shadow-[0_0_20px_rgba(245,158,11,0.3)]"
-            : "bg-[#262626] text-[#fafafa] border border-[#333333] hover:bg-[#333333]"
-        }`}
-      >
-        {plan.cta}
-      </button>
-
-      {/* Ambient glow for Growth */}
-      {isGrowth && (
-        <div
-          className="absolute -inset-px rounded-2xl pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(245,158,11,0.08), transparent, rgba(245,158,11,0.05))",
-            animation: "energy-pulse 3s ease-in-out infinite",
-          }}
-        />
-      )}
     </motion.div>
   );
 }

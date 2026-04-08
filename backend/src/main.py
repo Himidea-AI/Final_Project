@@ -44,9 +44,11 @@ DEFAULT_LNG = 126.9015
 def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Dict[str, Any]:
     """
     LangGraph AgentState를 프론트엔드 SimulationOutput 스키마로 변환
+    [B1 고도화] 분석 리포트와 정량 지표(metrics)를 분리하여 반환
     """
     md = state.get("market_data", {})
     analysis = state.get("analysis_results", {})
+    metrics = state.get("analysis_metrics", {})
     target_dist = state.get("target_district", "마포구")
 
     # [좌표 기본값 처리]
@@ -58,21 +60,18 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     legal_risks = [
         {
             "type": r["type"],
-            "risk_level": r["level"].upper(),  # "safe"→"SAFE", "caution"→"CAUTION", "danger"→"DANGER"
+            "risk_level": r["level"].upper(),
             "detail": r["summary"],
         }
         for r in legal_risks_raw
     ]
 
-    # 공통 추천 메시지
-    legal_summaries = " ".join([r["summary"] for r in legal_risks_raw])
-    recommendation = (
-        f"[{target_dist}] 에이전트 분석 결과: {analysis.get('market_summary', '상권 데이터 수집 중')} {legal_summaries}"
-    )
-
+    # [B1 고도화] 응답 구조 재설계
     response_data = {
         "request_id": request_id,
         "target_district": target_dist,
+        "analysis_report": analysis.get("market_summary", ""),  # 줄글 리포트
+        "analysis_metrics": metrics,                            # 차트용 정량 데이터
         "simulation_months": 12,
         "monthly_projection": [
             {
@@ -92,7 +91,6 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             }
         ],
         "legal_risks": legal_risks,
-        "ai_recommendation": recommendation,
         "map_data": {
             "center": {"lat": lat, "lng": lng},
             "markers": [
@@ -105,16 +103,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 }
             ],
         },
-        # [BEP 분석용 Mock 데이터]
         "financial_report": md.get("financial_metrics", {}),
     }
 
-    # [검증용 로그 출력] 터미널에서 최종 데이터 확인 가능
-    print("\n" + "=" * 50)
-    print(f"DEBUG: [{target_dist}] 프론트엔드 전송 최종 JSON 데이터")
-    print(json.dumps(response_data, indent=2, ensure_ascii=False))
-    print("=" * 50 + "\n")
-
+    print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {metrics.get('district_grade', 'N/A')})")
     return response_data
 
 
@@ -169,7 +161,7 @@ async def analyze_location(input_data: SimulationInput):
     }
 
     try:
-        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=45.0)
+        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=90.0)
         result = map_state_to_simulation_output(final_state, request_id)
         return {"status": "success", "data": result}
     except Exception as e:
@@ -194,7 +186,7 @@ async def run_simulation(input_data: SimulationInput):
         "errors": [],
     }
     try:
-        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=45.0)
+        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=90.0)
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
         return {"status": "error", "message": str(e)}

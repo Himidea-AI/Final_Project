@@ -6,33 +6,46 @@ from langchain_core.messages import HumanMessage
 from src.schemas.state import AgentState
 from src.agents.nodes.supervisor import supervisor_node
 from src.agents.nodes.market_analyst import market_analyst_node
+from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.legal import legal_analyst_node
+from src.agents.nodes.synthesis import synthesis_node
 
 
 def build_graph() -> StateGraph:
     """
-    상권분석 워크플로우 그래프 빌드 (Supervisor 기반 순환 구조)
+    상권분석 워크플로우 그래프 빌드 (Supervisor 기반 Hub-and-Spoke 구조)
     """
     workflow = StateGraph(AgentState)
 
+    # 1. 노드 등록
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("market_analyst", market_analyst_node)
+    workflow.add_node("population_analyst", population_analyst_node)
     workflow.add_node("legal_analyst", legal_analyst_node)
+    workflow.add_node("synthesis", synthesis_node)
 
+    # 2. 진입점 설정
     workflow.set_entry_point("supervisor")
 
+    # 3. 중앙 통제 라우팅 (Supervisor -> Workers)
     workflow.add_conditional_edges(
         "supervisor",
         lambda x: x["next_step"],
         {
             "market_analyst": "market_analyst",
+            "population_analyst": "population_analyst",
             "legal_analyst": "legal_analyst",
-            "FINISH": END,
+            "FINISH": "synthesis",
         },
     )
 
+    # 4. 작업 완료 후 복귀 (Workers -> Supervisor)
     workflow.add_edge("market_analyst", "supervisor")
+    workflow.add_edge("population_analyst", "supervisor")
     workflow.add_edge("legal_analyst", "supervisor")
+
+    # 5. 최종 합성 후 종료 (Synthesis -> END)
+    workflow.add_edge("synthesis", END)
 
     return workflow
 

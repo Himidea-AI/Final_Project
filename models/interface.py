@@ -1,0 +1,310 @@
+"""
+A1 → B2 인터페이스 모듈
+
+A1(찬영) 딥러닝 모델 출력을 B2(수지니) 12개월 시뮬레이션 입력으로
+전달하기 위한 통합 인터페이스.
+
+- lstm_forecast : 월 예상매출, 신뢰구간
+- revenue_predictor : 생존률, 리스크 레벨, 12개월 월별 생존률
+- revenue_predictor/bep : BEP 개월수, 월별 손익
+
+모델 가중치가 없는 개발 환경에서는 mock 데이터를 반환한다.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
+
+logger = logging.getLogger(__name__)
+
+MODEL_VERSION = "0.1.0"
+DATA_PERIOD = "2019Q1~2024Q4"
+
+
+# ---------------------------------------------------------------------------
+# Mock 데이터 생성
+# ---------------------------------------------------------------------------
+
+
+def _mock_revenue_forecast() -> dict:
+    """LSTM 매출 예측 mock 데이터 (4분기 → 12개월 변환)."""
+    base_sales = 15_000_000.0
+    monthly_predictions = []
+    for m in range(1, 13):
+        sales = base_sales * (1 + 0.01 * m)  # 완만한 상승 추세
+        margin = sales * 0.05 * ((m - 1) // 3 + 1)
+        monthly_predictions.append(
+            {
+                "month": m,
+                "predicted_sales": round(sales),
+                "confidence_lower": round(max(0, sales - margin)),
+                "confidence_upper": round(sales + margin),
+            }
+        )
+    monthly_avg = sum(p["predicted_sales"] for p in monthly_predictions) / 12
+    return {
+        "monthly_avg": round(monthly_avg),
+        "monthly_predictions": monthly_predictions,
+    }
+
+
+def _mock_survival() -> dict:
+    """생존률 mock 데이터."""
+    survival_rate = 0.72
+    monthly_decay = survival_rate ** (1 / 3)
+    monthly_rates = []
+    cumulative = 1.0
+    for _ in range(12):
+        cumulative *= monthly_decay
+        monthly_rates.append(round(max(0.0, min(1.0, cumulative)), 4))
+    return {
+        "survival_rate": survival_rate,
+        "risk_level": "safe",
+        "monthly_survival_rates": monthly_rates,
+    }
+
+
+def _mock_bep(industry_name: str) -> dict:
+    """BEP mock 데이터."""
+    from models.revenue_predictor.bep import BEPCalculator
+
+    cost_cfg = BEPCalculator.get_default_costs(industry_name)
+    calc = BEPCalculator(cost_cfg)
+    monthly_revenue = 15_000_000.0
+    bep_result = calc.calculate_bep(monthly_revenue)
+
+    monthly_simulation = calc.simulate_monthly([monthly_revenue] * 12)
+    # simulate_monthly 에는 cost 키가 없으므로 변환
+    simulation = []
+    for row in monthly_simulation:
+        simulation.append(
+            {
+                "month": row["month"],
+                "revenue": row["revenue"],
+                "cost": row["total_cost"],
+                "profit": row["profit"],
+                "cumulative_profit": row["cumulative_profit"],
+                "bep_reached": row["bep_reached"],
+            }
+        )
+
+    return {
+        "bep_months": bep_result["bep_months"],
+        "monthly_profit": bep_result["monthly_profit"],
+        "total_initial_investment": bep_result["total_initial_investment"],
+        "annual_roi": bep_result["annual_roi"],
+        "monthly_simulation": simulation,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 실제 모델 호출 헬퍼
+# ---------------------------------------------------------------------------
+
+
+def _run_lstm_forecast(dong_code: str, industry_code: str) -> dict:
+    """LSTM 매출 예측 모델 호출 → 분기 결과를 12개월로 변환."""
+    from models.lstm_forecast.predict import predict as lstm_predict
+
+    # 4분기(= 12개월) 예측
+    quarterly_results = lstm_predict(dong_code, industry_code, n_months=4)
+
+    # 분기 결과를 3개월씩 할당하여 12개월 predictions 생성
+    monthly_predictions: list[dict] = []
+    for qr in quarterly_results:
+        q_sales = qr["predicted_sales"]
+        q_lower = qr["confidence_lower"]
+        q_upper = qr["confidence_upper"]
+        offset = (qr["quarter_offset"] - 1) * 3
+        for m_in_q in range(3):
+            month = offset + m_in_q + 1
+            monthly_predictions.append(
+                {
+                    "month": month,
+                    "predicted_sales": q_sales,
+                    "confidence_lower": q_lower,
+                    "confidence_upper": q_upper,
+                }
+            )
+
+    monthly_avg = (
+        sum(p["predicted_sales"] for p in monthly_predictions) / len(monthly_predictions)
+        if monthly_predictions
+        else 0.0
+    )
+
+    return {
+        "monthly_avg": round(monthly_avg),
+        "monthly_predictions": monthly_predictions,
+    }
+
+
+def _run_survival(dong_code: str, industry_code: str) -> dict:
+    """생존률 예측 모델 호출."""
+    from models.revenue_predictor.predict import predict as survival_predict
+
+    result = survival_predict(dong_code, industry_code)
+    return {
+        "survival_rate": result["survival_rate"],
+        "risk_level": result["closure_risk_level"],
+        "monthly_survival_rates": result["monthly_survival_rates"],
+    }
+
+
+def _run_bep(
+    monthly_avg: float,
+    monthly_predictions: list[dict],
+    industry_name: str,
+    cost_config: dict | None,
+) -> dict:
+    """BEP 계산."""
+    from models.revenue_predictor.bep import BEPCalculator
+
+    if cost_config is None:
+        cost_config = BEPCalculator.get_default_costs(industry_name)
+
+    calc = BEPCalculator(cost_config)
+    bep_result = calc.calculate_bep(monthly_avg)
+
+    monthly_revenues = [p["predicted_sales"] for p in monthly_predictions]
+    monthly_simulation_raw = calc.simulate_monthly(monthly_revenues)
+    simulation = []
+    for row in monthly_simulation_raw:
+        simulation.append(
+            {
+                "month": row["month"],
+                "revenue": row["revenue"],
+                "cost": row["total_cost"],
+                "profit": row["profit"],
+                "cumulative_profit": row["cumulative_profit"],
+                "bep_reached": row["bep_reached"],
+            }
+        )
+
+    return {
+        "bep_months": bep_result["bep_months"],
+        "monthly_profit": bep_result["monthly_profit"],
+        "total_initial_investment": bep_result["total_initial_investment"],
+        "annual_roi": bep_result["annual_roi"],
+        "monthly_simulation": simulation,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 동 이름 조회
+# ---------------------------------------------------------------------------
+
+
+def _resolve_dong_name(dong_code: str) -> str:
+    """dong_code → dong_name 변환. 실패 시 dong_code 그대로 반환."""
+    try:
+        from models.revenue_predictor.data_prep import load_store_data
+
+        df = load_store_data(seoul=False)
+        match = df.loc[df["dong_code"].astype(str) == str(dong_code), "dong_name"]
+        if not match.empty:
+            return str(match.iloc[0])
+    except Exception:
+        logger.debug("dong_name 조회 실패 — dong_code를 그대로 사용합니다")
+    return dong_code
+
+
+# ---------------------------------------------------------------------------
+# 통합 출력 클래스
+# ---------------------------------------------------------------------------
+
+
+class ModelOutput:
+    """A1 모델 통합 출력 -- B2 시뮬레이션 입력용"""
+
+    @staticmethod
+    def generate(
+        dong_code: str,
+        industry_code: str,
+        industry_name: str,
+        cost_config: dict | None = None,
+    ) -> dict:
+        """전체 모델 파이프라인 실행 후 통합 결과 반환.
+
+        모델 가중치가 없는 환경에서는 mock 데이터를 반환하므로
+        B2 개발을 즉시 시작할 수 있다.
+
+        Parameters
+        ----------
+        dong_code : str
+            행정동 코드 (예: ``"1144053"``).
+        industry_code : str
+            업종 코드 (예: ``"CS100001"``).
+        industry_name : str
+            업종명 (예: ``"한식음식점"``). BEP 기본 비용 구조에 사용.
+        cost_config : dict | None
+            BEP 계산에 사용할 비용 구조. ``None`` 이면 업종별 기본값 사용.
+
+        Returns
+        -------
+        dict
+            아래 구조의 통합 결과::
+
+                {
+                    "input": { dong_code, dong_name, industry_code, industry_name },
+                    "revenue_forecast": { monthly_avg, monthly_predictions },
+                    "survival": { survival_rate, risk_level, monthly_survival_rates },
+                    "bep": { bep_months, monthly_profit, total_initial_investment,
+                             annual_roi, monthly_simulation },
+                    "metadata": { model_version, generated_at, data_period },
+                }
+        """
+        use_mock = False
+
+        # ---- 1) LSTM 매출 예측 ----
+        try:
+            revenue_forecast = _run_lstm_forecast(dong_code, industry_code)
+            logger.info("LSTM 매출 예측 완료")
+        except Exception as exc:
+            logger.warning("LSTM 매출 예측 실패 (mock 사용): %s", exc)
+            revenue_forecast = _mock_revenue_forecast()
+            use_mock = True
+
+        # ---- 2) 생존률 예측 ----
+        try:
+            survival = _run_survival(dong_code, industry_code)
+            logger.info("생존률 예측 완료")
+        except Exception as exc:
+            logger.warning("생존률 예측 실패 (mock 사용): %s", exc)
+            survival = _mock_survival()
+            use_mock = True
+
+        # ---- 3) BEP 계산 ----
+        try:
+            bep = _run_bep(
+                monthly_avg=revenue_forecast["monthly_avg"],
+                monthly_predictions=revenue_forecast["monthly_predictions"],
+                industry_name=industry_name,
+                cost_config=cost_config,
+            )
+            logger.info("BEP 계산 완료")
+        except Exception as exc:
+            logger.warning("BEP 계산 실패 (mock 사용): %s", exc)
+            bep = _mock_bep(industry_name)
+            use_mock = True
+
+        # ---- dong_name 조회 ----
+        dong_name = _resolve_dong_name(dong_code) if not use_mock else dong_code
+
+        return {
+            "input": {
+                "dong_code": dong_code,
+                "dong_name": dong_name,
+                "industry_code": industry_code,
+                "industry_name": industry_name,
+            },
+            "revenue_forecast": revenue_forecast,
+            "survival": survival,
+            "bep": bep,
+            "metadata": {
+                "model_version": MODEL_VERSION,
+                "generated_at": datetime.now(tz=UTC).isoformat(),
+                "data_period": DATA_PERIOD,
+            },
+        }

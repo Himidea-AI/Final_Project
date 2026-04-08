@@ -6,29 +6,33 @@
 - PGVectorDBClient  : pgvector(PostgreSQL) 기반 (프로덕션 대체)
 """
 
-import os
-import asyncio
-import concurrent.futures
-import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
-import openai
-from langchain_community.vectorstores import PGVector
+from langchain_postgres.vectorstores import PGVector
 from langchain_huggingface import HuggingFaceEmbeddings
+from sqlalchemy.ext.asyncio import create_async_engine
 from src.config.settings import settings
 from dotenv import load_dotenv
 
-# [보강] settings 모듈에서 이미 로드했을 수 있으나, 만약을 위해 호출 유지
+# 커넥션 풀 설정 — 동시 요청 대응
+_POOL_SIZE = 10  # 기본 커넥션 수
+_MAX_OVERFLOW = 20  # 초과 허용 커넥션 수 (최대 30개 동시 접속)
+_POOL_TIMEOUT = 30  # 커넥션 대기 타임아웃(초)
+_POOL_PRE_PING = True  # 끊긴 커넥션 자동 재연결
+
 load_dotenv()
 
 _LOCAL_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 
 
-
 class LegalVectorDB:
     """
     지연 초기화 방식의 PGVector 클라이언트 — DEV 모드 완벽 지원
+
+    langchain_postgres (JSONB 스키마) 기반.
+    langchain_community.PGVector와 스키마 비호환 — 혼용 금지.
     """
+
     def __init__(self, collection_name: str = "legal_documents"):
         self.collection_name = collection_name
         self._vectorstore = None
@@ -46,19 +50,23 @@ class LegalVectorDB:
 
     @property
     def vectorstore(self):
-        # DEV 모드일 때는 PGVector 인스턴스 생성을 시도하지도 않습니다. (psycopg2 에러 방지)
         if settings.app_mode == "DEV":
             return None
 
         if self._vectorstore is None:
-            # settings에서 실시간으로 연결 주소를 가져옵니다.
-            conn_string = settings.postgres_url
+            conn_string = settings.postgres_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            async_engine = create_async_engine(
+                conn_string,
+                pool_size=_POOL_SIZE,
+                max_overflow=_MAX_OVERFLOW,
+                pool_timeout=_POOL_TIMEOUT,
+                pool_pre_ping=_POOL_PRE_PING,
+            )
             self._vectorstore = PGVector(
-                connection_string=conn_string,
-                embedding_function=self.embeddings,
+                connection=async_engine,
+                embeddings=self.embeddings,
                 collection_name=self.collection_name,
-                # [중요] 외부에서 PGVector를 로드할 때 확장 프로그램 설치를 시도하지 않도록 할 수 있으나
-                # 여기서는 연결 자체를 안 하는 것이 핵심입니다.
+                use_jsonb=True,
             )
         return self._vectorstore
 
@@ -72,9 +80,10 @@ class LegalVectorDB:
                     "metadata": {"source": "법률 가이드", "relevance": 1.0},
                 }
             ]
-            
+
         vs = self.vectorstore
-        if vs is None: return []
+        if vs is None:
+            return []
 
         try:
             docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=search_k)
@@ -91,10 +100,12 @@ class LegalVectorDB:
 
     def get_total_count(self) -> int:
         # DEV 모드에서는 DB 접속 없이 즉시 반환
-        if settings.app_mode == "DEV": return 42 # Mock count
+        if settings.app_mode == "DEV":
+            return 42  # Mock count
 
         try:
             import psycopg2
+
             # settings에서 주소를 가져옵니다.
             conn = psycopg2.connect(settings.postgres_url)
             cur = conn.cursor()
@@ -102,7 +113,7 @@ class LegalVectorDB:
                 "SELECT COUNT(*) FROM langchain_pg_embedding e "
                 "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
                 "WHERE c.name = %s",
-                (self.collection_name,)
+                (self.collection_name,),
             )
             count = cur.fetchone()[0]
             cur.close()
@@ -111,6 +122,7 @@ class LegalVectorDB:
         except Exception as e:
             print(f"DEBUG: DB Count 조회 실패 - {str(e)}")
             return 0
+
 
 # 싱글톤 인터페이스 제공
 legal_db = LegalVectorDB()

@@ -2,66 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global scrollbar (Lenis uses html scroll) */
-html::-webkit-scrollbar {
-  width: 6px;
-}
-html::-webkit-scrollbar-track {
-  background: transparent;
-}
-html::-webkit-scrollbar-thumb {
-  background: rgba(64, 64, 64, 0.8);
-  border-radius: 4px;
-}
-html::-webkit-scrollbar-thumb:hover {
-  background: rgba(245, 158, 11, 0.8);
+/* ═══════════════════════════════════════════════════════
+   SPOTTER Design System — Indigo & Stone Theme (Tailwind v3)
+   ═══════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    --background: #1e1b18;
+    --foreground: #e2e8f0;
+    --card: #2c2825;
+    --card-foreground: #e2e8f0;
+    --popover: #2c2825;
+    --popover-foreground: #e2e8f0;
+    --primary: #818cf8;
+    --primary-foreground: #1e1b18;
+    --secondary: #3a3633;
+    --secondary-foreground: #d1d5db;
+    --muted: #2c2825;
+    --muted-foreground: #9ca3af;
+    --accent: #484441;
+    --accent-foreground: #d1d5db;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --border: #3a3633;
+    --input: #3a3633;
+    --ring: #818cf8;
+    --radius: 1.25rem;
+  }
 }
 
-/* 스크롤바 숨김 */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+/* ═══════════════════════════════════════════════════════
+   Scrollbar Styles
+   ═══════════════════════════════════════════════════════ */
 
-/* Custom scrollbar for simulator */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(64, 64, 64, 0.8);
-  border-radius: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(245, 158, 11, 0.8);
-}
+html::-webkit-scrollbar { width: 6px; }
+html::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar-thumb { background: rgba(64, 64, 64, 0.8); border-radius: 4px; }
+html::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
 
-/* Floating logo animation */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(64, 64, 64, 0.8); border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
+
+/* ═══════════════════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════════════════ */
+
 @keyframes floatLogo {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-12px); }
 }
-.animate-float-logo {
-  animation: floatLogo 6s ease-in-out infinite;
-}
+.animate-float-logo { animation: floatLogo 6s ease-in-out infinite; }
 
-/* Circuit drawing animation */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow { animation: spin-slow 4s linear infinite; }
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 40s linear infinite; }
+
 @keyframes drawCircuit {
   0% { stroke-dashoffset: 600; }
   100% { stroke-dashoffset: 0; }
 }
-.animate-draw {
-  stroke-dasharray: 150 450;
-  animation: drawCircuit 3s linear infinite;
-}
+.animate-draw { stroke-dasharray: 150 450; animation: drawCircuit 3s linear infinite; }
 
-/* 3D Hologram Preloader */
 .scene-3d { perspective: 1200px; transform-style: preserve-3d; }
 .hologram-wrapper { transform-style: preserve-3d; animation: float-core 5s ease-in-out infinite; }
 
@@ -70,8 +84,8 @@ html::-webkit-scrollbar-thumb:hover {
   50% { transform: translateY(-20px) scale(1.05); }
 }
 @keyframes energy-pulse {
-  0%, 100% { text-shadow: 0 0 20px rgba(245,158,11,0.4); transform: translateZ(0px) scale(1); }
-  50% { text-shadow: 0 0 40px rgba(245,158,11,0.8); transform: translateZ(20px) scale(1.02); }
+  0%, 100% { text-shadow: 0 0 20px rgba(99,102,241,0.4); transform: translateZ(0px) scale(1); }
+  50% { text-shadow: 0 0 40px rgba(99,102,241,0.8); transform: translateZ(20px) scale(1.02); }
 }
 @keyframes gyro-1 { 100% { transform: rotateX(70deg) rotateY(10deg) rotateZ(360deg); } }
 @keyframes gyro-2 { 100% { transform: rotateX(50deg) rotateY(60deg) rotateZ(-360deg); } }
@@ -90,15 +104,7 @@ html::-webkit-scrollbar-thumb:hover {
   0% { opacity: 0; transform: scale(0.95); filter: blur(15px); }
   100% { opacity: 1; transform: scale(1); filter: blur(0px); }
 }
-
-/* Fade-in slide animation for About page */
 @keyframes fadeSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(40px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
 }
