@@ -1,0 +1,37 @@
+name: "Auto PR Title"
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  update-pr-title:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Extract Jira ID and Update Title
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const branchName = pr.head.ref;
+            const oldTitle = pr.title;
+            
+            // IM3-숫자 패턴 찾기
+            const jiraMatch = branchName.match(/IM3-\d+/i);
+            
+            if (jiraMatch) {
+              const jiraId = jiraMatch[0].toUpperCase();
+              
+              if (!oldTitle.startsWith(jiraId)) {
+                const newTitle = `${jiraId}: ${oldTitle}`;
+                
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  title: newTitle
+                });
+              }
+            }
