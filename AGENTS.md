@@ -20,12 +20,47 @@
 | A1 — 데이터 엔지니어 | 찬영 | `backend/src/services/`, `backend/src/database/`, `data/` |
 | A2 — RAG + 법률 | 봉환 | `backend/src/chains/`, `backend/src/database/vector_db.py`, `backend/src/services/ftc_franchise.py` |
 
+### 트랙 A-1 추가 — 딥러닝 예측 모델 (찬영 겸임)
+
+A1 찬영이 데이터 엔지니어링과 함께 딥러닝 예측 모델을 담당합니다.
+
+| Task | 담당자 | 디렉토리 | 산출물 |
+|------|--------|---------|--------|
+| 서울 전체 데이터 전처리 | 찬영 (A1) | `data/pipeline/`, `data/processed/` | 사전학습용 CSV + DB 적재 |
+| LSTM 매출 예측 (사전학습+파인튜닝) | 찬영 (A1) | `models/lstm_forecast/` | 월 예상매출 |
+| 생존률/폐업률 예측 | 찬영 (A1) | `models/revenue_predictor/` | 생존률, BEP |
+| 백테스팅 (2024년 검증) | 찬영 (A1) + 수지니 (B2) | `validation/` | 정확도 리포트 |
+
 ### 트랙 B — AI 엔진 (2명)
 
 | 역할 | 담당자 | 담당 디렉토리 |
 |------|--------|-------------|
 | B1 — LangGraph Agent | 예진 | `backend/src/agents/`, `backend/src/schemas/` |
-| B2 — 딥러닝 모델 | 수지니 | `models/`, `validation/` |
+| B2 — 시뮬레이션 + 설명 | 수지니 | `models/explainability/`, `validation/` |
+
+#### B2 세부 Task
+
+| Task | 담당자 | 디렉토리 | 산출물 |
+|------|--------|---------|--------|
+| 12개월 시뮬레이션 | 수지니 (B2) | `models/explainability/` | 월별 시나리오 (계절성/비용 반영) |
+| SHAP 분석 | 수지니 (B2) | `models/explainability/` | 피처 기여도 시각화 |
+| 시나리오 비교 | 수지니 (B2) | `validation/scenario_comparison.py` | 낙관/비관/기본 시나리오 |
+
+#### A1 → B2 인터페이스
+
+찬영 모델의 출력을 수지니가 시뮬레이션 입력으로 사용합니다.
+
+```
+찬영 모델 출력 (models/lstm_forecast/, models/revenue_predictor/)
+├── 월 예상매출
+├── 생존률
+└── BEP
+      ↓
+수지니 시뮬레이션 (models/explainability/)
+├── 12개월 월별 시나리오 (계절성/비용 반영)
+├── SHAP 피처 기여도 분석
+└── 시각화
+```
 
 ### 트랙 C — 프론트엔드 + 배포 (2명)
 

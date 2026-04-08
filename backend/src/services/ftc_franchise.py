@@ -11,12 +11,42 @@
   - serviceKey는 URL 인코딩된 채로 쿼리스트링에 직접 포함 (httpx params 미사용)
   - 본문 XML 내부에 HTML이 중첩된 복잡한 구조 — 정규식으로 수치 추출
 """
+
 import re
+from difflib import SequenceMatcher
 from urllib.parse import unquote
 
 import httpx
 from lxml import etree
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+
+def _fuzzy_match(query: str, brand: str, threshold: float = 0.65) -> bool:
+    """
+    브랜드명 퍼지 매칭 — 3단계 순서로 확인.
+
+    1. 직접 포함: "메가커피" in "메가커피" → True
+    2. 2글자 토큰 분리: "메가커피" → ["메가","커피"] 모두 포함 여부
+       예) "메가MGC커피"에 "메가"와 "커피" 둘 다 있으면 매칭
+    3. difflib 유사도: 0.65 이상이면 매칭
+
+    Args:
+        query: 사용자 입력 브랜드명
+        brand: API 반환 브랜드명
+        threshold: difflib 유사도 임계값 (기본 0.65)
+    """
+    q, b = query.lower(), brand.lower()
+
+    if q in b:
+        return True
+
+    # 2글자 한글 토큰 분리 매칭
+    tokens = [q[i : i + 2] for i in range(0, len(q) - 1, 2)]
+    if len(tokens) >= 2 and all(t in b for t in tokens):
+        return True
+
+    return SequenceMatcher(None, q, b).ratio() >= threshold
+
 
 BASE_URL = "https://franchise.ftc.go.kr"
 # 서버가 브라우저가 아닌 요청을 차단(406)하므로 필수
@@ -81,15 +111,17 @@ class FtcFranchiseClient:
             results = []
             for item in root.findall(".//item"):
                 b_name = item.findtext("brandNm") or ""
-                if brand_name.lower() in b_name.lower():
-                    results.append({
-                        "jng_ifrmp_sn": item.findtext("jngIfrmpSn") or "",
-                        "brand_name": b_name,
-                        "corp_name": item.findtext("corpNm") or "",
-                        "registration_no": item.findtext("jngIfrmpRgsno") or "",
-                        "viewer_url": item.findtext("viwerUrl") or "",
-                        "year": target_yr,
-                    })
+                if _fuzzy_match(brand_name, b_name):
+                    results.append(
+                        {
+                            "jng_ifrmp_sn": item.findtext("jngIfrmpSn") or "",
+                            "brand_name": b_name,
+                            "corp_name": item.findtext("corpNm") or "",
+                            "registration_no": item.findtext("jngIfrmpRgsno") or "",
+                            "viewer_url": item.findtext("viwerUrl") or "",
+                            "year": target_yr,
+                        }
+                    )
 
             if results:
                 return results
@@ -146,6 +178,7 @@ class FtcFranchiseClient:
         Returns:
             dict: 추출된 핵심 데이터
         """
+
         def _find_number(pattern: str) -> int:
             """패턴 뒤에 오는 숫자 추출"""
             match = re.search(pattern + r"[^0-9]*([0-9,]+)", xml_content)
@@ -164,15 +197,12 @@ class FtcFranchiseClient:
             "store_count_new": _find_number(r"신규\s*개점"),
             "store_count_close": _find_number(r"폐\s*점"),
             "store_count_terminate": _find_number(r"계약\s*해지"),
-
             # 매출 정보
             "avg_sales_amount": _find_number(r"평균\s*매출액"),
-
             # 가맹금
             "franchise_fee": _find_number(r"가입\s*비"),
             "education_fee": _find_number(r"교육\s*비"),
             "deposit": _find_number(r"보\s*증\s*금"),
-
             # 영업지역
             "territory_condition": _find_text(r"영업지역"),
         }
