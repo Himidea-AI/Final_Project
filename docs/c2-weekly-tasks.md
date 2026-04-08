@@ -1,7 +1,7 @@
 # C2 (혁) — 인프라 + PM 주차별 작업 현황
 
 > **담당 영역**: Docker, Nginx, `docs/`, `tests/`  
-> **최종 업데이트**: 2026-04-07  
+> **최종 업데이트**: 2026-04-08  
 > **📌 WBS 상세**: [c2-wbs.md](./c2-wbs.md) — 티켓 분리, 의존성, 리스크 분석
 
 ---
@@ -22,9 +22,9 @@
 
 | 우선순위 | 작업 내용 | 상태 | 비고 |
 |---------|----------|------|------|
-| 1 | 백엔드 ↔ 프론트 API 연결 검증 | 🔲 미착수 | `/api/simulate`, `/api/result/{id}` 통신 테스트 |
-| 2 | Nginx 리버스 프록시 설정 (`nginx/default.conf`) | 🔲 미착수 | 프론트 정적파일 서빙 + `/api` → 백엔드 프록시 |
-| 3 | dev 브랜치 최신 변경사항 기반 Docker 통합 빌드 검증 | 🔲 미착수 | Alembic, DB 모델, Agent skeleton 반영 |
+| 1 | 백엔드 ↔ 프론트 API 연결 검증 | ✅ 완료 | E2E 8/8 통과, `/api/health`, `/api/report/{id}`, `/api/status/{id}` |
+| 2 | Nginx 리버스 프록시 설정 (`nginx/default.conf`) | ✅ 완료 | gzip, WebSocket, 타임아웃, 디버그 로그 포맷 |
+| 3 | dev 브랜치 최신 변경사항 기반 Docker 통합 빌드 검증 | ✅ 완료 | Alembic, 헬스체크, depends_on condition 적용 |
 
 ---
 
