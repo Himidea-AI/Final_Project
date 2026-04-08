@@ -27,10 +27,10 @@ app = FastAPI(
 # LangGraph 컴파일된 앱 초기화
 app_graph = compile_graph()
 
-# CORS 설정: 프론트엔드(localhost:3000) 접근 허용
+# CORS 설정: 프론트엔드(localhost:3000) 접근 허용 및 Docker nginx (localhost) 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -122,6 +122,31 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
 async def health_check():
     """서버 상태 확인"""
     return {"status": "ok"}
+
+
+@app.get("/report/{report_id}")
+async def get_report(report_id: str):
+    """결과 리포트용 Mock API - 프론트엔드 연결 검증용"""
+    return {
+        "status": "success",
+        "data": {
+            "request_id": report_id,
+            "message": "This is a mock report response."
+        }
+    }
+
+
+@app.get("/status/{job_id}")
+async def get_status(job_id: str):
+    """작업 상태 조회용 Mock API - 프론트엔드 연결 검증용"""
+    return {
+        "status": "success",
+        "data": {
+            "job_id": job_id,
+            "progress": 100,
+            "message": "This is a mock status response."
+        }
+    }
 
 
 @app.post("/analyze")

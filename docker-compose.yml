@@ -19,14 +19,17 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    command: >
+      sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
-      - chromadb
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # PostgreSQL — 상권통계, 시뮬레이션 결과 저장
   db:
@@ -39,21 +42,24 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mapo_simulator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # Redis — 시뮬레이션 결과 캐시 + Job 상태 관리
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # ChromaDB — 법률 문서 Vector DB (RAG용, OpenAI 임베딩)
-  chromadb:
-    image: chromadb/chroma:latest
-    ports:
-      - "8001:8000"   # 호스트 8001 → 컨테이너 8000
-    volumes:
-      - chroma_data:/chroma/chroma
+
 
 volumes:
   postgres_data:    # PostgreSQL 데이터 영속화
-  chroma_data:      # ChromaDB 벡터 데이터 영속화

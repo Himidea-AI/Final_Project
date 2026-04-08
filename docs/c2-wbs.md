@@ -51,7 +51,7 @@
 ### ✅ 1주차 완료 (04/02 ~ 04/06)
 
 #### IM3-C2-01: Docker Compose 초기 세팅
-- **완료**: PostgreSQL 16, Redis 7, ChromaDB, Backend, Frontend 5개 서비스 구성
+- **완료**: PostgreSQL 16, Redis 7, Backend, Frontend 4개 서비스 구성
 - **PR**: #11 머지됨
 - **커밋**: `583349a` (version 속성 제거)
 
@@ -83,7 +83,7 @@
 - **확인 사항**:
   - [ ] `docker compose build` 전체 성공 여부
   - [ ] `requirements.txt` 의존성 충돌 확인
-  - [ ] 각 서비스 간 네트워크 연결 (backend → db, backend → chromadb, frontend → backend)
+  - [ ] 각 서비스 간 네트워크 연결 (backend → db, frontend → backend)
   - [ ] 환경변수 누락 확인 (`.env.example` vs 실제 코드)
 - **DB 초기화** (기존 Alembic 티켓 흡수):
   - [ ] `docker-compose.yml`의 backend `command`에 `alembic upgrade head` 추가
@@ -108,7 +108,6 @@
 - **작업**:
   - [ ] PostgreSQL 헬스체크 (`pg_isready`)
   - [ ] Redis 헬스체크 (`redis-cli ping`)
-  - [ ] ChromaDB 헬스체크 (HTTP `/api/v1/heartbeat`)
   - [ ] `depends_on` → `condition: service_healthy`로 변경
 - **난이도**: 🟢 쉬움 — 정형화된 패턴
 - **선행**: #6
