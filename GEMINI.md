@@ -9,7 +9,7 @@
 
 ## 작업 방식
 
-- 코드 수정 전 관련 파일을 먼저 읽어서 기존 패턴을 파아앙하세요.
+- 코드 수정 전 관련 파일을 먼저 읽어서 기존 패턴을 파악하세요.
 - Python 코드 작성 후 `ruff check --fix` 및 `ruff format`을 실행하세요.
 - 프론트엔드 코드 작성 후 `cd frontend && npx prettier --write .`을 실행하세요.
 
