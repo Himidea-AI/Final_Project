@@ -19,8 +19,9 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         y: isVisible ? 0 : 20,
         scale: isVisible ? 1 : 0.95,
       }}
+      whileHover={{ y: -8 }}
       transition={{ duration: 0.5, ease: [0.19, 1, 0.22, 1] }}
-      className="group relative w-[340px] shrink-0 rounded-2xl overflow-hidden p-[2px] transition-transform duration-500 ease-out hover:-translate-y-2"
+      className="group relative w-[340px] shrink-0 rounded-2xl overflow-hidden p-[2px]"
     >
       {/* 1. 회전하는 그라데이션 배경 (호버 시) */}
       <div
