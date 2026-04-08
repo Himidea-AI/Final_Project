@@ -19,6 +19,7 @@ from src.config.settings import settings
 
 _BASE_URL = "https://www.law.go.kr/DRF"
 _TIMEOUT = 10.0
+_MAX_RETRIES = 1  # 타임아웃·네트워크 오류 시 최대 재시도 횟수
 
 
 def _strip_html(text: str) -> str:
@@ -39,6 +40,8 @@ class LawApiClient:
         """
         판례 검색 — 검색 결과의 상세 내용(판결요지 등)을 병렬로 조회.
 
+        타임아웃·네트워크 오류 시 _MAX_RETRIES 횟수만큼 재시도.
+
         Args:
             query: 검색어 (예: "권리금 회수 보호")
             display: 반환할 판례 수 (최대 20)
@@ -50,18 +53,27 @@ class LawApiClient:
         if not self._is_available():
             return []
 
-        try:
-            ids = await self._search(query, display)
-            if not ids:
+        last_error = None
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                ids = await self._search(query, display)
+                if not ids:
+                    return []
+
+                # 상세 조회 병렬 실행
+                details = await asyncio.gather(*[self._fetch_detail(id_) for id_ in ids])
+                return [d for d in details if d]
+
+            except (httpx.TimeoutException, httpx.NetworkError) as e:
+                last_error = e
+                if attempt < _MAX_RETRIES:
+                    print(f"[LawApiClient] 재시도 {attempt + 1}/{_MAX_RETRIES} (query={query!r}): {e}")
+            except Exception as e:
+                print(f"[LawApiClient] 판례 검색 실패 (query={query!r}): {e}")
                 return []
 
-            # 상세 조회 병렬 실행
-            details = await asyncio.gather(*[self._fetch_detail(id_) for id_ in ids])
-            return [d for d in details if d]
-
-        except Exception as e:
-            print(f"[LawApiClient] 판례 검색 실패 (query={query!r}): {e}")
-            return []
+        print(f"[LawApiClient] 판례 검색 최종 실패 (query={query!r}): {last_error}")
+        return []
 
     async def _search(self, query: str, display: int) -> list[str]:
         """판례 검색 — 판례일련번호 목록 반환"""

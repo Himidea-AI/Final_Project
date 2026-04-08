@@ -45,6 +45,8 @@ class LegalDocumentRetriever:
         """
         법률 문서 검색
 
+        검색 결과가 0건이면 source_filter를 제거하고 전체 컬렉션에서 fallback 재검색.
+
         Args:
             query: 검색 쿼리
             top_k: 반환할 문서 수
@@ -56,15 +58,16 @@ class LegalDocumentRetriever:
             반환 형식: {"content": str, "metadata": {"source": ..., "relevance": float, ...}}
             relevance는 0~1 범위, 1에 가까울수록 관련도 높음
         """
-        filter_dict = None
-        if source_filter:
-            filter_dict = {"source": {"$in": source_filter}}
-
         vs = self._db.vectorstore
         if vs is None:
             return []
 
+        filter_dict = {"source": {"$in": source_filter}} if source_filter else None
         docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k, filter=filter_dict)
+
+        # 결과 0건이고 source_filter가 있었으면 필터 없이 fallback 재검색
+        if not docs_with_score and source_filter:
+            docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k)
 
         results = [
             {
