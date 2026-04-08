@@ -53,9 +53,28 @@ SALES_FEATURES = [
 STORE_FEATURES = [
     "store_count",
     "franchise_count",
+    "open_count",
+    "close_count",
+    "closure_rate",
 ]
 
-ALL_FEATURES = SALES_FEATURES + STORE_FEATURES
+POP_FEATURES = [
+    "total_pop",
+    "avg_age",
+    "total_households",
+]
+
+RENT_FEATURES = [
+    "rent_1f",
+    "vacancy_rate",
+]
+
+EXTRA_FEATURES = [
+    "cpi_index",
+    "quarter_num",  # 계절성 피처 (1~4)
+]
+
+ALL_FEATURES = SALES_FEATURES + STORE_FEATURES + POP_FEATURES + RENT_FEATURES + EXTRA_FEATURES
 
 
 # ---------------------------------------------------------------------------
@@ -123,14 +142,23 @@ def load_sales_data(
                 df = pd.read_csv(sales_csv, dtype={"dong_code": str, "행정동코드": str})
                 # rename if needed (원본 한글 컬럼명 → 영문)
                 csv_rename = {
-                    "STDR_YYQU_CD": "quarter", "행정동코드": "dong_code", "행정동명": "dong_name",
-                    "SVC_INDUTY_CD": "industry_code", "SVC_INDUTY_CD_NM": "industry_name",
-                    "THSMON_SELNG_AMT": "monthly_sales", "THSMON_SELNG_CO": "monthly_count",
-                    "MDWK_SELNG_AMT": "weekday_sales", "WKEND_SELNG_AMT": "weekend_sales",
-                    "ML_SELNG_AMT": "male_sales", "FML_SELNG_AMT": "female_sales",
-                    "AGRDE_10_SELNG_AMT": "age_10_sales", "AGRDE_20_SELNG_AMT": "age_20_sales",
-                    "AGRDE_30_SELNG_AMT": "age_30_sales", "AGRDE_40_SELNG_AMT": "age_40_sales",
-                    "AGRDE_50_SELNG_AMT": "age_50_sales", "AGRDE_60_ABOVE_SELNG_AMT": "age_60_above_sales",
+                    "STDR_YYQU_CD": "quarter",
+                    "행정동코드": "dong_code",
+                    "행정동명": "dong_name",
+                    "SVC_INDUTY_CD": "industry_code",
+                    "SVC_INDUTY_CD_NM": "industry_name",
+                    "THSMON_SELNG_AMT": "monthly_sales",
+                    "THSMON_SELNG_CO": "monthly_count",
+                    "MDWK_SELNG_AMT": "weekday_sales",
+                    "WKEND_SELNG_AMT": "weekend_sales",
+                    "ML_SELNG_AMT": "male_sales",
+                    "FML_SELNG_AMT": "female_sales",
+                    "AGRDE_10_SELNG_AMT": "age_10_sales",
+                    "AGRDE_20_SELNG_AMT": "age_20_sales",
+                    "AGRDE_30_SELNG_AMT": "age_30_sales",
+                    "AGRDE_40_SELNG_AMT": "age_40_sales",
+                    "AGRDE_50_SELNG_AMT": "age_50_sales",
+                    "AGRDE_60_ABOVE_SELNG_AMT": "age_60_above_sales",
                 }
                 df = df.rename(columns={k: v for k, v in csv_rename.items() if k in df.columns})
                 logger.info("개별 CSV에서 로드: %s (%d rows)", sales_csv, len(df))
@@ -168,10 +196,15 @@ def load_store_data(
             if stores_csv.exists():
                 df = pd.read_csv(stores_csv, dtype={"dong_code": str, "행정동코드": str})
                 store_rename = {
-                    "STDR_YYQU_CD": "quarter", "행정동코드": "dong_code", "행정동명": "dong_name",
-                    "SVC_INDUTY_CD": "industry_code", "SVC_INDUTY_CD_NM": "industry_name",
-                    "STOR_CO": "store_count", "OPBIZ_STOR_CO": "open_count",
-                    "CLSBIZ_STOR_CO": "close_count", "FRC_STOR_CO": "franchise_count",
+                    "STDR_YYQU_CD": "quarter",
+                    "행정동코드": "dong_code",
+                    "행정동명": "dong_name",
+                    "SVC_INDUTY_CD": "industry_code",
+                    "SVC_INDUTY_CD_NM": "industry_name",
+                    "STOR_CO": "store_count",
+                    "OPBIZ_STOR_CO": "open_count",
+                    "CLSBIZ_STOR_CO": "close_count",
+                    "FRC_STOR_CO": "franchise_count",
                     "CLSBIZ_RT": "closure_rate",
                 }
                 df = df.rename(columns={k: v for k, v in store_rename.items() if k in df.columns})
@@ -225,9 +258,56 @@ def build_timeseries(
                 how="left",
             )
 
+    # 유동인구 병합
+    pop_csv = DATA_DIR / "seoul_population_quarterly.csv"
+    if pop_csv.exists() and "quarter" in df.columns and "dong_code" in df.columns:
+        pop_df = pd.read_csv(pop_csv, dtype={"dong_code": str})
+        df = df.merge(pop_df[["quarter", "dong_code", "total_pop"]], on=["quarter", "dong_code"], how="left")
+
+    # 추가 피처 로드 (CSV 기반)
+    # 평균연령, 가구수
+    demo_csv = DATA_DIR / "dong_demographics.csv"
+    if demo_csv.exists() and "dong_code" in df.columns:
+        dong_demo = pd.read_csv(demo_csv, dtype={"dong_code": str})
+        df = df.merge(dong_demo[["dong_code", "avg_age", "total_households"]], on="dong_code", how="left")
+
+    # 임대료
+    rent_csv = DATA_DIR / "golmok_rent_export.csv"
+    if rent_csv.exists() and "quarter" in df.columns and "dong_code" in df.columns:
+        rent_df = pd.read_csv(rent_csv, dtype={"dong_code": str})
+        rent_df["quarter"] = pd.to_numeric(rent_df["quarter"], errors="coerce")
+        df = df.merge(rent_df[["quarter", "dong_code", "rent_1f"]], on=["quarter", "dong_code"], how="left")
+
+    # 공실률
+    vacancy_csv = DATA_DIR / "vacancy_rate_export.csv"
+    if vacancy_csv.exists() and "quarter" in df.columns:
+        vacancy_df = pd.read_csv(vacancy_csv)
+        vacancy_df["quarter"] = vacancy_df["year"] * 10 + vacancy_df["q_num"]
+        df = df.merge(vacancy_df[["quarter", "vacancy_rate"]], on="quarter", how="left")
+
+    # CPI 병합
+    cpi_csv = DATA_DIR / "cpi_dining_quarterly.csv"
+    if cpi_csv.exists() and "quarter" in df.columns:
+        cpi_df = pd.read_csv(cpi_csv)
+        df = df.merge(cpi_df[["quarter", "cpi_index"]], on="quarter", how="left")
+
+    # 계절성 피처 추가 (분기 번호 1~4)
+    if "quarter" in df.columns:
+        df["quarter_num"] = (df["quarter"] % 10).astype(float)
+
+    # 코로나 시기 가중치 (2020~2021 → 0.5, 나머지 → 1.0)
+    if "quarter" in df.columns:
+        year = df["quarter"] // 10
+        df["sample_weight"] = np.where((year >= 2020) & (year <= 2021), 0.5, 1.0)
+
     # 결측치 처리
     feat_available = [c for c in feature_cols if c in df.columns]
     df[feat_available] = df[feat_available].fillna(0)
+
+    # 로그 스케일 변환 (매출 관련 컬럼)
+    log_cols = [c for c in SALES_FEATURES if c in df.columns]
+    for col in log_cols:
+        df[col] = np.log1p(df[col].clip(lower=0))  # log(1 + x), 0원 처리
 
     # 분기 기준 정렬
     df = df.sort_values(["dong_code", "industry_code", "quarter"]).reset_index(drop=True)
@@ -288,6 +368,8 @@ def prepare_sequences(
 
     X_list: list[np.ndarray] = []
     y_list: list[np.ndarray] = []
+    w_list: list[float] = []
+    has_weight = "sample_weight" in data.columns
 
     groups = data.groupby(["dong_code", "industry_code"])
     for _, group in groups:
@@ -296,18 +378,21 @@ def prepare_sequences(
 
         feat_vals = feature_scaler.transform(group[feature_cols].values.astype(np.float32))
         tgt_vals = target_scaler.transform(group[[target_col]].values.astype(np.float32))
+        weights = group["sample_weight"].values if has_weight else np.ones(len(group))
 
         for i in range(len(group) - window_size):
             X_list.append(feat_vals[i : i + window_size])
             y_list.append(tgt_vals[i + window_size])
+            w_list.append(float(weights[i + window_size]))
 
     if not X_list:
         raise ValueError(f"시퀀스를 생성할 수 없습니다. window_size={window_size}보다 긴 시계열 그룹이 없습니다.")
 
     X = np.array(X_list, dtype=np.float32)
     y = np.array(y_list, dtype=np.float32)
+    w = np.array(w_list, dtype=np.float32)
 
-    return X, y, feature_scaler, target_scaler
+    return X, y, feature_scaler, target_scaler, w
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +446,7 @@ def prepare_dataloaders(
     logger.info("시계열 DataFrame 크기: %s", ts.shape)
 
     # 시퀀스 생성
-    X, y, feat_scaler, tgt_scaler = prepare_sequences(
+    X, y, feat_scaler, tgt_scaler, w = prepare_sequences(
         ts,
         window_size=window_size,
         target_col=target_col,
@@ -377,8 +462,9 @@ def prepare_dataloaders(
 
     X_train, X_val = X[:n_train], X[n_train:]
     y_train, y_val = y[:n_train], y[n_train:]
+    w_train = w[:n_train]
 
-    train_ds = TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train))
+    train_ds = TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train), torch.from_numpy(w_train))
     val_ds = TensorDataset(torch.from_numpy(X_val), torch.from_numpy(y_val))
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)

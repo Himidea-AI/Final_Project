@@ -54,6 +54,14 @@ class LSTMForecaster(nn.Module):
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0,
         )
+
+        # Attention 메커니즘
+        self.attention = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.Tanh(),
+            nn.Linear(hidden_size // 2, 1),
+        )
+
         self.fc = nn.Sequential(
             nn.Linear(hidden_size, hidden_size // 2),
             nn.ReLU(),
@@ -80,8 +88,13 @@ class LSTMForecaster(nn.Module):
         """
         # lstm_out: (batch, seq_len, hidden_size)
         lstm_out, _ = self.lstm(x)
-        last_hidden = lstm_out[:, -1, :]  # 마지막 타임스텝
-        return self.fc(last_hidden)
+
+        # Attention: 각 타임스텝의 중요도를 계산
+        attn_scores = self.attention(lstm_out)  # (batch, seq_len, 1)
+        attn_weights = torch.softmax(attn_scores, dim=1)  # 정규화
+        context = (attn_weights * lstm_out).sum(dim=1)  # 가중 합산 (batch, hidden_size)
+
+        return self.fc(context)
 
     # ------------------------------------------------------------------
     # 가중치 저장 / 로드

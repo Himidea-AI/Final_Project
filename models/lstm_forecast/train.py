@@ -98,13 +98,24 @@ def _train_one_epoch(
     total_loss = 0.0
     n_batches = 0
 
-    for X_batch, y_batch in loader:
+    for batch in loader:
+        if len(batch) == 3:
+            X_batch, y_batch, w_batch = batch
+            w_batch = w_batch.to(device)
+        else:
+            X_batch, y_batch = batch
+            w_batch = None
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device)
 
         optimizer.zero_grad()
         pred = model(X_batch)
-        loss = criterion(pred, y_batch)
+
+        if w_batch is not None:
+            loss = (w_batch.unsqueeze(1) * (pred - y_batch) ** 2).mean()
+        else:
+            loss = criterion(pred, y_batch)
+
         loss.backward()
         optimizer.step()
 
