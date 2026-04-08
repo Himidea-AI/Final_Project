@@ -20,6 +20,7 @@ from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.settings import settings
 from src.services.ftc_franchise import FtcFranchiseClient
+from src.services.law_api import LawApiClient
 
 
 def _run_async(coro):
@@ -130,7 +131,7 @@ def _extract_risk_level(llm_response: str) -> str:
     return "caution"
 
 
-def check_franchise_law(state: AgentState, retriever: LegalDocumentRetriever) -> dict:
+def check_franchise_law(state: AgentState, docs: list[dict]) -> dict:
     """
     가맹사업법 검토 — 영업지역 보장 의무 및 출점 제한 검토.
 
@@ -139,14 +140,14 @@ def check_franchise_law(state: AgentState, retriever: LegalDocumentRetriever) ->
     - 정보공개서 기재 사항 준수
     - 가맹금 예치 의무
 
+    Args:
+        docs: _fetch_all_docs_parallel()에서 병렬 검색된 가맹사업법 문서
+
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
     brand = state.get("brand_name") or "해당 브랜드"
     district = state.get("target_district", "")
-
-    query = f"{brand} 영업지역 보장 동일 브랜드 출점 제한 가맹사업법"
-    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES))
 
     question = (
         f"'{brand}' 브랜드가 '{district}'에 신규 출점할 때 가맹사업법상 영업지역 침해 리스크는 어떻게 됩니까? "
@@ -177,7 +178,7 @@ def check_franchise_law(state: AgentState, retriever: LegalDocumentRetriever) ->
         }
 
 
-def check_commercial_lease_law(state: AgentState, retriever: LegalDocumentRetriever) -> dict:
+def check_commercial_lease_law(state: AgentState, docs: list[dict]) -> dict:
     """
     상가임대차보호법 검토 — 임차인 보호 범위 및 권리금 리스크 검토.
 
@@ -186,13 +187,13 @@ def check_commercial_lease_law(state: AgentState, retriever: LegalDocumentRetrie
     - 계약갱신요구권 행사 가능 여부 (최대 10년)
     - 환산보증금 기준 충족 여부 (서울 9억 원)
 
+    Args:
+        docs: _fetch_all_docs_parallel()에서 병렬 검색된 상가임대차보호법 문서
+
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
     district = state.get("target_district", "")
-
-    query = "권리금 회수 기회 보호 계약갱신요구권 환산보증금 상가임대차보호법"
-    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES))
 
     question = (
         f"'{district}'에서 프랜차이즈 점포를 임차할 때 상가임대차보호법상 주요 리스크는 무엇입니까? "
@@ -223,7 +224,7 @@ def check_commercial_lease_law(state: AgentState, retriever: LegalDocumentRetrie
         }
 
 
-def check_food_hygiene(state: AgentState, retriever: LegalDocumentRetriever) -> dict:
+def check_food_hygiene(state: AgentState, docs: list[dict]) -> dict:
     """
     식품위생법 검토 — 업종별 영업신고/허가 및 위생 기준 검토.
 
@@ -232,14 +233,14 @@ def check_food_hygiene(state: AgentState, retriever: LegalDocumentRetriever) -> 
     - 위생교육 이수 의무
     - 영업장 시설 기준
 
+    Args:
+        docs: _fetch_all_docs_parallel()에서 병렬 검색된 식품위생법 문서
+
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
     business_type = state.get("business_type", "")
     district = state.get("target_district", "")
-
-    query = f"{business_type} 영업신고 허가 위생교육 시설기준 식품위생법"
-    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES))
 
     question = (
         f"'{district}'에서 '{business_type}' 업종으로 프랜차이즈 창업 시 식품위생법상 "
@@ -270,7 +271,7 @@ def check_food_hygiene(state: AgentState, retriever: LegalDocumentRetriever) -> 
         }
 
 
-def check_safety_regulation(state: AgentState, retriever: LegalDocumentRetriever) -> dict:
+def check_safety_regulation(state: AgentState, docs: list[dict]) -> dict:
     """
     다중이용업소 안전관리법 검토 — 소방·안전 시설 의무 검토.
 
@@ -279,13 +280,13 @@ def check_safety_regulation(state: AgentState, retriever: LegalDocumentRetriever
     - 소방시설 설치 의무 (간이스프링클러, 비상구 등)
     - 안전시설 완비증명서 발급 의무
 
+    Args:
+        docs: _fetch_all_docs_parallel()에서 병렬 검색된 다중이용업소법 문서
+
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
     business_type = state.get("business_type", "")
-
-    query = f"{business_type} 다중이용업소 소방시설 안전시설 완비증명 의무"
-    docs = _run_async(retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.SAFETY_SOURCES))
 
     question = (
         f"'{business_type}' 업종 프랜차이즈 창업 시 다중이용업소의 안전관리에 관한 특별법상 "
@@ -448,7 +449,44 @@ def check_zoning_regulation(state: AgentState) -> dict:
         "business_type": type_label,
         "allowed": level != "danger",
         "summary": summary,
+        "articles": [],
+        "recommendation": "토지이음(eum.go.kr)에서 실제 용도지역을 확인하세요." if level != "safe" else "",
     }
+
+
+async def _fetch_all_docs_parallel(state: dict, retriever: LegalDocumentRetriever) -> tuple:
+    """
+    RAG 검색 5개 + 판례 API 검색 2개를 asyncio.gather()로 병렬 실행.
+
+    순차 실행 대비 응답 시간을 대폭 단축.
+
+    Returns:
+        tuple: (franchise_docs, lease_docs, food_docs, safety_docs, summary_docs,
+                franchise_prec, lease_prec)
+    """
+    brand = state.get("brand_name") or "해당 브랜드"
+    district = state.get("target_district", "")
+    business_type = state.get("business_type", "")
+
+    franchise_q = f"{brand} 영업지역 보장 동일 브랜드 출점 제한 가맹사업법"
+    lease_q = "권리금 회수 기회 보호 계약갱신요구권 환산보증금 상가임대차보호법"
+    food_q = f"{business_type} 영업신고 허가 위생교육 시설기준 식품위생법"
+    safety_q = f"{business_type} 다중이용업소 소방시설 안전시설 완비증명 의무"
+    summary_q = f"{business_type} {district} 프랜차이즈 법률 검토"
+
+    law_client = LawApiClient()
+
+    return await asyncio.gather(
+        # pgvector RAG 검색
+        retriever.search(franchise_q, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),
+        retriever.search(lease_q, top_k=5, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES),
+        retriever.search(food_q, top_k=5, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES),
+        retriever.search(safety_q, top_k=5, source_filter=LegalDocumentRetriever.SAFETY_SOURCES),
+        retriever.search(summary_q, top_k=10),
+        # 국가법령정보 판례 검색 (단일 핵심 키워드로 검색)
+        law_client.search_precedents("가맹사업", display=3),
+        law_client.search_precedents("권리금", display=3),
+    )
 
 
 def legal_node(state) -> dict:
@@ -458,6 +496,9 @@ def legal_node(state) -> dict:
     Pydantic AgentState / TypedDict AgentState 양쪽 모두 지원.
     결과는 analysis_results["legal_risks"]에 저장하고 dict로 반환.
     검토 중 오류가 발생해도 다른 검토는 계속 진행 (부분 실패 허용).
+
+    최적화: _fetch_all_docs_parallel()로 RAG 검색 5개를 병렬 실행 후
+            각 check 함수에 pre-fetched docs를 전달 (순차 검색 제거).
     """
     # Pydantic 모델이 넘어온 경우 dict로 정규화 (TypedDict는 이미 dict)
     if not isinstance(state, dict):
@@ -465,39 +506,36 @@ def legal_node(state) -> dict:
 
     retriever = LegalDocumentRetriever()
 
+    # RAG 검색 5개 + 판례 검색 2개 병렬 실행 (핵심 최적화)
+    franchise_docs, lease_docs, food_docs, safety_docs, legal_info_docs, franchise_prec, lease_prec = _run_async(
+        _fetch_all_docs_parallel(state, retriever)
+    )
+
     risks: list[dict] = []
 
-    # 1. 가맹사업법 검토
-    franchise_result = check_franchise_law(state, retriever)
-    risks.append(franchise_result)
+    # 1. 가맹사업법 검토 (RAG docs + 판례 병합)
+    risks.append(check_franchise_law(state, franchise_docs + franchise_prec))
 
-    # 2. 상가임대차보호법 검토
-    lease_result = check_commercial_lease_law(state, retriever)
-    risks.append(lease_result)
+    # 2. 상가임대차보호법 검토 (RAG docs + 판례 병합)
+    risks.append(check_commercial_lease_law(state, lease_docs + lease_prec))
 
     # 3. 용도지역 규제 검토 (LLM 없이 규칙 기반)
-    zoning_result = check_zoning_regulation(state)
-    risks.append(zoning_result)
+    risks.append(check_zoning_regulation(state))
 
-    # 4. 식품위생법 검토
-    food_hygiene_result = check_food_hygiene(state, retriever)
-    risks.append(food_hygiene_result)
+    # 4. 식품위생법 검토 (pre-fetched docs 사용)
+    risks.append(check_food_hygiene(state, food_docs))
 
-    # 5. 다중이용업소 안전관리법 검토
-    safety_result = check_safety_regulation(state, retriever)
-    risks.append(safety_result)
+    # 5. 다중이용업소 안전관리법 검토 (pre-fetched docs 사용)
+    risks.append(check_safety_regulation(state, safety_docs))
 
     # 6. 공정위 가맹사업 정보공개서 검토
-    ftc_result = check_ftc_franchise(state)
-    risks.append(ftc_result)
+    risks.append(check_ftc_franchise(state))
 
-    # legal_info: 이번 검토에서 참조한 RAG 문서 수집 (graph.py 로그 + supervisor 완료 신호용)
-    query = f"{state.get('business_type', '')} {state.get('target_district', '')} 프랜차이즈 법률 검토"
-    legal_info = _run_async(retriever.search(query, top_k=10))
-
-    # RAG 문서가 없는 경우(DEV 모드 등)에도 supervisor가 완료로 인식하도록 risks를 fallback으로 사용
-    if not legal_info:
-        legal_info = [{"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks]
+    # legal_info: RAG 문서 + 판례 합산 (graph.py 로그 + supervisor 완료 신호용)
+    precedents = franchise_prec + lease_prec
+    legal_info = (legal_info_docs + precedents) or [
+        {"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks
+    ]
 
     # analysis_results dict 업데이트
     analysis = dict(state.get("analysis_results") or {})
