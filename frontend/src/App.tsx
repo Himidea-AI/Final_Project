@@ -619,14 +619,17 @@ function AccordionGallery({
           {DISTRICTS.map((d, i) => {
             const isHovered = hoveredIdx === i;
             const isMapo = i === MAPO_IDX;
+            const isActive = isMapo; // 마포구만 클릭 가능 → "active" 상태로 표시
 
             return (
               <div
                 key={d.eng}
-                className={`relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer border transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
                   isHovered
-                    ? "w-[320px] md:w-[480px] border-indigo-500/40 shadow-[0_0_20px_rgba(99,102,241,0.15)] bg-[#2c2825]"
-                    : "w-[70px] md:w-[80px] border-[#3a3633] bg-[#1e1b18]"
+                    ? "w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(129,140,248,0.3)]"
+                    : isActive
+                    ? "w-[70px] md:w-[80px] z-0 shadow-[0_0_15px_rgba(129,140,248,0.1)]"
+                    : "w-[70px] md:w-[80px] z-0"
                 }`}
                 onMouseEnter={() => setHoveredIdx(i)}
                 onMouseLeave={() => setHoveredIdx(null)}
@@ -634,6 +637,23 @@ function AccordionGallery({
                   if (isMapo && !isDragging) onMapoClick();
                 }}
               >
+                {/* 1. Animated Gradient Border — 회전하는 conic-gradient (호버/활성 시 표시) */}
+                <div
+                  className={`absolute inset-[-50%] z-0 animate-spin-slow transition-opacity duration-500 ${
+                    isHovered || isActive ? "opacity-100" : "opacity-0"
+                  }`}
+                  style={{
+                    background:
+                      "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                  }}
+                />
+
+                {/* 2. 실제 컨텐츠 컨테이너 (2px 인셋으로 테두리만 노출) */}
+                <div
+                  className={`absolute inset-[2px] z-10 overflow-hidden rounded-[14px] transition-colors duration-500 ${
+                    isHovered || isActive ? "bg-[#2c2825]" : "bg-[#1e1b18]"
+                  }`}
+                >
                 {/* Parallax background image */}
                 <div
                   className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
@@ -750,6 +770,7 @@ function AccordionGallery({
                       )}
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
             );

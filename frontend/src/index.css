@@ -58,6 +58,12 @@ html::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
 }
 .animate-float-logo { animation: floatLogo 6s ease-in-out infinite; }
 
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow { animation: spin-slow 4s linear infinite; }
+
 @keyframes drawCircuit {
   0% { stroke-dashoffset: 600; }
   100% { stroke-dashoffset: 0; }
