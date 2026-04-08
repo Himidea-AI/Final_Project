@@ -39,7 +39,7 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
   if (/[^a-zA-Z0-9]/.test(pw)) score++;
   const map = [
     { level: 1, label: "약함", color: "bg-red-500" },
-    { level: 2, label: "보통", color: "bg-amber-500" },
+    { level: 2, label: "보통", color: "bg-indigo-500" },
     { level: 3, label: "강함", color: "bg-emerald-400" },
     { level: 4, label: "매우 강함", color: "bg-emerald-500" },
   ];
@@ -108,7 +108,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
 
   const fields = [
     // Each field rendered with stagger delay
-    { key: "companyName", label: "기업명 (프랜차이즈 본부명)", type: "text", value: form.companyName, onChange: (v: string) => set("companyName", v), placeholder: "사업자등록번호 입력 시 자동완성", suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#f59e0b]" /> : form.companyName ? <CheckCircle size={14} className="text-emerald-400" /> : null },
+    { key: "companyName", label: "기업명 (프랜차이즈 본부명)", type: "text", value: form.companyName, onChange: (v: string) => set("companyName", v), placeholder: "사업자등록번호 입력 시 자동완성", suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#818cf8]" /> : form.companyName ? <CheckCircle size={14} className="text-emerald-400" /> : null },
     { key: "bizNumber", label: "사업자등록번호", type: "text", value: form.bizNumber, onChange: handleBizChange, placeholder: "000-00-00000" },
     { key: "contactName", label: "담당자명", type: "text", value: form.contactName, onChange: (v: string) => set("contactName", v), placeholder: "홍길동" },
     { key: "position", label: "직책", type: "text", value: form.position, onChange: (v: string) => set("position", v), placeholder: "영업기획팀장" },
@@ -135,7 +135,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
               onBlur={() => touch(f.key)}
               placeholder={f.placeholder}
               className={`${fieldClass} ${
-                f.error ? "border-red-500" : "border-[#333333] focus:border-[#f59e0b]"
+                f.error ? "border-red-500" : "border-[#333333] focus:border-[#818cf8]"
               }`}
             />
             {f.suffix && (
@@ -144,7 +144,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
           </div>
           {f.error && <p className={errorClass}>{f.error}</p>}
           {f.key === "storeCount" && storeNum >= 30 && (
-            <p className="text-[10px] text-[#fbbf24] mt-1">
+            <p className="text-[10px] text-[#a5b4fc] mt-1">
               30호점 이상 — Enterprise 요금제를 추천합니다
             </p>
           )}
@@ -160,7 +160,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
             value={form.password}
             onChange={(e) => set("password", e.target.value)}
             placeholder="영문+숫자+특수문자 8자 이상"
-            className={`${fieldClass} border-[#333333] focus:border-[#f59e0b] pr-10`}
+            className={`${fieldClass} border-[#333333] focus:border-[#818cf8] pr-10`}
           />
           <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555] hover:text-[#a1a1aa]">
             {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -191,7 +191,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
             className={`${fieldClass} pr-10 ${
               touched.has("passwordConfirm") && form.passwordConfirm
                 ? pwMatch ? "border-emerald-500" : "border-red-500"
-                : "border-[#333333] focus:border-[#f59e0b]"
+                : "border-[#333333] focus:border-[#818cf8]"
             }`}
           />
           <button type="button" onClick={() => setShowPwC(!showPwC)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555] hover:text-[#a1a1aa]">
@@ -213,7 +213,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
         <label className="flex items-center gap-3 cursor-pointer group">
           <div
             className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${
-              form.agreeTerms ? "bg-[#f59e0b] border-[#f59e0b]" : "border-[#404040] group-hover:border-[#555]"
+              form.agreeTerms ? "bg-[#818cf8] border-[#818cf8]" : "border-[#404040] group-hover:border-[#555]"
             }`}
             onClick={() => set("agreeTerms", !form.agreeTerms)}
           >
@@ -236,7 +236,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
         disabled={!allValid}
         className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
           allValid
-            ? "bg-gradient-to-r from-[#d97706] to-[#f59e0b] text-white shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-[0.98]"
+            ? "bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
             : "bg-[#262626] text-[#555] cursor-not-allowed"
         }`}
       >
