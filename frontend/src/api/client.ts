@@ -4,7 +4,7 @@
 import axios from "axios";
 import type { SimulationInput, SimulationOutput, JobStatus } from "../types";
 
-const USE_MOCK = true; // 프론트엔드 테스트를 위해 강제 Mock 모드 활성화
+const USE_MOCK = false; // 프론트엔드 테스트를 위해 강제 Mock 모드 활성화 (에이전트 연동을 위해 false로 변경)
 
 const apiClient = axios.create({
   baseURL: "/api",
@@ -42,6 +42,26 @@ export async function runSimulation(input: SimulationInput): Promise<SimulationO
 /** 시뮬레이션 리포트 조회 */
 export async function getReport(requestId: string): Promise<SimulationOutput> {
   const response = await apiClient.get(`/report/${requestId}`);
+  return response.data;
+}
+
+/** [B1-C1 연동] 상권 분석 및 지도 데이터 요청 */
+export async function analyzeLocation(input: SimulationInput): Promise<any> {
+  if (USE_MOCK) {
+    console.log("[Mock API] analyzeLocation called with:", input);
+    return {
+      status: "success",
+      data: {
+        summary: "Mock 분석 결과: 서교동은 카페가 많습니다.",
+        map_data: {
+          center: { lat: 37.5565, lng: 126.9239 },
+          markers: [{ id: "mock-1", lat: 37.5565, lng: 126.9239, label: "서교동", type: "candidate" }]
+        }
+      }
+    };
+  }
+
+  const response = await apiClient.post("/analyze", input);
   return response.data;
 }
 

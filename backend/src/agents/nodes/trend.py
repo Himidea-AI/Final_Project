@@ -5,7 +5,8 @@
   - Naver DataLab 트렌드 API (크롤링 아님, 키워드 검색량 추이)
   - 서울 상권분석서비스(golmok) 추정매출 데이터
 """
-from src.agents.state import AgentState
+
+from ..state import AgentState
 
 
 def analyze_search_trend(state: AgentState) -> dict:

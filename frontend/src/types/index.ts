@@ -62,3 +62,24 @@ export interface JobStatus {
   status: "pending" | "in_progress" | "completed" | "failed";
   progress: number;
 }
+
+/** [B1-C1 연동] 분석 결과 (지도 마커 포함) */
+export interface AnalysisResult {
+  status: string;
+  data: {
+    summary: string;
+    map_data: {
+      center: { lat: number; lng: number };
+      markers: Array<{
+        id: string;
+        lat: number;
+        lng: number;
+        label: string;
+        type: string;
+      }>;
+    };
+    market_report: any;
+    legal_report: any[];
+    full_analysis: any;
+  };
+}

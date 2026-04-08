@@ -30,14 +30,26 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 
 ## 팀원별 담당 영역
 
-| 역할 | 담당 디렉토리 |
-|------|-------------|
-| A — 데이터 엔지니어 | `backend/src/services/`, `backend/src/database/`, `data/` |
-| B — AI Agent 개발자 | `backend/src/agents/`, `backend/src/schemas/` |
-| C — 딥러닝 모델 | `models/` |
-| D — RAG + 법률 | `backend/src/chains/` |
-| E — 프론트엔드 | `frontend/` |
-| F — PM / 검증 | `validation/`, `models/lstm_forecast/`, `docs/` |
+### 트랙 A — 데이터 + RAG
+
+| 역할 | 담당자 | 담당 디렉토리 |
+|------|--------|-------------|
+| A1 — 데이터 엔지니어 | 찬영 | `backend/src/services/`, `backend/src/database/`, `data/` |
+| A2 — RAG + 법률 | 봉환 | `backend/src/chains/`, `backend/src/database/vector_db.py` |
+
+### 트랙 B — AI 엔진
+
+| 역할 | 담당자 | 담당 디렉토리 |
+|------|--------|-------------|
+| B1 — LangGraph Agent | 예진 | `backend/src/agents/`, `backend/src/schemas/` |
+| B2 — 딥러닝 모델 | 수지니 | `models/`, `validation/` |
+
+### 트랙 C — 프론트엔드 + 배포
+
+| 역할 | 담당자 | 담당 디렉토리 |
+|------|--------|-------------|
+| C1 — 프론트엔드 | 강민 | `frontend/` |
+| C2 — 인프라 + PM | 혁 | Docker, Nginx, `docs/`, `tests/` |
 
 ## 실행 방법
 

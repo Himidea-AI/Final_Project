@@ -5,6 +5,8 @@
 consumer_key + consumer_secret으로 access_token을 먼저 발급받아야 함.
 토큰 유효시간은 1시간.
 """
+from typing import List
+
 from src.services.base_client import BaseAPIClient
 
 
@@ -24,32 +26,81 @@ class SgisAPIClient(BaseAPIClient):
         Returns:
             str: access_token (유효시간 1시간)
         """
-        # TODO: /auth/authentication.json 호출
-        # TODO: consumer_key + consumer_secret 파라미터 전송
-        # TODO: 응답에서 accessToken 추출
-        # TODO: self._access_token에 저장
-        pass
+        data = await self.get(
+            "/auth/authentication.json",
+            params={
+                "consumer_key": self.consumer_key,
+                "consumer_secret": self.consumer_secret,
+            },
+        )
+        token = data["result"]["accessToken"]
+        self._access_token = token
+        return token
 
     async def _ensure_token(self) -> None:
         """토큰이 없으면 자동 발급"""
         if not self._access_token:
             await self.authenticate()
 
-    async def get_resident_population(self, district: str) -> dict:
-        """주거인구 조회"""
-        await self._ensure_token()
-        # TODO: /population/population.json 호출 (accessToken 포함)
-        # TODO: 행정동 코드로 필터링
-        pass
+    async def get_resident_population(self, adm_cd: str, year: str = "") -> List[dict]:
+        """
+        주거인구 조회
 
-    async def get_age_distribution(self, district: str) -> dict:
-        """연령별 인구 분포 조회"""
-        await self._ensure_token()
-        # TODO: 10세 단위 연령별 인구 조회
-        pass
+        Args:
+            adm_cd: 행정동 코드
+            year: 기준 연도 (선택)
 
-    async def get_household_composition(self, district: str) -> dict:
-        """가구구성 조회"""
+        Returns:
+            list: 주거인구 결과 리스트
+        """
         await self._ensure_token()
-        # TODO: 가구 유형별 데이터 조회
-        pass
+        params = {
+            "accessToken": self._access_token,
+            "adm_cd": adm_cd,
+        }
+        if year:
+            params["year"] = year
+        data = await self.get("/stats/population.json", params=params)
+        return data.get("result", [])
+
+    async def get_age_distribution(self, adm_cd: str, year: str = "") -> List[dict]:
+        """
+        연령별 인구 분포 조회
+
+        Args:
+            adm_cd: 행정동 코드
+            year: 기준 연도 (선택)
+
+        Returns:
+            list: 연령별 인구 결과 리스트
+        """
+        await self._ensure_token()
+        params = {
+            "accessToken": self._access_token,
+            "adm_cd": adm_cd,
+        }
+        if year:
+            params["year"] = year
+        data = await self.get("/stats/agePopulation.json", params=params)
+        return data.get("result", [])
+
+    async def get_household_composition(self, adm_cd: str, year: str = "") -> List[dict]:
+        """
+        가구구성 조회
+
+        Args:
+            adm_cd: 행정동 코드
+            year: 기준 연도 (선택)
+
+        Returns:
+            list: 가구구성 결과 리스트
+        """
+        await self._ensure_token()
+        params = {
+            "accessToken": self._access_token,
+            "adm_cd": adm_cd,
+        }
+        if year:
+            params["year"] = year
+        data = await self.get("/stats/household.json", params=params)
+        return data.get("result", [])
