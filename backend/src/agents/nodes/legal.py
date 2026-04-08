@@ -96,16 +96,28 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
         return message.content[0].text
 
     if provider == "gemini":
+        import time
+
         from langchain_core.messages import HumanMessage, SystemMessage
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.0-flash-lite",
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0.1,
         )
-        response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
-        return response.content if isinstance(response.content, str) else str(response.content)
+        # 429 RESOURCE_EXHAUSTED 시 최대 2회 재시도 (지수 백오프)
+        for attempt in range(3):
+            try:
+                response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
+                return response.content if isinstance(response.content, str) else str(response.content)
+            except Exception as e:
+                if "429" in str(e) and attempt < 2:
+                    wait = 30 * (2**attempt)  # 30s → 60s
+                    print(f"[Gemini] 429 발생, {wait}초 후 재시도 ({attempt + 1}/2)")
+                    time.sleep(wait)
+                else:
+                    raise
 
     # 기본값: Ollama
     from langchain_core.messages import HumanMessage, SystemMessage
