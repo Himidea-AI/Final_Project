@@ -97,9 +97,13 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
 
     if provider == "gemini":
         from langchain_core.messages import HumanMessage, SystemMessage
-        from src.agents.llms import get_fast_llm
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-        llm = get_fast_llm()
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0.1,
+        )
         response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
         return response.content if isinstance(response.content, str) else str(response.content)
 
