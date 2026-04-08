@@ -64,6 +64,12 @@ html::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
 }
 .animate-spin-slow { animation: spin-slow 4s linear infinite; }
 
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 40s linear infinite; }
+
 @keyframes drawCircuit {
   0% { stroke-dashoffset: 600; }
   100% { stroke-dashoffset: 0; }

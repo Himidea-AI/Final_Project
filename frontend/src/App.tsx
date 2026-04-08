@@ -97,18 +97,18 @@ const DISTRICTS = [
   { name: "금천구", eng: "GEUMCHEON", img: "/images/Geumcheon-gu.svg" },
   { name: "노원구", eng: "NOWON", img: "/images/Nowon-gu.svg" },
   { name: "도봉구", eng: "DOBONG", img: "/images/Dobong-gu.svg" },
-  { name: "동대문구", eng: "DDM", img: "/images/Dongdaemun-gu.svg" },
+  { name: "동대문구", eng: "DONGDAEMUN", img: "/images/Dongdaemun-gu.svg" },
   { name: "동작구", eng: "DONGJAK", img: "/images/Dongjak-gu.svg" },
   { name: "마포구", eng: "MAPO", img: "/images/Mapo-gu.svg" },
-  { name: "서대문구", eng: "SDM", img: "/images/Seodaemun-gu.svg" },
+  { name: "서대문구", eng: "SEODAEMUN", img: "/images/Seodaemun-gu.svg" },
   { name: "서초구", eng: "SEOCHO", img: "/images/Seocho-gu.svg" },
   { name: "성동구", eng: "SEONGDONG", img: "/images/Seongdong-gu.svg" },
   { name: "성북구", eng: "SEONGBUK", img: "/images/Seongbuk-gu.svg" },
   { name: "송파구", eng: "SONGPA", img: "/images/Songpa-gu.svg" },
   { name: "양천구", eng: "YANGCHEON", img: "/images/Yangcheon-gu.svg" },
-  { name: "영등포구", eng: "YDP", img: "/images/Yeongdeungpo-gu.svg" },
+  { name: "영등포구", eng: "YEONGDEUNGPO", img: "/images/Yeongdeungpo-gu.svg" },
   { name: "용산구", eng: "YONGSAN", img: "/images/Yongsan-gu.svg" },
-  { name: "은평구", eng: "EP", img: "/images/Eunpyeong-gu.svg" },
+  { name: "은평구", eng: "EUNPYEONG", img: "/images/Eunpyeong-gu.svg" },
   { name: "종로구", eng: "JONGNO", img: "/images/Jongno-gu.svg" },
   { name: "중구", eng: "JUNG", img: "/images/Jung-gu.svg" },
   { name: "중랑구", eng: "JUNGNANG", img: "/images/Jungnang-gu.svg" },
@@ -146,8 +146,6 @@ const DONG_DATA: Record<string, string[]> = {
   "중랑구": ["면목본동","면목2동","면목3·8동","면목4동","면목5동","면목7동","상봉1동","상봉2동","중화1동","중화2동","묵1동","묵2동","망우본동","망우3동","신내1동","신내2동"],
 };
 
-const GU_NAMES = Object.keys(DONG_DATA);
-
 const CHART_DATA = [
   { label: "유동인구", value: 82 },
   { label: "임대료", value: 45 },
@@ -157,6 +155,32 @@ const CHART_DATA = [
   { label: "성장성", value: 56 },
   { label: "접근성", value: 78 },
 ];
+
+/* ═══════════════════════════════════════════════════════
+   BUSINESS TYPE DATA — 시뮬레이터 입력 옵션 (Frontend Mockup)
+   ⚠️ 백엔드 연동 전 디자인 전용. SimulationInput 페이로드 확장 합의 필요.
+   ═══════════════════════════════════════════════════════ */
+const BUSINESS_TYPES = ["카페", "음식점", "베이커리", "디저트", "주점", "분식", "패스트푸드", "기타"];
+
+const BUSINESS_SUBTYPES: Record<string, string[]> = {
+  "카페": ["저가형 커피", "프리미엄 커피", "디저트 카페", "로스터리", "북카페"],
+  "음식점": ["한식", "일식", "양식", "중식", "퓨전"],
+  "베이커리": ["빵집", "케이크 전문", "샌드위치"],
+  "디저트": ["아이스크림", "도넛", "마카롱"],
+  "주점": ["호프", "이자카야", "와인바"],
+  "분식": ["떡볶이", "김밥", "라면"],
+  "패스트푸드": ["햄버거", "치킨", "피자"],
+  "기타": ["기타"],
+};
+
+const PRICE_RANGES = [
+  { label: "5천원 이하", value: "under5k" },
+  { label: "5천-1만", value: "5to10k" },
+  { label: "1-2만", value: "10to20k" },
+  { label: "2만 이상", value: "over20k" },
+];
+
+const OPERATING_HOURS_OPTIONS = ["오전", "점심", "저녁", "심야"];
 
 /* ═══════════════════════════════════════════════════════
    NetworkBackground — Canvas 파티클 네트워크 배경
@@ -366,9 +390,38 @@ function IntroScene({
   onContactClick: () => void;
 }) {
   return (
-    <div className="relative z-10 flex h-full w-full items-center">
-      {/* Left section — Typography menu */}
-      <div className="flex-1 flex flex-col justify-center pl-12 md:pl-20 lg:pl-32">
+    <div className="relative z-10 h-full w-full overflow-hidden">
+      {/* Background Watermark Logo (idea 5) — 화면을 가로지르는 거대한 반투명 로고 */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+        <img
+          src="/logo.svg"
+          alt=""
+          className="w-[90vw] max-w-[1400px] h-auto opacity-[0.018]"
+        />
+      </div>
+
+      {/* Right section — Floating Logo with Glow (원래 위치 복원) */}
+      <div className="absolute right-[10%] top-1/2 -translate-y-1/2 p-10 cursor-pointer group hidden md:flex flex-col items-center pointer-events-auto z-30">
+        <div className="relative animate-float-logo">
+          <div className="absolute inset-0 bg-[#818cf8] blur-[50px] opacity-0 group-hover:opacity-30 transition-all duration-700 ease-out scale-75 group-hover:scale-125" />
+          <img
+            src="/logo.svg"
+            alt="SPOTTER"
+            className="w-48 h-auto relative z-10 opacity-90 transition-all duration-500 group-hover:scale-105 group-hover:drop-shadow-[0_0_30px_rgba(99,102,241,0.6)]"
+          />
+        </div>
+        <div className="mt-8 text-center transition-all duration-500 group-hover:scale-105">
+          <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] text-[#e2e8f0]">
+            SPOTTER
+          </h1>
+          <p className="text-[#818cf8] font-mono text-xs tracking-widest mt-3 uppercase opacity-60 transition-opacity duration-500 group-hover:opacity-100">
+            AI Franchise Simulator
+          </p>
+        </div>
+      </div>
+
+      {/* Left section — Typography menu (uniform single column) */}
+      <div className="relative z-20 h-full flex flex-col justify-center pl-12 md:pl-20 lg:pl-32 pt-[18vh] pb-20">
         {/* Sub-copy */}
         <div className="flex items-center gap-4 mb-10 text-xs tracking-[0.3em] text-gray-500 uppercase">
           <div className="w-px h-4 bg-gray-600" />
@@ -377,14 +430,15 @@ function IntroScene({
           </span>
         </div>
 
-        {/* Menu */}
+        {/* Menu — 균일 사이즈, 일렬 정렬 */}
         <nav className="flex flex-col gap-3">
           {MENU_ITEMS.map((item, i) => {
             const isActive = activeMenuIndex === i;
             return (
               <button
                 key={item}
-                className="relative text-left group w-fit self-start"
+                className="relative text-left group self-start whitespace-nowrap"
+                style={{ width: "fit-content", maxWidth: "fit-content" }}
                 onMouseEnter={() => setActiveMenuIndex(i)}
                 onClick={() => {
                   if (i === 0) onAboutClick();
@@ -400,7 +454,7 @@ function IntroScene({
                   }`}
                 />
                 <span
-                  className={`block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  className={`inline-block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                     isActive
                       ? "text-[#e2e8f0] translate-x-0"
                       : "text-[#3a3633] -translate-x-2 group-hover:text-[#9ca3af]"
@@ -412,40 +466,34 @@ function IntroScene({
             );
           })}
         </nav>
-
-        {/* CTA hint */}
-        <div className="mt-12 flex items-center gap-3 text-sm text-gray-500">
-          <span className="text-indigo-400">
-            <ChevronRight size={16} />
-          </span>
-          <span className="tracking-wide">
-            Click <span className="text-[#e2e8f0] font-semibold">SIMULATOR</span> to
-            explore
-          </span>
-        </div>
       </div>
 
-      {/* Right section — Floating Logo with Glow */}
-      <div className="absolute right-[10%] top-1/2 -translate-y-1/2 p-10 cursor-pointer group hidden md:flex flex-col items-center pointer-events-auto">
-        <div className="relative animate-float-logo">
-          {/* Amber neon glow on hover */}
-          <div className="absolute inset-0 bg-[#818cf8] blur-[50px] opacity-0 group-hover:opacity-30 transition-all duration-700 ease-out scale-75 group-hover:scale-125" />
-
-          <img
-            src="/logo.svg"
-            alt="SPOTTER"
-            className="w-48 h-auto relative z-10 opacity-90 transition-all duration-500 group-hover:scale-105 group-hover:drop-shadow-[0_0_30px_rgba(99,102,241,0.6)]"
-          />
-        </div>
-
-        {/* Text logo */}
-        <div className="mt-8 text-center transition-all duration-500 group-hover:scale-105">
-          <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] text-[#e2e8f0]">
-            SPOTTER
-          </h1>
-          <p className="text-[#818cf8] font-mono text-xs tracking-widest mt-3 uppercase opacity-60 transition-opacity duration-500 group-hover:opacity-100">
-            AI Franchise Simulator
-          </p>
+      {/* Bottom Marquee Strip (idea 4) — 화면 하단 가로 스크롤 데이터 띠 */}
+      <div className="absolute bottom-0 left-0 w-full overflow-hidden border-t border-[#3a3633]/40 py-3 pointer-events-none z-20 bg-[#1e1b18]/50 backdrop-blur-sm">
+        <div className="flex animate-marquee whitespace-nowrap">
+          {[...Array(2)].map((_, k) => (
+            <div
+              key={k}
+              className="flex items-center gap-12 px-6 font-mono text-[10px] uppercase tracking-[0.3em] shrink-0"
+            >
+              <span className="text-[#9ca3af]">AI Market Intelligence</span>
+              <span className="text-[#3a3633]">●</span>
+              <span className="text-[#818cf8]">Mapo-Gu MVP</span>
+              <span className="text-[#3a3633]">●</span>
+              <span className="text-[#9ca3af]">Cannibalization Analysis</span>
+              <span className="text-[#3a3633]">●</span>
+              <span className="text-[#9ca3af]">12-Month Forecast</span>
+              <span className="text-[#3a3633]">●</span>
+              <span className="text-[#818cf8]">Live Data · 19 Sources</span>
+              <span className="text-[#3a3633]">●</span>
+              <span className="text-[#9ca3af]">25 Districts</span>
+              <span className="text-[#3a3633]">●</span>
+              <span className="text-[#9ca3af]">LangGraph Multi-Agent</span>
+              <span className="text-[#3a3633]">●</span>
+              <span className="text-[#818cf8]">Project SPOTTER v3.8</span>
+              <span className="text-[#3a3633]">●</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -619,16 +667,13 @@ function AccordionGallery({
           {DISTRICTS.map((d, i) => {
             const isHovered = hoveredIdx === i;
             const isMapo = i === MAPO_IDX;
-            const isActive = isMapo; // 마포구만 클릭 가능 → "active" 상태로 표시
 
             return (
               <div
                 key={d.eng}
-                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
                   isHovered
                     ? "w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(129,140,248,0.3)]"
-                    : isActive
-                    ? "w-[70px] md:w-[80px] z-0 shadow-[0_0_15px_rgba(129,140,248,0.1)]"
                     : "w-[70px] md:w-[80px] z-0"
                 }`}
                 onMouseEnter={() => setHoveredIdx(i)}
@@ -637,10 +682,10 @@ function AccordionGallery({
                   if (isMapo && !isDragging) onMapoClick();
                 }}
               >
-                {/* 1. Animated Gradient Border — 회전하는 conic-gradient (호버/활성 시 표시) */}
+                {/* 1. Animated Gradient Border — 호버 시에만 회전 빛 표시 */}
                 <div
                   className={`absolute inset-[-50%] z-0 animate-spin-slow transition-opacity duration-500 ${
-                    isHovered || isActive ? "opacity-100" : "opacity-0"
+                    isHovered ? "opacity-100" : "opacity-0"
                   }`}
                   style={{
                     background:
@@ -651,7 +696,7 @@ function AccordionGallery({
                 {/* 2. 실제 컨텐츠 컨테이너 (2px 인셋으로 테두리만 노출) */}
                 <div
                   className={`absolute inset-[2px] z-10 overflow-hidden rounded-[14px] transition-colors duration-500 ${
-                    isHovered || isActive ? "bg-[#2c2825]" : "bg-[#1e1b18]"
+                    isHovered ? "bg-[#2c2825]" : "bg-[#1e1b18]"
                   }`}
                 >
                 {/* Parallax background image */}
@@ -1307,19 +1352,47 @@ function SimulatorDashboard({
   const [chartView, setChartView] = useState<"daily" | "monthly">("daily");
   const [tableView, setTableView] = useState<"cannibalization" | "neighborhoods">("cannibalization");
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
-  const [selectedGu, setSelectedGu] = useState("마포구");
+  const [selectedGu] = useState("마포구");
   const [selectedDongs, setSelectedDongs] = useState<string[]>(
     () => [...DONG_DATA["마포구"]]
   );
-  const [guDropdownOpen, setGuDropdownOpen] = useState(false);
   const [dongDropdownOpen, setDongDropdownOpen] = useState(false);
 
-  const handleGuChange = useCallback((gu: string) => {
-    setSelectedGu(gu);
-    setSelectedDongs([...DONG_DATA[gu]]);
-    setGuDropdownOpen(false);
-    setDongDropdownOpen(false);
+  // [Frontend Mockup] 백엔드 연동 보류 — SimulationInput 확장 후 페이로드 매핑 필요
+  const [businessType, setBusinessType] = useState("카페");
+  const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [businessSubtype, setBusinessSubtype] = useState<string>("");
+  const [storeArea, setStoreArea] = useState(15); // 평
+  const [targetPrice, setTargetPrice] = useState("5to10k");
+  const [operatingHours, setOperatingHours] = useState<string[]>(["점심", "저녁"]);
+  const [initialCapital, setInitialCapital] = useState(5000); // 만원
+
+  const toggleOperatingHour = useCallback((hour: string) => {
+    setOperatingHours((prev) =>
+      prev.includes(hour) ? prev.filter((h) => h !== hour) : [...prev, hour]
+    );
   }, []);
+
+  // 결과 화면 진입 시 스크롤을 맨 위로 리셋 (리포트 최상단부터 보이도록)
+  const dashboardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (reportState === "result" && dashboardRef.current) {
+      dashboardRef.current.scrollTop = 0;
+    }
+  }, [reportState]);
+
+  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀
+  useEffect(() => {
+    if (reportState !== "result") return;
+    // 가짜 history 엔트리 추가 → 뒤로가기 시 popstate 발생
+    window.history.pushState({ simResult: true }, "");
+    const handlePopState = () => {
+      setReportState("idle");
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [reportState, setReportState]);
 
   const toggleDong = useCallback((dong: string) => {
     setSelectedDongs((prev) => {
@@ -1430,7 +1503,7 @@ function SimulatorDashboard({
   const inputTrack = "accent-[#818cf8]";
 
   return (
-    <div className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar">
+    <div ref={dashboardRef} className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar">
       {/* Top bar */}
       <div className="sticky top-0 z-30 flex items-center px-8 py-4 mt-14 border-b border-[#3a3633] bg-[#1e1b18]/80 backdrop-blur-xl">
         <span className={`text-xs font-medium tracking-wider ${textSecondary}`}>
@@ -1440,143 +1513,28 @@ function SimulatorDashboard({
 
       {/* Dashboard body */}
       <div className="flex flex-col lg:flex-row gap-6 p-8 max-w-7xl mx-auto">
-        {/* Left panel — Controls */}
-        <div className={`lg:w-[380px] shrink-0 rounded-2xl border p-6 transition-all duration-700 ${panel}`}>
+        {/* Left panel — Controls (result 상태일 땐 숨김 → 우측 리포트가 full-width로 확장) */}
+        <div className={`lg:w-[380px] shrink-0 rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === "result" ? "hidden" : ""}`}>
           <h3
-            className={`flex items-center gap-2 text-sm font-bold tracking-wider mb-8 ${textPrimary}`}
+            className={`flex items-center gap-2 text-sm font-bold tracking-wider mb-6 ${textPrimary}`}
           >
             <Sliders size={16} className={accent} />
             SIMULATION CONTROLS
           </h3>
 
-          {/* Radius slider */}
-          <div className="mb-8">
-            <div className="flex justify-between mb-2">
+          {/* ─────────── BASIC: 분석 대상 (지역) ─────────── */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-2">
+              <MapPin size={13} className={accent} />
               <label className={`text-xs font-medium ${textSecondary}`}>
-                상권 반경
-              </label>
-              <span className={`text-xs font-mono ${accent}`}>{radius}m</span>
-            </div>
-            <input
-              type="range"
-              min={100}
-              max={1500}
-              value={radius}
-              onChange={(e) => setRadius(Number(e.target.value))}
-              className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} ${
-                "bg-[#3a3633]"
-              }`}
-            />
-            <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-              <span>100m</span>
-              <span>1500m</span>
-            </div>
-          </div>
-
-          {/* Budget slider */}
-          <div className="mb-8">
-            <div className="flex justify-between mb-2">
-              <label className={`text-xs font-medium ${textSecondary}`}>
-                임대료 예산
-              </label>
-              <span className={`text-xs font-mono ${accent}`}>{budget}만원</span>
-            </div>
-            <input
-              type="range"
-              min={50}
-              max={1000}
-              value={budget}
-              onChange={(e) => setBudget(Number(e.target.value))}
-              className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} ${
-                "bg-[#3a3633]"
-              }`}
-            />
-            <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-              <span>50만</span>
-              <span>1000만</span>
-            </div>
-          </div>
-
-          {/* Toggle switch */}
-          <div className="mb-10">
-            <div className="flex items-center justify-between">
-              <label className={`text-xs font-medium ${textSecondary}`}>
-                유동인구 가중치
-              </label>
-              <button
-                onClick={() => setWeighted(!weighted)}
-                className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
-                  weighted ? accentBg : "bg-[#3a3633]"
-                }`}
-              >
-                <div
-                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
-                    weighted ? "translate-x-[22px]" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-
-          {/* Run button */}
-          <button
-            onClick={runSim}
-            disabled={reportState === "loading"}
-            className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${
-              reportState === "loading"
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:scale-[1.02] active:scale-[0.98]"
-            } ${
-              "bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:from-[#4f46e5] hover:to-[#6366f1]"
-            }`}
-          >
-            <Play size={16} />
-            RUN SIMULATION
-          </button>
-
-          {/* Location selector */}
-          <div className="mt-6 p-4 rounded-xl border bg-[#1e1b18] border-[#3a3633]">
-            <div className="flex items-center gap-2 mb-3">
-              <MapPin size={14} className={accent} />
-              <span className={`text-xs font-medium ${textPrimary}`}>
                 분석 대상
-              </span>
+              </label>
             </div>
 
-            {/* 구 선택 드롭다운 */}
-            <div className="relative mb-3">
-              <button
-                onClick={() => {
-                  setGuDropdownOpen(!guDropdownOpen);
-                  setDongDropdownOpen(false);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#2c2825] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
-              >
-                <span>{selectedGu}</span>
-                <ChevronRight
-                  size={14}
-                  className={`text-[#9ca3af] transition-transform duration-200 ${
-                    guDropdownOpen ? "rotate-90" : ""
-                  }`}
-                />
-              </button>
-              {guDropdownOpen && (
-                <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
-                  {GU_NAMES.map((gu) => (
-                    <button
-                      key={gu}
-                      onClick={() => handleGuChange(gu)}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                        gu === selectedGu
-                          ? "text-[#818cf8] bg-[#818cf8]/10"
-                          : "text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]"
-                      }`}
-                    >
-                      {gu}
-                    </button>
-                  ))}
-                </div>
-              )}
+            {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
+            <div className="mb-2 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/50 flex items-center justify-between">
+              <span className="text-sm text-[#e2e8f0]">{selectedGu}</span>
+              <span className="text-[10px] text-[#9ca3af] uppercase tracking-wider opacity-70">선택됨</span>
             </div>
 
             {/* 행정동 선택 드롭다운 */}
@@ -1584,9 +1542,9 @@ function SimulatorDashboard({
               <button
                 onClick={() => {
                   setDongDropdownOpen(!dongDropdownOpen);
-                  setGuDropdownOpen(false);
+                  setBusinessTypeOpen(false);
                 }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#2c2825] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
               >
                 <span className="truncate">
                   {selectedDongs.length === DONG_DATA[selectedGu].length
@@ -1602,7 +1560,6 @@ function SimulatorDashboard({
               </button>
               {dongDropdownOpen && (
                 <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
-                  {/* 전체 선택 */}
                   <button
                     onClick={toggleAllDongs}
                     className="w-full text-left px-3 py-2 text-xs font-medium border-b border-[#3a3633] transition-colors text-[#818cf8] hover:bg-[#818cf8]/10"
@@ -1644,6 +1601,300 @@ function SimulatorDashboard({
               )}
             </div>
           </div>
+
+          {/* ─────────── BASIC: 업종 ─────────── */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <Store size={13} className={accent} />
+              <label className={`text-xs font-medium ${textSecondary}`}>
+                업종
+              </label>
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setBusinessTypeOpen(!businessTypeOpen);
+                  setDongDropdownOpen(false);
+                }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+              >
+                <span>{businessType}</span>
+                <ChevronRight
+                  size={14}
+                  className={`text-[#9ca3af] transition-transform duration-200 ${
+                    businessTypeOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+              {businessTypeOpen && (
+                <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                  {BUSINESS_TYPES.map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setBusinessType(type);
+                        setBusinessSubtype("");
+                        setBusinessTypeOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                        type === businessType
+                          ? "text-[#818cf8] bg-[#818cf8]/10"
+                          : "text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ─────────── 분석 조건 (기존 sliders) ─────────── */}
+          <div className="pt-5 border-t border-[#3a3633]">
+            {/* Radius slider */}
+            <div className="mb-6">
+              <div className="flex justify-between mb-2">
+                <label className={`text-xs font-medium ${textSecondary}`}>
+                  상권 반경
+                </label>
+                <span className={`text-xs font-mono ${accent}`}>{radius}m</span>
+              </div>
+              <input
+                type="range"
+                min={100}
+                max={1500}
+                value={radius}
+                onChange={(e) => setRadius(Number(e.target.value))}
+                className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
+              />
+              <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
+                <span>100m</span>
+                <span>1500m</span>
+              </div>
+            </div>
+
+            {/* Budget slider */}
+            <div className="mb-6">
+              <div className="flex justify-between mb-2">
+                <label className={`text-xs font-medium ${textSecondary}`}>
+                  임대료 예산
+                </label>
+                <span className={`text-xs font-mono ${accent}`}>{budget}만원</span>
+              </div>
+              <input
+                type="range"
+                min={50}
+                max={1000}
+                value={budget}
+                onChange={(e) => setBudget(Number(e.target.value))}
+                className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
+              />
+              <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
+                <span>50만</span>
+                <span>1000만</span>
+              </div>
+            </div>
+
+            {/* Toggle switch */}
+            <div className="mb-2">
+              <div className="flex items-center justify-between">
+                <label className={`text-xs font-medium ${textSecondary}`}>
+                  유동인구 가중치
+                </label>
+                <button
+                  onClick={() => setWeighted(!weighted)}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
+                    weighted ? accentBg : "bg-[#3a3633]"
+                  }`}
+                >
+                  <div
+                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
+                      weighted ? "translate-x-[22px]" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ─────────── ADVANCED 토글 ─────────── */}
+          <div className="mt-5 pt-5 border-t border-[#3a3633]">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-dashed border-[#3a3633] bg-transparent hover:bg-[#1e1b18] hover:border-[#818cf8]/40 transition-colors group"
+            >
+              <span className="flex items-center gap-2">
+                <Settings size={13} className="text-[#9ca3af] group-hover:text-[#818cf8] transition-colors" />
+                <span className={`text-xs font-medium ${textSecondary} group-hover:text-[#e2e8f0] transition-colors`}>
+                  더 정확한 분석을 원하시나요?
+                </span>
+              </span>
+              <ChevronDown
+                size={14}
+                className={`text-[#9ca3af] transition-transform duration-300 ${
+                  showAdvanced ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            <p className={`text-[10px] mt-1.5 ${textSecondary} opacity-60 px-1`}>
+              미입력 항목은 평균값으로 자동 추정됩니다
+            </p>
+          </div>
+
+          {/* ─────────── ADVANCED 펼침 영역 ─────────── */}
+          <div
+            className={`overflow-hidden transition-all duration-500 ease-out ${
+              showAdvanced ? "max-h-[1200px] opacity-100 mt-5" : "max-h-0 opacity-0 mt-0"
+            }`}
+          >
+            <div className="p-4 rounded-xl border border-[#3a3633] bg-[#1e1b18]/50 space-y-6">
+              {/* 1. 업종 소분류 */}
+              <div>
+                <label className={`block text-xs font-medium mb-2 ${textSecondary}`}>
+                  업종 소분류
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {BUSINESS_SUBTYPES[businessType]?.map((sub) => {
+                    const active = businessSubtype === sub;
+                    return (
+                      <button
+                        key={sub}
+                        onClick={() => setBusinessSubtype(active ? "" : sub)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                          active
+                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
+                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
+                        }`}
+                      >
+                        {sub}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. 매장 면적 */}
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className={`text-xs font-medium ${textSecondary}`}>
+                    매장 면적
+                  </label>
+                  <span className={`text-xs font-mono ${accent}`}>{storeArea}평</span>
+                </div>
+                <input
+                  type="range"
+                  min={5}
+                  max={100}
+                  value={storeArea}
+                  onChange={(e) => setStoreArea(Number(e.target.value))}
+                  className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
+                />
+                <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
+                  <span>5평</span>
+                  <span>100평</span>
+                </div>
+              </div>
+
+              {/* 3. 목표 객단가 */}
+              <div>
+                <label className={`block text-xs font-medium mb-2 ${textSecondary}`}>
+                  목표 객단가
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {PRICE_RANGES.map((range) => {
+                    const active = targetPrice === range.value;
+                    return (
+                      <button
+                        key={range.value}
+                        onClick={() => setTargetPrice(range.value)}
+                        className={`px-2 py-2 rounded-lg text-[11px] font-medium border transition-all ${
+                          active
+                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
+                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
+                        }`}
+                      >
+                        {range.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. 운영 시간대 (멀티 선택) */}
+              <div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <label className={`text-xs font-medium ${textSecondary}`}>
+                    주 타겟 시간대
+                  </label>
+                  <span className="text-[10px] text-[#9ca3af] opacity-60">복수 선택 가능</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {OPERATING_HOURS_OPTIONS.map((hour) => {
+                    const active = operatingHours.includes(hour);
+                    return (
+                      <button
+                        key={hour}
+                        onClick={() => toggleOperatingHour(hour)}
+                        className={`py-2 rounded-lg text-[11px] font-medium border transition-all ${
+                          active
+                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
+                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
+                        }`}
+                      >
+                        {hour}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 5. 초기 자본금 */}
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className={`text-xs font-medium ${textSecondary}`}>
+                    초기 자본금
+                  </label>
+                  <span className={`text-xs font-mono ${accent}`}>
+                    {initialCapital >= 10000
+                      ? `${(initialCapital / 10000).toFixed(1)}억`
+                      : `${initialCapital}만`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={1000}
+                  max={50000}
+                  step={500}
+                  value={initialCapital}
+                  onChange={(e) => setInitialCapital(Number(e.target.value))}
+                  className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
+                />
+                <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
+                  <span>1천만</span>
+                  <span>5억</span>
+                </div>
+              </div>
+
+              <p className={`text-[10px] ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}>
+                * 권리금/보증금 제외, 인테리어·초기 운영비 기준
+              </p>
+            </div>
+          </div>
+
+          {/* ─────────── RUN SIMULATION (맨 아래) ─────────── */}
+          <button
+            onClick={runSim}
+            disabled={reportState === "loading"}
+            className={`w-full mt-6 py-3.5 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${
+              reportState === "loading"
+                ? "opacity-50 cursor-not-allowed"
+                : "hover:scale-[1.02] active:scale-[0.98]"
+            } bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:from-[#4f46e5] hover:to-[#6366f1]`}
+          >
+            <Play size={16} />
+            RUN SIMULATION
+          </button>
         </div>
 
         {/* Right panel — Visualization */}
@@ -1686,8 +1937,8 @@ function SimulatorDashboard({
           )}
 
           {reportState === "result" && (
-            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-28 md:pt-32 lg:overflow-hidden overflow-y-auto flex flex-col">
-              <div className="max-w-[1600px] w-full mx-auto flex flex-col h-full gap-4">
+            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-28 md:pt-32 overflow-y-auto custom-scrollbar flex flex-col pb-12">
+              <div className="max-w-[1600px] w-full mx-auto flex flex-col gap-6">
 
                 {/* Header & Nav */}
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
@@ -1698,7 +1949,7 @@ function SimulatorDashboard({
                   <div className="flex items-center gap-3">
                     <button className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"><Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> 2026. 04.</button>
                     <div className="relative">
-                      <button onClick={() => setIsDownloadOpen(!isDownloadOpen)} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                      <button onClick={() => setIsDownloadOpen(!isDownloadOpen)} className="flex items-center gap-2 px-3 py-2 bg-transparent border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500 rounded-lg text-[11px] font-bold transition-colors">
                         <Download className="w-3.5 h-3.5" /> 다운로드 <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
                       </button>
                       {isDownloadOpen && (
@@ -1723,11 +1974,11 @@ function SimulatorDashboard({
                 </div>
 
                 {/* Main Dashboard Body */}
-                <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
+                <div className="flex flex-col lg:flex-row gap-6">
                   {/* Left Column */}
-                  <div className="flex-1 lg:flex-[2] flex flex-col gap-4 min-h-0">
+                  <div className="lg:flex-[2] flex flex-col gap-6">
                     {/* Chart */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col shrink-0 h-[220px]">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 pb-10 shadow-xl flex flex-col h-[320px]">
                       <div className="flex justify-between items-end mb-4">
                         <div>
                           <h2 className="text-sm font-bold text-white">{chartView === "daily" ? "시간대별 유동인구 및 매출 (24H)" : "LSTM 12개월 매출 추이 예측 (12M)"}</h2>
@@ -1758,22 +2009,22 @@ function SimulatorDashboard({
                             <linearGradient id="grayGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#a3a3a3" stopOpacity="0.5" /><stop offset="100%" stopColor="#a3a3a3" stopOpacity="0" /></linearGradient>
                           </defs>
                         </svg>
-                        <div className="absolute bottom-0 left-0 w-full flex justify-between text-[10px] text-[#d1d5db] font-mono pl-2">
+                        <div className="absolute -bottom-3 left-0 w-full flex justify-between text-[10px] text-[#d1d5db] font-mono pl-2">
                           {chartView === "daily" ? <><span>06:00</span><span>10:00</span><span>14:00</span><span>18:00</span><span>22:00</span><span>02:00</span></> : <><span>1M</span><span>3M</span><span>6M</span><span>9M</span><span>12M</span></>}
                         </div>
                       </div>
                     </div>
 
                     {/* Table */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col flex-1 min-h-0">
-                      <div className="p-4 border-b border-[#3a3633] shrink-0 flex justify-between items-center">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col flex-1">
+                      <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
                         <h2 className="text-sm font-bold text-white">상세 데이터 테이블</h2>
                         <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
                           <button onClick={() => setTableView("cannibalization")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "cannibalization" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>가맹점 간섭도</button>
                           <button onClick={() => setTableView("neighborhoods")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "neighborhoods" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>행정동 비교</button>
                         </div>
                       </div>
-                      <div className="overflow-y-auto flex-1">
+                      <div className="flex-1">
                         <table className="w-full text-left border-collapse">
                           <thead className="sticky top-0 bg-[#1e1b18]/90 backdrop-blur-sm z-10">
                             <tr className="text-[11px] font-mono text-[#9ca3af] uppercase tracking-wider">
@@ -1803,13 +2054,18 @@ function SimulatorDashboard({
                           </tbody>
                         </table>
                       </div>
+                      {/* Footer — 빈 공간을 채우는 메타 정보 */}
+                      <div className="px-5 py-3 border-t border-[#3a3633] flex justify-between items-center text-[10px] font-mono text-[#9ca3af]">
+                        <span>총 4건 · {tableView === "cannibalization" ? "가맹점 간섭도 분석" : "행정동 비교 분석"}</span>
+                        <span className="opacity-70">UPDATED 2026.04.08</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Right Column */}
-                  <div className="flex-1 lg:flex-[1] flex flex-col gap-4 min-h-0">
+                  <div className="lg:flex-[1] flex flex-col gap-6">
                     {/* Radar Chart */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center shrink-0">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center">
                       <div className="w-full text-left mb-2">
                         <h2 className="text-sm font-bold text-white">상권 종합 지표 분석 (7 Core Metrics)</h2>
                         <p className="text-[11px] text-indigo-400">에이전트 노드 분석 결과 통합 데이터</p>
@@ -1833,9 +2089,9 @@ function SimulatorDashboard({
                     </div>
 
                     {/* Insights */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col flex-1 min-h-0">
-                      <h2 className="text-sm font-bold text-white mb-1">SPOTTER AI 인사이트</h2>
-                      <div className="overflow-y-auto flex-1 space-y-3 pr-1 mt-3">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col flex-1">
+                      <h2 className="text-sm font-bold text-white mb-3">SPOTTER AI 인사이트</h2>
+                      <div className="space-y-3">
                         <InsightCard icon={<TrendingUp className="w-4 h-4 text-indigo-400" />} title="저녁 시간대 매출 집중형" desc="18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다." />
                         <div className="flex gap-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
                           <div className="shrink-0 mt-0.5"><Scale className="w-4 h-4 text-rose-500" /></div>
@@ -1846,7 +2102,7 @@ function SimulatorDashboard({
                         </div>
                         <InsightCard icon={<Users className="w-4 h-4 text-indigo-400" />} title="2030 여성 타겟 구역" desc="SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가." />
                       </div>
-                      <button className="w-full mt-3 py-2 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-md text-xs font-bold text-white transition-colors flex items-center justify-center gap-2 group shrink-0">
+                      <button className="w-full mt-auto py-2.5 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-md text-xs font-bold text-white transition-colors flex items-center justify-center gap-2 group">
                         상세 리포트 보기 <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                       </button>
                     </div>
@@ -1930,7 +2186,7 @@ function StatCard({ title, value, trend, trendUp, icon, sparkline }: {
   icon: React.ReactElement; sparkline: string;
 }) {
   return (
-    <div className="bg-[#2c2825] border border-[#3a3633] p-4 rounded-xl flex flex-col justify-between group hover:border-indigo-500/50 transition-colors h-[110px]">
+    <div className="bg-[#2c2825] border border-[#3a3633] p-6 rounded-xl flex flex-col justify-between gap-3 group hover:border-indigo-500/50 transition-colors min-h-[130px]">
       <div className="flex justify-between items-start">
         <p className="text-[#9ca3af] text-xs font-medium">{title}</p>
         <div className="text-[#9ca3af] opacity-50 group-hover:opacity-100 group-hover:text-indigo-400 transition-colors">
@@ -2176,7 +2432,15 @@ export default function App() {
             </button>
             <span className="text-border">/</span>
             <button
-              onClick={() => transitionTo(scene === "simulator" ? "accordion" : "intro")}
+              onClick={() => {
+                // 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
+                // (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
+                if (scene === "simulator" && reportState === "result") {
+                  window.history.back();
+                  return;
+                }
+                transitionTo(scene === "simulator" ? "accordion" : "intro");
+              }}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
             >
               <ChevronRight size={14} className="rotate-180" />
