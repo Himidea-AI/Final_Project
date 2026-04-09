@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PREDICT_CONFIG: dict = {
     "db_url": DB_URL,
-    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo.pt"),
-    "scalers_path": str(WEIGHTS_DIR / "finetune_scalers.pkl"),
+    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_v6b.pt"),
+    "scalers_path": str(WEIGHTS_DIR / "finetune_v6b_scalers.pkl"),
     "window_size": 6,
-    "hidden_size": 64,
+    "hidden_size": 256,
     "num_layers": 2,
     "dropout": 0.2,
     "target_col": "monthly_sales",
@@ -157,13 +157,14 @@ def predict(
             pred_scaled = model(current_seq)  # (1, 1)
             pred_val = pred_scaled.cpu().numpy().flatten()[0]
 
-            # 역변환 (스케일러)
-            pred_original = tgt_scaler.inverse_transform([[pred_val]])[0][0]
-            predictions.append(float(pred_original))
+            # 역변환 (스케일러 → 로그 역변환)
+            pred_log = tgt_scaler.inverse_transform([[pred_val]])[0][0]
+            pred_original = float(np.expm1(pred_log))  # log1p 역변환
+            predictions.append(pred_original)
 
             # 다음 입력 시퀀스 구성 (sliding window)
             new_step = current_seq[0, -1, :].clone()  # 마지막 타임스텝 복사
-            new_step[target_idx] = pred_val  # 예측값으로 타겟 피처 업데이트
+            new_step[target_idx] = float(pred_val)  # 예측값으로 타겟 피처 업데이트
             new_step = new_step.unsqueeze(0).unsqueeze(0)  # (1, 1, features)
             current_seq = torch.cat([current_seq[:, 1:, :], new_step], dim=1)
 
