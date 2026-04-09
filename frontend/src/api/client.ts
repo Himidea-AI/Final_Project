@@ -23,10 +23,34 @@ import type {
 
 
 
+/**
+ * [v11.5 멀티테넌시 사전 준비]
+ * ⚠️ 임시 mock workspace ID — 데모 단일 테넌트용
+ * 백엔드 RBAC 준비되면 JWT payload에서 workspace_id를 추출하여 교체 예정.
+ *
+ * 백엔드 합의사항 (팀 회의 결과):
+ *   - Type: String (UUID 형식)
+ *   - Column name: workspace_id
+ *   - Delivery: FastAPI Dependency Injection
+ *   - Header: X-Tenant-ID
+ *   - JWT workspace_id ↔ X-Tenant-ID 이중 검증 (불일치 시 403)
+ */
+const MOCK_WORKSPACE_ID = "spotter-demo-workspace-01";
+
 const apiClient = axios.create({
   baseURL: "/api",
   timeout: 120000,
   headers: { "Content-Type": "application/json" },
+});
+
+/**
+ * 요청 인터셉터: 모든 API 호출에 X-Tenant-ID 헤더 자동 주입
+ * Nginx → FastAPI 미들웨어가 이 헤더를 받아 workspace 컨텍스트 결정
+ */
+apiClient.interceptors.request.use((config) => {
+  // TODO: 실제 인증 구현 시 JWT에서 workspace_id 추출하여 교체
+  config.headers["X-Tenant-ID"] = MOCK_WORKSPACE_ID;
+  return config;
 });
 
 /** 서버 상태 확인 */

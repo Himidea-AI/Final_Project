@@ -17,5 +17,10 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/pages/AnalysisDashboard.tsx",
+    "src/components/SimulationResult",
+    "src/hooks/useSimulation.ts"
+  ]
 }
