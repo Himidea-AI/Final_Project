@@ -25,6 +25,7 @@
 | 1 | 백엔드 ↔ 프론트 API 연결 검증 | ✅ 완료 | E2E 8/8 통과, `/api/health`, `/api/report/{id}`, `/api/status/{id}` |
 | 2 | Nginx 리버스 프록시 설정 (`nginx/default.conf`) | ✅ 완료 | gzip, WebSocket, 타임아웃, 디버그 로그 포맷 |
 | 3 | dev 브랜치 최신 변경사항 기반 Docker 통합 빌드 검증 | ✅ 완료 | Alembic, 헬스체크, depends_on condition 적용 |
+| 4 | 백엔드 Dockerfile 경량화 계획 수립 및 적용 | 🔲 미착수 | Multi-stage 빌드 적용, 이미지 크기 축소 |
 
 ---
 

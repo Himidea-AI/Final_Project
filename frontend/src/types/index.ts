@@ -4,7 +4,8 @@
 
 /** 시뮬레이션 요청 입력 */
 export interface SimulationInput {
-  business_type: "cafe" | "restaurant" | "convenience";
+  business_type: string; // "cafe" | "restaurant" | "convenience" 등 확장 가능성 고려
+  business_subtype?: string;
   brand_name: string;
   target_district: string;
   existing_stores: ExistingStore[];
@@ -12,6 +13,13 @@ export interface SimulationInput {
   monthly_rent: number;
   simulation_months: number;
   scenarios: string[];
+  // New fields
+  store_area?: number;
+  target_price_range?: string;
+  operating_hours?: string[];
+  initial_capital?: number;
+  use_weighted_population?: boolean;
+  radius_m?: number;
 }
 
 /** 기존 매장 정보 */
@@ -49,11 +57,21 @@ export interface LegalRisk {
 export interface SimulationOutput {
   request_id: string;
   target_district: string;
+  analysis_report: string;    // 줄글 리포트
+  analysis_metrics: AnalysisMetrics; // 차트용 정량 데이터
   simulation_months: number;
   monthly_projection: MonthlyProjection[];
   comparison: DistrictComparison[];
   legal_risks: LegalRisk[];
-  ai_recommendation: string;
+  ai_recommendation?: string; // 기존 호환성 유지
+  map_data?: any;
+}
+
+export interface AnalysisMetrics {
+  district_grade: 'EXCELLENT' | 'GOOD' | 'NORMAL' | 'RISKY';
+  growth_rate: number;
+  competition_score: number;
+  rent_affordability: string;
 }
 
 /** Job 상태 */

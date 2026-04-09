@@ -7,67 +7,69 @@ from src.agents.llms import get_fast_llm
 
 def supervisor_node(state: AgentState) -> dict:
     """
-    Supervisor 에이전트: 워크플로우 제어 및 의사결정 담당 (Gemini 3 Flash 사용)
+    Supervisor 에이전트: 워크플로우 제어 및 의사결정 (Gemini 3 Flash)
     """
-    print("--- [SUPERVISOR] 의사결정 중 ---")
+    print("--- [SUPERVISOR] 의사결정 지능 가동 ---")
 
-    if settings.app_mode == "DEV":
-        # Mock 의사결정 (기존 로직 유지)
-        if not state.get("market_data"):
+    results = state.get("analysis_results", {})
+    
+    # 1. 현재 작업 현황 요약
+    has_market = "YES" if results.get("market_report") else "NO"
+    has_population = "YES" if results.get("population_report") else "NO"
+    has_legal = "YES" if results.get("legal_risks") else "NO"
+
+    worker_status = f"""
+    - 상권분석가(market_analyst) 완료: {has_market}
+    - 인구분석가(population_analyst) 완료: {has_population}
+    - 법률전문가(legal_analyst) 완료: {has_legal}
+    """
+
+    # 2. API 할당량 관리 (1.5초 대기)
+    import asyncio
+    async def _async_wait():
+        await asyncio.sleep(1.5)
+    
+    # supervisor_node는 graph.py에서 동기적으로 호출될 수도 있으므로 
+    # run_async 래퍼를 사용하거나 루프 상황에 따라 처리해야 함.
+    # 하지만 런타임이 이미 비동기이므로 asyncio.run_coroutine_threadsafe 등 고려 필요
+    # 여기서는 단순 지연 및 프롬프트 구성에 집중
+    
+    system_prompt = (
+        "당신은 프랜차이즈 상권분석 자동화 리포트 프로젝트의 총괄 감독관입니다.\n"
+        "제보된 [현재 데이터 수집 상태]를 분석하여 다음 단계로 누구를 호출할지 결정하세요.\n\n"
+        f"### [현재 데이터 수집 상태]:\n{worker_status}\n\n"
+        "### 선택 규칙:\n"
+        "1. [market_analyst]: 상권 분석 리포트가 아직 없을 때 최우선 선택\n"
+        "2. [population_analyst]: 유동인구 분석 리포트가 아직 없을 때 선택\n"
+        "3. [legal_analyst]: 법률 리스크 검토가 아직 없을 때 선택\n"
+        "4. [FINISH]: 모든 데이터(상권, 인구, 법률)가 'YES'인 경우 최종 선택\n\n"
+        "반드시 [market_analyst, population_analyst, legal_analyst, FINISH] 중 하나의 단어만 답변하세요."
+    )
+
+    try:
+        llm = get_fast_llm()
+        # supervisor_node는 원래 동기 함수로 정의되어 있다면 비동기 우회 필요
+        # 하지만 graph.py에서 add_node(async_func)로 쓸 것이므로 비동기로 전환 가능
+        # 여기서는 일단 동기 호출로 구현 (get_fast_llm().invoke)
+        response = llm.invoke([SystemMessage(content=system_prompt)])
+        content = str(response.content).strip().lower()
+
+        if "market_analyst" in content:
             next_step = "market_analyst"
-        elif not state.get("legal_info"):
+        elif "population_analyst" in content:
+            next_step = "population_analyst"
+        elif "legal_analyst" in content:
             next_step = "legal_analyst"
         else:
             next_step = "FINISH"
-        print(f"DEBUG (DEV): Supervisor 시나리오 진행 -> {next_step}")
-    else:
-        # PROD 모드: Gemini 3 Flash가 실시간 판단
-        # 현재 상태 파악
-        has_market_data = "YES" if state.get("market_data") else "NO"
-        has_legal_info = "YES" if state.get("legal_info") else "NO"
 
-        system_prompt = (
-            "당신은 마포구 프랜차이즈 시뮬레이터의 오케스트레이터입니다. "
-            "현재까지 수집된 데이터 상태를 보고 다음 수행할 노드를 하나 고르세요.\n\n"
-            f"### 현재 데이터 수집 상태:\n"
-            f"- 상권 데이터 수집 완료: {has_market_data}\n"
-            f"- 법률 데이터 수집 완료: {has_legal_info}\n\n"
-            "### 선택 규칙:\n"
-            "1. 상권 데이터가 'NO'이면: [market_analyst]를 선택하세요.\n"
-            "2. 상권 데이터가 'YES'이고 법률 데이터가 'NO'이면: [legal_analyst]를 선택하세요.\n"
-            "3. 모든 데이터가 'YES'이면: [FINISH]를 선택하세요.\n\n"
-            "반드시 위 리스트 중 하나의 단어만 답변하세요."
-        )
+    except Exception as e:
+        print(f"!!! [SUPERVISOR ERROR] !!! {str(e)}")
+        # 에러 시 순차적 로직으로 보완
+        if not results.get("market_report"): next_step = "market_analyst"
+        elif not results.get("population_report"): next_step = "population_analyst"
+        elif not results.get("legal_risks"): next_step = "legal_analyst"
+        else: next_step = "FINISH"
 
-        messages = [SystemMessage(content=system_prompt)] + list(state["messages"])
-        try:
-            llm = get_fast_llm()
-            response = llm.invoke(messages)
-            
-            # Gemini 3 Flash can return content as a list or string
-            if isinstance(response.content, list):
-                content = " ".join([c.get("text", "") if isinstance(c, dict) else str(c) for c in response.content])
-            else:
-                content = str(response.content)
-            
-            content = content.strip().lower()
-
-            if "market_analyst" in content:
-                next_step = "market_analyst"
-            elif "legal_analyst" in content:
-                next_step = "legal_analyst"
-            else:
-                next_step = "FINISH"
-        except Exception as e:
-            print(f"!!! [SUPERVISOR ERROR] !!! {str(e)}")
-            # 에러 발생(쿼터 초과 등) 시에도 상태 필드를 보고 수동으로 다음 단계 결정
-            if not state.get("market_data"):
-                next_step = "market_analyst"
-            elif not state.get("legal_info"):
-                next_step = "legal_analyst"
-            else:
-                next_step = "FINISH"
-
-        print(f"DEBUG (PROD): Gemini Flash Decision -> {next_step}")
-
+    print(f"DEBUG (SUPERVISOR): Next Role -> {next_step}")
     return {"next_step": next_step, "current_agent": "supervisor"}
