@@ -62,6 +62,7 @@ POP_FEATURES = [
     "total_pop",
     "avg_age",
     "total_households",
+    "resident_pop",  # 주민등록 주거인구 (마포구 분기별)
 ]
 
 RENT_FEATURES = [
@@ -72,6 +73,7 @@ RENT_FEATURES = [
 EXTRA_FEATURES = [
     "cpi_index",
     "quarter_num",  # 계절성 피처 (1~4)
+    "trend_score",  # 네이버 검색 트렌드 (서울 전체)
 ]
 
 ALL_FEATURES = SALES_FEATURES + STORE_FEATURES + POP_FEATURES + RENT_FEATURES + EXTRA_FEATURES
@@ -136,8 +138,8 @@ def load_sales_data(
             df = pd.read_csv(csv_path, dtype={"dong_code": str})
             logger.info("CSV에서 로드 완료: %s (%d rows)", csv_path, len(df))
         else:
-            # 개별 파일 시도
-            sales_csv = DATA_DIR / "district_sales.csv"
+            # 개별 파일 시도 (dong_prefix 없으면 서울 전체 우선)
+            sales_csv = DATA_DIR / ("seoul_district_sales.csv" if dong_prefix is None else "district_sales.csv")
             if sales_csv.exists():
                 df = pd.read_csv(sales_csv, dtype={"dong_code": str, "행정동코드": str})
                 # rename if needed (원본 한글 컬럼명 → 영문)
@@ -192,7 +194,7 @@ def load_store_data(
         if csv_path and Path(csv_path).exists():
             df = pd.read_csv(csv_path, dtype={"dong_code": str})
         else:
-            stores_csv = DATA_DIR / "district_stores.csv"
+            stores_csv = DATA_DIR / ("seoul_district_stores.csv" if dong_prefix is None else "district_stores.csv")
             if stores_csv.exists():
                 df = pd.read_csv(stores_csv, dtype={"dong_code": str, "행정동코드": str})
                 store_rename = {
@@ -243,9 +245,11 @@ def build_timeseries(
     # 매출 테이블에서 사용 가능한 피처만 선택
     sales_cols = [c for c in SALES_FEATURES if c in sales_df.columns]
     key_cols = ["quarter", "dong_code", "industry_code"]
+    extra_cols = ["dong_name"]  # 트렌드 매칭용
     avail_keys = [c for c in key_cols if c in sales_df.columns]
+    avail_extra = [c for c in extra_cols if c in sales_df.columns]
 
-    df = sales_df[avail_keys + sales_cols].copy()
+    df = sales_df[avail_keys + avail_extra + sales_cols].copy()
 
     # 점포 데이터 병합
     if store_df is not None and not store_df.empty:
@@ -271,25 +275,46 @@ def build_timeseries(
         dong_demo = pd.read_csv(demo_csv, dtype={"dong_code": str})
         df = df.merge(dong_demo[["dong_code", "avg_age", "total_households"]], on="dong_code", how="left")
 
-    # 임대료
-    rent_csv = DATA_DIR / "golmok_rent_export.csv"
-    if rent_csv.exists() and "quarter" in df.columns and "dong_code" in df.columns:
-        rent_df = pd.read_csv(rent_csv, dtype={"dong_code": str})
-        rent_df["quarter"] = pd.to_numeric(rent_df["quarter"], errors="coerce")
-        df = df.merge(rent_df[["quarter", "dong_code", "rent_1f"]], on=["quarter", "dong_code"], how="left")
+    # 주거인구 (마포구 분기별)
+    resident_csv = DATA_DIR / "mapo_resident_pop_quarterly.csv"
+    if resident_csv.exists() and "quarter" in df.columns and "dong_code" in df.columns:
+        res_df = pd.read_csv(resident_csv, dtype={"dong_code": str})
+        df = df.merge(res_df[["quarter", "dong_code", "resident_pop"]], on=["quarter", "dong_code"], how="left")
 
-    # 공실률
+    # 임대료 (서울 전체 행정동 단위 — DB)
+    try:
+        from sqlalchemy import create_engine
+
+        engine = create_engine(DB_URL + "?connect_timeout=3", echo=False)
+        rent_df = pd.read_sql(
+            "SELECT dong_code, quarter_code AS quarter, rent_1f FROM seoul_golmok_rent WHERE rent_1f IS NOT NULL",
+            engine,
+        )
+        rent_df["dong_code"] = rent_df["dong_code"].astype(str)
+        df = df.merge(rent_df, on=["quarter", "dong_code"], how="left")
+        engine.dispose()
+    except Exception:
+        pass
+
+    # 공실률 (분기별 평균으로 집계 — 원본이 지역별 여러 행)
     vacancy_csv = DATA_DIR / "vacancy_rate_export.csv"
     if vacancy_csv.exists() and "quarter" in df.columns:
         vacancy_df = pd.read_csv(vacancy_csv)
         vacancy_df["quarter"] = vacancy_df["year"] * 10 + vacancy_df["q_num"]
-        df = df.merge(vacancy_df[["quarter", "vacancy_rate"]], on="quarter", how="left")
+        vacancy_agg = vacancy_df.groupby("quarter", as_index=False)["vacancy_rate"].mean()
+        df = df.merge(vacancy_agg, on="quarter", how="left")
 
     # CPI 병합
     cpi_csv = DATA_DIR / "cpi_dining_quarterly.csv"
     if cpi_csv.exists() and "quarter" in df.columns:
         cpi_df = pd.read_csv(cpi_csv)
         df = df.merge(cpi_df[["quarter", "cpi_index"]], on="quarter", how="left")
+
+    # 네이버 트렌드 병합 (서울 전체)
+    trend_csv = DATA_DIR / "naver_trend_seoul_quarterly.csv"
+    if trend_csv.exists() and "quarter" in df.columns and "dong_name" in df.columns:
+        trend_df = pd.read_csv(trend_csv)
+        df = df.merge(trend_df, on=["quarter", "dong_name"], how="left")
 
     # 계절성 피처 추가 (분기 번호 1~4)
     if "quarter" in df.columns:
