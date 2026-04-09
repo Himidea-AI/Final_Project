@@ -12,15 +12,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 가상 환경 생성 (최종 런타임 이미지에 쉽게 복사하기 위함)
+ENV PYTHONDONTWRITEBYTECODE=1
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY requirements.txt .
+# 프로젝트 루트 컨텍스트에서 백엔드 환경 설정 파일 복사
+COPY backend/requirements.txt .
 
-# BuildKit 캐시를 활용하여 자주 재빌드되는 경우 속도 최적화
+# BuildKit 캐시 및 PyTorch CPU 전용 인덱스를 활용하여 컴파일 최적화 및 경량화 설치
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install --compile --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
 # === 2. Runtime Stage ===
 FROM python:3.12-slim AS runtime
@@ -38,9 +40,12 @@ COPY --from=builder /opt/venv /opt/venv
 
 # 가상 환경 환경변수 등록 (가상환경의 파이썬/uvicorn을 우선 사용)
 ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONDONTWRITEBYTECODE=1
 
-# 애플리케이션 소스 코드 복사
-COPY . .
+# 애플리케이션 소스 코드 및 주요 AI 모듈 복사 (Context: 프로젝트 루트)
+COPY backend/ .
+COPY models/ ./models
+COPY data/ ./data
 
 EXPOSE 8000
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

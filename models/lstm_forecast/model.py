@@ -133,6 +133,27 @@ class LSTMForecaster(nn.Module):
         state = torch.load(path, map_location="cpu", weights_only=True)
         self.load_state_dict(state, strict=strict)
 
+    def load_weights_partial(self, path: str | Path) -> None:
+        """input_size가 다른 사전학습 가중치를 부분 복사로 로드한다.
+
+        LSTM weight_ih 레이어는 기존 피처 수만큼만 복사하고,
+        나머지 레이어(Attention, FC)는 그대로 로드한다.
+        추가된 피처에 대한 가중치는 랜덤 초기화 상태로 유지.
+        """
+        pretrained = torch.load(path, map_location="cpu", weights_only=True)
+        current = self.state_dict()
+
+        for key in pretrained:
+            if key in current:
+                if pretrained[key].shape == current[key].shape:
+                    current[key] = pretrained[key]
+                elif "weight_ih" in key:
+                    # LSTM input 가중치: 기존 피처 수만큼만 복사
+                    min_feat = min(pretrained[key].shape[1], current[key].shape[1])
+                    current[key][:, :min_feat] = pretrained[key][:, :min_feat]
+
+        self.load_state_dict(current)
+
     # ------------------------------------------------------------------
     # Freeze / Unfreeze (전이학습용)
     # ------------------------------------------------------------------
