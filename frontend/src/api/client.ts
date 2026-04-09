@@ -21,7 +21,7 @@ import type {
   AnalysisResult,
 } from "../types";
 
-const USE_MOCK = true;
+
 
 const apiClient = axios.create({
   baseURL: "/api",
@@ -31,7 +31,6 @@ const apiClient = axios.create({
 
 /** 서버 상태 확인 */
 export async function healthCheck() {
-  if (USE_MOCK) return { status: "ok", mock: true };
   const response = await apiClient.get("/health");
   return response.data;
 }
@@ -40,94 +39,6 @@ export async function healthCheck() {
 export async function runSimulation(
   input: SimulationInput
 ): Promise<SimulationOutput> {
-  if (USE_MOCK) {
-    // 현실적 Mock — 백엔드 응답 형태와 동일
-    return new Promise((resolve) =>
-      setTimeout(
-        () =>
-          resolve({
-            request_id: `mock-${Date.now()}`,
-            target_district: input.target_district,
-            simulation_months: input.simulation_months,
-            analysis_report: `### ${input.target_district} 상권 정밀 분석 리포트\n\n현재 ${input.target_district} 지역은 **성장기**에 진입해 있으며, 최근 6개월간 배달 수요가 15.4% 증가했습니다. 주변 경쟁 업종의 밀도는 다소 높으나, 타겟 브랜드의 인지도를 고려할 때 충분한 시장 점유가 가능할 것으로 예상됩니다.\n\n#### 주요 요인\n- **유동인구**: 주말 평균 4.2만 명 (전년 대비 8% 상승)\n- **임대료**: 평당 평균 18만 원 (인근 지역 대비 적정 수준)\n- **위험요소**: 반경 300m 내 저가형 커피 프랜차이즈 4개 입점 중`,
-            analysis_metrics: {
-              district_grade: "GOOD",
-              growth_rate: 15.4,
-              competition_score: 72,
-              rent_affordability: "MODERATE",
-            },
-            monthly_projection: Array.from({ length: 12 }, (_, i) => ({
-              month: i + 1,
-              revenue: Math.round(2800 + Math.random() * 1200),
-              cumulative_profit: Math.round(
-                (i + 1) * 400 - 3000 + Math.random() * 500
-              ),
-            })),
-            comparison: [
-              {
-                district: "서교동",
-                score: 87,
-                revenue: 3240,
-                bep: 8,
-                survival: 78,
-                cannibalization: 0.32,
-              },
-              {
-                district: "합정동",
-                score: 82,
-                revenue: 2980,
-                bep: 9,
-                survival: 74,
-                cannibalization: 0.18,
-              },
-              {
-                district: "망원1동",
-                score: 79,
-                revenue: 2760,
-                bep: 10,
-                survival: 71,
-                cannibalization: 0.12,
-              },
-              {
-                district: "연남동",
-                score: 85,
-                revenue: 3120,
-                bep: 7,
-                survival: 80,
-                cannibalization: 0.25,
-              },
-              {
-                district: "상암동",
-                score: 73,
-                revenue: 2450,
-                bep: 12,
-                survival: 65,
-                cannibalization: 0.05,
-              },
-            ],
-            legal_risks: [
-              {
-                type: "가맹사업법 영업지역 보호",
-                risk_level: "HIGH",
-                detail:
-                  "반경 500m 내 동일 브랜드 매장 존재. 가맹사업법 제12조의4에 따른 영업지역 침해 가능성.",
-              },
-              {
-                type: "상가임대차보호법",
-                risk_level: "MEDIUM",
-                detail:
-                  "해당 상가 보증금이 환산보증금 기준 초과. 상가임대차보호법 적용 범위 확인 필요.",
-              },
-            ],
-            ai_recommendation:
-              "서교동은 유동인구 밀도와 카페 수요 지표가 높아 입점에 유리하지만, 반경 500m 내 동일 브랜드 매장(1호점)이 존재하여 카니발리제이션 위험이 32%로 산출됩니다. 합정동 또는 연남동을 대안으로 검토하시기 바랍니다.",
-          }),
-        2500
-      )
-    );
-
-  }
-
   const response = await apiClient.post("/simulate", input);
   return response.data;
 }
@@ -136,45 +47,6 @@ export async function runSimulation(
 export async function analyzeLocation(
   input: SimulationInput
 ): Promise<AnalysisResult> {
-  if (USE_MOCK) {
-    return new Promise((resolve) =>
-      setTimeout(
-        () =>
-          resolve({
-            status: "success",
-            data: {
-              summary: `${input.target_district} 분석 완료: 유동인구 상위 20%, 임대료 중간, 경쟁 강도 보통`,
-              map_data: {
-                center: { lat: 37.5565, lng: 126.9239 },
-                markers: [
-                  { id: "1", lat: 37.5565, lng: 126.9239, label: input.target_district, type: "candidate" },
-                  { id: "2", lat: 37.5545, lng: 126.9219, label: "기존 1호점", type: "existing" },
-                ],
-              },
-              market_report: {
-                floating_population: 82,
-                rent_index: 45,
-                competition_intensity: 68,
-                estimated_revenue: 74,
-                survival_rate: 91,
-                growth_potential: 56,
-                accessibility: 78,
-              },
-              legal_report: [
-                {
-                  type: "가맹사업법 영업지역 보호",
-                  risk_level: "HIGH",
-                  detail: "영업지역 중첩 가능성 감지",
-                },
-              ],
-              full_analysis: null,
-            },
-          }),
-        2000
-      )
-    );
-  }
-
   const response = await apiClient.post("/analyze", input);
   return response.data;
 }
@@ -189,9 +61,6 @@ export async function getReport(
 
 /** 시뮬레이션 진행 상태 조회 */
 export async function getStatus(jobId: string): Promise<JobStatus> {
-  if (USE_MOCK) {
-    return { job_id: jobId, status: "completed", progress: 100 };
-  }
   const response = await apiClient.get(`/status/${jobId}`);
   return response.data;
 }

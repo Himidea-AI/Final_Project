@@ -21,3 +21,9 @@ class SimulationInput(BaseModel):
     monthly_rent: int = Field(default=0, description="월 임대료 (원, 0이면 자동 추정)")
     simulation_months: int = Field(default=12, description="시뮬레이션 기간 (개월)")
     scenarios: list[str] = Field(default_factory=lambda: ["base"], description="시나리오 목록")
+
+    # New advanced fields
+    store_area: float = Field(default=15.0, description="점포 면적 (평)")
+    target_price_range: str = Field(default="12000", description="예상 객단가")
+    operating_hours: list[str] = Field(default_factory=lambda: ["10:00", "22:00"], description="영업 시간 (시작, 종료)")
+    initial_capital: int = Field(default=150_000_000, description="초기 자본금 (원)")

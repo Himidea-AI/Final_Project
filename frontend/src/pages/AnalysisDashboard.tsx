@@ -1,3 +1,8 @@
+// 🚨 [AI 개발 규칙: TEAMMATE UI PROTECTED]
+// 1. 이 파일의 JSX 구조, Tailwind 클래스, 컴포넌트 배치는 프론트엔드 팀원의 자산입니다.
+// 2. 안티그래비티는 오직 '데이터 바인딩(value, onChange)'과 '결과 출력 로직'만 수정할 수 있습니다.
+// 3. UI 레이아웃을 변경해야 할 경우 반드시 사용자(담당자)에게 먼저 허락을 구하십시오.
+
 import React, { useState, useEffect } from 'react';
 import { useSimulation } from '../hooks/useSimulation';
 import MetricCharts from '../components/SimulationResult/MetricCharts';
@@ -17,7 +22,7 @@ const LOADING_STEPS = [
 const AnalysisDashboard: React.FC = () => {
   const { execute, loading, error, result } = useSimulation();
   const [district, setDistrict] = useState('서교동');
-  const [brand, setBrand] = useState('메가커피');
+  const [brandName, setBrandName] = useState('메가커피');
 
   // Progress state for procedural loading
   const [progress, setProgress] = useState(0);
@@ -55,22 +60,25 @@ const AnalysisDashboard: React.FC = () => {
       setStatusMessage(LOADING_STEPS[stepIdx].m);
     }
   }, [progress, loading]);
+  
 
 
 
-  const handleAnalyze = () => {
+
     execute({
       business_type: 'cafe',
-      brand_name: brand,
+      brand_name: brandName,
       target_district: district,
       existing_stores: [],
       initial_investment: 150000000,
-      monthly_rent: 3500000,
+      monthly_rent: 0,
       simulation_months: 12,
-      scenarios: ['standard']
+      scenarios: ['base']
     });
   };
 
+  // 🚨 [DANGER ZONE: DO NOT TOUCH UI STRUCTURE]
+  // 이 아래 return 문 내부의 JSX 구조는 절대 수정 금지입니다.
   return (
     <div className="min-h-screen bg-[#1e1b18] text-[#e2e8f0] font-sans selection:bg-indigo-500/30">
       {/* 글로벌 헤더 높이만큼 패딩 추가 (pt-24) */}
@@ -107,13 +115,14 @@ const AnalysisDashboard: React.FC = () => {
               <div className="flex flex-col">
                 <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">Brand</span>
                 <input
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
+                  value={brandName}
+                  onChange={(e) => setBrandName(e.target.value)}
                   className="bg-transparent border-none focus:ring-0 text-sm font-bold w-32 text-white p-0"
                   placeholder="브랜드"
                 />
               </div>
             </div>
+
             <button
               onClick={handleAnalyze}
               disabled={loading}
@@ -231,7 +240,7 @@ const AnalysisDashboard: React.FC = () => {
                         className="flex items-start gap-4 p-5 rounded-2xl bg-[#1e1b18] border border-[#3a3633] hover:border-indigo-500/30 transition-colors"
                       >
                         <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px] ${risk.risk_level === 'HIGH' ? 'bg-red-500 shadow-red-500/50' :
-                            risk.risk_level === 'MEDIUM' ? 'bg-amber-500 shadow-amber-500/50' : 'bg-green-500 shadow-green-500/50'
+                          risk.risk_level === 'MEDIUM' ? 'bg-amber-500 shadow-amber-500/50' : 'bg-green-500 shadow-green-500/50'
                           }`} />
                         <div>
                           <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">{risk.type}</p>
@@ -239,6 +248,8 @@ const AnalysisDashboard: React.FC = () => {
                         </div>
                       </motion.div>
                     ))}
+                  </div>
+
                   </div>
                 </div>
               </div>
@@ -272,8 +283,7 @@ const AnalysisDashboard: React.FC = () => {
               </p>
             </motion.div>
           )}
-        </AnimatePresence>
-      </div>
+      </AnimatePresence>
 
       <style>{`
         @keyframes fadeSlideIn {
