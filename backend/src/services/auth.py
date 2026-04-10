@@ -1,5 +1,5 @@
 """
-회원가입 서비스 — 사업자 검증 + 브랜드 매핑 + 회원 저장
+회원 인증 서비스 — 회원가입 + 로그인 + 브랜드 매핑
 """
 
 import uuid
@@ -123,5 +123,63 @@ class AuthService:
                 } if top_brand else None,
             }
 
+        finally:
+            engine.dispose()
+
+    def login(self, email: str, password: str) -> dict:
+        """
+        로그인 처리 — 이메일 + 비밀번호 검증 후 회원 정보 + 브랜드 매핑 반환.
+
+        Returns:
+            dict: 로그인 결과 (회원 정보 + 매핑된 브랜드)
+        """
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT id, company_name, biz_number, contact_name, position, "
+                        "email, phone, store_count, password_hash, plan "
+                        "FROM users WHERE email = :email"
+                    ),
+                    {"email": email},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "가입되지 않은 이메일입니다."}
+
+                user = dict(row._mapping)
+
+                if not _verify_password(password, user["password_hash"]):
+                    return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
+
+                # 브랜드 매핑
+                brands = self._mapper.search_brand_by_company(user["company_name"])
+                top_brand = brands[0] if brands else None
+
+                if top_brand:
+                    top_brand["mapo_store_count"] = self._mapper.count_mapo_stores(
+                        top_brand["brand_name"]
+                    )
+
+                return {
+                    "status": "success",
+                    "user": {
+                        "id": str(user["id"]),
+                        "company_name": user["company_name"],
+                        "contact_name": user["contact_name"],
+                        "email": user["email"],
+                        "phone": user["phone"],
+                        "position": user["position"],
+                        "store_count": user["store_count"],
+                        "plan": user["plan"],
+                    },
+                    "brand": {
+                        "brand_name": top_brand["brand_name"],
+                        "franchise_count": top_brand["franchise_count"],
+                        "avg_sales": top_brand["avg_sales"],
+                        "mapo_store_count": top_brand["mapo_store_count"],
+                    } if top_brand else None,
+                }
         finally:
             engine.dispose()

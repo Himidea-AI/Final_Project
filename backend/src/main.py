@@ -215,6 +215,27 @@ async def signup(req: SignupRequest):
         return {"status": "error", "message": str(e)}
 
 
+# ---------------------------------------------------------------------------
+# 로그인 API
+# ---------------------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/auth/login")
+async def login(req: LoginRequest):
+    """로그인 — 이메일/비밀번호 검증 + 브랜드 정보 반환"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = auth.login(req.email, req.password)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @app.post("/simulate")
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
