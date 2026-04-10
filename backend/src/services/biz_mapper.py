@@ -87,12 +87,14 @@ class BizMapper:
         try:
             with engine.connect() as conn:
                 # 법인명 + 브랜드명 모두 ILIKE 검색
+                # 실제 DB 컬럼: corpNm, brandNm, yr, frcsCnt (CSV 원본 camelCase)
                 rows = conn.execute(
                     text(
-                        "SELECT * FROM ftc_brand_franchise "
-                        "WHERE (corp_name ILIKE :pattern OR brand_name ILIKE :pattern) "
-                        "AND year = '2024' "
-                        "ORDER BY franchise_count DESC "
+                        'SELECT *, "corpNm" as corp_name, "brandNm" as brand_name, '
+                        '"frcsCnt" as franchise_count FROM ftc_brand_franchise '
+                        'WHERE ("corpNm" ILIKE :pattern OR "brandNm" ILIKE :pattern) '
+                        "AND yr = 2024 "
+                        'ORDER BY "frcsCnt" DESC '
                         "LIMIT 20"
                     ),
                     {"pattern": f"%{company_name}%"},
@@ -102,10 +104,11 @@ class BizMapper:
                 if not rows:
                     rows = conn.execute(
                         text(
-                            "SELECT * FROM ftc_brand_franchise "
-                            "WHERE (corp_name ILIKE :pattern OR brand_name ILIKE :pattern) "
-                            "AND year = '2023' "
-                            "ORDER BY franchise_count DESC "
+                            'SELECT *, "corpNm" as corp_name, "brandNm" as brand_name, '
+                            '"frcsCnt" as franchise_count FROM ftc_brand_franchise '
+                            'WHERE ("corpNm" ILIKE :pattern OR "brandNm" ILIKE :pattern) '
+                            "AND yr = 2023 "
+                            'ORDER BY "frcsCnt" DESC '
                             "LIMIT 20"
                         ),
                         {"pattern": f"%{company_name}%"},

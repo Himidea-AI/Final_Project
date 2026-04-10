@@ -70,17 +70,39 @@ export default function SignupForm({ planName, onSuccess }: Props) {
   );
   const touch = (key: string) => setTouched((p) => new Set(p).add(key));
 
-  // Biz number auto-complete simulation
+  // Biz number formatting
   const handleBizChange = (v: string) => {
     const formatted = formatBizNumber(v);
     set("bizNumber", formatted);
-    const digits = formatted.replace(/\D/g, "");
-    if (digits.length === 10 && !bizLoading) {
-      setBizLoading(true);
-      setTimeout(() => {
-        set("companyName", "(주)SPOTTER DEMO");
-        setBizLoading(false);
-      }, 500);
+  };
+
+  // 기업명 blur 시 — 사업자번호 + 기업명 둘 다 있으면 /biz/lookup 호출
+  const handleCompanyBlur = async () => {
+    const digits = form.bizNumber.replace(/\D/g, "");
+    if (digits.length !== 10 || !form.companyName.trim() || bizLoading) return;
+
+    setBizLoading(true);
+    try {
+      const res = await fetch("/api/biz/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          biz_number: digits,
+          company_name: form.companyName.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.status === "success" && data.data?.brands?.length > 0) {
+        const brand = data.data.brands[0];
+        // 기업명 정제 (DB 매칭 결과로 교정)
+        if (brand.corp_name) set("companyName", brand.corp_name);
+        // 가맹점 수 자동 입력
+        if (brand.franchise_count) set("storeCount", String(brand.franchise_count));
+      }
+    } catch {
+      // API 실패 시 사용자 직접 입력 유도 (무시)
+    } finally {
+      setBizLoading(false);
     }
   };
 
@@ -100,16 +122,46 @@ export default function SignupForm({ planName, onSuccess }: Props) {
     pwMatch &&
     form.agreeTerms;
 
-  const handleSubmit = () => {
-    if (!allValid) return;
-    console.log("Signup:", { ...form, plan: planName });
-    onSuccess();
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!allValid || isSubmitting) return;
+    setSubmitError("");
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: form.companyName,
+          bizNumber: form.bizNumber.replace(/\D/g, ""),
+          contactName: form.contactName,
+          position: form.position,
+          email: form.email,
+          phone: form.phone.replace(/\D/g, ""),
+          storeCount: form.storeCount,
+          password: form.password,
+          plan: planName,
+        }),
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        onSuccess();
+      } else {
+        setSubmitError(data.message || "가입 중 오류가 발생했습니다.");
+      }
+    } catch {
+      setSubmitError("서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const fields = [
     // Each field rendered with stagger delay
-    { key: "companyName", label: "기업명 (프랜차이즈 본부명)", type: "text", value: form.companyName, onChange: (v: string) => set("companyName", v), placeholder: "사업자등록번호 입력 시 자동완성", suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#818cf8]" /> : form.companyName ? <CheckCircle size={14} className="text-emerald-400" /> : null },
     { key: "bizNumber", label: "사업자등록번호", type: "text", value: form.bizNumber, onChange: handleBizChange, placeholder: "000-00-00000" },
+    { key: "companyName", label: "기업명 (프랜차이즈 본부명)", type: "text", value: form.companyName, onChange: (v: string) => set("companyName", v), placeholder: "기업명 입력 후 탭 시 자동 매핑", onBlur: handleCompanyBlur, suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#818cf8]" /> : form.companyName ? <CheckCircle size={14} className="text-emerald-400" /> : null },
     { key: "contactName", label: "담당자명", type: "text", value: form.contactName, onChange: (v: string) => set("contactName", v), placeholder: "홍길동" },
     { key: "position", label: "직책", type: "text", value: form.position, onChange: (v: string) => set("position", v), placeholder: "영업기획팀장" },
     { key: "email", label: "업무용 이메일", type: "email", value: form.email, onChange: (v: string) => set("email", v), placeholder: "name@company.com", error: touched.has("email") && form.email && !emailValid ? "올바른 이메일 형식을 입력하세요" : "" },
@@ -132,7 +184,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
               type={f.type}
               value={f.value}
               onChange={(e) => f.onChange(e.target.value)}
-              onBlur={() => touch(f.key)}
+              onBlur={() => { touch(f.key); if ((f as any).onBlur) (f as any).onBlur(); }}
               placeholder={f.placeholder}
               className={`${fieldClass} ${
                 f.error ? "border-red-500" : "border-[#3a3633] focus:border-[#818cf8]"
@@ -227,20 +279,31 @@ export default function SignupForm({ planName, onSuccess }: Props) {
         </label>
       </motion.div>
 
+      {/* Error message */}
+      {submitError && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 text-center"
+        >
+          {submitError}
+        </motion.div>
+      )}
+
       {/* Submit */}
       <motion.button
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5, duration: 0.4 }}
         onClick={handleSubmit}
-        disabled={!allValid}
+        disabled={!allValid || isSubmitting}
         className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
-          allValid
+          allValid && !isSubmitting
             ? "bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
             : "bg-[#2c2825] text-[#9ca3af] cursor-not-allowed"
         }`}
       >
-        가입 완료
+        {isSubmitting ? "가입 처리 중..." : "가입 완료"}
       </motion.button>
     </div>
   );
