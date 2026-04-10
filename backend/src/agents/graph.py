@@ -4,53 +4,30 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage
 
 from src.schemas.state import AgentState
-from src.agents.nodes.supervisor import supervisor_node
-from src.agents.nodes.market_analyst import market_analyst_node
-from src.agents.nodes.population import population_analyst_node
-from src.agents.nodes.legal import legal_analyst_node
-from src.agents.nodes.synthesis import synthesis_node
+from src.agents.nodes.context_analyst import context_analyst_node
+from src.agents.nodes.strategy_synthesizer import strategy_synthesizer_node
 
 
 def build_graph() -> StateGraph:
     """
-    상권분석 워크플로우 그래프 빌드 (Supervisor 기반 Hub-and-Spoke 구조)
+    상권분석 워크플로우 그래프 빌드 (2노드 선형 파이프라인)
+    ContextAnalyst(스카우팅/비교) -> StrategySynthesizer(법률/최종합성)
     """
     workflow = StateGraph(AgentState)
 
     # 1. 노드 등록
-    workflow.add_node("supervisor", supervisor_node)
-    workflow.add_node("market_analyst", market_analyst_node)
-    workflow.add_node("population_analyst", population_analyst_node)
-    workflow.add_node("legal_analyst", legal_analyst_node)
-    workflow.add_node("synthesis", synthesis_node)
+    workflow.add_node("context_analyst", context_analyst_node)
+    workflow.add_node("strategy_synthesizer", strategy_synthesizer_node)
 
-    # 2. 진입점 설정
-    workflow.set_entry_point("supervisor")
-
-    # 3. 중앙 통제 라우팅 (Supervisor -> Workers)
-    workflow.add_conditional_edges(
-        "supervisor",
-        lambda x: x["next_step"],
-        {
-            "market_analyst": "market_analyst",
-            "population_analyst": "population_analyst",
-            "legal_analyst": "legal_analyst",
-            "FINISH": "synthesis",
-        },
-    )
-
-    # 4. 작업 완료 후 복귀 (Workers -> Supervisor)
-    workflow.add_edge("market_analyst", "supervisor")
-    workflow.add_edge("population_analyst", "supervisor")
-    workflow.add_edge("legal_analyst", "supervisor")
-
-    # 5. 최종 합성 후 종료 (Synthesis -> END)
-    workflow.add_edge("synthesis", END)
+    # 2. 진입점 및 선형 경로 설정
+    workflow.set_entry_point("context_analyst")
+    workflow.add_edge("context_analyst", "strategy_synthesizer")
+    workflow.add_edge("strategy_synthesizer", END)
 
     return workflow
 
 
-def compile_graph():
+def compile_workflow():
     """그래프 컴파일"""
     builder = build_graph()
     return builder.compile()
@@ -58,7 +35,7 @@ def compile_graph():
 
 # --- 로컬 테스트 코드 ---
 async def test_run():
-    app = compile_graph()
+    app = compile_workflow()
 
     # 셈플 입력값: 홍대(서교동) 카페 창업 시나리오
     initial_state = {
@@ -88,25 +65,7 @@ async def test_run():
     async for event in app.astream(initial_state):
         for node_name, output in event.items():
             print(f"\n▶ [실행 중인 노드: {node_name}]")
-
-            # 1. Supervisor의 의사결정 로그 출력
-            if node_name == "supervisor":
-                print(
-                    f"   - Supervisor의 다음 결정: {output.get('next_step', 'Unknown')}"
-                )
-
-            # 2. Worker 노드의 작업 로그 출력
-            if node_name == "market_analyst":
-                print(
-                    f"   - 상권 데이터 수집 완료: {output.get('market_data', {}).get('district_name')}"
-                )
-
-            if node_name == "legal_analyst":
-                print(
-                    f"   - 법률 정보 분석 완료: {len(output.get('legal_info', []))}건 검색됨"
-                )
-
-            # 상태 업데이트 추적 (최종 리포트용)
+            # 상태 업데이트 추적
             final_state.update(output)
 
     # -----------------------------------------------------

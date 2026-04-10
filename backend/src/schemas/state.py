@@ -20,18 +20,22 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     
     # 2. 사용자 요청 파라미터
-    business_type: str        # 업종 (예: 카페)
+    business_type: str        # 업종 (예: cafe, restaurant)
     brand_name: str           # 브랜드명
-    target_district: str      # 분석 대상 행정동
+    target_district: str      # 분석 대상 행정동 (초기 입력 혹은 최종 승자)
     
     # 3. 데이터 슬롯 (Track A 및 RAG 결과물 저장)
     market_data: MarketData   # DB에서 가져올 상권 데이터 객체
-    # 수정: 단순 텍스트 리스트가 아닌 상세 정보(content, relevance 등)가 담긴 객체 리스트
-    legal_info: list[dict[str, Any]]  
+    legal_info: list[dict[str, Any]]  # 법률 RAG 결과
     
-    # 4. 분석 결과 및 상태 제어
+    # 4. [NEW] 선형 구조를 위한 추가 필드
+    scouting_results: list[dict[str, Any]] # 마포구 16개동 정량 스코어링 결과
+    top_3_candidates: list[str]            # 선별된 상위 3개 행정동 리스트
+    winner_district: str                   # 최종 선정된 1순위 지역명 (Winner)
+    brand_analysis: dict[str, Any]         # 브랜드 전국 평균 vs 지역 분석 결과
+    
+    # 5. 분석 결과 및 상태 제어
     analysis_results: dict[str, Any]
-    analysis_metrics: dict[str, Any]  # 추가: 시각화 및 정량적 평가를 위한 고도화 데이터 (growth_rate, grade 등)
-    current_agent: str        # 현재 작업을 수행 중인 에이전트명
-    next_step: str            # Supervisor가 결정한 다음 단계
+    analysis_metrics: dict[str, Any]  # 시각화 및 정량적 평가 고도화 데이터
+    overall_legal_risk: str           # 최종 종합 리스크 레벨 (Safe/Caution/Danger)
     errors: list[str]

@@ -265,3 +265,46 @@ class FtcFranchiseClient:
             "viewer_url": brand["viewer_url"],
             "year": brand["year"],
         }
+
+    async def compare_brand_to_district(self, brand_name: str, district_avg_revenue: int) -> dict:
+        """
+        브랜드 전국 매출 비교 로직:
+        [브랜드 전국 평균 매출 vs 해당 동 업종 평균 매출] 대조 분석.
+
+        Args:
+            brand_name: 분석 대상 브랜드명
+            district_avg_revenue: 해당 행정동의 동일 업종 평균 매출 (Python scouting에서 전달)
+
+        Returns:
+            dict: 비교 결과 (brand_revenue, district_revenue, diff_ratio, status)
+        """
+        detail = await self.get_brand_detail(brand_name)
+        if not detail or "avg_sales_amount" not in detail:
+            return {
+                "error": f"브랜드 '{brand_name}' 데이터를 찾을 수 없어 비교 분석이 불가능합니다.",
+                "brand_revenue": 0,
+                "district_revenue": district_avg_revenue,
+                "status": "UNKNOWN"
+            }
+
+        brand_revenue = detail["avg_sales_amount"]
+        # 매출은 1년 단위이므로 월 단위로 변환 (필요 시)
+        # FTC 데이터의 '평균 매출액'은 보통 연 평균임. 
+        # district_avg_revenue가 월 매출이라면 단위를 맞춰야 함.
+        # 여기서는 둘 다 월 매출로 가정하거나, 연 매출로 통일 (기존 district_avg_revenue는 월 매출임)
+        brand_monthly = brand_revenue / 12
+
+        diff = brand_monthly - district_avg_revenue
+        diff_ratio = (diff / district_avg_revenue * 100) if district_avg_revenue > 0 else 0
+
+        status = "EXCEEDS" if diff > 0 else "BELOW"
+        
+        return {
+            "brand_name": detail.get("brand_name"),
+            "brand_avg_monthly": round(brand_monthly, 0),
+            "district_avg_monthly": district_avg_revenue,
+            "diff_amount": round(diff, 0),
+            "diff_ratio_percent": round(diff_ratio, 2),
+            "status": status,
+            "summary": f"전국 브랜드 평균 월매출({round(brand_monthly/10000, 1)}만)이 해당 동 평균({round(district_avg_revenue/10000, 1)}만) 대비 {round(abs(diff_ratio), 1)}% {status == 'EXCEEDS' and '높습니다' or '낮습니다'}."
+        }

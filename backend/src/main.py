@@ -15,7 +15,7 @@ from typing import Any, Dict
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.schemas.simulation_input import SimulationInput
-from src.agents.graph import compile_graph
+from src.agents.graph import compile_workflow
 
 app = FastAPI(
     title="마포구 프랜차이즈 상권분석 시뮬레이터",
@@ -24,7 +24,7 @@ app = FastAPI(
 )
 
 # LangGraph 컴파일된 앱 초기화
-app_graph = compile_graph()
+app_graph = compile_workflow()
 
 # CORS 설정: 프론트엔드(localhost:3000) 접근 허용 및 Docker nginx (localhost) 허용
 app.add_middleware(

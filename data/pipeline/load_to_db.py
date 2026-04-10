@@ -52,8 +52,22 @@ def _read_csv(filename: str, **kwargs) -> pd.DataFrame:
 
 def get_engine(db_url: str = DB_URL):
     """Create a sync SQLAlchemy engine and ensure all ORM tables exist."""
+    # Windows/psycopg2 encoding workaround: ensure URL is clean
+    if "localhost" in db_url:
+        db_url = db_url.replace("localhost", "127.0.0.1")
+    
     engine = create_engine(db_url, echo=False)
-    Base.metadata.create_all(engine)
+    
+    try:
+        Base.metadata.create_all(engine)
+    except Exception as e:
+        print(f"Warning: metadata.create_all failed: {e}")
+        # If it's the specific Unicode error, we might need a different approach
+        if "UnicodeDecodeError" in str(e):
+            print("Detected UnicodeDecodeError in psycopg2. Attempting alternate connection...")
+            # Fallback or more specific fix could go here if needed
+            raise e
+        raise e
     return engine
 
 
@@ -138,13 +152,16 @@ def load_living_population(engine) -> int:
     )
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE living_population RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "living_population",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
-        chunksize=5000,
+        chunksize=1000,
     )
     return len(df)
 
@@ -205,10 +222,13 @@ def load_sgis_population(engine) -> int:
     combined["value"] = pd.to_numeric(combined["value"], errors="coerce")
     combined = combined.drop_duplicates(subset=["year", "area_code", "indicator"])
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE sgis_population RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "sgis_population",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
         chunksize=5000,
@@ -243,10 +263,13 @@ def load_sgis_household(engine) -> int:
     combined["value"] = pd.to_numeric(combined["value"], errors="coerce")
     combined = combined.drop_duplicates(subset=["year", "area_code", "indicator"])
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE sgis_household RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "sgis_household",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
         chunksize=5000,
@@ -278,10 +301,13 @@ def load_sgis_business(engine) -> int:
     combined["value"] = pd.to_numeric(combined["value"], errors="coerce")
     combined = combined.drop_duplicates(subset=["year", "area_code", "indicator"])
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE sgis_business RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "sgis_business",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
         chunksize=5000,
@@ -373,13 +399,16 @@ def load_golmok_commercial(engine) -> int:
         "Int64"
     )
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE golmok_commercial RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "golmok_commercial",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
-        chunksize=5000,
+        chunksize=1000,
     )
     return len(combined)
 
@@ -507,13 +536,16 @@ def load_district_sales(engine) -> int:
 
     df["quarter"] = pd.to_numeric(df["quarter"], errors="coerce").astype("Int64")
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE district_sales RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "district_sales",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
-        chunksize=5000,
+        chunksize=1000,
     )
     return len(df)
 
@@ -574,13 +606,16 @@ def load_store_info(engine) -> int:
     ]
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE store_info RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "store_info",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
-        chunksize=5000,
+        chunksize=1000,
     )
     return len(df)
 
@@ -630,13 +665,16 @@ def load_store_quarterly(engine) -> int:
     ]
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE store_quarterly RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "store_quarterly",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
-        chunksize=5000,
+        chunksize=1000,
     )
     return len(df)
 
@@ -681,13 +719,17 @@ def load_rent_cost(engine) -> int:
         "source",
     ]
     combined = df_rent[[c for c in keep_rent if c in df_rent.columns]]
+
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE rent_cost RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "rent_cost",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
-        chunksize=5000,
+        chunksize=1000,
     )
     return len(combined)
 
@@ -751,10 +793,13 @@ def load_dong_mapping(engine) -> int:
     ]
     result = result[[c for c in keep if c in result.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE dong_mapping RESTART IDENTITY CASCADE;"))
+
     result.to_sql(
         "dong_mapping",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
         chunksize=1000,
@@ -785,10 +830,13 @@ def load_golmok_rent(engine) -> int:
     ]
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE golmok_rent RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "golmok_rent",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
         chunksize=1000,
@@ -834,19 +882,19 @@ def main() -> None:
         if args.table not in LOADERS:
             print(f"Unknown table '{args.table}'. Available: {', '.join(LOADERS)}")
             sys.exit(1)
-        tables_to_load = {args.table: LOADERS[args.table]}
+        LOADERS[args.table](engine)
     else:
-        tables_to_load = LOADERS
-
-    total = len(tables_to_load)
-    for i, (name, loader) in enumerate(tables_to_load.items(), 1):
-        print(f"[{i}/{total}] {name}...")
-        try:
-            n = loader(engine)
-            print(f"  -> {n:,} rows loaded")
-        except Exception as exc:
-            print(f"  -> ERROR: {exc}")
-            raise
+        # Load all tables
+        for table_name, loader_func in LOADERS.items():
+            print(f"[{table_name}] loading...")
+            try:
+                n = loader_func(engine)
+                print(f"  -> {n} rows loaded")
+            except FileNotFoundError as e:
+                print(f"  -> SKIP: {e}")
+            except Exception as e:
+                print(f"  -> ERROR: {e}")
+                raise
 
     print("\nRow counts:")
     with engine.connect() as conn:
