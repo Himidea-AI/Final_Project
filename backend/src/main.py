@@ -11,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
 import uuid
 import asyncio
-import json
 from typing import Any, Dict
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
@@ -71,7 +70,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "request_id": request_id,
         "target_district": target_dist,
         "analysis_report": analysis.get("market_summary", ""),  # 줄글 리포트
-        "analysis_metrics": metrics,                            # 차트용 정량 데이터
+        "analysis_metrics": metrics,  # 차트용 정량 데이터
         "simulation_months": 12,
         "monthly_projection": [
             {
@@ -119,13 +118,7 @@ async def health_check():
 @app.get("/report/{report_id}")
 async def get_report(report_id: str):
     """결과 리포트용 Mock API - 프론트엔드 연결 검증용"""
-    return {
-        "status": "success",
-        "data": {
-            "request_id": report_id,
-            "message": "This is a mock report response."
-        }
-    }
+    return {"status": "success", "data": {"request_id": report_id, "message": "This is a mock report response."}}
 
 
 @app.get("/status/{job_id}")
@@ -133,11 +126,7 @@ async def get_status(job_id: str):
     """작업 상태 조회용 Mock API - 프론트엔드 연결 검증용"""
     return {
         "status": "success",
-        "data": {
-            "job_id": job_id,
-            "progress": 100,
-            "message": "This is a mock status response."
-        }
+        "data": {"job_id": job_id, "progress": 100, "message": "This is a mock status response."},
     }
 
 
