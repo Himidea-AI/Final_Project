@@ -256,7 +256,7 @@ def test_ftc_franchise_db_failure_fallback(mock_llm):
     DB 조회 실패 시(PostgresClient 예외) FTC 판정이 safe/caution/danger 중 하나로
     정상 반환되는지 확인 — position_ratio 로직이 예외 처리로 감싸져 있어야 함
     """
-    with patch("src.agents.nodes.legal.PostgresClient") as MockPG:
+    with patch("src.database.postgres.PostgresClient") as MockPG:
         MockPG.return_value.connect = AsyncMock(side_effect=Exception("DB 연결 실패"))
 
         result = legal_node(_BASE_STATE.copy())
