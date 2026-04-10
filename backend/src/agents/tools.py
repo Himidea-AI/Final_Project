@@ -20,21 +20,20 @@ class MarketDataTool:
         """
         async with self.db_client.get_session() as session:
             # 1. pgvector L2 거리 연산 (<->)을 사용하여 반경 내 점포 검색 (HNSW 인덱스 활용)
-            # 좌표는 [lat, lon] 벡터 형태라고 가정
-            query = text("""
+            # 마포구(자치구코드 11440) 데이터로 한정하여 검색 효율 극대화
+            query = text(f"""
                 SELECT store_name, industry_s, lat, lon,
-                       (location_vector <-> ARRAY[:lat, :lon]::vector(2)) as distance
+                       (location_vector <-> CAST(:vec AS vector)) as distance
                 FROM store_info
                 WHERE industry_m_code = :ind_code
-                AND (location_vector <-> ARRAY[:lat, :lon]::vector(2)) < :radius_limit
+                AND dong_code LIKE '11440%'
+                AND (location_vector <-> CAST(:vec AS vector)) < :radius_limit
                 ORDER BY distance ASC
             """)
-            
-            # 500m 반경 제한 (위경도 단위 근사치 사용 혹은 PostGIS st_distance_sphere 연계)
-            # 여기서는 pgvector 실습을 위해 L2 거리가 0.005(약 500m) 이하인 것을 필터링한다고 가정
+
+            # asyncpg 호환을 위해 vector를 string 형태로 전달
             result = await session.execute(query, {
-                "lat": lat, 
-                "lon": lon, 
+                "vec": f"[{lat},{lon}]",
                 "ind_code": industry_m_code,
                 "radius_limit": radius_m / 111000.0 # 미터를 위경도 도 단위로 대략 변환
             })
@@ -105,9 +104,13 @@ class MarketDataTool:
         최근 1년 매출 추이 및 '통계적 요약본' 리턴
         """
         async with self.db_client.get_session() as session:
-            # 1. 최근 4분기 매출 트렌드
+            # 1. 최근 4분기 매출 트렌드 (마포구 코드 11440으로 한정)
             sales_stmt = select(DistrictSales)\
-                .where(DistrictSales.dong_name == dong_name, DistrictSales.industry_code == industry_code)\
+                .where(
+                    DistrictSales.dong_code.like('11440%'),
+                    DistrictSales.dong_name == dong_name, 
+                    DistrictSales.industry_code == industry_code
+                )\
                 .order_by(DistrictSales.quarter.desc())\
                 .limit(4)
             
@@ -148,7 +151,13 @@ class MarketDataTool:
         임대료 데이터 조회 및 수익성 근거 마련
         """
         async with self.db_client.get_session() as session:
-            rent_stmt = select(GolmokRent).where(GolmokRent.dong_name == dong_name).order_by(GolmokRent.year.desc(), GolmokRent.quarter.desc()).limit(1)
+            rent_stmt = select(GolmokRent)\
+                .where(
+                    GolmokRent.dong_code.like('11440%'),
+                    GolmokRent.dong_name == dong_name
+                )\
+                .order_by(GolmokRent.year.desc(), GolmokRent.quarter.desc())\
+                .limit(1)
             rent_res = await session.execute(rent_stmt)
             rent_data = rent_res.scalar()
 

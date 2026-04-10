@@ -37,6 +37,8 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import JoinUsPage from "./pages/JoinUs/JoinUsPage";
+import HQCommandCenter from "./pages/HQCommandCenter";
+import LoginPage from "./pages/LoginPage";
 import { runSimulation, analyzeLocation } from "./api/client";
 import React from "react";
 import html2canvas from "html2canvas";
@@ -3204,12 +3206,14 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
 */
 
 /** 현재 경로 → scene 이름 매핑 */
-function pathToScene(pathname: string): "intro" | "about" | "joinus" | "accordion" | "simulator" | "contact" {
+function pathToScene(pathname: string): "intro" | "about" | "joinus" | "accordion" | "simulator" | "contact" | "hq" | "login" {
   if (pathname === "/about") return "about";
   if (pathname === "/joinus") return "joinus";
   if (pathname === "/explore") return "accordion";
   if (pathname === "/simulator") return "simulator";
   if (pathname === "/contact") return "contact";
+  if (pathname === "/hq") return "hq";
+  if (pathname === "/login") return "login";
   return "intro";
 }
 
@@ -3358,6 +3362,8 @@ export default function App() {
             />
           }
         />
+        <Route path="/hq" element={<HQCommandCenter />} />
+        <Route path="/login" element={<LoginPage />} />
       </Routes>
 
       {/* Global header — all scenes except intro */}

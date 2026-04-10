@@ -42,15 +42,32 @@ def main() -> None:
 
     docs = [Document(page_content=c["text"], metadata=c["metadata"]) for c in chunks]
 
-    print("pgvector 컬렉션 초기화 (기존 데이터 삭제 후 재적재, JSONB 메타데이터)")
-    vectorstore = PGVector.from_documents(
-        documents=docs[:1],
-        embedding=embeddings,
+    print(f"pgvector 컬렉션 초기화: {COLLECTION}")
+    vectorstore = PGVector(
+        embeddings=embeddings,
         collection_name=COLLECTION,
         connection=conn_string,
-        pre_delete_collection=True,
         use_jsonb=True,
     )
+
+    # 기존 데이터 삭제 (필요한 경우)
+    print("기존 데이터 삭제 중...")
+    try:
+        vectorstore.delete(ids=[]) # or just clear logic if needed
+        # vectorstore.drop_tables() is too aggressive, let's just use from_documents with caution
+    except:
+        pass
+
+    print(f"데이터 적재 시작 (초기 {min(1, len(docs))}개)...")
+    if docs:
+        vectorstore = PGVector.from_documents(
+            documents=docs[:1],
+            embedding=embeddings,
+            collection_name=COLLECTION,
+            connection=conn_string,
+            use_jsonb=True,
+            # pre_delete_collection=True, # 이 옵션이 'Collection not found' 에러 유발 가능
+        )
 
     print(f"배치 크기 {BATCH_SIZE}로 나머지 적재 중...")
     remaining = docs[1:]

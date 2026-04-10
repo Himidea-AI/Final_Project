@@ -6,17 +6,21 @@ current_dir = Path(__file__).parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
+from pydantic import BaseModel
 import uuid
 import asyncio
-import json
 from typing import Any, Dict
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.schemas.simulation_input import SimulationInput
-from src.agents.graph import compile_graph
+from src.agents.graph import compile_workflow
+from src.services.biz_mapper import BizMapper
+from src.services.auth import AuthService
 
 app = FastAPI(
     title="마포구 프랜차이즈 상권분석 시뮬레이터",
@@ -25,7 +29,7 @@ app = FastAPI(
 )
 
 # LangGraph 컴파일된 앱 초기화
-app_graph = compile_graph()
+app_graph = compile_workflow()
 
 # CORS 설정: 프론트엔드(localhost:3000) 접근 허용 및 Docker nginx (localhost) 허용
 app.add_middleware(
@@ -60,7 +64,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     legal_risks = [
         {
             "type": r["type"],
-            "risk_level": r["level"].upper(),
+            "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(r["level"], "LOW"),
             "detail": r["summary"],
         }
         for r in legal_risks_raw
@@ -71,7 +75,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "request_id": request_id,
         "target_district": target_dist,
         "analysis_report": analysis.get("market_summary", ""),  # 줄글 리포트
-        "analysis_metrics": metrics,                            # 차트용 정량 데이터
+        "analysis_metrics": metrics,  # 차트용 정량 데이터
         "simulation_months": 12,
         "monthly_projection": [
             {
@@ -90,6 +94,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 "cannibalization": 4,
             }
         ],
+        "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
         "legal_risks": legal_risks,
         "map_data": {
             "center": {"lat": lat, "lng": lng},
@@ -119,13 +124,7 @@ async def health_check():
 @app.get("/report/{report_id}")
 async def get_report(report_id: str):
     """결과 리포트용 Mock API - 프론트엔드 연결 검증용"""
-    return {
-        "status": "success",
-        "data": {
-            "request_id": report_id,
-            "message": "This is a mock report response."
-        }
-    }
+    return {"status": "success", "data": {"request_id": report_id, "message": "This is a mock report response."}}
 
 
 @app.get("/status/{job_id}")
@@ -133,11 +132,7 @@ async def get_status(job_id: str):
     """작업 상태 조회용 Mock API - 프론트엔드 연결 검증용"""
     return {
         "status": "success",
-        "data": {
-            "job_id": job_id,
-            "progress": 100,
-            "message": "This is a mock status response."
-        }
+        "data": {"job_id": job_id, "progress": 100, "message": "This is a mock status response."},
     }
 
 
@@ -166,6 +161,79 @@ async def analyze_location(input_data: SimulationInput):
         return {"status": "success", "data": result}
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 사업자등록번호 → 프랜차이즈 매핑 API
+# ---------------------------------------------------------------------------
+
+
+class BizLookupRequest(BaseModel):
+    biz_number: str
+    company_name: str
+
+
+@app.post("/biz/lookup")
+async def biz_lookup(req: BizLookupRequest):
+    """사업자등록번호 + 기업명으로 프랜차이즈 브랜드 매핑"""
+    mapper = BizMapper(
+        nts_api_key=os.environ.get("NTS_API_KEY", ""),
+    )
+    try:
+        result = await mapper.map_franchise(req.biz_number, req.company_name)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 회원가입 API
+# ---------------------------------------------------------------------------
+
+
+class SignupRequest(BaseModel):
+    companyName: str
+    bizNumber: str
+    contactName: str
+    position: str = ""
+    email: str
+    phone: str
+    storeCount: str = ""
+    password: str
+    plan: str = "starter"
+    agreeTerms: bool = False
+
+
+@app.post("/auth/signup")
+async def signup(req: SignupRequest):
+    """회원가입 — 사업자 검증 + 브랜드 매핑 + DB 저장"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await auth.signup(req.model_dump())
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 로그인 API
+# ---------------------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/auth/login")
+async def login(req: LoginRequest):
+    """로그인 — 이메일/비밀번호 검증 + 브랜드 정보 반환"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = auth.login(req.email, req.password)
+        return result
+    except Exception as e:
         return {"status": "error", "message": str(e)}
 
 

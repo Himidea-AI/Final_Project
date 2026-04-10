@@ -1,15 +1,15 @@
 """
-Agent 노드 모듈 — LangGraph에서 호출되는 개별 분석 Agent들
+Agent 노드 모듈 — 마포구 프랜차이즈 상권분석 시뮬레이터 (2노드 선형 체제)
 
-각 파일은 하나의 Agent 노드를 담당하며, Git 충돌을 방지하기 위해 파일을 분리함.
+이 패키지는 LangGraph 워크플로우를 구성하는 핵심 분석 엔진들을 포함합니다.
+2026-04-10 아키텍처 리팩토링을 통해 기존 11개 노드를 다음 2개의 전략적 노드로 압축했습니다.
 
-  - commercial.py   : 상권분석 (업종밀도, 폐업률, 평균매출)
-  - population.py   : 유동인구 (생활인구 OA-14991, 지하철 승하차)
-  - demographics.py : 인구통계 (주거인구, 연령분포, 가구구성)
-  - cost.py         : 비용산정 (임대료, 인건비, 운영비)
-  - competition.py  : 경쟁분석 (직접경쟁 + 카니발리제이션 + 간접경쟁)
-  - trend.py        : 트렌드 (Naver DataLab 키워드 검색량, 소비패턴)
-  - legal.py        : 법규검토 (RAG 기반 가맹사업법/상가임대차법)
-  - report.py       : 리포트 생성 (종합 보고서, 비교표, 리스크 요약)
-  - supervisor.py   : Supervisor (결과 충분성 판단, 재분석 루프 제어)
+주요 노드:
+  - context_analyst.py      : 마포구 16개동 전수 스카우팅, Top 3 선별 및 브랜드 경쟁력 대조 분석
+  - strategy_synthesizer.py : 최적 입지 대상 법률 리스크(RAG) 검토 및 최종 전략 JSON 리포트 합성
 """
+
+from .context_analyst import context_analyst_node
+from .strategy_synthesizer import strategy_synthesizer_node
+
+__all__ = ["context_analyst_node", "strategy_synthesizer_node"]
