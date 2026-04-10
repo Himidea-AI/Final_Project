@@ -874,6 +874,10 @@ def load_seoul_training_dataset(engine) -> int:
     )
 
 
+def load_ftc_brand_franchise(engine) -> int:
+    return _load_simple(engine, "ftc_brand_franchise.csv", "ftc_brand_franchise")
+
+
 # ---------------------------------------------------------------------------
 # LOADERS registry
 # ---------------------------------------------------------------------------
@@ -899,6 +903,7 @@ LOADERS: dict = {
     "seoul_golmok_rent": load_seoul_golmok_rent,
     "seoul_population_quarterly": load_seoul_population_quarterly,
     "seoul_training_dataset": load_seoul_training_dataset,
+    "ftc_brand_franchise": load_ftc_brand_franchise,
 }
 
 

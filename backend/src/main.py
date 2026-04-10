@@ -6,9 +6,12 @@ current_dir = Path(__file__).parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
+from pydantic import BaseModel
 import uuid
 import asyncio
 from typing import Any, Dict
@@ -16,6 +19,7 @@ from typing import Any, Dict
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.schemas.simulation_input import SimulationInput
 from src.agents.graph import compile_graph
+from src.services.biz_mapper import BizMapper
 
 app = FastAPI(
     title="마포구 프랜차이즈 상권분석 시뮬레이터",
@@ -155,6 +159,29 @@ async def analyze_location(input_data: SimulationInput):
         return {"status": "success", "data": result}
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 사업자등록번호 → 프랜차이즈 매핑 API
+# ---------------------------------------------------------------------------
+
+
+class BizLookupRequest(BaseModel):
+    biz_number: str
+    company_name: str
+
+
+@app.post("/biz/lookup")
+async def biz_lookup(req: BizLookupRequest):
+    """사업자등록번호 + 기업명으로 프랜차이즈 브랜드 매핑"""
+    mapper = BizMapper(
+        nts_api_key=os.environ.get("NTS_API_KEY", ""),
+    )
+    try:
+        result = await mapper.map_franchise(req.biz_number, req.company_name)
+        return {"status": "success", "data": result}
+    except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
