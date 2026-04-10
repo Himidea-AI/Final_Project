@@ -18,7 +18,35 @@ from urllib.parse import unquote
 
 import httpx
 from lxml import etree
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+# FTC 브랜드 업종 키워드 → 골목상권 업종 코드 매핑
+INDUSTRY_KEYWORD_MAP: dict[str, str] = {
+    "한식": "CS100001",
+    "중식": "CS100002",
+    "중국": "CS100002",
+    "일식": "CS100003",
+    "초밥": "CS100003",
+    "양식": "CS100004",
+    "피자": "CS100004",
+    "파스타": "CS100004",
+    "제과": "CS100005",
+    "베이커리": "CS100005",
+    "빵": "CS100005",
+    "패스트푸드": "CS100006",
+    "햄버거": "CS100006",
+    "버거": "CS100006",
+    "치킨": "CS100007",
+    "분식": "CS100008",
+    "떡볶이": "CS100008",
+    "커피": "CS100009",
+    "카페": "CS100009",
+    "음료": "CS100009",
+    "호프": "CS100010",
+    "주점": "CS100010",
+}
 
 
 def _fuzzy_match(query: str, brand: str, threshold: float = 0.65) -> bool:
@@ -266,45 +294,133 @@ class FtcFranchiseClient:
             "year": brand["year"],
         }
 
-    async def compare_brand_to_district(self, brand_name: str, district_avg_revenue: int) -> dict:
+    # ------------------------------------------------------------------
+    # 브랜드 vs 업종 비교 분석
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def match_industry_code(brand_name: str) -> str | None:
         """
-        브랜드 전국 매출 비교 로직:
-        [브랜드 전국 평균 매출 vs 해당 동 업종 평균 매출] 대조 분석.
+        브랜드명에서 업종 키워드를 찾아 골목상권 업종 코드를 반환.
 
         Args:
-            brand_name: 분석 대상 브랜드명
-            district_avg_revenue: 해당 행정동의 동일 업종 평균 매출 (Python scouting에서 전달)
+            brand_name: FTC 브랜드명 (예: "메가MGC커피")
 
         Returns:
-            dict: 비교 결과 (brand_revenue, district_revenue, diff_ratio, status)
+            str | None: 매칭된 업종 코드 (예: "CS100009"), 없으면 None
         """
-        detail = await self.get_brand_detail(brand_name)
-        if not detail or "avg_sales_amount" not in detail:
+        name_lower = brand_name.lower()
+        for keyword, code in INDUSTRY_KEYWORD_MAP.items():
+            if keyword in name_lower:
+                return code
+        return None
+
+    async def compare_brand_to_district(
+        self,
+        brand_name: str,
+        dong_name: str,
+        session: AsyncSession,
+        yr: str | None = None,
+    ) -> dict:
+        """
+        브랜드 매출과 해당 행정동의 업종 평균 매출을 비교.
+
+        FTC 정보공개서의 브랜드 연평균 매출(전국)과
+        district_sales 테이블의 실제 분기별 업종 매출(로컬)을 나란히 제공.
+
+        Args:
+            brand_name: 브랜드명
+            dong_name: 행정동명 (예: "망원동")
+            session: SQLAlchemy AsyncSession
+            yr: 정보공개서 연도 (None이면 자동 폴백)
+
+        Returns:
+            dict: 브랜드 정보 + 업종 분기별 매출 + 포지션 비교
+        """
+        from src.database.models import DistrictSales
+
+        # 1) FTC 브랜드 상세 조회
+        brand_detail = await self.get_brand_detail(brand_name, yr=yr)
+        if not brand_detail:
+            return {"error": f"브랜드 '{brand_name}'을(를) 찾을 수 없습니다."}
+
+        # 2) 업종 코드 매칭
+        industry_code = self.match_industry_code(brand_detail["brand_name"])
+        if not industry_code:
             return {
-                "error": f"브랜드 '{brand_name}' 데이터를 찾을 수 없어 비교 분석이 불가능합니다.",
-                "brand_revenue": 0,
-                "district_revenue": district_avg_revenue,
-                "status": "UNKNOWN"
+                **brand_detail,
+                "error": "업종 코드를 매칭할 수 없습니다. 업종 키워드를 확인하세요.",
             }
 
-        brand_revenue = detail["avg_sales_amount"]
-        # 매출은 1년 단위이므로 월 단위로 변환 (필요 시)
-        # FTC 데이터의 '평균 매출액'은 보통 연 평균임. 
-        # district_avg_revenue가 월 매출이라면 단위를 맞춰야 함.
-        # 여기서는 둘 다 월 매출로 가정하거나, 연 매출로 통일 (기존 district_avg_revenue는 월 매출임)
-        brand_monthly = brand_revenue / 12
+        # 3) 해당 동의 업종 분기별 매출 조회 (최근 4분기)
+        stmt = (
+            select(
+                DistrictSales.quarter,
+                DistrictSales.industry_name,
+                DistrictSales.monthly_sales,
+                DistrictSales.monthly_count,
+            )
+            .where(
+                DistrictSales.dong_name == dong_name,
+                DistrictSales.industry_code == industry_code,
+            )
+            .order_by(DistrictSales.quarter.desc())
+            .limit(4)
+        )
+        result = await session.execute(stmt)
+        rows = result.fetchall()
 
-        diff = brand_monthly - district_avg_revenue
-        diff_ratio = (diff / district_avg_revenue * 100) if district_avg_revenue > 0 else 0
+        if not rows:
+            return {
+                **brand_detail,
+                "industry_code": industry_code,
+                "error": f"'{dong_name}'에서 해당 업종의 매출 데이터를 찾을 수 없습니다.",
+            }
 
-        status = "EXCEEDS" if diff > 0 else "BELOW"
-        
+        # 4) 업종 분기별 매출 정리
+        quarterly_sales = [
+            {
+                "quarter": row.quarter,
+                "monthly_sales": row.monthly_sales,
+                "monthly_count": row.monthly_count,
+            }
+            for row in rows
+        ]
+
+        # 5) 업종 연평균 매출 (최근 4분기 평균 × 12)
+        avg_quarterly = sum(r.monthly_sales for r in rows) / len(rows)
+        district_annual_avg = int(avg_quarterly * 12)
+
+        # 6) 브랜드 포지션 계산 (FTC 연매출 vs 업종 연평균)
+        brand_annual = brand_detail.get("avg_sales_amount", 0)
+        if district_annual_avg > 0 and brand_annual > 0:
+            position_ratio = round(brand_annual / district_annual_avg * 100, 1)
+        else:
+            position_ratio = 0.0
+
         return {
-            "brand_name": detail.get("brand_name"),
-            "brand_avg_monthly": round(brand_monthly, 0),
-            "district_avg_monthly": district_avg_revenue,
-            "diff_amount": round(diff, 0),
-            "diff_ratio_percent": round(diff_ratio, 2),
-            "status": status,
-            "summary": f"전국 브랜드 평균 월매출({round(brand_monthly/10000, 1)}만)이 해당 동 평균({round(district_avg_revenue/10000, 1)}만) 대비 {round(abs(diff_ratio), 1)}% {status == 'EXCEEDS' and '높습니다' or '낮습니다'}."
+            "brand": {
+                "name": brand_detail["brand_name"],
+                "corp_name": brand_detail["corp_name"],
+                "year": brand_detail["year"],
+                "annual_avg_sales": brand_annual,
+                "monthly_avg_sales": brand_annual // 12 if brand_annual else 0,
+                "store_count": brand_detail.get("store_count_total", 0),
+                "churn_rate": brand_detail.get("churn_rate", 0),
+            },
+            "district": {
+                "dong_name": dong_name,
+                "industry_code": industry_code,
+                "industry_name": rows[0].industry_name,
+                "annual_avg_sales": district_annual_avg,
+                "quarterly_sales": quarterly_sales,
+            },
+            "comparison": {
+                "position_ratio": position_ratio,
+                "summary": (
+                    f"{brand_detail['brand_name']}의 전국 가맹점 평균 연매출은 "
+                    f"{brand_annual:,}원으로, {dong_name} {rows[0].industry_name} 업종 "
+                    f"평균 대비 {position_ratio}% 수준입니다."
+                ),
+            },
         }

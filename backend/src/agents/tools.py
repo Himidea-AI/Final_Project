@@ -23,19 +23,17 @@ class MarketDataTool:
             # 마포구(자치구코드 11440) 데이터로 한정하여 검색 효율 극대화
             query = text(f"""
                 SELECT store_name, industry_s, lat, lon,
-                       (ARRAY[lat, lon]::vector <-> '[{lat},{lon}]'::vector) as distance
+                       (location_vector <-> CAST(:vec AS vector)) as distance
                 FROM store_info
                 WHERE industry_m_code = :ind_code
                 AND dong_code LIKE '11440%'
-                AND (ARRAY[lat, lon]::vector <-> '[{lat},{lon}]'::vector) < :radius_limit
+                AND (location_vector <-> CAST(:vec AS vector)) < :radius_limit
                 ORDER BY distance ASC
             """)
-            
-            # 500m 반경 제한 (위경도 단위 근사치 사용 혹은 PostGIS st_distance_sphere 연계)
-            # 여기서는 pgvector 실습을 위해 L2 거리가 0.005(약 500m) 이하인 것을 필터링한다고 가정
+
+            # asyncpg 호환을 위해 vector를 string 형태로 전달
             result = await session.execute(query, {
-                "lat": lat, 
-                "lon": lon, 
+                "vec": f"[{lat},{lon}]",
                 "ind_code": industry_m_code,
                 "radius_limit": radius_m / 111000.0 # 미터를 위경도 도 단위로 대략 변환
             })

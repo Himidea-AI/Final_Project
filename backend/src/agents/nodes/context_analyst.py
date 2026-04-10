@@ -40,10 +40,14 @@ async def context_analyst_node(state: AgentState) -> dict:
     top_3 = sorted_results[:3]
     top_3_names = [r["district"] for r in top_3]
 
-    # [2] 브랜드 전국 매출 비교 (ftc_franchise.py)
-    # Top 1 지역의 평균 매출과 브랜드 전국 평균 비교
-    target_avg_revenue = top_3[0]["avg_revenue"]
-    brand_comp_result = await ftc_client.compare_brand_to_district(brand_name, target_avg_revenue)
+    # [2] 브랜드 전국 매출 비교 (ftc_franchise.py - dev 고도화 버전 적용)
+    # Top 1 지역의 행정동명과 브랜드 전국 데이터를 DB 세션 기반으로 대조
+    async with db_client.get_session() as session:
+        brand_comp_result = await ftc_client.compare_brand_to_district(
+            brand_name, 
+            top_3[0]["district"], 
+            session
+        )
 
     # [3] LLM 심층 비교 분석 (Structured Output 적용)
     llm = get_fast_llm().with_structured_output(Top3ComparisonReport)

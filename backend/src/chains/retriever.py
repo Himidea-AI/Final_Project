@@ -66,6 +66,9 @@ class LegalDocumentRetriever:
         "주세법(법률)(제20618호)(20250101)",
     ]
 
+    # 관련성 임계값 — 이 점수 미만인 문서는 LLM 컨텍스트에서 제외
+    RELEVANCE_THRESHOLD = 0.3
+
     async def search(
         self,
         query: str,
@@ -76,6 +79,7 @@ class LegalDocumentRetriever:
         법률 문서 검색
 
         검색 결과가 0건이면 source_filter를 제거하고 전체 컬렉션에서 fallback 재검색.
+        relevance < RELEVANCE_THRESHOLD(0.3)인 문서는 제외하여 LLM 프롬프트 품질 향상.
 
         Args:
             query: 검색 쿼리
@@ -108,6 +112,7 @@ class LegalDocumentRetriever:
                 },
             }
             for doc, score in docs_with_score
+            if score >= self.RELEVANCE_THRESHOLD
         ]
         results.sort(key=lambda x: x["metadata"]["relevance"], reverse=True)
         return results

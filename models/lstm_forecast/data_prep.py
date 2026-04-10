@@ -89,11 +89,12 @@ def _load_from_db(
     db_url: str = DB_URL,
 ) -> pd.DataFrame:
     """DB에서 SQL 쿼리를 실행하여 DataFrame을 반환한다."""
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
 
     engine = create_engine(db_url, echo=False)
     try:
-        return pd.read_sql(query, engine)
+        with engine.connect() as conn:
+            return pd.read_sql(text(query), conn)
     finally:
         engine.dispose()
 
