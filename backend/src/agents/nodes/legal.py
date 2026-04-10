@@ -16,7 +16,7 @@ import concurrent.futures
 import json
 import os
 
-from src.agents.state import AgentState
+from src.schemas.state import AgentState
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.settings import settings
@@ -260,7 +260,7 @@ async def check_franchise_law(state: AgentState, docs: list[dict]) -> dict:
     - 가맹금 예치 의무
 
     Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 가맹사업법 문서
+        docs: Phase 1에서 병렬 검색된 가맹사업법 + 판례 문서
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
@@ -279,7 +279,7 @@ async def check_franchise_law(state: AgentState, docs: list[dict]) -> dict:
     try:
         response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
+        articles = [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs]
         return {
             "type": "franchise_law",
             "level": level,
@@ -307,7 +307,7 @@ async def check_commercial_lease_law(state: AgentState, docs: list[dict]) -> dic
     - 환산보증금 기준 충족 여부 (서울 9억 원)
 
     Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 상가임대차보호법 문서
+        docs: Phase 1에서 병렬 검색된 상가임대차보호법 + 판례 문서
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
@@ -325,7 +325,7 @@ async def check_commercial_lease_law(state: AgentState, docs: list[dict]) -> dic
     try:
         response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
+        articles = [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs]
         return {
             "type": "commercial_lease_law",
             "level": level,
@@ -353,7 +353,7 @@ async def check_food_hygiene(state: AgentState, docs: list[dict]) -> dict:
     - 영업장 시설 기준
 
     Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 식품위생법 문서
+        docs: Phase 1에서 병렬 검색된 식품위생법 + 판례 문서
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
@@ -372,7 +372,7 @@ async def check_food_hygiene(state: AgentState, docs: list[dict]) -> dict:
     try:
         response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
+        articles = [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs]
         return {
             "type": "food_hygiene",
             "level": level,
@@ -400,7 +400,7 @@ async def check_safety_regulation(state: AgentState, docs: list[dict]) -> dict:
     - 안전시설 완비증명서 발급 의무
 
     Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 다중이용업소법 문서
+        docs: Phase 1에서 병렬 검색된 다중이용업소법 + 판례 문서
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
@@ -418,7 +418,7 @@ async def check_safety_regulation(state: AgentState, docs: list[dict]) -> dict:
     try:
         response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
+        articles = [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs]
         return {
             "type": "safety_regulation",
             "level": level,
@@ -446,7 +446,7 @@ async def check_building_law(state: AgentState, docs: list[dict]) -> dict:
     - 무허가·불법건축물 임차 리스크
 
     Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 건축법 문서
+        docs: Phase 1에서 병렬 검색된 건축법 문서
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
@@ -465,7 +465,7 @@ async def check_building_law(state: AgentState, docs: list[dict]) -> dict:
     try:
         response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
+        articles = [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs]
         return {
             "type": "building_law",
             "level": level,
@@ -493,7 +493,7 @@ async def check_fire_safety_law(state: AgentState, docs: list[dict]) -> dict:
     - 소방시설 완공검사 및 정기점검 의무
 
     Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 소방시설법 문서
+        docs: Phase 1에서 병렬 검색된 소방시설법 문서
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
@@ -511,7 +511,7 @@ async def check_fire_safety_law(state: AgentState, docs: list[dict]) -> dict:
     try:
         response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
+        articles = [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs]
         return {
             "type": "fire_safety_law",
             "level": level,
@@ -540,7 +540,7 @@ async def check_labor_law(state: AgentState, docs: list[dict]) -> dict:
     - 4대 보험 가입 의무
 
     Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 근로기준법 문서
+        docs: Phase 1에서 병렬 검색된 근로기준법 문서
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
@@ -558,7 +558,7 @@ async def check_labor_law(state: AgentState, docs: list[dict]) -> dict:
     try:
         response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
         level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
+        articles = [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs]
         return {
             "type": "labor_law",
             "level": level,
@@ -600,7 +600,7 @@ async def check_vat_law(state: AgentState, docs: list[dict]) -> dict:
             "type": "vat_law",
             "level": level,
             "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "articles": [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs],
             "recommendation": "세무사 상담을 통해 과세 유형 사전 결정 권장" if level != "safe" else "",
         }
     except Exception as e:
@@ -637,7 +637,7 @@ async def check_privacy_law(state: AgentState, docs: list[dict]) -> dict:
             "type": "privacy_law",
             "level": level,
             "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "articles": [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs],
             "recommendation": "개인정보 처리방침 및 CCTV 안내문 사전 준비 필요" if level != "safe" else "",
         }
     except Exception as e:
@@ -673,7 +673,7 @@ async def check_accessibility_law(state: AgentState, docs: list[dict]) -> dict:
             "type": "accessibility_law",
             "level": level,
             "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "articles": [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs],
             "recommendation": "인테리어 설계 전 편의시설 설치 의무 여부 관할 구청 확인 권장" if level != "safe" else "",
         }
     except Exception as e:
@@ -710,7 +710,7 @@ async def check_sewage_law(state: AgentState, docs: list[dict]) -> dict:
             "type": "sewage_law",
             "level": level,
             "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "articles": [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs],
             "recommendation": "인테리어 공사 전 유류분리기 설치 계획 포함 여부 확인 필요" if level != "safe" else "",
         }
     except Exception as e:
@@ -747,7 +747,7 @@ async def check_fair_trade_law(state: AgentState, docs: list[dict]) -> dict:
             "type": "fair_trade_law",
             "level": level,
             "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
+            "articles": [d["metadata"].get("law_article") or d["metadata"].get("case_number", "") for d in docs],
             "recommendation": "가맹 계약서 내 불공정 조항 법무사 검토 권장" if level != "safe" else "",
         }
     except Exception as e:
