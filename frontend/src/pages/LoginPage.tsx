@@ -8,9 +8,11 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const auth = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -32,9 +34,8 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (data.status === "success") {
-        // TODO: JWT 토큰 저장 (localStorage)
-        // localStorage.setItem("token", data.token);
-        navigate("/simulator");
+        auth.login(data.user, data.brand || null);
+        navigate("/");
       } else {
         setError(data.message || "이메일 또는 비밀번호가 올바르지 않습니다.");
       }

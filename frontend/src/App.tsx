@@ -39,6 +39,9 @@ import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import JoinUsPage from "./pages/JoinUs/JoinUsPage";
 import HQCommandCenter from "./pages/HQCommandCenter";
 import LoginPage from "./pages/LoginPage";
+import { AuthProvider } from "./auth/AuthContext";
+import ProtectedRoute from "./auth/ProtectedRoute";
+import AIVerdictBanner from "./components/AIVerdictBanner";
 import { runSimulation, analyzeLocation } from "./api/client";
 import React from "react";
 import html2canvas from "html2canvas";
@@ -2258,6 +2261,14 @@ function SimulatorDashboard({
                   </div>
                 </div>
 
+                {/* AI Verdict Banner — 킬러 인사이트 메인 상단 */}
+                <AIVerdictBanner
+                  headline={simResult?.recommendation || "강력한 입지 독점력과 2030 타겟팅을 통한 고수익 확보 가능 상권"}
+                  severity="positive"
+                  reason="AI 멀티에이전트(market·population·legal) 종합 분석 결과. 유동인구 밀집도 상위 12%, 인근 동종업계 평균 매출 대비 15% 초과 달성 예측."
+                  isDirect={false}
+                />
+
                 {/* 4 Stats Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
                   <StatCard onClick={() => setActiveDrawer("revenue")} title="예상 월 매출 (추정)" value={`₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`} trend="+12.5%" trendUp={true} icon={<BarChart3 />} sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0" />
@@ -3286,6 +3297,7 @@ export default function App() {
   );
 
   return (
+    <AuthProvider>
     <div
       className="w-screen h-screen overflow-hidden select-none bg-background text-foreground"
       style={{
@@ -3356,13 +3368,15 @@ export default function App() {
         <Route
           path="/simulator"
           element={
-            <SimulatorDashboard
-              reportState={reportState}
-              setReportState={setReportState}
-            />
+            <ProtectedRoute>
+              <SimulatorDashboard
+                reportState={reportState}
+                setReportState={setReportState}
+              />
+            </ProtectedRoute>
           }
         />
-        <Route path="/hq" element={<HQCommandCenter />} />
+        <Route path="/hq" element={<ProtectedRoute><HQCommandCenter /></ProtectedRoute>} />
         <Route path="/login" element={<LoginPage />} />
       </Routes>
 
@@ -3504,5 +3518,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </AuthProvider>
   );
 }
