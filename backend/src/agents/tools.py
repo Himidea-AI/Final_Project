@@ -23,18 +23,17 @@ class MarketDataTool:
             # 좌표는 [lat, lon] 벡터 형태라고 가정
             query = text("""
                 SELECT store_name, industry_s, lat, lon,
-                       (location_vector <-> ARRAY[:lat, :lon]::vector(2)) as distance
+                       (location_vector <-> CAST(:vec AS vector)) as distance
                 FROM store_info
                 WHERE industry_m_code = :ind_code
-                AND (location_vector <-> ARRAY[:lat, :lon]::vector(2)) < :radius_limit
+                AND (location_vector <-> CAST(:vec AS vector)) < :radius_limit
                 ORDER BY distance ASC
             """)
-            
+
+            # asyncpg 호환을 위해 vector를 string 형태로 전달 (ARRAY[]::vector 구문 미지원)
             # 500m 반경 제한 (위경도 단위 근사치 사용 혹은 PostGIS st_distance_sphere 연계)
-            # 여기서는 pgvector 실습을 위해 L2 거리가 0.005(약 500m) 이하인 것을 필터링한다고 가정
             result = await session.execute(query, {
-                "lat": lat, 
-                "lon": lon, 
+                "vec": f"[{lat},{lon}]",
                 "ind_code": industry_m_code,
                 "radius_limit": radius_m / 111000.0 # 미터를 위경도 도 단위로 대략 변환
             })
