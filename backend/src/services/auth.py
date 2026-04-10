@@ -118,7 +118,7 @@ class AuthService:
                 "brand": {
                     "brand_name": top_brand["brand_name"] if top_brand else None,
                     "franchise_count": top_brand["franchise_count"] if top_brand else 0,
-                    "avg_sales": top_brand["avg_sales"] if top_brand else 0,
+                    "avg_sales": top_brand.get("avrgSlsAmt", top_brand.get("avg_sales", 0)) if top_brand else 0,
                     "mapo_store_count": top_brand["mapo_store_count"] if top_brand else 0,
                 } if top_brand else None,
             }
@@ -177,7 +177,7 @@ class AuthService:
                     "brand": {
                         "brand_name": top_brand["brand_name"],
                         "franchise_count": top_brand["franchise_count"],
-                        "avg_sales": top_brand["avg_sales"],
+                        "avg_sales": top_brand.get("avrgSlsAmt", top_brand.get("avg_sales", 0)),
                         "mapo_store_count": top_brand["mapo_store_count"],
                     } if top_brand else None,
                 }
