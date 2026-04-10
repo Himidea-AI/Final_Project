@@ -73,6 +73,8 @@ def _mock_shap_values(feature_cols: list[str]) -> dict:
             "feature_ko": _FEATURE_KO.get(feature_cols[i], feature_cols[i]),
             "shap_value": round(float(shap_vals[i]), 6),
             "abs_shap": round(float(abs(shap_vals[i])), 6),
+            # 기여 방향: 실제 경로와 동일한 필드 구조 유지
+            "direction": "positive" if shap_vals[i] > 0 else ("negative" if shap_vals[i] < 0 else "neutral"),
         }
         for rank, i in enumerate(sorted_indices)
     ]
@@ -130,9 +132,14 @@ def explain_prediction(
             return _mock_shap_values(FEATURE_COLS)
 
     # ---- 2) 입력 데이터 준비 (scaler 적용 포함) ----
-    input_data = _prepare_input(dong_code, industry_code)
+    try:
+        input_data = _prepare_input(dong_code, industry_code)
+    except Exception as prep_exc:
+        # DB/CSV 로드 실패 등 내부 예외를 catch 하여 mock 으로 전환
+        _log("WARNING", f"입력 데이터 준비 중 예외 발생 - mock 반환: {prep_exc}")
+        return _mock_shap_values(FEATURE_COLS)
     if input_data is None:
-        _log("WARNING", f"입력 데이터 준비 실패 (dong={dong_code}, industry={industry_code}) — mock 반환")
+        _log("WARNING", f"입력 데이터 준비 실패 (dong={dong_code}, industry={industry_code}) - mock 반환")
         return _mock_shap_values(FEATURE_COLS)
 
     # input_data: shape (1, WINDOW_SIZE, 8) np.ndarray
@@ -154,31 +161,38 @@ def explain_prediction(
         _log("INFO", "DeepExplainer 실행 시작")
         explainer = shap.DeepExplainer(model, background)
         shap_values_raw = explainer.shap_values(input_tensor)
-        base_value = float(explainer.expected_value)
+        # expected_value 가 np.ndarray 로 반환되는 shap 버전 대응
+        _ev = explainer.expected_value
+        base_value = float(_ev.item() if isinstance(_ev, np.ndarray) else _ev)
         _log("INFO", "DeepExplainer 완료")
 
     except Exception as deep_exc:
         # DeepExplainer 실패 → GradientExplainer 로 전환
-        _log("WARNING", f"DeepExplainer 실패 — GradientExplainer 로 전환: {deep_exc}")
+        _log("WARNING", f"DeepExplainer 실패 - GradientExplainer 로 전환: {deep_exc}")
         try:
             import shap
 
             explainer = shap.GradientExplainer(model, background)
             shap_values_raw = explainer.shap_values(input_tensor)
-            base_value = (
-                float(explainer.expected_value)
-                if hasattr(explainer, "expected_value")
-                else 0.5
-            )
+            # expected_value 가 np.ndarray 로 반환되는 shap 버전 대응
+            if hasattr(explainer, "expected_value"):
+                _ev = explainer.expected_value
+                base_value = float(_ev.item() if isinstance(_ev, np.ndarray) else _ev)
+            else:
+                base_value = 0.5
             _log("INFO", "GradientExplainer 완료")
 
         except Exception as grad_exc:
             # 두 explainer 모두 실패 → mock 반환
-            _log("WARNING", f"GradientExplainer 도 실패 — mock 반환: {grad_exc}")
+            _log("WARNING", f"GradientExplainer 도 실패 - mock 반환: {grad_exc}")
             return _mock_shap_values(FEATURE_COLS)
 
     # ---- 5) SHAP 값 후처리: (..., WINDOW_SIZE, 8) → 시간축 평균 → (8,) ----
     shap_array = np.array(shap_values_raw)
+
+    # ndim >= 4: 일부 shap 버전에서 list of arrays 형태로 반환 → 앞 차원 순서대로 제거
+    while shap_array.ndim >= 4:
+        shap_array = shap_array[0]
 
     # 배치 차원 제거 (있는 경우)
     if shap_array.ndim == 3:
@@ -187,6 +201,11 @@ def explain_prediction(
     # 시간축(분기) 평균 → 피처별 대표 기여도
     if shap_array.ndim == 2:
         shap_array = shap_array.mean(axis=0)  # (n_features,)
+
+    # 처리 후에도 1차원이 아니면 복구 불가 → mock 반환
+    if shap_array.ndim != 1:
+        _log("WARNING", f"SHAP 값 차원 처리 실패 (ndim={shap_array.ndim}) - mock 반환")
+        return _mock_shap_values(FEATURE_COLS)
 
     # ---- 6) 피처별 기여도 정렬 (절댓값 내림차순) ----
     sorted_indices = np.argsort(-np.abs(shap_array))
@@ -197,6 +216,8 @@ def explain_prediction(
             "feature_ko": _FEATURE_KO.get(FEATURE_COLS[i], FEATURE_COLS[i]),
             "shap_value": round(float(shap_array[i]), 6),
             "abs_shap": round(float(abs(shap_array[i])), 6),
+            # 기여 방향: 생존률을 높이면 positive, 낮추면 negative
+            "direction": "positive" if shap_array[i] > 0 else ("negative" if shap_array[i] < 0 else "neutral"),
         }
         for rank, i in enumerate(sorted_indices)
     ]
