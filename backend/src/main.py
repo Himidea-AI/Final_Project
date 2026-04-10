@@ -94,6 +94,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 "cannibalization": 4,
             }
         ],
+        "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
         "legal_risks": legal_risks,
         "map_data": {
             "center": {"lat": lat, "lng": lng},
