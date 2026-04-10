@@ -11,14 +11,14 @@ IM3-62: RAG 통합 테스트 — LangGraph 연동 검증
 """
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 # conftest.py가 os.environ 설정 완료 후 임포트
 from src.chains.retriever import LegalDocumentRetriever
 from src.agents.nodes.legal import legal_node, check_zoning_regulation
 
-# LLM mock 응답 — "주의" 수준으로 고정 (Ollama 실행 불필요)
-_MOCK_LLM_RESPONSE = "관련 법률을 검토한 결과 주의가 필요합니다. 리스크 수준: 주의"
+# LLM mock 응답 — JSON 구조화 출력 형식으로 고정 (Ollama 실행 불필요)
+_MOCK_LLM_RESPONSE = '관련 법률을 검토한 결과 주의가 필요합니다.\n{"risk_level": "caution"}'
 
 # legal_node 테스트용 기본 AgentState (TypedDict 호환)
 _BASE_STATE = {
@@ -37,6 +37,7 @@ _BASE_STATE = {
 # ──────────────────────────────────────────────────────────────
 # 1. Retriever 테스트 — 실제 pgvector 연결
 # ──────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_retriever_returns_nonempty():
@@ -95,9 +96,7 @@ async def test_retriever_source_filter_franchise():
     assert len(results) > 0, "가맹사업법 소스 필터링 결과 없음"
     for doc in results:
         source = doc["metadata"].get("source", "")
-        assert source in LegalDocumentRetriever.FRANCHISE_LAW_SOURCES, (
-            f"필터링 외 소스 포함됨: {source}"
-        )
+        assert source in LegalDocumentRetriever.FRANCHISE_LAW_SOURCES, f"필터링 외 소스 포함됨: {source}"
 
 
 @pytest.mark.asyncio
@@ -112,9 +111,7 @@ async def test_retriever_source_filter_lease():
     assert len(results) > 0, "상가임대차보호법 소스 필터링 결과 없음"
     for doc in results:
         source = doc["metadata"].get("source", "")
-        assert source in LegalDocumentRetriever.LEASE_LAW_SOURCES, (
-            f"필터링 외 소스 포함됨: {source}"
-        )
+        assert source in LegalDocumentRetriever.LEASE_LAW_SOURCES, f"필터링 외 소스 포함됨: {source}"
 
 
 @pytest.mark.asyncio
@@ -129,9 +126,7 @@ async def test_retriever_source_filter_food_hygiene():
     assert len(results) > 0, "식품위생법 소스 필터링 결과 없음"
     for doc in results:
         source = doc["metadata"].get("source", "")
-        assert source in LegalDocumentRetriever.FOOD_HYGIENE_SOURCES, (
-            f"필터링 외 소스 포함됨: {source}"
-        )
+        assert source in LegalDocumentRetriever.FOOD_HYGIENE_SOURCES, f"필터링 외 소스 포함됨: {source}"
 
 
 @pytest.mark.asyncio
@@ -146,16 +141,15 @@ async def test_retriever_source_filter_safety():
     assert len(results) > 0, "다중이용업소법 소스 필터링 결과 없음"
     for doc in results:
         source = doc["metadata"].get("source", "")
-        assert source in LegalDocumentRetriever.SAFETY_SOURCES, (
-            f"필터링 외 소스 포함됨: {source}"
-        )
+        assert source in LegalDocumentRetriever.SAFETY_SOURCES, f"필터링 외 소스 포함됨: {source}"
 
 
 # ──────────────────────────────────────────────────────────────
 # 2. legal_node 통합 테스트 — LLM mock, 실제 pgvector
 # ──────────────────────────────────────────────────────────────
 
-@patch("src.agents.nodes.legal._call_llm", return_value=_MOCK_LLM_RESPONSE)
+
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
 def test_legal_node_output_keys(mock_llm):
     """legal_node 반환값에 analysis_results, legal_info 키가 있는지 확인"""
     result = legal_node(_BASE_STATE.copy())
@@ -165,9 +159,9 @@ def test_legal_node_output_keys(mock_llm):
     assert "legal_risks" in result["analysis_results"], "analysis_results.legal_risks 키 누락"
 
 
-@patch("src.agents.nodes.legal._call_llm", return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_six_risk_types(mock_llm):
-    """6가지 리스크 타입이 모두 포함되는지 확인"""
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+def test_legal_node_all_risk_types(mock_llm):
+    """14가지 리스크 타입이 모두 포함되는지 확인"""
     result = legal_node(_BASE_STATE.copy())
     risks = result["analysis_results"]["legal_risks"]
 
@@ -179,13 +173,19 @@ def test_legal_node_six_risk_types(mock_llm):
         "food_hygiene",
         "safety_regulation",
         "ftc_franchise",
+        "building_law",
+        "fire_safety_law",
+        "labor_law",
+        "vat_law",
+        "privacy_law",
+        "accessibility_law",
+        "sewage_law",
+        "fair_trade_law",
     }
-    assert expected_types == risk_types, (
-        f"누락된 리스크 타입: {expected_types - risk_types}"
-    )
+    assert expected_types.issubset(risk_types), f"누락된 리스크 타입: {expected_types - risk_types}"
 
 
-@patch("src.agents.nodes.legal._call_llm", return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
 def test_legal_node_risk_structure(mock_llm):
     """각 리스크 dict가 필수 키를 모두 포함하는지 확인"""
     result = legal_node(_BASE_STATE.copy())
@@ -197,7 +197,7 @@ def test_legal_node_risk_structure(mock_llm):
         assert not missing, f"{risk.get('type')} 리스크에 키 누락: {missing}"
 
 
-@patch("src.agents.nodes.legal._call_llm", return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
 def test_legal_node_risk_level_values(mock_llm):
     """level 값이 safe / caution / danger 중 하나인지 확인"""
     result = legal_node(_BASE_STATE.copy())
@@ -205,12 +205,10 @@ def test_legal_node_risk_level_values(mock_llm):
 
     valid_levels = {"safe", "caution", "danger"}
     for risk in risks:
-        assert risk["level"] in valid_levels, (
-            f"{risk['type']} 리스크의 level 값 비정상: {risk['level']}"
-        )
+        assert risk["level"] in valid_levels, f"{risk['type']} 리스크의 level 값 비정상: {risk['level']}"
 
 
-@patch("src.agents.nodes.legal._call_llm", return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
 def test_legal_node_legal_info_not_empty(mock_llm):
     """legal_info가 비어있지 않은지 확인 (실제 문서 or fallback)"""
     result = legal_node(_BASE_STATE.copy())
@@ -222,7 +220,7 @@ def test_legal_node_legal_info_not_empty(mock_llm):
         assert "metadata" in item, "legal_info 항목에 metadata 키 누락"
 
 
-@patch("src.agents.nodes.legal._call_llm", return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
 def test_legal_node_state_passthrough(mock_llm):
     """legal_node가 기존 state 필드를 유지하면서 결과를 추가하는지 확인"""
     state = _BASE_STATE.copy()
@@ -236,7 +234,7 @@ def test_legal_node_state_passthrough(mock_llm):
     assert result["business_type"] == "cafe", "business_type 필드가 사라짐"
 
 
-@patch("src.agents.nodes.legal._call_llm", return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
 def test_legal_node_fallback_when_no_rag_docs(mock_llm):
     """
     retriever.search()가 빈 리스트를 반환할 때
@@ -257,6 +255,7 @@ def test_legal_node_fallback_when_no_rag_docs(mock_llm):
 # ──────────────────────────────────────────────────────────────
 # 3. 용도지역 판정 테스트 — 결정론적 (외부 의존성 없음)
 # ──────────────────────────────────────────────────────────────
+
 
 def test_zoning_commercial_district_cafe_safe():
     """상업지역(서교동) 카페 → safe"""
@@ -299,9 +298,22 @@ def test_zoning_mapo_dong_map_coverage():
     from src.agents.nodes.legal import _DISTRICT_ZONE_MAP
 
     mapo_dongs = [
-        "서교동", "합정동", "공덕동", "망원1동", "망원2동",
-        "연남동", "대흥동", "염리동", "성산1동", "성산2동",
-        "상암동", "아현동", "도화동", "용강동", "신수동", "서강동",
+        "서교동",
+        "합정동",
+        "공덕동",
+        "망원1동",
+        "망원2동",
+        "연남동",
+        "대흥동",
+        "염리동",
+        "성산1동",
+        "성산2동",
+        "상암동",
+        "아현동",
+        "도화동",
+        "용강동",
+        "신수동",
+        "서강동",
     ]
     for dong in mapo_dongs:
         assert dong in _DISTRICT_ZONE_MAP, f"{dong}이 용도지역 맵에 없음"

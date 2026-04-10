@@ -857,11 +857,11 @@ async def check_ftc_franchise(state: AgentState) -> dict:
         }
 
 
-async def check_zoning_regulation(state: AgentState) -> dict:
+def check_zoning_regulation(state: AgentState) -> dict:
     """
     용도지역 규제 검토 — 대상 행정동의 용도지역에서 해당 업종 영업 가능 여부.
 
-    LLM 없이 constants 기반 규칙으로 판정 (빠르고 결정론적).
+    LLM 없이 constants 기반 규칙으로 판정 (빠르고 결정론적). I/O 없으므로 sync.
 
     Returns:
         dict: {type, level, zone, business_type, allowed, summary}
