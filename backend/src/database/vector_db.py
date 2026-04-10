@@ -6,8 +6,6 @@
 - PGVectorDBClient  : pgvector(PostgreSQL) 기반 (프로덕션 대체)
 """
 
-from typing import List, Dict, Any
-
 from langchain_postgres.vectorstores import PGVector
 from langchain_huggingface import HuggingFaceEmbeddings
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -69,34 +67,6 @@ class LegalVectorDB:
                 use_jsonb=True,
             )
         return self._vectorstore
-
-    async def asearch_legal_docs(self, query: str, search_k: int = 5) -> List[Dict[str, Any]]:
-        # [강화] PGVector 호출 전 다시 한번 DEV 체크
-        if settings.app_mode == "DEV":
-            print("DEBUG: [LegalVectorDB] DEV 모드 - Mock 데이터를 반환합니다.")
-            return [
-                {
-                    "content": "상가건물 임대차보호법 (DEV 모드 가짜 데이터): 임대료 인상 제한 및 권리금 보호 가이드라인",
-                    "metadata": {"source": "법률 가이드", "relevance": 1.0},
-                }
-            ]
-
-        vs = self.vectorstore
-        if vs is None:
-            return []
-
-        try:
-            docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=search_k)
-            return [
-                {
-                    "content": doc.page_content,
-                    "metadata": {**doc.metadata, "relevance": round(score, 2)},
-                }
-                for doc, score in docs_with_score
-            ]
-        except Exception as e:
-            print(f"!!! [VECTOR DB ERROR] !!! {str(e)}")
-            return []
 
     def get_total_count(self) -> int:
         # DEV 모드에서는 DB 접속 없이 즉시 반환

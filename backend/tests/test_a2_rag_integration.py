@@ -157,6 +157,22 @@ def test_legal_node_output_keys(mock_llm):
     assert "analysis_results" in result, "analysis_results 키 누락"
     assert "legal_info" in result, "legal_info 키 누락"
     assert "legal_risks" in result["analysis_results"], "analysis_results.legal_risks 키 누락"
+    assert "overall_legal_risk" in result["analysis_results"], "analysis_results.overall_legal_risk 키 누락"
+
+
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+def test_legal_node_overall_risk_level(mock_llm):
+    """overall_legal_risk가 safe/caution/danger 중 하나이며 14개 리스크 중 최고 레벨인지 확인"""
+    result = legal_node(_BASE_STATE.copy())
+    analysis = result["analysis_results"]
+
+    overall = analysis["overall_legal_risk"]
+    assert overall in {"safe", "caution", "danger"}, f"overall_legal_risk 값 비정상: {overall}"
+
+    # 14개 개별 리스크 레벨보다 낮을 수 없음
+    level_order = {"safe": 0, "caution": 1, "danger": 2}
+    max_individual = max(level_order.get(r["level"], 0) for r in analysis["legal_risks"])
+    assert level_order[overall] == max_individual, f"overall_legal_risk({overall})이 개별 최고 레벨과 불일치"
 
 
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
@@ -232,6 +248,23 @@ def test_legal_node_state_passthrough(mock_llm):
     assert result["brand_name"] == "스타벅스", "brand_name 필드가 사라짐"
     assert result["target_district"] == "합정동", "target_district 필드가 사라짐"
     assert result["business_type"] == "cafe", "business_type 필드가 사라짐"
+
+
+@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+def test_ftc_franchise_db_failure_fallback(mock_llm):
+    """
+    DB 조회 실패 시(PostgresClient 예외) FTC 판정이 safe/caution/danger 중 하나로
+    정상 반환되는지 확인 — position_ratio 로직이 예외 처리로 감싸져 있어야 함
+    """
+    with patch("src.agents.nodes.legal.PostgresClient") as MockPG:
+        MockPG.return_value.connect = AsyncMock(side_effect=Exception("DB 연결 실패"))
+
+        result = legal_node(_BASE_STATE.copy())
+        risks = result["analysis_results"]["legal_risks"]
+        ftc_risk = next((r for r in risks if r["type"] == "ftc_franchise"), None)
+
+        assert ftc_risk is not None, "ftc_franchise 리스크가 누락됨"
+        assert ftc_risk["level"] in {"safe", "caution", "danger"}, f"DB 실패 후 ftc level 비정상: {ftc_risk['level']}"
 
 
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
