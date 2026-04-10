@@ -41,11 +41,11 @@ INDUSTRY_KEYWORD_MAP: dict[str, str] = {
     "치킨": "CS100007",
     "분식": "CS100008",
     "떡볶이": "CS100008",
-    "커피": "CS100009",
-    "카페": "CS100009",
-    "음료": "CS100009",
-    "호프": "CS100010",
-    "주점": "CS100010",
+    "커피": "CS100010",
+    "카페": "CS100010",
+    "음료": "CS100010",
+    "호프": "CS100009",
+    "주점": "CS100009",
 }
 
 
@@ -337,7 +337,7 @@ class FtcFranchiseClient:
         Returns:
             dict: 브랜드 정보 + 업종 분기별 매출 + 포지션 비교
         """
-        from src.database.models import DistrictSales
+        from src.database.models import DistrictSales, StoreQuarterly
 
         # 1) FTC 브랜드 상세 조회
         brand_detail = await self.get_brand_detail(brand_name, yr=yr)
@@ -352,13 +352,21 @@ class FtcFranchiseClient:
                 "error": "업종 코드를 매칭할 수 없습니다. 업종 키워드를 확인하세요.",
             }
 
-        # 3) 해당 동의 업종 분기별 매출 조회 (최근 4분기)
+        # 3) 해당 동의 업종 분기별 매출 + 점포 수 조회 (최근 4분기)
         stmt = (
             select(
                 DistrictSales.quarter,
                 DistrictSales.industry_name,
                 DistrictSales.monthly_sales,
                 DistrictSales.monthly_count,
+                StoreQuarterly.store_count,
+                StoreQuarterly.franchise_count,
+            )
+            .join(
+                StoreQuarterly,
+                (DistrictSales.quarter == StoreQuarterly.quarter)
+                & (DistrictSales.dong_code == StoreQuarterly.dong_code)
+                & (DistrictSales.industry_code == StoreQuarterly.industry_code),
             )
             .where(
                 DistrictSales.dong_name == dong_name,
@@ -377,24 +385,32 @@ class FtcFranchiseClient:
                 "error": f"'{dong_name}'에서 해당 업종의 매출 데이터를 찾을 수 없습니다.",
             }
 
-        # 4) 업종 분기별 매출 정리
-        quarterly_sales = [
-            {
-                "quarter": row.quarter,
-                "monthly_sales": row.monthly_sales,
-                "monthly_count": row.monthly_count,
-            }
-            for row in rows
-        ]
+        # 4) 분기별 점포당 매출 계산
+        quarterly_sales = []
+        for row in rows:
+            per_store = row.monthly_sales // row.store_count if row.store_count > 0 else 0
+            quarterly_sales.append(
+                {
+                    "quarter": row.quarter,
+                    "monthly_sales": row.monthly_sales,
+                    "monthly_count": row.monthly_count,
+                    "store_count": row.store_count,
+                    "franchise_count": row.franchise_count,
+                    "per_store_monthly_sales": per_store,
+                }
+            )
 
-        # 5) 업종 연평균 매출 (최근 4분기 평균 × 12)
-        avg_quarterly = sum(r.monthly_sales for r in rows) / len(rows)
-        district_annual_avg = int(avg_quarterly * 12)
+        # 5) 점포당 월매출 평균 (최근 4분기)
+        per_store_values = [q["per_store_monthly_sales"] for q in quarterly_sales if q["per_store_monthly_sales"] > 0]
+        avg_per_store_monthly = int(sum(per_store_values) / len(per_store_values)) if per_store_values else 0
 
-        # 6) 브랜드 포지션 계산 (FTC 연매출 vs 업종 연평균)
+        # 6) 브랜드 월매출 (FTC 연매출 ÷ 12)
         brand_annual = brand_detail.get("avg_sales_amount", 0)
-        if district_annual_avg > 0 and brand_annual > 0:
-            position_ratio = round(brand_annual / district_annual_avg * 100, 1)
+        brand_monthly = brand_annual // 12 if brand_annual else 0
+
+        # 7) 포지션 비교 (브랜드 월매출 vs 점포당 월매출)
+        if avg_per_store_monthly > 0 and brand_monthly > 0:
+            position_ratio = round(brand_monthly / avg_per_store_monthly * 100, 1)
         else:
             position_ratio = 0.0
 
@@ -404,7 +420,7 @@ class FtcFranchiseClient:
                 "corp_name": brand_detail["corp_name"],
                 "year": brand_detail["year"],
                 "annual_avg_sales": brand_annual,
-                "monthly_avg_sales": brand_annual // 12 if brand_annual else 0,
+                "monthly_avg_sales": brand_monthly,
                 "store_count": brand_detail.get("store_count_total", 0),
                 "churn_rate": brand_detail.get("churn_rate", 0),
             },
@@ -412,15 +428,16 @@ class FtcFranchiseClient:
                 "dong_name": dong_name,
                 "industry_code": industry_code,
                 "industry_name": rows[0].industry_name,
-                "annual_avg_sales": district_annual_avg,
+                "avg_per_store_monthly_sales": avg_per_store_monthly,
                 "quarterly_sales": quarterly_sales,
             },
             "comparison": {
                 "position_ratio": position_ratio,
                 "summary": (
-                    f"{brand_detail['brand_name']}의 전국 가맹점 평균 연매출은 "
-                    f"{brand_annual:,}원으로, {dong_name} {rows[0].industry_name} 업종 "
-                    f"평균 대비 {position_ratio}% 수준입니다."
+                    f"{dong_name} {rows[0].industry_name} 점포당 월평균 매출은 "
+                    f"{avg_per_store_monthly:,}원이며, {brand_detail['brand_name']}의 "
+                    f"전국 가맹점 평균 월매출 {brand_monthly:,}원은 "
+                    f"이 상권 대비 {position_ratio}% 수준입니다."
                 ),
             },
         }

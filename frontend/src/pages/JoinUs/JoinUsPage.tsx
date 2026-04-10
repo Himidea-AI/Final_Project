@@ -15,8 +15,9 @@ interface Props {
 }
 
 export default function JoinUsPage({ onBack }: Props) {
-  const [phase, setPhase] = useState<Phase>("pricing");
-  const [selectedPlan, setSelectedPlan] = useState<Plan["id"] | null>(null);
+  // 요금제 선택은 HQ Command Center(/hq)로 이동 — 가입은 바로 폼 진입
+  const [phase, setPhase] = useState<Phase>("form");
+  const [selectedPlan, setSelectedPlan] = useState<Plan["id"] | null>("growth");
 
   const handleSelect = (id: Plan["id"]) => {
     setSelectedPlan(id);

@@ -32,24 +32,24 @@ DATA_PERIOD = "2019Q1~2024Q4"
 
 
 def _mock_revenue_forecast() -> dict:
-    """LSTM 매출 예측 mock 데이터 (4분기 → 12개월 변환)."""
+    """LSTM 매출 예측 mock 데이터 (4분기)."""
     base_sales = 15_000_000.0
-    monthly_predictions = []
-    for m in range(1, 13):
-        sales = base_sales * (1 + 0.01 * m)  # 완만한 상승 추세
-        margin = sales * 0.05 * ((m - 1) // 3 + 1)
-        monthly_predictions.append(
+    quarterly_predictions = []
+    for q in range(1, 5):
+        sales = base_sales * (1 + 0.03 * q)  # 완만한 상승 추세
+        margin = sales * 0.05 * q
+        quarterly_predictions.append(
             {
-                "month": m,
+                "quarter_offset": q,
                 "predicted_sales": round(sales),
                 "confidence_lower": round(max(0, sales - margin)),
                 "confidence_upper": round(sales + margin),
             }
         )
-    monthly_avg = sum(p["predicted_sales"] for p in monthly_predictions) / 12
+    quarterly_avg = sum(p["predicted_sales"] for p in quarterly_predictions) / 4
     return {
-        "monthly_avg": round(monthly_avg),
-        "monthly_predictions": monthly_predictions,
+        "quarterly_avg": round(quarterly_avg),
+        "quarterly_predictions": quarterly_predictions,
     }
 
 
@@ -108,39 +108,18 @@ def _mock_bep(industry_name: str) -> dict:
 
 
 def _run_lstm_forecast(dong_code: str, industry_code: str) -> dict:
-    """LSTM 매출 예측 모델 호출 → 분기 결과를 12개월로 변환."""
+    """LSTM 매출 예측 모델 호출 → 분기별 결과 반환."""
     from models.lstm_forecast.predict import predict as lstm_predict
 
-    # 4분기(= 12개월) 예측
     quarterly_results = lstm_predict(dong_code, industry_code, n_months=4)
 
-    # 분기 결과를 3개월씩 할당하여 12개월 predictions 생성
-    monthly_predictions: list[dict] = []
-    for qr in quarterly_results:
-        q_sales = qr["predicted_sales"]
-        q_lower = qr["confidence_lower"]
-        q_upper = qr["confidence_upper"]
-        offset = (qr["quarter_offset"] - 1) * 3
-        for m_in_q in range(3):
-            month = offset + m_in_q + 1
-            monthly_predictions.append(
-                {
-                    "month": month,
-                    "predicted_sales": q_sales,
-                    "confidence_lower": q_lower,
-                    "confidence_upper": q_upper,
-                }
-            )
-
-    monthly_avg = (
-        sum(p["predicted_sales"] for p in monthly_predictions) / len(monthly_predictions)
-        if monthly_predictions
-        else 0.0
+    quarterly_avg = (
+        sum(qr["predicted_sales"] for qr in quarterly_results) / len(quarterly_results) if quarterly_results else 0.0
     )
 
     return {
-        "monthly_avg": round(monthly_avg),
-        "monthly_predictions": monthly_predictions,
+        "quarterly_avg": round(quarterly_avg),
+        "quarterly_predictions": quarterly_results,
     }
 
 
@@ -304,7 +283,7 @@ class ModelOutput:
 
                 {
                     "input": { dong_code, dong_name, industry_code, industry_name },
-                    "revenue_forecast": { monthly_avg, monthly_predictions },
+                    "revenue_forecast": { quarterly_avg, quarterly_predictions },
                     "survival": { survival_rate, risk_level, monthly_survival_rates },
                     "bep": { bep_months, monthly_profit, total_initial_investment,
                              annual_roi, monthly_simulation },
@@ -313,7 +292,7 @@ class ModelOutput:
         """
         use_mock = False
 
-        # ---- 1) LSTM 매출 예측 ----
+        # ---- 1) LSTM 매출 예측 (분기별) ----
         try:
             revenue_forecast = _run_lstm_forecast(dong_code, industry_code)
             logger.info("LSTM 매출 예측 완료")
@@ -333,9 +312,11 @@ class ModelOutput:
 
         # ---- 3) BEP 계산 ----
         try:
+            quarterly_avg = revenue_forecast["quarterly_avg"]
+            quarterly_preds = revenue_forecast["quarterly_predictions"]
             bep = _run_bep(
-                monthly_avg=revenue_forecast["monthly_avg"],
-                monthly_predictions=revenue_forecast["monthly_predictions"],
+                monthly_avg=quarterly_avg,
+                monthly_predictions=quarterly_preds,
                 industry_name=industry_name,
                 cost_config=cost_config,
             )

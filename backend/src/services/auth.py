@@ -103,9 +103,41 @@ class AuthService:
                 )
                 conn.commit()
 
-            # 4. 응답 조립 (비밀번호 제외)
+            # 4. biz_brand_mapping 테이블에 매핑 저장 (축적)
             top_brand = mapping["brands"][0] if mapping["brands"] else None
+            if top_brand:
+                with engine.connect() as conn:
+                    conn.execute(
+                        text("""
+                            INSERT INTO biz_brand_mapping (
+                                biz_number, company_name, brand_name,
+                                industry_large, industry_medium,
+                                franchise_count, avg_sales, mapo_store_count
+                            ) VALUES (
+                                :biz, :company, :brand,
+                                :ind_l, :ind_m,
+                                :frc_cnt, :avg_sales, :mapo_cnt
+                            )
+                            ON CONFLICT (biz_number) DO UPDATE SET
+                                brand_name = EXCLUDED.brand_name,
+                                franchise_count = EXCLUDED.franchise_count,
+                                avg_sales = EXCLUDED.avg_sales,
+                                mapo_store_count = EXCLUDED.mapo_store_count
+                        """),
+                        {
+                            "biz": biz_clean,
+                            "company": data["companyName"],
+                            "brand": top_brand["brand_name"],
+                            "ind_l": top_brand.get("industry_large", ""),
+                            "ind_m": top_brand.get("industry_medium", ""),
+                            "frc_cnt": top_brand["franchise_count"],
+                            "avg_sales": top_brand["avg_sales"],
+                            "mapo_cnt": top_brand["mapo_store_count"],
+                        },
+                    )
+                    conn.commit()
 
+            # 5. 응답 조립 (비밀번호 제외)
             return {
                 "status": "success",
                 "user": {
@@ -153,14 +185,26 @@ class AuthService:
                 if not _verify_password(password, user["password_hash"]):
                     return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
 
-                # 브랜드 매핑
-                brands = self._mapper.search_brand_by_company(user["company_name"])
-                top_brand = brands[0] if brands else None
+                # 브랜드 매핑 — biz_brand_mapping 우선, 없으면 ftc_brand_franchise 검색
+                brand_row = conn.execute(
+                    text(
+                        "SELECT brand_name, industry_large, industry_medium, "
+                        "franchise_count, avg_sales, mapo_store_count "
+                        "FROM biz_brand_mapping WHERE biz_number = :biz"
+                    ),
+                    {"biz": user["biz_number"]},
+                ).fetchone()
 
-                if top_brand:
-                    top_brand["mapo_store_count"] = self._mapper.count_mapo_stores(
-                        top_brand["brand_name"]
-                    )
+                if brand_row:
+                    brand_data = dict(brand_row._mapping)
+                else:
+                    brands = self._mapper.search_brand_by_company(user["company_name"])
+                    top = brands[0] if brands else None
+                    if top:
+                        top["mapo_store_count"] = self._mapper.count_mapo_stores(top["brand_name"])
+                        brand_data = top
+                    else:
+                        brand_data = None
 
                 return {
                     "status": "success",

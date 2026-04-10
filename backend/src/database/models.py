@@ -362,3 +362,23 @@ class User(Base):
         server_default=func.now(),
         comment="가입 일시",
     )
+
+
+class BizBrandMapping(Base):
+    """사업자등록번호 ↔ 브랜드 매핑 — 회원가입 시 자동 축적"""
+
+    __tablename__ = "biz_brand_mapping"
+
+    biz_number = Column(String(12), primary_key=True, comment="사업자등록번호 (하이픈 제거)")
+    company_name = Column(String(100), nullable=False, comment="기업명 (법인명)")
+    brand_name = Column(String(100), comment="매핑된 브랜드명")
+    industry_large = Column(String(50), comment="업종 대분류")
+    industry_medium = Column(String(50), comment="업종 중분류")
+    franchise_count = Column(Integer, comment="전국 가맹점 수")
+    avg_sales = Column(BigInteger, comment="평균매출 (천원)")
+    mapo_store_count = Column(Integer, comment="마포구 점포 수")
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="등록 일시",
+    )
