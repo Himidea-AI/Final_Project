@@ -20,6 +20,7 @@ from typing import Any, Dict
 from src.schemas.simulation_input import SimulationInput
 from src.agents.graph import compile_graph
 from src.services.biz_mapper import BizMapper
+from src.services.auth import AuthService
 
 app = FastAPI(
     title="마포구 프랜차이즈 상권분석 시뮬레이터",
@@ -181,6 +182,35 @@ async def biz_lookup(req: BizLookupRequest):
     try:
         result = await mapper.map_franchise(req.biz_number, req.company_name)
         return {"status": "success", "data": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 회원가입 API
+# ---------------------------------------------------------------------------
+
+
+class SignupRequest(BaseModel):
+    companyName: str
+    bizNumber: str
+    contactName: str
+    position: str = ""
+    email: str
+    phone: str
+    storeCount: str = ""
+    password: str
+    plan: str = "starter"
+    agreeTerms: bool = False
+
+
+@app.post("/auth/signup")
+async def signup(req: SignupRequest):
+    """회원가입 — 사업자 검증 + 브랜드 매핑 + DB 저장"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await auth.signup(req.model_dump())
+        return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
