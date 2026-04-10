@@ -94,14 +94,14 @@ def _calc_regression_metrics(
     predicted: list[float],
 ) -> dict:
     """
-    생존률 예측의 회귀 정확도 지표를 산출한다.
+    폐업률 예측의 회귀 정확도 지표를 산출한다.
 
-    생존률은 연속값(0~1)이므로 분류 지표 대신 회귀 지표를 사용한다.
+    폐업률은 연속값(%)이므로 분류 지표 대신 회귀 지표를 사용한다.
     accuracy_metrics.py 의 함수를 재사용한다.
 
     Args:
-        actual:    실제 생존률 리스트 (폐업률에서 변환된 값)
-        predicted: 모델 예측 생존률 리스트
+        actual:    실제 폐업률 리스트 (%)
+        predicted: 모델 예측 폐업률 리스트 (%)
 
     Returns:
         dict:
@@ -128,9 +128,9 @@ def run_backtest(test_year: int = 2024) -> dict:
     store_quarterly 폐업률 실제값과 생존률 모델 예측값을 비교하여
     모델의 신뢰도를 검증한다.
 
-    실제값 기준: test_year Q4 (quarter == test_year * 10 + 4) 단일 포인트.
-    예측값 기준: _predict_survival() 의 survival_rate (0~1).
-    비교 지표:   회귀 지표 (MAE, RMSE, R²) - 생존률은 연속값.
+    실제값 기준: test_year Q4 (quarter == test_year * 10 + 4) 단일 포인트의 closure_rate (%).
+    예측값 기준: _predict_survival() 의 survival_rate → (1 - survival_rate) * 100 변환 (%).
+    비교 지표:   회귀 지표 (MAE, RMSE, R²) - 폐업률은 연속값.
 
     Parameters
     ----------
@@ -153,7 +153,15 @@ def run_backtest(test_year: int = 2024) -> dict:
     df = _load_store_data()
     if df.empty:
         _log("ERROR", "점포 집계 데이터가 없습니다 - 백테스트를 중단합니다")
-        return {"test_year": test_year, "error": "점포 집계 데이터 로드 실패"}
+        return {
+            "test_year": test_year,
+            "error": "점포 집계 데이터 로드 실패",
+            "skipped": 0,
+            "overall": None,
+            "by_dong": {},
+            "by_industry": {},
+            "details": [],
+        }
 
     # ---- 2) test_year Q4 실제값 필터 ----
     # 분기 코드 형식: YYYYQ (예: 20244 = 2024년 4분기)
@@ -162,7 +170,15 @@ def run_backtest(test_year: int = 2024) -> dict:
 
     if df_q4.empty:
         _log("WARNING", f"{test_year}년 Q4 데이터가 없습니다 (quarter={q4_code})")
-        return {"test_year": test_year, "error": f"{test_year}년 Q4 데이터 없음"}
+        return {
+            "test_year": test_year,
+            "error": f"{test_year}년 Q4 데이터 없음",
+            "skipped": 0,
+            "overall": None,
+            "by_dong": {},
+            "by_industry": {},
+            "details": [],
+        }
 
     _log("INFO", f"{test_year} Q4 데이터 {len(df_q4)}건 확인")
 
@@ -174,15 +190,25 @@ def run_backtest(test_year: int = 2024) -> dict:
         dong_code = str(row["dong_code"])
         industry_code = str(row["industry_code"])
 
-        # 실제 폐업률 → 생존률 변환 (0~1)
-        actual_closure_rate = float(row["closure_rate"])
-        actual_survival_rate = max(0.0, min(1.0, 1.0 - actual_closure_rate / 100))
+        # 실제 폐업률 (%) - 컬럼 없으면 skip
+        try:
+            actual_closure_rate = float(row["closure_rate"])
+        except KeyError:
+            _log("WARNING", f"closure_rate 컬럼 없음 (dong={dong_code}, ind={industry_code}) - skip")
+            skipped += 1
+            continue
 
-        # 생존률 예측 - 실패 시 skip
+        # 비정상 데이터 방어: 0~100% 범위로 클리핑
+        actual_closure_rate = max(0.0, min(100.0, actual_closure_rate))
+
+        # 폐업률 예측 - 실패 시 skip
         pred = _predict_survival(dong_code, industry_code)
         if pred is None:
             skipped += 1
             continue
+
+        # 예측 생존률 → 폐업률 변환: (1 - survival_rate) * 100
+        predicted_closure_rate = round((1.0 - float(pred["survival_rate"])) * 100, 4)
 
         predictions.append(
             {
@@ -191,8 +217,7 @@ def run_backtest(test_year: int = 2024) -> dict:
                 "industry_code": industry_code,
                 "industry_name": str(row.get("industry_name", industry_code)),
                 "actual_closure_rate": round(actual_closure_rate, 4),
-                "actual_survival_rate": round(actual_survival_rate, 4),
-                "predicted_survival_rate": round(float(pred["survival_rate"]), 4),
+                "predicted_closure_rate": predicted_closure_rate,
                 "closure_risk_level": pred["closure_risk_level"],
             }
         )
@@ -208,13 +233,26 @@ def run_backtest(test_year: int = 2024) -> dict:
             "test_year": test_year,
             "error": "모델 예측 실패 - 가중치 파일이 없거나 모델 로드에 실패했습니다",
             "skipped": skipped,
+            "overall": None,
+            "by_dong": {},
+            "by_industry": {},
+            "details": [],
         }
 
     pred_df = pd.DataFrame(predictions)
-    actual_vals = pred_df["actual_survival_rate"].tolist()
-    pred_vals = pred_df["predicted_survival_rate"].tolist()
+    # 폐업률 (%) 기준으로 비교
+    actual_vals = pred_df["actual_closure_rate"].tolist()
+    pred_vals = pred_df["predicted_closure_rate"].tolist()
 
     # ---- 5) 전체 회귀 정확도 지표 ----
+    # closure_rate=0 항목은 MAPE 계산에서 제외되므로 사전 경고
+    zero_count = actual_vals.count(0.0)
+    if zero_count > 0:
+        _log(
+            "WARNING",
+            f"실제 폐업률이 0.0인 항목 {zero_count}건 - MAPE 계산 시 해당 항목 제외됩니다",
+        )
+
     overall_metrics = _calc_regression_metrics(actual_vals, pred_vals)
     overall_metrics["n_samples"] = len(predictions)
 
@@ -227,8 +265,8 @@ def run_backtest(test_year: int = 2024) -> dict:
     # ---- 6) 동별 지표 ----
     by_dong: dict = {}
     for dong_name, grp in pred_df.groupby("dong_name"):
-        a = grp["actual_survival_rate"].tolist()
-        p = grp["predicted_survival_rate"].tolist()
+        a = grp["actual_closure_rate"].tolist()
+        p = grp["predicted_closure_rate"].tolist()
         by_dong[dong_name] = {
             "mape": round(mape(a, p), 4),
             "mae": round(mae(a, p), 6),
@@ -238,8 +276,8 @@ def run_backtest(test_year: int = 2024) -> dict:
     # ---- 7) 업종별 지표 ----
     by_industry: dict = {}
     for ind_name, grp in pred_df.groupby("industry_name"):
-        a = grp["actual_survival_rate"].tolist()
-        p = grp["predicted_survival_rate"].tolist()
+        a = grp["actual_closure_rate"].tolist()
+        p = grp["predicted_closure_rate"].tolist()
         by_industry[ind_name] = {
             "mape": round(mape(a, p), 4),
             "mae": round(mae(a, p), 6),
