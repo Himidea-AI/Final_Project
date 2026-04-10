@@ -15,6 +15,10 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +221,58 @@ def _resolve_dong_name(dong_code: str) -> str:
 
 class ModelOutput:
     """A1 모델 통합 출력 -- B2 시뮬레이션 입력용"""
+
+    @staticmethod
+    async def generate_with_brand(
+        dong_code: str,
+        industry_code: str,
+        industry_name: str,
+        brand_name: str,
+        dong_name: str,
+        ftc_api_key: str,
+        db_session: AsyncSession,
+        cost_config: dict | None = None,
+    ) -> dict:
+        """generate() 결과에 FTC 브랜드 비교 분석을 추가.
+
+        Parameters
+        ----------
+        dong_code, industry_code, industry_name, cost_config :
+            ``generate()``와 동일.
+        brand_name : str
+            FTC 브랜드명 (예: ``"메가커피"``).
+        dong_name : str
+            행정동명 (예: ``"망원동"``).
+        ftc_api_key : str
+            공정위 API 키.
+        db_session : AsyncSession
+            SQLAlchemy 비동기 세션.
+
+        Returns
+        -------
+        dict
+            ``generate()`` 결과 + ``brand_comparison`` 필드.
+        """
+        from src.services.ftc_franchise import FtcFranchiseClient
+
+        # 1) 기존 모델 파이프라인
+        result = ModelOutput.generate(dong_code, industry_code, industry_name, cost_config)
+
+        # 2) FTC 브랜드 비교
+        try:
+            ftc_client = FtcFranchiseClient(ftc_api_key)
+            comparison = await ftc_client.compare_brand_to_district(
+                brand_name=brand_name,
+                dong_name=dong_name,
+                session=db_session,
+            )
+            result["brand_comparison"] = comparison
+            logger.info("FTC 브랜드 비교 완료: %s", brand_name)
+        except Exception as exc:
+            logger.warning("FTC 브랜드 비교 실패: %s", exc)
+            result["brand_comparison"] = {"error": str(exc)}
+
+        return result
 
     @staticmethod
     def generate(
