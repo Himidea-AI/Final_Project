@@ -59,7 +59,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     legal_risks = [
         {
             "type": r["type"],
-            "risk_level": r["level"].upper(),
+            "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(r["level"], "LOW"),
             "detail": r["summary"],
         }
         for r in legal_risks_raw
