@@ -910,8 +910,6 @@ async def _run_legal_pipeline(state: dict) -> dict:
     """
     import redis.asyncio as aioredis
 
-    from src.config.settings import settings
-
     brand = state.get("brand_name") or "해당 브랜드"
     district = state.get("target_district", "")
     business_type = state.get("business_type", "")
@@ -928,6 +926,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
             cached_data = json.loads(cached)
             analysis = dict(state.get("analysis_results") or {})
             analysis["legal_risks"] = cached_data["legal_risks"]
+            await _redis.aclose()
             return {**state, "analysis_results": analysis, "legal_info": cached_data["legal_info"]}
     except Exception as e:
         print(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
