@@ -78,12 +78,17 @@ async def synthesis_node(state: AgentState) -> dict:
     # 3. 데이터 업데이트 (기존 legal_risks를 100% 보존하며 final_report 추가)
     new_analysis_results = dict(analysis_results)
     new_analysis_results["final_report"] = final_strategy.model_dump()
-    
+    # main.py가 analysis_report로 읽는 키
+    new_analysis_results["market_summary"] = (
+        final_strategy.summary + "\n\n" + final_strategy.final_recommendation
+    )
+
     # [검증] legal_risks가 누락되지 않았는지 다시 한 번 확인
     if "legal_risks" not in new_analysis_results:
         new_analysis_results["legal_risks"] = legal_risks
 
     return {
         "analysis_results": new_analysis_results,
+        "overall_legal_risk": overall_legal_risk,
         "current_agent": "synthesis"
     }

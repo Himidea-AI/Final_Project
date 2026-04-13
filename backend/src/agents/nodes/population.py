@@ -20,7 +20,9 @@ async def population_analyst_node(state: AgentState) -> dict:
     
     if "error" in pop_data:
         print(f"!!! [POPULATION ANALYST DATA ERROR] !!! {pop_data['error']}")
-        return {**state, "current_agent": "population_analyst"}
+        analysis_results = state.get("analysis_results", {})
+        analysis_results["population_report"] = f"{target_district} 인구 데이터 조회 실패: {pop_data['error']}"
+        return {"analysis_results": analysis_results, "current_agent": "population_analyst"}
 
     # 2. API 할당량 관리 (2초 대기)
     print("⏳ API 할당량 관리를 위해 2초 대기 중...")

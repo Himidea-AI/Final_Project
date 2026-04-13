@@ -14,7 +14,7 @@ from src.agents.nodes.synthesis import synthesis_node
 def build_graph() -> StateGraph:
     """
     상권분석 워크플로우 그래프 빌드
-    context_analyst → legal → strategy_synthesizer → END
+    supervisor → market_analyst / population_analyst / legal_analyst → synthesis → END
     """
     workflow = StateGraph(AgentState)
 

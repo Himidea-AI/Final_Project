@@ -252,7 +252,6 @@ const AnalysisDashboard: React.FC = () => {
 
                     </div>
                   </div>
-                </div>
 
                 {/* 우측: 정성 리포트 패널 */}
                 <div className="lg:col-span-8 h-[calc(100vh-280px)] min-h-[600px] sticky top-32">
@@ -291,6 +290,7 @@ const AnalysisDashboard: React.FC = () => {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      </div>
     </div>
   );
 };

@@ -993,6 +993,7 @@ function AccordionGallery({
               </div>
             );
           })}
+
       </div>
 
     </div>
