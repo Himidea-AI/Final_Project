@@ -42,6 +42,9 @@ async def context_analyst_node(state: AgentState) -> dict:
 
     # [2] 브랜드 전국 매출 비교 (ftc_franchise.py - dev 고도화 버전 적용)
     # Top 1 지역의 행정동명과 브랜드 전국 데이터를 DB 세션 기반으로 대조
+    if not db_client.engine:
+        await db_client.connect()
+        
     async with db_client.get_session() as session:
         brand_comp_result = await ftc_client.compare_brand_to_district(
             brand_name, 

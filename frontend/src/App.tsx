@@ -1,4 +1,13 @@
 /**
+ * 🚨 [AI 개발 규칙: ROUTE STRUCTURE PROTECTED]
+ * ─────────────────────────────────────────────────────────────
+ * 1. 이 파일의 <Routes> 구조와 "/" 경로(IntroScene)는 절대 수정/삭제 금지.
+ * 2. 신규 대시보드 기능은 오직 "/simulator" 경로 내에서만 수정할 것.
+ * 3. 'Cleanup' 명목으로 기존 import나 Route를 제거하지 마시오.
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/**
  * ═══════════════════════════════════════════════════════
  * SPOTTER — 프랜차이즈 상권분석 시뮬레이터 (Frontend)
  * ═══════════════════════════════════════════════════════
@@ -44,46 +53,23 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AIVerdictBanner from "./components/AIVerdictBanner";
 import { ToastProvider, useToast } from "./components/Toast";
 import { runSimulation, analyzeLocation } from "./api/client";
+import AnalysisDashboard from "./pages/AnalysisDashboard";
 import React from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
-/**
- * 시뮬레이션 결과 — UI 바인딩용
- * 백엔드 SimulationOutput + AnalysisResult를 프론트 UI에 맞게 변환한 구조.
- * runSim() 함수에서 API 응답을 이 형태로 매핑하여 simResult state에 저장.
- */
-interface SimResult {
-  score: number;        // 상권 종합 매력도 (0~100)
-  revenue: number;      // 예상 월 매출 (만원 단위)
-  riskLevel: string;    // 카니발리제이션 위험도 ("LOW" | "MEDIUM" | "HIGH")
-  recommendation: string; // AI 추천 코멘트 (에이전트 생성)
-  chartData: { label: string; value: number }[]; // 7개 항목별 점수 (레이더 차트 데이터)
-}
 import {
   ChevronRight,
-  Sliders,
-  Activity,
   MapPin,
-  BarChart3,
-  Play,
   ExternalLink,
   Mail,
   Phone,
   GitFork,
   Users,
-  AlertTriangle,
   TrendingUp,
-  TrendingDown,
-  Download,
-  Calendar,
-  Store,
-  Crosshair,
-  Zap,
-  Scale,
-  FileText,
-  Database,
+  Activity,
+  Play,
   ChevronDown,
   User,
   Bell,
@@ -97,6 +83,17 @@ import {
   LogOut,
   ShieldAlert,
   CheckCircle2,
+  TrendingDown,
+  Zap,
+  Calendar,
+  Download,
+  FileText,
+  Database,
+  BarChart3,
+  Crosshair,
+  AlertTriangle,
+  Scale,
+  Store,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
@@ -104,34 +101,34 @@ import {
    ═══════════════════════════════════════════════════════ */
 
 const DISTRICTS = [
-  { name: "강남구", eng: "GANGNAM", img: "/images/Gangnam-gu.svg" },
-  { name: "강동구", eng: "GANGDONG", img: "/images/Gangdong-gu.svg" },
-  { name: "강북구", eng: "GANGBUK", img: "/images/Gangbuk-gu.svg" },
-  { name: "강서구", eng: "GANGSEO", img: "/images/Gangseo-gu.svg" },
-  { name: "관악구", eng: "GWANAK", img: "/images/Gwanak-gu.svg" },
-  { name: "광진구", eng: "GWANGJIN", img: "/images/Gwangjin-gu.svg" },
-  { name: "구로구", eng: "GURO", img: "/images/Guro-gu.svg" },
-  { name: "금천구", eng: "GEUMCHEON", img: "/images/Geumcheon-gu.svg" },
-  { name: "노원구", eng: "NOWON", img: "/images/Nowon-gu.svg" },
-  { name: "도봉구", eng: "DOBONG", img: "/images/Dobong-gu.svg" },
-  { name: "동대문구", eng: "DONGDAEMUN", img: "/images/Dongdaemun-gu.svg" },
-  { name: "동작구", eng: "DONGJAK", img: "/images/Dongjak-gu.svg" },
-  { name: "마포구", eng: "MAPO", img: "/images/Mapo-gu.svg" },
-  { name: "서대문구", eng: "SEODAEMUN", img: "/images/Seodaemun-gu.svg" },
-  { name: "서초구", eng: "SEOCHO", img: "/images/Seocho-gu.svg" },
-  { name: "성동구", eng: "SEONGDONG", img: "/images/Seongdong-gu.svg" },
-  { name: "성북구", eng: "SEONGBUK", img: "/images/Seongbuk-gu.svg" },
-  { name: "송파구", eng: "SONGPA", img: "/images/Songpa-gu.svg" },
-  { name: "양천구", eng: "YANGCHEON", img: "/images/Yangcheon-gu.svg" },
-  { name: "영등포구", eng: "YEONGDEUNGPO", img: "/images/Yeongdeungpo-gu.svg" },
-  { name: "용산구", eng: "YONGSAN", img: "/images/Yongsan-gu.svg" },
-  { name: "은평구", eng: "EUNPYEONG", img: "/images/Eunpyeong-gu.svg" },
-  { name: "종로구", eng: "JONGNO", img: "/images/Jongno-gu.svg" },
-  { name: "중구", eng: "JUNG", img: "/images/Jung-gu.svg" },
-  { name: "중랑구", eng: "JUNGNANG", img: "/images/Jungnang-gu.svg" },
+  { name: "종로구", eng: "jongno", img: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=2094&auto=format&fit=crop" },
+  { name: "중구", eng: "jung", img: "https://images.unsplash.com/photo-1582996269871-dad1e4adbbc7?q=80&w=2000&auto=format&fit=crop" },
+  { name: "용산구", eng: "yongsan", img: "https://images.unsplash.com/photo-1538485399081-7191377e8241?q=80&w=2155&auto=format&fit=crop" },
+  { name: "성동구", eng: "seongdong", img: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2070&auto=format&fit=crop" },
+  { name: "광진구", eng: "gwangjin", img: "https://images.unsplash.com/photo-1570129477492-45c003edd2be?q=80&w=2070&auto=format&fit=crop" },
+  { name: "동대문구", eng: "dongdaemun", img: "https://images.unsplash.com/photo-1493397212122-2b85edf8106b?q=80&w=2070&auto=format&fit=crop" },
+  { name: "중랑구", eng: "jungnang", img: "https://images.unsplash.com/photo-1518005020481-aacf907376d7?q=80&w=2071&auto=format&fit=crop" },
+  { name: "성북구", eng: "seongbuk", img: "https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?q=80&w=2070&auto=format&fit=crop" },
+  { name: "강북구", eng: "gangbuk", img: "https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?q=80&w=2070&auto=format&fit=crop" },
+  { name: "도봉구", eng: "dobong", img: "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=2070&auto=format&fit=crop" },
+  { name: "노원구", eng: "nowon", img: "https://images.unsplash.com/photo-1549144511-f099e773c147?q=80&w=2187&auto=format&fit=crop" },
+  { name: "은평구", eng: "eunpyeong", img: "https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?q=80&w=2070&auto=format&fit=crop" },
+  { name: "서대문구", eng: "seodaemun", img: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop" },
+  { name: "마포구", eng: "mapo", img: "https://images.unsplash.com/photo-1621252179027-94459d278660?q=80&w=2070&auto=format&fit=crop" },
+  { name: "양천구", eng: "yangcheon", img: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=2144&auto=format&fit=crop" },
+  { name: "강서구", eng: "gangseo", img: "https://images.unsplash.com/photo-1444723121867-7a241cacace9?q=80&w=2070&auto=format&fit=crop" },
+  { name: "구로구", eng: "guro", img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2070&auto=format&fit=crop" },
+  { name: "금천구", eng: "geumcheon", img: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?q=80&w=2074&auto=format&fit=crop" },
+  { name: "영등포구", eng: "yeongdeungpo", img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=2070&auto=format&fit=crop" },
+  { name: "동작구", eng: "dongjak", img: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=2073&auto=format&fit=crop" },
+  { name: "관악구", eng: "gwanak", img: "https://images.unsplash.com/photo-1473081556163-2a17de81fc97?q=80&w=2187&auto=format&fit=crop" },
+  { name: "서초구", eng: "seocho", img: "https://images.unsplash.com/photo-1542332213-31f87348057f?q=80&w=2070&auto=format&fit=crop" },
+  { name: "강남구", eng: "gangnam", img: "https://images.unsplash.com/photo-1538666579040-cf6d0fc8789d?q=80&w=2070&auto=format&fit=crop" },
+  { name: "송파구", eng: "songpa", img: "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?q=80&w=2089&auto=format&fit=crop" },
+  { name: "강동구", eng: "gangdong", img: "https://images.unsplash.com/photo-1519052537078-e6302a4968d4?q=80&w=2070&auto=format&fit=crop" },
 ];
 
-const MAPO_IDX = 12;
+const MAPO_IDX = DISTRICTS.findIndex((d) => d.name === "마포구");
 
 const MENU_ITEMS = ["ABOUT SPOTTER", "JOIN US", "SIMULATOR", "CONTACT"];
 
@@ -652,9 +649,8 @@ function IntroScene({
               >
                 {/* Indicator bar */}
                 <div
-                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
-                    isActive ? "scale-x-100" : "scale-x-0"
-                  }`}
+                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${isActive ? "scale-x-100" : "scale-x-0"
+                    }`}
                 />
                 <span
                   className={`inline-block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
@@ -835,11 +831,10 @@ function AccordionGallery({
             {DISTRICTS.map((d, i) => (
               <div
                 key={d.eng}
-                className={`w-1 h-3 rounded-full transition-all duration-300 ${
-                  hoveredIdx === i
-                    ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                    : "bg-white/20"
-                }`}
+                className={`w-1 h-3 rounded-full transition-all duration-300 ${hoveredIdx === i
+                  ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                  : "bg-white/20"
+                  }`}
               />
             ))}
           </div>
@@ -862,14 +857,13 @@ function AccordionGallery({
       {/* Gallery track */}
       <div
         ref={trackRef}
-        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${
-          isDragging ? "cursor-grabbing" : "cursor-grab"
-        }`}
+        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${isDragging ? "cursor-grabbing" : "cursor-grab"
+          }`}
         onMouseDown={handleMouseDown}
       >
-          {DISTRICTS.map((d, i) => {
-            const isHovered = hoveredIdx === i;
-            const isMapo = i === MAPO_IDX;
+        {DISTRICTS.map((d, i) => {
+          const isHovered = hoveredIdx === i;
+          const isMapo = i === MAPO_IDX;
 
             return (
               <div
@@ -881,29 +875,23 @@ function AccordionGallery({
                     ? "w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(129,140,248,0.3)]"
                     : "w-[70px] md:w-[80px] z-0"
                 }`}
-                onMouseEnter={() => setHoveredIdx(i)}
-                onMouseLeave={() => setHoveredIdx(null)}
-                onClick={() => {
-                  if (isMapo && !isDragging) onMapoClick();
-                }}
-              >
-                {/* 1. Animated Gradient Border — 호버 시에만 회전 빛 표시 */}
-                <div
-                  className={`absolute inset-[-50%] z-0 animate-spin-slow transition-opacity duration-500 ${
-                    isHovered ? "opacity-100" : "opacity-0"
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onClick={() => {
+                if (isMapo && !isDragging) onMapoClick();
+              }}
+            >
+              {/* Parallax background image */}
+              <div
+                className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                  ? "scale-100 opacity-80 grayscale-0"
+                  : "scale-[0.9] opacity-30 grayscale-0"
                   }`}
-                  style={{
-                    background:
-                      "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                  }}
-                />
+                style={{ backgroundImage: `url(${d.img})` }}
+              />
 
-                {/* 2. 실제 컨텐츠 컨테이너 (2px 인셋으로 테두리만 노출) */}
-                <div
-                  className={`absolute inset-[2px] z-10 overflow-hidden rounded-[14px] transition-colors duration-500 ${
-                    isHovered ? "bg-[#2c2825]" : "bg-[#1e1b18]"
-                  }`}
-                >
+                {/* (Optional) Animated Gradient Border or other effects would go here */}
+
                 {/* Parallax background image */}
                 <div
                   className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
@@ -917,21 +905,10 @@ function AccordionGallery({
                 {/* Gradient mask */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18] via-[#1e1b18]/60 to-transparent opacity-90 transition-opacity duration-1000" />
 
-                {/* District number */}
-                <div
-                  className={`absolute top-6 left-0 right-0 text-center font-mono text-xs transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered ? "text-gray-400 opacity-100" : "text-gray-600 opacity-0"
-                  }`}
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </div>
-
                 {/* English name (shown on hover) */}
                 <div
                   className={`absolute top-12 left-6 right-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-4"
+                    isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                   }`}
                 >
                   <span className="text-xs tracking-[0.3em] text-gray-400 font-light uppercase">
@@ -943,9 +920,7 @@ function AccordionGallery({
                 {isMapo && (
                   <div
                     className={`absolute top-24 left-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                      isHovered
-                        ? "opacity-100 translate-y-0"
-                        : "opacity-0 translate-y-4"
+                      isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                     }`}
                   >
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
@@ -969,9 +944,7 @@ function AccordionGallery({
                               : "text-4xl md:text-5xl opacity-0 translate-y-10 blur-[4px]"
                           }`}
                           style={{
-                            transitionDelay: isHovered
-                              ? `${ci * 40 + 100}ms`
-                              : "0ms",
+                            transitionDelay: isHovered ? `${ci * 40 + 100}ms` : "0ms",
                           }}
                         >
                           {char}
@@ -990,9 +963,7 @@ function AccordionGallery({
                               : "text-2xl md:text-3xl opacity-60 translate-y-0 blur-0"
                           }`}
                           style={{
-                            transitionDelay: isHovered
-                              ? "0ms"
-                              : `${ci * 40 + 100}ms`,
+                            transitionDelay: isHovered ? "0ms" : `${ci * 40 + 100}ms`,
                           }}
                         >
                           {char}
@@ -1021,10 +992,10 @@ function AccordionGallery({
                     </div>
                   </div>
                 </div>
-                </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
       </div>
 
     </div>
@@ -3452,7 +3423,6 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
    [글로벌 상태]
    - isDark: Light/Dark 테마 토글 (SkyThemeToggle 연결)
    - isTransitioning: 씬 전환 시 800ms 암전 오버레이
-   - reportState: Simulator idle/loading/result 상태
    - isAppLoaded: 프리로더 완료 여부
 
    [글로벌 헤더]
@@ -3483,9 +3453,7 @@ export default function App() {
   const scene = pathToScene(location.pathname);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [reportState, setReportState] = useState<"idle" | "loading" | "result">(
-    "idle"
-  );
+  const [reportState, setReportState] = useState<"idle" | "loading" | "result">("idle");
   const [activeMenuIndex, setActiveMenuIndex] = useState(2);
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(
     null
@@ -3538,7 +3506,6 @@ export default function App() {
         };
         const path = pathMap[next] || "/";
         navigate(path);
-        setReportState("idle");
         setTimeout(() => setIsTransitioning(false), 100);
       }, 800);
     },
@@ -3669,9 +3636,8 @@ export default function App() {
 
       {/* Transition overlay */}
       <div
-        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
-          isTransitioning ? "opacity-100" : "opacity-0"
-        }`}
+        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${isTransitioning ? "opacity-100" : "opacity-0"
+          }`}
       />
 
       {/* 3D Hologram Preloader */}

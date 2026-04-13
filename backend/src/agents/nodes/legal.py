@@ -16,7 +16,7 @@ import concurrent.futures
 import json
 import os
 
-from src.schemas.state import AgentState
+from src.agents.state import AgentState
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.settings import settings
@@ -763,19 +763,16 @@ async def check_fair_trade_law(state: AgentState, docs: list[dict]) -> dict:
 async def check_ftc_franchise(state: AgentState) -> dict:
     """
     공정위 가맹사업 정보공개서 검토 — 브랜드 폐점률·매출·가맹금 리스크 판정.
-    + 해당 행정동 업종 평균 매출과 비교하여 지역 경쟁력 리스크 추가 판정.
 
     주요 검토 항목:
     - 폐점률 (10% 초과 시 위험, 5% 초과 시 주의)
     - 평균 매출액 (1억 미만 시 주의)
-    - 가맹금 수준
-    - 브랜드 전국 평균 매출 vs 해당 동 업종 평균 비교 (position_ratio < 70% 시 주의)
+    - 가맹금 수준 (1000만 원 초과 시 주의)
 
     Returns:
         dict: {type, level, summary, articles, recommendation}
     """
     brand = state.get("brand_name") or ""
-    district = state.get("target_district", "")
 
     if not brand:
         return {
@@ -813,7 +810,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
         franchise_fee = detail.get("franchise_fee", 0)
         store_count = detail.get("store_count_total", 0)
 
-        # 리스크 레벨 판정 (공정위 지표 기준)
+        # 리스크 레벨 판정
         if churn_rate > 0.10:
             level = "danger"
         elif churn_rate > 0.05 or avg_sales < 100_000_000:
@@ -835,58 +832,6 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             summary += "폐점률 또는 매출 수준에서 주의가 필요합니다."
         else:
             summary += "공정위 지표 기준 안정적인 브랜드로 판단됩니다."
-
-        # 지역 업종 평균 대비 비교 (A1 DB 활용 — non-fatal)
-        if district:
-            try:
-                from sqlalchemy import select
-
-                from src.database.models import DistrictSales
-                from src.database.postgres import PostgresClient
-
-                industry_code = FtcFranchiseClient.match_industry_code(detail.get("brand_name", brand))
-                if industry_code:
-                    pg = PostgresClient(settings.postgres_url)
-                    await pg.connect()
-                    try:
-                        async with pg.get_session() as session:
-                            stmt = (
-                                select(
-                                    DistrictSales.quarter,
-                                    DistrictSales.industry_name,
-                                    DistrictSales.monthly_sales,
-                                )
-                                .where(
-                                    DistrictSales.dong_name == district,
-                                    DistrictSales.industry_code == industry_code,
-                                )
-                                .order_by(DistrictSales.quarter.desc())
-                                .limit(4)
-                            )
-                            result = await session.execute(stmt)
-                            rows = result.fetchall()
-                    finally:
-                        await pg.disconnect()
-
-                    if rows:
-                        district_annual_avg = int(sum(r.monthly_sales for r in rows) / len(rows) * 12)
-                        position_ratio = (
-                            round(avg_sales / district_annual_avg * 100, 1)
-                            if district_annual_avg > 0 and avg_sales > 0
-                            else 0.0
-                        )
-                        industry_name = rows[0].industry_name
-
-                        summary += (
-                            f" {district} {industry_name} 업종 연평균 매출 {district_annual_avg:,}원 대비 "
-                            f"브랜드 전국 평균은 {position_ratio}% 수준입니다."
-                        )
-                        # 지역 대비 매출이 낮으면 주의 상향
-                        if 0 < position_ratio < 70 and level == "safe":
-                            level = "caution"
-                            summary += " 지역 업종 평균 대비 매출이 낮아 주의가 필요합니다."
-            except Exception as e:
-                print(f"[check_ftc_franchise] 지역 업종 비교 실패 (무시): {e}")
 
         recommendation = ""
         if level == "danger":
@@ -912,11 +857,11 @@ async def check_ftc_franchise(state: AgentState) -> dict:
         }
 
 
-def check_zoning_regulation(state: AgentState) -> dict:
+async def check_zoning_regulation(state: AgentState) -> dict:
     """
     용도지역 규제 검토 — 대상 행정동의 용도지역에서 해당 업종 영업 가능 여부.
 
-    LLM 없이 constants 기반 규칙으로 판정 (빠르고 결정론적). I/O 없으므로 sync.
+    LLM 없이 constants 기반 규칙으로 판정 (빠르고 결정론적).
 
     Returns:
         dict: {type, level, zone, business_type, allowed, summary}
@@ -967,14 +912,15 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     import redis.asyncio as aioredis
 
+    from src.config.settings import settings
+
     brand = state.get("brand_name") or "해당 브랜드"
     district = state.get("target_district", "")
     business_type = state.get("business_type", "")
 
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
-    _raw_key = f"legal:{brand}:{district}:{business_type}"
-    cache_key = "legal:" + hashlib.md5(_raw_key.encode()).hexdigest()
+    cache_key = f"legal:{brand}:{district}:{business_type}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -1107,23 +1053,15 @@ async def _run_legal_pipeline(state: dict) -> dict:
         {"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks
     ]
 
-    # 종합 리스크 레벨 — 14개 중 가장 높은 레벨 (danger > caution > safe)
-    _level_order = {"danger": 2, "caution": 1, "safe": 0}
-    overall_level = max((r.get("level", "safe") for r in risks), key=lambda lv: _level_order.get(lv, 0))
-
     analysis = dict(state.get("analysis_results") or {})
     analysis["legal_risks"] = risks
-    analysis["overall_legal_risk"] = overall_level
 
     # Redis 캐시 저장 — 다음 동일 요청 시 즉시 반환
     if _redis is not None:
         try:
             await _redis.set(
                 cache_key,
-                json.dumps(
-                    {"legal_risks": risks, "legal_info": legal_info, "overall_legal_risk": overall_level},
-                    ensure_ascii=False,
-                ),
+                json.dumps({"legal_risks": risks, "legal_info": legal_info}, ensure_ascii=False),
                 ex=_CACHE_TTL,
             )
             print(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
