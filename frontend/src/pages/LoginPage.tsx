@@ -7,12 +7,14 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2, ChevronRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useToast } from "../components/Toast";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const auth = useAuth();
+  const { showToast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -35,7 +37,8 @@ export default function LoginPage() {
       const data = await res.json();
       if (data.status === "success") {
         auth.login(data.user, data.brand || null);
-        navigate("/");
+        showToast("success", `환영합니다! ${data.user?.company_name || "SPOTTER"} 엔진에 연결되었습니다.`);
+        navigate("/simulator");
       } else {
         setError(data.message || "이메일 또는 비밀번호가 올바르지 않습니다.");
       }
@@ -49,6 +52,9 @@ export default function LoginPage() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleLogin();
   };
+
+  // 이미 로그인 상태면 메인으로 리다이렉트
+  if (auth.isLoggedIn) return <Navigate to="/" replace />;
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1e1b18]">
@@ -171,7 +177,7 @@ export default function LoginPage() {
             >
               아직 계정이 없으신가요? 회원가입
             </button>
-            <button className="text-[10px] text-[#9ca3af] hover:text-[#818cf8] transition-colors">
+            <button onClick={() => showToast("info", "비밀번호 찾기 기능은 준비 중입니다.")} className="text-[10px] text-[#9ca3af] hover:text-[#818cf8] transition-colors">
               비밀번호를 잊으셨나요?
             </button>
           </div>
