@@ -3,26 +3,48 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage
 
 from src.schemas.state import AgentState
-from src.agents.nodes.context_analyst import context_analyst_node
-from src.agents.nodes.legal import legal_node
-from src.agents.nodes.strategy_synthesizer import strategy_synthesizer_node
+# 1. 예진 님의 5인 체제 노드들만 남기고 나머지는 제거했습니다.
+from src.agents.nodes.supervisor import supervisor_node
+from src.agents.nodes.market_analyst import market_analyst_node
+from src.agents.nodes.population import population_analyst_node
+from src.agents.nodes.legal import legal_analyst_node
+from src.agents.nodes.synthesis import synthesis_node
 
 
 def build_graph() -> StateGraph:
     """
-    상권분석 워크플로우 그래프 빌드
-    context_analyst → legal → strategy_synthesizer → END
+    상권분석 워크플로우 그래프 빌드 (Supervisor 기반 Hub-and-Spoke 구조)
     """
     workflow = StateGraph(AgentState)
 
-    workflow.add_node("context_analyst", context_analyst_node)
-    workflow.add_node("legal_analyst", legal_node)
-    workflow.add_node("synthesis", strategy_synthesizer_node)
+    # 노드 등록 (5인 체제)
+    workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("market_analyst", market_analyst_node)
+    workflow.add_node("population_analyst", population_analyst_node)
+    workflow.add_node("legal_analyst", legal_analyst_node)
+    workflow.add_node("synthesis", synthesis_node)
 
-    workflow.set_entry_point("context_analyst")
+    # 진입점 설정
+    workflow.set_entry_point("supervisor")
 
-    workflow.add_edge("context_analyst", "legal_analyst")
-    workflow.add_edge("legal_analyst", "synthesis")
+    # 중앙 통제 라우팅 (Supervisor -> Workers)
+    workflow.add_conditional_edges(
+        "supervisor",
+        lambda x: x["next_step"],
+        {
+            "market_analyst": "market_analyst",
+            "population_analyst": "population_analyst",
+            "legal_analyst": "legal_analyst",
+            "FINISH": "synthesis",
+        },
+    )
+
+    # 작업 완료 후 복귀 (Workers -> Supervisor)
+    workflow.add_edge("market_analyst", "supervisor")
+    workflow.add_edge("population_analyst", "supervisor")
+    workflow.add_edge("legal_analyst", "supervisor")
+
+    # 최종 합성 후 종료 (Synthesis -> END)
     workflow.add_edge("synthesis", END)
 
     return workflow
@@ -34,11 +56,11 @@ def compile_graph():
     return builder.compile()
 
 
-# main.py 호환용 별칭
+# ★★★ [중요] 로그인 오류를 해결하는 핵심 열쇠 ★★★
 compile_workflow = compile_graph
 
 
-# --- 로컬 테스트 코드 ---
+# --- 로컬 테스트 코드 (필요할 때 터미널에서 실행 가능) ---
 async def test_run():
     app = compile_graph()
 
