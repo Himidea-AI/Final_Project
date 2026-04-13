@@ -364,6 +364,26 @@ class User(Base):
     )
 
 
+class FtcBrandFranchise(Base):
+    """공정거래위원회 프랜차이즈 브랜드 정보 — 회원가입 시 브랜드 자동 매핑용"""
+
+    __tablename__ = "ftc_brand_franchise"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    yr = Column(SmallInteger, index=True, comment="기준 연도")
+    corpNm = Column(String(200), comment="법인명 (기업명)")
+    brandNm = Column(String(200), index=True, comment="브랜드명")
+    indutyLclasNm = Column(String(50), comment="업종 대분류명")
+    indutyMlsfcNm = Column(String(50), comment="업종 중분류명")
+    frcsCnt = Column(Integer, comment="가맹점 수")
+    newFrcsRgsCnt = Column(Integer, comment="신규 가맹점 등록 수")
+    ctrtEndCnt = Column(Integer, comment="계약 종료 수")
+    ctrtCncltnCnt = Column(Integer, comment="계약 해지 수")
+    nmChgCnt = Column(Integer, comment="명칭 변경 수")
+    avrgSlsAmt = Column(BigInteger, comment="평균 매출액 (천원)")
+    arUnitAvrgSlsAmt = Column(BigInteger, comment="면적당 평균 매출액")
+
+
 class BizBrandMapping(Base):
     """사업자등록번호 ↔ 브랜드 매핑 — 회원가입 시 자동 축적"""
 
