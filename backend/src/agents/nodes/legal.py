@@ -16,7 +16,7 @@ import concurrent.futures
 import json
 import os
 
-from src.agents.state import AgentState
+from src.schemas.state import AgentState
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.settings import settings
@@ -974,7 +974,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     law_client = LawApiClient()
 
     # zoning: I/O 없는 규칙 기반 — 즉시 실행 후 Phase 1 병렬 대기
-    zoning_result = check_zoning_regulation(state)
+    zoning_result = await check_zoning_regulation(state)
 
     # Phase 1: RAG×13 + 판례×4 + FTC API 병렬 실행 (총 18개)
     # return_exceptions=True — 한 개 실패해도 나머지 결과 유지
