@@ -1047,6 +1047,37 @@ async def _run_legal_pipeline(state: dict) -> dict:
     )
 
     # Phase 2: LLM check 함수 12개 병렬 실행 (Phase 1 결과 docs 전달)
+    # return_exceptions=True — 한 LLM 실패해도 나머지 결과 유지
+    _phase2_raw = await asyncio.gather(
+        check_franchise_law(state, franchise_docs + franchise_prec),
+        check_commercial_lease_law(state, lease_docs + lease_prec),
+        check_food_hygiene(state, food_docs + food_prec),
+        check_safety_regulation(state, safety_docs + safety_prec),
+        check_building_law(state, building_docs),
+        check_fire_safety_law(state, fire_docs),
+        check_labor_law(state, labor_docs),
+        check_vat_law(state, vat_docs),
+        check_privacy_law(state, privacy_docs),
+        check_accessibility_law(state, accessibility_docs),
+        check_sewage_law(state, sewage_docs),
+        check_fair_trade_law(state, fair_trade_docs),
+        return_exceptions=True,
+    )
+
+    # Phase 2 예외 결과를 caution dict로 대체
+    _DEFAULT_RISK_TYPES = [
+        "franchise_law", "commercial_lease", "food_hygiene", "safety_regulation",
+        "building_law", "fire_safety", "labor_law", "vat_law",
+        "privacy_law", "accessibility_law", "sewage_law", "fair_trade",
+    ]
+
+    def _safe_risk(r: object, type_name: str) -> dict:
+        if isinstance(r, Exception):
+            print(f"[legal_node] Phase 2 LLM 실패 ({type_name}, 무시하고 계속): {r}")
+            return {"type": type_name, "level": "caution", "summary": f"검토 중 오류 발생: {r}", "articles": [], "recommendation": ""}
+        return r  # type: ignore[return-value]
+
+    _phase2_results = list(_phase2_raw)
     (
         franchise_risk,
         lease_risk,
@@ -1060,20 +1091,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         accessibility_risk,
         sewage_risk,
         fair_trade_risk,
-    ) = await asyncio.gather(
-        check_franchise_law(state, franchise_docs + franchise_prec),
-        check_commercial_lease_law(state, lease_docs + lease_prec),
-        check_food_hygiene(state, food_docs + food_prec),
-        check_safety_regulation(state, safety_docs + safety_prec),
-        check_building_law(state, building_docs),
-        check_fire_safety_law(state, fire_docs),
-        check_labor_law(state, labor_docs),
-        check_vat_law(state, vat_docs),
-        check_privacy_law(state, privacy_docs),
-        check_accessibility_law(state, accessibility_docs),
-        check_sewage_law(state, sewage_docs),
-        check_fair_trade_law(state, fair_trade_docs),
-    )
+    ) = [_safe_risk(_phase2_results[i], _DEFAULT_RISK_TYPES[i]) for i in range(12)]
 
     risks = [
         franchise_risk,
@@ -1092,6 +1110,15 @@ async def _run_legal_pipeline(state: dict) -> dict:
         fair_trade_risk,
     ]
 
+    # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe
+    levels = [r.get("level", "caution") for r in risks if isinstance(r, dict)]
+    if "danger" in levels:
+        overall_level = "danger"
+    elif "caution" in levels:
+        overall_level = "caution"
+    else:
+        overall_level = "safe"
+
     precedents = franchise_prec + lease_prec + food_prec + safety_prec
     legal_info = (legal_info_docs + precedents) or [
         {"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks
@@ -1099,13 +1126,14 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     analysis = dict(state.get("analysis_results") or {})
     analysis["legal_risks"] = risks
+    analysis["overall_legal_risk"] = overall_level
 
-    # Redis 캐시 저장 — 다음 동일 요청 시 즉시 반환
+    # Redis 캐시 저장 — overall_legal_risk 포함
     if _redis is not None:
         try:
             await _redis.set(
                 cache_key,
-                json.dumps({"legal_risks": risks, "legal_info": legal_info}, ensure_ascii=False),
+                json.dumps({"legal_risks": risks, "legal_info": legal_info, "overall_legal_risk": overall_level}, ensure_ascii=False),
                 ex=_CACHE_TTL,
             )
             print(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
