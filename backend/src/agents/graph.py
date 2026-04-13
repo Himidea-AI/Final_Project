@@ -13,7 +13,8 @@ from src.agents.nodes.synthesis import synthesis_node
 
 def build_graph() -> StateGraph:
     """
-    상권분석 워크플로우 그래프 빌드 (Supervisor 기반 Hub-and-Spoke 구조)
+    상권분석 워크플로우 그래프 빌드
+    context_analyst → legal → strategy_synthesizer → END
     """
     workflow = StateGraph(AgentState)
 

@@ -21,7 +21,7 @@ class CsvDataLoader:
         district_prefix: str = "11440",
     ) -> pd.DataFrame:
         """생활인구 CSV 로드 후 행정동 코드 prefix로 필터링."""
-        df = pd.read_csv(file_path, dtype={"adstrd_code_se": str})
+        df = pd.read_csv(file_path, dtype={"adstrd_code_se": str}, encoding="cp949")
         return df[df["adstrd_code_se"].str.startswith(district_prefix)].reset_index(drop=True)
 
     def load_sgis_stats(self, file_path: str) -> pd.DataFrame:
@@ -39,7 +39,7 @@ class CsvDataLoader:
         self,
         file_path: str,
         sgg_name: str = "마포구",
-        encoding: str = "utf-8",
+        encoding: str = "cp949",
     ) -> pd.DataFrame:
         """점포 정보 CSV 로드 후 시군구명으로 필터링."""
         df = pd.read_csv(file_path, encoding=encoding, low_memory=False)
