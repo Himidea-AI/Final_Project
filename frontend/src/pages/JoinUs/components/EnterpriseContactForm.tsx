@@ -46,7 +46,7 @@ export default function EnterpriseContactForm({ onSuccess }: Props) {
 
   const handleSubmit = () => {
     if (!allValid) return;
-    console.log("Enterprise inquiry:", form);
+    // console.log("Enterprise inquiry:", form);
     onSuccess();
   };
 

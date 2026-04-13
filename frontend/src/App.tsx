@@ -39,7 +39,7 @@ import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import JoinUsPage from "./pages/JoinUs/JoinUsPage";
 import HQCommandCenter from "./pages/HQCommandCenter";
 import LoginPage from "./pages/LoginPage";
-import { AuthProvider } from "./auth/AuthContext";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import AIVerdictBanner from "./components/AIVerdictBanner";
 import { runSimulation, analyzeLocation } from "./api/client";
@@ -93,6 +93,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Folder,
+  LogOut,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
@@ -1503,6 +1504,7 @@ function SimulatorDashboard({
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
   const [loadingText, setLoadingText] = useState("INITIALIZING AI ENGINE...");
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [chartView, setChartView] = useState<"daily" | "monthly">("daily");
   const [tableView, setTableView] = useState<"cannibalization" | "neighborhoods">("cannibalization");
@@ -1787,23 +1789,44 @@ function SimulatorDashboard({
     }
   }, [setReportState, selectedDongs, budget]);
 
-  // Loading streaming text
+  // Loading — 단계별 progress bar + 스트리밍 텍스트 (100~120초 대응)
   useEffect(() => {
-    if (reportState !== "loading") return;
-    const texts = [
-      "FETCHING KT TELECOM DATA...",
-      "ANALYZING CANNIBALIZATION RATE...",
-      "CALCULATING RENT-TO-REVENUE RATIO...",
-      "RUNNING WHAT-IF SCENARIOS...",
-      "CROSS-CHECKING LEGAL RISKS...",
-      "GENERATING 12-MONTH FORECAST...",
+    if (reportState !== "loading") {
+      setLoadingProgress(0);
+      return;
+    }
+
+    const stages = [
+      { at: 0, text: "INITIALIZING AI ENGINE..." },
+      { at: 5, text: "CONNECTING TO DATABASE..." },
+      { at: 10, text: "FETCHING KT TELECOM DATA..." },
+      { at: 20, text: "ANALYZING COMPETITION DENSITY (pgvector)..." },
+      { at: 30, text: "QUERYING POPULATION TRENDS..." },
+      { at: 40, text: "CALCULATING RENT-TO-REVENUE RATIO..." },
+      { at: 50, text: "ANALYZING CANNIBALIZATION RATE..." },
+      { at: 60, text: "CROSS-CHECKING LEGAL RISKS (RAG 3,775 chunks)..." },
+      { at: 70, text: "RUNNING WHAT-IF SCENARIOS..." },
+      { at: 80, text: "GENERATING 12-MONTH FORECAST (LSTM)..." },
+      { at: 88, text: "SYNTHESIZING MULTI-AGENT RESULTS..." },
     ];
-    let i = 0;
-    const interval = setInterval(() => {
-      setLoadingText(texts[i % texts.length]);
-      i++;
-    }, 400);
-    return () => clearInterval(interval);
+
+    // 90%까지 100초에 걸쳐 천천히 올라감
+    const duration = 100000; // 100초
+    const maxProgress = 90;
+    const interval = 500; // 0.5초마다 업데이트
+    const step = (maxProgress / duration) * interval;
+    let current = 0;
+
+    const timer = setInterval(() => {
+      current = Math.min(current + step + Math.random() * 0.3, maxProgress);
+      setLoadingProgress(current);
+
+      // 단계별 텍스트 업데이트
+      const stage = [...stages].reverse().find((s) => current >= s.at);
+      if (stage) setLoadingText(stage.text);
+    }, interval);
+
+    return () => clearInterval(timer);
   }, [reportState]);
 
   // Dark theme only
@@ -2206,13 +2229,35 @@ function SimulatorDashboard({
                 {/* Double spinner */}
                 <div className="absolute inset-0 border-4 border-[#3a3633] border-t-[#818cf8] rounded-full animate-[spin_2s_linear_infinite]" />
                 <div className="absolute inset-2 border-4 border-[#3a3633] border-b-[#818cf8] rounded-full animate-[spin_3s_linear_infinite_reverse]" />
+                {/* Center percentage */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-lg font-black font-mono text-[#818cf8]">
+                    {Math.round(loadingProgress)}%
+                  </span>
+                </div>
               </div>
 
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-4 w-full max-w-md">
                 <p className={`font-mono text-xl font-black tracking-[0.2em] uppercase ${accent}`}>
                   PROCESSING DATA
                 </p>
-                <div className="px-4 py-2 mt-2 bg-black/10 rounded-md border border-[#3a3633]/30 backdrop-blur-sm flex items-center gap-3">
+
+                {/* Progress Bar */}
+                <div className="w-full relative">
+                  <div className="w-full h-2 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#6366f1] to-[#818cf8] rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${loadingProgress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1.5">
+                    <span className="text-[9px] font-mono text-[#818cf8]">{Math.round(loadingProgress)}%</span>
+                    <span className="text-[9px] font-mono text-[#9ca3af]">~{Math.max(0, Math.round((90 - loadingProgress) / 0.9))}초 남음</span>
+                  </div>
+                </div>
+
+                {/* Current step */}
+                <div className="px-4 py-2 bg-black/10 rounded-md border border-[#3a3633]/30 backdrop-blur-sm flex items-center gap-3">
                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                   <p className={`font-mono text-xs tracking-widest ${textSecondary}`}>
                     [ {loadingText} ]
@@ -2508,6 +2553,27 @@ function SimulatorDashboard({
    ※ SkyThemeToggle, GlobalLimelightNav는 글로벌 헤더 전용
 */
 
+
+function LogoutButton() {
+  const { isLoggedIn, logout } = useAuth();
+  const navigate = useNavigate();
+
+  if (!isLoggedIn) return null;
+
+  return (
+    <button
+      onClick={() => {
+        logout();
+        navigate("/login");
+      }}
+      className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-[#9ca3af] hover:text-rose-400 hover:bg-rose-500/10 rounded-full text-xs font-medium transition-colors border border-transparent hover:border-rose-500/30"
+      title="로그아웃"
+    >
+      <LogOut className="w-3.5 h-3.5" />
+      <span>로그아웃</span>
+    </button>
+  );
+}
 
 function GlobalLimelightNav() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -3412,6 +3478,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4 md:gap-6">
             <GlobalLimelightNav />
+            <LogoutButton />
           </div>
         </header>
       )}
