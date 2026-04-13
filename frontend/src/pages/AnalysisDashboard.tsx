@@ -64,7 +64,7 @@ const AnalysisDashboard: React.FC = () => {
 
 
 
-
+  const handleAnalyze = () => {
     execute({
       business_type: 'cafe',
       brand_name: brandName,
@@ -250,16 +250,16 @@ const AnalysisDashboard: React.FC = () => {
                     ))}
                   </div>
 
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* 우측: 정성 리포트 패널 */}
-              <div className="lg:col-span-8 h-[calc(100vh-280px)] min-h-[600px] sticky top-32">
-                <ReportViewer report={result.analysis_report} />
-              </div>
-            </motion.div>
-          ) : (
+                {/* 우측: 정성 리포트 패널 */}
+                <div className="lg:col-span-8 h-[calc(100vh-280px)] min-h-[600px] sticky top-32">
+                  <ReportViewer report={result.analysis_report} />
+                </div>
+              </motion.div>
+            ) : (
             <motion.div
               key="idle"
               initial={{ opacity: 0 }}

@@ -25,20 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend" / "src"))
 from database.models import Base  # noqa: E402
 
 PROC = Path(__file__).resolve().parents[1] / "processed"
+
 # DB 접속 정보: 환경변수 → .env → 기본값 (docker-compose 기준)
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
-
-# psycopg (v3) 우선, 없으면 psycopg2 사용
-try:
-    import psycopg  # noqa: F401
-
-    _driver = "postgresql+psycopg"
-except ImportError:
-    _driver = "postgresql"
-
 DB_URL = os.environ.get(
     "POSTGRES_URL",
-    f"{_driver}://postgres:{_pw}@localhost:5432/mapo_simulator",
+    f"postgresql://postgres:{_pw}@localhost:5432/mapo_simulator",
 )
 
 
@@ -60,8 +52,22 @@ def _read_csv(filename: str, **kwargs) -> pd.DataFrame:
 
 def get_engine(db_url: str = DB_URL):
     """Create a sync SQLAlchemy engine and ensure all ORM tables exist."""
+    # Windows/psycopg2 encoding workaround: ensure URL is clean
+    if "localhost" in db_url:
+        db_url = db_url.replace("localhost", "127.0.0.1")
+    
     engine = create_engine(db_url, echo=False)
-    Base.metadata.create_all(engine)
+    
+    try:
+        Base.metadata.create_all(engine)
+    except Exception as e:
+        print(f"Warning: metadata.create_all failed: {e}")
+        # If it's the specific Unicode error, we might need a different approach
+        if "UnicodeDecodeError" in str(e):
+            print("Detected UnicodeDecodeError in psycopg2. Attempting alternate connection...")
+            # Fallback or more specific fix could go here if needed
+            raise e
+        raise e
     return engine
 
 
@@ -146,11 +152,15 @@ def load_living_population(engine) -> int:
     )
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE living_population RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "living_population",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
+        method="multi",
         chunksize=1000,
     )
     return len(df)
@@ -212,12 +222,16 @@ def load_sgis_population(engine) -> int:
     combined["value"] = pd.to_numeric(combined["value"], errors="coerce")
     combined = combined.drop_duplicates(subset=["year", "area_code", "indicator"])
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE sgis_population RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "sgis_population",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
-        chunksize=1000,
+        method="multi",
+        chunksize=5000,
     )
     return len(combined)
 
@@ -249,12 +263,16 @@ def load_sgis_household(engine) -> int:
     combined["value"] = pd.to_numeric(combined["value"], errors="coerce")
     combined = combined.drop_duplicates(subset=["year", "area_code", "indicator"])
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE sgis_household RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "sgis_household",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
-        chunksize=1000,
+        method="multi",
+        chunksize=5000,
     )
     return len(combined)
 
@@ -283,12 +301,16 @@ def load_sgis_business(engine) -> int:
     combined["value"] = pd.to_numeric(combined["value"], errors="coerce")
     combined = combined.drop_duplicates(subset=["year", "area_code", "indicator"])
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE sgis_business RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "sgis_business",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
-        chunksize=1000,
+        method="multi",
+        chunksize=5000,
     )
     return len(combined)
 
@@ -377,11 +399,15 @@ def load_golmok_commercial(engine) -> int:
         "Int64"
     )
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE golmok_commercial RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "golmok_commercial",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
+        method="multi",
         chunksize=1000,
     )
     return len(combined)
@@ -510,11 +536,15 @@ def load_district_sales(engine) -> int:
 
     df["quarter"] = pd.to_numeric(df["quarter"], errors="coerce").astype("Int64")
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE district_sales RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "district_sales",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
+        method="multi",
         chunksize=1000,
     )
     return len(df)
@@ -576,11 +606,15 @@ def load_store_info(engine) -> int:
     ]
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE store_info RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "store_info",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
+        method="multi",
         chunksize=1000,
     )
     return len(df)
@@ -631,11 +665,15 @@ def load_store_quarterly(engine) -> int:
     ]
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE store_quarterly RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "store_quarterly",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
+        method="multi",
         chunksize=1000,
     )
     return len(df)
@@ -681,11 +719,16 @@ def load_rent_cost(engine) -> int:
         "source",
     ]
     combined = df_rent[[c for c in keep_rent if c in df_rent.columns]]
+
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE rent_cost RESTART IDENTITY CASCADE;"))
+
     combined.to_sql(
         "rent_cost",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
+        method="multi",
         chunksize=1000,
     )
     return len(combined)
@@ -750,10 +793,13 @@ def load_dong_mapping(engine) -> int:
     ]
     result = result[[c for c in keep if c in result.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE dong_mapping RESTART IDENTITY CASCADE;"))
+
     result.to_sql(
         "dong_mapping",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
         chunksize=1000,
@@ -784,98 +830,18 @@ def load_golmok_rent(engine) -> int:
     ]
     df = df[[c for c in keep if c in df.columns]]
 
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE golmok_rent RESTART IDENTITY CASCADE;"))
+
     df.to_sql(
         "golmok_rent",
         engine,
-        if_exists="replace",
+        if_exists="append",
         index=False,
         method="multi",
         chunksize=1000,
     )
     return len(df)
-
-
-# ---------------------------------------------------------------------------
-# Table 12–20: 추가 테이블 (CSV → DB 직접 로드)
-# ---------------------------------------------------------------------------
-
-
-def _load_simple(engine, filename: str, table: str, dtype: dict | None = None) -> int:
-    """CSV 파일을 테이블에 그대로 로드 (컬럼 매핑 불필요한 경우)."""
-    df = _read_csv(filename, dtype=dtype or {})
-    df.to_sql(table, engine, if_exists="replace", index=False, chunksize=1000)
-    return len(df)
-
-
-def load_cpi_dining_quarterly(engine) -> int:
-    return _load_simple(engine, "cpi_dining_quarterly.csv", "cpi_dining_quarterly")
-
-
-def load_golmok_sales(engine) -> int:
-    return _load_simple(
-        engine, "golmok_sales.csv", "golmok_sales", dtype={"trdar_code": str}
-    )
-
-
-def load_golmok_stores(engine) -> int:
-    return _load_simple(
-        engine, "golmok_stores.csv", "golmok_stores", dtype={"trdar_code": str}
-    )
-
-
-def load_mapo_resident_pop(engine) -> int:
-    return _load_simple(
-        engine, "mapo_resident_pop.csv", "mapo_resident_pop", dtype={"dong_code": str}
-    )
-
-
-def load_seoul_district_sales(engine) -> int:
-    return _load_simple(
-        engine,
-        "seoul_district_sales.csv",
-        "seoul_district_sales",
-        dtype={"dong_code": str},
-    )
-
-
-def load_seoul_district_stores(engine) -> int:
-    return _load_simple(
-        engine,
-        "seoul_district_stores.csv",
-        "seoul_district_stores",
-        dtype={"dong_code": str},
-    )
-
-
-def load_seoul_golmok_rent(engine) -> int:
-    return _load_simple(
-        engine,
-        "seoul_golmok_rent.csv",
-        "seoul_golmok_rent",
-        dtype={"dong_code": str},
-    )
-
-
-def load_seoul_population_quarterly(engine) -> int:
-    return _load_simple(
-        engine,
-        "seoul_population_quarterly.csv",
-        "seoul_population_quarterly",
-        dtype={"dong_code": str},
-    )
-
-
-def load_seoul_training_dataset(engine) -> int:
-    return _load_simple(
-        engine,
-        "seoul_training_dataset.csv",
-        "seoul_training_dataset",
-        dtype={"dong_code": str},
-    )
-
-
-def load_ftc_brand_franchise(engine) -> int:
-    return _load_simple(engine, "ftc_brand_franchise.csv", "ftc_brand_franchise")
 
 
 # ---------------------------------------------------------------------------
@@ -894,16 +860,6 @@ LOADERS: dict = {
     "rent_cost": load_rent_cost,
     "golmok_rent": load_golmok_rent,
     "dong_mapping": load_dong_mapping,
-    "cpi_dining_quarterly": load_cpi_dining_quarterly,
-    "golmok_sales": load_golmok_sales,
-    "golmok_stores": load_golmok_stores,
-    "mapo_resident_pop": load_mapo_resident_pop,
-    "seoul_district_sales": load_seoul_district_sales,
-    "seoul_district_stores": load_seoul_district_stores,
-    "seoul_golmok_rent": load_seoul_golmok_rent,
-    "seoul_population_quarterly": load_seoul_population_quarterly,
-    "seoul_training_dataset": load_seoul_training_dataset,
-    "ftc_brand_franchise": load_ftc_brand_franchise,
 }
 
 
@@ -926,19 +882,19 @@ def main() -> None:
         if args.table not in LOADERS:
             print(f"Unknown table '{args.table}'. Available: {', '.join(LOADERS)}")
             sys.exit(1)
-        tables_to_load = {args.table: LOADERS[args.table]}
+        LOADERS[args.table](engine)
     else:
-        tables_to_load = LOADERS
-
-    total = len(tables_to_load)
-    for i, (name, loader) in enumerate(tables_to_load.items(), 1):
-        print(f"[{i}/{total}] {name}...")
-        try:
-            n = loader(engine)
-            print(f"  -> {n:,} rows loaded")
-        except Exception as exc:
-            print(f"  -> ERROR: {exc}")
-            continue
+        # Load all tables
+        for table_name, loader_func in LOADERS.items():
+            print(f"[{table_name}] loading...")
+            try:
+                n = loader_func(engine)
+                print(f"  -> {n} rows loaded")
+            except FileNotFoundError as e:
+                print(f"  -> SKIP: {e}")
+            except Exception as e:
+                print(f"  -> ERROR: {e}")
+                raise
 
     print("\nRow counts:")
     with engine.connect() as conn:

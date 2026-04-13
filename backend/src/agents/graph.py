@@ -5,19 +5,11 @@ from langchain_core.messages import HumanMessage
 
 # backend/src/agents/graph.py 상단
 
-from src.agents.nodes import (
-    supervisor_node,
-    market_analyst_node,
-    population_analyst_node,
-    legal_analyst_node,
-    synthesis_node
-)
-
 from src.schemas.state import AgentState
 from src.agents.nodes.supervisor import supervisor_node
 from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
-from src.agents.nodes.legal import legal_analyst_node
+from src.agents.nodes.legal import legal_node
 from src.agents.nodes.synthesis import synthesis_node
 
 
@@ -31,7 +23,7 @@ def build_graph() -> StateGraph:
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("market_analyst", market_analyst_node)
     workflow.add_node("population_analyst", population_analyst_node)
-    workflow.add_node("legal_analyst", legal_analyst_node)
+    workflow.add_node("legal_analyst", legal_node)
     workflow.add_node("synthesis", synthesis_node)
 
     # 2. 진입점 설정

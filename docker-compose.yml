@@ -30,6 +30,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+      - ./models:/app/models
 
   # PostgreSQL — 상권통계, 시뮬레이션 결과 저장
   db:
