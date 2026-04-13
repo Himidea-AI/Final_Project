@@ -13,7 +13,7 @@ export const SimulationProvider = ({ children }: { children: ReactNode }) => {
   const [result, setResult] = useState<any | null>(null);
 
   const setSimulationResult = (data: any) => {
-    console.log("[SimulationContext] 결과 업데이트:", data);
+    // console.log("[SimulationContext]", data);
     setResult(data);
   };
 
