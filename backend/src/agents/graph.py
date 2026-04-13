@@ -1,7 +1,17 @@
 import asyncio
 from typing import Literal
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END  # <--- 이 줄이 있는지 꼭 확인하세요!
 from langchain_core.messages import HumanMessage
+
+# backend/src/agents/graph.py 상단
+
+from src.agents.nodes import (
+    supervisor_node,
+    market_analyst_node,
+    population_analyst_node,
+    legal_analyst_node,
+    synthesis_node
+)
 
 from src.schemas.state import AgentState
 from src.agents.nodes.context_analyst import context_analyst_node
