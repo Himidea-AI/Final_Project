@@ -172,10 +172,12 @@ export default function HQCommandCenter() {
 
         {/* 렌더링 영역 */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-          {activeMenu === "team" && <TeamManagementView />}
-          {activeMenu === "pipeline" && <PipelineKanbanView />}
-          {activeMenu === "tuning" && <BrandTuningView />}
-          {activeMenu === "billing" && <BillingManagementView />}
+          <div className="max-w-[1920px] w-full mx-auto xl:px-10 2xl:px-16">
+            {activeMenu === "team" && <TeamManagementView />}
+            {activeMenu === "pipeline" && <PipelineKanbanView />}
+            {activeMenu === "tuning" && <BrandTuningView />}
+            {activeMenu === "billing" && <BillingManagementView />}
+          </div>
         </div>
       </div>
     </div>
@@ -588,7 +590,7 @@ function KanbanCard({
 function BrandTuningView() {
   const { showToast } = useToast();
   return (
-    <div className="max-w-4xl flex flex-col gap-6">
+    <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
       <div className="bg-[#2c2825] border border-[#818cf8]/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(129,140,248,0.05)] relative overflow-hidden">
         {/* 장식용 배경 */}
         <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-[#818cf8] opacity-5 pointer-events-none" />

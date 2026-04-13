@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ArrowLeft, CheckCircle } from "lucide-react";
 import { PLANS } from "./constants/plans";
@@ -15,9 +15,14 @@ interface Props {
 }
 
 export default function JoinUsPage({ onBack }: Props) {
-  // 요금제 선택은 HQ Command Center(/hq)로 이동 — 가입은 바로 폼 진입
-  const [phase, setPhase] = useState<Phase>("form");
-  const [selectedPlan, setSelectedPlan] = useState<Plan["id"] | null>("growth");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState<Phase>("pricing");
+  const [selectedPlan, setSelectedPlan] = useState<Plan["id"] | null>(null);
+
+  // 마운트 시 + phase 변경 시 스크롤 최상단으로
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [phase]);
 
   const handleSelect = (id: Plan["id"]) => {
     setSelectedPlan(id);
@@ -32,7 +37,7 @@ export default function JoinUsPage({ onBack }: Props) {
   const selectedPlanData = PLANS.find((p) => p.id === selectedPlan);
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-[#1e1b18] text-[#e2e8f0] overflow-y-auto custom-scrollbar">
+    <div ref={scrollRef} className="absolute inset-0 z-20 flex flex-col bg-[#1e1b18] text-[#e2e8f0] overflow-y-auto custom-scrollbar">
       {/* Header */}
       <div className="fixed top-0 left-0 w-full h-24 border-b border-[#2c2825] flex items-center px-8 md:px-16 bg-[#1e1b18]/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-3">
@@ -127,7 +132,7 @@ export default function JoinUsPage({ onBack }: Props) {
 
               {/* Form heading */}
               <h2 className="text-2xl font-black mb-2">
-                {selectedPlan === "enterprise" ? "Enterprise 도입 문의" : "기업 회원가입"}
+                {selectedPlan === "enterprise" ? "Enterprise 도입 문의" : "회원가입"}
               </h2>
               <p className="text-[#9ca3af] text-sm mb-8">
                 {selectedPlan === "enterprise"
