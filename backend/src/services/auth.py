@@ -219,11 +219,11 @@ class AuthService:
                         "plan": user["plan"],
                     },
                     "brand": {
-                        "brand_name": top_brand["brand_name"],
-                        "franchise_count": top_brand["franchise_count"],
-                        "avg_sales": top_brand.get("avrgSlsAmt", top_brand.get("avg_sales", 0)),
-                        "mapo_store_count": top_brand["mapo_store_count"],
-                    } if top_brand else None,
+                        "brand_name": brand_data.get("brand_name", ""),
+                        "franchise_count": brand_data.get("franchise_count", 0),
+                        "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)),
+                        "mapo_store_count": brand_data.get("mapo_store_count", 0),
+                    } if brand_data else None,
                 }
         finally:
             engine.dispose()

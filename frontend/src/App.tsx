@@ -1,4 +1,13 @@
 /**
+ * 🚨 [AI 개발 규칙: ROUTE STRUCTURE PROTECTED]
+ * ─────────────────────────────────────────────────────────────
+ * 1. 이 파일의 <Routes> 구조와 "/" 경로(IntroScene)는 절대 수정/삭제 금지.
+ * 2. 신규 대시보드 기능은 오직 "/simulator" 경로 내에서만 수정할 것.
+ * 3. 'Cleanup' 명목으로 기존 import나 Route를 제거하지 마시오.
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/**
  * ═══════════════════════════════════════════════════════
  * SPOTTER — 프랜차이즈 상권분석 시뮬레이터 (Frontend)
  * ═══════════════════════════════════════════════════════
@@ -42,47 +51,25 @@ import LoginPage from "./pages/LoginPage";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import AIVerdictBanner from "./components/AIVerdictBanner";
+import { ToastProvider, useToast } from "./components/Toast";
 import { runSimulation, analyzeLocation } from "./api/client";
+import AnalysisDashboard from "./pages/AnalysisDashboard";
 import React from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
-/**
- * 시뮬레이션 결과 — UI 바인딩용
- * 백엔드 SimulationOutput + AnalysisResult를 프론트 UI에 맞게 변환한 구조.
- * runSim() 함수에서 API 응답을 이 형태로 매핑하여 simResult state에 저장.
- */
-interface SimResult {
-  score: number;        // 상권 종합 매력도 (0~100)
-  revenue: number;      // 예상 월 매출 (만원 단위)
-  riskLevel: string;    // 카니발리제이션 위험도 ("LOW" | "MEDIUM" | "HIGH")
-  recommendation: string; // AI 추천 코멘트 (에이전트 생성)
-  chartData: { label: string; value: number }[]; // 7개 항목별 점수 (레이더 차트 데이터)
-}
 import {
   ChevronRight,
-  Sliders,
-  Activity,
   MapPin,
-  BarChart3,
-  Play,
   ExternalLink,
   Mail,
   Phone,
   GitFork,
   Users,
-  AlertTriangle,
   TrendingUp,
-  TrendingDown,
-  Download,
-  Calendar,
-  Store,
-  Crosshair,
-  Zap,
-  Scale,
-  FileText,
-  Database,
+  Activity,
+  Play,
   ChevronDown,
   User,
   Bell,
@@ -94,6 +81,19 @@ import {
   ThumbsDown,
   Folder,
   LogOut,
+  ShieldAlert,
+  CheckCircle2,
+  TrendingDown,
+  Zap,
+  Calendar,
+  Download,
+  FileText,
+  Database,
+  BarChart3,
+  Crosshair,
+  AlertTriangle,
+  Scale,
+  Store,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
@@ -101,34 +101,34 @@ import {
    ═══════════════════════════════════════════════════════ */
 
 const DISTRICTS = [
-  { name: "강남구", eng: "GANGNAM", img: "/images/Gangnam-gu.svg" },
-  { name: "강동구", eng: "GANGDONG", img: "/images/Gangdong-gu.svg" },
-  { name: "강북구", eng: "GANGBUK", img: "/images/Gangbuk-gu.svg" },
-  { name: "강서구", eng: "GANGSEO", img: "/images/Gangseo-gu.svg" },
-  { name: "관악구", eng: "GWANAK", img: "/images/Gwanak-gu.svg" },
-  { name: "광진구", eng: "GWANGJIN", img: "/images/Gwangjin-gu.svg" },
-  { name: "구로구", eng: "GURO", img: "/images/Guro-gu.svg" },
-  { name: "금천구", eng: "GEUMCHEON", img: "/images/Geumcheon-gu.svg" },
-  { name: "노원구", eng: "NOWON", img: "/images/Nowon-gu.svg" },
-  { name: "도봉구", eng: "DOBONG", img: "/images/Dobong-gu.svg" },
-  { name: "동대문구", eng: "DONGDAEMUN", img: "/images/Dongdaemun-gu.svg" },
-  { name: "동작구", eng: "DONGJAK", img: "/images/Dongjak-gu.svg" },
-  { name: "마포구", eng: "MAPO", img: "/images/Mapo-gu.svg" },
-  { name: "서대문구", eng: "SEODAEMUN", img: "/images/Seodaemun-gu.svg" },
-  { name: "서초구", eng: "SEOCHO", img: "/images/Seocho-gu.svg" },
-  { name: "성동구", eng: "SEONGDONG", img: "/images/Seongdong-gu.svg" },
-  { name: "성북구", eng: "SEONGBUK", img: "/images/Seongbuk-gu.svg" },
-  { name: "송파구", eng: "SONGPA", img: "/images/Songpa-gu.svg" },
-  { name: "양천구", eng: "YANGCHEON", img: "/images/Yangcheon-gu.svg" },
-  { name: "영등포구", eng: "YEONGDEUNGPO", img: "/images/Yeongdeungpo-gu.svg" },
-  { name: "용산구", eng: "YONGSAN", img: "/images/Yongsan-gu.svg" },
-  { name: "은평구", eng: "EUNPYEONG", img: "/images/Eunpyeong-gu.svg" },
-  { name: "종로구", eng: "JONGNO", img: "/images/Jongno-gu.svg" },
-  { name: "중구", eng: "JUNG", img: "/images/Jung-gu.svg" },
-  { name: "중랑구", eng: "JUNGNANG", img: "/images/Jungnang-gu.svg" },
+  { name: "종로구", eng: "jongno", img: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?q=80&w=2094&auto=format&fit=crop" },
+  { name: "중구", eng: "jung", img: "https://images.unsplash.com/photo-1582996269871-dad1e4adbbc7?q=80&w=2000&auto=format&fit=crop" },
+  { name: "용산구", eng: "yongsan", img: "https://images.unsplash.com/photo-1538485399081-7191377e8241?q=80&w=2155&auto=format&fit=crop" },
+  { name: "성동구", eng: "seongdong", img: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2070&auto=format&fit=crop" },
+  { name: "광진구", eng: "gwangjin", img: "https://images.unsplash.com/photo-1570129477492-45c003edd2be?q=80&w=2070&auto=format&fit=crop" },
+  { name: "동대문구", eng: "dongdaemun", img: "https://images.unsplash.com/photo-1493397212122-2b85edf8106b?q=80&w=2070&auto=format&fit=crop" },
+  { name: "중랑구", eng: "jungnang", img: "https://images.unsplash.com/photo-1518005020481-aacf907376d7?q=80&w=2071&auto=format&fit=crop" },
+  { name: "성북구", eng: "seongbuk", img: "https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?q=80&w=2070&auto=format&fit=crop" },
+  { name: "강북구", eng: "gangbuk", img: "https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?q=80&w=2070&auto=format&fit=crop" },
+  { name: "도봉구", eng: "dobong", img: "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=2070&auto=format&fit=crop" },
+  { name: "노원구", eng: "nowon", img: "https://images.unsplash.com/photo-1549144511-f099e773c147?q=80&w=2187&auto=format&fit=crop" },
+  { name: "은평구", eng: "eunpyeong", img: "https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?q=80&w=2070&auto=format&fit=crop" },
+  { name: "서대문구", eng: "seodaemun", img: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=2070&auto=format&fit=crop" },
+  { name: "마포구", eng: "mapo", img: "https://images.unsplash.com/photo-1621252179027-94459d278660?q=80&w=2070&auto=format&fit=crop" },
+  { name: "양천구", eng: "yangcheon", img: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=2144&auto=format&fit=crop" },
+  { name: "강서구", eng: "gangseo", img: "https://images.unsplash.com/photo-1444723121867-7a241cacace9?q=80&w=2070&auto=format&fit=crop" },
+  { name: "구로구", eng: "guro", img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2070&auto=format&fit=crop" },
+  { name: "금천구", eng: "geumcheon", img: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?q=80&w=2074&auto=format&fit=crop" },
+  { name: "영등포구", eng: "yeongdeungpo", img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=2070&auto=format&fit=crop" },
+  { name: "동작구", eng: "dongjak", img: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=2073&auto=format&fit=crop" },
+  { name: "관악구", eng: "gwanak", img: "https://images.unsplash.com/photo-1473081556163-2a17de81fc97?q=80&w=2187&auto=format&fit=crop" },
+  { name: "서초구", eng: "seocho", img: "https://images.unsplash.com/photo-1542332213-31f87348057f?q=80&w=2070&auto=format&fit=crop" },
+  { name: "강남구", eng: "gangnam", img: "https://images.unsplash.com/photo-1538666579040-cf6d0fc8789d?q=80&w=2070&auto=format&fit=crop" },
+  { name: "송파구", eng: "songpa", img: "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?q=80&w=2089&auto=format&fit=crop" },
+  { name: "강동구", eng: "gangdong", img: "https://images.unsplash.com/photo-1519052537078-e6302a4968d4?q=80&w=2070&auto=format&fit=crop" },
 ];
 
-const MAPO_IDX = 12;
+const MAPO_IDX = DISTRICTS.findIndex((d) => d.name === "마포구");
 
 const MENU_ITEMS = ["ABOUT SPOTTER", "JOIN US", "SIMULATOR", "CONTACT"];
 
@@ -169,6 +169,50 @@ const CHART_DATA = [
   { label: "성장성", value: 56 },
   { label: "접근성", value: 78 },
 ];
+
+/* ═══════════════════════════════════════════════════════
+   Smart Mock — 동/업종 이름 기반 해시로 동적 결과 생성
+   발표 시 다른 동을 선택하면 다른 결과가 나오도록 함
+   ═══════════════════════════════════════════════════════ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function generateSmartMock(dongName: string, businessType: string) {
+  const seed = hashString(dongName + businessType);
+
+  // 매출: 2500만 ~ 5500만 (만원 단위)
+  const revenue = 2500 + (seed % 3001);
+  // 매력도: 62 ~ 96
+  const score = 62 + (seed % 35);
+  // 리스크: seed 기반 분기
+  const riskLevels = ["LOW", "LOW", "MEDIUM", "LOW", "HIGH"] as const;
+  const riskLevel = riskLevels[seed % riskLevels.length];
+
+  // 7대 지표: 각각 다른 seed offset으로 40~95 사이
+  const metricSeeds = [0, 17, 31, 47, 61, 79, 89];
+  const chartData = [
+    "유동인구", "임대료", "경쟁강도", "매출추정", "생존율", "성장성", "접근성"
+  ].map((label, i) => ({
+    label,
+    value: 40 + ((seed + metricSeeds[i]) % 56),
+  }));
+
+  // AI 한 줄 평 (동 이름 포함)
+  const verdicts = [
+    `${dongName}은(는) ${businessType} 업종에 유리한 입지로, 유동인구 밀집도가 높은 상권입니다.`,
+    `${dongName} 상권은 ${businessType} 창업 시 평균 이상의 매출이 예상되는 권역입니다.`,
+    `${dongName}의 ${businessType} 시장은 경쟁이 치열하나, 타겟층 밀도가 높아 수익성이 기대됩니다.`,
+    `${dongName}은(는) ${businessType} 업종의 성장 잠재력이 높은 지역으로 분석됩니다.`,
+  ];
+  const recommendation = verdicts[seed % verdicts.length];
+
+  return { revenue, score, riskLevel, recommendation, chartData };
+}
 
 /* ═══════════════════════════════════════════════════════
    BUSINESS TYPE DATA — 시뮬레이터 입력 옵션 (Frontend Mockup)
@@ -605,9 +649,8 @@ function IntroScene({
               >
                 {/* Indicator bar */}
                 <div
-                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
-                    isActive ? "scale-x-100" : "scale-x-0"
-                  }`}
+                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${isActive ? "scale-x-100" : "scale-x-0"
+                    }`}
                 />
                 <span
                   className={`inline-block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
@@ -788,11 +831,10 @@ function AccordionGallery({
             {DISTRICTS.map((d, i) => (
               <div
                 key={d.eng}
-                className={`w-1 h-3 rounded-full transition-all duration-300 ${
-                  hoveredIdx === i
-                    ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                    : "bg-white/20"
-                }`}
+                className={`w-1 h-3 rounded-full transition-all duration-300 ${hoveredIdx === i
+                  ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                  : "bg-white/20"
+                  }`}
               />
             ))}
           </div>
@@ -815,52 +857,47 @@ function AccordionGallery({
       {/* Gallery track */}
       <div
         ref={trackRef}
-        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${
-          isDragging ? "cursor-grabbing" : "cursor-grab"
-        }`}
+        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${isDragging ? "cursor-grabbing" : "cursor-grab"
+          }`}
         onMouseDown={handleMouseDown}
       >
-          {DISTRICTS.map((d, i) => {
-            const isHovered = hoveredIdx === i;
-            const isMapo = i === MAPO_IDX;
+        {DISTRICTS.map((d, i) => {
+          const isHovered = hoveredIdx === i;
+          const isMapo = i === MAPO_IDX;
 
             return (
               <div
                 key={d.eng}
-                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                  isMapo ? "cursor-pointer" : "cursor-not-allowed"
+                } ${
                   isHovered
                     ? "w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(129,140,248,0.3)]"
                     : "w-[70px] md:w-[80px] z-0"
                 }`}
-                onMouseEnter={() => setHoveredIdx(i)}
-                onMouseLeave={() => setHoveredIdx(null)}
-                onClick={() => {
-                  if (isMapo && !isDragging) onMapoClick();
-                }}
-              >
-                {/* 1. Animated Gradient Border — 호버 시에만 회전 빛 표시 */}
-                <div
-                  className={`absolute inset-[-50%] z-0 animate-spin-slow transition-opacity duration-500 ${
-                    isHovered ? "opacity-100" : "opacity-0"
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onClick={() => {
+                if (isMapo && !isDragging) onMapoClick();
+              }}
+            >
+              {/* Parallax background image */}
+              <div
+                className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isHovered
+                  ? "scale-100 opacity-80 grayscale-0"
+                  : "scale-[0.9] opacity-30 grayscale-0"
                   }`}
-                  style={{
-                    background:
-                      "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                  }}
-                />
+                style={{ backgroundImage: `url(${d.img})` }}
+              />
 
-                {/* 2. 실제 컨텐츠 컨테이너 (2px 인셋으로 테두리만 노출) */}
-                <div
-                  className={`absolute inset-[2px] z-10 overflow-hidden rounded-[14px] transition-colors duration-500 ${
-                    isHovered ? "bg-[#2c2825]" : "bg-[#1e1b18]"
-                  }`}
-                >
+                {/* (Optional) Animated Gradient Border or other effects would go here */}
+
                 {/* Parallax background image */}
                 <div
                   className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
                     isHovered
-                      ? "scale-100 opacity-80 grayscale-0"
-                      : "scale-[0.9] opacity-30 grayscale-0"
+                      ? `scale-100 ${isMapo ? "opacity-80 grayscale-0" : "opacity-50 grayscale"}`
+                      : `scale-[0.9] ${isMapo ? "opacity-30 grayscale-0" : "opacity-20 grayscale"}`
                   }`}
                   style={{ backgroundImage: `url(${d.img})` }}
                 />
@@ -868,21 +905,10 @@ function AccordionGallery({
                 {/* Gradient mask */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18] via-[#1e1b18]/60 to-transparent opacity-90 transition-opacity duration-1000" />
 
-                {/* District number */}
-                <div
-                  className={`absolute top-6 left-0 right-0 text-center font-mono text-xs transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered ? "text-gray-400 opacity-100" : "text-gray-600 opacity-0"
-                  }`}
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </div>
-
                 {/* English name (shown on hover) */}
                 <div
                   className={`absolute top-12 left-6 right-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-4"
+                    isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                   }`}
                 >
                   <span className="text-xs tracking-[0.3em] text-gray-400 font-light uppercase">
@@ -894,9 +920,7 @@ function AccordionGallery({
                 {isMapo && (
                   <div
                     className={`absolute top-24 left-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                      isHovered
-                        ? "opacity-100 translate-y-0"
-                        : "opacity-0 translate-y-4"
+                      isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                     }`}
                   >
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
@@ -920,9 +944,7 @@ function AccordionGallery({
                               : "text-4xl md:text-5xl opacity-0 translate-y-10 blur-[4px]"
                           }`}
                           style={{
-                            transitionDelay: isHovered
-                              ? `${ci * 40 + 100}ms`
-                              : "0ms",
+                            transitionDelay: isHovered ? `${ci * 40 + 100}ms` : "0ms",
                           }}
                         >
                           {char}
@@ -941,9 +963,7 @@ function AccordionGallery({
                               : "text-2xl md:text-3xl opacity-60 translate-y-0 blur-0"
                           }`}
                           style={{
-                            transitionDelay: isHovered
-                              ? "0ms"
-                              : `${ci * 40 + 100}ms`,
+                            transitionDelay: isHovered ? "0ms" : `${ci * 40 + 100}ms`,
                           }}
                         >
                           {char}
@@ -951,12 +971,12 @@ function AccordionGallery({
                       ))}
                     </h2>
 
-                    {/* Bottom info (shown on hover) */}
+                    {/* Bottom info */}
                     <div
                       className={`absolute left-0 bottom-0 flex flex-col items-start transition-all duration-[1000ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
                         isHovered
                           ? "opacity-100 translate-y-0 delay-[300ms]"
-                          : "opacity-0 translate-y-4 pointer-events-none"
+                          : isMapo ? "opacity-0 translate-y-4 pointer-events-none" : "opacity-40 translate-y-0"
                       }`}
                     >
                       {isMapo ? (
@@ -965,17 +985,17 @@ function AccordionGallery({
                           <span>클릭하여 시뮬레이션 시작</span>
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-500">
+                        <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-bold tracking-wider">
                           서비스 준비 중
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
-                </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
       </div>
 
     </div>
@@ -1493,6 +1513,11 @@ function ContactPage({ onBack }: { onBack: () => void }) {
    AnalysisResult.data.market_report → 7개 항목별 차트 데이터
 */
 
+/**
+ * SimulatorDashboard — 시뮬레이션 분석 결과 대시보드
+ * idle → loading(Progress Bar) → result(KPI + 차트 + 테이블)
+ * API 실패 시 generateSmartMock() 폴백, businessType은 백엔드 연동 전 하드코딩
+ */
 function SimulatorDashboard({
   reportState,
   setReportState,
@@ -1505,6 +1530,7 @@ function SimulatorDashboard({
   const [weighted, setWeighted] = useState(true);
   const [loadingText, setLoadingText] = useState("INITIALIZING AI ENGINE...");
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const { showToast } = useToast();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [chartView, setChartView] = useState<"daily" | "monthly">("daily");
   const [tableView, setTableView] = useState<"cannibalization" | "neighborhoods">("cannibalization");
@@ -1597,13 +1623,14 @@ function SimulatorDashboard({
       const dateStr = reportFullDate.replace(/\./g, "");
       const districtName = selectedDongs[0] || "연남동";
       pdf.save(`SPOTTER_마포구_${districtName}_${dateStr}.pdf`);
+      showToast("success", "PDF 리포트 생성이 완료되었습니다.");
     } catch (error) {
       console.error("PDF Generation Failed:", error);
       alert("PDF 생성 중 오류가 발생했습니다.");
     } finally {
       setIsGeneratingPDF(false);
     }
-  }, [reportFullDate, selectedDongs]);
+  }, [reportFullDate, selectedDongs, showToast]);
 
   const handleDownloadExcel = useCallback(() => {
     setIsDownloadOpen(false);
@@ -1680,7 +1707,8 @@ function SimulatorDashboard({
 
     const dateStr = reportFullDate.replace(/\./g, "");
     XLSX.writeFile(wb, `SPOTTER_마포구_${districtName}_${dateStr}.xlsx`);
-  }, [reportFullDate, selectedDongs, simResult]);
+    showToast("success", "Excel 데이터가 다운로드되었습니다.");
+  }, [reportFullDate, selectedDongs, simResult, showToast]);
 
   const toggleOperatingHour = useCallback((hour: string) => {
     setOperatingHours((prev) =>
@@ -1777,17 +1805,18 @@ function SimulatorDashboard({
       setReportState("result");
     } catch (err) {
       console.error("Simulation failed:", err);
-      // Fallback — 에러 시에도 결과 화면 표시 (Mock 수준)
+      // Fallback — Smart Mock (동/업종 기반 동적 데이터)
+      const mock = generateSmartMock(selectedDongs[0] || "연남동", businessType);
       setSimResult({
-        score: 87,
-        revenue: 3240,
-        riskLevel: "HIGH",
-        recommendation: "API 연결 실패 — Mock 데이터를 표시합니다.",
-        chartData: CHART_DATA,
+        score: mock.score,
+        revenue: mock.revenue,
+        riskLevel: mock.riskLevel,
+        recommendation: mock.recommendation,
+        chartData: mock.chartData,
       });
       setReportState("result");
     }
-  }, [setReportState, selectedDongs, budget]);
+  }, [setReportState, selectedDongs, budget, businessType, showToast]);
 
   // Loading — 단계별 progress bar + 스트리밍 텍스트 (100~120초 대응)
   useEffect(() => {
@@ -1989,8 +2018,9 @@ function SimulatorDashboard({
             {/* Radius slider */}
             <div className="mb-6">
               <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary}`}>
+                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
                   상권 반경
+                  <span className="text-[#818cf8] cursor-help" title="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장">&#9432;</span>
                 </label>
                 <span className={`text-xs font-mono ${accent}`}>{radius}m</span>
               </div>
@@ -2011,8 +2041,9 @@ function SimulatorDashboard({
             {/* Budget slider */}
             <div className="mb-6">
               <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary}`}>
+                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
                   임대료 예산
+                  <span className="text-[#818cf8] cursor-help" title="월 임대료 예산. 마포구 평균 1층 기준 200~400만원">&#9432;</span>
                 </label>
                 <span className={`text-xs font-mono ${accent}`}>{budget}만원</span>
               </div>
@@ -2033,8 +2064,9 @@ function SimulatorDashboard({
             {/* Toggle switch */}
             <div className="mb-2">
               <div className="flex items-center justify-between">
-                <label className={`text-xs font-medium ${textSecondary}`}>
+                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
                   유동인구 가중치
+                  <span className="text-[#818cf8] cursor-help" title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장">&#9432;</span>
                 </label>
                 <button
                   onClick={() => setWeighted(!weighted)}
@@ -2209,17 +2241,46 @@ function SimulatorDashboard({
         {/* Right panel — Visualization */}
         <div className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel}`}>
           {reportState === "idle" && (
-            <div className="h-full flex flex-col items-center justify-center gap-4">
-              <div
-                className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
-                  "bg-[#1e1b18]"
-                }`}
-              >
-                <BarChart3 size={28} className={textSecondary} />
+            <div className="h-full flex flex-col items-center justify-center gap-6 relative overflow-hidden">
+              {/* 배경 패턴 */}
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23818cf8' fill-opacity='0.3'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }} />
+
+              {/* 아이콘 */}
+              <div className="relative">
+                <div className="absolute inset-0 bg-[#818cf8] blur-[40px] opacity-10 animate-pulse" />
+                <div className="relative w-20 h-20 rounded-2xl bg-[#2c2825] border border-[#3a3633] flex items-center justify-center shadow-lg">
+                  <Activity size={36} className="text-[#818cf8]" />
+                </div>
               </div>
-              <p className={`text-sm ${textSecondary}`}>
-                조건을 설정하고 시뮬레이션을 실행하세요
-              </p>
+
+              {/* 텍스트 */}
+              <div className="text-center relative z-10">
+                <h2 className="text-2xl font-black text-[#e2e8f0] mb-2">
+                  Ready for <span className="text-[#818cf8]">Insights?</span>
+                </h2>
+                <p className="text-sm text-[#9ca3af] max-w-sm leading-relaxed">
+                  좌측 패널에서 분석할 지역과 업종을 설정하고
+                  <br />
+                  <span className="text-[#818cf8] font-bold">RUN SIMULATION</span>을 눌러주세요.
+                </p>
+              </div>
+
+              {/* 미니 가이드 */}
+              <div className="flex gap-6 mt-4 relative z-10">
+                <div className="flex items-center gap-2 text-xs text-[#9ca3af]">
+                  <span className="w-6 h-6 rounded-full bg-[#818cf8]/10 flex items-center justify-center text-[#818cf8] text-[10px] font-bold">1</span>
+                  동 선택
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[#9ca3af]">
+                  <span className="w-6 h-6 rounded-full bg-[#818cf8]/10 flex items-center justify-center text-[#818cf8] text-[10px] font-bold">2</span>
+                  업종 선택
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[#9ca3af]">
+                  <span className="w-6 h-6 rounded-full bg-[#818cf8]/10 flex items-center justify-center text-[#818cf8] text-[10px] font-bold">3</span>
+                  RUN 클릭
+                </div>
+              </div>
             </div>
           )}
 
@@ -2268,7 +2329,7 @@ function SimulatorDashboard({
           )}
 
           {reportState === "result" && (
-            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-28 md:pt-32 overflow-y-auto custom-scrollbar flex flex-col pb-12">
+            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-28 md:pt-32 overflow-y-auto custom-scrollbar flex flex-col pb-12 animate-[fadeSlideIn_0.8s_ease-out]">
               <div className="max-w-[1600px] w-full mx-auto flex flex-col gap-6">
 
                 {/* Header & Nav */}
@@ -2278,7 +2339,7 @@ function SimulatorDashboard({
                     <p className="text-[#9ca3af] text-sm">서울특별시 마포구 {selectedDongs[0] || "연남동"} 일대 시뮬레이션 결과</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"><Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> {reportMonthLabel}</button>
+                    <button onClick={() => showToast("info", "과거 데이터 조회 기능은 준비 중입니다.")} className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"><Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> {reportMonthLabel}</button>
                     <div className="relative">
                       <button
                         onClick={() => setIsDownloadOpen(!isDownloadOpen)}
@@ -2448,13 +2509,13 @@ function SimulatorDashboard({
                           <line x1="100" y1="100" x2="100" y2="40" stroke="#3a3633" /><line x1="100" y1="100" x2="147" y2="63" stroke="#3a3633" /><line x1="100" y1="100" x2="158" y2="113" stroke="#3a3633" /><line x1="100" y1="100" x2="126" y2="154" stroke="#3a3633" /><line x1="100" y1="100" x2="74" y2="154" stroke="#3a3633" /><line x1="100" y1="100" x2="42" y2="113" stroke="#3a3633" /><line x1="100" y1="100" x2="53" y2="63" stroke="#3a3633" />
                           <polygon points="100,50 140,70 145,110 115,140 85,130 60,105 70,75" fill="rgba(99,102,241,0.4)" stroke="#818cf8" strokeWidth="2" className="drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
                           <circle cx="100" cy="50" r="3" fill="#fff" /><circle cx="140" cy="70" r="3" fill="#fff" /><circle cx="145" cy="110" r="3" fill="#fff" /><circle cx="115" cy="140" r="3" fill="#fff" /><circle cx="85" cy="130" r="3" fill="#fff" /><circle cx="60" cy="105" r="3" fill="#fff" /><circle cx="70" cy="75" r="3" fill="#fff" />
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="100" y="32" fill="#e5e5e5" fontSize="10" fontWeight="bold" textAnchor="middle">유동인구</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="157" y="60" fill="#a3a3a3" fontSize="10" textAnchor="start">매출</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="168" y="117" fill="#a3a3a3" fontSize="10" textAnchor="start">성장성</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="133" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle">생존율</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="67" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle">임대료</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="32" y="117" fill="#a3a3a3" fontSize="10" textAnchor="end">경쟁강도</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="43" y="60" fill="#a3a3a3" fontSize="10" textAnchor="end">접근성</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="100" y="32" fill="#e5e5e5" fontSize="10" fontWeight="bold" textAnchor="middle"><title>유동인구: 82/100 (마포구 상위 12%)</title>유동인구</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="157" y="60" fill="#a3a3a3" fontSize="10" textAnchor="start"><title>매출: 74/100 (월 3,240만 추정)</title>매출</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="168" y="117" fill="#a3a3a3" fontSize="10" textAnchor="start"><title>성장성: 56/100 (전년 대비 +3.2%)</title>성장성</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="133" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle"><title>생존율: 91/100 (3년 생존 82%)</title>생존율</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="67" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle"><title>임대료: 45/100 (평당 25만원)</title>임대료</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="32" y="117" fill="#a3a3a3" fontSize="10" textAnchor="end"><title>경쟁강도: 68/100 (반경 500m 내 45개)</title>경쟁강도</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="43" y="60" fill="#a3a3a3" fontSize="10" textAnchor="end"><title>접근성: 78/100 (지하철 도보 5분)</title>접근성</text>
                         </svg>
                       </div>
                     </div>
@@ -2576,17 +2637,21 @@ function LogoutButton() {
 }
 
 function GlobalLimelightNav() {
+  const navigate = useNavigate();
+  const { isLoggedIn, logout } = useAuth();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
+  const [openDropdown, setOpenDropdown] = useState<"bell" | "user" | null>(null);
+  const [unreadCount, setUnreadCount] = useState(1); // TODO Phase 2: GET /notifications/unread-count API polling으로 교체
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // B2B 실무 시나리오 메뉴 구성 (HQ Command Center)
-  const navItems: { icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
-    { icon: <Folder />, label: "보관함 / 파이프라인" },
-    { icon: <Bell />, label: "알림 (승인 대기 등)", hasNoti: true },
-    { icon: <Settings />, label: "HQ 설정 (브랜드 튜닝)" },
-    { icon: <User />, label: "내 워크스페이스" },
+  type NavItemType = "folder" | "bell" | "settings" | "user";
+  const navItems: { type: NavItemType; icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
+    { type: "folder", icon: <Folder />, label: "출점 파이프라인" },
+    { type: "user", icon: <User />, label: "내 프로필" },
+    { type: "settings", icon: <Settings />, label: "브랜드 AI 튜닝" },
+    { type: "bell", icon: <Bell />, label: "알림", hasNoti: unreadCount > 0 },
   ];
 
   const targetIndex = hoverIndex !== null ? hoverIndex : activeIndex;
@@ -2600,49 +2665,137 @@ function GlobalLimelightNav() {
     }
   }, [targetIndex]);
 
+  const handleItemClick = (index: number, type: NavItemType) => {
+    // 비로그인 시 로그인 페이지로
+    if (!isLoggedIn) {
+      navigate("/login");
+      return;
+    }
+
+    setActiveIndex(index);
+
+    if (type === "folder") {
+      setOpenDropdown(null);
+      navigate("/hq?tab=pipeline");
+    } else if (type === "settings") {
+      setOpenDropdown(null);
+      navigate("/hq?tab=tuning");
+    } else if (type === "bell") {
+      setOpenDropdown(openDropdown === "bell" ? null : "bell");
+    } else if (type === "user") {
+      setOpenDropdown(openDropdown === "user" ? null : "user");
+    }
+  };
+
   return (
-    <div
-      className="relative flex items-center bg-[#2c2825] border border-[#3a3633] rounded-full h-10 px-2 shadow-sm overflow-hidden hidden md:flex"
-      onMouseLeave={() => setHoverIndex(null)}
-    >
-      {/* 호버 조명 효과 (인디고 테마 유지) */}
+    <div className="relative hidden md:flex">
+      {/* 아이콘 바 — overflow-hidden으로 빔 클리핑 */}
       <div
-        className="absolute top-0 z-10 pointer-events-none flex flex-col items-center transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
-        style={{ left: `${indicatorStyle.left}px`, transform: "translateX(-50%)", opacity: indicatorStyle.opacity }}
+        className="relative flex items-center bg-[#2c2825] border border-[#3a3633] rounded-full h-10 px-2 shadow-sm overflow-hidden"
+        onMouseLeave={() => setHoverIndex(null)}
       >
-        <div className="w-6 h-[2px] bg-[#818cf8] rounded-b-full shadow-[0_0_8px_#818cf8]" />
+        {/* 호버 조명 효과 */}
         <div
-          className="w-12 h-10 bg-[#818cf8]/20"
-          style={{ clipPath: "polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)" }}
-        />
+          className="absolute top-0 z-10 pointer-events-none flex flex-col items-center transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+          style={{ left: `${indicatorStyle.left}px`, transform: "translateX(-50%)", opacity: indicatorStyle.opacity }}
+        >
+          <div className="w-6 h-[2px] bg-[#818cf8] rounded-b-full shadow-[0_0_8px_#818cf8]" />
+          <div className="w-12 h-10 bg-[#818cf8]/20" style={{ clipPath: "polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)" }} />
+        </div>
+
+        {/* 아이콘 리스트 */}
+        {navItems.map((item, index) => (
+          <button
+            key={index}
+            ref={(el) => { navRefs.current[index] = el; }}
+            onClick={() => handleItemClick(index, item.type)}
+            onMouseEnter={() => setHoverIndex(index)}
+            className="relative z-20 flex items-center justify-center h-full px-3 text-[#9ca3af] hover:text-[#e2e8f0] transition-colors group"
+            title={item.label}
+          >
+            {React.cloneElement(item.icon, {
+              className: `w-4 h-4 transition-all duration-300 ${
+                targetIndex === index
+                  ? "text-[#818cf8] scale-110 drop-shadow-[0_0_5px_rgba(129,140,248,0.5)]"
+                  : "scale-100 group-hover:scale-110"
+              }`,
+            } as React.HTMLAttributes<HTMLElement>)}
+
+            {item.hasNoti && (
+              <span className="absolute top-2 right-2 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {navItems.map((item, index) => (
-        <button
-          key={index}
-          ref={(el) => { navRefs.current[index] = el; }}
-          onClick={() => setActiveIndex(index)}
-          onMouseEnter={() => setHoverIndex(index)}
-          className="relative z-20 flex items-center justify-center h-full px-3 text-[#9ca3af] hover:text-[#e2e8f0] transition-colors group"
-          title={item.label}
-        >
-          {React.cloneElement(item.icon, {
-            className: `w-4 h-4 transition-all duration-300 ${
-              targetIndex === index
-                ? "text-[#818cf8] scale-110 drop-shadow-[0_0_5px_rgba(129,140,248,0.5)]"
-                : "scale-100 group-hover:scale-110"
-            }`,
-          } as React.HTMLAttributes<HTMLElement>)}
+      {/* 드롭다운 — overflow-hidden 바깥에서 렌더링 */}
 
-          {/* 🔴 실시간 알림 Ping 뱃지 */}
-          {item.hasNoti && (
-            <span className="absolute top-2 right-2 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-            </span>
-          )}
-        </button>
-      ))}
+      {/* 알림 드롭다운 (Bell) */}
+      {openDropdown === "bell" && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
+          <div className="absolute top-12 right-0 w-72 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
+            <div className="px-4 py-2 border-b border-[#3a3633] flex justify-between items-center">
+              <span className="text-xs font-bold text-[#e2e8f0]">최근 알림</span>
+              <span onClick={() => setUnreadCount(0)} className="text-[10px] text-[#818cf8] cursor-pointer hover:underline">모두 읽음</span>
+            </div>
+            <div className="max-h-64 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] flex gap-3">
+                <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-[#e2e8f0] leading-tight">새로운 매니저 워크스페이스 승인 대기중 (최점포 님)</p>
+                  <p className="text-[10px] text-[#9ca3af] mt-1">10분 전</p>
+                </div>
+              </div>
+              <div className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors flex gap-3">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-[#e2e8f0] leading-tight">마포구 연남동 AI 시뮬레이션 완료 및 저장됨</p>
+                  <p className="text-[10px] text-[#9ca3af] mt-1">2시간 전</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 유저/워크스페이스 드롭다운 (User) */}
+      {openDropdown === "user" && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
+          <div className="absolute top-12 right-0 w-56 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
+            <div className="px-4 py-3 border-b border-[#3a3633]">
+              <p className="text-xs font-black text-[#e2e8f0]">SPOTTER-HQ</p>
+              <p className="text-[10px] text-[#9ca3af] mt-0.5">마스터 계정 (팀장)</p>
+            </div>
+            <div className="py-1">
+              <button
+                onClick={() => { setOpenDropdown(null); navigate("/hq?tab=team"); }}
+                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
+              >
+                팀 및 권역 관리
+              </button>
+              <button
+                onClick={() => { setOpenDropdown(null); navigate("/hq?tab=billing"); }}
+                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
+              >
+                결제 및 토큰 사용량
+              </button>
+            </div>
+            <div className="border-t border-[#3a3633] py-1 mt-1">
+              <button
+                onClick={() => { setOpenDropdown(null); logout(); navigate("/login"); }}
+                className="w-full text-left px-4 py-2 text-xs text-rose-400 hover:bg-rose-500/10 transition-colors"
+              >
+                로그아웃
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3215,6 +3368,7 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
   severity?: "critical" | "advisory" | "opportunity";
   onClick?: () => void;
 }) {
+  const { showToast } = useToast();
   const severityStyle = {
     critical: { dot: "bg-rose-500", label: "CRITICAL" },
     advisory: { dot: "bg-[#818cf8]", label: "ADVISORY" },
@@ -3245,14 +3399,14 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
       {/* Feedback buttons */}
       <div className="flex justify-end gap-1 pt-1 -mb-0.5 -mr-0.5 opacity-50 group-hover:opacity-100 transition-opacity">
         <button
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); showToast("success", "소중한 피드백이 전달되었습니다. AI 학습에 반영됩니다."); }}
           className="p-1 rounded hover:bg-[#818cf8]/10 hover:text-[#818cf8] text-[#9ca3af] transition-colors"
           aria-label="유용함"
         >
           <ThumbsUp className="w-3 h-3" />
         </button>
         <button
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); showToast("info", "소중한 피드백이 전달되었습니다. AI 학습에 반영됩니다."); }}
           className="p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-[#9ca3af] transition-colors"
           aria-label="유용하지 않음"
         >
@@ -3269,7 +3423,6 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
    [글로벌 상태]
    - isDark: Light/Dark 테마 토글 (SkyThemeToggle 연결)
    - isTransitioning: 씬 전환 시 800ms 암전 오버레이
-   - reportState: Simulator idle/loading/result 상태
    - isAppLoaded: 프리로더 완료 여부
 
    [글로벌 헤더]
@@ -3300,9 +3453,7 @@ export default function App() {
   const scene = pathToScene(location.pathname);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [reportState, setReportState] = useState<"idle" | "loading" | "result">(
-    "idle"
-  );
+  const [reportState, setReportState] = useState<"idle" | "loading" | "result">("idle");
   const [activeMenuIndex, setActiveMenuIndex] = useState(2);
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(
     null
@@ -3355,7 +3506,6 @@ export default function App() {
         };
         const path = pathMap[next] || "/";
         navigate(path);
-        setReportState("idle");
         setTimeout(() => setIsTransitioning(false), 100);
       }, 800);
     },
@@ -3364,6 +3514,7 @@ export default function App() {
 
   return (
     <AuthProvider>
+    <ToastProvider>
     <div
       className="w-screen h-screen overflow-hidden select-none bg-background text-foreground"
       style={{
@@ -3447,7 +3598,7 @@ export default function App() {
       </Routes>
 
       {/* Global header — all scenes except intro */}
-      {scene !== "intro" && !isTransitioning && (
+      {scene !== "intro" && scene !== "login" && !isTransitioning && (
         <header className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633] flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/90 backdrop-blur-md z-50 transition-colors duration-500">
           <div className="flex items-center gap-4">
             <button
@@ -3485,9 +3636,8 @@ export default function App() {
 
       {/* Transition overlay */}
       <div
-        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
-          isTransitioning ? "opacity-100" : "opacity-0"
-        }`}
+        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${isTransitioning ? "opacity-100" : "opacity-0"
+          }`}
       />
 
       {/* 3D Hologram Preloader */}
@@ -3585,6 +3735,7 @@ export default function App() {
         </div>
       )}
     </div>
+    </ToastProvider>
     </AuthProvider>
   );
 }

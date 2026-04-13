@@ -10,7 +10,9 @@
  * TODO (Phase 2+): 실제 JWT 인증 + workspace API 연동
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useToast } from "../components/Toast";
 import {
   Building2,
   Users,
@@ -35,11 +37,21 @@ import {
    ═══════════════════════════════════════════════════════ */
 type MenuId = "team" | "pipeline" | "tuning" | "billing";
 
-/* ════════════════════════���══════════════════════════════
+/* ═══════════════════════════════════════════════════════
    Main Component
-   ══════════════════��════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════ */
 export default function HQCommandCenter() {
-  const [activeMenu, setActiveMenu] = useState<MenuId>("team");
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab") as MenuId | null;
+  const [activeMenu, setActiveMenu] = useState<MenuId>(tabFromUrl || "team");
+  const { showToast } = useToast();
+
+  // URL ?tab= 파라미터 변경 시 탭 동기화
+  useEffect(() => {
+    if (tabFromUrl && ["team", "pipeline", "tuning", "billing"].includes(tabFromUrl)) {
+      setActiveMenu(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   return (
     <div className="absolute inset-0 z-20 flex bg-[#1e1b18] text-[#e2e8f0] font-sans overflow-hidden select-none">
@@ -137,12 +149,22 @@ export default function HQCommandCenter() {
                 className="w-64 h-9 bg-[#2c2825] border border-[#3a3633] rounded-full pl-9 pr-4 text-xs focus:outline-none focus:border-[#818cf8] transition-colors text-[#e2e8f0] placeholder-[#9ca3af]"
               />
             </div>
-            <button className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)]">
+            <button
+              onClick={() => {
+                if (activeMenu === "team") {
+                  navigator.clipboard.writeText("SPOTTER-HQ-2026");
+                  showToast("success", "초대 코드가 복사되었습니다: SPOTTER-HQ-2026");
+                } else {
+                  showToast("info", "해당 기능은 정식 서비스에서 제공됩니다.");
+                }
+              }}
+              className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)]"
+            >
               <Plus className="w-4 h-4" />
               {activeMenu === "team"
                 ? "매니저 초대"
                 : activeMenu === "pipeline"
-                ? "새 ��뮬레이션"
+                ? "새 시뮬레이션"
                 : "저장"}
             </button>
           </div>
@@ -162,7 +184,7 @@ export default function HQCommandCenter() {
 
 /* ═══════════════════════════════════════════════════════
    Sidebar Menu Button
-   ═══════════════════════════��═══════════════════════════ */
+   ═══════════════════════════════════════════════════════ */
 function MenuButton({
   active,
   icon,
@@ -200,7 +222,7 @@ function MenuButton({
 
 /* ═══════════════════════════════════════════════════════
    View 1: Team Management (팀 및 권역 관리)
-   ═══════════════════════════════════════════��═══════════ */
+   ═══════════════════════════════════════════════════════ */
 // 구 → 동 매핑 (mock, 주요 동만)
 const REGION_DATA: Record<string, string[]> = {
   "마포구": ["연남동", "서교동", "합정동", "망원동", "상암동", "성산동", "연희동"],
@@ -212,6 +234,7 @@ const REGION_DATA: Record<string, string[]> = {
 };
 
 function TeamManagementView() {
+  const { showToast } = useToast();
   const [pendingGu, setPendingGu] = useState("");
   const [pendingDongs, setPendingDongs] = useState<string[]>([]);
 
@@ -241,10 +264,10 @@ function TeamManagementView() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors border border-emerald-500/20">
+              <button onClick={() => showToast("success", "매니저 승인 기능은 정식 서비스에서 제공됩니다.")} className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors border border-emerald-500/20">
                 <CheckCircle2 className="w-5 h-5" />
               </button>
-              <button className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-colors border border-rose-500/20">
+              <button onClick={() => showToast("info", "매니저 거절 기능은 정식 서비스에서 제공됩니다.")} className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-colors border border-rose-500/20">
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
@@ -352,7 +375,7 @@ function TeamManagementView() {
                   </span>
                 </td>
                 <td className="p-4 text-right">
-                  <button className="text-[#9ca3af] hover:text-[#818cf8] transition-colors">
+                  <button onClick={() => showToast("info", "멤버 관리 기능은 정식 서비스에서 제공됩니다.")} className="text-[#9ca3af] hover:text-[#818cf8] transition-colors">
                     <MoreVertical className="w-5 h-5 ml-auto" />
                   </button>
                 </td>
@@ -393,7 +416,7 @@ function TeamManagementView() {
                   </span>
                 </td>
                 <td className="p-4 text-right">
-                  <button className="text-[#9ca3af] hover:text-[#818cf8] transition-colors">
+                  <button onClick={() => showToast("info", "멤버 관리 기능은 정식 서비스에서 제공됩니다.")} className="text-[#9ca3af] hover:text-[#818cf8] transition-colors">
                     <MoreVertical className="w-5 h-5 ml-auto" />
                   </button>
                 </td>
@@ -519,8 +542,9 @@ function KanbanCard({
   score: string;
   manager: string;
 }) {
+  const { showToast } = useToast();
   return (
-    <div className="bg-[#1e1b18] border border-[#3a3633] rounded-xl p-4 cursor-grab hover:border-[#818cf8]/50 transition-colors shadow-md group">
+    <div onClick={() => showToast("info", "칸반 상태 변경은 정식 버전에서 지원됩니다.")} className="bg-[#1e1b18] border border-[#3a3633] rounded-xl p-4 cursor-grab hover:border-[#818cf8]/50 transition-colors shadow-md group">
       <div className="flex justify-between items-start mb-3">
         <div>
           <span className="text-[10px] font-mono text-[#9ca3af]">{date}</span>
@@ -559,13 +583,14 @@ function KanbanCard({
 }
 
 /* ═══════════════════════════════════════════════════════
-   View 3: Brand AI Tuning (브랜드 AI ��닝)
-   ════��═══════════════════════════════��══════════════════ */
+   View 3: Brand AI Tuning (브랜드 AI 튜닝)
+   ═══════════════════════════════════════════════════════ */
 function BrandTuningView() {
+  const { showToast } = useToast();
   return (
     <div className="max-w-4xl flex flex-col gap-6">
       <div className="bg-[#2c2825] border border-[#818cf8]/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(129,140,248,0.05)] relative overflow-hidden">
-        {/* 장식용 배��� */}
+        {/* 장식용 배경 */}
         <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-[#818cf8] opacity-5 pointer-events-none" />
 
         <div className="relative z-10">
@@ -574,11 +599,11 @@ function BrandTuningView() {
           </h3>
           <p className="text-sm text-[#9ca3af] mb-8">
             우리 프랜차이즈의 특성을 입력하면, AI 예측 모델이 이를 반영하여
-            맞춤형 예상 매출과 리스크를 산��합니다.
+            맞춤형 예상 매출과 리스크를 산출합니다.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 객단가 (AOV) 설��� */}
+            {/* 객단가 (AOV) 설정 */}
             <div className="flex flex-col gap-2">
               <label className="text-xs font-bold text-[#e2e8f0]">
                 예상 평균 객단가 (AOV)
@@ -654,7 +679,7 @@ function BrandTuningView() {
           </div>
 
           <div className="mt-8 flex justify-end">
-            <button className="px-6 py-2.5 bg-[#818cf8] text-[#1e1b18] text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-[#6366f1] transition-colors">
+            <button onClick={() => showToast("info", "AI 모델 가중치 업데이트 기능은 준비 중입니다.")} className="px-6 py-2.5 bg-[#818cf8] text-[#1e1b18] text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-[#6366f1] transition-colors">
               AI 모델 업데이트 적용
             </button>
           </div>
@@ -668,6 +693,7 @@ function BrandTuningView() {
    View 4: Billing & API Token Management (결제 및 토큰)
    ═══════════════════════════════════════════════════════ */
 function BillingManagementView() {
+  const { showToast } = useToast();
   const currentPlan = "Growth";
   const billingCycle = "2026. 04. 10 ~ 2026. 05. 09";
   const totalTokens = 1000;
@@ -707,7 +733,7 @@ function BillingManagementView() {
               </div>
             </div>
           </div>
-          <button className="w-full mt-6 py-2.5 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] text-[#e2e8f0] text-xs font-bold rounded-lg transition-colors">
+          <button onClick={() => showToast("info", "결제 및 플랜 변경은 정식 오픈 후 지원됩니다.")} className="w-full mt-6 py-2.5 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] text-[#e2e8f0] text-xs font-bold rounded-lg transition-colors">
             결제 수단 관리 / 영수증
           </button>
         </div>
@@ -754,7 +780,7 @@ function BillingManagementView() {
                 <p className="text-[10px] text-[#9ca3af]">플랜을 업그레이드하거나 일회성 토큰을 충전하세요.</p>
               </div>
             </div>
-            <button className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] transition-colors">
+            <button onClick={() => showToast("info", "토큰 충전은 정식 오픈 후 지원됩니다.")} className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] transition-colors">
               즉시 충전하기
             </button>
           </div>
@@ -810,7 +836,7 @@ function BillingManagementView() {
                       현재 사용 중인 플랜
                     </button>
                   ) : (
-                    <button className="w-full py-3 bg-[#1e1b18] text-[#9ca3af] border border-[#3a3633] text-xs font-bold rounded-xl group-hover:bg-[#818cf8] group-hover:text-[#1e1b18] group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(129,140,248,0)] group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)]">
+                    <button onClick={() => showToast("info", "결제 및 플랜 변경은 정식 오픈 후 지원됩니다.")} className="w-full py-3 bg-[#1e1b18] text-[#9ca3af] border border-[#3a3633] text-xs font-bold rounded-xl group-hover:bg-[#818cf8] group-hover:text-[#1e1b18] group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(129,140,248,0)] group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)]">
                       이 플랜으로 변경
                     </button>
                   )}

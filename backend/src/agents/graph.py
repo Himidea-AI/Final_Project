@@ -1,53 +1,69 @@
 import asyncio
-from typing import Literal
-from langgraph.graph import StateGraph, END  # <--- 이 줄이 있는지 꼭 확인하세요!
+from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage
 
-# backend/src/agents/graph.py 상단
-
-from src.agents.nodes import (
-    supervisor_node,
-    market_analyst_node,
-    population_analyst_node,
-    legal_analyst_node,
-    synthesis_node
-)
-
 from src.schemas.state import AgentState
-from src.agents.nodes.context_analyst import context_analyst_node
-from src.agents.nodes.strategy_synthesizer import strategy_synthesizer_node
+# 1. 예진 님의 5인 체제 노드들만 남기고 나머지는 제거했습니다.
+from src.agents.nodes.supervisor import supervisor_node
+from src.agents.nodes.market_analyst import market_analyst_node
+from src.agents.nodes.population import population_analyst_node
+from src.agents.nodes.legal import legal_analyst_node
+from src.agents.nodes.synthesis import synthesis_node
 
 
 def build_graph() -> StateGraph:
     """
-    상권분석 워크플로우 그래프 빌드 (2노드 선형 파이프라인)
-    ContextAnalyst(스카우팅/비교) -> StrategySynthesizer(법률/최종합성)
+    상권분석 워크플로우 그래프 빌드 (Supervisor 기반 Hub-and-Spoke 구조)
     """
     workflow = StateGraph(AgentState)
 
-    # 1. 노드 등록
-    workflow.add_node("context_analyst", context_analyst_node)
-    workflow.add_node("strategy_synthesizer", strategy_synthesizer_node)
+    # 노드 등록 (5인 체제)
+    workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("market_analyst", market_analyst_node)
+    workflow.add_node("population_analyst", population_analyst_node)
+    workflow.add_node("legal_analyst", legal_analyst_node)
+    workflow.add_node("synthesis", synthesis_node)
 
-    # 2. 진입점 및 선형 경로 설정
-    workflow.set_entry_point("context_analyst")
-    workflow.add_edge("context_analyst", "strategy_synthesizer")
-    workflow.add_edge("strategy_synthesizer", END)
+    # 진입점 설정
+    workflow.set_entry_point("supervisor")
+
+    # 중앙 통제 라우팅 (Supervisor -> Workers)
+    workflow.add_conditional_edges(
+        "supervisor",
+        lambda x: x["next_step"],
+        {
+            "market_analyst": "market_analyst",
+            "population_analyst": "population_analyst",
+            "legal_analyst": "legal_analyst",
+            "FINISH": "synthesis",
+        },
+    )
+
+    # 작업 완료 후 복귀 (Workers -> Supervisor)
+    workflow.add_edge("market_analyst", "supervisor")
+    workflow.add_edge("population_analyst", "supervisor")
+    workflow.add_edge("legal_analyst", "supervisor")
+
+    # 최종 합성 후 종료 (Synthesis -> END)
+    workflow.add_edge("synthesis", END)
 
     return workflow
 
 
-def compile_workflow():
+def compile_graph():
     """그래프 컴파일"""
     builder = build_graph()
     return builder.compile()
 
 
-# --- 로컬 테스트 코드 ---
-async def test_run():
-    app = compile_workflow()
+# ★★★ [중요] 로그인 오류를 해결하는 핵심 열쇠 ★★★
+compile_workflow = compile_graph
 
-    # 셈플 입력값: 홍대(서교동) 카페 창업 시나리오
+
+# --- 로컬 테스트 코드 (필요할 때 터미널에서 실행 가능) ---
+async def test_run():
+    app = compile_graph()
+
     initial_state = {
         "messages": [
             HumanMessage(
@@ -65,52 +81,15 @@ async def test_run():
         "errors": [],
     }
 
-    print("\n" + "=" * 50)
-    print("🚀 [LANGGRAPH SIMULATION START] 홍대 카페 창업 시나리오")
-    print("=" * 50)
-    print(f"사용자 질문: {initial_state['messages'][0].content}")
-
     final_state = initial_state
-
     async for event in app.astream(initial_state):
         for node_name, output in event.items():
             print(f"\n▶ [실행 중인 노드: {node_name}]")
-            # 상태 업데이트 추적
             final_state.update(output)
 
-    # -----------------------------------------------------
-    # 최종 리포트 출력 (Final Report)
-    # -----------------------------------------------------
-    print("\n" + "=" * 50)
-    print("📋 [FINAL ANALYSIS REPORT: 홍대 카페 창업]")
-    print("=" * 50)
-
-    # 1. 상권 요약
-    market_summary = final_state.get("analysis_results", {}).get(
-        "market_summary", "데이터 없음"
-    )
-    print(f"📍 [상권 분석 요약]\n   {market_summary}")
-
-    # 2. 법률 리스크 요약
-    legal_risks = final_state.get("analysis_results", {}).get(
-        "legal_risks", "데이터 없음"
-    )
-    print(f"\n⚖️ [법률 리스크 요약]\n   {legal_risks}")
-
-    # 3. 상세 지표 (상권)
-    md = final_state.get("market_data", {})
-    if md:
-        print(f"\n📊 [상세 지표]")
-        print(f"   - 구역: {md.get('district_name')}")
-        print(f"   - 유동 인구: {md.get('floating_pop', {}).get('total', 0):,}명")
-        print(f"   - 경쟁 매장: {md.get('store_count')}개")
-        print(f"   - 예상 매출: {md.get('avg_revenue', 0):,}원")
-
-    print("\n" + "=" * 50)
-    print("✨ [시뮬레이션 종료]")
-    print("=" * 50)
+    print("\n=== [FINAL STATE] ===")
+    print(f"analysis_results: {final_state.get('analysis_results', {})}")
 
 
 if __name__ == "__main__":
-    # 비동기 실행
     asyncio.run(test_run())

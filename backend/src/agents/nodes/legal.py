@@ -908,6 +908,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
     기존 순차 실행 대비 ~35~68초 → ~8~12초로 단축.
     동일 brand+district+business_type 조합은 Redis에 24시간 캐시.
     """
+    import hashlib
+
     import redis.asyncio as aioredis
 
     from src.config.settings import settings
@@ -928,7 +930,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
             cached_data = json.loads(cached)
             analysis = dict(state.get("analysis_results") or {})
             analysis["legal_risks"] = cached_data["legal_risks"]
-            return {**state, "analysis_results": analysis, "legal_info": cached_data["legal_info"]}
+            overall_cached = cached_data.get("overall_legal_risk", "caution")
+            analysis["overall_legal_risk"] = overall_cached
+            await _redis.aclose()
+            return {**state, "analysis_results": analysis, "legal_info": cached_data["legal_info"], "overall_legal_risk": overall_cached}
     except Exception as e:
         print(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
 
@@ -1065,7 +1070,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         finally:
             await _redis.aclose()
 
-    return {**state, "analysis_results": analysis, "legal_info": legal_info}
+    return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
 
 
 def legal_node(state) -> dict:
