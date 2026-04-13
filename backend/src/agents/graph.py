@@ -8,7 +8,7 @@ from src.agents.nodes.supervisor import supervisor_node
 from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.legal import legal_analyst_node
-from src.agents.nodes.strategy_synthesizer import strategy_synthesizer_node as synthesis_node
+from src.agents.nodes.synthesis import synthesis_node
 
 
 def build_graph() -> StateGraph:
