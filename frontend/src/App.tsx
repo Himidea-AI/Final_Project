@@ -104,6 +104,14 @@ import {
   AlertTriangle,
   Scale,
   Store,
+  Columns,
+  Search,
+  Rows3,
+  AlignJustify,
+  List,
+  LayoutDashboard,
+  Building2,
+  ArrowRight,
   Terminal,
   Network,
   Circle,
@@ -604,6 +612,8 @@ function IntroScene({
   onSimulatorClick: () => void;
   onContactClick: () => void;
 }) {
+  const { isLoggedIn } = useAuth();
+
   return (
     <div className="relative z-10 h-full w-full overflow-hidden">
       {/* Background Watermark Logo (idea 5) — 화면을 가로지르는 거대한 반투명 로고 */}
@@ -647,7 +657,8 @@ function IntroScene({
 
         {/* Menu — 균일 사이즈, 일렬 정렬 */}
         <nav className="flex flex-col gap-3">
-          {MENU_ITEMS.map((item, i) => {
+          {MENU_ITEMS.map((rawItem, i) => {
+            const item = (i === 1 && isLoggedIn) ? "GO TO DASHBOARD" : rawItem;
             const isActive = activeMenuIndex === i;
             return (
               <button
@@ -657,7 +668,7 @@ function IntroScene({
                 onMouseEnter={() => setActiveMenuIndex(i)}
                 onClick={() => {
                   if (i === 0) onAboutClick();
-                  if (i === 1) onJoinUsClick();
+                  if (i === 1) isLoggedIn ? onSimulatorClick() : onJoinUsClick();
                   if (i === 2) onSimulatorClick();
                   if (i === 3) onContactClick();
                 }}
@@ -1553,6 +1564,8 @@ function SimulatorDashboard({
   const [targetPrice, setTargetPrice] = useState("5to10k");
   const [operatingHours, setOperatingHours] = useState<string[]>(["점심", "저녁"]);
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
+  const [isSplitMode, setIsSplitMode] = useState(false);
+  const [tableDensity, setTableDensity] = useState<"comfortable" | "standard" | "compact">("standard");
   const [initialCapital, setInitialCapital] = useState(5000); // 만원
 
   // [v8.0/v8.1] Drill-down Drawer + 테이블 행 확장 + 정렬 상태
@@ -2351,6 +2364,17 @@ function SimulatorDashboard({
                     <p className="text-[#9ca3af] text-sm">서울특별시 마포구 {selectedDongs[0] || "연남동"} 일대 시뮬레이션 결과</p>
                   </div>
                   <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsSplitMode(!isSplitMode)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold transition-all duration-300 border ${
+                        isSplitMode
+                          ? "bg-amber-500 text-black border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+                          : "bg-[#2c2825] text-[#9ca3af] border-[#3a3633] hover:text-white hover:bg-[#3a3633]"
+                      }`}
+                    >
+                      {isSplitMode ? <X className="w-3.5 h-3.5" /> : <Columns className="w-3.5 h-3.5" />}
+                      {isSplitMode ? "비교 모드 종료" : "VS 비교 모드"}
+                    </button>
                     <button onClick={() => showToast("info", "과거 데이터 조회 기능은 준비 중입니다.")} className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"><Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> {reportMonthLabel}</button>
                     <div className="relative">
                       <button
@@ -2379,8 +2403,17 @@ function SimulatorDashboard({
                   </div>
                 </div>
 
-                {/* AI Verdict Banner — 킬러 인사이트 메인 상단 */}
-                <AIVerdictBanner
+                {/* Split Mode: 2단 비교 뷰 */}
+                {isSplitMode && (
+                  <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6 relative">
+                    <DashboardPanelView districtName={`마포구 ${selectedDongs[0] || "연남동"}`} isVariantB={false} />
+                    <div className="hidden 2xl:block absolute left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-[#3a3633] to-transparent -translate-x-1/2 pointer-events-none" />
+                    <DashboardPanelView districtName="마포구 망원동" isVariantB={true} />
+                  </div>
+                )}
+
+                {/* Single Mode: 기존 대시보드 */}
+                {!isSplitMode && (<><AIVerdictBanner
                   headline={simResult?.recommendation || "강력한 입지 독점력과 2030 타겟팅을 통한 고수익 확보 가능 상권"}
                   severity="positive"
                   reason="AI 멀티에이전트(market·population·legal) 종합 분석 결과. 유동인구 밀집도 상위 12%, 인근 동종업계 평균 매출 대비 15% 초과 달성 예측."
@@ -2440,10 +2473,22 @@ function SimulatorDashboard({
                     {/* Table */}
                     <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
                       <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
-                        <h2 className="text-sm font-bold text-white">상세 데이터 테이블</h2>
-                        <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
-                          <button onClick={() => handleTableViewChange("cannibalization")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "cannibalization" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>가맹점 간섭도</button>
-                          <button onClick={() => handleTableViewChange("neighborhoods")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "neighborhoods" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>행정동 비교</button>
+                        <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                          상세 데이터 테이블
+                          <span className="hidden md:inline-block px-1.5 py-0.5 bg-[#3a3633] text-[#9ca3af] text-[9px] rounded uppercase font-mono">{tableDensity} view</span>
+                        </h2>
+                        <div className="flex items-center gap-3">
+                          {/* 밀도 조절 */}
+                          <div className="hidden sm:flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
+                            <button onClick={() => setTableDensity("comfortable")} title="넓게 보기" className={`p-1 rounded transition-colors ${tableDensity === "comfortable" ? "bg-[#3a3633] text-[#818cf8]" : "text-[#9ca3af] hover:text-white"}`}><Rows3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setTableDensity("standard")} title="보통" className={`p-1 rounded transition-colors ${tableDensity === "standard" ? "bg-[#3a3633] text-[#818cf8]" : "text-[#9ca3af] hover:text-white"}`}><AlignJustify className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setTableDensity("compact")} title="좁게 보기" className={`p-1 rounded transition-colors ${tableDensity === "compact" ? "bg-[#3a3633] text-[#818cf8]" : "text-[#9ca3af] hover:text-white"}`}><List className="w-3.5 h-3.5" /></button>
+                          </div>
+                          {/* 테이블 종류 토글 */}
+                          <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
+                            <button onClick={() => handleTableViewChange("cannibalization")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "cannibalization" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>가맹점 간섭도</button>
+                            <button onClick={() => handleTableViewChange("neighborhoods")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "neighborhoods" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>행정동 비교</button>
+                          </div>
                         </div>
                       </div>
                       <div>
@@ -2480,6 +2525,7 @@ function SimulatorDashboard({
                                     col2={row.distance}
                                     col3={row.impact}
                                     status={row.status}
+                                    density={tableDensity}
                                   />
                                 ))
                               : sortedNeighborhoodRows.map((row, i) => (
@@ -2493,6 +2539,7 @@ function SimulatorDashboard({
                                     col2={row.score}
                                     col3={row.survival}
                                     status={row.bep}
+                                    density={tableDensity}
                                   />
                                 ))}
                           </tbody>
@@ -2591,6 +2638,7 @@ function SimulatorDashboard({
                     </div>
                   </div>
                 </div>
+                </>)}
               </div>
             </div>
           )}
@@ -3342,9 +3390,10 @@ function SortHeader({
   );
 }
 
-function TableRow({ icon, col1, col2, col3, status, expanded, onToggle }: {
+function TableRow({ icon, col1, col2, col3, status, expanded, onToggle, density = "standard" }: {
   icon: React.ReactNode; col1: string; col2: string; col3: string; status: string;
   index?: number; expanded?: boolean; onToggle?: () => void;
+  density?: "comfortable" | "standard" | "compact";
 }) {
   const getStatusColor = (s: string) => {
     if (s === "Safe") return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
@@ -3352,6 +3401,8 @@ function TableRow({ icon, col1, col2, col3, status, expanded, onToggle }: {
     if (s.includes("개월")) return "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
     return "bg-[#1e1b18] text-[#9ca3af] border-[#3a3633]";
   };
+  const dc = density === "compact" ? "py-1.5 px-3 text-[10px]" : density === "comfortable" ? "py-4 px-3 text-sm" : "py-3 px-3 text-xs";
+  const statusSize = density === "compact" ? "text-[9px]" : "text-[10px]";
   return (
     <>
       <tr
@@ -3360,7 +3411,7 @@ function TableRow({ icon, col1, col2, col3, status, expanded, onToggle }: {
           expanded ? "bg-[#818cf8]/[0.06]" : "hover:bg-[#3a3633]/50"
         }`}
       >
-        <td className="p-3 pl-5 font-medium text-[#e2e8f0]">
+        <td className={`${dc} pl-5 font-medium text-[#e2e8f0]`}>
           <span className="inline-flex items-center gap-2">
             <ChevronRight
               size={12}
@@ -3372,10 +3423,10 @@ function TableRow({ icon, col1, col2, col3, status, expanded, onToggle }: {
             {col1}
           </span>
         </td>
-        <td className="p-3 text-[#9ca3af] font-mono">{col2}</td>
-        <td className="p-3 font-mono font-bold text-white">{col3}</td>
-        <td className="p-3">
-          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border whitespace-nowrap ${getStatusColor(status)}`}>
+        <td className={`${dc} text-[#9ca3af] font-mono`}>{col2}</td>
+        <td className={`${dc} font-mono font-bold text-white`}>{col3}</td>
+        <td className={dc}>
+          <span className={`px-2 py-0.5 ${statusSize} font-bold rounded-full border whitespace-nowrap ${getStatusColor(status)}`}>
             {status}
           </span>
         </td>
@@ -3501,6 +3552,114 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
    - 앱 최초 진입 시 3초간 5축 자이로스코프 홀로그램
    - 100% → warp-out 트랜지션 → main-scene-in → isAppLoaded=true → DOM 제거
 */
+
+/* ═══════════════════════════════════════════════════════
+   DashboardPanelView — VS 비교 모드용 압축 대시보드 패널
+   isVariantB=true면 망원동 데이터, false면 연남동 데이터 출력
+   ═══════════════════════════════════════════════════════ */
+function DashboardPanelView({ districtName, isVariantB }: { districtName: string; isVariantB: boolean }) {
+
+  const revenue = isVariantB ? "₩ 28,100,000" : "₩ 32,400,000";
+  const score = isVariantB ? "76 / 100" : "87 / 100";
+  const traffic = isVariantB ? "38,205 명" : "42,105 명";
+  const risk = isVariantB ? "MEDIUM (28%)" : "Low (12%)";
+  const scoreTrend = isVariantB ? "-2.1 Pts" : "+5.2 Pts";
+  const revenueTrend = isVariantB ? "+6.3%" : "+12.5%";
+  const radarValues = isVariantB ? [62, 81, 55, 68, 71, 58, 73] : [78, 65, 72, 87, 74, 82, 80];
+  const radarLabels = ["유동인구", "임대료", "경쟁강도", "매출추정", "생존율", "성장성", "접근성"];
+  const accentColor = isVariantB ? "text-emerald-500" : "text-amber-500";
+  const badgeColor = isVariantB ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20";
+
+  // 레이더 차트 좌표 계산
+  const radarPoints = radarValues.map((v, i) => {
+    const angle = (Math.PI * 2 * i) / 7 - Math.PI / 2;
+    const r = (v / 100) * 70;
+    return `${100 + r * Math.cos(angle)},${100 + r * Math.sin(angle)}`;
+  }).join(" ");
+
+  return (
+    <div className="flex flex-col gap-4 w-full animate-in fade-in zoom-in-95 duration-500">
+      {/* 구역 타이틀 */}
+      <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MapPin className={`w-4 h-4 ${accentColor}`} />
+          <span className="font-bold text-white text-sm">{districtName}</span>
+        </div>
+        {isVariantB && <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${badgeColor}`}>비교 대상</span>}
+      </div>
+
+      {/* 4 Stats Cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
+          <p className="text-[10px] text-[#9ca3af] mb-1">예상 월 매출</p>
+          <p className="text-lg font-black text-white">{revenue}</p>
+          <p className={`text-[10px] mt-1 ${isVariantB ? "text-emerald-400" : "text-indigo-400"}`}>{revenueTrend}</p>
+        </div>
+        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
+          <p className="text-[10px] text-[#9ca3af] mb-1">상권 매력도</p>
+          <p className="text-lg font-black text-white">{score}</p>
+          <p className={`text-[10px] mt-1 ${isVariantB ? "text-rose-400" : "text-indigo-400"}`}>{scoreTrend}</p>
+        </div>
+        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
+          <p className="text-[10px] text-[#9ca3af] mb-1">일평균 유동인구</p>
+          <p className="text-lg font-black text-white">{traffic}</p>
+          <p className="text-[10px] mt-1 text-[#9ca3af]">KT 통신망 기준</p>
+        </div>
+        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
+          <p className="text-[10px] text-[#9ca3af] mb-1">카니발리제이션</p>
+          <p className="text-lg font-black text-white">{risk}</p>
+          <p className={`text-[10px] mt-1 ${isVariantB ? "text-amber-400" : "text-emerald-400"}`}>{isVariantB ? "주의 권역" : "안전 권역"}</p>
+        </div>
+      </div>
+
+      {/* 레이더 차트 */}
+      <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 flex flex-col items-center">
+        <h3 className="text-xs font-bold text-white mb-3 self-start">7대 지표 분석</h3>
+        <div className="relative w-[200px] h-[200px]">
+          <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
+            {[20, 40, 60, 80].map((r) => (
+              <polygon key={r} points={Array.from({ length: 7 }, (_, i) => {
+                const a = (Math.PI * 2 * i) / 7 - Math.PI / 2;
+                return `${100 + r * 0.7 * Math.cos(a)},${100 + r * 0.7 * Math.sin(a)}`;
+              }).join(" ")} fill="none" stroke="#3a3633" strokeWidth="0.5" />
+            ))}
+            <polygon points={radarPoints} fill={isVariantB ? "rgba(16,185,129,0.15)" : "rgba(129,140,248,0.15)"} stroke={isVariantB ? "#10b981" : "#818cf8"} strokeWidth="2" />
+            {radarValues.map((v, i) => {
+              const angle = (Math.PI * 2 * i) / 7 - Math.PI / 2;
+              const r = (v / 100) * 70;
+              return <circle key={i} cx={100 + r * Math.cos(angle)} cy={100 + r * Math.sin(angle)} r="3" fill={isVariantB ? "#10b981" : "#818cf8"} />;
+            })}
+            {radarLabels.map((label, i) => {
+              const angle = (Math.PI * 2 * i) / 7 - Math.PI / 2;
+              const lx = 100 + 85 * Math.cos(angle);
+              const ly = 100 + 85 * Math.sin(angle);
+              return <text key={i} x={lx} y={ly} fill="#9ca3af" fontSize="9" textAnchor="middle" dominantBaseline="middle">{label}</text>;
+            })}
+          </svg>
+        </div>
+      </div>
+
+      {/* AI 인사이트 요약 */}
+      <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5">
+        <h3 className="text-xs font-bold text-white mb-3">AI 인사이트</h3>
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-xs text-[#d1d5db]">
+            <TrendingUp className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+            <span>{isVariantB ? "망원동은 주거 밀집형 상권으로 점심 시간대 매출 비중이 높습니다." : "저녁 시간대 유동인구 급증. 야간 메뉴 강화를 권장합니다."}</span>
+          </div>
+          <div className="flex items-start gap-2 text-xs text-[#d1d5db]">
+            <Scale className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+            <span>{isVariantB ? "반경 300m 내 동종 프랜차이즈 7개. 카니발리제이션 주의 필요." : "상가임대차보호법 위반 사례 존재 권역. 법적 분쟁 리스크 감지."}</span>
+          </div>
+          <div className="flex items-start gap-2 text-xs text-[#d1d5db]">
+            <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+            <span>{isVariantB ? "3040 직장인 비율 38%. 오피스 근접성이 강점입니다." : "2030 여성 타겟 구역. SNS 친화적 인테리어 도입 시 수익 +34%."}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════
    SpotterAgentWorkflow — AI 에이전트 파이프라인 시각화
@@ -3664,6 +3823,62 @@ function SpotterAgentWorkflow() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════
+   CommandPalette — Cmd+K 전역 커맨드 팔레트
+   ═══════════════════════════════════════════════════════ */
+function CommandPalette({ isOpen, onClose, onNavigate }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onNavigate: (path: string) => void;
+}) {
+  const { showToast } = useToast();
+  if (!isOpen) return null;
+
+  const handleAction = (action: () => void) => { action(); onClose(); };
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-start justify-center pt-[15vh] sm:pt-[20vh] px-4">
+      <div className="absolute inset-0 bg-[#050505]/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-2xl bg-[#1e1b18] border border-[#3a3633] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Search Input */}
+        <div className="flex items-center px-4 border-b border-[#3a3633]">
+          <Search className="w-5 h-5 text-[#818cf8]" />
+          <input autoFocus type="text" placeholder="Type a command or search..." className="w-full bg-transparent border-none px-4 py-5 text-sm text-[#e2e8f0] placeholder-[#9ca3af] focus:outline-none" />
+          <kbd className="px-2 py-1 bg-[#2c2825] border border-[#3a3633] rounded text-[10px] font-mono text-[#9ca3af]">ESC</kbd>
+        </div>
+        {/* Commands */}
+        <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
+          <div className="px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">Navigation</div>
+          <button onClick={() => handleAction(() => onNavigate("accordion"))} className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors">
+            <div className="flex items-center gap-3"><LayoutDashboard className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" /><span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">시뮬레이터 대시보드</span></div>
+            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
+          </button>
+          <button onClick={() => handleAction(() => onNavigate("hq"))} className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors">
+            <div className="flex items-center gap-3"><Building2 className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" /><span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">HQ 커맨드 센터</span></div>
+            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
+          </button>
+          <button onClick={() => handleAction(() => onNavigate("about"))} className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors">
+            <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" /><span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">About SPOTTER</span></div>
+            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
+          </button>
+          <button onClick={() => handleAction(() => onNavigate("contact"))} className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors">
+            <div className="flex items-center gap-3"><Mail className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" /><span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">Contact</span></div>
+            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
+          </button>
+
+          <div className="px-3 py-2 mt-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">Quick Actions</div>
+          <button onClick={() => handleAction(() => showToast("info", "테마 전환 기능은 준비 중입니다."))} className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors">
+            <div className="flex items-center gap-3"><Settings className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" /><span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">다크/라이트 테마 전환</span></div>
+          </button>
+          <button onClick={() => handleAction(() => showToast("info", "로그아웃은 우측 상단 메뉴를 이용해주세요."))} className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-rose-500/10 group transition-colors">
+            <div className="flex items-center gap-3"><LogOut className="w-4 h-4 text-[#9ca3af] group-hover:text-rose-500" /><span className="text-sm font-medium text-[#d1d5db] group-hover:text-rose-500">로그아웃</span></div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** 암전 트랜지션 네비게이션 Context — 모든 하위 컴포넌트에서 사용 가능 */
 const TransitionContext = createContext<(path: string) => void>(() => {});
 export const useTransition = () => useContext(TransitionContext);
@@ -3699,6 +3914,20 @@ export default function App() {
       el.scrollTop = 0;
     });
   }, [location.pathname]);
+
+  // Command Palette (Cmd+K / Ctrl+K)
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setIsCommandOpen((prev) => !prev);
+      }
+      if (e.key === "Escape") setIsCommandOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Preloader
   const [loadProgress, setLoadProgress] = useState(0);
@@ -3742,6 +3971,7 @@ export default function App() {
           about: "/about",
           joinus: "/joinus",
           login: "/login",
+          hq: "/hq",
           accordion: "/explore",
           simulator: "/simulator",
           contact: "/contact",
@@ -3889,6 +4119,13 @@ export default function App() {
           </div>
         </header>
       )}
+
+      {/* Command Palette (Cmd+K / Ctrl+K) */}
+      <CommandPalette
+        isOpen={isCommandOpen}
+        onClose={() => setIsCommandOpen(false)}
+        onNavigate={(target) => { setIsCommandOpen(false); transitionTo(target as any); }}
+      />
 
       {/* Transition overlay */}
       <div
