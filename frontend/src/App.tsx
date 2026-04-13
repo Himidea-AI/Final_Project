@@ -53,11 +53,19 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AIVerdictBanner from "./components/AIVerdictBanner";
 import { ToastProvider, useToast } from "./components/Toast";
 import { runSimulation, analyzeLocation } from "./api/client";
-import AnalysisDashboard from "./pages/AnalysisDashboard";
+// import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
+
+interface SimResult {
+  score: number;
+  revenue: number;
+  riskLevel: string;
+  recommendation: string;
+  chartData: { label: string; value: number }[];
+}
 
 import {
   ChevronRight,
@@ -100,8 +108,6 @@ import {
   Network,
   Circle,
   CircleDotDashed,
-  CircleAlert,
-  CircleX,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
@@ -2241,10 +2247,10 @@ function SimulatorDashboard({
         <div className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel}`}>
           {/* --- Idle State (Empty State with Blurred Silhouette) --- */}
           {reportState === "idle" && (
-            <div className="absolute inset-0 z-40 bg-background text-foreground font-sans p-4 md:p-6 pt-24 md:pt-28 lg:overflow-hidden flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-500">
+            <div className="relative flex-1 flex flex-col items-center justify-center w-full h-full min-h-[600px] animate-in fade-in zoom-in-95 duration-500 bg-card/5 border border-border/50 rounded-2xl overflow-hidden">
 
               {/* 1. 배경: 블러 처리된 가짜(Mock) 대시보드 실루엣 */}
-              <div className="absolute inset-0 w-full h-full p-4 md:p-6 pt-24 md:pt-28 opacity-20 blur-[8px] pointer-events-none flex flex-col gap-4">
+              <div className="absolute inset-0 w-full h-full p-8 opacity-20 blur-[8px] pointer-events-none flex flex-col gap-4">
                 {/* 가짜 헤더 영역 */}
                 <div className="h-10 w-1/3 bg-secondary rounded-lg mb-4" />
                 {/* 가짜 4 KPI 카드 */}
@@ -2335,8 +2341,8 @@ function SimulatorDashboard({
           )}
 
           {reportState === "result" && (
-            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-24 md:pt-28 lg:overflow-hidden flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
-              <div className="max-w-[1920px] w-full h-full mx-auto flex flex-col gap-4 xl:px-10 2xl:px-16 transition-all duration-500">
+            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-24 md:pt-28 overflow-y-auto custom-scrollbar flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
+              <div className="max-w-[1920px] w-full mx-auto flex flex-col gap-4 xl:px-10 2xl:px-16 transition-all duration-500 pb-12">
 
                 {/* Header & Nav */}
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
@@ -2390,9 +2396,9 @@ function SimulatorDashboard({
                 </div>
 
                 {/* Main Dashboard Body */}
-                <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
+                <div className="flex flex-col lg:flex-row gap-4">
                   {/* Left Column */}
-                  <div className="lg:flex-[2] flex flex-col gap-4 min-h-0">
+                  <div className="lg:flex-[2] flex flex-col gap-4">
                     {/* Chart */}
                     <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 pb-10 shadow-xl flex flex-col h-[320px]">
                       <div className="flex justify-between items-end mb-4">
@@ -2432,15 +2438,15 @@ function SimulatorDashboard({
                     </div>
 
                     {/* Table */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col flex-1 min-h-0">
-                      <div className="p-5 border-b border-[#3a3633] flex justify-between items-center shrink-0">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
+                      <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
                         <h2 className="text-sm font-bold text-white">상세 데이터 테이블</h2>
                         <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
                           <button onClick={() => handleTableViewChange("cannibalization")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "cannibalization" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>가맹점 간섭도</button>
                           <button onClick={() => handleTableViewChange("neighborhoods")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "neighborhoods" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>행정동 비교</button>
                         </div>
                       </div>
-                      <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
+                      <div>
                         <table className="w-full text-left border-collapse">
                           <thead className="sticky top-0 bg-[#1e1b18]/90 backdrop-blur-sm z-10">
                             <tr className="text-[11px] font-mono text-[#9ca3af] uppercase tracking-wider">
@@ -2501,7 +2507,7 @@ function SimulatorDashboard({
                   </div>
 
                   {/* Right Column */}
-                  <div className="lg:flex-[1] flex flex-col gap-4 min-h-0">
+                  <div className="lg:flex-[1] flex flex-col gap-4">
                     {/* Radar Chart */}
                     <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center">
                       <div className="w-full text-left mb-2">
@@ -3540,9 +3546,13 @@ const spotterAgentTasks = [
 ];
 
 type TaskStatus = "completed" | "in-progress" | "pending";
+type AgentTask = {
+  id: string; title: string; description: string; status: TaskStatus; priority: string; dependencies: string[];
+  subtasks: { id: string; title: string; description: string; status: TaskStatus; tools: string[] }[];
+};
 
 function SpotterAgentWorkflow() {
-  const [tasks, setTasks] = useState(spotterAgentTasks);
+  const [tasks, setTasks] = useState<AgentTask[]>(spotterAgentTasks as AgentTask[]);
   const [expandedTasks, setExpandedTasks] = useState<string[]>(["2", "3"]);
   const [expandedSubtasks, setExpandedSubtasks] = useState<Record<string, boolean>>({});
 
@@ -3576,7 +3586,7 @@ function SpotterAgentWorkflow() {
 
   const variants = {
     hidden: { opacity: 0, y: -5 },
-    visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 500, damping: 30 } },
+    visible: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 500, damping: 30 } },
     listVisible: { opacity: 1, height: "auto", transition: { duration: 0.25, staggerChildren: 0.05, when: "beforeChildren" as const } },
     listHidden: { opacity: 0, height: 0, overflow: "hidden" as const, transition: { duration: 0.2 } },
   };
@@ -3603,7 +3613,7 @@ function SpotterAgentWorkflow() {
                     <div className="flex shrink-0 gap-2 items-center">
                       {task.dependencies.length > 0 && (
                         <div className="hidden sm:flex gap-1 mr-2">
-                          {task.dependencies.map(dep => <span key={dep} className="px-1.5 py-0.5 rounded bg-[#2c2825] border border-[#3a3633] text-[9px] font-mono text-[#9ca3af]">Dep #{dep}</span>)}
+                          {task.dependencies.map(dep => <span key={dep} className="px-1.5 py-0.5 rounded bg-[#2c2825] border border-[#3a3633] text-[9px] font-mono text-[#9ca3af]">Step {dep} 완료 후</span>)}
                         </div>
                       )}
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${isCompleted ? "bg-emerald-500/10 text-emerald-500" : task.status === "in-progress" ? "bg-[#818cf8]/10 text-[#818cf8]" : "bg-[#3a3633] text-[#9ca3af]"}`}>
