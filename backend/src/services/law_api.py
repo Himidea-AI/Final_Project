@@ -30,11 +30,20 @@ def _strip_html(text: str) -> str:
 class LawApiClient:
     """국가법령정보 공동활용 API 비동기 클라이언트"""
 
+    _warned_no_oc: bool = False  # 경고 중복 출력 방지
+
     def __init__(self):
         self._oc = settings.law_oc
 
     def _is_available(self) -> bool:
-        return bool(self._oc)
+        if not self._oc:
+            if not LawApiClient._warned_no_oc:
+                print(
+                    "[LawApiClient] WARNING: LAW_OC 환경변수가 설정되지 않아 판례 검색을 사용할 수 없습니다. .env에 LAW_OC를 추가하세요."
+                )
+                LawApiClient._warned_no_oc = True
+            return False
+        return True
 
     async def search_precedents(self, query: str, display: int = 3) -> list[dict]:
         """

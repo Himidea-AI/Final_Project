@@ -57,11 +57,15 @@ def build_legal_prompt(context_docs: list[dict], question: str) -> str:
     else:
         parts = []
         for i, doc in enumerate(context_docs, start=1):
-            source = doc["metadata"].get("source", "")
-            article = doc["metadata"].get("article", "")
+            content = doc.get("content") or ""
+            if not content:
+                continue
+            metadata = doc.get("metadata") or {}
+            source = metadata.get("source", "")
+            article = metadata.get("article", "")
             label = f"[{i}] {source} {article}".strip()
-            parts.append(f"{label}\n{doc['content']}")
-        context_str = "\n\n".join(parts)
+            parts.append(f"{label}\n{content}")
+        context_str = "\n\n".join(parts) if parts else "관련 법률 문서를 찾을 수 없습니다."
 
     return _LEGAL_USER_TEMPLATE.format(context=context_str, question=question)
 

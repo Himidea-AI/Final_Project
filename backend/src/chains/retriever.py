@@ -94,6 +94,9 @@ class LegalDocumentRetriever:
         """
         vs = self._db.vectorstore
         if vs is None:
+            print(
+                f"[LegalDocumentRetriever] WARNING: vectorstore가 초기화되지 않아 '{query}' 검색을 건너뜁니다. POSTGRES_URL 및 DB 연결을 확인하세요."
+            )
             return []
 
         filter_dict = {"source": {"$in": source_filter}} if source_filter else None
@@ -139,5 +142,7 @@ class LegalDocumentRetriever:
         docs = [Document(page_content=c["text"], metadata=c["metadata"]) for c in chunks]
 
         vs = self._db.vectorstore
+        if vs is None:
+            raise RuntimeError("VectorStore 초기화 실패 — POSTGRES_URL 및 PostgreSQL 연결을 확인하세요.")
         await vs.aadd_documents(docs)
         return len(docs)

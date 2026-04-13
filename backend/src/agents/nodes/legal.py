@@ -122,6 +122,8 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
+        if not message.content:
+            raise ValueError("Anthropic LLM 응답이 비어있습니다.")
         return message.content[0].text
 
     if provider == "gemini":
@@ -182,6 +184,8 @@ async def _async_call_llm(system_prompt: str, user_message: str) -> str:
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
+        if not message.content:
+            raise ValueError("Anthropic LLM 응답이 비어있습니다.")
         return message.content[0].text
 
     if provider == "gemini":
@@ -218,16 +222,25 @@ async def _async_call_llm(system_prompt: str, user_message: str) -> str:
 
 def _extract_risk_level(llm_response: str) -> str:
     """
-    LLM 응답 마지막 줄의 JSON에서 리스크 레벨 파싱.
+    LLM 응답에서 리스크 레벨 파싱.
 
-    1차: JSON {"risk_level": "..."} 파싱 (프롬프트에서 강제)
-    2차: 키워드 매칭 fallback (LLM이 JSON 형식을 따르지 않은 경우)
+    1차: 응답 전체에서 JSON {"risk_level": "..."} 패턴 탐색 (마크다운 코드블록 포함)
+    2차: 마지막 줄 JSON 파싱
+    3차: 키워드 매칭 fallback (LLM이 JSON 형식을 따르지 않은 경우)
     """
     import json
     import re
 
-    # 1차: 마지막 줄 JSON 파싱
-    last_line = llm_response.strip().splitlines()[-1].strip() if llm_response.strip() else ""
+    # 마크다운 코드블록 제거: ```json ... ``` 또는 ``` ... ```
+    cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", llm_response, flags=re.DOTALL).strip()
+
+    # 1차: 응답 전체에서 JSON 패턴 탐색 (가장 신뢰도 높음)
+    match = re.search(r'\{"risk_level"\s*:\s*"(safe|caution|danger)"\}', cleaned)
+    if match:
+        return match.group(1)
+
+    # 2차: 마지막 줄 JSON 파싱
+    last_line = cleaned.splitlines()[-1].strip() if cleaned else ""
     try:
         data = json.loads(last_line)
         level = data.get("risk_level", "").lower()
@@ -236,13 +249,8 @@ def _extract_risk_level(llm_response: str) -> str:
     except (json.JSONDecodeError, AttributeError):
         pass
 
-    # 1차 실패 시: 응답 전체에서 JSON 패턴 탐색
-    match = re.search(r'\{"risk_level"\s*:\s*"(safe|caution|danger)"\}', llm_response)
-    if match:
-        return match.group(1)
-
-    # 2차 fallback: 키워드 매칭
-    lower = llm_response.lower()
+    # 3차 fallback: 키워드 매칭
+    lower = cleaned.lower()
     if "위험" in lower or "danger" in lower or "위반" in lower:
         return "danger"
     if "안전" in lower or "safe" in lower or "문제없" in lower:
@@ -980,13 +988,24 @@ async def _run_legal_pipeline(state: dict) -> dict:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         cached = await _redis.get(cache_key)
         if cached:
-            print(f"[legal_node] 캐시 히트: {cache_key}")
             cached_data = json.loads(cached)
-            analysis = dict(state.get("analysis_results") or {})
-            analysis["legal_risks"] = cached_data["legal_risks"]
-            analysis["overall_legal_risk"] = cached_data.get("overall_legal_risk", "caution")
-            await _redis.aclose()
-            return {**state, "analysis_results": analysis, "legal_info": cached_data["legal_info"]}
+            legal_risks = cached_data.get("legal_risks")
+            legal_info = cached_data.get("legal_info")
+            if legal_risks is None or legal_info is None:
+                print(f"[legal_node] 캐시 데이터 손상 — 재계산: {cache_key}")
+            else:
+                print(f"[legal_node] 캐시 히트: {cache_key}")
+                analysis = dict(state.get("analysis_results") or {})
+                analysis["legal_risks"] = legal_risks
+                overall_cached = cached_data.get("overall_legal_risk", "caution")
+                analysis["overall_legal_risk"] = overall_cached
+                await _redis.aclose()
+                return {
+                    **state,
+                    "analysis_results": analysis,
+                    "legal_info": legal_info,
+                    "overall_legal_risk": overall_cached,
+                }
     except Exception as e:
         print(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
 
@@ -1012,26 +1031,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
     zoning_result = check_zoning_regulation(state)
 
     # Phase 1: RAG×13 + 판례×4 + FTC API 병렬 실행 (총 18개)
-    (
-        franchise_docs,
-        lease_docs,
-        food_docs,
-        safety_docs,
-        legal_info_docs,
-        building_docs,
-        fire_docs,
-        labor_docs,
-        vat_docs,
-        privacy_docs,
-        accessibility_docs,
-        sewage_docs,
-        fair_trade_docs,
-        franchise_prec,
-        lease_prec,
-        food_prec,
-        safety_prec,
-        ftc_result,
-    ) = await asyncio.gather(
+    # return_exceptions=True — 한 개 실패해도 나머지 결과 유지
+    _phase1_results = await asyncio.gather(
         # RAG 검색 (13개)
         retriever.search(franchise_q, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),
         retriever.search(lease_q, top_k=5, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES),
@@ -1053,6 +1054,50 @@ async def _run_legal_pipeline(state: dict) -> dict:
         law_client.search_precedents("다중이용업소", display=3),
         # FTC API — RAG docs 불필요, Phase 1에서 선행 실행
         check_ftc_franchise(state),
+        return_exceptions=True,
+    )
+
+    # 예외 결과를 빈 리스트/caution dict로 대체
+    def _safe_list(r: object) -> list:
+        if isinstance(r, Exception):
+            print(f"[legal_node] Phase 1 검색 실패 (무시하고 계속): {r}")
+            return []
+        return r  # type: ignore[return-value]
+
+    def _safe_ftc(r: object) -> dict:
+        if isinstance(r, Exception):
+            print(f"[legal_node] FTC API 실패 (무시하고 계속): {r}")
+            return {
+                "type": "ftc_franchise",
+                "level": "caution",
+                "summary": f"FTC API 오류: {r}",
+                "articles": [],
+                "recommendation": "",
+            }
+        return r  # type: ignore[return-value]
+
+    (
+        franchise_docs,
+        lease_docs,
+        food_docs,
+        safety_docs,
+        legal_info_docs,
+        building_docs,
+        fire_docs,
+        labor_docs,
+        vat_docs,
+        privacy_docs,
+        accessibility_docs,
+        sewage_docs,
+        fair_trade_docs,
+        franchise_prec,
+        lease_prec,
+        food_prec,
+        safety_prec,
+        ftc_result,
+    ) = (
+        *[_safe_list(_phase1_results[i]) for i in range(17)],
+        _safe_ftc(_phase1_results[17]),
     )
 
     # Phase 2: LLM check 함수 12개 병렬 실행 (Phase 1 결과 docs 전달)
@@ -1131,7 +1176,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         finally:
             await _redis.aclose()
 
-    return {**state, "analysis_results": analysis, "legal_info": legal_info}
+    return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
 
 
 def legal_node(state) -> dict:
