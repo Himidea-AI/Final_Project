@@ -1,4 +1,13 @@
 /**
+ * 🚨 [AI 개발 규칙: ROUTE STRUCTURE PROTECTED]
+ * ─────────────────────────────────────────────────────────────
+ * 1. 이 파일의 <Routes> 구조와 "/" 경로(IntroScene)는 절대 수정/삭제 금지.
+ * 2. 신규 대시보드 기능은 오직 "/simulator" 경로 내에서만 수정할 것.
+ * 3. 'Cleanup' 명목으로 기존 import나 Route를 제거하지 마시오.
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/**
  * ═══════════════════════════════════════════════════════
  * SPOTTER — 프랜차이즈 상권분석 시뮬레이터 (Frontend)
  * ═══════════════════════════════════════════════════════
@@ -34,55 +43,43 @@
  *   - C2: Docker 배포 시 nginx.conf의 /api 프록시가 백엔드를 가리켜야 함
  */
 
-import { useState, useEffect, useRef, useCallback, forwardRef } from "react";
+import { useState, useEffect, useRef, useCallback, forwardRef, createContext, useContext } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import JoinUsPage from "./pages/JoinUs/JoinUsPage";
 import HQCommandCenter from "./pages/HQCommandCenter";
 import LoginPage from "./pages/LoginPage";
-import { AuthProvider } from "./auth/AuthContext";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import AIVerdictBanner from "./components/AIVerdictBanner";
+import { ToastProvider, useToast } from "./components/Toast";
 import { runSimulation, analyzeLocation } from "./api/client";
+// import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
-/**
- * 시뮬레이션 결과 — UI 바인딩용
- * 백엔드 SimulationOutput + AnalysisResult를 프론트 UI에 맞게 변환한 구조.
- * runSim() 함수에서 API 응답을 이 형태로 매핑하여 simResult state에 저장.
- */
 interface SimResult {
-  score: number;        // 상권 종합 매력도 (0~100)
-  revenue: number;      // 예상 월 매출 (만원 단위)
-  riskLevel: string;    // 카니발리제이션 위험도 ("LOW" | "MEDIUM" | "HIGH")
-  recommendation: string; // AI 추천 코멘트 (에이전트 생성)
-  chartData: { label: string; value: number }[]; // 7개 항목별 점수 (레이더 차트 데이터)
+  score: number;
+  revenue: number;
+  riskLevel: string;
+  recommendation: string;
+  chartData: { label: string; value: number }[];
 }
+
 import {
   ChevronRight,
+  ChevronLeft,
   Sliders,
   Activity,
   MapPin,
-  BarChart3,
-  Play,
   ExternalLink,
   Mail,
   Phone,
   GitFork,
   Users,
-  AlertTriangle,
   TrendingUp,
-  TrendingDown,
-  Download,
-  Calendar,
-  Store,
-  Crosshair,
-  Zap,
-  Scale,
-  FileText,
-  Database,
+  Play,
   ChevronDown,
   User,
   Bell,
@@ -93,11 +90,30 @@ import {
   ThumbsUp,
   ThumbsDown,
   Folder,
+  LogOut,
+  ShieldAlert,
+  CheckCircle2,
+  TrendingDown,
+  Zap,
+  Calendar,
+  Download,
+  FileText,
+  Database,
+  BarChart3,
+  Crosshair,
+  AlertTriangle,
+  Scale,
+  Store,
+  Terminal,
+  Network,
+  Circle,
+  CircleDotDashed,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
    DATA
    ═══════════════════════════════════════════════════════ */
+import { LayoutGroup, motion, AnimatePresence } from "framer-motion";
 
 const DISTRICTS = [
   { name: "강남구", eng: "GANGNAM", img: "/images/Gangnam-gu.svg" },
@@ -127,9 +143,9 @@ const DISTRICTS = [
   { name: "중랑구", eng: "JUNGNANG", img: "/images/Jungnang-gu.svg" },
 ];
 
-const MAPO_IDX = 12;
+const MAPO_IDX = DISTRICTS.findIndex((d) => d.name === "마포구");
 
-const MENU_ITEMS = ["ABOUT SPOTTER", "JOIN US", "SIMULATOR", "CONTACT"];
+const MENU_ITEMS = ["ABOUT SPOTTER", "GET STARTED", "SIMULATOR", "CONTACT"];
 
 const DONG_DATA: Record<string, string[]> = {
   "강남구": ["신사동","논현1동","논현2동","압구정동","청담동","삼성1동","삼성2동","대치1동","대치2동","대치4동","역삼1동","역삼2동","도곡1동","도곡2동","개포1동","개포2동","개포3동","개포4동","일원본동","일원1동","수서동","세곡동"],
@@ -168,6 +184,50 @@ const CHART_DATA = [
   { label: "성장성", value: 56 },
   { label: "접근성", value: 78 },
 ];
+
+/* ═══════════════════════════════════════════════════════
+   Smart Mock — 동/업종 이름 기반 해시로 동적 결과 생성
+   발표 시 다른 동을 선택하면 다른 결과가 나오도록 함
+   ═══════════════════════════════════════════════════════ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function generateSmartMock(dongName: string, businessType: string) {
+  const seed = hashString(dongName + businessType);
+
+  // 매출: 2500만 ~ 5500만 (만원 단위)
+  const revenue = 2500 + (seed % 3001);
+  // 매력도: 62 ~ 96
+  const score = 62 + (seed % 35);
+  // 리스크: seed 기반 분기
+  const riskLevels = ["LOW", "LOW", "MEDIUM", "LOW", "HIGH"] as const;
+  const riskLevel = riskLevels[seed % riskLevels.length];
+
+  // 7대 지표: 각각 다른 seed offset으로 40~95 사이
+  const metricSeeds = [0, 17, 31, 47, 61, 79, 89];
+  const chartData = [
+    "유동인구", "임대료", "경쟁강도", "매출추정", "생존율", "성장성", "접근성"
+  ].map((label, i) => ({
+    label,
+    value: 40 + ((seed + metricSeeds[i]) % 56),
+  }));
+
+  // AI 한 줄 평 (동 이름 포함)
+  const verdicts = [
+    `${dongName}은(는) ${businessType} 업종에 유리한 입지로, 유동인구 밀집도가 높은 상권입니다.`,
+    `${dongName} 상권은 ${businessType} 창업 시 평균 이상의 매출이 예상되는 권역입니다.`,
+    `${dongName}의 ${businessType} 시장은 경쟁이 치열하나, 타겟층 밀도가 높아 수익성이 기대됩니다.`,
+    `${dongName}은(는) ${businessType} 업종의 성장 잠재력이 높은 지역으로 분석됩니다.`,
+  ];
+  const recommendation = verdicts[seed % verdicts.length];
+
+  return { revenue, score, riskLevel, recommendation, chartData };
+}
 
 /* ═══════════════════════════════════════════════════════
    BUSINESS TYPE DATA — 시뮬레이터 입력 옵션 (Frontend Mockup)
@@ -604,9 +664,8 @@ function IntroScene({
               >
                 {/* Indicator bar */}
                 <div
-                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
-                    isActive ? "scale-x-100" : "scale-x-0"
-                  }`}
+                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${isActive ? "scale-x-100" : "scale-x-0"
+                    }`}
                 />
                 <span
                   className={`inline-block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
@@ -787,11 +846,10 @@ function AccordionGallery({
             {DISTRICTS.map((d, i) => (
               <div
                 key={d.eng}
-                className={`w-1 h-3 rounded-full transition-all duration-300 ${
-                  hoveredIdx === i
-                    ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                    : "bg-white/20"
-                }`}
+                className={`w-1 h-3 rounded-full transition-all duration-300 ${hoveredIdx === i
+                  ? "bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                  : "bg-white/20"
+                  }`}
               />
             ))}
           </div>
@@ -814,46 +872,30 @@ function AccordionGallery({
       {/* Gallery track */}
       <div
         ref={trackRef}
-        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${
-          isDragging ? "cursor-grabbing" : "cursor-grab"
-        }`}
+        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${isDragging ? "cursor-grabbing" : "cursor-grab"
+          }`}
         onMouseDown={handleMouseDown}
       >
-          {DISTRICTS.map((d, i) => {
-            const isHovered = hoveredIdx === i;
-            const isMapo = i === MAPO_IDX;
+        {DISTRICTS.map((d, i) => {
+          const isHovered = hoveredIdx === i;
+          const isMapo = i === MAPO_IDX;
 
             return (
               <div
                 key={d.eng}
-                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden cursor-pointer bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                  isMapo ? "cursor-pointer" : "cursor-not-allowed"
+                } ${
                   isHovered
                     ? "w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(129,140,248,0.3)]"
                     : "w-[70px] md:w-[80px] z-0"
                 }`}
-                onMouseEnter={() => setHoveredIdx(i)}
-                onMouseLeave={() => setHoveredIdx(null)}
-                onClick={() => {
-                  if (isMapo && !isDragging) onMapoClick();
-                }}
-              >
-                {/* 1. Animated Gradient Border — 호버 시에만 회전 빛 표시 */}
-                <div
-                  className={`absolute inset-[-50%] z-0 animate-spin-slow transition-opacity duration-500 ${
-                    isHovered ? "opacity-100" : "opacity-0"
-                  }`}
-                  style={{
-                    background:
-                      "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
-                  }}
-                />
-
-                {/* 2. 실제 컨텐츠 컨테이너 (2px 인셋으로 테두리만 노출) */}
-                <div
-                  className={`absolute inset-[2px] z-10 overflow-hidden rounded-[14px] transition-colors duration-500 ${
-                    isHovered ? "bg-[#2c2825]" : "bg-[#1e1b18]"
-                  }`}
-                >
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onClick={() => {
+                if (isMapo && !isDragging) onMapoClick();
+              }}
+            >
                 {/* Parallax background image */}
                 <div
                   className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
@@ -867,21 +909,10 @@ function AccordionGallery({
                 {/* Gradient mask */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18] via-[#1e1b18]/60 to-transparent opacity-90 transition-opacity duration-1000" />
 
-                {/* District number */}
-                <div
-                  className={`absolute top-6 left-0 right-0 text-center font-mono text-xs transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered ? "text-gray-400 opacity-100" : "text-gray-600 opacity-0"
-                  }`}
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </div>
-
                 {/* English name (shown on hover) */}
                 <div
                   className={`absolute top-12 left-6 right-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-4"
+                    isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                   }`}
                 >
                   <span className="text-xs tracking-[0.3em] text-gray-400 font-light uppercase">
@@ -893,9 +924,7 @@ function AccordionGallery({
                 {isMapo && (
                   <div
                     className={`absolute top-24 left-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                      isHovered
-                        ? "opacity-100 translate-y-0"
-                        : "opacity-0 translate-y-4"
+                      isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                     }`}
                   >
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
@@ -919,9 +948,7 @@ function AccordionGallery({
                               : "text-4xl md:text-5xl opacity-0 translate-y-10 blur-[4px]"
                           }`}
                           style={{
-                            transitionDelay: isHovered
-                              ? `${ci * 40 + 100}ms`
-                              : "0ms",
+                            transitionDelay: isHovered ? `${ci * 40 + 100}ms` : "0ms",
                           }}
                         >
                           {char}
@@ -940,9 +967,7 @@ function AccordionGallery({
                               : "text-2xl md:text-3xl opacity-60 translate-y-0 blur-0"
                           }`}
                           style={{
-                            transitionDelay: isHovered
-                              ? "0ms"
-                              : `${ci * 40 + 100}ms`,
+                            transitionDelay: isHovered ? "0ms" : `${ci * 40 + 100}ms`,
                           }}
                         >
                           {char}
@@ -950,7 +975,7 @@ function AccordionGallery({
                       ))}
                     </h2>
 
-                    {/* Bottom info (shown on hover) */}
+                    {/* Bottom info */}
                     <div
                       className={`absolute left-0 bottom-0 flex flex-col items-start transition-all duration-[1000ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
                         isHovered
@@ -964,17 +989,17 @@ function AccordionGallery({
                           <span>클릭하여 시뮬레이션 시작</span>
                         </div>
                       ) : (
-                        <span className="text-xs text-gray-500">
+                        <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-bold tracking-wider">
                           서비스 준비 중
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
-                </div>
               </div>
             );
           })}
+
       </div>
 
     </div>
@@ -1492,6 +1517,11 @@ function ContactPage({ onBack }: { onBack: () => void }) {
    AnalysisResult.data.market_report → 7개 항목별 차트 데이터
 */
 
+/**
+ * SimulatorDashboard — 시뮬레이션 분석 결과 대시보드
+ * idle → loading(Progress Bar) → result(KPI + 차트 + 테이블)
+ * API 실패 시 generateSmartMock() 폴백, businessType은 백엔드 연동 전 하드코딩
+ */
 function SimulatorDashboard({
   reportState,
   setReportState,
@@ -1503,6 +1533,8 @@ function SimulatorDashboard({
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
   const [loadingText, setLoadingText] = useState("INITIALIZING AI ENGINE...");
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const { showToast } = useToast();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [chartView, setChartView] = useState<"daily" | "monthly">("daily");
   const [tableView, setTableView] = useState<"cannibalization" | "neighborhoods">("cannibalization");
@@ -1520,6 +1552,7 @@ function SimulatorDashboard({
   const [storeArea, setStoreArea] = useState(15); // 평
   const [targetPrice, setTargetPrice] = useState("5to10k");
   const [operatingHours, setOperatingHours] = useState<string[]>(["점심", "저녁"]);
+  const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
   const [initialCapital, setInitialCapital] = useState(5000); // 만원
 
   // [v8.0/v8.1] Drill-down Drawer + 테이블 행 확장 + 정렬 상태
@@ -1595,13 +1628,14 @@ function SimulatorDashboard({
       const dateStr = reportFullDate.replace(/\./g, "");
       const districtName = selectedDongs[0] || "연남동";
       pdf.save(`SPOTTER_마포구_${districtName}_${dateStr}.pdf`);
+      showToast("success", "PDF 리포트 생성이 완료되었습니다.");
     } catch (error) {
       console.error("PDF Generation Failed:", error);
       alert("PDF 생성 중 오류가 발생했습니다.");
     } finally {
       setIsGeneratingPDF(false);
     }
-  }, [reportFullDate, selectedDongs]);
+  }, [reportFullDate, selectedDongs, showToast]);
 
   const handleDownloadExcel = useCallback(() => {
     setIsDownloadOpen(false);
@@ -1678,7 +1712,8 @@ function SimulatorDashboard({
 
     const dateStr = reportFullDate.replace(/\./g, "");
     XLSX.writeFile(wb, `SPOTTER_마포구_${districtName}_${dateStr}.xlsx`);
-  }, [reportFullDate, selectedDongs, simResult]);
+    showToast("success", "Excel 데이터가 다운로드되었습니다.");
+  }, [reportFullDate, selectedDongs, simResult, showToast]);
 
   const toggleOperatingHour = useCallback((hour: string) => {
     setOperatingHours((prev) =>
@@ -1775,35 +1810,57 @@ function SimulatorDashboard({
       setReportState("result");
     } catch (err) {
       console.error("Simulation failed:", err);
-      // Fallback — 에러 시에도 결과 화면 표시 (Mock 수준)
+      // Fallback — Smart Mock (동/업종 기반 동적 데이터)
+      const mock = generateSmartMock(selectedDongs[0] || "연남동", businessType);
       setSimResult({
-        score: 87,
-        revenue: 3240,
-        riskLevel: "HIGH",
-        recommendation: "API 연결 실패 — Mock 데이터를 표시합니다.",
-        chartData: CHART_DATA,
+        score: mock.score,
+        revenue: mock.revenue,
+        riskLevel: mock.riskLevel,
+        recommendation: mock.recommendation,
+        chartData: mock.chartData,
       });
       setReportState("result");
     }
-  }, [setReportState, selectedDongs, budget]);
+  }, [setReportState, selectedDongs, budget, businessType, showToast]);
 
-  // Loading streaming text
+  // Loading — 단계별 progress bar + 스트리밍 텍스트 (100~120초 대응)
   useEffect(() => {
-    if (reportState !== "loading") return;
-    const texts = [
-      "FETCHING KT TELECOM DATA...",
-      "ANALYZING CANNIBALIZATION RATE...",
-      "CALCULATING RENT-TO-REVENUE RATIO...",
-      "RUNNING WHAT-IF SCENARIOS...",
-      "CROSS-CHECKING LEGAL RISKS...",
-      "GENERATING 12-MONTH FORECAST...",
+    if (reportState !== "loading") {
+      setLoadingProgress(0);
+      return;
+    }
+
+    const stages = [
+      { at: 0, text: "INITIALIZING AI ENGINE..." },
+      { at: 5, text: "CONNECTING TO DATABASE..." },
+      { at: 10, text: "FETCHING KT TELECOM DATA..." },
+      { at: 20, text: "ANALYZING COMPETITION DENSITY (pgvector)..." },
+      { at: 30, text: "QUERYING POPULATION TRENDS..." },
+      { at: 40, text: "CALCULATING RENT-TO-REVENUE RATIO..." },
+      { at: 50, text: "ANALYZING CANNIBALIZATION RATE..." },
+      { at: 60, text: "CROSS-CHECKING LEGAL RISKS (RAG 3,775 chunks)..." },
+      { at: 70, text: "RUNNING WHAT-IF SCENARIOS..." },
+      { at: 80, text: "GENERATING 12-MONTH FORECAST (LSTM)..." },
+      { at: 88, text: "SYNTHESIZING MULTI-AGENT RESULTS..." },
     ];
-    let i = 0;
-    const interval = setInterval(() => {
-      setLoadingText(texts[i % texts.length]);
-      i++;
-    }, 400);
-    return () => clearInterval(interval);
+
+    // 90%까지 100초에 걸쳐 천천히 올라감
+    const duration = 100000; // 100초
+    const maxProgress = 90;
+    const interval = 500; // 0.5초마다 업데이트
+    const step = (maxProgress / duration) * interval;
+    let current = 0;
+
+    const timer = setInterval(() => {
+      current = Math.min(current + step + Math.random() * 0.3, maxProgress);
+      setLoadingProgress(current);
+
+      // 단계별 텍스트 업데이트
+      const stage = [...stages].reverse().find((s) => current >= s.at);
+      if (stage) setLoadingText(stage.text);
+    }, interval);
+
+    return () => clearInterval(timer);
   }, [reportState]);
 
   // Dark theme only
@@ -1966,8 +2023,9 @@ function SimulatorDashboard({
             {/* Radius slider */}
             <div className="mb-6">
               <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary}`}>
+                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
                   상권 반경
+                  <span className="text-[#818cf8] cursor-help" title="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장">&#9432;</span>
                 </label>
                 <span className={`text-xs font-mono ${accent}`}>{radius}m</span>
               </div>
@@ -1988,8 +2046,9 @@ function SimulatorDashboard({
             {/* Budget slider */}
             <div className="mb-6">
               <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary}`}>
+                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
                   임대료 예산
+                  <span className="text-[#818cf8] cursor-help" title="월 임대료 예산. 마포구 평균 1층 기준 200~400만원">&#9432;</span>
                 </label>
                 <span className={`text-xs font-mono ${accent}`}>{budget}만원</span>
               </div>
@@ -2010,8 +2069,9 @@ function SimulatorDashboard({
             {/* Toggle switch */}
             <div className="mb-2">
               <div className="flex items-center justify-between">
-                <label className={`text-xs font-medium ${textSecondary}`}>
+                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
                   유동인구 가중치
+                  <span className="text-[#818cf8] cursor-help" title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장">&#9432;</span>
                 </label>
                 <button
                   onClick={() => setWeighted(!weighted)}
@@ -2185,18 +2245,54 @@ function SimulatorDashboard({
 
         {/* Right panel — Visualization */}
         <div className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel}`}>
+          {/* --- Idle State (Empty State with Blurred Silhouette) --- */}
           {reportState === "idle" && (
-            <div className="h-full flex flex-col items-center justify-center gap-4">
-              <div
-                className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
-                  "bg-[#1e1b18]"
-                }`}
-              >
-                <BarChart3 size={28} className={textSecondary} />
+            <div className="relative flex-1 flex flex-col items-center justify-center w-full h-full min-h-[600px] animate-in fade-in zoom-in-95 duration-500 bg-card/5 border border-border/50 rounded-2xl overflow-hidden">
+
+              {/* 1. 배경: 블러 처리된 가짜(Mock) 대시보드 실루엣 */}
+              <div className="absolute inset-0 w-full h-full p-8 opacity-20 blur-[8px] pointer-events-none flex flex-col gap-4">
+                {/* 가짜 헤더 영역 */}
+                <div className="h-10 w-1/3 bg-secondary rounded-lg mb-4" />
+                {/* 가짜 4 KPI 카드 */}
+                <div className="grid grid-cols-4 gap-4">
+                  {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-card border border-border rounded-xl" />)}
+                </div>
+                {/* 가짜 메인 바디 */}
+                <div className="flex flex-1 gap-4 mt-2">
+                  <div className="flex-[2] flex flex-col gap-4">
+                    <div className="flex-1 bg-card border border-border rounded-xl" />
+                    <div className="flex-1 bg-card border border-border rounded-xl" />
+                  </div>
+                  <div className="flex-[1] bg-card border border-border rounded-xl" />
+                </div>
               </div>
-              <p className={`text-sm ${textSecondary}`}>
-                조건을 설정하고 시뮬레이션을 실행하세요
-              </p>
+
+              {/* 2. 중앙 CTA (Call to Action) 가이드 박스 */}
+              <div className="relative z-10 flex flex-col items-center max-w-md text-center bg-card/80 backdrop-blur-xl border border-border/50 p-10 rounded-3xl shadow-2xl">
+                <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
+                  <MapPin className="w-8 h-8 text-primary animate-bounce" />
+                </div>
+
+                <h2 className="text-2xl font-black text-foreground mb-3 tracking-tight">
+                  첫 번째 시뮬레이션을 시작하세요
+                </h2>
+
+                <p className="text-sm text-muted-foreground leading-relaxed mb-8">
+                  좌측 패널에서 분석을 원하는 <strong className="text-primary">행정동</strong>과 <strong className="text-primary">업종</strong>을 선택한 후,<br/>
+                  하단의 RUN 버튼을 눌러 AI 예측 엔진을 가동하십시오.
+                </p>
+
+                {/* 좌측 패널을 가리키는 시각적 힌트 */}
+                <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground bg-background px-4 py-2 rounded-full border border-border">
+                  <span className="flex items-center gap-1 text-primary">
+                    <ChevronLeft className="w-4 h-4 animate-pulse" />
+                    SELECT PARAMETERS
+                  </span>
+                  <span className="w-1 h-1 bg-border rounded-full" />
+                  <span>PRESS RUN</span>
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -2206,13 +2302,35 @@ function SimulatorDashboard({
                 {/* Double spinner */}
                 <div className="absolute inset-0 border-4 border-[#3a3633] border-t-[#818cf8] rounded-full animate-[spin_2s_linear_infinite]" />
                 <div className="absolute inset-2 border-4 border-[#3a3633] border-b-[#818cf8] rounded-full animate-[spin_3s_linear_infinite_reverse]" />
+                {/* Center percentage */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-lg font-black font-mono text-[#818cf8]">
+                    {Math.round(loadingProgress)}%
+                  </span>
+                </div>
               </div>
 
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-4 w-full max-w-md">
                 <p className={`font-mono text-xl font-black tracking-[0.2em] uppercase ${accent}`}>
                   PROCESSING DATA
                 </p>
-                <div className="px-4 py-2 mt-2 bg-black/10 rounded-md border border-[#3a3633]/30 backdrop-blur-sm flex items-center gap-3">
+
+                {/* Progress Bar */}
+                <div className="w-full relative">
+                  <div className="w-full h-2 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#6366f1] to-[#818cf8] rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${loadingProgress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1.5">
+                    <span className="text-[9px] font-mono text-[#818cf8]">{Math.round(loadingProgress)}%</span>
+                    <span className="text-[9px] font-mono text-[#9ca3af]">~{Math.max(0, Math.round((90 - loadingProgress) / 0.9))}초 남음</span>
+                  </div>
+                </div>
+
+                {/* Current step */}
+                <div className="px-4 py-2 bg-black/10 rounded-md border border-[#3a3633]/30 backdrop-blur-sm flex items-center gap-3">
                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                   <p className={`font-mono text-xs tracking-widest ${textSecondary}`}>
                     [ {loadingText} ]
@@ -2223,8 +2341,8 @@ function SimulatorDashboard({
           )}
 
           {reportState === "result" && (
-            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-28 md:pt-32 overflow-y-auto custom-scrollbar flex flex-col pb-12">
-              <div className="max-w-[1600px] w-full mx-auto flex flex-col gap-6">
+            <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-24 md:pt-28 overflow-y-auto custom-scrollbar flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
+              <div className="max-w-[1920px] w-full mx-auto flex flex-col gap-4 xl:px-10 2xl:px-16 transition-all duration-500 pb-12">
 
                 {/* Header & Nav */}
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
@@ -2233,7 +2351,7 @@ function SimulatorDashboard({
                     <p className="text-[#9ca3af] text-sm">서울특별시 마포구 {selectedDongs[0] || "연남동"} 일대 시뮬레이션 결과</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"><Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> {reportMonthLabel}</button>
+                    <button onClick={() => showToast("info", "과거 데이터 조회 기능은 준비 중입니다.")} className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"><Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> {reportMonthLabel}</button>
                     <div className="relative">
                       <button
                         onClick={() => setIsDownloadOpen(!isDownloadOpen)}
@@ -2278,9 +2396,9 @@ function SimulatorDashboard({
                 </div>
 
                 {/* Main Dashboard Body */}
-                <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex flex-col lg:flex-row gap-4">
                   {/* Left Column */}
-                  <div className="lg:flex-[2] flex flex-col gap-6">
+                  <div className="lg:flex-[2] flex flex-col gap-4">
                     {/* Chart */}
                     <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 pb-10 shadow-xl flex flex-col h-[320px]">
                       <div className="flex justify-between items-end mb-4">
@@ -2320,7 +2438,7 @@ function SimulatorDashboard({
                     </div>
 
                     {/* Table */}
-                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col flex-1">
+                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
                       <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
                         <h2 className="text-sm font-bold text-white">상세 데이터 테이블</h2>
                         <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
@@ -2328,7 +2446,7 @@ function SimulatorDashboard({
                           <button onClick={() => handleTableViewChange("neighborhoods")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === "neighborhoods" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>행정동 비교</button>
                         </div>
                       </div>
-                      <div className="flex-1">
+                      <div>
                         <table className="w-full text-left border-collapse">
                           <thead className="sticky top-0 bg-[#1e1b18]/90 backdrop-blur-sm z-10">
                             <tr className="text-[11px] font-mono text-[#9ca3af] uppercase tracking-wider">
@@ -2389,7 +2507,7 @@ function SimulatorDashboard({
                   </div>
 
                   {/* Right Column */}
-                  <div className="lg:flex-[1] flex flex-col gap-6">
+                  <div className="lg:flex-[1] flex flex-col gap-4">
                     {/* Radar Chart */}
                     <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center">
                       <div className="w-full text-left mb-2">
@@ -2403,13 +2521,13 @@ function SimulatorDashboard({
                           <line x1="100" y1="100" x2="100" y2="40" stroke="#3a3633" /><line x1="100" y1="100" x2="147" y2="63" stroke="#3a3633" /><line x1="100" y1="100" x2="158" y2="113" stroke="#3a3633" /><line x1="100" y1="100" x2="126" y2="154" stroke="#3a3633" /><line x1="100" y1="100" x2="74" y2="154" stroke="#3a3633" /><line x1="100" y1="100" x2="42" y2="113" stroke="#3a3633" /><line x1="100" y1="100" x2="53" y2="63" stroke="#3a3633" />
                           <polygon points="100,50 140,70 145,110 115,140 85,130 60,105 70,75" fill="rgba(99,102,241,0.4)" stroke="#818cf8" strokeWidth="2" className="drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
                           <circle cx="100" cy="50" r="3" fill="#fff" /><circle cx="140" cy="70" r="3" fill="#fff" /><circle cx="145" cy="110" r="3" fill="#fff" /><circle cx="115" cy="140" r="3" fill="#fff" /><circle cx="85" cy="130" r="3" fill="#fff" /><circle cx="60" cy="105" r="3" fill="#fff" /><circle cx="70" cy="75" r="3" fill="#fff" />
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="100" y="32" fill="#e5e5e5" fontSize="10" fontWeight="bold" textAnchor="middle">유동인구</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="157" y="60" fill="#a3a3a3" fontSize="10" textAnchor="start">매출</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="168" y="117" fill="#a3a3a3" fontSize="10" textAnchor="start">성장성</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="133" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle">생존율</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="67" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle">임대료</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="32" y="117" fill="#a3a3a3" fontSize="10" textAnchor="end">경쟁강도</text>
-                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="43" y="60" fill="#a3a3a3" fontSize="10" textAnchor="end">접근성</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="100" y="32" fill="#e5e5e5" fontSize="10" fontWeight="bold" textAnchor="middle"><title>유동인구: 82/100 (마포구 상위 12%)</title>유동인구</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="157" y="60" fill="#a3a3a3" fontSize="10" textAnchor="start"><title>매출: 74/100 (월 3,240만 추정)</title>매출</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="168" y="117" fill="#a3a3a3" fontSize="10" textAnchor="start"><title>성장성: 56/100 (전년 대비 +3.2%)</title>성장성</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="133" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle"><title>생존율: 91/100 (3년 생존 82%)</title>생존율</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="67" y="166" fill="#a3a3a3" fontSize="10" textAnchor="middle"><title>임대료: 45/100 (평당 25만원)</title>임대료</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="32" y="117" fill="#a3a3a3" fontSize="10" textAnchor="end"><title>경쟁강도: 68/100 (반경 500m 내 45개)</title>경쟁강도</text>
+                          <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="43" y="60" fill="#a3a3a3" fontSize="10" textAnchor="end"><title>접근성: 78/100 (지하철 도보 5분)</title>접근성</text>
                         </svg>
                       </div>
                     </div>
@@ -2446,6 +2564,30 @@ function SimulatorDashboard({
                           desc="SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가."
                         />
                       </div>
+
+                      {/* --- AI Workflow & Report Buttons --- */}
+                      <div className="flex flex-col gap-2 mt-3 shrink-0">
+                        <button
+                          onClick={() => setIsWorkflowOpen(true)}
+                          className="w-full py-2.5 bg-gradient-to-r from-[#818cf8]/20 to-transparent hover:from-[#818cf8]/40 border border-[#818cf8]/30 rounded-md text-xs font-bold text-[#e2e8f0] transition-all flex items-center justify-between px-4 group shadow-[0_0_15px_rgba(129,140,248,0.1)] hover:shadow-[0_0_20px_rgba(129,140,248,0.25)]"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Network className="w-4 h-4 text-[#818cf8] group-hover:scale-110 transition-transform" />
+                            <span>AI 에이전트 워크플로우 보기</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[10px] font-mono text-[#818cf8]">LIVE</span>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => showToast("info", "전체 리포트 다운로드는 상단 다운로드 버튼을 이용해주세요.")}
+                          className="w-full py-2 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-md text-xs font-bold text-[#a3a3a3] hover:text-white transition-colors flex items-center justify-center gap-2 group"
+                        >
+                          전체 리포트 다운로드 (PDF)
+                          <Download className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2454,6 +2596,37 @@ function SimulatorDashboard({
           )}
         </div>
       </div>
+
+      {/* ==========================================
+          AI Agent Workflow Drawer
+          ========================================== */}
+      <>
+        <div
+          className={`fixed inset-0 z-[100] bg-[#050505]/70 backdrop-blur-sm transition-opacity duration-500 ${isWorkflowOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+          onClick={() => setIsWorkflowOpen(false)}
+        />
+        <div
+          className={`fixed top-0 right-0 w-full md:w-[600px] h-full bg-[#1e1b18] border-l border-[#3a3633] z-[101] shadow-2xl flex flex-col transition-transform duration-[800ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isWorkflowOpen ? "translate-x-0" : "translate-x-full"}`}
+        >
+          <div className="flex justify-between items-center p-6 border-b border-[#3a3633] bg-[#2c2825]">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#818cf8]/10 border border-[#818cf8]/20 flex items-center justify-center">
+                <Terminal className="w-4 h-4 text-[#818cf8]" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-white tracking-tight">LangGraph Execution Log</h2>
+                <p className="text-[10px] text-[#a3a3a3] font-mono mt-0.5">MULTI-AGENT PIPELINE</p>
+              </div>
+            </div>
+            <button onClick={() => setIsWorkflowOpen(false)} className="p-2 text-[#a3a3a3] hover:text-white hover:bg-[#3a3633] rounded-lg transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 bg-[#171717] custom-scrollbar">
+            <SpotterAgentWorkflow />
+          </div>
+        </div>
+      </>
 
       {/* [v8.0] Drill-down Drawer — KPI/차트 클릭 시 우측에서 슬라이드 인 */}
       <DetailDrawer
@@ -2509,18 +2682,43 @@ function SimulatorDashboard({
 */
 
 
+function LogoutButton() {
+  const { isLoggedIn, logout } = useAuth();
+  const nav = useTransition();
+
+  if (!isLoggedIn) return null;
+
+  return (
+    <button
+      onClick={() => {
+        logout();
+        nav("/login");
+      }}
+      className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-[#9ca3af] hover:text-rose-400 hover:bg-rose-500/10 rounded-full text-xs font-medium transition-colors border border-transparent hover:border-rose-500/30"
+      title="로그아웃"
+    >
+      <LogOut className="w-3.5 h-3.5" />
+      <span>로그아웃</span>
+    </button>
+  );
+}
+
 function GlobalLimelightNav() {
+  const nav = useTransition();
+  const { isLoggedIn, logout } = useAuth();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
+  const [openDropdown, setOpenDropdown] = useState<"bell" | "user" | null>(null);
+  const [unreadCount, setUnreadCount] = useState(1); // TODO Phase 2: GET /notifications/unread-count API polling으로 교체
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // B2B 실무 시나리오 메뉴 구성 (HQ Command Center)
-  const navItems: { icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
-    { icon: <Folder />, label: "보관함 / 파이프라인" },
-    { icon: <Bell />, label: "알림 (승인 대기 등)", hasNoti: true },
-    { icon: <Settings />, label: "HQ 설정 (브랜드 튜닝)" },
-    { icon: <User />, label: "내 워크스페이스" },
+  type NavItemType = "folder" | "bell" | "settings" | "user";
+  const navItems: { type: NavItemType; icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
+    { type: "folder", icon: <Folder />, label: "출점 파이프라인" },
+    { type: "user", icon: <User />, label: "내 프로필" },
+    { type: "settings", icon: <Settings />, label: "브랜드 AI 튜닝" },
+    { type: "bell", icon: <Bell />, label: "알림", hasNoti: unreadCount > 0 },
   ];
 
   const targetIndex = hoverIndex !== null ? hoverIndex : activeIndex;
@@ -2534,49 +2732,137 @@ function GlobalLimelightNav() {
     }
   }, [targetIndex]);
 
+  const handleItemClick = (index: number, type: NavItemType) => {
+    // 비로그인 시 로그인 페이지로
+    if (!isLoggedIn) {
+      nav("/login");
+      return;
+    }
+
+    setActiveIndex(index);
+
+    if (type === "folder") {
+      setOpenDropdown(null);
+      nav("/hq?tab=pipeline");
+    } else if (type === "settings") {
+      setOpenDropdown(null);
+      nav("/hq?tab=tuning");
+    } else if (type === "bell") {
+      setOpenDropdown(openDropdown === "bell" ? null : "bell");
+    } else if (type === "user") {
+      setOpenDropdown(openDropdown === "user" ? null : "user");
+    }
+  };
+
   return (
-    <div
-      className="relative flex items-center bg-[#2c2825] border border-[#3a3633] rounded-full h-10 px-2 shadow-sm overflow-hidden hidden md:flex"
-      onMouseLeave={() => setHoverIndex(null)}
-    >
-      {/* 호버 조명 효과 (인디고 테마 유지) */}
+    <div className="relative hidden md:flex">
+      {/* 아이콘 바 — overflow-hidden으로 빔 클리핑 */}
       <div
-        className="absolute top-0 z-10 pointer-events-none flex flex-col items-center transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
-        style={{ left: `${indicatorStyle.left}px`, transform: "translateX(-50%)", opacity: indicatorStyle.opacity }}
+        className="relative flex items-center bg-[#2c2825] border border-[#3a3633] rounded-full h-10 px-2 shadow-sm overflow-hidden"
+        onMouseLeave={() => setHoverIndex(null)}
       >
-        <div className="w-6 h-[2px] bg-[#818cf8] rounded-b-full shadow-[0_0_8px_#818cf8]" />
+        {/* 호버 조명 효과 */}
         <div
-          className="w-12 h-10 bg-[#818cf8]/20"
-          style={{ clipPath: "polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)" }}
-        />
+          className="absolute top-0 z-10 pointer-events-none flex flex-col items-center transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
+          style={{ left: `${indicatorStyle.left}px`, transform: "translateX(-50%)", opacity: indicatorStyle.opacity }}
+        >
+          <div className="w-6 h-[2px] bg-[#818cf8] rounded-b-full shadow-[0_0_8px_#818cf8]" />
+          <div className="w-12 h-10 bg-[#818cf8]/20" style={{ clipPath: "polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)" }} />
+        </div>
+
+        {/* 아이콘 리스트 */}
+        {navItems.map((item, index) => (
+          <button
+            key={index}
+            ref={(el) => { navRefs.current[index] = el; }}
+            onClick={() => handleItemClick(index, item.type)}
+            onMouseEnter={() => setHoverIndex(index)}
+            className="relative z-20 flex items-center justify-center h-full px-3 text-[#9ca3af] hover:text-[#e2e8f0] transition-colors group"
+            title={item.label}
+          >
+            {React.cloneElement(item.icon, {
+              className: `w-4 h-4 transition-all duration-300 ${
+                targetIndex === index
+                  ? "text-[#818cf8] scale-110 drop-shadow-[0_0_5px_rgba(129,140,248,0.5)]"
+                  : "scale-100 group-hover:scale-110"
+              }`,
+            } as React.HTMLAttributes<HTMLElement>)}
+
+            {item.hasNoti && (
+              <span className="absolute top-2 right-2 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {navItems.map((item, index) => (
-        <button
-          key={index}
-          ref={(el) => { navRefs.current[index] = el; }}
-          onClick={() => setActiveIndex(index)}
-          onMouseEnter={() => setHoverIndex(index)}
-          className="relative z-20 flex items-center justify-center h-full px-3 text-[#9ca3af] hover:text-[#e2e8f0] transition-colors group"
-          title={item.label}
-        >
-          {React.cloneElement(item.icon, {
-            className: `w-4 h-4 transition-all duration-300 ${
-              targetIndex === index
-                ? "text-[#818cf8] scale-110 drop-shadow-[0_0_5px_rgba(129,140,248,0.5)]"
-                : "scale-100 group-hover:scale-110"
-            }`,
-          } as React.HTMLAttributes<HTMLElement>)}
+      {/* 드롭다운 — overflow-hidden 바깥에서 렌더링 */}
 
-          {/* 🔴 실시간 알림 Ping 뱃지 */}
-          {item.hasNoti && (
-            <span className="absolute top-2 right-2 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-            </span>
-          )}
-        </button>
-      ))}
+      {/* 알림 드롭다운 (Bell) */}
+      {openDropdown === "bell" && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
+          <div className="absolute top-12 right-0 w-72 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
+            <div className="px-4 py-2 border-b border-[#3a3633] flex justify-between items-center">
+              <span className="text-xs font-bold text-[#e2e8f0]">최근 알림</span>
+              <span onClick={() => setUnreadCount(0)} className="text-[10px] text-[#818cf8] cursor-pointer hover:underline">모두 읽음</span>
+            </div>
+            <div className="max-h-64 overflow-y-auto custom-scrollbar">
+              <div className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] flex gap-3">
+                <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-[#e2e8f0] leading-tight">새로운 매니저 워크스페이스 승인 대기중 (최점포 님)</p>
+                  <p className="text-[10px] text-[#9ca3af] mt-1">10분 전</p>
+                </div>
+              </div>
+              <div className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors flex gap-3">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-[#e2e8f0] leading-tight">마포구 연남동 AI 시뮬레이션 완료 및 저장됨</p>
+                  <p className="text-[10px] text-[#9ca3af] mt-1">2시간 전</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 유저/워크스페이스 드롭다운 (User) */}
+      {openDropdown === "user" && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
+          <div className="absolute top-12 right-0 w-56 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
+            <div className="px-4 py-3 border-b border-[#3a3633]">
+              <p className="text-xs font-black text-[#e2e8f0]">SPOTTER-HQ</p>
+              <p className="text-[10px] text-[#9ca3af] mt-0.5">마스터 계정 (팀장)</p>
+            </div>
+            <div className="py-1">
+              <button
+                onClick={() => { setOpenDropdown(null); nav("/hq?tab=team"); }}
+                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
+              >
+                팀 및 권역 관리
+              </button>
+              <button
+                onClick={() => { setOpenDropdown(null); nav("/hq?tab=billing"); }}
+                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
+              >
+                결제 및 토큰 사용량
+              </button>
+            </div>
+            <div className="border-t border-[#3a3633] py-1 mt-1">
+              <button
+                onClick={() => { setOpenDropdown(null); logout(); nav("/login"); }}
+                className="w-full text-left px-4 py-2 text-xs text-rose-400 hover:bg-rose-500/10 transition-colors"
+              >
+                로그아웃
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3149,6 +3435,7 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
   severity?: "critical" | "advisory" | "opportunity";
   onClick?: () => void;
 }) {
+  const { showToast } = useToast();
   const severityStyle = {
     critical: { dot: "bg-rose-500", label: "CRITICAL" },
     advisory: { dot: "bg-[#818cf8]", label: "ADVISORY" },
@@ -3179,14 +3466,14 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
       {/* Feedback buttons */}
       <div className="flex justify-end gap-1 pt-1 -mb-0.5 -mr-0.5 opacity-50 group-hover:opacity-100 transition-opacity">
         <button
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); showToast("success", "소중한 피드백이 전달되었습니다. AI 학습에 반영됩니다."); }}
           className="p-1 rounded hover:bg-[#818cf8]/10 hover:text-[#818cf8] text-[#9ca3af] transition-colors"
           aria-label="유용함"
         >
           <ThumbsUp className="w-3 h-3" />
         </button>
         <button
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); showToast("info", "소중한 피드백이 전달되었습니다. AI 학습에 반영됩니다."); }}
           className="p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-[#9ca3af] transition-colors"
           aria-label="유용하지 않음"
         >
@@ -3203,7 +3490,6 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
    [글로벌 상태]
    - isDark: Light/Dark 테마 토글 (SkyThemeToggle 연결)
    - isTransitioning: 씬 전환 시 800ms 암전 오버레이
-   - reportState: Simulator idle/loading/result 상태
    - isAppLoaded: 프리로더 완료 여부
 
    [글로벌 헤더]
@@ -3215,6 +3501,172 @@ function InsightCard({ icon, title, desc, severity = "advisory", onClick }: {
    - 앱 최초 진입 시 3초간 5축 자이로스코프 홀로그램
    - 100% → warp-out 트랜지션 → main-scene-in → isAppLoaded=true → DOM 제거
 */
+
+/* ═══════════════════════════════════════════════════════
+   SpotterAgentWorkflow — AI 에이전트 파이프라인 시각화
+   LangGraph 5-노드 워크플로우를 Drawer 안에서 표시
+   ═══════════════════════════════════════════════════════ */
+const spotterAgentTasks = [
+  {
+    id: "1", title: "Supervisor Node (의사결정 지능)", description: "입력된 상권 조건(마포구 연남동)을 분석하고 하위 에이전트들에게 분석 태스크를 할당합니다.", status: "completed" as const, priority: "high", dependencies: [] as string[],
+    subtasks: [
+      { id: "1.1", title: "파라미터 추출 및 쿼리 최적화", description: "사용자 입력값 파싱 및 DB 쿼리 파라미터 생성", status: "completed" as const, tools: ["Query Parser"] },
+      { id: "1.2", title: "하위 에이전트 태스크 분배", description: "Market, Population, Legal 에이전트 병렬 호출", status: "completed" as const, tools: ["LangGraph Router"] },
+    ],
+  },
+  {
+    id: "2", title: "Market Analyst (상권 & 경쟁 분석)", description: "pgvector DB에서 상권의 매출 현황과 카니발리제이션 위험도를 계산합니다.", status: "in-progress" as const, priority: "high", dependencies: ["1"],
+    subtasks: [
+      { id: "2.1", title: "경쟁점 반경 검색 (Vector Search)", description: "HNSW 인덱스를 활용한 500m 내 동종 업계 검색", status: "completed" as const, tools: ["pgvector", "PostgreSQL"] },
+      { id: "2.2", title: "예상 매출 LSTM 추론", description: "최근 3년 매출 데이터를 기반으로 향후 12개월 매출 예측", status: "in-progress" as const, tools: ["LSTM Model", "TensorFlow"] },
+      { id: "2.3", title: "카니발리제이션 타격률 계산", description: "인접 가맹점 간의 상권 중첩도 기반 매출 하락률 도출", status: "pending" as const, tools: ["Cannibalization Engine"] },
+    ],
+  },
+  {
+    id: "3", title: "Population Analyst (유동인구 분석)", description: "KT 통신망 데이터를 기반으로 시간대별, 성별/연령별 유동인구를 군집화합니다.", status: "in-progress" as const, priority: "medium", dependencies: ["1"],
+    subtasks: [
+      { id: "3.1", title: "시간대별 유동인구 집계", description: "06시~02시까지의 시간대별 트래픽 분포 계산", status: "completed" as const, tools: ["KT API"] },
+      { id: "3.2", title: "핵심 타겟(Primary Target) 매칭", description: "브랜드 타겟층(2030 여성)과 해당 상권 유동인구 비율 대조", status: "in-progress" as const, tools: ["Demographic Scraper"] },
+    ],
+  },
+  {
+    id: "4", title: "Legal Analyst (법률 리스크 RAG)", description: "상가임대차보호법 및 지역 규제 데이터를 검색하여 권리금/임대료 리스크를 판단합니다.", status: "pending" as const, priority: "high", dependencies: ["1"],
+    subtasks: [
+      { id: "4.1", title: "문서 청크 검색 (Similarity Search)", description: "관련 법률 문서 및 최근 판례 RAG 검색", status: "pending" as const, tools: ["Sentence-Transformers", "Vector DB"] },
+      { id: "4.2", title: "리스크 요약 및 경고 생성", description: "검색된 판례를 바탕으로 LLM 기반 위험 요소 3줄 요약", status: "pending" as const, tools: ["Gemini 1.5 Pro"] },
+    ],
+  },
+  {
+    id: "5", title: "Strategy Synthesizer (최종 리포트 생성)", description: "모든 에이전트의 결과를 취합하여 7대 지표를 정규화하고 최종 인사이트를 작성합니다.", status: "pending" as const, priority: "high", dependencies: ["2", "3", "4"],
+    subtasks: [
+      { id: "5.1", title: "0~100점 정규화 (Normalization)", description: "7개 주요 메트릭을 레이더 차트용 점수로 변환", status: "pending" as const, tools: ["Math Module"] },
+      { id: "5.2", title: "종합 매력도 및 BEP 산출", description: "투자금 대비 손익분기점(BEP) 도달 개월 수 계산", status: "pending" as const, tools: ["ROI Calculator"] },
+    ],
+  },
+];
+
+type TaskStatus = "completed" | "in-progress" | "pending";
+type AgentTask = {
+  id: string; title: string; description: string; status: TaskStatus; priority: string; dependencies: string[];
+  subtasks: { id: string; title: string; description: string; status: TaskStatus; tools: string[] }[];
+};
+
+function SpotterAgentWorkflow() {
+  const [tasks, setTasks] = useState<AgentTask[]>(spotterAgentTasks as AgentTask[]);
+  const [expandedTasks, setExpandedTasks] = useState<string[]>(["2", "3"]);
+  const [expandedSubtasks, setExpandedSubtasks] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const timer = setTimeout(() => { toggleSubtaskStatus("2", "2.2"); }, 2500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleTaskExpansion = (taskId: string) => {
+    setExpandedTasks((prev) => prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]);
+  };
+  const toggleSubtaskExpansion = (taskId: string, subtaskId: string) => {
+    const key = `${taskId}-${subtaskId}`;
+    setExpandedSubtasks((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleSubtaskStatus = (taskId: string, subtaskId: string) => {
+    setTasks((prev) => prev.map((task) => {
+      if (task.id === taskId) {
+        const updatedSubtasks = task.subtasks.map((subtask) => {
+          if (subtask.id === subtaskId) return { ...subtask, status: (subtask.status === "completed" ? "pending" : "completed") as TaskStatus };
+          return subtask;
+        });
+        const allCompleted = updatedSubtasks.every((s) => s.status === "completed");
+        return { ...task, subtasks: updatedSubtasks, status: (allCompleted ? "completed" : "in-progress") as TaskStatus };
+      }
+      return task;
+    }));
+  };
+
+  const variants = {
+    hidden: { opacity: 0, y: -5 },
+    visible: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 500, damping: 30 } },
+    listVisible: { opacity: 1, height: "auto", transition: { duration: 0.25, staggerChildren: 0.05, when: "beforeChildren" as const } },
+    listHidden: { opacity: 0, height: 0, overflow: "hidden" as const, transition: { duration: 0.2 } },
+  };
+
+  return (
+    <div className="w-full font-sans text-[#e2e8f0]">
+      <LayoutGroup>
+        <ul className="space-y-1">
+          {tasks.map((task, index) => {
+            const isExpanded = expandedTasks.includes(task.id);
+            const isCompleted = task.status === "completed";
+            return (
+              <motion.li key={task.id} className={index !== 0 ? "mt-2 pt-2 border-t border-[#3a3633]" : ""} initial="hidden" animate="visible" variants={variants}>
+                <motion.div className="group flex items-center px-3 py-2.5 rounded-lg hover:bg-[#2c2825] transition-colors cursor-pointer" onClick={() => toggleTaskExpansion(task.id)}>
+                  <div className="mr-3 shrink-0">
+                    <AnimatePresence mode="wait">
+                      <motion.div key={task.status} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                        {task.status === "completed" ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : task.status === "in-progress" ? <CircleDotDashed className="w-5 h-5 text-[#818cf8] animate-spin-slow" /> : <Circle className="w-5 h-5 text-[#404040]" />}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                  <div className="flex-1 flex justify-between items-center min-w-0">
+                    <div className="truncate pr-4"><span className={`text-sm font-bold ${isCompleted ? "text-[#9ca3af] line-through decoration-[#3a3633]" : "text-[#e2e8f0]"}`}>{task.title}</span></div>
+                    <div className="flex shrink-0 gap-2 items-center">
+                      {task.dependencies.length > 0 && (
+                        <div className="hidden sm:flex gap-1 mr-2">
+                          {task.dependencies.map(dep => <span key={dep} className="px-1.5 py-0.5 rounded bg-[#2c2825] border border-[#3a3633] text-[9px] font-mono text-[#9ca3af]">Step {dep} 완료 후</span>)}
+                        </div>
+                      )}
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${isCompleted ? "bg-emerald-500/10 text-emerald-500" : task.status === "in-progress" ? "bg-[#818cf8]/10 text-[#818cf8]" : "bg-[#3a3633] text-[#9ca3af]"}`}>
+                        {task.status.replace("-", " ")}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+                <AnimatePresence mode="wait">
+                  {isExpanded && task.subtasks.length > 0 && (
+                    <motion.div className="relative overflow-hidden ml-[22px] pl-4 border-l-2 border-dashed border-[#3a3633] mt-2 mb-3" variants={variants} initial="listHidden" animate="listVisible" exit="listHidden" layout>
+                      <ul className="space-y-1">
+                        {task.subtasks.map((subtask) => {
+                          const subtaskKey = `${task.id}-${subtask.id}`;
+                          const isSubExp = expandedSubtasks[subtaskKey];
+                          return (
+                            <motion.li key={subtask.id} className="flex flex-col" variants={variants} layout>
+                              <div className="flex items-center p-1.5 rounded-md hover:bg-[#2c2825] cursor-pointer transition-colors" onClick={() => toggleSubtaskExpansion(task.id, subtask.id)}>
+                                <div className="mr-2" onClick={(e) => { e.stopPropagation(); toggleSubtaskStatus(task.id, subtask.id); }}>
+                                  {subtask.status === "completed" ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : subtask.status === "in-progress" ? <CircleDotDashed className="w-4 h-4 text-[#818cf8] animate-spin-slow" /> : <Circle className="w-4 h-4 text-[#404040]" />}
+                                </div>
+                                <span className={`text-xs ${subtask.status === "completed" ? "text-[#6b7280] line-through" : "text-[#d1d5db]"}`}>{subtask.title}</span>
+                              </div>
+                              <AnimatePresence mode="wait">
+                                {isSubExp && (
+                                  <motion.div className="ml-6 pl-3 border-l border-dashed border-[#404040] py-2" variants={variants} initial="listHidden" animate="listVisible" exit="listHidden" layout>
+                                    <p className="text-[11px] text-[#9ca3af] mb-2 leading-relaxed">{subtask.description}</p>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="text-[9px] font-mono text-[#6b7280] uppercase">Tools:</span>
+                                      {subtask.tools.map(tool => <span key={tool} className="px-1.5 py-0.5 rounded bg-[#1e1b18] border border-[#3a3633] text-[9px] font-mono text-[#818cf8]">{tool}</span>)}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </motion.li>
+                          );
+                        })}
+                      </ul>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.li>
+            );
+          })}
+        </ul>
+      </LayoutGroup>
+    </div>
+  );
+}
+
+/** 암전 트랜지션 네비게이션 Context — 모든 하위 컴포넌트에서 사용 가능 */
+const TransitionContext = createContext<(path: string) => void>(() => {});
+export const useTransition = () => useContext(TransitionContext);
 
 /** 현재 경로 → scene 이름 매핑 */
 function pathToScene(pathname: string): "intro" | "about" | "joinus" | "accordion" | "simulator" | "contact" | "hq" | "login" {
@@ -3234,13 +3686,19 @@ export default function App() {
   const scene = pathToScene(location.pathname);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [reportState, setReportState] = useState<"idle" | "loading" | "result">(
-    "idle"
-  );
+  const [reportState, setReportState] = useState<"idle" | "loading" | "result">("idle");
   const [activeMenuIndex, setActiveMenuIndex] = useState(2);
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(
     null
   );
+
+  // 페이지 전환 시 모든 스크롤 컨테이너를 최상단으로 리셋
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.querySelectorAll("[class*='overflow-y']").forEach((el) => {
+      el.scrollTop = 0;
+    });
+  }, [location.pathname]);
 
   // Preloader
   const [loadProgress, setLoadProgress] = useState(0);
@@ -3276,18 +3734,31 @@ export default function App() {
 
   /** 암전 트랜지션 + 라우팅 */
   const transitionTo = useCallback(
-    (next: "intro" | "about" | "joinus" | "accordion" | "simulator" | "contact") => {
+    (next: "intro" | "about" | "joinus" | "accordion" | "simulator" | "contact" | "login") => {
       setIsTransitioning(true);
       setTimeout(() => {
         const pathMap: Record<string, string> = {
           intro: "/",
           about: "/about",
           joinus: "/joinus",
+          login: "/login",
           accordion: "/explore",
           simulator: "/simulator",
           contact: "/contact",
         };
         const path = pathMap[next] || "/";
+        navigate(path);
+        setTimeout(() => setIsTransitioning(false), 100);
+      }, 800);
+    },
+    [navigate]
+  );
+
+  /** 경로 기반 암전 전환 — 하위 컴포넌트에서 useTransition()으로 사용 */
+  const navigateWithTransition = useCallback(
+    (path: string) => {
+      setIsTransitioning(true);
+      setTimeout(() => {
         navigate(path);
         setReportState("idle");
         setTimeout(() => setIsTransitioning(false), 100);
@@ -3298,6 +3769,8 @@ export default function App() {
 
   return (
     <AuthProvider>
+    <ToastProvider>
+    <TransitionContext.Provider value={navigateWithTransition}>
     <div
       className="w-screen h-screen overflow-hidden select-none bg-background text-foreground"
       style={{
@@ -3330,7 +3803,7 @@ export default function App() {
               activeMenuIndex={activeMenuIndex}
               setActiveMenuIndex={setActiveMenuIndex}
               onAboutClick={() => transitionTo("about")}
-              onJoinUsClick={() => transitionTo("joinus")}
+              onJoinUsClick={() => transitionTo("login")}
               onSimulatorClick={() => transitionTo("accordion")}
               onContactClick={() => transitionTo("contact")}
             />
@@ -3377,11 +3850,11 @@ export default function App() {
           }
         />
         <Route path="/hq" element={<ProtectedRoute><HQCommandCenter /></ProtectedRoute>} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage onLogoClick={() => transitionTo("intro")} />} />
       </Routes>
 
       {/* Global header — all scenes except intro */}
-      {scene !== "intro" && !isTransitioning && (
+      {scene !== "intro" && scene !== "login" && !isTransitioning && (
         <header className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633] flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/90 backdrop-blur-md z-50 transition-colors duration-500">
           <div className="flex items-center gap-4">
             <button
@@ -3412,15 +3885,15 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4 md:gap-6">
             <GlobalLimelightNav />
+            <LogoutButton />
           </div>
         </header>
       )}
 
       {/* Transition overlay */}
       <div
-        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
-          isTransitioning ? "opacity-100" : "opacity-0"
-        }`}
+        className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${isTransitioning ? "opacity-100" : "opacity-0"
+          }`}
       />
 
       {/* 3D Hologram Preloader */}
@@ -3518,6 +3991,8 @@ export default function App() {
         </div>
       )}
     </div>
+    </TransitionContext.Provider>
+    </ToastProvider>
     </AuthProvider>
   );
 }

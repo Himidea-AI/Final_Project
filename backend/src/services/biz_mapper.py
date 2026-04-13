@@ -54,13 +54,33 @@ class BizMapper:
             dict: status(상태), tax_type(과세유형), valid(유효 여부)
         """
         clean = biz_number.replace("-", "")
+
+        # API 키가 없으면 검증 건너뜀
+        if not self._nts_key:
+            return {
+                "biz_number": biz_number,
+                "status": "미확인",
+                "tax_type": "",
+                "valid": True,
+            }
+
         url = f"https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey={self._nts_key}"
 
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.post(url, json={"b_no": [clean]})
             resp.raise_for_status()
 
-        data = resp.json().get("data", [{}])[0]
+        # 일부 정부 API가 EUC-KR로 응답하는 경우 대비
+        try:
+            data = resp.json().get("data", [{}])[0]
+        except (UnicodeDecodeError, ValueError):
+            text = resp.content.decode("cp949", errors="replace")
+            import json as _json
+            try:
+                data = _json.loads(text).get("data", [{}])[0]
+            except Exception:
+                data = {}
+
         b_stt = data.get("b_stt", "")
         tax_type = data.get("tax_type", "")
 
@@ -84,6 +104,7 @@ class BizMapper:
         2024년 데이터 우선, 없으면 2023년.
         """
         engine = create_engine(self._db_url, echo=False)
+        rows = []
         try:
             with engine.connect() as conn:
                 # 법인명 + 브랜드명 모두 ILIKE 검색
@@ -113,6 +134,9 @@ class BizMapper:
                         ),
                         {"pattern": f"%{company_name}%"},
                     ).fetchall()
+        except Exception:
+            # ftc_brand_franchise 테이블 없거나 접근 불가 시 빈 결과 반환
+            return []
         finally:
             engine.dispose()
 

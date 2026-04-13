@@ -1,20 +1,20 @@
 import sys
 from pathlib import Path
+import os
+import uuid
+import asyncio
+from typing import Any, Dict
 
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
 current_dir = Path(__file__).parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
-import os
-
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
-import uuid
-import asyncio
-from typing import Any, Dict
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.schemas.simulation_input import SimulationInput
@@ -59,13 +59,13 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     lat = md.get("lat") if md.get("lat") else DEFAULT_LAT
     lng = md.get("lng") if md.get("lng") else DEFAULT_LNG
 
-    # 법률 리스크 리스트 변환
+    # 법률 리스크 리스트 변환 (5인 체제 데이터 구조에 맞게 최적화)
     legal_risks_raw = analysis.get("legal_risks") or []
     legal_risks = [
         {
-            "type": r["type"],
-            "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(r["level"], "LOW"),
-            "detail": r["summary"],
+            "type": r.get("type", "General"),
+            "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(r.get("level", "safe").lower(), "LOW"),
+            "detail": r.get("summary", ""),
         }
         for r in legal_risks_raw
     ]
@@ -75,7 +75,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "request_id": request_id,
         "target_district": target_dist,
         "analysis_report": analysis.get("market_summary", ""),  # 줄글 리포트
-        "analysis_metrics": metrics,  # 차트용 정량 데이터
+        "analysis_metrics": metrics,                            # 차트용 정량 데이터
         "simulation_months": 12,
         "monthly_projection": [
             {
@@ -150,6 +150,8 @@ async def analyze_location(input_data: SimulationInput):
         "market_data": {},
         "legal_info": [],
         "analysis_results": {},
+        "analysis_metrics": {},
+        "overall_legal_risk": "safe",
         "current_agent": "start",
         "next_step": "",
         "errors": [],
@@ -231,7 +233,7 @@ async def login(req: LoginRequest):
     """로그인 — 이메일/비밀번호 검증 + 브랜드 정보 반환"""
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
-        result = auth.login(req.email, req.password)
+        result = await run_in_threadpool(auth.login, req.email, req.password)
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -249,6 +251,8 @@ async def run_simulation(input_data: SimulationInput):
         "market_data": {},
         "legal_info": [],
         "analysis_results": {},
+        "analysis_metrics": {},
+        "overall_legal_risk": "safe",
         "current_agent": "start",
         "next_step": "",
         "errors": [],
