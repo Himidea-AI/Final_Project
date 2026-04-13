@@ -11,6 +11,7 @@ if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -232,7 +233,7 @@ async def login(req: LoginRequest):
     """로그인 — 이메일/비밀번호 검증 + 브랜드 정보 반환"""
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
-        result = auth.login(req.email, req.password)
+        result = await run_in_threadpool(auth.login, req.email, req.password)
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
