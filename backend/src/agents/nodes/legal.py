@@ -984,9 +984,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
             cached_data = json.loads(cached)
             analysis = dict(state.get("analysis_results") or {})
             analysis["legal_risks"] = cached_data["legal_risks"]
-            analysis["overall_legal_risk"] = cached_data.get("overall_legal_risk", "caution")
+            overall_cached = cached_data.get("overall_legal_risk", "caution")
+            analysis["overall_legal_risk"] = overall_cached
             await _redis.aclose()
-            return {**state, "analysis_results": analysis, "legal_info": cached_data["legal_info"]}
+            return {**state, "analysis_results": analysis, "legal_info": cached_data["legal_info"], "overall_legal_risk": overall_cached}
     except Exception as e:
         print(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
 
@@ -1131,7 +1132,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         finally:
             await _redis.aclose()
 
-    return {**state, "analysis_results": analysis, "legal_info": legal_info}
+    return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
 
 
 def legal_node(state) -> dict:
