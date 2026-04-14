@@ -2,7 +2,7 @@ from typing import Literal
 from langchain_core.messages import SystemMessage
 from src.schemas.state import AgentState
 from src.config.settings import settings
-from src.agents.llms import get_fast_llm
+from src.agents.llms import get_smart_llm
 
 
 def supervisor_node(state: AgentState) -> dict:
@@ -47,11 +47,14 @@ def supervisor_node(state: AgentState) -> dict:
     )
 
     try:
-        llm = get_fast_llm()
-        # supervisor_node는 원래 동기 함수로 정의되어 있다면 비동기 우회 필요
-        # 하지만 graph.py에서 add_node(async_func)로 쓸 것이므로 비동기로 전환 가능
-        # 여기서는 일단 동기 호출로 구현 (get_fast_llm().invoke)
-        response = llm.invoke([SystemMessage(content=system_prompt)])
+        llm = get_smart_llm()
+        # Gemini는 SystemMessage 단독 호출 시 'contents are required' 오류 발생
+        # HumanMessage를 반드시 함께 전달해야 함
+        from langchain_core.messages import HumanMessage
+        response = llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content="다음 단계를 결정해줘."),
+        ])
         content = str(response.content).strip().lower()
 
         if "market_analyst" in content:
