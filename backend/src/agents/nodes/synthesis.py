@@ -1,9 +1,13 @@
 import asyncio
 import json
+import redis.asyncio as aioredis
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.schemas.state import AgentState
 from src.schemas.structured_output import FinalStrategyResult
-from src.agents.llms import get_fast_llm
+from src.agents.llms import get_smart_llm
+from src.config.settings import settings
+
+_CACHE_TTL = 86400  # 24시간
 
 async def synthesis_node(state: AgentState) -> dict:
     """
@@ -13,19 +17,40 @@ async def synthesis_node(state: AgentState) -> dict:
     - FinalStrategyResult 스키마에 맞춰 정형화된 JSON 데이터를 생성합니다.
     """
     print("--- [SYNTHESIS] 최종 전략 합성 및 데이터 검증 시작 ---")
-    
+
+    brand_name = state.get("brand_name", "미지정 브랜드")
+    business_type = state.get("business_type", "카페")
+    target_district = state.get("target_district", "마포구")
+
+    # Redis 캐시 조회
+    cache_key = f"synthesis:{brand_name}:{target_district}:{business_type}"
+    _redis = None
+    try:
+        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        cached = await _redis.get(cache_key)
+        if cached:
+            cached_data = json.loads(cached)
+            print(f"[synthesis] 캐시 히트: {cache_key}")
+            analysis = dict(state.get("analysis_results", {}))
+            analysis["final_report"] = cached_data["final_report"]
+            analysis["market_summary"] = cached_data["market_summary"]
+            await _redis.aclose()
+            return {
+                "analysis_results": analysis,
+                "overall_legal_risk": cached_data["overall_legal_risk"],
+                "current_agent": "synthesis",
+            }
+    except Exception as e:
+        print(f"[synthesis] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+
     # 1. 데이터 추출 (기존 에이전트들의 결과물)
     analysis_results = state.get("analysis_results", {})
     market_report = analysis_results.get("market_report", "상권 분석 정보 없음")
     population_report = analysis_results.get("population_report", "인구 분석 정보 없음")
-    
+
     # [중요] 14개의 법률 리스크 데이터 (절대 보존)
     legal_risks = analysis_results.get("legal_risks", [])
     overall_legal_risk = state.get("overall_legal_risk", "Caution")
-    
-    brand_name = state.get("brand_name", "미지정 브랜드")
-    business_type = state.get("business_type", "카페")
-    target_district = state.get("target_district", "마포구")
     
     # 2. LLM 합성용 컨텍스트 구성
     legal_summary_for_llm = "\n".join([
@@ -50,7 +75,7 @@ async def synthesis_node(state: AgentState) -> dict:
 
     try:
         # LLM 호출 (Structured Output)
-        llm = get_fast_llm().with_structured_output(FinalStrategyResult)
+        llm = get_smart_llm().with_structured_output(FinalStrategyResult)
         
         # API 할당량 관리를 위한 미세 대기
         await asyncio.sleep(1.5)
@@ -86,6 +111,23 @@ async def synthesis_node(state: AgentState) -> dict:
     # [검증] legal_risks가 누락되지 않았는지 다시 한 번 확인
     if "legal_risks" not in new_analysis_results:
         new_analysis_results["legal_risks"] = legal_risks
+
+    # Redis 캐시 저장
+    if _redis is not None:
+        try:
+            await _redis.set(
+                cache_key,
+                json.dumps({
+                    "final_report": new_analysis_results["final_report"],
+                    "market_summary": new_analysis_results["market_summary"],
+                    "overall_legal_risk": overall_legal_risk,
+                }, ensure_ascii=False),
+                ex=_CACHE_TTL,
+            )
+            print(f"[synthesis] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+            await _redis.aclose()
+        except Exception as e:
+            print(f"[synthesis] Redis 캐시 저장 실패 (무시): {e}")
 
     return {
         "analysis_results": new_analysis_results,

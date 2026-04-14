@@ -15,7 +15,7 @@ class LLMRetryProxy:
 
     def invoke(self, *args, **kwargs):
         max_retries = 5
-        base_delay = 60 # 429 대응을 위해 기본 대기 시간을 60초로 상향
+        base_delay = 10
         for attempt in range(max_retries):
             try:
                 return self._llm.invoke(*args, **kwargs)
@@ -30,7 +30,7 @@ class LLMRetryProxy:
 
     async def ainvoke(self, *args, **kwargs):
         max_retries = 5
-        base_delay = 60
+        base_delay = 10
         for attempt in range(max_retries):
             try:
                 return await self._llm.ainvoke(*args, **kwargs)
@@ -63,11 +63,11 @@ def retry_on_429(func):
 
 @retry_on_429
 def get_fast_llm():
-    """Supervisor, Market Analyst용 고성능/저지연 모델"""
+    """Market Analyst, Population, Legal용 빠른 모델"""
     if not hasattr(get_fast_llm, "_instance"):
         google_api_key = os.getenv("GOOGLE_API_KEY")
         get_fast_llm._instance = ChatGoogleGenerativeAI(
-            model="gemini-3-flash-preview",
+            model="gemini-2.0-flash",
             google_api_key=google_api_key,
             temperature=0.1,
         )
@@ -75,11 +75,11 @@ def get_fast_llm():
 
 @retry_on_429
 def get_smart_llm():
-    """Gemini 3.1 Pro (복잡한 추론용)"""
+    """Supervisor, Synthesis용 복잡한 추론 모델"""
     if not hasattr(get_smart_llm, "_instance"):
         google_api_key = os.getenv("GOOGLE_API_KEY")
         get_smart_llm._instance = ChatGoogleGenerativeAI(
-            model="gemini-3.1-pro-preview",
+            model="gemini-2.0-flash",
             google_api_key=google_api_key,
             temperature=0.1,
         )

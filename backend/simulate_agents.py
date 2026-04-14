@@ -25,77 +25,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_core.messages import HumanMessage
-from sqlalchemy import text
 from src.agents.graph import compile_graph
-from src.agents import tools as _tools_module
 from src.agents.tools import MarketDataTool
 
 
-# ────────────────────────────────────────────────
-# Monkey-patch: get_competitor_stats
-# tools.py 원본을 건드리지 않고 시뮬레이션 중에만 교체
-# ────────────────────────────────────────────────
-_BUSINESS_TYPE_TO_CODE: Dict[str, str] = {
-    "카페": "I212", "커피": "I212", "비알코올": "I212",
-    "음식점": "I201", "한식": "I201", "식당": "I201",
-    "치킨": "I206", "피자": "I207", "분식": "I209",
-    "주점": "I211", "편의점": "G209",
-    "베이커리": "I213", "빵": "I213",
-}
-
-_original_get_competitor_stats = MarketDataTool.get_competitor_stats
-
-
-async def _patched_get_competitor_stats(
-    self, lat: float, lon: float, industry_m_code: str, radius_m: int = 500
-) -> Dict[str, Any]:
-    """location_vector 없이 lat/lon 유클리드 거리로 경쟁 업체를 검색하는 패치 버전"""
-    resolved_code = _BUSINESS_TYPE_TO_CODE.get(industry_m_code, industry_m_code)
-    lat_delta = radius_m / 111000.0
-    lon_delta = radius_m / 88500.0
-
-    async with self.db_client.get_session() as session:
-        query = text("""
-            SELECT store_name, industry_s, lat, lon,
-                   sqrt(power((lat - :lat) * 111000, 2) + power((lon - :lon) * 88500, 2)) AS distance_m
-            FROM store_info
-            WHERE industry_m_code = :ind_code
-              AND dong_code LIKE '11440%'
-              AND lat BETWEEN :lat_min AND :lat_max
-              AND lon BETWEEN :lon_min AND :lon_max
-            ORDER BY distance_m ASC
-        """)
-        result = await session.execute(query, {
-            "lat": lat, "lon": lon, "ind_code": resolved_code,
-            "lat_min": lat - lat_delta, "lat_max": lat + lat_delta,
-            "lon_min": lon - lon_delta, "lon_max": lon + lon_delta,
-        })
-        competitors = result.fetchall()
-        competitors = [c for c in competitors if c.distance_m <= radius_m]
-
-    if not competitors:
-        return {"competitor_count": 0, "density_level": "LOW",
-                "summary": f"반경 {radius_m}m 내 경쟁 업체가 없습니다."}
-
-    count = len(competitors)
-    avg_dist = sum(c.distance_m for c in competitors) / count
-    density = "HIGH" if count > 10 else "MEDIUM" if count > 3 else "LOW"
-    return {
-        "competitor_count": count, "density_level": density,
-        "avg_distance_m": round(avg_dist, 1),
-        "nearest_competitor": competitors[0].store_name,
-        "summary": f"반경 {radius_m}m 내 {count}개의 경쟁 업체 (평균 {round(avg_dist, 1)}m).",
-    }
-
-
+# tools.py가 kakao_store 기반으로 수정됐으므로 monkey-patch 불필요
 def apply_patches():
-    MarketDataTool.get_competitor_stats = _patched_get_competitor_stats
-    print("[PATCH] MarketDataTool.get_competitor_stats → lat/lon 거리 버전 적용")
+    print("[INFO] kakao_store 기반 tools.py 사용 — 패치 불필요")
 
 
 def restore_patches():
-    MarketDataTool.get_competitor_stats = _original_get_competitor_stats
-    print("[PATCH] MarketDataTool.get_competitor_stats → 원본 복원 완료")
+    pass
 
 
 # ────────────────────────────────────────────────
@@ -150,39 +90,18 @@ def print_agent_result(node_name: str, output: dict):
     print(f"  ▶ 노드 완료: [{node_name.upper()}]")
     print(f"{'─'*70}")
 
-    if node_name == "supervisor":
-        print(f"  다음 단계 결정: {output.get('next_step', '?')}")
-
-    elif node_name == "market_analyst":
+    if node_name == "parallel_analysis":
         analysis = output.get("analysis_results", {})
-        report = analysis.get("market_report", "")
         metrics = output.get("analysis_metrics", {})
+        risks = analysis.get("legal_risks", [])
         print(f"  [상권 등급]   : {metrics.get('district_grade', 'N/A')}")
         print(f"  [경쟁 점수]   : {metrics.get('competition_score', 'N/A')}")
-        print(f"  [임대 적합성] : {metrics.get('rent_affordability', 'N/A')}")
-        if report:
-            print(f"\n  [리포트 미리보기]\n{report[:400]}...")
-
-    elif node_name == "population_analyst":
-        analysis = output.get("analysis_results", {})
-        report = analysis.get("population_report", "")
-        metrics = output.get("analysis_metrics", {})
-        print(f"  [인구 점수]    : {metrics.get('population_score', 'N/A')}")
-        print(f"  [주요 타겟]    : {metrics.get('main_target_age', 'N/A')}")
-        print(f"  [피크 시간대]  : {metrics.get('peak_time', 'N/A')}")
-        if report:
-            print(f"\n  [리포트 미리보기]\n{report[:400]}...")
-
-    elif node_name == "legal_analyst":
-        analysis = output.get("analysis_results", {})
-        risks = analysis.get("legal_risks", [])
-        overall = output.get("overall_legal_risk", "N/A")
-        print(f"  [종합 리스크]  : {overall}")
-        print(f"  [법률 항목 수] : {len(risks)}개")
-        for r in risks[:5]:
+        print(f"  [인구 점수]   : {metrics.get('population_score', 'N/A')}")
+        print(f"  [법률 리스크] : {output.get('overall_legal_risk', 'N/A')} ({len(risks)}개 항목)")
+        for r in risks[:3]:
             print(f"    - {r.get('type', '?')} | {r.get('level', '?')} | {r.get('summary', '')[:60]}")
-        if len(risks) > 5:
-            print(f"    ... 외 {len(risks) - 5}개 항목")
+        if len(risks) > 3:
+            print(f"    ... 외 {len(risks) - 3}개 항목")
 
     elif node_name == "synthesis":
         analysis = output.get("analysis_results", {})
