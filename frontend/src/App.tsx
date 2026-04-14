@@ -613,6 +613,7 @@ function IntroScene({
   onContactClick: () => void;
 }) {
   const { isLoggedIn } = useAuth();
+  const navTo = useTransition();
 
   return (
     <div className="relative z-10 h-full w-full overflow-hidden">
@@ -668,7 +669,7 @@ function IntroScene({
                 onMouseEnter={() => setActiveMenuIndex(i)}
                 onClick={() => {
                   if (i === 0) onAboutClick();
-                  if (i === 1) isLoggedIn ? onSimulatorClick() : onJoinUsClick();
+                  if (i === 1) isLoggedIn ? navTo("/simulator") : onJoinUsClick();
                   if (i === 2) onSimulatorClick();
                   if (i === 3) onContactClick();
                 }}
@@ -2626,13 +2627,6 @@ function SimulatorDashboard({
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                             <span className="text-[10px] font-mono text-[#818cf8]">LIVE</span>
                           </div>
-                        </button>
-                        <button
-                          onClick={() => showToast("info", "전체 리포트 다운로드는 상단 다운로드 버튼을 이용해주세요.")}
-                          className="w-full py-2 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] rounded-md text-xs font-bold text-[#a3a3a3] hover:text-white transition-colors flex items-center justify-center gap-2 group"
-                        >
-                          전체 리포트 다운로드 (PDF)
-                          <Download className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
                         </button>
                       </div>
                     </div>
