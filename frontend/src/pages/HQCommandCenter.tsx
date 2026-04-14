@@ -10,10 +10,13 @@
  * TODO (Phase 2+): 실제 JWT 인증 + workspace API 연동
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
+import { useAuth } from "../auth/AuthContext";
 import { BrandLogo } from "../components/BrandLogo";
+import { SEOUL_REGIONS } from "../data/seoulRegions";
 import {
   Building2,
   Users,
@@ -31,6 +34,7 @@ import {
   Shield,
   Zap,
   TrendingUp,
+  ChevronDown,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
@@ -46,6 +50,8 @@ export default function HQCommandCenter() {
   const tabFromUrl = searchParams.get("tab") as MenuId | null;
   const [activeMenu, setActiveMenu] = useState<MenuId>(tabFromUrl || "team");
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const [isIssuing, setIsIssuing] = useState(false);
 
   // URL ?tab= 파라미터 변경 시 탭 동기화
   useEffect(() => {
@@ -53,6 +59,36 @@ export default function HQCommandCenter() {
       setActiveMenu(tabFromUrl);
     }
   }, [tabFromUrl]);
+
+  const handleIssueInviteCode = async () => {
+    if (isIssuing) return;
+    if (!user?.id) {
+      showToast("error", "로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.");
+      return;
+    }
+    setIsIssuing(true);
+    try {
+      const res = await fetch("/api/auth/invite-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner_id: user.id, max_uses: 10 }),
+      });
+      const data = await res.json();
+      if (data.status === "success" && data.invite_code) {
+        await navigator.clipboard.writeText(data.invite_code);
+        showToast(
+          "success",
+          `초대 코드가 복사되었습니다: ${data.invite_code} (최대 ${data.max_uses}회 사용)`
+        );
+      } else {
+        showToast("error", data.message || "초대 코드 발급에 실패했습니다.");
+      }
+    } catch {
+      showToast("error", "서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsIssuing(false);
+    }
+  };
 
   return (
     <div className="absolute inset-0 z-20 flex bg-[#1e1b18] text-[#e2e8f0] font-sans overflow-hidden select-none">
@@ -155,20 +191,29 @@ export default function HQCommandCenter() {
             <button
               onClick={() => {
                 if (activeMenu === "team") {
-                  navigator.clipboard.writeText("SPOTTER-HQ-2026");
-                  showToast("success", "초대 코드가 복사되었습니다: SPOTTER-HQ-2026");
+                  void handleIssueInviteCode();
                 } else {
                   showToast("info", "해당 기능은 정식 서비스에서 제공됩니다.");
                 }
               }}
-              className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)]"
+              disabled={activeMenu === "team" && isIssuing}
+              className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] disabled:opacity-60 disabled:cursor-wait"
             >
-              <Plus className="w-4 h-4" />
-              {activeMenu === "team"
-                ? "매니저 초대"
-                : activeMenu === "pipeline"
-                ? "새 시뮬레이션"
-                : "저장"}
+              {activeMenu === "team" && isIssuing ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-[#1e1b18]/40 border-t-[#1e1b18] rounded-full animate-spin" />
+                  발급 중...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  {activeMenu === "team"
+                    ? "초대코드 발급"
+                    : activeMenu === "pipeline"
+                    ? "새 시뮬레이션"
+                    : "저장"}
+                </>
+              )}
             </button>
           </div>
         </header>
@@ -228,15 +273,101 @@ function MenuButton({
 /* ═══════════════════════════════════════════════════════
    View 1: Team Management (팀 및 권역 관리)
    ═══════════════════════════════════════════════════════ */
-// 구 → 동 매핑 (mock, 주요 동만)
-const REGION_DATA: Record<string, string[]> = {
-  "마포구": ["연남동", "서교동", "합정동", "망원동", "상암동", "성산동", "연희동"],
-  "서초구": ["서초동", "반포동", "잠원동", "방배동", "양재동", "내곡동"],
-  "강남구": ["역삼동", "삼성동", "청담동", "신사동", "논현동", "대치동", "개포동"],
-  "서대문구": ["신촌동", "창천동", "연희동", "홍제동", "남가좌동", "북가좌동"],
-  "영등포구": ["여의도동", "당산동", "영등포동", "문래동", "양평동", "신길동"],
-  "송파구": ["잠실동", "석촌동", "송파동", "방이동", "가락동", "문정동"],
-};
+// 구 → 동 매핑은 src/data/seoulRegions.ts 에 분리 (서울 25개 구 전체)
+const REGION_DATA = SEOUL_REGIONS;
+
+function RegionSelect({
+  value,
+  onChange,
+  options,
+  placeholder = "선택...",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`w-full flex items-center justify-between bg-[#2c2825] border rounded-lg px-3.5 py-2.5 text-xs transition-colors ${
+          open
+            ? "border-[#818cf8] text-[#e2e8f0]"
+            : value
+            ? "border-[#3a3633] text-[#e2e8f0] hover:border-[#818cf8]/50"
+            : "border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50"
+        }`}
+      >
+        <span className="font-medium">{value || placeholder}</span>
+        <ChevronDown
+          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+            open ? "rotate-180 text-[#818cf8]" : "text-[#9ca3af]"
+          }`}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.15, ease: [0.19, 1, 0.22, 1] }}
+            className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 origin-top bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl overflow-hidden"
+          >
+            <ul className="max-h-60 overflow-y-auto custom-scrollbar py-1">
+              {options.map((opt) => {
+                const selected = opt === value;
+                return (
+                  <li key={opt}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange(opt);
+                        setOpen(false);
+                      }}
+                      className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
+                        selected
+                          ? "bg-[#818cf8]/10 text-[#818cf8] font-bold"
+                          : "text-[#e2e8f0] hover:bg-[#2c2825]"
+                      }`}
+                    >
+                      <span>{opt}</span>
+                      {selected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function TeamManagementView() {
   const { showToast } = useToast();
@@ -284,16 +415,14 @@ function TeamManagementView() {
           {/* 구 → 동 선택 */}
           <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg p-4">
             <p className="text-[10px] text-[#9ca3af] uppercase tracking-wider font-bold mb-3">담당 권역 할당</p>
-            <select
-              value={pendingGu}
-              onChange={(e) => { setPendingGu(e.target.value); setPendingDongs([]); }}
-              className="w-full bg-[#2c2825] border border-[#3a3633] rounded-lg text-xs px-3 py-2.5 text-[#e2e8f0] outline-none focus:border-[#818cf8] transition-colors mb-3"
-            >
-              <option value="">구 선택...</option>
-              {Object.keys(REGION_DATA).map((gu) => (
-                <option key={gu} value={gu}>{gu}</option>
-              ))}
-            </select>
+            <div className="mb-3">
+              <RegionSelect
+                value={pendingGu}
+                onChange={(v) => { setPendingGu(v); setPendingDongs([]); }}
+                options={Object.keys(REGION_DATA)}
+                placeholder="구 선택..."
+              />
+            </div>
 
             {pendingGu && (
               <div>
