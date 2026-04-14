@@ -56,32 +56,33 @@
   - 12개월 시뮬레이션 코드 착수 요청
   - 찬영 → 수지니 가중치(survival_model.pt) 전달 요청
 
-### 오후 (PM) — docker-compose + 테스트 기반
+### 오후 (PM) — docker-compose 업데이트 완료 ✅
 
-- [ ] **docker-compose.yml 업데이트** [IM3-149]
+- [x] **docker-compose.yml 업데이트** [IM3-149]
   - `db` 서비스 주석 처리, Redis만 로컬 유지
+- [x] **alembic/env.py 수정**
+  - RDS 패스워드 `%` 이스케이프 처리 (Docker 연결용)
 
-- [ ] **통합 테스트 디렉토리 구조** [IM3-150]
+### 오후 (PM) — 통합 테스트 기반 구축
+
+- [x] **통합 테스트 디렉토리 구조** [IM3-150]
   - `tests/integration/conftest.py`
+- [x] **API 통합 테스트 작성** [IM3-150]
+  - `test_auth_flow.py` (회원가입/로그인)
+  - `test_simulate_flow.py` (분석/시뮬레이션)
 
-- [ ] **API 통합 테스트 작성** [IM3-150]
-  - `test_auth_flow.py`, `test_simulate_flow.py`
+### 오후 (PM) — 전체 파이프라인 통합 테스트
 
----
-
-## 📅 04/15 (수) — 전체 파이프라인 통합 테스트
-
-### 오전 (AM)
 - [ ] **데이터→Agent→UI 전체 흐름 테스트** [IM3-151]
   - RDS 실데이터 → 5인 Agent → synthesis JSON 검증
 - [ ] **강민 프론트 연동 테스트 지원**
   - synthesis 응답 → 프론트 바인딩 (3~4h)
 
-### 오후 (PM)
-- [ ] **Docker 환경 테스트 확인**
+### 야간/마무리
+- [ ] **Docker 환경 통합 테스트 확인**
   - `docker compose up backend redis` → pytest
-  - 봉환 pgvector e2e 테스트
-- [ ] **테스트 스크립트** — `scripts/run_tests.sh`
+  - 봉환 pgvector e2e 테스트 (RDS 기반)
+- [ ] **테스트 스크립트 고도화** — `scripts/run_tests.sh`
 
 ---
 
@@ -404,7 +405,7 @@
 | ✅ | IM3-81 | 백엔드-프론트 API E2E 검증 | 2주차 |
 | ✅ | IM3-147 | AWS RDS PostgreSQL 세팅 | 3주차 |
 | ⬜ | IM3-148 | RDS 데이터 적재 조율 | 3주차 |
-| ⬜ | IM3-149 | docker-compose.yml RDS 전환 | 3주차 |
+| ✅ | IM3-149 | docker-compose.yml RDS 전환 | 3주차 |
 | ⬜ | IM3-150 | 통합 테스트 기반 구축 | 3주차 |
 | ⬜ | IM3-151 | 전체 파이프라인 통합 테스트 | 3주차 |
 | ⬜ | IM3-152 | Docker 프로덕션 최적화 | 3주차 |
