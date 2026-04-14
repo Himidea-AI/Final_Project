@@ -116,7 +116,11 @@ import {
   Network,
   Circle,
   CircleDotDashed,
+  BarChartBig,
+  Map as MapIcon,
 } from "lucide-react";
+
+import AgentMapVisualizer from "./components/AgentMapVisualizer";
 
 /* ═══════════════════════════════════════════════════════
    DATA
@@ -1550,6 +1554,7 @@ function SimulatorDashboard({
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [chartView, setChartView] = useState<"daily" | "monthly">("daily");
   const [tableView, setTableView] = useState<"cannibalization" | "neighborhoods">("cannibalization");
+  const [dashboardMode, setDashboardMode] = useState<"data" | "map">("data");
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [selectedGu] = useState("마포구");
   const [selectedDongs, setSelectedDongs] = useState<string[]>(
@@ -2365,6 +2370,32 @@ function SimulatorDashboard({
                     <p className="text-[#9ca3af] text-sm">서울특별시 마포구 {selectedDongs[0] || "연남동"} 일대 시뮬레이션 결과</p>
                   </div>
                   <div className="flex items-center gap-3">
+                    {!isSplitMode && (
+                      <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
+                        <button
+                          onClick={() => setDashboardMode("data")}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            dashboardMode === "data"
+                              ? "bg-[#3a3633] text-[#818cf8] shadow-sm"
+                              : "text-[#9ca3af] hover:text-white"
+                          }`}
+                        >
+                          <BarChartBig className="w-3.5 h-3.5" />
+                          데이터 뷰
+                        </button>
+                        <button
+                          onClick={() => setDashboardMode("map")}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            dashboardMode === "map"
+                              ? "bg-[#3a3633] text-[#818cf8] shadow-sm"
+                              : "text-[#9ca3af] hover:text-white"
+                          }`}
+                        >
+                          <MapIcon className="w-3.5 h-3.5" />
+                          AI 에이전트 맵
+                        </button>
+                      </div>
+                    )}
                     <button
                       onClick={() => setIsSplitMode(!isSplitMode)}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold transition-all duration-300 border ${
@@ -2421,16 +2452,19 @@ function SimulatorDashboard({
                   isDirect={false}
                 />
 
-                {/* 4 Stats Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-                  <StatCard onClick={() => setActiveDrawer("revenue")} title="예상 월 매출 (추정)" value={`₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`} trend="+12.5%" trendUp={true} icon={<BarChart3 />} sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0" />
-                  <StatCard onClick={() => setActiveDrawer("attractiveness")} title="상권 종합 매력도" value={`${simResult?.score ?? 87} / 100`} trend="+5.2 Pts" trendUp={true} icon={<Crosshair />} sparkline="M 0 25 Q 15 20, 30 10 T 60 15 T 80 5 T 100 0" />
-                  <StatCard onClick={() => setActiveDrawer("traffic")} title="일평균 유동인구" value="42,105 명" trend="-2.4%" trendUp={false} icon={<Users />} sparkline="M 0 5 Q 15 10, 30 20 T 60 15 T 80 25 T 100 30" />
-                  <StatCard onClick={() => setActiveDrawer("cannibalization")} title="카니발리제이션 위험" value={`${simResult?.riskLevel ?? "Low"} (12%)`} trend="안전 권역" trendUp={true} icon={<AlertTriangle className="text-indigo-400" />} sparkline="M 0 30 Q 20 25, 40 28 T 80 25 T 100 30" />
-                </div>
+                {/* Main Dashboard Body — dashboardMode 토글 (data | map) */}
+                {dashboardMode === "data" ? (
+                <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
+                  {/* 4 Stats Cards — data 뷰에서만 표시 */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                    <StatCard onClick={() => setActiveDrawer("revenue")} title="예상 월 매출 (추정)" value={`₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`} trend="+12.5%" trendUp={true} icon={<BarChart3 />} sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0" />
+                    <StatCard onClick={() => setActiveDrawer("attractiveness")} title="상권 종합 매력도" value={`${simResult?.score ?? 87} / 100`} trend="+5.2 Pts" trendUp={true} icon={<Crosshair />} sparkline="M 0 25 Q 15 20, 30 10 T 60 15 T 80 5 T 100 0" />
+                    <StatCard onClick={() => setActiveDrawer("traffic")} title="일평균 유동인구" value="42,105 명" trend="-2.4%" trendUp={false} icon={<Users />} sparkline="M 0 5 Q 15 10, 30 20 T 60 15 T 80 25 T 100 30" />
+                    <StatCard onClick={() => setActiveDrawer("cannibalization")} title="카니발리제이션 위험" value={`${simResult?.riskLevel ?? "Low"} (12%)`} trend="안전 권역" trendUp={true} icon={<AlertTriangle className="text-indigo-400" />} sparkline="M 0 30 Q 20 25, 40 28 T 80 25 T 100 30" />
+                  </div>
 
-                {/* Main Dashboard Body */}
-                <div className="flex flex-col lg:flex-row gap-4">
+                  {/* Charts / Table / Radar / Insights */}
+                  <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
                   {/* Left Column */}
                   <div className="lg:flex-[2] flex flex-col gap-4">
                     {/* Chart */}
@@ -2632,6 +2666,28 @@ function SimulatorDashboard({
                     </div>
                   </div>
                 </div>
+                </div>
+                ) : (
+                  /* 🗺️ AI 에이전트 맵 뷰 — KPI 없이 화면 꽉 채움 */
+                  <div className="flex-1 w-full h-full min-h-[700px] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
+                    <div className="flex-1 bg-[#1e1b18] border border-[#3a3633] rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
+                      {/* 맵 헤더 */}
+                      <div className="h-14 bg-[#171717]/90 backdrop-blur-md border-b border-[#3a3633] flex justify-between items-center px-6 shrink-0 z-50">
+                        <h3 className="text-sm font-black text-white flex items-center gap-3">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#818cf8] animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
+                          Multi-Agent Geospatial Recommendations
+                        </h3>
+                        <p className="text-xs text-[#9ca3af] font-mono tracking-widest">
+                          AI AGENT TARGETING SYSTEM
+                        </p>
+                      </div>
+                      {/* AgentMapVisualizer — 현재는 DEFAULT_LOCATIONS mock, 추후 simResult 기반 props 전달 예정 */}
+                      <div className="flex-1 relative">
+                        <AgentMapVisualizer height="100%" />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 </>)}
               </div>
             </div>
