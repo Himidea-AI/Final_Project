@@ -15,7 +15,8 @@ from config.settings import settings
 config = context.config
 
 if settings.postgres_url:
-    config.set_main_option("sqlalchemy.url", settings.postgres_url)
+    # configparser는 %를 interpolation 문자로 인식하므로 %%로 이스케이프
+    config.set_main_option("sqlalchemy.url", settings.postgres_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
