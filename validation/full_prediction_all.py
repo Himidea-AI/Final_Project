@@ -10,21 +10,25 @@ Outputs per combination:
 Uses optimal config: guide-density + pop_per_store, window=4, hidden=128
 """
 import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from pathlib import Path
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from models.lstm_forecast.data_prep import (
-    ALL_FEATURES, SALES_FEATURES, build_timeseries, load_sales_data, load_store_data,
+    ALL_FEATURES,
+    SALES_FEATURES,
+    build_timeseries,
+    load_sales_data,
+    load_store_data,
 )
 from models.lstm_forecast.model import LSTMForecaster
-from validation.accuracy_metrics import mape, mae, r_squared
 
 device = torch.device("cpu")
 WINDOW, HIDDEN, N_STEPS = 4, 128, 4
@@ -89,19 +93,19 @@ def calc_bep(monthly_revenue, industry):
             "initial": cfg["initial"], "annual_roi": round(annual_roi, 1)}
 
 
-def calc_survival(closure_rate):
-    """Estimate survival rate from closure rate."""
+def calc_closure(closure_rate):
+    """Estimate closure probability from closure rate."""
     if closure_rate <= 0:
-        return 0.85, "safe"
-    annual_survival = max(0, min(1, 1 - closure_rate / 100))
-    if annual_survival >= 0.85:
-        return round(annual_survival, 4), "safe"
-    elif annual_survival >= 0.70:
-        return round(annual_survival, 4), "caution"
-    elif annual_survival >= 0.50:
-        return round(annual_survival, 4), "warning"
+        return 0.15, "safe"
+    annual_closure = max(0, min(1, closure_rate / 100))
+    if annual_closure <= 0.15:
+        return round(annual_closure, 4), "safe"
+    elif annual_closure <= 0.30:
+        return round(annual_closure, 4), "caution"
+    elif annual_closure <= 0.50:
+        return round(annual_closure, 4), "warning"
     else:
-        return round(annual_survival, 4), "danger"
+        return round(annual_closure, 4), "danger"
 
 
 # Imputation
@@ -244,7 +248,7 @@ def main():
 
             annual_sales = sum(preds)
             monthly_avg = annual_sales / 12
-            survival_rate, risk_level = calc_survival(cr)
+            closure_rate_val, risk_level = calc_closure(cr)
             bep = calc_bep(monthly_avg, ind)
 
             confidence = "low" if (dn, ind) in LOW_CONFIDENCE_COMBOS else "high"
@@ -255,7 +259,7 @@ def main():
                 "Q3": round(preds[2]), "Q4": round(preds[3]),
                 "annual": round(annual_sales),
                 "monthly_avg": round(monthly_avg),
-                "survival": survival_rate,
+                "closure": closure_rate_val,
                 "risk": risk_level,
                 "bep_months": bep["bep_months"],
                 "monthly_profit": bep["monthly_profit"],
@@ -275,14 +279,14 @@ def main():
     dong_summary = df.groupby("dong").agg(
         annual_total=("annual", "sum"),
         monthly_avg=("monthly_avg", "mean"),
-        avg_survival=("survival", "mean"),
+        avg_closure=("closure", "mean"),
         avg_bep=("bep_months", lambda x: x[x < 999].mean() if (x < 999).any() else 999),
     ).sort_values("annual_total", ascending=False)
 
-    print(f"  {'dong':<8} {'annual_total':>16} {'monthly_avg':>14} {'survival':>10} {'avg_bep':>10}")
+    print(f"  {'dong':<8} {'annual_total':>16} {'monthly_avg':>14} {'closure':>10} {'avg_bep':>10}")
     print("  " + "-" * 62)
     for dong, row in dong_summary.iterrows():
-        print(f"  {dong:<8} {row['annual_total']:>15,.0f} {row['monthly_avg']:>13,.0f} {row['avg_survival']:>9.1%} {row['avg_bep']:>9.1f}")
+        print(f"  {dong:<8} {row['annual_total']:>15,.0f} {row['monthly_avg']:>13,.0f} {row['avg_closure']:>9.1%} {row['avg_bep']:>9.1f}")
 
     # 2. Sales by industry
     print(f"\n{'='*100}")
@@ -291,15 +295,15 @@ def main():
     ind_summary = df.groupby("ind").agg(
         annual_total=("annual", "sum"),
         monthly_avg=("monthly_avg", "mean"),
-        avg_survival=("survival", "mean"),
+        avg_closure=("closure", "mean"),
         avg_bep=("bep_months", lambda x: x[x < 999].mean() if (x < 999).any() else 999),
         avg_roi=("annual_roi", lambda x: x[x > -100].mean() if (x > -100).any() else -100),
     ).sort_values("annual_total", ascending=False)
 
-    print(f"  {'ind':<10} {'annual_total':>16} {'monthly_avg':>14} {'survival':>10} {'avg_bep':>10} {'ROI':>8}")
+    print(f"  {'ind':<10} {'annual_total':>16} {'monthly_avg':>14} {'closure':>10} {'avg_bep':>10} {'ROI':>8}")
     print("  " + "-" * 72)
     for ind, row in ind_summary.iterrows():
-        print(f"  {ind:<10} {row['annual_total']:>15,.0f} {row['monthly_avg']:>13,.0f} {row['avg_survival']:>9.1%} {row['avg_bep']:>9.1f} {row['avg_roi']:>7.1f}%")
+        print(f"  {ind:<10} {row['annual_total']:>15,.0f} {row['monthly_avg']:>13,.0f} {row['avg_closure']:>9.1%} {row['avg_bep']:>9.1f} {row['avg_roi']:>7.1f}%")
 
     # 3. Full matrix - quarterly sales
     print(f"\n{'='*100}")
@@ -312,10 +316,10 @@ def main():
         sub = df[df["ind"]==ind].sort_values("annual", ascending=False)
         if len(sub) == 0: continue
         print(f"\n  [{ind}]")
-        print(f"  {'dong':<8} {'Q1':>12} {'Q2':>12} {'Q3':>12} {'Q4':>12} {'annual':>14} {'BEP':>6} {'survival':>10} {'risk':>8}")
+        print(f"  {'dong':<8} {'Q1':>12} {'Q2':>12} {'Q3':>12} {'Q4':>12} {'annual':>14} {'BEP':>6} {'closure':>10} {'risk':>8}")
         print("  " + "-" * 100)
         for _, r in sub.iterrows():
-            print(f"  {r['dong']:<8} {r['Q1']:>11,.0f} {r['Q2']:>11,.0f} {r['Q3']:>11,.0f} {r['Q4']:>11,.0f} {r['annual']:>13,.0f} {r['bep_months']:>5.1f} {r['survival']:>9.1%} {r['risk']:>8}")
+            print(f"  {r['dong']:<8} {r['Q1']:>11,.0f} {r['Q2']:>11,.0f} {r['Q3']:>11,.0f} {r['Q4']:>11,.0f} {r['annual']:>13,.0f} {r['bep_months']:>5.1f} {r['closure']:>9.1%} {r['risk']:>8}")
 
     # 4. Top/Bottom combinations
     print(f"\n{'='*100}")
@@ -323,13 +327,13 @@ def main():
     print("=" * 100)
     df_sorted = df.sort_values("annual", ascending=False)
 
-    print(f"\n  [상위 10 - 가장 높은 매출]")
+    print("\n  [상위 10 - 가장 높은 매출]")
     print(f"  {'dong':<8} {'ind':<10} {'annual':>14} {'monthly':>12} {'BEP':>6} {'ROI':>8} {'risk':>8}")
     print("  " + "-" * 72)
     for _, r in df_sorted.head(10).iterrows():
         print(f"  {r['dong']:<8} {r['ind']:<10} {r['annual']:>13,.0f} {r['monthly_avg']:>11,.0f} {r['bep_months']:>5.1f} {r['annual_roi']:>7.1f}% {r['risk']:>8}")
 
-    print(f"\n  [하위 10 - 가장 낮은 매출]")
+    print("\n  [하위 10 - 가장 낮은 매출]")
     print(f"  {'dong':<8} {'ind':<10} {'annual':>14} {'monthly':>12} {'BEP':>6} {'ROI':>8} {'risk':>8}")
     print("  " + "-" * 72)
     for _, r in df_sorted.tail(10).iterrows():
@@ -345,7 +349,7 @@ def main():
     print(f"  적자 조합: {len(unprofitable)}개 ({len(unprofitable)/len(df)*100:.0f}%)")
 
     if len(profitable) > 0:
-        print(f"\n  BEP 구간별 분포:")
+        print("\n  BEP 구간별 분포:")
         for lo, hi, label in [(0,6,"6개월 이내"),(6,12,"6~12개월"),(12,24,"1~2년"),(24,36,"2~3년"),(36,999,"3년 이상")]:
             cnt = len(profitable[(profitable["bep_months"]>=lo) & (profitable["bep_months"]<hi)])
             print(f"    {label:<12} {cnt:>3}개")
@@ -367,7 +371,7 @@ def main():
     print(f"  high (신뢰): {len(high_conf)}개 ({len(high_conf)/len(df)*100:.0f}%)")
     print(f"  low  (주의): {len(low_conf)}개 ({len(low_conf)/len(df)*100:.0f}%)")
     if len(low_conf) > 0:
-        print(f"\n  [신뢰도 낮은 조합]")
+        print("\n  [신뢰도 낮은 조합]")
         print(f"  {'dong':<8} {'ind':<10} {'annual':>14} {'risk':>8} {'사유'}")
         print("  " + "-" * 70)
         reasons = {

@@ -1,8 +1,8 @@
 """
-생존률/폐업률 예측 모델 정의 — LSTM 기반
+폐업률 예측 모델 정의 — LSTM 기반
 
 입력:  과거 N분기의 점포 시계열 피처 (store_count, closure_rate 등)
-출력:  다음 분기 생존 확률 (0~1)
+출력:  다음 분기 폐업 확률 (0~1)
 """
 
 from __future__ import annotations
@@ -11,16 +11,16 @@ import torch
 import torch.nn as nn
 
 
-class SurvivalPredictor(nn.Module):
+class ClosurePredictor(nn.Module):
     """
-    LSTM 기반 생존률 예측 모델.
+    LSTM 기반 폐업률 예측 모델.
 
     Architecture:
         Input (batch, seq_len, n_features)
         → LSTM (2-layer, bidirectional)
         → Attention pooling
         → FC head
-        → Sigmoid → survival probability
+        → Sigmoid → closure probability
     """
 
     def __init__(
@@ -70,7 +70,7 @@ class SurvivalPredictor(nn.Module):
             x: (batch, seq_len, n_features)
 
         Returns:
-            (batch,) — 생존 확률 (0~1)
+            (batch,) — 폐업 확률 (0~1)
         """
         # LSTM 출력: (batch, seq_len, hidden*2)
         lstm_out, _ = self.lstm(x)
@@ -81,13 +81,13 @@ class SurvivalPredictor(nn.Module):
         # Context vector: (batch, hidden*2)
         context = (lstm_out * attn_weights).sum(dim=1)
 
-        # 생존 확률
+        # 폐업 확률
         return self.fc(context).squeeze(-1)
 
 
-def build_model(input_size: int = 8, hidden_size: int = 64) -> SurvivalPredictor:
+def build_model(input_size: int = 8, hidden_size: int = 64) -> ClosurePredictor:
     """모델 인스턴스를 생성하고 가중치를 초기화한다."""
-    model = SurvivalPredictor(input_size=input_size, hidden_size=hidden_size)
+    model = ClosurePredictor(input_size=input_size, hidden_size=hidden_size)
 
     # Xavier 초기화
     for name, param in model.named_parameters():

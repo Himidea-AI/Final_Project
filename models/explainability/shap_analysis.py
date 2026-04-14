@@ -28,7 +28,7 @@ _FEATURE_KO: dict[str, str] = {
     "franchise_count": "프랜차이즈 수",
     "store_change_rate": "점포 증감률",
     "franchise_ratio": "프랜차이즈 비율",
-    "survival_rate": "생존률",
+    "closure_rate_pred": "폐업률",
 }
 
 
@@ -106,14 +106,14 @@ def explain_prediction(
     Args:
         dong_code:     행정동 코드 (예: "11440530")
         industry_code: 업종 코드   (예: "CS100001")
-        model:         학습된 SurvivalPredictor 인스턴스.
-                       None 이면 내부에서 weights/survival_model.pt 를 로드한다.
+        model:         학습된 ClosurePredictor 인스턴스.
+                       None 이면 내부에서 weights/closure_model.pt 를 로드한다.
 
     Returns:
         dict:
             feature_importance : 피처별 SHAP 기여도 리스트 (중요도 내림차순)
             base_value         : SHAP expected_value (기준 예측값)
-            predicted_value    : 모델 실제 출력 (생존률 0~1)
+            predicted_value    : 모델 실제 출력 (폐업률 0~1)
             is_mock            : mock 데이터 여부
     """
     import torch
@@ -258,8 +258,7 @@ def plot_shap_summary(
     if len(shap_values) != len(feature_names):
         _log(
             "WARNING",
-            f"shap_values 길이({len(shap_values)})와 "
-            f"feature_names 길이({len(feature_names)}) 불일치",
+            f"shap_values 길이({len(shap_values)})와 feature_names 길이({len(feature_names)}) 불일치",
         )
 
     # 절댓값 기준 내림차순 정렬 (중요도 높은 피처가 위로)

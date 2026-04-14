@@ -1,7 +1,7 @@
 """
-생존률 예측 추론 함수
+폐업률 예측 추론 함수
 
-predict(dong_code, industry_code) → 생존률 예측 결과
+predict(dong_code, industry_code) → 폐업률 예측 결과
 B2(수지니)의 12개월 시뮬레이션 입력으로 사용된다.
 """
 
@@ -38,7 +38,7 @@ def _load_model() -> torch.nn.Module:
     if _cached_model is not None:
         return _cached_model
 
-    model_path = WEIGHTS_DIR / "survival_model.pt"
+    model_path = WEIGHTS_DIR / "closure_model.pt"
     if not model_path.exists():
         raise FileNotFoundError(f"학습된 모델 가중치를 찾을 수 없습니다: {model_path}")
 
@@ -77,7 +77,7 @@ def _load_scaler():
 
 def _prepare_input(dong_code: str | int, industry_code: str) -> np.ndarray | None:
     """
-    특정 동×업종의 최근 WINDOW_SIZE 분기 데이터를 추출하여 모델 입력 형태로 반환.
+    특정 동x업종의 최근 WINDOW_SIZE 분기 데이터를 추출하여 모델 입력 형태로 반환.
 
     Returns:
         np.ndarray shape (1, WINDOW_SIZE, n_features) 또는 데이터 부족 시 None
@@ -119,35 +119,37 @@ def _prepare_input(dong_code: str | int, industry_code: str) -> np.ndarray | Non
 # ---------------------------------------------------------------------------
 
 
-def _classify_risk(survival_rate: float) -> str:
-    """생존률 기반 위험도 분류."""
-    if survival_rate >= 0.7:
+def _classify_risk(closure_rate: float) -> str:
+    """폐업률 기반 위험도 분류."""
+    if closure_rate <= 0.3:
         return "safe"
-    elif survival_rate >= 0.4:
+    elif closure_rate <= 0.6:
         return "caution"
     else:
         return "danger"
 
 
 # ---------------------------------------------------------------------------
-# 12개월 월별 생존률 보간
+# 12개월 월별 폐업률 보간
 # ---------------------------------------------------------------------------
 
 
-def _interpolate_monthly(quarterly_survival: float, months: int = 12) -> list[float]:
+def _interpolate_monthly(quarterly_closure: float, months: int = 12) -> list[float]:
     """
-    분기 생존률을 12개월 월별 생존률로 보간한다.
+    분기 폐업률을 12개월 월별 누적 폐업률로 보간한다.
 
-    분기 생존률을 월별 감쇄율로 변환하여 누적 적용.
+    분기 폐업률을 월별 증가율로 변환하여 누적 적용.
     """
-    # 분기 생존률 → 월별 생존률 (3개월 단위)
-    monthly_decay = quarterly_survival ** (1 / 3)
+    # 분기 폐업률 → 월별 누적 (1 - (1-closure)^(1/3) 의 누적)
+    quarterly_retain = 1.0 - quarterly_closure
+    monthly_decay = quarterly_retain ** (1 / 3)
 
     monthly_rates = []
     cumulative = 1.0
     for _ in range(months):
         cumulative *= monthly_decay
-        monthly_rates.append(round(max(0.0, min(1.0, cumulative)), 4))
+        closure = round(max(0.0, min(1.0, 1.0 - cumulative)), 4)
+        monthly_rates.append(closure)
 
     return monthly_rates
 
@@ -163,7 +165,7 @@ def _autoregressive_predict(
     steps: int = 4,
 ) -> list[float]:
     """
-    자기회귀 방식으로 여러 분기의 생존률을 예측한다.
+    자기회귀 방식으로 여러 분기의 폐업률을 예측한다.
 
     Args:
         model: 학습된 모델
@@ -171,7 +173,7 @@ def _autoregressive_predict(
         steps: 예측 분기 수
 
     Returns:
-        list of predicted survival rates (분기별)
+        list of predicted closure rates (분기별)
     """
     predictions: list[float] = []
     current_input = torch.tensor(initial_input, dtype=torch.float32)
@@ -184,9 +186,9 @@ def _autoregressive_predict(
 
             # 다음 입력: 시퀀스를 한 칸 밀고 예측값으로 마지막 행 업데이트
             new_row = current_input[0, -1, :].clone()
-            # survival_rate 인덱스는 FEATURE_COLS의 마지막
-            survival_idx = FEATURE_COLS.index("survival_rate")
-            new_row[survival_idx] = pred
+            # closure_rate_pred 인덱스는 FEATURE_COLS의 마지막
+            closure_idx = FEATURE_COLS.index("closure_rate_pred")
+            new_row[closure_idx] = pred
 
             current_input = torch.cat([current_input[:, 1:, :], new_row.unsqueeze(0).unsqueeze(0)], dim=1)
 
@@ -200,7 +202,7 @@ def _autoregressive_predict(
 
 def predict(dong_code: str | int, industry_code: str) -> dict:
     """
-    특정 동×업종의 생존률을 예측한다.
+    특정 동x업종의 폐업률을 예측한다.
 
     Args:
         dong_code:    행정동 코드 (예: "11440530")
@@ -208,10 +210,10 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
 
     Returns:
         dict:
-            survival_rate:        향후 1분기 생존 확률 (0~1)
+            closure_rate:         향후 1분기 폐업 확률 (0~1)
             closure_risk_level:   위험도 ("safe" / "caution" / "danger")
-            monthly_survival_rates: 12개월 월별 생존률 리스트
-            quarterly_predictions:  4분기 생존률 리스트
+            monthly_closure_rates: 12개월 월별 누적 폐업률 리스트
+            quarterly_predictions:  4분기 폐업률 리스트
     """
     model = _load_model()
     input_data = _prepare_input(dong_code, industry_code)
@@ -219,25 +221,25 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
     if input_data is None:
         logger.warning("입력 데이터를 준비할 수 없습니다 — 기본값 반환")
         return {
-            "survival_rate": 0.5,
+            "closure_rate": 0.5,
             "closure_risk_level": "caution",
-            "monthly_survival_rates": [0.5] * 12,
+            "monthly_closure_rates": [0.5] * 12,
             "quarterly_predictions": [0.5] * 4,
         }
 
     # 자기회귀 4분기 예측
     quarterly_preds = _autoregressive_predict(model, input_data, steps=4)
 
-    # 첫 분기 예측값을 기준 생존률로 사용
-    survival_rate = quarterly_preds[0]
-    risk_level = _classify_risk(survival_rate)
+    # 첫 분기 예측값을 기준 폐업률로 사용
+    closure_rate = quarterly_preds[0]
+    risk_level = _classify_risk(closure_rate)
 
-    # 12개월 월별 생존률 보간
-    monthly_rates = _interpolate_monthly(survival_rate, months=12)
+    # 12개월 월별 폐업률 보간
+    monthly_rates = _interpolate_monthly(closure_rate, months=12)
 
     return {
-        "survival_rate": round(survival_rate, 4),
+        "closure_rate": round(closure_rate, 4),
         "closure_risk_level": risk_level,
-        "monthly_survival_rates": monthly_rates,
+        "monthly_closure_rates": monthly_rates,
         "quarterly_predictions": [round(p, 4) for p in quarterly_preds],
     }
