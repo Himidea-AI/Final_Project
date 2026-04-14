@@ -37,7 +37,7 @@ class LSTMForecaster(nn.Module):
     def __init__(
         self,
         input_size: int = 10,
-        hidden_size: int = 64,
+        hidden_size: int = 128,
         num_layers: int = 2,
         dropout: float = 0.2,
         output_size: int = 1,
