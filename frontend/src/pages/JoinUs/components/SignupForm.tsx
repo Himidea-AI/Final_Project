@@ -70,18 +70,25 @@ export default function SignupForm({ planName, onSuccess }: Props) {
   );
   const touch = (key: string) => setTouched((p) => new Set(p).add(key));
 
+  // 사업자 검증 상태
+  const [bizVerified, setBizVerified] = useState<boolean | null>(null); // null=미검증, true=유효, false=무효
+  const [bizError, setBizError] = useState("");
+
   // Biz number formatting
   const handleBizChange = (v: string) => {
     const formatted = formatBizNumber(v);
     set("bizNumber", formatted);
+    setBizVerified(null); // 번호 변경 시 검증 상태 초기화
+    setBizError("");
   };
 
-  // 기업명 blur 시 — 사업자번호 + 기업명 둘 다 있으면 /biz/lookup 호출
-  const handleCompanyBlur = async () => {
+  // 사업자번호 + 기업명 둘 다 있으면 /biz/lookup 호출 (어느 필드에서 blur해도 동작)
+  const tryBizLookup = async () => {
     const digits = form.bizNumber.replace(/\D/g, "");
     if (digits.length !== 10 || !form.companyName.trim() || bizLoading) return;
 
     setBizLoading(true);
+    setBizError("");
     try {
       const res = await fetch("/api/biz/lookup", {
         method: "POST",
@@ -92,15 +99,24 @@ export default function SignupForm({ planName, onSuccess }: Props) {
         }),
       });
       const data = await res.json();
+
+      // 사업자번호 유효성 체크
+      const verification = data.data?.verification;
+      if (verification && !verification.valid) {
+        setBizVerified(false);
+        setBizError(verification.tax_type || "유효하지 않은 사업자등록번호입니다.");
+        return;
+      }
+
+      setBizVerified(true);
+
       if (data.status === "success" && data.data?.brands?.length > 0) {
         const brand = data.data.brands[0];
-        // 기업명 정제 (DB 매칭 결과로 교정)
         if (brand.corp_name) set("companyName", brand.corp_name);
-        // 가맹점 수 자동 입력
         if (brand.franchise_count) set("storeCount", String(brand.franchise_count));
       }
     } catch {
-      // API 실패 시 사용자 직접 입력 유도 (무시)
+      // API 실패 시 검증 생략 (사용자 직접 입력 유도)
     } finally {
       setBizLoading(false);
     }
@@ -113,6 +129,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
   const allValid =
     form.companyName &&
     form.bizNumber.replace(/\D/g, "").length === 10 &&
+    bizVerified === true &&
     form.contactName &&
     form.position &&
     emailValid &&
@@ -160,8 +177,8 @@ export default function SignupForm({ planName, onSuccess }: Props) {
 
   const fields = [
     // Each field rendered with stagger delay
-    { key: "bizNumber", label: "사업자등록번호", type: "text", value: form.bizNumber, onChange: handleBizChange, placeholder: "000-00-00000" },
-    { key: "companyName", label: "기업명 (프랜차이즈 본부명)", type: "text", value: form.companyName, onChange: (v: string) => set("companyName", v), placeholder: "기업명 입력 후 탭 시 자동 매핑", onBlur: handleCompanyBlur, suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#818cf8]" /> : form.companyName ? <CheckCircle size={14} className="text-emerald-400" /> : null },
+    { key: "bizNumber", label: "사업자등록번호", type: "text", value: form.bizNumber, onChange: handleBizChange, placeholder: "000-00-00000", onBlur: tryBizLookup, error: bizError, suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#818cf8]" /> : bizVerified === true ? <CheckCircle size={14} className="text-emerald-400" /> : bizVerified === false ? <XCircle size={14} className="text-rose-400" /> : null },
+    { key: "companyName", label: "기업명 (프랜차이즈 본부명)", type: "text", value: form.companyName, onChange: (v: string) => { set("companyName", v); setBizVerified(null); setBizError(""); }, placeholder: "사업자번호와 기업명 입력 후 자동 검증", onBlur: tryBizLookup, suffix: bizLoading ? <Loader2 size={14} className="animate-spin text-[#818cf8]" /> : bizVerified === true ? <CheckCircle size={14} className="text-emerald-400" /> : null },
     { key: "contactName", label: "담당자명", type: "text", value: form.contactName, onChange: (v: string) => set("contactName", v), placeholder: "홍길동" },
     { key: "position", label: "직책", type: "text", value: form.position, onChange: (v: string) => set("position", v), placeholder: "영업기획팀장" },
     { key: "email", label: "업무용 이메일", type: "email", value: form.email, onChange: (v: string) => set("email", v), placeholder: "name@company.com", error: touched.has("email") && form.email && !emailValid ? "올바른 이메일 형식을 입력하세요" : "" },
