@@ -16,6 +16,7 @@ interface User {
   position: string;
   store_count: string;
   plan: string;
+  role?: "master" | "manager";
 }
 
 interface Brand {

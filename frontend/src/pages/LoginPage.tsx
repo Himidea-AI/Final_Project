@@ -178,6 +178,12 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
             >
               아직 계정이 없으신가요? 회원가입
             </button>
+            <button
+              onClick={() => nav("/joinus?role=manager")}
+              className="w-full py-3 rounded-xl text-xs font-bold text-emerald-400/80 border border-emerald-500/20 hover:border-emerald-500/60 hover:text-emerald-400 hover:bg-emerald-500/5 transition-colors"
+            >
+              초대 코드로 팀원에 합류하기
+            </button>
             <button onClick={() => showToast("info", "비밀번호 찾기 기능은 준비 중입니다.")} className="text-[10px] text-[#9ca3af] hover:text-[#818cf8] transition-colors">
               비밀번호를 잊으셨나요?
             </button>
