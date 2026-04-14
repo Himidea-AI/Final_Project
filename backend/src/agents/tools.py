@@ -14,47 +14,59 @@ class MarketDataTool:
     def __init__(self, db_client: PostgresClient):
         self.db_client = db_client
 
+    # 업종 코드 → kakao_store category 매핑
+    _KAKAO_CATEGORY_MAP: Dict[str, str] = {
+        "I212": "커피-음료", "카페": "커피-음료", "커피": "커피-음료",
+        "I201": "한식음식점", "한식": "한식음식점", "음식점": "한식음식점",
+        "I206": "치킨전문점", "치킨": "치킨전문점",
+        "I207": "패스트푸드점", "피자": "패스트푸드점",
+        "I209": "분식전문점", "분식": "분식전문점",
+        "I211": "호프-간이주점", "주점": "호프-간이주점",
+        "I213": "제과점", "베이커리": "제과점", "빵": "제과점",
+        "G209": "패스트푸드점", "편의점": "패스트푸드점",
+    }
+
     async def get_competitor_stats(self, lat: float, lon: float, industry_m_code: str, radius_m: int = 500) -> Dict[str, Any]:
         """
-        pgvector를 사용하여 반경 내 유사 업종 경쟁 업체 분석 및 밀집도 리턴
+        kakao_store 기반 반경 내 현재 영업 중인 경쟁 업체 분석
+        (store_info는 폐업 포함 누적 데이터라 kakao_store로 대체)
         """
+        category = self._KAKAO_CATEGORY_MAP.get(industry_m_code, industry_m_code)
+        lat_delta = radius_m / 111000.0
+        lon_delta = radius_m / 88500.0
+
         async with self.db_client.get_session() as session:
-            # 1. pgvector L2 거리 연산 (<->)을 사용하여 반경 내 점포 검색 (HNSW 인덱스 활용)
-            # 마포구(자치구코드 11440) 데이터로 한정하여 검색 효율 극대화
-            query = text(f"""
-                SELECT store_name, industry_s, lat, lon,
-                       (location_vector <-> CAST(:vec AS vector)) as distance
-                FROM store_info
-                WHERE industry_m_code = :ind_code
-                AND dong_code LIKE '11440%'
-                AND (location_vector <-> CAST(:vec AS vector)) < :radius_limit
-                ORDER BY distance ASC
+            query = text("""
+                SELECT place_name, category, lat, lon,
+                       sqrt(power((lat - :lat) * 111000, 2) + power((lon - :lon) * 88500, 2)) AS distance_m
+                FROM kakao_store
+                WHERE category = :category
+                  AND lat BETWEEN :lat_min AND :lat_max
+                  AND lon BETWEEN :lon_min AND :lon_max
+                ORDER BY distance_m ASC
             """)
-
-            # asyncpg 호환을 위해 vector를 string 형태로 전달
             result = await session.execute(query, {
-                "vec": f"[{lat},{lon}]",
-                "ind_code": industry_m_code,
-                "radius_limit": radius_m / 111000.0 # 미터를 위경도 도 단위로 대략 변환
+                "lat": lat, "lon": lon, "category": category,
+                "lat_min": lat - lat_delta, "lat_max": lat + lat_delta,
+                "lon_min": lon - lon_delta, "lon_max": lon + lon_delta,
             })
-            
             competitors = result.fetchall()
-            
-            if not competitors:
-                return {"competitor_count": 0, "density_level": "LOW", "detail": "반경 500m 내 경쟁 업체가 없습니다."}
+            competitors = [c for c in competitors if c.distance_m <= radius_m]
 
-            count = len(competitors)
-            avg_dist = sum(c.distance * 111000 for c in competitors) / count # 다시 m로 변환
-            
-            density = "HIGH" if count > 10 else "MEDIUM" if count > 3 else "LOW"
-            
-            return {
-                "competitor_count": count,
-                "density_level": density,
-                "avg_distance_m": round(avg_dist, 1),
-                "nearest_competitor": competitors[0].store_name if competitors else None,
-                "summary": f"반경 500m 내 {count}개의 경쟁 업체가 밀집해 있으며, 평균 거리는 {round(avg_dist, 1)}m입니다."
-            }
+        if not competitors:
+            return {"competitor_count": 0, "density_level": "LOW", "summary": f"반경 {radius_m}m 내 경쟁 업체가 없습니다."}
+
+        count = len(competitors)
+        avg_dist = sum(c.distance_m for c in competitors) / count
+        density = "HIGH" if count > 10 else "MEDIUM" if count > 3 else "LOW"
+
+        return {
+            "competitor_count": count,
+            "density_level": density,
+            "avg_distance_m": round(avg_dist, 1),
+            "nearest_competitor": competitors[0].place_name,
+            "summary": f"반경 {radius_m}m 내 현재 영업 중인 {count}개의 경쟁 업체 (평균 {round(avg_dist, 1)}m).",
+        }
 
     async def get_population_trends(self, dong_name: str) -> Dict[str, Any]:
         """

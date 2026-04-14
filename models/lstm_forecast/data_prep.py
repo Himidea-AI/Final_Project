@@ -287,6 +287,9 @@ def _hot_deck(
                     donor_val = donors.iloc[d_idx.flatten()[0]][col]
 
             if donor_val is not None:
+                # int64 컬럼에 float 할당 시 TypeError 방지
+                if result[col].dtype == np.int64:
+                    result[col] = result[col].astype(float)
                 result.at[idx, col] = donor_val * np.random.normal(1, 0.02)
 
     return result

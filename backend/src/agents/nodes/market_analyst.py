@@ -1,3 +1,6 @@
+import json
+import re
+import redis.asyncio as aioredis
 from src.schemas.state import AgentState, MarketData
 from src.config.settings import settings
 from src.agents.llms import get_fast_llm
@@ -9,6 +12,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 db_client = PostgresClient(settings.postgres_url)
 market_tool = MarketDataTool(db_client)
 
+_CACHE_TTL = 86400  # 24시간
+
 async def market_analyst_node(state: AgentState) -> dict:
     """
     상권 분석 에이전트:
@@ -17,8 +22,29 @@ async def market_analyst_node(state: AgentState) -> dict:
     """
     target_district = state.get("target_district", "서교동")
     business_type = state.get("business_type", "카페")
-    
+
     print(f"--- [MARKET ANALYST] {target_district} 실데이터 분석 시작 ---")
+
+    # Redis 캐시 조회
+    cache_key = f"market:{target_district}:{business_type}"
+    _redis = None
+    try:
+        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        cached = await _redis.get(cache_key)
+        if cached:
+            cached_data = json.loads(cached)
+            print(f"[market_analyst] 캐시 히트: {cache_key}")
+            analysis = dict(state.get("analysis_results", {}))
+            analysis["market_report"] = cached_data["market_report"]
+            await _redis.aclose()
+            return {
+                "market_data": cached_data["market_data"],
+                "analysis_results": analysis,
+                "analysis_metrics": {**state.get("analysis_metrics", {}), **cached_data["metrics"]},
+                "current_agent": "market_analyst",
+            }
+    except Exception as e:
+        print(f"[market_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
 
     # [1] DB 연결 (필요 시)
     if db_client.engine is None:
@@ -89,10 +115,7 @@ async def market_analyst_node(state: AgentState) -> dict:
             raw_content = "".join([c.get("text", "") if isinstance(c, dict) else str(c) for c in response.content])
         else:
             raw_content = str(response.content)
-        
-        import json
-        import re
-        
+
         # 1. 리포트 본문 추출
         market_summary = re.sub(r'\[JSON_START\].*?\[JSON_END\]', '', raw_content, flags=re.DOTALL).strip()
         
@@ -116,7 +139,24 @@ async def market_analyst_node(state: AgentState) -> dict:
         final_metrics = {"district_grade": "NORMAL"}
 
     analysis_results = state.get("analysis_results", {})
-    analysis_results["market_report"] = market_summary # 개별 키에 저장
+    analysis_results["market_report"] = market_summary
+
+    # Redis 캐시 저장
+    if _redis is not None:
+        try:
+            await _redis.set(
+                cache_key,
+                json.dumps({
+                    "market_report": market_summary,
+                    "market_data": real_market_data,
+                    "metrics": final_metrics,
+                }, ensure_ascii=False, default=str),
+                ex=_CACHE_TTL,
+            )
+            print(f"[market_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+            await _redis.aclose()
+        except Exception as e:
+            print(f"[market_analyst] Redis 캐시 저장 실패 (무시): {e}")
 
     return {
         "market_data": real_market_data,

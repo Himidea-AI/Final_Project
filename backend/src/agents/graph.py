@@ -1,51 +1,72 @@
 import asyncio
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage
 
 from src.schemas.state import AgentState
-# 1. 예진 님의 5인 체제 노드들만 남기고 나머지는 제거했습니다.
-from src.agents.nodes.supervisor import supervisor_node
 from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.legal import legal_analyst_node
 from src.agents.nodes.synthesis import synthesis_node
 
 
+async def parallel_analysis_node(state: AgentState) -> dict:
+    """
+    3개 분석 에이전트를 병렬 실행 (LLM supervisor 제거 → API 호출 4회 절감)
+
+    market_analyst / population_analyst / legal_analyst 를 asyncio.gather로
+    동시에 실행하고 결과를 합산하여 반환합니다.
+    """
+    print("--- [PARALLEL ANALYSIS] 3개 에이전트 병렬 실행 시작 ---")
+
+    market_result, population_result, legal_result = await asyncio.gather(
+        market_analyst_node(state),
+        population_analyst_node(state),
+        legal_analyst_node(state),
+    )
+
+    # 각 에이전트의 analysis_results를 하나로 병합
+    merged_analysis = dict(state.get("analysis_results", {}))
+    for result in (market_result, population_result, legal_result):
+        merged_analysis.update(result.get("analysis_results", {}))
+
+    # analysis_metrics 병합
+    merged_metrics = dict(state.get("analysis_metrics", {}))
+    for result in (market_result, population_result, legal_result):
+        merged_metrics.update(result.get("analysis_metrics", {}))
+
+    # overall_legal_risk는 legal 결과 우선
+    overall_legal_risk = (
+        legal_result.get("overall_legal_risk")
+        or state.get("overall_legal_risk", "caution")
+    )
+
+    print("--- [PARALLEL ANALYSIS] 3개 에이전트 완료 ---")
+
+    return {
+        "analysis_results": merged_analysis,
+        "analysis_metrics": merged_metrics,
+        "market_data": market_result.get("market_data", state.get("market_data", {})),
+        "legal_info": legal_result.get("legal_info", state.get("legal_info", [])),
+        "overall_legal_risk": overall_legal_risk,
+        "current_agent": "parallel_analysis",
+    }
+
+
 def build_graph() -> StateGraph:
     """
-    상권분석 워크플로우 그래프 빌드
-    supervisor → market_analyst / population_analyst / legal_analyst → synthesis → END
+    상권분석 워크플로우 그래프 빌드 (방향 B: 병렬 실행)
+
+    START → parallel_analysis (market + population + legal 동시) → synthesis → END
+
+    변경 전: supervisor(LLM) 4회 호출 + 3개 에이전트 순차 실행
+    변경 후: supervisor 제거 + 3개 에이전트 병렬 실행 → LLM 호출 4회 절감, 속도 ~3배
     """
     workflow = StateGraph(AgentState)
 
-    # 노드 등록 (5인 체제)
-    workflow.add_node("supervisor", supervisor_node)
-    workflow.add_node("market_analyst", market_analyst_node)
-    workflow.add_node("population_analyst", population_analyst_node)
-    workflow.add_node("legal_analyst", legal_analyst_node)
+    workflow.add_node("parallel_analysis", parallel_analysis_node)
     workflow.add_node("synthesis", synthesis_node)
 
-    # 진입점 설정
-    workflow.set_entry_point("supervisor")
-
-    # 중앙 통제 라우팅 (Supervisor -> Workers)
-    workflow.add_conditional_edges(
-        "supervisor",
-        lambda x: x["next_step"],
-        {
-            "market_analyst": "market_analyst",
-            "population_analyst": "population_analyst",
-            "legal_analyst": "legal_analyst",
-            "FINISH": "synthesis",
-        },
-    )
-
-    # 작업 완료 후 복귀 (Workers -> Supervisor)
-    workflow.add_edge("market_analyst", "supervisor")
-    workflow.add_edge("population_analyst", "supervisor")
-    workflow.add_edge("legal_analyst", "supervisor")
-
-    # 최종 합성 후 종료 (Synthesis -> END)
+    workflow.set_entry_point("parallel_analysis")
+    workflow.add_edge("parallel_analysis", "synthesis")
     workflow.add_edge("synthesis", END)
 
     return workflow
@@ -53,44 +74,8 @@ def build_graph() -> StateGraph:
 
 def compile_graph():
     """그래프 컴파일"""
-    builder = build_graph()
-    return builder.compile()
+    return build_graph().compile()
 
 
-# ★★★ [중요] 로그인 오류를 해결하는 핵심 열쇠 ★★★
+# 하위 호환성 유지
 compile_workflow = compile_graph
-
-
-# --- 로컬 테스트 코드 (필요할 때 터미널에서 실행 가능) ---
-async def test_run():
-    app = compile_graph()
-
-    initial_state = {
-        "messages": [
-            HumanMessage(
-                content="홍대(서교동) 구역에 카페를 차리려고 합니다. 상권 분석과 주의해야 할 법률 정보를 알려주세요."
-            )
-        ],
-        "business_type": "카페",
-        "brand_name": "Antigravity Coffee",
-        "target_district": "서교동",
-        "market_data": {},
-        "legal_info": [],
-        "analysis_results": {},
-        "current_agent": "start",
-        "next_step": "",
-        "errors": [],
-    }
-
-    final_state = initial_state
-    async for event in app.astream(initial_state):
-        for node_name, output in event.items():
-            print(f"\n▶ [실행 중인 노드: {node_name}]")
-            final_state.update(output)
-
-    print("\n=== [FINAL STATE] ===")
-    print(f"analysis_results: {final_state.get('analysis_results', {})}")
-
-
-if __name__ == "__main__":
-    asyncio.run(test_run())

@@ -1,5 +1,5 @@
 """
-생존률/폐업률 예측 모델 — 학습 데이터 전처리
+폐업률 예측 모델 — 학습 데이터 전처리
 
 store_quarterly 테이블(또는 CSV fallback)에서 점포 시계열 데이터를 로드하고
 LSTM 입력에 적합한 sliding-window 시퀀스로 변환한다.
@@ -42,7 +42,7 @@ FEATURE_COLS = [
     "franchise_count",
     "store_change_rate",
     "franchise_ratio",
-    "survival_rate",
+    "closure_rate_pred",
 ]
 
 # 프로젝트 루트 기준 CSV 경로
@@ -130,7 +130,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     추가되는 컬럼:
         - store_change_rate: 점포 증감률 (이전 분기 대비)
         - franchise_ratio:   프랜차이즈 비율 (franchise_count / store_count)
-        - survival_rate:     생존률 (1 - closure_rate/100)
+        - closure_rate_pred: 폐업률 (closure_rate/100, 0~1 스케일)
     """
     df = df.copy()
 
@@ -149,8 +149,8 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # 프랜차이즈 비율
     df["franchise_ratio"] = np.where(df["store_count"] > 0, df["franchise_count"] / df["store_count"], 0)
 
-    # 생존률 (0~1)
-    df["survival_rate"] = (1 - df["closure_rate"] / 100).clip(0, 1)
+    # 폐업률 (0~1 스케일)
+    df["closure_rate_pred"] = (df["closure_rate"] / 100).clip(0, 1)
 
     return df
 
@@ -163,7 +163,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 def create_sequences(
     df: pd.DataFrame,
     window_size: int = 6,
-    target_col: str = "survival_rate",
+    target_col: str = "closure_rate_pred",
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     동×업종 단위로 sliding window 시퀀스를 생성한다.
@@ -176,7 +176,7 @@ def create_sequences(
     Returns:
         (X, y) where
             X: shape (N, window_size, n_features)
-            y: shape (N,)  — 다음 분기 생존률
+            y: shape (N,)  — 다음 분기 폐업률
     """
     sequences: list[np.ndarray] = []
     targets: list[float] = []

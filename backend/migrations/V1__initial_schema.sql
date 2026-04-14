@@ -291,3 +291,28 @@ CREATE TABLE IF NOT EXISTS simulation_result (
     status          VARCHAR(20),                                          -- 처리 상태 (pending/running/done/error)
     PRIMARY KEY (request_id)
 );
+
+
+-- =============================================================================
+-- 12. 카카오 로컬 API 기반 점포 (kakao_store)
+-- 출처: 카카오 로컬 API (실시간 수집)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS kakao_store (
+    kakao_id        VARCHAR(20)     NOT NULL,   -- 카카오 장소 ID (PK)
+    place_name      VARCHAR(200),               -- 장소명 (점포명)
+    brand_name      VARCHAR(100),               -- 정규화된 브랜드명
+    category        VARCHAR(30),                -- 10대 업종 카테고리
+    category_detail VARCHAR(200),               -- 카카오 카테고리 상세
+    address         TEXT,                       -- 지번 주소
+    road_address    TEXT,                       -- 도로명 주소
+    dong_name       VARCHAR(20),                -- 행정동명
+    lat             FLOAT,                      -- 위도
+    lon             FLOAT,                      -- 경도
+    phone           VARCHAR(20),                -- 전화번호
+    place_url       TEXT,                       -- 카카오맵 URL
+    collected_at    TIMESTAMPTZ     DEFAULT now(), -- 수집 일시
+    PRIMARY KEY (kakao_id)
+);
+CREATE INDEX IF NOT EXISTS ix_kakao_store_brand_name ON kakao_store (brand_name);
+CREATE INDEX IF NOT EXISTS ix_kakao_store_category   ON kakao_store (category);
+CREATE INDEX IF NOT EXISTS ix_kakao_store_dong_name  ON kakao_store (dong_name);

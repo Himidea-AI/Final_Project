@@ -1,10 +1,14 @@
 import json
 import asyncio
 import re
+import redis.asyncio as aioredis
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.schemas.state import AgentState
 from src.agents.nodes.market_analyst import market_tool
 from src.agents.llms import get_fast_llm
+from src.config.settings import settings
+
+_CACHE_TTL = 86400  # 24시간
 
 async def population_analyst_node(state: AgentState) -> dict:
     """
@@ -13,7 +17,28 @@ async def population_analyst_node(state: AgentState) -> dict:
     - 피크 시간대 및 주요 타겟층 도출
     """
     target_district = state.get("target_district", "서교동")
+    business_type = state.get("business_type", "카페")
     print(f"--- [POPULATION ANALYST] {target_district} 입동인구 분석 시작 ---")
+
+    # Redis 캐시 조회
+    cache_key = f"population:{target_district}:{business_type}"
+    _redis = None
+    try:
+        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        cached = await _redis.get(cache_key)
+        if cached:
+            cached_data = json.loads(cached)
+            print(f"[population_analyst] 캐시 히트: {cache_key}")
+            analysis = dict(state.get("analysis_results", {}))
+            analysis["population_report"] = cached_data["population_report"]
+            await _redis.aclose()
+            return {
+                "analysis_results": analysis,
+                "analysis_metrics": {**state.get("analysis_metrics", {}), **cached_data["metrics"]},
+                "current_agent": "population_analyst",
+            }
+    except Exception as e:
+        print(f"[population_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
 
     # 1. 실데이터 수집
     pop_data = await market_tool.get_population_trends(target_district)
@@ -75,6 +100,19 @@ async def population_analyst_node(state: AgentState) -> dict:
 
     analysis_results = state.get("analysis_results", {})
     analysis_results["population_report"] = population_report
+
+    # Redis 캐시 저장
+    if _redis is not None:
+        try:
+            await _redis.set(
+                cache_key,
+                json.dumps({"population_report": population_report, "metrics": new_metrics}, ensure_ascii=False),
+                ex=_CACHE_TTL,
+            )
+            print(f"[population_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+            await _redis.aclose()
+        except Exception as e:
+            print(f"[population_analyst] Redis 캐시 저장 실패 (무시): {e}")
 
     return {
         "analysis_results": analysis_results,

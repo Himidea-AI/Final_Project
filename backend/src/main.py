@@ -313,6 +313,47 @@ async def manager_login(req: LoginRequest):
         return {"status": "error", "message": str(e)}
 
 
+@app.get("/auth/managers")
+async def get_managers(owner_id: str):
+    """팀장 소속 매니저 전체 목록 조회 (승인 상태 포함)"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.get_managers, owner_id)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+class ManagerApprovalBody(BaseModel):
+    owner_id: str
+    assigned_gu: str | None = None
+    assigned_dongs: list[str] | None = None
+
+
+@app.patch("/auth/manager/{manager_id}/approve")
+async def approve_manager(manager_id: str, body: ManagerApprovalBody):
+    """팀장이 매니저 가입을 승인"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(
+            auth.approve_manager, body.owner_id, manager_id, body.assigned_gu, body.assigned_dongs
+        )
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.patch("/auth/manager/{manager_id}/reject")
+async def reject_manager(manager_id: str, body: ManagerApprovalBody):
+    """팀장이 매니저 가입을 거절"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.reject_manager, body.owner_id, manager_id)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @app.post("/simulate")
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
