@@ -6,6 +6,7 @@ from alembic import context
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from database.models import Base
 from config.settings import settings
@@ -15,7 +16,8 @@ from config.settings import settings
 config = context.config
 
 if settings.postgres_url:
-    config.set_main_option("sqlalchemy.url", settings.postgres_url)
+    # configparser는 %를 interpolation 문자로 인식하므로 %%로 이스케이프
+    config.set_main_option("sqlalchemy.url", settings.postgres_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -71,9 +73,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

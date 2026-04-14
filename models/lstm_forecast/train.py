@@ -30,13 +30,13 @@ DEFAULT_PRETRAIN_CONFIG: dict = {
     "db_url": DB_URL,
     "dong_prefix": None,  # 서울 전체
     "csv_path": None,
-    "window_size": 6,
+    "window_size": 4,
     "batch_size": 64,
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
     "feature_cols": None,  # None = ALL_FEATURES
     # 모델 하이퍼파라미터
-    "hidden_size": 64,
+    "hidden_size": 128,
     "num_layers": 2,
     "dropout": 0.2,
     # 학습 하이퍼파라미터
@@ -52,13 +52,13 @@ DEFAULT_FINETUNE_CONFIG: dict = {
     "db_url": DB_URL,
     "dong_prefix": "11440",  # 마포구
     "csv_path": None,
-    "window_size": 6,
+    "window_size": 4,
     "batch_size": 32,
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
     "feature_cols": None,
     # 모델 하이퍼파라미터
-    "hidden_size": 64,
+    "hidden_size": 128,
     "num_layers": 2,
     "dropout": 0.2,
     # 파인튜닝 하이퍼파라미터

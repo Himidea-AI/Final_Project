@@ -102,7 +102,8 @@ def main():
     stores = load_store_data(dong_prefix="11440")
     ts = build_timeseries(sales, stores)
     ts = impute(ts)
-    fc = [c for c in ALL_FEATURES if c in ts.columns]
+    ts["pop_per_store"] = np.where(ts["store_count"] > 0, ts["total_pop"] / ts["store_count"], 0)
+    fc = [c for c in ALL_FEATURES if c in ts.columns] + ["pop_per_store"]
 
     # Sequences
     fs = MinMaxScaler()
