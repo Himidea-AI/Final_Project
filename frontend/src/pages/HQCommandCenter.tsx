@@ -10,7 +10,7 @@
  * TODO (Phase 2+): 실제 JWT 인증 + workspace API 연동
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
@@ -369,8 +369,42 @@ function RegionSelect({
   );
 }
 
-function TeamManagementView() {
-  const { showToast } = useToast();
+type Manager = {
+  id: string;
+  contact_name: string;
+  position: string;
+  email: string;
+  phone: string;
+  is_active: boolean;
+  is_approved: boolean;
+  created_at: string;
+};
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "—";
+  const diff = Date.now() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}일 전`;
+  return date.toISOString().slice(0, 10);
+}
+
+function PendingManagerCard({
+  manager,
+  onApprove,
+  onReject,
+  isBusy,
+}: {
+  manager: Manager;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  isBusy: boolean;
+}) {
   const [pendingGu, setPendingGu] = useState("");
   const [pendingDongs, setPendingDongs] = useState<string[]>([]);
 
@@ -381,85 +415,233 @@ function TeamManagementView() {
   };
 
   return (
+    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-lg shadow-rose-500/5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
+          <BrandLogo
+            name={manager.contact_name}
+            isUser={true}
+            tone="muted"
+            className="w-10 h-10 text-sm rounded-full"
+          />
+          <div>
+            <p className="text-sm font-bold text-[#e2e8f0]">
+              {manager.contact_name}
+              {manager.position && (
+                <span className="ml-2 text-[10px] font-mono text-[#9ca3af] uppercase tracking-wider">
+                  {manager.position}
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-[#9ca3af]">
+              초대 코드 입력 완료 ({formatRelativeTime(manager.created_at)})
+            </p>
+            <p className="text-[10px] text-[#6b7280] font-mono mt-0.5">
+              {manager.email}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onApprove(manager.id)}
+            disabled={isBusy}
+            className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50 disabled:cursor-wait"
+            title="승인"
+          >
+            <CheckCircle2 className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => onReject(manager.id)}
+            disabled={isBusy}
+            className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50 disabled:cursor-wait"
+            title="거절"
+          >
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* 구 → 동 선택 */}
+      <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg p-4">
+        <p className="text-[10px] text-[#9ca3af] uppercase tracking-wider font-bold mb-3">
+          담당 권역 할당
+        </p>
+        <div className="mb-3">
+          <RegionSelect
+            value={pendingGu}
+            onChange={(v) => {
+              setPendingGu(v);
+              setPendingDongs([]);
+            }}
+            options={Object.keys(REGION_DATA)}
+            placeholder="구 선택..."
+          />
+        </div>
+
+        {pendingGu && (
+          <div>
+            <p className="text-[10px] text-[#9ca3af] mb-2">
+              {pendingGu} 행정동 선택 (복수 가능)
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {REGION_DATA[pendingGu]?.map((dong) => {
+                const selected = pendingDongs.includes(dong);
+                return (
+                  <button
+                    key={dong}
+                    onClick={() => toggleDong(dong)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                      selected
+                        ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
+                        : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
+                    }`}
+                  >
+                    {dong}
+                  </button>
+                );
+              })}
+            </div>
+            {pendingDongs.length > 0 && (
+              <p className="text-[10px] text-[#818cf8] mt-2 font-mono">
+                {pendingDongs.length}개 동 선택됨: {pendingDongs.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TeamManagementView() {
+  const { showToast } = useToast();
+  const { user } = useAuth();
+  const [managers, setManagers] = useState<Manager[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const fetchManagers = useCallback(async () => {
+    if (!user?.id) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/auth/managers?owner_id=${encodeURIComponent(user.id)}`
+      );
+      const data = await res.json();
+      if (data.status === "success" && Array.isArray(data.managers)) {
+        setManagers(data.managers);
+      } else {
+        showToast("error", data.message || "매니저 목록 조회에 실패했습니다.");
+      }
+    } catch {
+      showToast("error", "서버 연결에 실패했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id, showToast]);
+
+  useEffect(() => {
+    fetchManagers();
+  }, [fetchManagers]);
+
+  const handleApprove = useCallback(
+    async (managerId: string) => {
+      if (!user?.id || busyId) return;
+      setBusyId(managerId);
+      try {
+        const res = await fetch(`/api/auth/manager/${managerId}/approve`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: user.id }),
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          showToast("success", data.message || "매니저를 승인했습니다.");
+          fetchManagers();
+        } else {
+          showToast("error", data.message || "승인에 실패했습니다.");
+        }
+      } catch {
+        showToast("error", "서버 연결에 실패했습니다.");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [user?.id, busyId, showToast, fetchManagers]
+  );
+
+  const handleReject = useCallback(
+    async (managerId: string) => {
+      if (!user?.id || busyId) return;
+      setBusyId(managerId);
+      try {
+        const res = await fetch(`/api/auth/manager/${managerId}/reject`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_id: user.id }),
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          showToast("success", data.message || "매니저를 거절했습니다.");
+          fetchManagers();
+        } else {
+          showToast("error", data.message || "거절에 실패했습니다.");
+        }
+      } catch {
+        showToast("error", "서버 연결에 실패했습니다.");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [user?.id, busyId, showToast, fetchManagers]
+  );
+
+  const pending = managers.filter((m) => m.is_active && !m.is_approved);
+  const active = managers.filter((m) => m.is_active && m.is_approved);
+
+  return (
     <div className="flex flex-col gap-8">
       {/* 1. 승인 대기 (Pending Approval) */}
       <section>
         <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-          승인 대기 중인 매니저 (1)
+          <span
+            className={`w-2 h-2 rounded-full ${
+              pending.length > 0 ? "bg-rose-500 animate-pulse" : "bg-[#404040]"
+            }`}
+          />
+          승인 대기 중인 매니저 ({pending.length})
         </h3>
-        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-lg shadow-rose-500/5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <BrandLogo
-                name="최점포 매니저"
-                isUser={true}
-                tone="muted"
-                className="w-10 h-10 text-sm rounded-full"
-              />
-              <div>
-                <p className="text-sm font-bold text-[#e2e8f0]">최점포 매니저</p>
-                <p className="text-xs text-[#9ca3af]">초대 코드 입력 완료 (10분 전)</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => showToast("success", "매니저 승인 기능은 정식 서비스에서 제공됩니다.")} className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors border border-emerald-500/20">
-                <CheckCircle2 className="w-5 h-5" />
-              </button>
-              <button onClick={() => showToast("info", "매니저 거절 기능은 정식 서비스에서 제공됩니다.")} className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-colors border border-rose-500/20">
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
 
-          {/* 구 → 동 선택 */}
-          <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg p-4">
-            <p className="text-[10px] text-[#9ca3af] uppercase tracking-wider font-bold mb-3">담당 권역 할당</p>
-            <div className="mb-3">
-              <RegionSelect
-                value={pendingGu}
-                onChange={(v) => { setPendingGu(v); setPendingDongs([]); }}
-                options={Object.keys(REGION_DATA)}
-                placeholder="구 선택..."
-              />
-            </div>
-
-            {pendingGu && (
-              <div>
-                <p className="text-[10px] text-[#9ca3af] mb-2">{pendingGu} 행정동 선택 (복수 가능)</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {REGION_DATA[pendingGu]?.map((dong) => {
-                    const selected = pendingDongs.includes(dong);
-                    return (
-                      <button
-                        key={dong}
-                        onClick={() => toggleDong(dong)}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
-                          selected
-                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
-                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
-                        }`}
-                      >
-                        {dong}
-                      </button>
-                    );
-                  })}
-                </div>
-                {pendingDongs.length > 0 && (
-                  <p className="text-[10px] text-[#818cf8] mt-2 font-mono">
-                    {pendingDongs.length}개 동 선택됨: {pendingDongs.join(", ")}
-                  </p>
-                )}
-              </div>
-            )}
+        {isLoading && managers.length === 0 ? (
+          <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-10 flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-[#3a3633] border-t-[#818cf8] rounded-full animate-spin" />
           </div>
-        </div>
+        ) : pending.length === 0 ? (
+          <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-8 text-center">
+            <p className="text-sm text-[#9ca3af]">승인 대기 중인 매니저가 없습니다.</p>
+            <p className="text-[10px] text-[#6b7280] mt-1">
+              상단 '초대코드 발급' 버튼으로 팀원을 초대하세요.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {pending.map((m) => (
+              <PendingManagerCard
+                key={m.id}
+                manager={m}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                isBusy={busyId === m.id}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* 2. 활성 멤버 리스트 */}
       <section>
         <h3 className="text-sm font-bold mb-4 text-[#9ca3af]">
-          활성 워크스페이스 멤버
+          활성 워크스페이스 멤버 ({active.length})
         </h3>
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl overflow-hidden shadow-lg">
           <table className="w-full text-left border-collapse">
@@ -467,103 +649,75 @@ function TeamManagementView() {
               <tr>
                 <th className="p-4 font-medium">이름 / 직급</th>
                 <th className="p-4 font-medium">담당 권역</th>
-                <th className="p-4 font-medium">최근 활동</th>
+                <th className="p-4 font-medium">가입일</th>
                 <th className="p-4 font-medium">상태</th>
                 <th className="p-4 font-medium text-right">관리</th>
               </tr>
             </thead>
             <tbody className="text-sm divide-y divide-[#3a3633]">
-              <tr className="hover:bg-[#1e1b18]/50 transition-colors">
-                <td className="p-4">
-                  <div className="flex items-center gap-3">
-                    <BrandLogo
-                      name="김마포 매니저"
-                      isUser={true}
-                      tone="accent"
-                      className="w-8 h-8 text-xs rounded-full"
-                    />
-                    <div>
-                      <p className="font-bold text-[#e2e8f0]">
-                        김마포 매니저
-                      </p>
-                      <p className="text-[10px] text-[#9ca3af]">
-                        Regional Manager
-                      </p>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-4">
-                  <div className="flex flex-wrap gap-1">
-                    <span className="px-2 py-0.5 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded-md text-[10px] font-bold inline-flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> 연남동
-                    </span>
-                    <span className="px-2 py-0.5 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded-md text-[10px] font-bold">
-                      서교동
-                    </span>
-                    <span className="px-2 py-0.5 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded-md text-[10px] font-bold">
-                      합정동
-                    </span>
-                  </div>
-                </td>
-                <td className="p-4 text-xs text-[#9ca3af]">
-                  연남동 시뮬레이션 저장 (2시간 전)
-                </td>
-                <td className="p-4">
-                  <span className="flex items-center gap-1.5 text-xs text-emerald-500 font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />{" "}
-                    Online
-                  </span>
-                </td>
-                <td className="p-4 text-right">
-                  <button onClick={() => showToast("info", "멤버 관리 기능은 정식 서비스에서 제공됩니다.")} className="text-[#9ca3af] hover:text-[#818cf8] transition-colors">
-                    <MoreVertical className="w-5 h-5 ml-auto" />
-                  </button>
-                </td>
-              </tr>
-              <tr className="hover:bg-[#1e1b18]/50 transition-colors">
-                <td className="p-4">
-                  <div className="flex items-center gap-3">
-                    <BrandLogo
-                      name="이서초 매니저"
-                      isUser={true}
-                      tone="muted"
-                      className="w-8 h-8 text-xs rounded-full"
-                    />
-                    <div>
-                      <p className="font-bold text-[#e2e8f0]">
-                        이서초 매니저
-                      </p>
-                      <p className="text-[10px] text-[#9ca3af]">
-                        Regional Manager
-                      </p>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-4">
-                  <div className="flex flex-wrap gap-1">
-                    <span className="px-2 py-0.5 bg-[#3a3633]/50 text-[#9ca3af] border border-[#3a3633] rounded-md text-[10px] font-bold inline-flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> 서초동
-                    </span>
-                    <span className="px-2 py-0.5 bg-[#3a3633]/50 text-[#9ca3af] border border-[#3a3633] rounded-md text-[10px] font-bold">
-                      반포동
-                    </span>
-                  </div>
-                </td>
-                <td className="p-4 text-xs text-[#9ca3af]">
-                  서초4동 리포트 공유 (어제)
-                </td>
-                <td className="p-4">
-                  <span className="flex items-center gap-1.5 text-xs text-[#9ca3af]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#404040]" />{" "}
-                    Offline
-                  </span>
-                </td>
-                <td className="p-4 text-right">
-                  <button onClick={() => showToast("info", "멤버 관리 기능은 정식 서비스에서 제공됩니다.")} className="text-[#9ca3af] hover:text-[#818cf8] transition-colors">
-                    <MoreVertical className="w-5 h-5 ml-auto" />
-                  </button>
-                </td>
-              </tr>
+              {active.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="p-8 text-center text-xs text-[#9ca3af]"
+                  >
+                    활성 매니저가 없습니다. 승인 대기 중인 매니저를 승인해보세요.
+                  </td>
+                </tr>
+              ) : (
+                active.map((m) => (
+                  <tr
+                    key={m.id}
+                    className="hover:bg-[#1e1b18]/50 transition-colors"
+                  >
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <BrandLogo
+                          name={m.contact_name}
+                          isUser={true}
+                          tone="accent"
+                          className="w-8 h-8 text-xs rounded-full"
+                        />
+                        <div>
+                          <p className="font-bold text-[#e2e8f0]">
+                            {m.contact_name}
+                          </p>
+                          <p className="text-[10px] text-[#9ca3af]">
+                            {m.position || "Regional Manager"}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#3a3633]/50 text-[#9ca3af] border border-[#3a3633] rounded-md text-[10px] font-bold">
+                        <MapPin className="w-3 h-3" /> 미지정
+                      </span>
+                    </td>
+                    <td className="p-4 text-xs text-[#9ca3af]">
+                      {formatRelativeTime(m.created_at)}
+                    </td>
+                    <td className="p-4">
+                      <span className="flex items-center gap-1.5 text-xs text-emerald-500 font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Active
+                      </span>
+                    </td>
+                    <td className="p-4 text-right">
+                      <button
+                        onClick={() =>
+                          showToast(
+                            "info",
+                            "멤버 관리 기능은 정식 서비스에서 제공됩니다."
+                          )
+                        }
+                        className="text-[#9ca3af] hover:text-[#818cf8] transition-colors"
+                      >
+                        <MoreVertical className="w-5 h-5 ml-auto" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
