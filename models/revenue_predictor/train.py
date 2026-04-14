@@ -1,5 +1,5 @@
 """
-생존률 예측 모델 학습 스크립트
+폐업률 예측 모델 학습 스크립트
 
 전략: 서울 전체 사전학습 → 마포구 파인튜닝 (transfer learning)
 """
@@ -197,7 +197,7 @@ def finetune(model: nn.Module | None = None, device: torch.device | None = None)
     logger.info("파인튜닝 완료 — best_val_loss=%.6f", result["best_val_loss"])
 
     # 최종 가중치 저장
-    torch.save(model.state_dict(), WEIGHTS_DIR / "survival_model.pt")
+    torch.save(model.state_dict(), WEIGHTS_DIR / "closure_model.pt")
 
     # scaler도 함께 저장 (추론 시 필요)
     import joblib

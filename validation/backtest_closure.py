@@ -60,9 +60,9 @@ def _load_store_data() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _predict_survival(dong_code: str, industry_code: str) -> dict | None:
+def _predict_closure(dong_code: str, industry_code: str) -> dict | None:
     """
-    특정 동x업종의 생존률(폐업률 역수)을 예측한다.
+    특정 동x업종의 폐업률을 예측한다.
 
     Args:
         dong_code:     행정동 코드 (예: "11440530")
@@ -70,14 +70,14 @@ def _predict_survival(dong_code: str, industry_code: str) -> dict | None:
 
     Returns:
         dict | None:
-            생존률 예측 결과 dict. 가중치 파일 없거나 예측 실패 시 None 반환.
-            dict 구조: {survival_rate, closure_risk_level,
-                       monthly_survival_rates, quarterly_predictions}
+            폐업률 예측 결과 dict. 가중치 파일 없거나 예측 실패 시 None 반환.
+            dict 구조: {closure_rate, closure_risk_level,
+                       monthly_closure_rates, quarterly_predictions}
     """
     try:
-        from models.revenue_predictor.predict import predict as survival_predict
+        from models.revenue_predictor.predict import predict as closure_predict
 
-        result = survival_predict(dong_code, industry_code)
+        result = closure_predict(dong_code, industry_code)
         return result
     except FileNotFoundError as exc:
         # 가중치 파일 없음 - 정상적인 개발 환경에서 발생 가능
@@ -129,7 +129,7 @@ def run_backtest(test_year: int = 2024) -> dict:
     모델의 신뢰도를 검증한다.
 
     실제값 기준: test_year Q4 (quarter == test_year * 10 + 4) 단일 포인트의 closure_rate (%).
-    예측값 기준: _predict_survival() 의 survival_rate → (1 - survival_rate) * 100 변환 (%).
+    예측값 기준: _predict_closure() 의 closure_rate × 100 변환 (%).
     비교 지표:   회귀 지표 (MAE, RMSE, R²) - 폐업률은 연속값.
 
     Parameters
@@ -202,13 +202,13 @@ def run_backtest(test_year: int = 2024) -> dict:
         actual_closure_rate = max(0.0, min(100.0, actual_closure_rate))
 
         # 폐업률 예측 - 실패 시 skip
-        pred = _predict_survival(dong_code, industry_code)
+        pred = _predict_closure(dong_code, industry_code)
         if pred is None:
             skipped += 1
             continue
 
-        # 예측 생존률 → 폐업률 변환: (1 - survival_rate) * 100
-        predicted_closure_rate = round((1.0 - float(pred["survival_rate"])) * 100, 4)
+        # 예측 폐업률 (0~1) → 백분율 (0~100)
+        predicted_closure_rate = round(float(pred["closure_rate"]) * 100, 4)
 
         predictions.append(
             {
@@ -226,8 +226,7 @@ def run_backtest(test_year: int = 2024) -> dict:
     if not predictions:
         _log(
             "ERROR",
-            f"예측 결과 없음 (전체 {len(df_q4)}건 중 {skipped}건 skip) - "
-            "가중치 파일이 있는지 확인하세요",
+            f"예측 결과 없음 (전체 {len(df_q4)}건 중 {skipped}건 skip) - 가중치 파일이 있는지 확인하세요",
         )
         return {
             "test_year": test_year,
@@ -258,8 +257,7 @@ def run_backtest(test_year: int = 2024) -> dict:
 
     _log(
         "INFO",
-        f"백테스트 완료 - {len(predictions)}건 평가, {skipped}건 skip, "
-        f"MAE={overall_metrics['mae']:.4f}",
+        f"백테스트 완료 - {len(predictions)}건 평가, {skipped}건 skip, MAE={overall_metrics['mae']:.4f}",
     )
 
     # ---- 6) 동별 지표 ----
