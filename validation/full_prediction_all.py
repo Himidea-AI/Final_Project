@@ -29,6 +29,21 @@ from validation.accuracy_metrics import mape, mae, r_squared
 device = torch.device("cpu")
 WINDOW, HIDDEN, N_STEPS = 4, 128, 4
 
+# 극단적 MAPE 이상치 조합 제외 (매출 규모 대비 오차율 900%+)
+EXCLUDE_COMBOS = {
+    ("염리동", "중식"),
+    ("성산1동", "제과"),
+}
+
+# 예측 신뢰도 낮음 (backtest MAPE 50%+ / 매출 급변·결측·개별점포 이벤트)
+LOW_CONFIDENCE_COMBOS = {
+    ("신수동", "치킨"),       # 86% — 매출 63% 폭락, 배달수요 감소
+    ("성산1동", "양식"),      # 72% — V자 반등, 트렌드 반전
+    ("신수동", "패스트푸드"),  # 59% — 매출 41% 하락, 소규모
+    ("도화동", "양식"),       # 51% — 6분기 결측 + 스파이크
+    ("대흥동", "치킨"),       # 51% — 개별 점포 대박 (CV=102%)
+}
+
 DONG_MAP = {
     "11440555":"아현동","11440565":"공덕동","11440585":"도화동",
     "11440590":"용강동","11440600":"대흥동","11440610":"염리동",
@@ -199,6 +214,9 @@ def main():
             dn = DONG_MAP[dc]
             ind = IND_MAP[ic]
 
+            if (dn, ind) in EXCLUDE_COMBOS:
+                continue
+
             grp = ts[(ts["dong_code"].astype(str)==dc) & (ts["industry_code"].astype(str)==ic)]
             grp = grp.sort_values("quarter")
 
@@ -229,6 +247,8 @@ def main():
             survival_rate, risk_level = calc_survival(cr)
             bep = calc_bep(monthly_avg, ind)
 
+            confidence = "low" if (dn, ind) in LOW_CONFIDENCE_COMBOS else "high"
+
             all_results.append({
                 "dong": dn, "ind": ind,
                 "Q1": round(preds[0]), "Q2": round(preds[1]),
@@ -241,6 +261,7 @@ def main():
                 "monthly_profit": bep["monthly_profit"],
                 "annual_roi": bep["annual_roi"],
                 "initial_invest": bep["initial"],
+                "confidence": confidence,
             })
 
     df = pd.DataFrame(all_results)
@@ -336,6 +357,29 @@ def main():
     for level in ["safe","caution","warning","danger"]:
         cnt = len(df[df["risk"]==level])
         print(f"  {level:<10} {cnt:>3}개 ({cnt/len(df)*100:.0f}%)")
+
+    # 7. Confidence summary
+    print(f"\n{'='*100}")
+    print("  [7] 예측 신뢰도")
+    print("=" * 100)
+    high_conf = df[df["confidence"]=="high"]
+    low_conf = df[df["confidence"]=="low"]
+    print(f"  high (신뢰): {len(high_conf)}개 ({len(high_conf)/len(df)*100:.0f}%)")
+    print(f"  low  (주의): {len(low_conf)}개 ({len(low_conf)/len(df)*100:.0f}%)")
+    if len(low_conf) > 0:
+        print(f"\n  [신뢰도 낮은 조합]")
+        print(f"  {'dong':<8} {'ind':<10} {'annual':>14} {'risk':>8} {'사유'}")
+        print("  " + "-" * 70)
+        reasons = {
+            ("신수동","치킨"): "매출 63% 폭락, 배달수요 감소",
+            ("성산1동","양식"): "V자 반등, 트렌드 반전",
+            ("신수동","패스트푸드"): "매출 41% 하락, 소규모",
+            ("도화동","양식"): "6분기 결측 + 매출 스파이크",
+            ("대흥동","치킨"): "개별 점포 대박 (CV=102%)",
+        }
+        for _, r in low_conf.iterrows():
+            reason = reasons.get((r["dong"], r["ind"]), "")
+            print(f"  {r['dong']:<8} {r['ind']:<10} {r['annual']:>13,.0f} {r['risk']:>8}  {reason}")
 
     # Save to CSV
     csv_path = Path(__file__).parent / "full_prediction_results.csv"
