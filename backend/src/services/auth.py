@@ -131,9 +131,9 @@ class AuthService:
                             "brand": top_brand["brand_name"],
                             "ind_l": top_brand.get("industry_large", ""),
                             "ind_m": top_brand.get("industry_medium", ""),
-                            "frc_cnt": top_brand["franchise_count"],
-                            "avg_sales": top_brand["avg_sales"],
-                            "mapo_cnt": top_brand["mapo_store_count"],
+                            "frc_cnt": top_brand.get("franchise_count", top_brand.get("frcsCnt", 0)),
+                            "avg_sales": top_brand.get("avrgSlsAmt", top_brand.get("avg_sales", 0)),
+                            "mapo_cnt": top_brand.get("mapo_store_count", 0),
                         },
                     )
                     conn.commit()
@@ -153,10 +153,12 @@ class AuthService:
                 },
                 "verification": mapping["verification"],
                 "brand": {
-                    "brand_name": top_brand["brand_name"] if top_brand else None,
-                    "franchise_count": top_brand["franchise_count"] if top_brand else 0,
+                    "brand_name": top_brand.get("brand_name", "") if top_brand else None,
+                    "franchise_count": top_brand.get("franchise_count", top_brand.get("frcsCnt", 0))
+                    if top_brand
+                    else 0,
                     "avg_sales": top_brand.get("avrgSlsAmt", top_brand.get("avg_sales", 0)) if top_brand else 0,
-                    "mapo_store_count": top_brand["mapo_store_count"] if top_brand else 0,
+                    "mapo_store_count": top_brand.get("mapo_store_count", 0) if top_brand else 0,
                 }
                 if top_brand
                 else None,
