@@ -479,7 +479,8 @@ class AuthService:
                 rows = conn.execute(
                     text("""
                         SELECT id, contact_name, position, email, phone,
-                               is_active, is_approved, created_at
+                               is_active, is_approved, created_at,
+                               assigned_gu, assigned_dongs
                         FROM manager_users
                         WHERE owner_id = :owner_id
                         ORDER BY created_at DESC
@@ -497,6 +498,8 @@ class AuthService:
                         "is_active": r._mapping["is_active"],
                         "is_approved": r._mapping["is_approved"],
                         "created_at": str(r._mapping["created_at"]),
+                        "assigned_gu": r._mapping["assigned_gu"],
+                        "assigned_dongs": r._mapping["assigned_dongs"],
                     }
                     for r in rows
                 ]
@@ -505,8 +508,14 @@ class AuthService:
         finally:
             engine.dispose()
 
-    def approve_manager(self, owner_id: str, manager_id: str) -> dict:
-        """팀장이 매니저 가입을 승인한다."""
+    def approve_manager(
+        self,
+        owner_id: str,
+        manager_id: str,
+        assigned_gu: str | None = None,
+        assigned_dongs: list[str] | None = None,
+    ) -> dict:
+        """팀장이 매니저 가입을 승인한다 (담당 구/행정동 지정 포함)."""
         engine = create_engine(self._db_url, echo=False)
         try:
             with engine.connect() as conn:
@@ -521,16 +530,27 @@ class AuthService:
                 if not row:
                     return {"status": "error", "message": "해당 매니저를 찾을 수 없습니다."}
 
+                import json
+
                 conn.execute(
-                    text("UPDATE manager_users SET is_approved = true WHERE id = :id"),
-                    {"id": manager_id},
+                    text(
+                        "UPDATE manager_users "
+                        "SET is_approved = true, assigned_gu = :gu, assigned_dongs = :dongs "
+                        "WHERE id = :id"
+                    ),
+                    {
+                        "id": manager_id,
+                        "gu": assigned_gu,
+                        "dongs": json.dumps(assigned_dongs) if assigned_dongs else None,
+                    },
                 )
                 conn.commit()
 
                 mgr = row._mapping
+                dong_info = f" (담당: {assigned_gu} {assigned_dongs})" if assigned_gu else ""
                 return {
                     "status": "success",
-                    "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 승인했습니다.",
+                    "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 승인했습니다.{dong_info}",
                 }
         finally:
             engine.dispose()

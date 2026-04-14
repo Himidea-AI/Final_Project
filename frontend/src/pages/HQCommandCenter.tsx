@@ -10,13 +10,13 @@
  * TODO (Phase 2+): 실제 JWT 인증 + workspace API 연동
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { useToast } from "../components/Toast";
-import { useAuth } from "../auth/AuthContext";
-import { BrandLogo } from "../components/BrandLogo";
-import { SEOUL_REGIONS } from "../data/seoulRegions";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../components/Toast';
+import { useAuth } from '../auth/AuthContext';
+import { BrandLogo } from '../components/BrandLogo';
+import { SEOUL_REGIONS } from '../data/seoulRegions';
 import {
   Building2,
   Users,
@@ -35,27 +35,27 @@ import {
   Zap,
   TrendingUp,
   ChevronDown,
-} from "lucide-react";
+} from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
    Types
    ═══════════════════════════════════════════════════════ */
-type MenuId = "team" | "pipeline" | "tuning" | "billing";
+type MenuId = 'team' | 'pipeline' | 'tuning' | 'billing';
 
 /* ═══════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════ */
 export default function HQCommandCenter() {
   const [searchParams] = useSearchParams();
-  const tabFromUrl = searchParams.get("tab") as MenuId | null;
-  const [activeMenu, setActiveMenu] = useState<MenuId>(tabFromUrl || "team");
+  const tabFromUrl = searchParams.get('tab') as MenuId | null;
+  const [activeMenu, setActiveMenu] = useState<MenuId>(tabFromUrl || 'team');
   const { showToast } = useToast();
   const { user } = useAuth();
   const [isIssuing, setIsIssuing] = useState(false);
 
   // URL ?tab= 파라미터 변경 시 탭 동기화
   useEffect(() => {
-    if (tabFromUrl && ["team", "pipeline", "tuning", "billing"].includes(tabFromUrl)) {
+    if (tabFromUrl && ['team', 'pipeline', 'tuning', 'billing'].includes(tabFromUrl)) {
       setActiveMenu(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -63,28 +63,28 @@ export default function HQCommandCenter() {
   const handleIssueInviteCode = async () => {
     if (isIssuing) return;
     if (!user?.id) {
-      showToast("error", "로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.");
+      showToast('error', '로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.');
       return;
     }
     setIsIssuing(true);
     try {
-      const res = await fetch("/api/auth/invite-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/auth/invite-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ owner_id: user.id, max_uses: 10 }),
       });
       const data = await res.json();
-      if (data.status === "success" && data.invite_code) {
+      if (data.status === 'success' && data.invite_code) {
         await navigator.clipboard.writeText(data.invite_code);
         showToast(
-          "success",
-          `초대 코드가 복사되었습니다: ${data.invite_code} (최대 ${data.max_uses}회 사용)`
+          'success',
+          `초대 코드가 복사되었습니다: ${data.invite_code} (최대 ${data.max_uses}회 사용)`,
         );
       } else {
-        showToast("error", data.message || "초대 코드 발급에 실패했습니다.");
+        showToast('error', data.message || '초대 코드 발급에 실패했습니다.');
       }
     } catch {
-      showToast("error", "서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast('error', '서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setIsIssuing(false);
     }
@@ -107,9 +107,7 @@ export default function HQCommandCenter() {
             <span className="font-black text-sm tracking-widest text-[#e2e8f0] group-hover:text-[#818cf8] transition-colors">
               SPOTTER-HQ
             </span>
-            <span className="text-[10px] text-[#9ca3af]">
-              (주) 제네시스 BBQ 본사
-            </span>
+            <span className="text-[10px] text-[#9ca3af]">(주) 제네시스 BBQ 본사</span>
           </div>
         </div>
 
@@ -120,21 +118,21 @@ export default function HQCommandCenter() {
           </p>
 
           <MenuButton
-            active={activeMenu === "team"}
-            onClick={() => setActiveMenu("team")}
+            active={activeMenu === 'team'}
+            onClick={() => setActiveMenu('team')}
             icon={<Users className="w-4 h-4" />}
             label="팀 및 권역 관리"
             badge="1"
           />
           <MenuButton
-            active={activeMenu === "pipeline"}
-            onClick={() => setActiveMenu("pipeline")}
+            active={activeMenu === 'pipeline'}
+            onClick={() => setActiveMenu('pipeline')}
             icon={<LayoutTemplate className="w-4 h-4" />}
             label="출점 파이프라인"
           />
           <MenuButton
-            active={activeMenu === "tuning"}
-            onClick={() => setActiveMenu("tuning")}
+            active={activeMenu === 'tuning'}
+            onClick={() => setActiveMenu('tuning')}
             icon={<SlidersHorizontal className="w-4 h-4" />}
             label="브랜드 AI 튜닝"
           />
@@ -143,8 +141,8 @@ export default function HQCommandCenter() {
             SETTINGS
           </p>
           <MenuButton
-            active={activeMenu === "billing"}
-            onClick={() => setActiveMenu("billing")}
+            active={activeMenu === 'billing'}
+            onClick={() => setActiveMenu('billing')}
             icon={<CreditCard className="w-4 h-4" />}
             label="결제 및 API 토큰"
           />
@@ -158,9 +156,7 @@ export default function HQCommandCenter() {
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-bold">마스터 계정 (팀장)</span>
-              <span className="text-[10px] text-[#818cf8]">
-                Pro Plan · 340 Tokens
-              </span>
+              <span className="text-[10px] text-[#818cf8]">Pro Plan · 340 Tokens</span>
             </div>
           </div>
         </div>
@@ -173,10 +169,10 @@ export default function HQCommandCenter() {
         {/* 상단 툴바 */}
         <header className="h-20 border-b border-[#3a3633] flex items-center justify-between px-8 bg-[#1e1b18]/80 backdrop-blur-md z-10 shrink-0 mt-24">
           <h2 className="text-lg font-bold flex items-center gap-2">
-            {activeMenu === "team" && "팀 및 권역 관리"}
-            {activeMenu === "pipeline" && "출점 파이프라인 보드"}
-            {activeMenu === "tuning" && "자사 브랜드 AI 튜닝 (Master Data)"}
-            {activeMenu === "billing" && "결제 및 API 토큰 관리"}
+            {activeMenu === 'team' && '팀 및 권역 관리'}
+            {activeMenu === 'pipeline' && '출점 파이프라인 보드'}
+            {activeMenu === 'tuning' && '자사 브랜드 AI 튜닝 (Master Data)'}
+            {activeMenu === 'billing' && '결제 및 API 토큰 관리'}
           </h2>
 
           <div className="flex items-center gap-4">
@@ -190,16 +186,16 @@ export default function HQCommandCenter() {
             </div>
             <button
               onClick={() => {
-                if (activeMenu === "team") {
+                if (activeMenu === 'team') {
                   void handleIssueInviteCode();
                 } else {
-                  showToast("info", "해당 기능은 정식 서비스에서 제공됩니다.");
+                  showToast('info', '해당 기능은 정식 서비스에서 제공됩니다.');
                 }
               }}
-              disabled={activeMenu === "team" && isIssuing}
+              disabled={activeMenu === 'team' && isIssuing}
               className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] disabled:opacity-60 disabled:cursor-wait"
             >
-              {activeMenu === "team" && isIssuing ? (
+              {activeMenu === 'team' && isIssuing ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-[#1e1b18]/40 border-t-[#1e1b18] rounded-full animate-spin" />
                   발급 중...
@@ -207,11 +203,11 @@ export default function HQCommandCenter() {
               ) : (
                 <>
                   <Plus className="w-4 h-4" />
-                  {activeMenu === "team"
-                    ? "초대코드 발급"
-                    : activeMenu === "pipeline"
-                    ? "새 시뮬레이션"
-                    : "저장"}
+                  {activeMenu === 'team'
+                    ? '초대코드 발급'
+                    : activeMenu === 'pipeline'
+                      ? '새 시뮬레이션'
+                      : '저장'}
                 </>
               )}
             </button>
@@ -221,10 +217,10 @@ export default function HQCommandCenter() {
         {/* 렌더링 영역 */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           <div className="max-w-[1920px] w-full mx-auto xl:px-10 2xl:px-16">
-            {activeMenu === "team" && <TeamManagementView />}
-            {activeMenu === "pipeline" && <PipelineKanbanView />}
-            {activeMenu === "tuning" && <BrandTuningView />}
-            {activeMenu === "billing" && <BillingManagementView />}
+            {activeMenu === 'team' && <TeamManagementView />}
+            {activeMenu === 'pipeline' && <PipelineKanbanView />}
+            {activeMenu === 'tuning' && <BrandTuningView />}
+            {activeMenu === 'billing' && <BillingManagementView />}
           </div>
         </div>
       </div>
@@ -253,8 +249,8 @@ function MenuButton({
       onClick={onClick}
       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 group ${
         active
-          ? "bg-[#818cf8]/10 text-[#818cf8]"
-          : "text-[#9ca3af] hover:bg-[#3a3633]/30 hover:text-[#e2e8f0]"
+          ? 'bg-[#818cf8]/10 text-[#818cf8]'
+          : 'text-[#9ca3af] hover:bg-[#3a3633]/30 hover:text-[#e2e8f0]'
       }`}
     >
       <div className="flex items-center gap-3">
@@ -280,7 +276,7 @@ function RegionSelect({
   value,
   onChange,
   options,
-  placeholder = "선택...",
+  placeholder = '선택...',
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -298,13 +294,13 @@ function RegionSelect({
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === 'Escape') setOpen(false);
     };
-    document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
 
@@ -315,16 +311,16 @@ function RegionSelect({
         onClick={() => setOpen((o) => !o)}
         className={`w-full flex items-center justify-between bg-[#2c2825] border rounded-lg px-3.5 py-2.5 text-xs transition-colors ${
           open
-            ? "border-[#818cf8] text-[#e2e8f0]"
+            ? 'border-[#818cf8] text-[#e2e8f0]'
             : value
-            ? "border-[#3a3633] text-[#e2e8f0] hover:border-[#818cf8]/50"
-            : "border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50"
+              ? 'border-[#3a3633] text-[#e2e8f0] hover:border-[#818cf8]/50'
+              : 'border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50'
         }`}
       >
         <span className="font-medium">{value || placeholder}</span>
         <ChevronDown
           className={`w-3.5 h-3.5 transition-transform duration-200 ${
-            open ? "rotate-180 text-[#818cf8]" : "text-[#9ca3af]"
+            open ? 'rotate-180 text-[#818cf8]' : 'text-[#9ca3af]'
           }`}
         />
       </button>
@@ -351,8 +347,8 @@ function RegionSelect({
                       }}
                       className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
                         selected
-                          ? "bg-[#818cf8]/10 text-[#818cf8] font-bold"
-                          : "text-[#e2e8f0] hover:bg-[#2c2825]"
+                          ? 'bg-[#818cf8]/10 text-[#818cf8] font-bold'
+                          : 'text-[#e2e8f0] hover:bg-[#2c2825]'
                       }`}
                     >
                       <span>{opt}</span>
@@ -378,14 +374,16 @@ type Manager = {
   is_active: boolean;
   is_approved: boolean;
   created_at: string;
+  assigned_gu: string | null;
+  assigned_dongs: string[] | null;
 };
 
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "—";
+  if (isNaN(date.getTime())) return '—';
   const diff = Date.now() - date.getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "방금 전";
+  if (minutes < 1) return '방금 전';
   if (minutes < 60) return `${minutes}분 전`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}시간 전`;
@@ -401,16 +399,16 @@ function PendingManagerCard({
   isBusy,
 }: {
   manager: Manager;
-  onApprove: (id: string) => void;
+  onApprove: (id: string, gu?: string, dongs?: string[]) => void;
   onReject: (id: string) => void;
   isBusy: boolean;
 }) {
-  const [pendingGu, setPendingGu] = useState("");
+  const [pendingGu, setPendingGu] = useState('');
   const [pendingDongs, setPendingDongs] = useState<string[]>([]);
 
   const toggleDong = (dong: string) => {
     setPendingDongs((prev) =>
-      prev.includes(dong) ? prev.filter((d) => d !== dong) : [...prev, dong]
+      prev.includes(dong) ? prev.filter((d) => d !== dong) : [...prev, dong],
     );
   };
 
@@ -436,14 +434,18 @@ function PendingManagerCard({
             <p className="text-xs text-[#9ca3af]">
               초대 코드 입력 완료 ({formatRelativeTime(manager.created_at)})
             </p>
-            <p className="text-[10px] text-[#6b7280] font-mono mt-0.5">
-              {manager.email}
-            </p>
+            <p className="text-[10px] text-[#6b7280] font-mono mt-0.5">{manager.email}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onApprove(manager.id)}
+            onClick={() =>
+              onApprove(
+                manager.id,
+                pendingGu || undefined,
+                pendingDongs.length ? pendingDongs : undefined,
+              )
+            }
             disabled={isBusy}
             className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50 disabled:cursor-wait"
             title="승인"
@@ -480,9 +482,7 @@ function PendingManagerCard({
 
         {pendingGu && (
           <div>
-            <p className="text-[10px] text-[#9ca3af] mb-2">
-              {pendingGu} 행정동 선택 (복수 가능)
-            </p>
+            <p className="text-[10px] text-[#9ca3af] mb-2">{pendingGu} 행정동 선택 (복수 가능)</p>
             <div className="flex flex-wrap gap-1.5">
               {REGION_DATA[pendingGu]?.map((dong) => {
                 const selected = pendingDongs.includes(dong);
@@ -492,8 +492,8 @@ function PendingManagerCard({
                     onClick={() => toggleDong(dong)}
                     className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
                       selected
-                        ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
-                        : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
+                        ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                        : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
                     }`}
                   >
                     {dong}
@@ -503,7 +503,7 @@ function PendingManagerCard({
             </div>
             {pendingDongs.length > 0 && (
               <p className="text-[10px] text-[#818cf8] mt-2 font-mono">
-                {pendingDongs.length}개 동 선택됨: {pendingDongs.join(", ")}
+                {pendingDongs.length}개 동 선택됨: {pendingDongs.join(', ')}
               </p>
             )}
           </div>
@@ -524,17 +524,15 @@ function TeamManagementView() {
     if (!user?.id) return;
     setIsLoading(true);
     try {
-      const res = await fetch(
-        `/api/auth/managers?owner_id=${encodeURIComponent(user.id)}`
-      );
+      const res = await fetch(`/api/auth/managers?owner_id=${encodeURIComponent(user.id)}`);
       const data = await res.json();
-      if (data.status === "success" && Array.isArray(data.managers)) {
+      if (data.status === 'success' && Array.isArray(data.managers)) {
         setManagers(data.managers);
       } else {
-        showToast("error", data.message || "매니저 목록 조회에 실패했습니다.");
+        showToast('error', data.message || '매니저 목록 조회에 실패했습니다.');
       }
     } catch {
-      showToast("error", "서버 연결에 실패했습니다.");
+      showToast('error', '서버 연결에 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -545,29 +543,33 @@ function TeamManagementView() {
   }, [fetchManagers]);
 
   const handleApprove = useCallback(
-    async (managerId: string) => {
+    async (managerId: string, gu?: string, dongs?: string[]) => {
       if (!user?.id || busyId) return;
       setBusyId(managerId);
       try {
         const res = await fetch(`/api/auth/manager/${managerId}/approve`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ owner_id: user.id }),
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            owner_id: user.id,
+            assigned_gu: gu || null,
+            assigned_dongs: dongs?.length ? dongs : null,
+          }),
         });
         const data = await res.json();
-        if (data.status === "success") {
-          showToast("success", data.message || "매니저를 승인했습니다.");
+        if (data.status === 'success') {
+          showToast('success', data.message || '매니저를 승인했습니다.');
           fetchManagers();
         } else {
-          showToast("error", data.message || "승인에 실패했습니다.");
+          showToast('error', data.message || '승인에 실패했습니다.');
         }
       } catch {
-        showToast("error", "서버 연결에 실패했습니다.");
+        showToast('error', '서버 연결에 실패했습니다.');
       } finally {
         setBusyId(null);
       }
     },
-    [user?.id, busyId, showToast, fetchManagers]
+    [user?.id, busyId, showToast, fetchManagers],
   );
 
   const handleReject = useCallback(
@@ -576,24 +578,24 @@ function TeamManagementView() {
       setBusyId(managerId);
       try {
         const res = await fetch(`/api/auth/manager/${managerId}/reject`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ owner_id: user.id }),
         });
         const data = await res.json();
-        if (data.status === "success") {
-          showToast("success", data.message || "매니저를 거절했습니다.");
+        if (data.status === 'success') {
+          showToast('success', data.message || '매니저를 거절했습니다.');
           fetchManagers();
         } else {
-          showToast("error", data.message || "거절에 실패했습니다.");
+          showToast('error', data.message || '거절에 실패했습니다.');
         }
       } catch {
-        showToast("error", "서버 연결에 실패했습니다.");
+        showToast('error', '서버 연결에 실패했습니다.');
       } finally {
         setBusyId(null);
       }
     },
-    [user?.id, busyId, showToast, fetchManagers]
+    [user?.id, busyId, showToast, fetchManagers],
   );
 
   const pending = managers.filter((m) => m.is_active && !m.is_approved);
@@ -606,7 +608,7 @@ function TeamManagementView() {
         <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${
-              pending.length > 0 ? "bg-rose-500 animate-pulse" : "bg-[#404040]"
+              pending.length > 0 ? 'bg-rose-500 animate-pulse' : 'bg-[#404040]'
             }`}
           />
           승인 대기 중인 매니저 ({pending.length})
@@ -657,19 +659,13 @@ function TeamManagementView() {
             <tbody className="text-sm divide-y divide-[#3a3633]">
               {active.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="p-8 text-center text-xs text-[#9ca3af]"
-                  >
+                  <td colSpan={5} className="p-8 text-center text-xs text-[#9ca3af]">
                     활성 매니저가 없습니다. 승인 대기 중인 매니저를 승인해보세요.
                   </td>
                 </tr>
               ) : (
                 active.map((m) => (
-                  <tr
-                    key={m.id}
-                    className="hover:bg-[#1e1b18]/50 transition-colors"
-                  >
+                  <tr key={m.id} className="hover:bg-[#1e1b18]/50 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <BrandLogo
@@ -679,11 +675,9 @@ function TeamManagementView() {
                           className="w-8 h-8 text-xs rounded-full"
                         />
                         <div>
-                          <p className="font-bold text-[#e2e8f0]">
-                            {m.contact_name}
-                          </p>
+                          <p className="font-bold text-[#e2e8f0]">{m.contact_name}</p>
                           <p className="text-[10px] text-[#9ca3af]">
-                            {m.position || "Regional Manager"}
+                            {m.position || 'Regional Manager'}
                           </p>
                         </div>
                       </div>
@@ -705,10 +699,7 @@ function TeamManagementView() {
                     <td className="p-4 text-right">
                       <button
                         onClick={() =>
-                          showToast(
-                            "info",
-                            "멤버 관리 기능은 정식 서비스에서 제공됩니다."
-                          )
+                          showToast('info', '멤버 관리 기능은 정식 서비스에서 제공됩니다.')
                         }
                         className="text-[#9ca3af] hover:text-[#818cf8] transition-colors"
                       >
@@ -732,28 +723,28 @@ function TeamManagementView() {
 function PipelineKanbanView() {
   const columns = [
     {
-      title: "상권 분석 중",
+      title: '상권 분석 중',
       count: 2,
-      borderColor: "border-[#3a3633]",
-      titleColor: "text-[#9ca3af]",
+      borderColor: 'border-[#3a3633]',
+      titleColor: 'text-[#9ca3af]',
     },
     {
-      title: "임원 보고 대기",
+      title: '임원 보고 대기',
       count: 1,
-      borderColor: "border-amber-500/50",
-      titleColor: "text-amber-500",
+      borderColor: 'border-amber-500/50',
+      titleColor: 'text-amber-500',
     },
     {
-      title: "가맹점주 제안",
+      title: '가맹점주 제안',
       count: 1,
-      borderColor: "border-[#818cf8]/50",
-      titleColor: "text-[#818cf8]",
+      borderColor: 'border-[#818cf8]/50',
+      titleColor: 'text-[#818cf8]',
     },
     {
-      title: "출점 확정",
+      title: '출점 확정',
       count: 0,
-      borderColor: "border-emerald-500/50",
-      titleColor: "text-emerald-500",
+      borderColor: 'border-emerald-500/50',
+      titleColor: 'text-emerald-500',
     },
   ];
 
@@ -765,9 +756,7 @@ function PipelineKanbanView() {
           className={`flex-1 min-w-[280px] bg-[#2c2825] border border-[#3a3633] rounded-2xl flex flex-col overflow-hidden shadow-lg border-t-2 ${col.borderColor}`}
         >
           <div className="p-4 border-b border-[#3a3633] flex justify-between items-center bg-[#1e1b18]/30">
-            <h4
-              className={`text-xs font-bold uppercase tracking-wider ${col.titleColor}`}
-            >
+            <h4 className={`text-xs font-bold uppercase tracking-wider ${col.titleColor}`}>
               {col.title}
             </h4>
             <span className="w-5 h-5 rounded-full bg-[#1e1b18] flex items-center justify-center text-[10px] font-bold text-[#9ca3af] border border-[#3a3633]">
@@ -814,9 +803,7 @@ function PipelineKanbanView() {
             )}
             {col.count === 0 && (
               <div className="flex-1 flex items-center justify-center border-2 border-dashed border-[#3a3633] rounded-xl m-2 opacity-50 min-h-[120px]">
-                <span className="text-xs font-mono text-[#9ca3af]">
-                  Drag & Drop
-                </span>
+                <span className="text-xs font-mono text-[#9ca3af]">Drag & Drop</span>
               </div>
             )}
           </div>
@@ -841,7 +828,10 @@ function KanbanCard({
 }) {
   const { showToast } = useToast();
   return (
-    <div onClick={() => showToast("info", "칸반 상태 변경은 정식 버전에서 지원됩니다.")} className="bg-[#1e1b18] border border-[#3a3633] rounded-xl p-4 cursor-grab hover:border-[#818cf8]/50 transition-colors shadow-md group">
+    <div
+      onClick={() => showToast('info', '칸반 상태 변경은 정식 버전에서 지원됩니다.')}
+      className="bg-[#1e1b18] border border-[#3a3633] rounded-xl p-4 cursor-grab hover:border-[#818cf8]/50 transition-colors shadow-md group"
+    >
       <div className="flex justify-between items-start mb-3">
         <div>
           <span className="text-[10px] font-mono text-[#9ca3af]">{date}</span>
@@ -860,17 +850,13 @@ function KanbanCard({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-[#2c2825] rounded-lg p-2 border border-[#3a3633] flex flex-col items-center justify-center text-center">
-          <span className="text-[9px] text-[#9ca3af] block mb-0.5">
-            예상 매출
-          </span>
+          <span className="text-[9px] text-[#9ca3af] block mb-0.5">예상 매출</span>
           <span className="text-xs font-black text-white flex items-center gap-1">
             <BarChart3 className="w-3 h-3 text-emerald-500" /> {revenue}
           </span>
         </div>
         <div className="bg-[#2c2825] rounded-lg p-2 border border-[#3a3633] flex flex-col items-center justify-center text-center">
-          <span className="text-[9px] text-[#9ca3af] block mb-0.5">
-            AI 매력도
-          </span>
+          <span className="text-[9px] text-[#9ca3af] block mb-0.5">AI 매력도</span>
           <span className="text-xs font-black text-white flex items-center gap-1">
             <Crosshair className="w-3 h-3 text-amber-500" /> {score} Pts
           </span>
@@ -896,16 +882,14 @@ function BrandTuningView() {
             <Zap className="w-5 h-5" /> Brand AI Weights
           </h3>
           <p className="text-sm text-[#9ca3af] mb-8">
-            우리 프랜차이즈의 특성을 입력하면, AI 예측 모델이 이를 반영하여
-            맞춤형 예상 매출과 리스크를 산출합니다.
+            우리 프랜차이즈의 특성을 입력하면, AI 예측 모델이 이를 반영하여 맞춤형 예상 매출과
+            리스크를 산출합니다.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* 객단가 (AOV) 설정 */}
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-[#e2e8f0]">
-                예상 평균 객단가 (AOV)
-              </label>
+              <label className="text-xs font-bold text-[#e2e8f0]">예상 평균 객단가 (AOV)</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af] font-bold">
                   ₩
@@ -927,16 +911,10 @@ function BrandTuningView() {
                 핵심 타겟 고객층 (Primary Target)
               </label>
               <select className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm font-medium text-[#e2e8f0] focus:border-[#818cf8] outline-none appearance-none">
-                <option value="2030f">
-                  2030 여성 (트렌드/디저트)
-                </option>
-                <option value="2030m">
-                  2030 남성/여성 (가성비/식사)
-                </option>
+                <option value="2030f">2030 여성 (트렌드/디저트)</option>
+                <option value="2030m">2030 남성/여성 (가성비/식사)</option>
                 <option value="3040">3040 직장인 (회식/저녁)</option>
-                <option value="family">
-                  주거 배후세대 (가족/배달)
-                </option>
+                <option value="family">주거 배후세대 (가족/배달)</option>
               </select>
               <p className="text-[10px] text-[#9ca3af]">
                 선택한 타겟층의 해당 상권 거주/유동 비율을 우선 분석합니다.
@@ -946,26 +924,18 @@ function BrandTuningView() {
             {/* 배달 vs 홀 비중 슬라이더 */}
             <div className="flex flex-col gap-4 md:col-span-2 mt-4 p-5 bg-[#1e1b18] border border-[#3a3633] rounded-xl">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-[#e2e8f0]">
-                  매출 비중 (홀 vs 배달)
-                </label>
+                <label className="text-xs font-bold text-[#e2e8f0]">매출 비중 (홀 vs 배달)</label>
                 <span className="text-xs font-mono font-bold text-[#818cf8]">
                   홀 30% : 배달 70%
                 </span>
               </div>
 
               <div className="relative w-full h-3 bg-[#3a3633] rounded-full overflow-hidden flex cursor-pointer">
-                <div
-                  className="h-full bg-[#3a3633]"
-                  style={{ width: "30%" }}
-                />
-                <div
-                  className="h-full bg-[#818cf8]"
-                  style={{ width: "70%" }}
-                />
+                <div className="h-full bg-[#3a3633]" style={{ width: '30%' }} />
+                <div className="h-full bg-[#818cf8]" style={{ width: '70%' }} />
                 <div
                   className="absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-[#818cf8] transition-transform hover:scale-110"
-                  style={{ left: "calc(30% - 10px)" }}
+                  style={{ left: 'calc(30% - 10px)' }}
                 />
               </div>
 
@@ -977,7 +947,10 @@ function BrandTuningView() {
           </div>
 
           <div className="mt-8 flex justify-end">
-            <button onClick={() => showToast("info", "AI 모델 가중치 업데이트 기능은 준비 중입니다.")} className="px-6 py-2.5 bg-[#818cf8] text-[#1e1b18] text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-[#6366f1] transition-colors">
+            <button
+              onClick={() => showToast('info', 'AI 모델 가중치 업데이트 기능은 준비 중입니다.')}
+              className="px-6 py-2.5 bg-[#818cf8] text-[#1e1b18] text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-[#6366f1] transition-colors"
+            >
               AI 모델 업데이트 적용
             </button>
           </div>
@@ -992,8 +965,8 @@ function BrandTuningView() {
    ═══════════════════════════════════════════════════════ */
 function BillingManagementView() {
   const { showToast } = useToast();
-  const currentPlan = "Growth";
-  const billingCycle = "2026. 04. 10 ~ 2026. 05. 09";
+  const currentPlan = 'Growth';
+  const billingCycle = '2026. 04. 10 ~ 2026. 05. 09';
   const totalTokens = 1000;
   const usedTokens = 660;
   const remainTokens = totalTokens - usedTokens;
@@ -1009,10 +982,14 @@ function BillingManagementView() {
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-6 shadow-lg flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-[#818cf8]/10 blur-[40px] rounded-full pointer-events-none" />
           <div>
-            <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">Current Plan</h3>
+            <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">
+              Current Plan
+            </h3>
             <div className="flex items-end gap-3 mb-4">
               <h2 className="text-3xl font-black text-white">{currentPlan}</h2>
-              <span className="px-2 py-1 bg-[#818cf8]/20 text-[#818cf8] border border-[#818cf8]/30 rounded-md text-[10px] font-bold mb-1">Active</span>
+              <span className="px-2 py-1 bg-[#818cf8]/20 text-[#818cf8] border border-[#818cf8]/30 rounded-md text-[10px] font-bold mb-1">
+                Active
+              </span>
             </div>
             <div className="flex flex-col gap-2 mt-6">
               <div className="flex justify-between items-center border-b border-[#3a3633] pb-2">
@@ -1031,7 +1008,10 @@ function BillingManagementView() {
               </div>
             </div>
           </div>
-          <button onClick={() => showToast("info", "결제 및 플랜 변경은 정식 오픈 후 지원됩니다.")} className="w-full mt-6 py-2.5 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] text-[#e2e8f0] text-xs font-bold rounded-lg transition-colors">
+          <button
+            onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
+            className="w-full mt-6 py-2.5 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] text-[#e2e8f0] text-xs font-bold rounded-lg transition-colors"
+          >
             결제 수단 관리 / 영수증
           </button>
         </div>
@@ -1041,10 +1021,14 @@ function BillingManagementView() {
           <div>
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">API Tokens Usage</h3>
+                <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">
+                  API Tokens Usage
+                </h3>
                 <h2 className="text-2xl font-black text-white">
-                  {usedTokens.toLocaleString()}{" "}
-                  <span className="text-lg text-[#9ca3af] font-medium">/ {totalTokens.toLocaleString()}</span>
+                  {usedTokens.toLocaleString()}{' '}
+                  <span className="text-lg text-[#9ca3af] font-medium">
+                    / {totalTokens.toLocaleString()}
+                  </span>
                 </h2>
               </div>
               <div className="text-right">
@@ -1063,8 +1047,12 @@ function BillingManagementView() {
               />
             </div>
             <div className="flex justify-between items-center mt-2 px-1">
-              <span className="text-[10px] text-[#818cf8] font-bold">{progressPercent.toFixed(1)}% Used</span>
-              <span className="text-[10px] text-[#9ca3af]">{remainTokens.toLocaleString()} Tokens Left</span>
+              <span className="text-[10px] text-[#818cf8] font-bold">
+                {progressPercent.toFixed(1)}% Used
+              </span>
+              <span className="text-[10px] text-[#9ca3af]">
+                {remainTokens.toLocaleString()} Tokens Left
+              </span>
             </div>
           </div>
 
@@ -1075,10 +1063,15 @@ function BillingManagementView() {
               </div>
               <div>
                 <p className="text-xs font-bold text-white">토큰이 부족하신가요?</p>
-                <p className="text-[10px] text-[#9ca3af]">플랜을 업그레이드하거나 일회성 토큰을 충전하세요.</p>
+                <p className="text-[10px] text-[#9ca3af]">
+                  플랜을 업그레이드하거나 일회성 토큰을 충전하세요.
+                </p>
               </div>
             </div>
-            <button onClick={() => showToast("info", "토큰 충전은 정식 오픈 후 지원됩니다.")} className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] transition-colors">
+            <button
+              onClick={() => showToast('info', '토큰 충전은 정식 오픈 후 지원됩니다.')}
+              className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] transition-colors"
+            >
               즉시 충전하기
             </button>
           </div>
@@ -1090,9 +1083,25 @@ function BillingManagementView() {
         <h3 className="text-sm font-bold text-[#e2e8f0] mb-4">플랜 업그레이드</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
-            { id: "Starter", price: "₩49,000", tokens: "100 Tokens/mo", target: "소규모 점포개발팀" },
-            { id: "Growth", price: "₩149,000", tokens: "1,000 Tokens/mo", target: "중견 프랜차이즈 본사", isPopular: true },
-            { id: "Enterprise", price: "Custom", tokens: "Unlimited Tokens", target: "대형 프랜차이즈 및 컨설팅사" },
+            {
+              id: 'Starter',
+              price: '₩49,000',
+              tokens: '100 Tokens/mo',
+              target: '소규모 점포개발팀',
+            },
+            {
+              id: 'Growth',
+              price: '₩149,000',
+              tokens: '1,000 Tokens/mo',
+              target: '중견 프랜차이즈 본사',
+              isPopular: true,
+            },
+            {
+              id: 'Enterprise',
+              price: 'Custom',
+              tokens: 'Unlimited Tokens',
+              target: '대형 프랜차이즈 및 컨설팅사',
+            },
           ].map((plan) => (
             <div
               key={plan.id}
@@ -1102,13 +1111,15 @@ function BillingManagementView() {
                 className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                 style={{
                   background:
-                    "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
                 }}
               />
               <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] flex flex-col p-6 transition-colors duration-500 border border-[#3a3633] group-hover:border-transparent">
                 {plan.isPopular && (
                   <div className="absolute top-4 right-4 px-2.5 py-0.5 bg-[#3a3633] border border-[#818cf8]/30 rounded-full">
-                    <span className="text-[9px] font-bold text-[#818cf8] tracking-wider">MOST POPULAR</span>
+                    <span className="text-[9px] font-bold text-[#818cf8] tracking-wider">
+                      MOST POPULAR
+                    </span>
                   </div>
                 )}
                 <h4 className="text-lg font-bold text-white mb-1">{plan.id}</h4>
@@ -1134,7 +1145,12 @@ function BillingManagementView() {
                       현재 사용 중인 플랜
                     </button>
                   ) : (
-                    <button onClick={() => showToast("info", "결제 및 플랜 변경은 정식 오픈 후 지원됩니다.")} className="w-full py-3 bg-[#1e1b18] text-[#9ca3af] border border-[#3a3633] text-xs font-bold rounded-xl group-hover:bg-[#818cf8] group-hover:text-[#1e1b18] group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(129,140,248,0)] group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)]">
+                    <button
+                      onClick={() =>
+                        showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')
+                      }
+                      className="w-full py-3 bg-[#1e1b18] text-[#9ca3af] border border-[#3a3633] text-xs font-bold rounded-xl group-hover:bg-[#818cf8] group-hover:text-[#1e1b18] group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(129,140,248,0)] group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)]"
+                    >
                       이 플랜으로 변경
                     </button>
                   )}

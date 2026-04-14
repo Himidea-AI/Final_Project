@@ -326,6 +326,8 @@ async def get_managers(owner_id: str):
 
 class ManagerApprovalBody(BaseModel):
     owner_id: str
+    assigned_gu: str | None = None
+    assigned_dongs: list[str] | None = None
 
 
 @app.patch("/auth/manager/{manager_id}/approve")
@@ -333,7 +335,9 @@ async def approve_manager(manager_id: str, body: ManagerApprovalBody):
     """팀장이 매니저 가입을 승인"""
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
-        result = await run_in_threadpool(auth.approve_manager, body.owner_id, manager_id)
+        result = await run_in_threadpool(
+            auth.approve_manager, body.owner_id, manager_id, body.assigned_gu, body.assigned_dongs
+        )
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
