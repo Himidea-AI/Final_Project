@@ -372,10 +372,10 @@ class AuthService:
                     text("""
                         INSERT INTO manager_users (
                             id, owner_id, invite_code_id, contact_name, position,
-                            email, phone, password_hash, is_active
+                            email, phone, password_hash, is_active, is_approved
                         ) VALUES (
                             :id, :owner_id, :invite_code_id, :contact_name, :position,
-                            :email, :phone, :password_hash, true
+                            :email, :phone, :password_hash, true, false
                         )
                     """),
                     {
@@ -426,7 +426,7 @@ class AuthService:
                 row = conn.execute(
                     text("""
                         SELECT m.id, m.owner_id, m.contact_name, m.position, m.email, m.phone,
-                               m.password_hash, m.is_active,
+                               m.password_hash, m.is_active, m.is_approved,
                                u.company_name, u.biz_number, u.store_count, u.plan
                         FROM manager_users m
                         JOIN users u ON m.owner_id = u.id
@@ -442,6 +442,9 @@ class AuthService:
 
                 if not mgr["is_active"]:
                     return {"status": "error", "message": "비활성화된 계정입니다."}
+
+                if not mgr["is_approved"]:
+                    return {"status": "error", "message": "팀장의 승인을 기다리고 있습니다."}
 
                 if not _verify_password(password, mgr["password_hash"]):
                     return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
@@ -460,6 +463,104 @@ class AuthService:
                         "store_count": str(mgr["store_count"]) if mgr["store_count"] is not None else "",
                         "plan": mgr["plan"],
                     },
+                }
+        finally:
+            engine.dispose()
+
+    # ------------------------------------------------------------------
+    # 매니저 승인 관리
+    # ------------------------------------------------------------------
+
+    def get_managers(self, owner_id: str) -> dict:
+        """팀장 소속 매니저 전체 목록을 조회한다 (승인 상태 포함)."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                rows = conn.execute(
+                    text("""
+                        SELECT id, contact_name, position, email, phone,
+                               is_active, is_approved, created_at
+                        FROM manager_users
+                        WHERE owner_id = :owner_id
+                        ORDER BY created_at DESC
+                    """),
+                    {"owner_id": owner_id},
+                ).fetchall()
+
+                managers = [
+                    {
+                        "id": str(r._mapping["id"]),
+                        "contact_name": r._mapping["contact_name"],
+                        "position": r._mapping["position"],
+                        "email": r._mapping["email"],
+                        "phone": r._mapping["phone"],
+                        "is_active": r._mapping["is_active"],
+                        "is_approved": r._mapping["is_approved"],
+                        "created_at": str(r._mapping["created_at"]),
+                    }
+                    for r in rows
+                ]
+
+                return {"status": "success", "managers": managers}
+        finally:
+            engine.dispose()
+
+    def approve_manager(self, owner_id: str, manager_id: str) -> dict:
+        """팀장이 매니저 가입을 승인한다."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT id, contact_name, email FROM manager_users "
+                        "WHERE id = :manager_id AND owner_id = :owner_id"
+                    ),
+                    {"manager_id": manager_id, "owner_id": owner_id},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "해당 매니저를 찾을 수 없습니다."}
+
+                conn.execute(
+                    text("UPDATE manager_users SET is_approved = true WHERE id = :id"),
+                    {"id": manager_id},
+                )
+                conn.commit()
+
+                mgr = row._mapping
+                return {
+                    "status": "success",
+                    "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 승인했습니다.",
+                }
+        finally:
+            engine.dispose()
+
+    def reject_manager(self, owner_id: str, manager_id: str) -> dict:
+        """팀장이 매니저 가입을 거절한다 (비활성화)."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT id, contact_name, email FROM manager_users "
+                        "WHERE id = :manager_id AND owner_id = :owner_id"
+                    ),
+                    {"manager_id": manager_id, "owner_id": owner_id},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "해당 매니저를 찾을 수 없습니다."}
+
+                conn.execute(
+                    text("UPDATE manager_users SET is_active = false WHERE id = :id"),
+                    {"id": manager_id},
+                )
+                conn.commit()
+
+                mgr = row._mapping
+                return {
+                    "status": "success",
+                    "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 거절했습니다.",
                 }
         finally:
             engine.dispose()
