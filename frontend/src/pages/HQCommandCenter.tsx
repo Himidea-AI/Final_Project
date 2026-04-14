@@ -13,6 +13,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "../components/Toast";
+import { BrandLogo } from "../components/BrandLogo";
 import {
   Building2,
   Users,
@@ -61,9 +62,11 @@ export default function HQCommandCenter() {
       <div className="w-64 bg-[#2c2825] border-r border-[#3a3633] flex flex-col z-20 shrink-0">
         {/* 워크스페이스 로고 영역 */}
         <div className="h-20 flex items-center px-6 border-b border-[#3a3633] gap-3 cursor-pointer group mt-24">
-          <div className="w-8 h-8 rounded-lg bg-[#818cf8]/20 border border-[#818cf8]/50 flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-[#818cf8]" />
-          </div>
+          <BrandLogo
+            name="(주) 제네시스 BBQ 본사"
+            isUser={false}
+            className="w-8 h-8 text-xs rounded-lg"
+          />
           <div className="flex flex-col">
             <span className="font-black text-sm tracking-widest text-[#e2e8f0] group-hover:text-[#818cf8] transition-colors">
               SPOTTER-HQ
@@ -257,9 +260,12 @@ function TeamManagementView() {
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-lg shadow-rose-500/5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-[#1e1b18] border border-[#3a3633] flex items-center justify-center font-bold text-[#9ca3af]">
-                최
-              </div>
+              <BrandLogo
+                name="최점포 매니저"
+                isUser={true}
+                tone="muted"
+                className="w-10 h-10 text-sm rounded-full"
+              />
               <div>
                 <p className="text-sm font-bold text-[#e2e8f0]">최점포 매니저</p>
                 <p className="text-xs text-[#9ca3af]">초대 코드 입력 완료 (10분 전)</p>
@@ -341,9 +347,12 @@ function TeamManagementView() {
               <tr className="hover:bg-[#1e1b18]/50 transition-colors">
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#818cf8]/20 flex items-center justify-center text-[#818cf8] font-bold text-xs">
-                      김
-                    </div>
+                    <BrandLogo
+                      name="김마포 매니저"
+                      isUser={true}
+                      tone="accent"
+                      className="w-8 h-8 text-xs rounded-full"
+                    />
                     <div>
                       <p className="font-bold text-[#e2e8f0]">
                         김마포 매니저
@@ -385,9 +394,12 @@ function TeamManagementView() {
               <tr className="hover:bg-[#1e1b18]/50 transition-colors">
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#3a3633] flex items-center justify-center text-[#9ca3af] font-bold text-xs">
-                      이
-                    </div>
+                    <BrandLogo
+                      name="이서초 매니저"
+                      isUser={true}
+                      tone="muted"
+                      className="w-8 h-8 text-xs rounded-full"
+                    />
                     <div>
                       <p className="font-bold text-[#e2e8f0]">
                         이서초 매니저
@@ -554,12 +566,13 @@ function KanbanCard({
             {district} 후보지
           </h5>
         </div>
-        <div
-          className="w-6 h-6 rounded-full bg-[#2c2825] flex items-center justify-center text-[8px] font-bold text-[#9ca3af] border border-[#3a3633]"
+        <BrandLogo
+          name={manager}
+          isUser={true}
+          tone="muted"
+          className="w-6 h-6 text-[9px] rounded-full"
           title={manager}
-        >
-          {manager[0]}
-        </div>
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
