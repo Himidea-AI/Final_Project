@@ -82,7 +82,7 @@ GOLMOK_FEATURES = [
     "store_normal",  # 골목상권 일반 점포 수
     "floating_pop",  # 골목상권 유동인구
     "pop_per_store_gm",  # 골목상권 점포당 유동인구 (파생)
-    "survival_5y",  # 5년 생존율
+    "normal_ratio",  # 일반 점포 비율 (store_normal / store_total)
 ]
 
 ALL_FEATURES = SALES_FEATURES + STORE_FEATURES + POP_FEATURES + RENT_FEATURES + EXTRA_FEATURES + GOLMOK_FEATURES
@@ -460,8 +460,8 @@ def build_timeseries(
     if golmok_csv.exists() and "quarter" in df.columns and "dong_code" in df.columns:
         gm = pd.read_csv(golmok_csv, dtype={"dong_code": str, "industry_code": str})
 
-        # 업종별 피처 (store_normal, store_franchise, survival_5y)
-        gm_ind_cols = ["store_normal", "store_franchise", "survival_5y"]
+        # 업종별 피처 (store_normal, store_franchise, store_total)
+        gm_ind_cols = ["store_normal", "store_franchise", "store_total"]
         gm_ind_avail = [c for c in gm_ind_cols if c in gm.columns]
         if gm_ind_avail:
             gm_ind = gm[["quarter", "dong_code", "industry_code"] + gm_ind_avail].drop_duplicates(
@@ -474,13 +474,11 @@ def build_timeseries(
             gm_dong = gm[["quarter", "dong_code", "floating_pop"]].drop_duplicates(subset=["quarter", "dong_code"])
             df = df.merge(gm_dong, on=["quarter", "dong_code"], how="left")
 
-        # 파생 피처: 점포당 유동인구
-        if "floating_pop" in df.columns:
-            store_total = gm[["quarter", "dong_code", "industry_code", "store_total"]].drop_duplicates(
-                subset=["quarter", "dong_code", "industry_code"]
-            )
-            df = df.merge(store_total, on=["quarter", "dong_code", "industry_code"], how="left")
-            df["pop_per_store_gm"] = np.where(df["store_total"] > 0, df["floating_pop"] / df["store_total"], 0)
+        # 파생 피처: 일반 점포 비율 + 점포당 유동인구
+        if "store_total" in df.columns:
+            df["normal_ratio"] = np.where(df["store_total"] > 0, df["store_normal"] / df["store_total"], 0)
+            if "floating_pop" in df.columns:
+                df["pop_per_store_gm"] = np.where(df["store_total"] > 0, df["floating_pop"] / df["store_total"], 0)
             df = df.drop(columns=["store_total"], errors="ignore")
 
         # 골목상권 피처 보간 (그룹별 선형 보간 → forward/backward fill)
