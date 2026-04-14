@@ -32,6 +32,7 @@ services:
       - ./backend:/app
       - ./data:/app/data
       - ./models:/app/models
+      - ./validation:/app/validation
 
   # PostgreSQL — AWS RDS로 이관 완료 (로컬 DB 불필요)
   # 접속 정보는 .env의 POSTGRES_URL 참조
