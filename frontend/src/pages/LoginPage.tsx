@@ -8,7 +8,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2, ChevronRight } from "lucide-react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth, loginWithFallback } from "../auth/AuthContext";
 import { useToast } from "../components/Toast";
 import { useTransition } from "../App";
 
@@ -29,25 +29,41 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
     if (!canSubmit || isLoading) return;
     setError("");
     setIsLoading(true);
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (data.status === "success") {
-        auth.login(data.user, data.brand || null);
-        showToast("success", `환영합니다! ${data.user?.company_name || "SPOTTER"} 엔진에 연결되었습니다.`);
-        nav("/simulator");
+
+    const result = await loginWithFallback(email, password);
+
+    if (result.success) {
+      if (result.role === "master") {
+        auth.login(result.user, result.brand);
+        showToast(
+          "success",
+          `환영합니다! ${result.user.company_name || "SPOTTER"} 엔진에 연결되었습니다.`
+        );
+        nav("/hq");
       } else {
-        setError(data.message || "이메일 또는 비밀번호가 올바르지 않습니다.");
+        auth.login(result.user, null);
+        showToast(
+          "success",
+          `${result.user.contact_name || "매니저"}님, 환영합니다.`
+        );
+        nav("/simulator");
       }
-    } catch {
-      setError("서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
-    } finally {
-      setIsLoading(false);
+    } else {
+      if (result.reason === "pending_approval") {
+        setError(
+          result.message ||
+            "팀장의 승인을 기다리고 있습니다. 잠시 후 다시 시도해주세요."
+        );
+      } else if (result.reason === "network_error") {
+        setError("서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      } else {
+        setError(
+          result.message || "이메일 또는 비밀번호가 올바르지 않습니다."
+        );
+      }
     }
+
+    setIsLoading(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
