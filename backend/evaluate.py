@@ -111,10 +111,35 @@ def predict_agent(inputs: dict) -> dict:
     final_report = analysis.get("final_report", {})
     market_summary = analysis.get("market_summary", "")
     market_report = analysis.get("market_report", "")
+    population_report = analysis.get("population_report", "")
+    legal_risks = analysis.get("legal_risks", [])
+
+    # 수익 시뮬레이션
+    sim = final_report.get("profit_simulation", {})
+    sim_text = ""
+    if sim:
+        sim_text = (
+            f"[수익 시뮬레이션]\n"
+            f"- 월 예상 매출: {sim.get('monthly_revenue', 0):,}원\n"
+            f"- 월 순이익: {sim.get('net_profit', 0):,}원\n"
+            f"- 수익률: {sim.get('margin_rate', 0)}%"
+        )
+
+    # 법률 리스크 요약
+    legal_text = ""
+    if legal_risks:
+        risk_lines = "\n".join(
+            f"  - {r.get('type', '?')} [{r.get('level', '?')}]: {r.get('summary', '')}"
+            for r in legal_risks[:5]
+        )
+        legal_text = f"[법률 리스크]\n{risk_lines}"
 
     output_text = "\n\n".join(filter(None, [
         market_summary,
-        f"[상권 분석]\n{market_report[:500]}" if market_report else "",
+        f"[상권 분석]\n{market_report}" if market_report else "",
+        f"[유동인구 분석]\n{population_report}" if population_report else "",
+        legal_text,
+        sim_text,
         f"[최종 제언]\n{final_report.get('final_recommendation', '')}" if final_report else "",
     ]))
 

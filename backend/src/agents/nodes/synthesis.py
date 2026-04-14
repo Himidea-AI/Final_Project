@@ -43,7 +43,7 @@ async def synthesis_node(state: AgentState) -> dict:
         f"4. 유동인구 분석 요약: {population_report[:500]}\n"
         f"5. 법률 리스크 검토 결과 (14개 항목):\n{legal_summary_for_llm}\n\n"
         "### 요구사항:\n"
-        "1. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제언을 하십시오.\n"
+        "1. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제안을 하십시오.\n"
         "2. 반드시 FinalStrategyResult 스키마에 맞춰 정형 데이터를 응답하십시오.\n"
         f"3. 종합 법률 리스크 등급은 반드시 '{overall_legal_risk}'를 반영하십시오.\n"
     )

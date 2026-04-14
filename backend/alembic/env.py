@@ -6,6 +6,7 @@ from alembic import context
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from database.models import Base
 from config.settings import settings
@@ -15,7 +16,9 @@ from config.settings import settings
 config = context.config
 
 if settings.postgres_url:
-    config.set_main_option("sqlalchemy.url", settings.postgres_url)
+    # POSTGRES_URL may contain percent-encoded characters like %23.
+    # Alembic's config parser treats % as interpolation syntax, so escape it.
+    config.set_main_option("sqlalchemy.url", settings.postgres_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -71,9 +74,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

@@ -15,6 +15,7 @@ import asyncio
 import concurrent.futures
 import json
 import os
+import re
 
 from src.schemas.state import AgentState
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
@@ -1046,68 +1047,112 @@ async def _run_legal_pipeline(state: dict) -> dict:
         _safe_ftc(_phase1_results[17]),
     )
 
-    # Phase 2: LLM check 함수 12개 병렬 실행 (Phase 1 결과 docs 전달)
-    # return_exceptions=True — 한 LLM 실패해도 나머지 결과 유지
-    _phase2_raw = await asyncio.gather(
-        check_franchise_law(state, franchise_docs + franchise_prec),
-        check_commercial_lease_law(state, lease_docs + lease_prec),
-        check_food_hygiene(state, food_docs + food_prec),
-        check_safety_regulation(state, safety_docs + safety_prec),
-        check_building_law(state, building_docs),
-        check_fire_safety_law(state, fire_docs),
-        check_labor_law(state, labor_docs),
-        check_vat_law(state, vat_docs),
-        check_privacy_law(state, privacy_docs),
-        check_accessibility_law(state, accessibility_docs),
-        check_sewage_law(state, sewage_docs),
-        check_fair_trade_law(state, fair_trade_docs),
-        return_exceptions=True,
+    # Phase 2: 12개 법률 항목을 단일 LLM 배치 호출로 처리 (12회 → 1회)
+    _BATCH_TYPES = [
+        "franchise_law", "commercial_lease_law", "food_hygiene", "safety_regulation",
+        "building_law", "fire_safety_law", "labor_law", "vat_law",
+        "privacy_law", "accessibility_law", "sewage_law", "fair_trade_law",
+    ]
+    _BATCH_LABELS = {
+        "franchise_law": "가맹사업법 (영업지역 보장·정보공개서)",
+        "commercial_lease_law": "상가임대차보호법 (권리금·계약갱신)",
+        "food_hygiene": "식품위생법 (영업신고·위생교육)",
+        "safety_regulation": "다중이용업소법 (소방·안전시설)",
+        "building_law": "건축법 (건축물 용도·용도변경)",
+        "fire_safety_law": "소방시설법 (스프링클러·소방안전관리자)",
+        "labor_law": "근로기준법 (근로계약서·최저임금·4대보험)",
+        "vat_law": "부가가치세법 (사업자등록·과세유형)",
+        "privacy_law": "개인정보보호법 (고객정보·CCTV)",
+        "accessibility_law": "장애인편의증진법 (편의시설 설치)",
+        "sewage_law": "하수도법 (오수처리·유류분리기)",
+        "fair_trade_law": "공정거래법 (불공정거래·거래강제)",
+    }
+
+    # 모든 RAG 문서를 법률별로 정리하여 컨텍스트 구성
+    docs_context = ""
+    docs_map = {
+        "franchise_law": franchise_docs + franchise_prec,
+        "commercial_lease_law": lease_docs + lease_prec,
+        "food_hygiene": food_docs + food_prec,
+        "safety_regulation": safety_docs + safety_prec,
+        "building_law": building_docs,
+        "fire_safety_law": fire_docs,
+        "labor_law": labor_docs,
+        "vat_law": vat_docs,
+        "privacy_law": privacy_docs,
+        "accessibility_law": accessibility_docs,
+        "sewage_law": sewage_docs,
+        "fair_trade_law": fair_trade_docs,
+    }
+    for law_type, docs in docs_map.items():
+        if docs:
+            snippets = " / ".join(d["content"][:150] for d in docs[:2])
+            docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
+
+    if len(docs_context) > 5000:
+        docs_context = docs_context[:5000] + "..."
+
+    items_desc = "\n".join(
+        f'{i+1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES)
+    )
+    batch_prompt = (
+        f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
+        f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
+        f"위 자료를 바탕으로 아래 12개 법률 항목의 창업 리스크를 평가하세요.\n"
+        f"리스크 레벨: safe(문제없음) / caution(주의필요) / danger(위반위험)\n\n"
+        f"[평가 항목]\n{items_desc}\n\n"
+        "반드시 아래 형식의 JSON 배열만 출력하세요 (설명 없이 배열만):\n"
+        '[{"type":"franchise_law","level":"caution","summary":"요약 1~2문장","recommendation":"권고사항"},'
+        '{"type":"commercial_lease_law",...}, ...]'
     )
 
-    # Phase 2 예외 결과를 caution dict로 대체
-    _DEFAULT_RISK_TYPES = [
-        "franchise_law", "commercial_lease", "food_hygiene", "safety_regulation",
-        "building_law", "fire_safety", "labor_law", "vat_law",
-        "privacy_law", "accessibility_law", "sewage_law", "fair_trade",
-    ]
+    batch_results: list[dict] = []
+    try:
+        raw = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, batch_prompt)
+        json_match = re.search(r"\[.*\]", raw, re.DOTALL)
+        if json_match:
+            parsed = json.loads(json_match.group())
+            seen = set()
+            for r in parsed:
+                t = r.get("type", "")
+                if t in _BATCH_TYPES and t not in seen:
+                    r.setdefault("articles", [])
+                    r.setdefault("level", "caution")
+                    r.setdefault("summary", "")
+                    r.setdefault("recommendation", "")
+                    batch_results.append(r)
+                    seen.add(t)
+        # 누락된 항목 caution으로 보완
+        seen = {r["type"] for r in batch_results}
+        for t in _BATCH_TYPES:
+            if t not in seen:
+                batch_results.append({"type": t, "level": "caution", "summary": "LLM 응답 누락 — 수동 검토 필요", "articles": [], "recommendation": "전문가 상담 권장"})
+        print(f"[legal_node] 배치 LLM 완료 — {len(batch_results)}개 항목 처리")
+    except Exception as e:
+        print(f"[legal_node] 배치 LLM 실패: {e} — 전체 caution 처리")
+        batch_results = [
+            {"type": t, "level": "caution", "summary": f"LLM 분석 실패: {e}", "articles": [], "recommendation": "전문가 상담 권장"}
+            for t in _BATCH_TYPES
+        ]
 
-    def _safe_risk(r: object, type_name: str) -> dict:
-        if isinstance(r, Exception):
-            print(f"[legal_node] Phase 2 LLM 실패 ({type_name}, 무시하고 계속): {r}")
-            return {"type": type_name, "level": "caution", "summary": f"검토 중 오류 발생: {r}", "articles": [], "recommendation": ""}
-        return r  # type: ignore[return-value]
-
-    _phase2_results = list(_phase2_raw)
-    (
-        franchise_risk,
-        lease_risk,
-        food_risk,
-        safety_risk,
-        building_risk,
-        fire_risk,
-        labor_risk,
-        vat_risk,
-        privacy_risk,
-        accessibility_risk,
-        sewage_risk,
-        fair_trade_risk,
-    ) = [_safe_risk(_phase2_results[i], _DEFAULT_RISK_TYPES[i]) for i in range(12)]
+    # batch_results를 타입별로 인덱싱
+    _batch_map = {r["type"]: r for r in batch_results}
 
     risks = [
-        franchise_risk,
-        lease_risk,
+        _batch_map.get("franchise_law", {"type": "franchise_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("commercial_lease_law", {"type": "commercial_lease_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
         zoning_result,
-        food_risk,
-        safety_risk,
+        _batch_map.get("food_hygiene", {"type": "food_hygiene", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("safety_regulation", {"type": "safety_regulation", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
         ftc_result,
-        building_risk,
-        fire_risk,
-        labor_risk,
-        vat_risk,
-        privacy_risk,
-        accessibility_risk,
-        sewage_risk,
-        fair_trade_risk,
+        _batch_map.get("building_law", {"type": "building_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("fire_safety_law", {"type": "fire_safety_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("labor_law", {"type": "labor_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("vat_law", {"type": "vat_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("privacy_law", {"type": "privacy_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("accessibility_law", {"type": "accessibility_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("sewage_law", {"type": "sewage_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get("fair_trade_law", {"type": "fair_trade_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
     ]
 
     # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe

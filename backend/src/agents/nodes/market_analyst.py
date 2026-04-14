@@ -74,7 +74,7 @@ async def market_analyst_node(state: AgentState) -> dict:
         "2. 구조화 데이터: 리포트의 가장 마지막에 아래와 같이 JSON 형식을 포함할 것.\n"
         "   - 형식: [JSON_START]{ \"grade\": \"등급\", \"growth_rate\": 수치, \"competition_score\": 수치, \"rent_affordability\": \"상타\" }[JSON_END]\n"
         "   - 등급(grade)은 반드시 [EXCELLENT, GOOD, NORMAL, RISKY] 중 대문자로 하나를 선택할 것.\n"
-        "3. 어조: 날카롭고 신뢰감 있는 전문가의 말투를 유지하세요."
+        "3. 어조: 비유적 표현이나 문학적 수사 없이, 구체적인 수치와 사실 중심으로 명확하고 이해하기 쉽게 작성하세요. 예비 창업자가 바로 이해할 수 있는 직관적인 표현을 사용하세요."
     )
 
     try:
