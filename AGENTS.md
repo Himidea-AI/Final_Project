@@ -20,50 +20,69 @@
 | A1 — 데이터 엔지니어 | 찬영 | `backend/src/services/`, `backend/src/database/`, `data/` |
 | A2 — RAG + 법률 | 봉환 | `backend/src/chains/`, `backend/src/database/vector_db.py`, `backend/src/services/ftc_franchise.py` |
 
-### 트랙 A-1 추가 — 딥러닝 예측 모델 (찬영 겸임)
+### 트랙 A-1 추가 — 딥러닝 예측 모델 (찬영 + 수지니 공동)
 
-A1 찬영이 데이터 엔지니어링과 함께 딥러닝 예측 모델을 담당합니다.
+A1 찬영이 데이터 엔지니어링을, B2 수지니가 LSTM 모델 학습/최적화/검증을 함께 담당합니다.
 
 | Task | 담당자 | 디렉토리 | 산출물 |
 |------|--------|---------|--------|
 | 서울 전체 데이터 전처리 | 찬영 (A1) | `data/pipeline/`, `data/processed/` | 사전학습용 CSV + DB 적재 |
-| LSTM 매출 예측 (사전학습+파인튜닝) | 찬영 (A1) | `models/lstm_forecast/` | 월 예상매출 |
-| 생존률/폐업률 예측 | 찬영 (A1) | `models/revenue_predictor/` | 생존률, BEP |
+| LSTM 매출 예측 (사전학습+파인튜닝) | 찬영 (A1) + 수지니 (B2) | `models/lstm_forecast/` | 월 예상매출 |
+| 생존률/폐업률 예측 | 찬영 (A1) + 수지니 (B2) | `models/revenue_predictor/` | 생존률, BEP |
 | 백테스팅 (2024년 검증) | 찬영 (A1) + 수지니 (B2) | `validation/` | 정확도 리포트 |
+| 피처 엔지니어링/골목상권 데이터 | 수지니 (B2) | `validation/`, `data/processed/golmok_*` | 피처 효과 분석 |
+| 예측 신뢰도 평가 | 수지니 (B2) | `validation/` | 저신뢰 조합 분류 |
 
 ### 트랙 B — AI 엔진 (2명)
 
 | 역할 | 담당자 | 담당 디렉토리 |
 |------|--------|-------------|
 | B1 — LangGraph Agent | 예진 | `backend/src/agents/`, `backend/src/schemas/` |
-| B2 — 시뮬레이션 + 설명 | 수지니 | `models/explainability/`, `validation/` |
+| B2 — 시뮬레이션 + 설명 + LSTM | 수지니 | `models/explainability/`, `models/lstm_forecast/`, `models/revenue_predictor/`, `validation/` |
 
 #### B2 세부 Task
 
 | Task | 담당자 | 디렉토리 | 산출물 |
 |------|--------|---------|--------|
+| LSTM 모델 학습/최적화 | 수지니 (B2) | `models/lstm_forecast/`, `validation/` | 모델 가중치, MAPE 리포트 |
+| 피처 엔지니어링 | 수지니 (B2) | `validation/`, `data/processed/golmok_*` | 골목상권 피처, 생활인구 피처 |
+| 예측 결과 생성/신뢰도 | 수지니 (B2) | `validation/full_prediction_all.py` | 156개 조합 예측 + confidence |
 | 12개월 시뮬레이션 | 수지니 (B2) | `models/explainability/` | 월별 시나리오 (계절성/비용 반영) |
 | SHAP 분석 | 수지니 (B2) | `models/explainability/` | 피처 기여도 시각화 |
 | 시나리오 비교 | 수지니 (B2) | `validation/scenario_comparison.py` | 낙관/비관/기본 시나리오 |
 
-#### A1 → B2 인터페이스
+#### LSTM → 시뮬레이션 인터페이스
 
-찬영 모델의 출력을 수지니가 시뮬레이션 입력으로 사용합니다.
+수지니가 LSTM 모델 학습/최적화와 시뮬레이션을 모두 담당합니다.
 인터페이스 모듈: `models/interface.py` (`ModelOutput.generate()`)
 
 ```
-찬영 모델 출력 (models/lstm_forecast/, models/revenue_predictor/)
-├── 월 예상매출
-├── 생존률
-└── BEP
+LSTM 모델 (models/lstm_forecast/) — 수지니 (B2)
+├── 학습/파인튜닝 (validation/train_v9.py)
+├── 피처 엔지니어링 (validation/test_golmok_features.py)
+├── 예측 (validation/full_prediction_all.py)
+│   ├── 월 예상매출 (156개 조합)
+│   ├── 생존률 + 리스크 등급
+│   ├── BEP + ROI
+│   └── 신뢰도 (high/low)
       ↓
 models/interface.py (ModelOutput.generate) — 통합 호출 + mock fallback
       ↓
-수지니 시뮬레이션 (models/explainability/)
+시뮬레이션 (models/explainability/) — 수지니 (B2)
 ├── 12개월 월별 시나리오 (계절성/비용 반영)
 ├── SHAP 피처 기여도 분석
 └── 시각화
 ```
+
+#### 현재 LSTM v9 상태
+
+- **전체 MAPE**: 18.7% (골목상권 피처 적용 시)
+- **모델 가중치**: `models/lstm_forecast/weights/finetuned_mapo_v9.pt`
+- **최적 설정**: guide-density 보간 + window=4 + hidden=128 + pop_per_store
+- **유효 피처**: store_franchise, floating_pop, pop_per_store_gm, store_normal, survival_5y
+- **제외 조합**: 염리동 중식, 성산1동 제과 (MAPE 900%+)
+- **저신뢰 조합**: 신수동 치킨/패스트푸드, 성산1동 양식, 도화동 양식, 대흥동 치킨
+- **데이터**: `data/processed/golmok_*.csv` (골목상권 API 크롤링), `data/processed/living_population_dong_mapo.csv` (생활인구)
 
 ### 트랙 C — 프론트엔드 + 배포 (2명)
 

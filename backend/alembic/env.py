@@ -16,8 +16,7 @@ from config.settings import settings
 config = context.config
 
 if settings.postgres_url:
-    # POSTGRES_URL may contain percent-encoded characters like %23.
-    # Alembic's config parser treats % as interpolation syntax, so escape it.
+    # configparser는 %를 interpolation 문자로 인식하므로 %%로 이스케이프
     config.set_main_option("sqlalchemy.url", settings.postgres_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.

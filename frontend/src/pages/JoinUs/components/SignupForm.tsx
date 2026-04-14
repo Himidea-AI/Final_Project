@@ -108,12 +108,17 @@ export default function SignupForm({ planName, onSuccess }: Props) {
         return;
       }
 
-      setBizVerified(true);
-
       if (data.status === "success" && data.data?.brands?.length > 0) {
         const brand = data.data.brands[0];
+        // 브랜드 매칭 성공 → 기업명 자동 교정 + 가맹점 수 자동 입력
         if (brand.corp_name) set("companyName", brand.corp_name);
         if (brand.franchise_count) set("storeCount", String(brand.franchise_count));
+        setBizVerified(true);
+        setBizError("");
+      } else {
+        // 사업자번호는 유효하지만 프랜차이즈 DB에 매칭되는 브랜드 없음
+        setBizVerified(false);
+        setBizError("해당 사업자번호로 등록된 프랜차이즈 브랜드를 찾을 수 없습니다. 기업명을 확인해주세요.");
       }
     } catch {
       // API 실패 시 검증 생략 (사용자 직접 입력 유도)

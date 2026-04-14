@@ -64,7 +64,9 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     legal_risks = [
         {
             "type": r.get("type", "General"),
-            "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(r.get("level", "safe").lower(), "LOW"),
+            "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(
+                r.get("level", "safe").lower(), "LOW"
+            ),
             "detail": r.get("summary", ""),
         }
         for r in legal_risks_raw
@@ -75,7 +77,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "request_id": request_id,
         "target_district": target_dist,
         "analysis_report": analysis.get("market_summary", ""),  # 줄글 리포트
-        "analysis_metrics": metrics,                            # 차트용 정량 데이터
+        "analysis_metrics": metrics,  # 차트용 정량 데이터
         "simulation_months": 12,
         "monthly_projection": [
             {
@@ -234,6 +236,78 @@ async def login(req: LoginRequest):
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await run_in_threadpool(auth.login, req.email, req.password)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 초대코드 API
+# ---------------------------------------------------------------------------
+
+
+class InviteCodeRequest(BaseModel):
+    owner_id: str
+    max_uses: int = 10
+
+
+@app.post("/auth/invite-code")
+async def generate_invite_code(req: InviteCodeRequest):
+    """팀장이 초대코드를 발급"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.generate_invite_code, req.owner_id, req.max_uses)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+class VerifyInviteRequest(BaseModel):
+    code: str
+
+
+@app.post("/auth/verify-invite")
+async def verify_invite_code(req: VerifyInviteRequest):
+    """초대코드 검증 — 유효하면 팀장의 기업정보(사업자번호, 기업명, 가맹점수) 반환"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.verify_invite_code, req.code)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 매니저 회원가입/로그인 API
+# ---------------------------------------------------------------------------
+
+
+class ManagerSignupRequest(BaseModel):
+    inviteCode: str
+    contactName: str
+    position: str = ""
+    email: str
+    phone: str
+    password: str
+
+
+@app.post("/auth/manager/signup")
+async def manager_signup(req: ManagerSignupRequest):
+    """매니저 회원가입 — 초대코드로 팀장 기업정보 자동 상속"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.manager_signup, req.model_dump())
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/auth/manager/login")
+async def manager_login(req: LoginRequest):
+    """매니저 로그인"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.manager_login, req.email, req.password)
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}

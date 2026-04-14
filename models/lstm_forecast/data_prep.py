@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -76,7 +77,21 @@ EXTRA_FEATURES = [
     "trend_score",  # 네이버 검색 트렌드 (서울 전체)
 ]
 
-ALL_FEATURES = SALES_FEATURES + STORE_FEATURES + POP_FEATURES + RENT_FEATURES + EXTRA_FEATURES
+GOLMOK_FEATURES = [
+    "store_franchise",  # 골목상권 프랜차이즈 점포 수
+    "store_normal",  # 골목상권 일반 점포 수
+    "floating_pop",  # 골목상권 유동인구
+    "pop_per_store_gm",  # 골목상권 점포당 유동인구 (파생)
+    "survival_5y",  # 5년 생존율
+]
+
+ALL_FEATURES = SALES_FEATURES + STORE_FEATURES + POP_FEATURES + RENT_FEATURES + EXTRA_FEATURES + GOLMOK_FEATURES
+
+# 극단적 MAPE 이상치 조합 제외 (MAPE 900%+ — 매출 규모 대비 예측 불가)
+EXCLUDE_COMBOS: set[tuple[str, str]] = {
+    ("11440610", "CS100002"),  # 염리동 중식
+    ("11440720", "CS100005"),  # 성산1동 제과
+}
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +238,129 @@ def load_store_data(
 
 
 # ---------------------------------------------------------------------------
+# 결측치 처리 (guide-density Hot Deck 보간)
+# ---------------------------------------------------------------------------
+
+
+def _hot_deck(
+    df: pd.DataFrame,
+    col: str,
+    donor_features: list[str],
+) -> pd.DataFrame:
+    """Hot Deck 보간: 결측치를 유사 행정동의 값으로 대체한다.
+
+    1) 같은 분기 내에서 '2동' → '1동' 쌍이 있으면 해당 값 사용
+    2) 없으면 NearestNeighbors로 가장 유사한 행의 값 사용
+    """
+    result = df.copy()
+    dong_col = "dong_name" if "dong_name" in df.columns else None
+    if dong_col is None:
+        return result
+
+    for _q, qdf in result.groupby("quarter"):
+        miss = qdf[col].isna() | (qdf[col] == 0)
+        if not miss.any():
+            continue
+        donors = qdf[~miss]
+        recipients = qdf[miss]
+        if donors.empty:
+            continue
+
+        for idx, row in recipients.iterrows():
+            dn = str(row.get(dong_col, ""))
+            donor_val = None
+
+            # 1) 2동 → 1동 쌍 매칭
+            if "2동" in dn:
+                pair_name = dn.replace("2동", "1동")
+                pair_rows = donors[donors[dong_col] == pair_name][col]
+                if not pair_rows.empty:
+                    donor_val = pair_rows.values[0]
+
+            # 2) NearestNeighbors fallback
+            if donor_val is None:
+                avail_feats = [f for f in donor_features if f in donors.columns]
+                if avail_feats:
+                    nn_model = NearestNeighbors(n_neighbors=1)
+                    nn_model.fit(donors[avail_feats].fillna(0).values)
+                    _, d_idx = nn_model.kneighbors(row[avail_feats].fillna(0).values.reshape(1, -1).astype(float))
+                    donor_val = donors.iloc[d_idx.flatten()[0]][col]
+
+            if donor_val is not None:
+                result.at[idx, col] = donor_val * np.random.normal(1, 0.02)
+
+    return result
+
+
+def _impute_missing(
+    df: pd.DataFrame,
+    feature_cols: list[str] | None = None,
+) -> pd.DataFrame:
+    """guide-density 기반 결측치 처리.
+
+    - 매출 컬럼: Hot Deck 보간
+    - 점포/인구/임대 컬럼: 그룹별 선형 보간 + ffill/bfill
+    - 나머지: fillna(0)
+    """
+    donor_features = [f for f in ["total_pop", "store_count"] if f in df.columns]
+    gk = ["dong_code", "industry_code"]
+
+    # 매출 컬럼: Hot Deck
+    for col in SALES_FEATURES:
+        if col in df.columns:
+            df = _hot_deck(df, col, donor_features)
+
+    # 점포/인구 컬럼: 그룹별 선형 보간
+    interp_cols = [
+        "store_count",
+        "franchise_count",
+        "open_count",
+        "close_count",
+        "total_pop",
+        "resident_pop",
+        "avg_age",
+        "total_households",
+    ]
+    for col in interp_cols:
+        if col in df.columns:
+            df[col] = df.groupby(gk)[col].transform(lambda x: x.interpolate(method="linear", limit_direction="both"))
+            df[col] = df.groupby(gk)[col].transform(lambda x: x.ffill().bfill())
+
+    # 폐업률: 선형 보간
+    if "closure_rate" in df.columns:
+        df["closure_rate"] = df.groupby(gk)["closure_rate"].transform(
+            lambda x: x.interpolate(method="linear", limit_direction="both")
+        )
+
+    # 임대료: 동 단위 보간
+    if "rent_1f" in df.columns:
+        df["rent_1f"] = df.groupby("dong_code")["rent_1f"].transform(
+            lambda x: x.interpolate(method="linear", limit_direction="both")
+        )
+        df["rent_1f"] = df.groupby("dong_code")["rent_1f"].transform(lambda x: x.fillna(x.median()))
+
+    # 공실률: 전체 선형 보간
+    if "vacancy_rate" in df.columns:
+        df["vacancy_rate"] = df["vacancy_rate"].interpolate(method="linear", limit_direction="both")
+
+    # CPI: ffill/bfill
+    if "cpi_index" in df.columns:
+        df["cpi_index"] = df["cpi_index"].ffill().bfill()
+
+    # 트렌드: 0 대체
+    if "trend_score" in df.columns:
+        df["trend_score"] = df["trend_score"].fillna(0)
+
+    # 나머지 피처: fillna(0)
+    if feature_cols is None:
+        feature_cols = ALL_FEATURES
+    feat_available = [c for c in feature_cols if c in df.columns]
+    df[feat_available] = df[feat_available].fillna(0)
+
+    return df
+
+
+# ---------------------------------------------------------------------------
 # 피처 엔지니어링 / 시퀀스 생성
 # ---------------------------------------------------------------------------
 
@@ -317,6 +455,43 @@ def build_timeseries(
         trend_df = pd.read_csv(trend_csv)
         df = df.merge(trend_df, on=["quarter", "dong_name"], how="left")
 
+    # 골목상권 피처 병합 (golmok_merged.csv)
+    golmok_csv = DATA_DIR / "golmok_merged.csv"
+    if golmok_csv.exists() and "quarter" in df.columns and "dong_code" in df.columns:
+        gm = pd.read_csv(golmok_csv, dtype={"dong_code": str, "industry_code": str})
+
+        # 업종별 피처 (store_normal, store_franchise, survival_5y)
+        gm_ind_cols = ["store_normal", "store_franchise", "survival_5y"]
+        gm_ind_avail = [c for c in gm_ind_cols if c in gm.columns]
+        if gm_ind_avail:
+            gm_ind = gm[["quarter", "dong_code", "industry_code"] + gm_ind_avail].drop_duplicates(
+                subset=["quarter", "dong_code", "industry_code"]
+            )
+            df = df.merge(gm_ind, on=["quarter", "dong_code", "industry_code"], how="left")
+
+        # 동 단위 피처 (floating_pop)
+        if "floating_pop" in gm.columns:
+            gm_dong = gm[["quarter", "dong_code", "floating_pop"]].drop_duplicates(subset=["quarter", "dong_code"])
+            df = df.merge(gm_dong, on=["quarter", "dong_code"], how="left")
+
+        # 파생 피처: 점포당 유동인구
+        if "floating_pop" in df.columns:
+            store_total = gm[["quarter", "dong_code", "industry_code", "store_total"]].drop_duplicates(
+                subset=["quarter", "dong_code", "industry_code"]
+            )
+            df = df.merge(store_total, on=["quarter", "dong_code", "industry_code"], how="left")
+            df["pop_per_store_gm"] = np.where(df["store_total"] > 0, df["floating_pop"] / df["store_total"], 0)
+            df = df.drop(columns=["store_total"], errors="ignore")
+
+        # 골목상권 피처 보간 (그룹별 선형 보간 → forward/backward fill)
+        gk = ["dong_code", "industry_code"]
+        for feat in GOLMOK_FEATURES:
+            if feat in df.columns:
+                df[feat] = df.groupby(gk)[feat].transform(
+                    lambda x: x.interpolate(method="linear", limit_direction="both")
+                )
+                df[feat] = df.groupby(gk)[feat].transform(lambda x: x.ffill().bfill())
+
     # 계절성 피처 추가 (분기 번호 1~4)
     if "quarter" in df.columns:
         df["quarter_num"] = (df["quarter"] % 10).astype(float)
@@ -326,9 +501,8 @@ def build_timeseries(
         year = df["quarter"] // 10
         df["sample_weight"] = np.where((year >= 2020) & (year <= 2021), 0.5, 1.0)
 
-    # 결측치 처리
-    feat_available = [c for c in feature_cols if c in df.columns]
-    df[feat_available] = df[feat_available].fillna(0)
+    # 결측치 처리 (guide-density Hot Deck 보간)
+    df = _impute_missing(df, feature_cols)
 
     # 로그 스케일 변환 (매출 관련 컬럼)
     log_cols = [c for c in SALES_FEATURES if c in df.columns]
@@ -343,7 +517,7 @@ def build_timeseries(
 
 def prepare_sequences(
     data: pd.DataFrame,
-    window_size: int = 6,
+    window_size: int = 4,
     target_col: str = "monthly_sales",
     feature_cols: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, MinMaxScaler, MinMaxScaler]:
@@ -398,7 +572,10 @@ def prepare_sequences(
     has_weight = "sample_weight" in data.columns
 
     groups = data.groupby(["dong_code", "industry_code"])
-    for _, group in groups:
+    for (dong_code, industry_code), group in groups:
+        # 극단적 이상치 조합 제외
+        if (str(dong_code), str(industry_code)) in EXCLUDE_COMBOS:
+            continue
         if len(group) <= window_size:
             continue
 
@@ -456,7 +633,7 @@ def prepare_dataloaders(
     """
     db_url = config.get("db_url", DB_URL)
     dong_prefix = config.get("dong_prefix", None)
-    window_size = config.get("window_size", 6)
+    window_size = config.get("window_size", 4)
     batch_size = config.get("batch_size", 64)
     val_ratio = config.get("val_ratio", 0.2)
     target_col = config.get("target_col", "monthly_sales")
