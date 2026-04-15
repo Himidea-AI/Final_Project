@@ -4,11 +4,12 @@ import re
 import redis.asyncio as aioredis
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.schemas.state import AgentState
-from src.agents.nodes.market_analyst import market_tool
+from src.agents.nodes.market_analyst import market_tool, db_client
 from src.agents.llms import get_fast_llm
 from src.config.settings import settings
 
 _CACHE_TTL = 86400  # 24시간
+
 
 async def population_analyst_node(state: AgentState) -> dict:
     """
@@ -40,9 +41,11 @@ async def population_analyst_node(state: AgentState) -> dict:
     except Exception as e:
         print(f"[population_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
 
-    # 1. 실데이터 수집
+    # 1. 실데이터 수집 (DB 연결 확인)
+    if db_client.engine is None:
+        await db_client.connect()
     pop_data = await market_tool.get_population_trends(target_district)
-    
+
     if "error" in pop_data:
         print(f"!!! [POPULATION ANALYST DATA ERROR] !!! {pop_data['error']}")
         analysis_results = state.get("analysis_results", {})
@@ -65,33 +68,36 @@ async def population_analyst_node(state: AgentState) -> dict:
         "### 출력 요구사항:\n"
         "1. 리포트 본문: 유동인구의 양적/질적 변화를 분석하고, 창업 시 고려해야 할 인구학적 통계치를 설명하세요.\n"
         "2. 구조화 데이터: 마지막에 반드시 [JSON_START]와 [JSON_END] 태그를 사용하여 아래 지표를 포함하세요.\n"
-        "   - { \"population_score\": 점수(1-10), \"main_target_age\": \"주타겟\", \"peak_time\": \"피크시간대\" }\n"
+        '   - { "population_score": 점수(1-10), "main_target_age": "주타겟", "peak_time": "피크시간대" }\n'
         "3. 어조: 정교하고 분석적인 톤을 유지하세요."
     )
 
     try:
         llm = get_fast_llm()
-        response = await llm.ainvoke([
-            SystemMessage(content=prompt),
-            HumanMessage(content=f"{target_district} 지역의 유동인구 심층 분석을 수행해줘.")
-        ])
-        
+        response = await llm.ainvoke(
+            [
+                SystemMessage(content=prompt),
+                HumanMessage(content=f"{target_district} 지역의 유동인구 심층 분석을 수행해줘."),
+            ]
+        )
+
         # content 추출
         if isinstance(response.content, list):
             raw_content = "".join([c.get("text", "") if isinstance(c, dict) else str(c) for c in response.content])
         else:
             raw_content = str(response.content)
-            
+
         # 파싱
-        population_report = re.sub(r'\[JSON_START\].*?\[JSON_END\]', '', raw_content, flags=re.DOTALL).strip()
-        json_match = re.search(r'\[JSON_START\](.*?)\[JSON_END\]', raw_content, re.DOTALL)
-        
+        population_report = re.sub(r"\[JSON_START\].*?\[JSON_END\]", "", raw_content, flags=re.DOTALL).strip()
+        json_match = re.search(r"\[JSON_START\](.*?)\[JSON_END\]", raw_content, re.DOTALL)
+
         new_metrics = {}
         if json_match:
             try:
-                json_str = re.sub(r'```json|```', '', json_match.group(1)).strip()
+                json_str = re.sub(r"```json|```", "", json_match.group(1)).strip()
                 new_metrics = json.loads(json_str)
-            except: pass
+            except:
+                pass
 
     except Exception as e:
         print(f"!!! [POPULATION ANALYST ERROR] !!! {str(e)}")
@@ -117,5 +123,5 @@ async def population_analyst_node(state: AgentState) -> dict:
     return {
         "analysis_results": analysis_results,
         "analysis_metrics": {**state.get("analysis_metrics", {}), **new_metrics},
-        "current_agent": "population_analyst"
+        "current_agent": "population_analyst",
     }
