@@ -280,7 +280,9 @@ def pretrain(config: dict | None = None) -> Path:
     logger.info("사전학습 완료. 가중치 저장: %s (best_val_loss=%.6f)", save_path, result["best_val_loss"])
 
     # 스케일러도 함께 저장 (추론 시 필요)
-    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / "pretrain_scalers.pkl")
+    # save_path stem에서 suffix 추출 (예: "pretrained_run2" → "_run2", "pretrained" → "")
+    _pt_suffix = save_path.stem.replace("pretrained", "")
+    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / f"pretrain_scalers{_pt_suffix}.pkl")
 
     return save_path
 
@@ -388,7 +390,9 @@ def finetune(config: dict | None = None) -> Path:
     )
 
     # 스케일러 저장
-    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / "finetune_scalers.pkl")
+    # save_path stem에서 suffix 추출 (예: "finetuned_mapo_run2" → "_run2", "finetuned_mapo" → "")
+    _ft_suffix = save_path.stem.replace("finetuned_mapo", "")
+    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / f"finetune_scalers{_ft_suffix}.pkl")
 
     return save_path
 
@@ -453,6 +457,12 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=None, help="배치 크기")
     parser.add_argument("--patience", type=int, default=None, help="조기 종료 patience")
     parser.add_argument("--window-size", type=int, default=None, help="입력 시퀀스 길이")
+    parser.add_argument(
+        "--save-suffix",
+        type=str,
+        default=None,
+        help="가중치/스케일러 파일명 suffix (예: run2 → pretrained_run2.pt, pretrain_scalers_run2.pkl)",
+    )
     args = parser.parse_args()
 
     # CLI 인자로 config 오버라이드
@@ -471,6 +481,16 @@ def main() -> None:
         overrides["patience"] = args.patience
     if args.window_size:
         overrides["window_size"] = args.window_size
+
+    # --save-suffix 처리: suffix가 있으면 가중치 저장 경로를 suffix 포함 경로로 교체
+    # suffix 없으면 overrides에 save_path 미포함 → DEFAULT_*_CONFIG 기본값 그대로 사용
+    if args.save_suffix:
+        s = args.save_suffix
+        if args.mode == "pretrain":
+            overrides["save_path"] = str(WEIGHTS_DIR / f"pretrained_{s}.pt")
+        else:
+            overrides["save_path"] = str(WEIGHTS_DIR / f"finetuned_mapo_{s}.pt")
+            overrides["pretrained_path"] = str(WEIGHTS_DIR / f"pretrained_{s}.pt")
 
     if args.mode == "pretrain":
         pretrain(overrides if overrides else None)
