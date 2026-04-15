@@ -1,7 +1,16 @@
 import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  ChevronRight,
+  CreditCard,
+} from "lucide-react";
 import type { SignupFormData } from "../types";
+import { PLANS } from "../constants/plans";
 
 const INITIAL: SignupFormData = {
   companyName: "",
@@ -312,21 +321,55 @@ export default function SignupForm({ planName, onSuccess }: Props) {
         </motion.div>
       )}
 
-      {/* Submit */}
-      <motion.button
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: 0.4 }}
-        onClick={handleSubmit}
-        disabled={!allValid || isSubmitting}
-        className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
-          allValid && !isSubmitting
-            ? "bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
-            : "bg-[#2c2825] text-[#9ca3af] cursor-not-allowed"
-        }`}
-      >
-        {isSubmitting ? "가입 처리 중..." : "가입 완료"}
-      </motion.button>
+      {/* Submit — 플랜 tier에 따라 CTA + 색상 분기 (Patch v12.2) */}
+      {(() => {
+        const planObj = PLANS.find((p) => p.name === planName);
+        const isFree = planObj ? planObj.price === "₩0" : true;
+        const buttonLabel = isSubmitting
+          ? "가입 처리 중..."
+          : isFree
+          ? "가입하기 · 무료로 시작"
+          : "구독 및 가입";
+        const activeClass = isFree
+          ? "bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]"
+          : "bg-gradient-to-r from-amber-500 to-amber-400 text-[#1e1b18] shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-[0.98]";
+        return (
+          <>
+            <motion.button
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.4 }}
+              onClick={handleSubmit}
+              disabled={!allValid || isSubmitting}
+              className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 flex items-center justify-center gap-2 ${
+                allValid && !isSubmitting
+                  ? activeClass
+                  : "bg-[#2c2825] text-[#9ca3af] cursor-not-allowed"
+              }`}
+            >
+              {!isSubmitting && !isFree && <CreditCard className="w-4 h-4" />}
+              {buttonLabel}
+              {!isSubmitting && <ChevronRight className="w-4 h-4" />}
+            </motion.button>
+            {!isFree && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.55, duration: 0.4 }}
+                className="text-[10px] text-[#9ca3af] text-center mt-2 leading-relaxed"
+              >
+                결제는 가입 후 HQ의{" "}
+                <span className="text-amber-400 font-mono">결제 및 API 토큰</span>{" "}
+                메뉴에서 진행됩니다 · 플랜:{" "}
+                <span className="text-amber-400 font-bold">
+                  {planObj?.name} {planObj?.price}
+                  {planObj?.priceNote}
+                </span>
+              </motion.p>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
