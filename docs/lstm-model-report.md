@@ -417,5 +417,26 @@ LSTM, GRU, TCN 3개 모델의 구현이 모두 완료되었다.
 - `validation/results/lstm_backtest_results_run2.csv` (run2)
 - `validation/results/lstm_backtest_results_run3.csv` (run3)
 
-### 실험 B: 시드 설정 O
-→ 추후 추가 예정
+### 실험 B: 시드 설정 O (3회)
+
+> 시드 고정(torch / numpy / random seed 동일 설정) 조건에서 3회 독립 학습 후 백테스트 결과.
+> 각 회차는 사전학습 → 파인튜닝 → 백테스트 전 과정을 새로 실행함.
+> 평가 기준: 2024년 마포구 154개 동×업종 조합 (EXCLUDE_COMBOS 2건 제외)
+
+| 회차 | 시드 | MAPE | MAE | RMSE | R² |
+|------|------|------|-----|------|----|
+| seed47 | 47 | 10.99% | 11.8억 | 45.7억 | 0.9759 |
+| seed415 | 415 | 11.57% | 8.1억 | 22.1억 | 0.9944 |
+| seed2026 | 2026 | 10.08% | 8.4억 | 25.3억 | 0.9926 |
+| **평균** | | **10.88%** | **9.4억** | **31.0억** | **0.9876** |
+| **표준편차** | | **0.61%** | — | — | — |
+
+- 3회 MAPE 범위: 10.08% ~ 11.57% (최대 편차 1.49%p)
+- seed2026이 가장 우수 (MAPE 10.08%), seed415가 가장 낮음 (11.57%)
+- R²는 seed415(0.9944), seed2026(0.9926)에서 높게 나타났으나, seed47(0.9759)은 MAE/RMSE가 상대적으로 큼
+- 표준편차 0.61%는 랜덤 실험 A(0.15%)보다 높음 → 시드 고정에도 초기화 값에 따른 편차 존재
+
+**참조 CSV 파일:**
+- `validation/results/lstm_backtest_results_seed47.csv` (seed47)
+- `validation/results/lstm_backtest_results_seed415.csv` (seed415)
+- `validation/results/lstm_backtest_results_seed2026.csv` (seed2026)

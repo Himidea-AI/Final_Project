@@ -519,7 +519,24 @@ def main() -> None:
         default=None,
         help="가중치/스케일러 파일명 suffix (예: run2 → pretrained_tcn_run2.pt, pretrain_tcn_scalers_run2.pkl)",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="재현성을 위한 랜덤 시드 (미설정 시 비결정적 학습)",
+    )
     args = parser.parse_args()
+
+    # 시드 설정 (재현성) — --seed 지정 시에만 실행, 미지정 시 기존과 동일하게 동작
+    if args.seed is not None:
+        import random
+
+        import numpy as np
+
+        random.seed(args.seed)           # Python 표준 random 시드 고정
+        np.random.seed(args.seed)        # NumPy 시드 고정
+        torch.manual_seed(args.seed)     # PyTorch CPU 시드 고정
+        torch.cuda.manual_seed_all(args.seed)  # PyTorch GPU 시드 고정 (CPU 환경에서도 무해)
 
     # CLI 인자로 config 오버라이드
     overrides: dict = {}
