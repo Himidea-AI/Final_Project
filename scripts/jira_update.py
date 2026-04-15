@@ -179,6 +179,39 @@ def update_description(issue_key: str, text: str) -> None:
     print(f"  [{issue_key}] 설명 업데이트 완료")
 
 
+def start_task(issue_key: str) -> None:
+    """작업 시작: 티켓 설명 출력 → 진행 중 전환 → 시작 코멘트."""
+    print(f"\n{'=' * 60}")
+    print(f"  작업 시작: {issue_key}")
+    print(f"{'=' * 60}\n")
+
+    # 1. 티켓 정보 조회
+    get_info(issue_key)
+
+    # 2. 진행 중으로 전환
+    print()
+    transition(issue_key, "in_progress")
+
+    # 3. 시작 코멘트
+    add_comment(issue_key, "작업 시작 (via jira_update.py)")
+    print(f"\n{'=' * 60}\n")
+
+
+def finish_task(issue_key: str, comment: str = "") -> None:
+    """작업 완료: 완료 전환 → 완료 코멘트."""
+    print(f"\n{'=' * 60}")
+    print(f"  작업 완료: {issue_key}")
+    print(f"{'=' * 60}\n")
+
+    # 1. 완료로 전환
+    transition(issue_key, "done")
+
+    # 2. 완료 코멘트
+    msg = comment if comment else "작업 완료 (via jira_update.py)"
+    add_comment(issue_key, msg)
+    print(f"\n{'=' * 60}\n")
+
+
 def create_issue(summary: str, description: str = "") -> str:
     """새 티켓 생성."""
     url = f"{JIRA_BASE}/rest/api/3/issue"
@@ -218,6 +251,8 @@ def main():
     parser.add_argument("--comment", "-c", help="코멘트 추가")
     parser.add_argument("--description", "-desc", help="설명 업데이트")
     parser.add_argument("--info", action="store_true", help="티켓 정보 조회")
+    parser.add_argument("--start", action="store_true", help="작업 시작 (설명 조회 + 진행 중 + 코멘트)")
+    parser.add_argument("--finish", action="store_true", help="작업 완료 (완료 전환 + 코멘트)")
     parser.add_argument("--create", action="store_true", help="새 티켓 생성")
     parser.add_argument("--summary", help="새 티켓 제목 (--create 시)")
     args = parser.parse_args()
@@ -241,6 +276,16 @@ def main():
     # 정보 조회
     if args.info:
         get_info(args.issue_key)
+        return
+
+    # 작업 시작
+    if args.start:
+        start_task(args.issue_key)
+        return
+
+    # 작업 완료
+    if args.finish:
+        finish_task(args.issue_key, args.comment or "")
         return
 
     # 상태 변경

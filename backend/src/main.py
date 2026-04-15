@@ -449,6 +449,30 @@ async def get_organization(owner_id: str):
 
 
 # ---------------------------------------------------------------------------
+# 유동인구 실시간 API
+# ---------------------------------------------------------------------------
+
+
+@app.get("/population/live")
+async def get_live_population(dongs: str | None = None):
+    """
+    마포구 동별 유동인구 실시간 조회 (서울 열린데이터 API).
+
+    - dongs 미지정: 마포구 16개 동 전체
+    - dongs=서교동,합정동,연남동: 특정 동만 조회
+
+    응답:
+    - daily_average: 요청한 동들의 일평균 유동인구
+    - dong_details: 동별 일합계, 피크시간대, 2039 남녀 비율
+    - hourly_total: 시간대별 합계 (차트용)
+    """
+    from src.services.population_api import get_population_by_dongs
+
+    dong_list = [d.strip() for d in dongs.split(",")] if dongs else None
+    return await get_population_by_dongs(dong_list)
+
+
+# ---------------------------------------------------------------------------
 # 시뮬레이션 API
 # ---------------------------------------------------------------------------
 
