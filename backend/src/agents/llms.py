@@ -67,7 +67,7 @@ def get_fast_llm():
     if not hasattr(get_fast_llm, "_instance"):
         google_api_key = os.getenv("GOOGLE_API_KEY")
         get_fast_llm._instance = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             google_api_key=google_api_key,
             temperature=0.1,
         )
@@ -79,7 +79,7 @@ def get_smart_llm():
     if not hasattr(get_smart_llm, "_instance"):
         google_api_key = os.getenv("GOOGLE_API_KEY")
         get_smart_llm._instance = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             google_api_key=google_api_key,
             temperature=0.1,
         )

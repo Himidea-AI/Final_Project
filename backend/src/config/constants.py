@@ -52,7 +52,7 @@ COMPETITION_RADIUS = {
 }
 
 # ── LLM 설정 ──
-LLM_MODEL = "gemini-2.0-flash"
+LLM_MODEL = "claude-sonnet-4-20250514"
 LLM_TIMEOUT = 60
 LLM_MAX_RETRIES = 2
 
