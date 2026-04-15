@@ -177,7 +177,7 @@ class FtcFranchiseClient:
                 - year: 조회 연도
         """
         # yr 미지정 시 최신 연도부터 순차 폴백
-        years = [yr] if yr else ["2024", "2023", "2022"]
+        years = [yr] if yr else ["2025", "2024", "2023"]
 
         for target_yr in years:
             url = self._build_url({"type": "list", "yr": target_yr})

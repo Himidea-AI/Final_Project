@@ -76,6 +76,7 @@ class BizMapper:
         except (UnicodeDecodeError, ValueError):
             text = resp.content.decode("cp949", errors="replace")
             import json as _json
+
             try:
                 data = _json.loads(text).get("data", [{}])[0]
             except Exception:
@@ -109,31 +110,21 @@ class BizMapper:
             with engine.connect() as conn:
                 # 법인명 + 브랜드명 모두 ILIKE 검색
                 # 실제 DB 컬럼: corpNm, brandNm, yr, frcsCnt (CSV 원본 camelCase)
-                rows = conn.execute(
-                    text(
-                        'SELECT *, "corpNm" as corp_name, "brandNm" as brand_name, '
-                        '"frcsCnt" as franchise_count FROM ftc_brand_franchise '
-                        'WHERE ("corpNm" ILIKE :pattern OR "brandNm" ILIKE :pattern) '
-                        "AND yr = 2024 "
-                        'ORDER BY "frcsCnt" DESC '
-                        "LIMIT 20"
-                    ),
-                    {"pattern": f"%{company_name}%"},
-                ).fetchall()
-
-                # 2024 결과 없으면 2023
-                if not rows:
+                # 최신 연도부터 순차 폴백: 2025 → 2024 → 2023
+                for yr in [2025, 2024, 2023]:
                     rows = conn.execute(
                         text(
                             'SELECT *, "corpNm" as corp_name, "brandNm" as brand_name, '
                             '"frcsCnt" as franchise_count FROM ftc_brand_franchise '
                             'WHERE ("corpNm" ILIKE :pattern OR "brandNm" ILIKE :pattern) '
-                            "AND yr = 2023 "
+                            "AND yr = :yr "
                             'ORDER BY "frcsCnt" DESC '
                             "LIMIT 20"
                         ),
-                        {"pattern": f"%{company_name}%"},
+                        {"pattern": f"%{company_name}%", "yr": yr},
                     ).fetchall()
+                    if rows:
+                        break
         except Exception:
             # ftc_brand_franchise 테이블 없거나 접근 불가 시 빈 결과 반환
             return []
@@ -198,10 +189,7 @@ class BizMapper:
         try:
             with engine.connect() as conn:
                 result = conn.execute(
-                    text(
-                        "SELECT COUNT(*) FROM store_info "
-                        "WHERE store_name ILIKE :pattern"
-                    ),
+                    text("SELECT COUNT(*) FROM store_info WHERE store_name ILIKE :pattern"),
                     {"pattern": f"%{brand_name}%"},
                 )
                 return result.scalar() or 0
