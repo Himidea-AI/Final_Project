@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PREDICT_CONFIG: dict = {
     "db_url": DB_URL,
-    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_v6b.pt"),
-    "scalers_path": str(WEIGHTS_DIR / "finetune_v6b_scalers.pkl"),
-    "window_size": 6,
-    "hidden_size": 256,
+    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo.pt"),
+    "scalers_path": str(WEIGHTS_DIR / "finetune_scalers.pkl"),
+    "window_size": 4,
+    "hidden_size": 128,
     "num_layers": 2,
     "dropout": 0.2,
     "target_col": "monthly_sales",

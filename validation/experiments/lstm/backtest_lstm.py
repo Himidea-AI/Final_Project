@@ -1,11 +1,14 @@
 """
-TCN 매출 예측 백테스팅 — 2024년 마포구 매출 예측 정확도 검증
+LSTM 매출 예측 백테스팅 — 2024년 마포구 매출 예측 정확도 검증
 
-GRU backtest_gru.py 구조를 그대로 따르되, 아래 항목을 TCN에 맞게 변경:
-- GRUForecaster → TCNForecaster
-- hidden_size=128, num_layers=2 → n_channels=128, kernel_size=2, dilations=[1,2], dropout=0.2
-- 가중치/스케일러 경로: tcn_forecast/weights/
-- 결과를 validation/results/tcn_backtest_results.csv 로 저장
+GRU backtest_gru.py 구조를 그대로 따르되, 아래 항목을 LSTM에 맞게 변경:
+- GRUForecaster → LSTMForecaster
+- 가중치 경로: gru_forecast/weights/ → lstm_forecast/weights/
+- 가중치 파일: finetuned_mapo_gru.pt → finetuned_mapo.pt
+- 스케일러 파일: finetune_gru_scalers.pkl → finetune_scalers.pkl
+- 결과를 validation/results/lstm_backtest_results.csv 로 저장
+
+window_size=4, hidden_size=128 은 GRU와 동일 — 공정한 비교를 위해 통일.
 
 담당: B2 — 수지니
 참조: validation/experiments/gru/backtest_gru.py (구조 동일)
@@ -28,13 +31,12 @@ logger = logging.getLogger(__name__)
 # 경로 / DB 설정
 # ---------------------------------------------------------------------------
 
-# 프로젝트 루트: 이 파일 위치 기준 3단계 상위
-# experiments/tcn/ → experiments/ → validation/ → root
+# 프로젝트 루트: 이 파일 위치 기준 3단계 상위 (experiments/lstm/ → experiments/ → validation/ → root)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-# 결과 저장 경로 — validation/results/tcn_backtest_results.csv
+# 결과 저장 경로 — validation/results/lstm_backtest_results.csv
 RESULTS_DIR = PROJECT_ROOT / "validation" / "results"
-RESULTS_CSV = RESULTS_DIR / "tcn_backtest_results.csv"
+RESULTS_CSV = RESULTS_DIR / "lstm_backtest_results.csv"
 
 # DB 연결 URL — 환경변수에서 로드 (GRU backtest_gru.py와 동일 방식)
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
@@ -112,11 +114,11 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# TCN 모델 예측 함수
+# LSTM 모델 예측 함수
 # ---------------------------------------------------------------------------
 
 
-def _predict_revenue_tcn(
+def _predict_revenue_lstm(
     dong_code: str,
     industry_code: str,
     timeseries_df: pd.DataFrame,
@@ -125,7 +127,7 @@ def _predict_revenue_tcn(
     tgt_scaler,
     model,
     test_year: int = 2024,
-    window_size: int = 4,   # TCN train config 일치: 4 (GRU와 동일)
+    window_size: int = 4,   # LSTM train config 일치: 4
     n_steps: int = 4,
 ) -> float | None:
     """test_year 이전 데이터만 사용하여 4스텝 자기회귀 예측 (데이터 누수 방지).
@@ -149,12 +151,12 @@ def _predict_revenue_tcn(
         피처 스케일러 (MinMaxScaler 등)
     tgt_scaler : sklearn scaler
         타겟 스케일러 (역변환용)
-    model : TCNForecaster
-        로드된 TCN 모델
+    model : LSTMForecaster
+        로드된 LSTM 모델
     test_year : int
         평가 연도 — 이 연도 이전 데이터만 입력으로 사용
     window_size : int
-        입력 시퀀스 길이 (TCN: 4, receptive field와 일치)
+        입력 시퀀스 길이 (LSTM: 4)
     n_steps : int
         예측할 분기 수 (연간 = 4분기)
 
@@ -193,11 +195,10 @@ def _predict_revenue_tcn(
     # 4스텝 자기회귀 예측 루프 (sliding window)
     predictions: list[float] = []
     with torch.no_grad():
-        # 초기 입력 시퀀스: (1, window_size, input_size)
         current_seq = torch.from_numpy(seq).unsqueeze(0).to(device)
 
         for _ in range(n_steps):
-            # TCN 순전파 → 스케일된 예측값
+            # LSTM 순전파 → 스케일된 예측값
             pred_scaled = model(current_seq)
             pred_val = pred_scaled.cpu().numpy().flatten()[0]
 
@@ -207,7 +208,6 @@ def _predict_revenue_tcn(
             predictions.append(max(0, pred_original))   # 음수 방지
 
             # 다음 입력 시퀀스 구성 (sliding window)
-            # 마지막 타임스텝을 복사하고 타겟 피처만 예측값으로 교체
             new_step = current_seq[0, -1, :].clone()
             new_step[target_idx] = float(pred_val)  # 타겟 피처만 예측값으로 교체
             new_step = new_step.unsqueeze(0).unsqueeze(0)  # (1, 1, features)
@@ -222,8 +222,8 @@ def _predict_revenue_tcn(
 # ---------------------------------------------------------------------------
 
 
-def backtest_tcn(test_year: int = 2024) -> dict:
-    """TCN 매출 예측 모델의 백테스트를 실행한다.
+def backtest_lstm(test_year: int = 2024) -> dict:
+    """LSTM 매출 예측 모델의 백테스트를 실행한다.
 
     2019~2023 데이터를 기반으로 2024년 4분기 매출을 예측하고
     실제 2024년 매출과 비교하여 정확도를 측정한다.
@@ -246,11 +246,11 @@ def backtest_tcn(test_year: int = 2024) -> dict:
     """
     import torch
 
-    # TCN 전용 모듈 import
-    from models.tcn_forecast.model import WEIGHTS_DIR, TCNForecaster
-    from models.tcn_forecast.train import load_scalers
+    # LSTM 전용 모듈 import
+    from models.lstm_forecast.model import WEIGHTS_DIR, LSTMForecaster
+    from models.lstm_forecast.train import load_scalers
 
-    # data_prep은 lstm_forecast에서 재사용 — 동일한 피처/전처리 적용
+    # data_prep은 lstm_forecast에서 직접 import — GRU/TCN과 동일한 데이터 소스
     from models.lstm_forecast.data_prep import (
         ALL_FEATURES,
         EXCLUDE_COMBOS,  # 극단적 이상치 조합 (염리동 중식, 성산1동 제과) 제외용
@@ -281,46 +281,44 @@ def backtest_tcn(test_year: int = 2024) -> dict:
     logger.info("실제 %d년 데이터: %d 조합", test_year, len(actual_agg))
 
     # -----------------------------------------------------------------------
-    # 2. TCN 모델 + 스케일러 로드
+    # 2. LSTM 모델 + 스케일러 로드
     # -----------------------------------------------------------------------
     # 파인튜닝 가중치 사용 (마포구 특화 학습 결과)
-    weights_path = WEIGHTS_DIR / "finetuned_mapo_tcn.pt"
-    scalers_path = WEIGHTS_DIR / "finetune_tcn_scalers.pkl"
+    weights_path = WEIGHTS_DIR / "finetuned_mapo.pt"
+    scalers_path = WEIGHTS_DIR / "finetune_scalers.pkl"
 
     if not weights_path.exists():
         return {
             "test_year": test_year,
-            "error": f"TCN 가중치 파일 없음: {weights_path}\n먼저 finetune을 실행하세요.",
+            "error": f"LSTM 가중치 파일 없음: {weights_path}\n먼저 finetune을 실행하세요.",
         }
 
     if not scalers_path.exists():
         return {
             "test_year": test_year,
-            "error": f"TCN 스케일러 파일 없음: {scalers_path}",
+            "error": f"LSTM 스케일러 파일 없음: {scalers_path}",
         }
 
     # 스케일러 로드 — input_size 추론에도 사용
     feat_scaler, tgt_scaler = load_scalers(scalers_path)
     input_size = len(feat_scaler.scale_)
 
-    # TCN 모델 초기화 및 가중치 로드
-    # n_channels=128, kernel_size=2, dilations=[1,2]: TCN train config와 일치
-    # receptive field = 1 + (2-1)×(1+2) = 4 = window_size (정확히 일치)
-    model = TCNForecaster(
+    # LSTM 모델 초기화 및 가중치 로드
+    # hidden_size=128, num_layers=2: LSTM train config와 일치
+    model = LSTMForecaster(
         input_size=input_size,
-        n_channels=128,
-        kernel_size=2,
-        dilations=[1, 2],
+        hidden_size=128,
+        num_layers=2,
         dropout=0.2,
     )
     model.load_weights(weights_path)
     device = torch.device("cpu")   # 추론은 CPU에서 수행
     model.to(device)
     model.eval()
-    logger.info("TCN 모델 로드 완료 (input_size=%d, n_channels=128)", input_size)
+    logger.info("LSTM 모델 로드 완료 (input_size=%d, hidden_size=128)", input_size)
 
     # -----------------------------------------------------------------------
-    # 3. 시계열 데이터 구성 (전체 기간 — _predict_revenue_tcn 내부에서 cutoff 적용)
+    # 3. 시계열 데이터 구성 (전체 기간 — _predict_revenue_lstm 내부에서 cutoff 적용)
     # -----------------------------------------------------------------------
     sales_m = load_sales_data(dong_prefix="11440")   # 마포구 전체
     stores_m = load_store_data(dong_prefix="11440")
@@ -331,7 +329,7 @@ def backtest_tcn(test_year: int = 2024) -> dict:
     logger.info("사용 피처 수: %d", len(feat_cols_m))
 
     # -----------------------------------------------------------------------
-    # 4. 각 동×업종에 대해 TCN 예측 수행 (데이터 누수 방지)
+    # 4. 각 동×업종에 대해 LSTM 예측 수행 (데이터 누수 방지)
     # -----------------------------------------------------------------------
     predictions: list[dict] = []
     skipped = 0
@@ -348,7 +346,7 @@ def backtest_tcn(test_year: int = 2024) -> dict:
             continue
 
         # test_year 이전 데이터만 사용하여 4분기 자기회귀 예측
-        pred_sales = _predict_revenue_tcn(
+        pred_sales = _predict_revenue_lstm(
             dong_code=dong_code,
             industry_code=industry_code,
             timeseries_df=ts_m,
@@ -357,7 +355,7 @@ def backtest_tcn(test_year: int = 2024) -> dict:
             tgt_scaler=tgt_scaler,
             model=model,
             test_year=test_year,
-            window_size=4,  # TCN 전용: 4 (receptive field와 일치)
+            window_size=4,  # LSTM train config 일치: 4
         )
 
         # 데이터 부족 시 건너뜀
@@ -462,13 +460,13 @@ def backtest_tcn(test_year: int = 2024) -> dict:
 def save_results_csv(result: dict) -> Path:
     """백테스트 결과를 CSV 파일로 저장한다.
 
-    LSTM/GRU와 동일한 포맷으로 저장하여 3모델 비교 분석 시 활용 가능.
-    컬럼 순서와 인코딩(utf-8-sig)은 GRU backtest_gru.py와 동일하게 유지.
+    결과 재현성과 GRU/TCN과의 비교 분석을 위해 CSV 저장.
+    GRU backtest_gru.py의 save_results_csv() 와 동일한 구조.
 
     Parameters
     ----------
     result : dict
-        backtest_tcn()의 반환값
+        backtest_lstm()의 반환값
 
     Returns
     -------
@@ -511,7 +509,7 @@ def save_results_csv(result: dict) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def print_report_tcn(result: dict) -> None:
+def print_report_lstm(result: dict) -> None:
     """백테스트 결과를 콘솔에 포맷팅하여 출력한다.
 
     GRU backtest_gru.py의 print_report_gru() 와 동일한 형식.
@@ -525,7 +523,7 @@ def print_report_tcn(result: dict) -> None:
     ov = result["overall"]
 
     # 전체 정확도 출력
-    print(f"\n=== TCN 매출 예측 백테스팅 ({test_year}) ===")
+    print(f"\n=== LSTM 매출 예측 백테스팅 ({test_year}) ===")
     print(f"전체 MAPE:  {ov['mape']:.1f}%")
     print(f"전체 MAE:   {ov['mae']:,.0f}원")
     print(f"전체 RMSE:  {ov['rmse']:,.0f}원")
@@ -556,7 +554,7 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    parser = argparse.ArgumentParser(description="TCN 매출 예측 백테스팅")
+    parser = argparse.ArgumentParser(description="LSTM 매출 예측 백테스팅")
     parser.add_argument(
         "--year",
         type=int,
@@ -566,10 +564,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 백테스트 실행
-    result = backtest_tcn(test_year=args.year)
+    result = backtest_lstm(test_year=args.year)
 
     # 콘솔 출력
-    print_report_tcn(result)
+    print_report_lstm(result)
 
     # CSV 저장 (오류 없을 경우에만)
     if "error" not in result:
