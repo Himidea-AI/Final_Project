@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../components/Toast';
@@ -23,7 +24,6 @@ import {
   LayoutTemplate,
   SlidersHorizontal,
   CreditCard,
-  Search,
   Plus,
   MapPin,
   MoreVertical,
@@ -31,10 +31,12 @@ import {
   XCircle,
   BarChart3,
   Crosshair,
-  Shield,
   Zap,
   TrendingUp,
   ChevronDown,
+  Trash2,
+  Pencil,
+  AlertTriangle,
 } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
@@ -96,18 +98,23 @@ export default function HQCommandCenter() {
           좌측 사이드바 (LNB)
           ========================================== */}
       <div className="w-64 bg-[#2c2825] border-r border-[#3a3633] flex flex-col z-20 shrink-0">
-        {/* 워크스페이스 로고 영역 */}
+        {/* 워크스페이스 로고 영역 — auth.user 기반 동적 */}
         <div className="h-20 flex items-center px-6 border-b border-[#3a3633] gap-3 cursor-pointer group mt-24">
           <BrandLogo
-            name="(주) 제네시스 BBQ 본사"
+            name={user?.company_name || "SPOTTER"}
             isUser={false}
-            className="w-8 h-8 text-xs rounded-lg"
+            className="w-8 h-8 text-xs rounded-lg shrink-0"
           />
-          <div className="flex flex-col">
-            <span className="font-black text-sm tracking-widest text-[#e2e8f0] group-hover:text-[#818cf8] transition-colors">
+          <div className="flex flex-col min-w-0">
+            <span
+              className="font-black text-sm text-[#e2e8f0] group-hover:text-[#818cf8] transition-colors truncate"
+              title={user?.company_name || "SPOTTER Workspace"}
+            >
+              {user?.company_name || "SPOTTER Workspace"}
+            </span>
+            <span className="text-[9px] text-[#9ca3af] font-mono tracking-widest uppercase">
               SPOTTER-HQ
             </span>
-            <span className="text-[10px] text-[#9ca3af]">(주) 제네시스 BBQ 본사</span>
           </div>
         </div>
 
@@ -148,15 +155,27 @@ export default function HQCommandCenter() {
           />
         </div>
 
-        {/* 하단 유저 프로필 */}
+        {/* 하단 유저 프로필 — auth.user 기반 동적 (master / manager 분기) */}
         <div className="p-4 border-t border-[#3a3633]">
           <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#1e1b18] cursor-pointer transition-colors">
-            <div className="w-8 h-8 rounded-full bg-[#3a3633] flex items-center justify-center">
-              <Shield className="w-4 h-4 text-[#9ca3af]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold">마스터 계정 (팀장)</span>
-              <span className="text-[10px] text-[#818cf8]">Pro Plan · 340 Tokens</span>
+            <BrandLogo
+              name={user?.contact_name || "사용자"}
+              isUser={true}
+              tone="accent"
+              className="w-8 h-8 text-xs rounded-full shrink-0"
+            />
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-xs font-bold text-[#e2e8f0] flex items-center gap-1.5">
+                <span className="truncate">{user?.contact_name || "사용자"}</span>
+                <span className="text-[9px] font-mono text-[#9ca3af] uppercase shrink-0">
+                  · {user?.role === "manager" ? "매니저" : "팀장"}
+                </span>
+              </span>
+              <span className="text-[10px] text-[#818cf8] truncate">
+                {user?.role === "manager"
+                  ? "Regional Access"
+                  : `${user?.plan || "Pro"} Plan`}
+              </span>
             </div>
           </div>
         </div>
@@ -176,14 +195,6 @@ export default function HQCommandCenter() {
           </h2>
 
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" />
-              <input
-                type="text"
-                placeholder="검색..."
-                className="w-64 h-9 bg-[#2c2825] border border-[#3a3633] rounded-full pl-9 pr-4 text-xs focus:outline-none focus:border-[#818cf8] transition-colors text-[#e2e8f0] placeholder-[#9ca3af]"
-              />
-            </div>
             <button
               onClick={() => {
                 if (activeMenu === 'team') {
@@ -193,7 +204,7 @@ export default function HQCommandCenter() {
                 }
               }}
               disabled={activeMenu === 'team' && isIssuing}
-              className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] disabled:opacity-60 disabled:cursor-wait"
+              className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {activeMenu === 'team' && isIssuing ? (
                 <>
@@ -392,6 +403,362 @@ function formatRelativeTime(dateStr: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+/* ─────────── ManagerActionsMenu — 활성 매니저 더보기 드롭다운 ─────────── */
+function ManagerActionsMenu({
+  onReassign,
+  onDelete,
+}: {
+  onReassign: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // 메뉴 폭 (w-48 = 12rem = 192px)
+  const MENU_WIDTH = 192;
+
+  // open 상태 변경 시 버튼 위치로 portal 좌표 계산
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setPosition({
+      top: rect.bottom + 4,
+      // 버튼 오른쪽 끝에 맞춰 정렬, 화면 밖으로 나가지 않도록 clamp
+      left: Math.max(8, rect.right - MENU_WIDTH),
+    });
+  }, [open]);
+
+  // 클릭 아웃사이드 + ESC + 스크롤/리사이즈 시 자동 닫기
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onScrollOrResize = () => setOpen(false);
+
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-[#9ca3af] hover:text-[#818cf8] transition-colors p-1 rounded hover:bg-[#1e1b18]"
+      >
+        <MoreVertical className="w-5 h-5 ml-auto" />
+      </button>
+
+      {/* Portal — 테이블의 overflow-hidden을 회피하고 body에 직접 렌더 */}
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              ref={menuRef}
+              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.98 }}
+              transition={{ duration: 0.15, ease: [0.19, 1, 0.22, 1] }}
+              style={{
+                position: "fixed",
+                top: position.top,
+                left: position.left,
+                width: MENU_WIDTH,
+              }}
+              className="z-[1000] origin-top-right bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl overflow-hidden"
+            >
+              <ul className="py-1">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onReassign();
+                      setOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 text-xs text-[#e2e8f0] hover:bg-[#2c2825] flex items-center gap-2.5 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-[#818cf8]" />
+                    담당 권역 변경
+                  </button>
+                </li>
+                <li className="border-t border-[#3a3633]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDelete();
+                      setOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    매니저 제거 (퇴사)
+                  </button>
+                </li>
+              </ul>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+/* ─────────── ReassignRegionModal — 담당 권역 변경 모달 ─────────── */
+function ReassignRegionModal({
+  manager,
+  onClose,
+  onSave,
+  isBusy,
+}: {
+  manager: Manager | null;
+  onClose: () => void;
+  onSave: (id: string, gu: string | null, dongs: string[] | null) => void;
+  isBusy: boolean;
+}) {
+  const [gu, setGu] = useState<string>("");
+  const [dongs, setDongs] = useState<string[]>([]);
+
+  // 모달이 새 매니저로 열릴 때마다 기존 권역 값으로 초기화
+  useEffect(() => {
+    if (manager) {
+      setGu(manager.assigned_gu ?? "");
+      setDongs(manager.assigned_dongs ?? []);
+    } else {
+      setGu("");
+      setDongs([]);
+    }
+  }, [manager]);
+
+  if (!manager) return null;
+
+  const toggleDong = (dong: string) => {
+    setDongs((prev) =>
+      prev.includes(dong) ? prev.filter((d) => d !== dong) : [...prev, dong],
+    );
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-md bg-[#2c2825] border border-[#3a3633] rounded-2xl shadow-2xl overflow-hidden"
+        >
+          <div className="px-6 py-5 border-b border-[#3a3633]">
+            <h3 className="text-sm font-black text-white flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-[#818cf8]" />
+              담당 권역 변경
+            </h3>
+            <p className="text-[11px] text-[#9ca3af] mt-1">
+              {manager.contact_name} 매니저의 담당 구/행정동을 변경합니다.
+            </p>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="text-[10px] text-[#9ca3af] uppercase tracking-wider font-bold block mb-2">
+                담당 구
+              </label>
+              <RegionSelect
+                value={gu}
+                onChange={(v) => {
+                  setGu(v);
+                  setDongs([]);
+                }}
+                options={Object.keys(REGION_DATA)}
+                placeholder="구 선택..."
+              />
+            </div>
+
+            {gu && (
+              <div>
+                <p className="text-[10px] text-[#9ca3af] mb-2">
+                  {gu} 행정동 선택 (복수 가능)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {REGION_DATA[gu]?.map((dong) => {
+                    const selected = dongs.includes(dong);
+                    return (
+                      <button
+                        key={dong}
+                        type="button"
+                        onClick={() => toggleDong(dong)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                          selected
+                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
+                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
+                        }`}
+                      >
+                        {dong}
+                      </button>
+                    );
+                  })}
+                </div>
+                {dongs.length > 0 && (
+                  <p className="text-[10px] text-[#818cf8] mt-2 font-mono">
+                    {dongs.length}개 동 선택됨
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-[#3a3633] bg-[#1e1b18]/50 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isBusy}
+              className="px-4 py-2 text-xs font-bold text-[#9ca3af] hover:text-white transition-colors"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onSave(manager.id, gu || null, dongs.length ? dongs : null)
+              }
+              disabled={isBusy}
+              className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isBusy ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-[#1e1b18]/40 border-t-[#1e1b18] rounded-full animate-spin" />
+                  저장 중...
+                </>
+              ) : (
+                "변경 저장"
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+/* ─────────── DeleteConfirmModal — 매니저 제거(퇴사) 확인 ─────────── */
+function DeleteConfirmModal({
+  manager,
+  onClose,
+  onConfirm,
+  isBusy,
+}: {
+  manager: Manager | null;
+  onClose: () => void;
+  onConfirm: (id: string) => void;
+  isBusy: boolean;
+}) {
+  if (!manager) return null;
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm bg-[#2c2825] border border-[#3a3633] rounded-2xl shadow-2xl overflow-hidden"
+        >
+          <div className="px-6 py-5 border-b border-[#3a3633]">
+            <h3 className="text-sm font-black text-white flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-500" />
+              매니저 제거 (퇴사 처리)
+            </h3>
+          </div>
+
+          <div className="p-6 space-y-3 text-sm">
+            <p className="text-[#e2e8f0]">
+              <span className="font-bold text-white">{manager.contact_name}</span>
+              <span className="text-[#9ca3af] text-xs"> ({manager.email})</span>
+              <br />
+              매니저를 워크스페이스에서 제거하시겠습니까?
+            </p>
+            <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-lg">
+              <p className="text-[11px] text-rose-400 leading-relaxed">
+                해당 매니저는 즉시 비활성화되며 더 이상 로그인할 수 없습니다.
+                담당 권역 할당 정보는 보존되지만 복구하려면 재승인이 필요합니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-t border-[#3a3633] bg-[#1e1b18]/50 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isBusy}
+              className="px-4 py-2 text-xs font-bold text-[#9ca3af] hover:text-white transition-colors"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={() => onConfirm(manager.id)}
+              disabled={isBusy}
+              className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isBusy ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  처리 중...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  제거하기
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 function PendingManagerCard({
   manager,
   onApprove,
@@ -519,6 +886,9 @@ function TeamManagementView() {
   const [managers, setManagers] = useState<Manager[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // 활성 매니저 관리 모달 (reassign / delete)
+  const [reassignTarget, setReassignTarget] = useState<Manager | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Manager | null>(null);
 
   const fetchManagers = useCallback(async () => {
     if (!user?.id) return;
@@ -527,7 +897,29 @@ function TeamManagementView() {
       const res = await fetch(`/api/auth/managers?owner_id=${encodeURIComponent(user.id)}`);
       const data = await res.json();
       if (data.status === 'success' && Array.isArray(data.managers)) {
-        setManagers(data.managers);
+        // assigned_dongs 방어적 정규화 — 백엔드에서 JSON text/array 둘 다 올 수 있음
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const normalized: Manager[] = data.managers.map((m: any) => {
+          let dongs: string[] | null = null;
+          const raw = m.assigned_dongs;
+          if (Array.isArray(raw)) {
+            dongs = raw.filter((d) => typeof d === "string");
+          } else if (typeof raw === "string" && raw.trim().length > 0) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                dongs = parsed.filter((d) => typeof d === "string");
+              }
+            } catch {
+              dongs = null;
+            }
+          }
+          return {
+            ...m,
+            assigned_dongs: dongs,
+          } as Manager;
+        });
+        setManagers(normalized);
       } else {
         showToast('error', data.message || '매니저 목록 조회에 실패했습니다.');
       }
@@ -596,6 +988,47 @@ function TeamManagementView() {
       }
     },
     [user?.id, busyId, showToast, fetchManagers],
+  );
+
+  // 재할당(approve와 동일 엔드포인트, 이미 승인된 매니저도 UPDATE로 동작)
+  const handleReassign = useCallback(
+    async (managerId: string, gu: string | null, dongs: string[] | null) => {
+      if (!user?.id || busyId) return;
+      setBusyId(managerId);
+      try {
+        const res = await fetch(`/api/auth/manager/${managerId}/approve`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            owner_id: user.id,
+            assigned_gu: gu,
+            assigned_dongs: dongs && dongs.length ? dongs : null,
+          }),
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          showToast("success", "담당 권역이 업데이트되었습니다.");
+          fetchManagers();
+          setReassignTarget(null);
+        } else {
+          showToast("error", data.message || "권역 변경에 실패했습니다.");
+        }
+      } catch {
+        showToast("error", "서버 연결에 실패했습니다.");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [user?.id, busyId, showToast, fetchManagers],
+  );
+
+  // 퇴사 처리 — reject 엔드포인트 재사용 (is_active=false)
+  const handleRemove = useCallback(
+    async (managerId: string) => {
+      await handleReject(managerId);
+      setDeleteTarget(null);
+    },
+    [handleReject],
   );
 
   const pending = managers.filter((m) => m.is_active && !m.is_approved);
@@ -683,9 +1116,28 @@ function TeamManagementView() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#3a3633]/50 text-[#9ca3af] border border-[#3a3633] rounded-md text-[10px] font-bold">
-                        <MapPin className="w-3 h-3" /> 미지정
-                      </span>
+                      {m.assigned_gu || (m.assigned_dongs && m.assigned_dongs.length > 0) ? (
+                        <div className="flex flex-wrap gap-1 items-center">
+                          {m.assigned_gu && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#818cf8]/15 text-[#818cf8] border border-[#818cf8]/30 rounded-md text-[10px] font-bold">
+                              <MapPin className="w-3 h-3" />
+                              {m.assigned_gu}
+                            </span>
+                          )}
+                          {m.assigned_dongs?.map((dong) => (
+                            <span
+                              key={dong}
+                              className="px-1.5 py-0.5 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded text-[9px] font-bold"
+                            >
+                              {dong}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#3a3633]/50 text-[#9ca3af] border border-[#3a3633] rounded-md text-[10px] font-bold">
+                          <MapPin className="w-3 h-3" /> 미지정
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 text-xs text-[#9ca3af]">
                       {formatRelativeTime(m.created_at)}
@@ -697,14 +1149,10 @@ function TeamManagementView() {
                       </span>
                     </td>
                     <td className="p-4 text-right">
-                      <button
-                        onClick={() =>
-                          showToast('info', '멤버 관리 기능은 정식 서비스에서 제공됩니다.')
-                        }
-                        className="text-[#9ca3af] hover:text-[#818cf8] transition-colors"
-                      >
-                        <MoreVertical className="w-5 h-5 ml-auto" />
-                      </button>
+                      <ManagerActionsMenu
+                        onReassign={() => setReassignTarget(m)}
+                        onDelete={() => setDeleteTarget(m)}
+                      />
                     </td>
                   </tr>
                 ))
@@ -713,6 +1161,22 @@ function TeamManagementView() {
           </table>
         </div>
       </section>
+
+      {/* 담당 권역 변경 모달 */}
+      <ReassignRegionModal
+        manager={reassignTarget}
+        onClose={() => setReassignTarget(null)}
+        onSave={handleReassign}
+        isBusy={!!busyId}
+      />
+
+      {/* 매니저 제거(퇴사) 확인 모달 */}
+      <DeleteConfirmModal
+        manager={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleRemove}
+        isBusy={!!busyId}
+      />
     </div>
   );
 }
@@ -979,7 +1443,15 @@ function BillingManagementView() {
       {/* 1. Current Subscription & Usage (Bento Box) */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 현재 요금제 */}
-        <div className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-6 shadow-lg flex flex-col justify-between relative overflow-hidden">
+        <div className="group relative rounded-2xl overflow-hidden p-[2px] transition-transform duration-500 ease-out hover:-translate-y-2">
+          <div
+            className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            style={{
+              background:
+                'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
+            }}
+          />
+          <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-6 shadow-lg flex flex-col justify-between overflow-hidden border border-[#3a3633] group-hover:border-transparent transition-colors duration-500">
           <div className="absolute top-0 right-0 w-32 h-32 bg-[#818cf8]/10 blur-[40px] rounded-full pointer-events-none" />
           <div>
             <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">
@@ -1010,14 +1482,23 @@ function BillingManagementView() {
           </div>
           <button
             onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
-            className="w-full mt-6 py-2.5 bg-[#1e1b18] hover:bg-[#3a3633] border border-[#3a3633] text-[#e2e8f0] text-xs font-bold rounded-lg transition-colors"
+            className="w-full mt-6 py-2.5 bg-[#1e1b18] text-[#e2e8f0] border border-[#3a3633] text-xs font-bold rounded-lg transition-all duration-300 hover:bg-[#818cf8] hover:text-[#1e1b18] hover:border-transparent hover:shadow-[0_0_20px_rgba(129,140,248,0.4)] active:scale-[0.98]"
           >
             결제 수단 관리 / 영수증
           </button>
+          </div>
         </div>
 
         {/* API 토큰 사용량 */}
-        <div className="lg:col-span-2 bg-[#2c2825] border border-[#3a3633] rounded-2xl p-6 shadow-lg flex flex-col justify-between">
+        <div className="group lg:col-span-2 relative rounded-2xl overflow-hidden p-[2px] transition-transform duration-500 ease-out hover:-translate-y-2">
+          <div
+            className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            style={{
+              background:
+                'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
+            }}
+          />
+          <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-6 shadow-lg flex flex-col justify-between border border-[#3a3633] group-hover:border-transparent transition-colors duration-500">
           <div>
             <div className="flex justify-between items-start mb-6">
               <div>
@@ -1070,10 +1551,11 @@ function BillingManagementView() {
             </div>
             <button
               onClick={() => showToast('info', '토큰 충전은 정식 오픈 후 지원됩니다.')}
-              className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] transition-colors"
+              className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98]"
             >
               즉시 충전하기
             </button>
+          </div>
           </div>
         </div>
       </section>
@@ -1116,8 +1598,8 @@ function BillingManagementView() {
               />
               <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] flex flex-col p-6 transition-colors duration-500 border border-[#3a3633] group-hover:border-transparent">
                 {plan.isPopular && (
-                  <div className="absolute top-4 right-4 px-2.5 py-0.5 bg-[#3a3633] border border-[#818cf8]/30 rounded-full">
-                    <span className="text-[9px] font-bold text-[#818cf8] tracking-wider">
+                  <div className="absolute top-4 right-4 inline-flex items-center justify-center h-5 px-2.5 bg-[#3a3633] border border-[#818cf8]/30 rounded-full">
+                    <span className="text-[9px] font-bold text-[#818cf8] tracking-wider leading-none">
                       MOST POPULAR
                     </span>
                   </div>

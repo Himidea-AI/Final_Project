@@ -70,8 +70,11 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
     if (e.key === "Enter") handleLogin();
   };
 
-  // 이미 로그인 상태면 메인으로 리다이렉트
-  if (auth.isLoggedIn) return <Navigate to="/" replace />;
+  // 이미 로그인 상태면 역할별 홈으로 리다이렉트
+  if (auth.isLoggedIn) {
+    const fallback = auth.user?.role === "manager" ? "/simulator" : "/hq";
+    return <Navigate to={fallback} replace />;
+  }
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#1e1b18]">
