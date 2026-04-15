@@ -370,6 +370,89 @@ async def reject_manager(manager_id: str, body: ManagerApprovalBody):
         return {"status": "error", "message": str(e)}
 
 
+# ---------------------------------------------------------------------------
+# 마이페이지 API
+# ---------------------------------------------------------------------------
+
+
+class ProfileUpdateBody(BaseModel):
+    contact_name: str | None = None
+    position: str | None = None
+    phone: str | None = None
+    store_count: int | None = None
+
+
+class PasswordChangeBody(BaseModel):
+    role: str  # master or manager
+    old_password: str
+    new_password: str
+
+
+@app.get("/auth/user/{user_id}")
+async def get_user_profile(user_id: str):
+    """팀장 프로필 조회"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        return await run_in_threadpool(auth.get_user_profile, user_id)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.put("/auth/user/{user_id}")
+async def update_user_profile(user_id: str, body: ProfileUpdateBody):
+    """팀장 프로필 수정"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        return await run_in_threadpool(auth.update_user_profile, user_id, body.model_dump(exclude_none=True))
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/auth/manager/{manager_id}/profile")
+async def get_manager_profile(manager_id: str):
+    """매니저 프로필 조회"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        return await run_in_threadpool(auth.get_manager_profile, manager_id)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.put("/auth/manager/{manager_id}/profile")
+async def update_manager_profile(manager_id: str, body: ProfileUpdateBody):
+    """매니저 프로필 수정"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        return await run_in_threadpool(auth.update_manager_profile, manager_id, body.model_dump(exclude_none=True))
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.put("/auth/user/{user_id}/password")
+async def change_password(user_id: str, body: PasswordChangeBody):
+    """비밀번호 변경 (팀장/매니저 공용)"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        return await run_in_threadpool(auth.change_password, user_id, body.role, body.old_password, body.new_password)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/auth/organization/{owner_id}")
+async def get_organization(owner_id: str):
+    """팀장 조직 전체 정보 (멀티테넌시)"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        return await run_in_threadpool(auth.get_organization, owner_id)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 시뮬레이션 API
+# ---------------------------------------------------------------------------
+
+
 @app.post("/simulate", response_model=SimulationOutput)
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""

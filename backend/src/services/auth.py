@@ -586,3 +586,298 @@ class AuthService:
                 }
         finally:
             engine.dispose()
+
+    # ------------------------------------------------------------------
+    # 마이페이지 — 프로필 조회/수정
+    # ------------------------------------------------------------------
+
+    def get_user_profile(self, user_id: str) -> dict:
+        """팀장 프로필 조회 (브랜드 매핑 포함)."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT id, company_name, biz_number, contact_name, position, "
+                        "email, phone, store_count, plan, created_at "
+                        "FROM users WHERE id = :id"
+                    ),
+                    {"id": user_id},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "사용자를 찾을 수 없습니다."}
+
+                user = dict(row._mapping)
+
+                # 브랜드 매핑 조회
+                brand_row = conn.execute(
+                    text(
+                        "SELECT brand_name, industry_large, industry_medium, "
+                        "franchise_count, avg_sales, mapo_store_count "
+                        "FROM biz_brand_mapping WHERE biz_number = :biz"
+                    ),
+                    {"biz": user["biz_number"]},
+                ).fetchone()
+
+                # 매니저 수
+                mgr_count = conn.execute(
+                    text("SELECT COUNT(*) FROM manager_users WHERE owner_id = :id AND is_active = true"),
+                    {"id": user_id},
+                ).scalar()
+
+                # 초대코드 수
+                invite_count = conn.execute(
+                    text("SELECT COUNT(*) FROM invite_codes WHERE owner_id = :id AND is_active = true"),
+                    {"id": user_id},
+                ).scalar()
+
+                return {
+                    "status": "success",
+                    "user": {
+                        "id": str(user["id"]),
+                        "role": "master",
+                        "company_name": user["company_name"],
+                        "biz_number": user["biz_number"],
+                        "contact_name": user["contact_name"],
+                        "position": user["position"],
+                        "email": user["email"],
+                        "phone": user["phone"],
+                        "store_count": user["store_count"],
+                        "plan": user["plan"],
+                        "created_at": str(user["created_at"]),
+                        "manager_count": mgr_count,
+                        "invite_code_count": invite_count,
+                    },
+                    "brand": dict(brand_row._mapping) if brand_row else None,
+                }
+        finally:
+            engine.dispose()
+
+    def get_manager_profile(self, manager_id: str) -> dict:
+        """매니저 프로필 조회 (소속 팀장 기업정보 포함)."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT m.id, m.owner_id, m.contact_name, m.position, m.email, m.phone, "
+                        "m.is_approved, m.created_at, "
+                        "u.company_name, u.biz_number, u.store_count, u.plan "
+                        "FROM manager_users m JOIN users u ON m.owner_id = u.id "
+                        "WHERE m.id = :id AND m.is_active = true"
+                    ),
+                    {"id": manager_id},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "매니저를 찾을 수 없습니다."}
+
+                mgr = dict(row._mapping)
+                return {
+                    "status": "success",
+                    "user": {
+                        "id": str(mgr["id"]),
+                        "role": "manager",
+                        "contact_name": mgr["contact_name"],
+                        "position": mgr["position"],
+                        "email": mgr["email"],
+                        "phone": mgr["phone"],
+                        "is_approved": mgr["is_approved"],
+                        "created_at": str(mgr["created_at"]),
+                        "company_name": mgr["company_name"],
+                        "biz_number": mgr["biz_number"],
+                        "store_count": mgr["store_count"],
+                        "plan": mgr["plan"],
+                    },
+                }
+        finally:
+            engine.dispose()
+
+    def update_user_profile(self, user_id: str, data: dict) -> dict:
+        """팀장 프로필 수정 (이름, 직책, 전화번호, 가맹점 수)."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                existing = conn.execute(text("SELECT id FROM users WHERE id = :id"), {"id": user_id}).fetchone()
+                if not existing:
+                    return {"status": "error", "message": "사용자를 찾을 수 없습니다."}
+
+                updates = {}
+                for field in ["contact_name", "position", "phone", "store_count"]:
+                    if field in data and data[field] is not None:
+                        updates[field] = data[field]
+
+                if not updates:
+                    return {"status": "error", "message": "수정할 항목이 없습니다."}
+
+                set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+                updates["id"] = user_id
+                conn.execute(text(f"UPDATE users SET {set_clause} WHERE id = :id"), updates)
+                conn.commit()
+
+                return {
+                    "status": "success",
+                    "message": "프로필이 수정되었습니다.",
+                    "updated_fields": list(updates.keys()),
+                }
+        finally:
+            engine.dispose()
+
+    def update_manager_profile(self, manager_id: str, data: dict) -> dict:
+        """매니저 프로필 수정 (이름, 직책, 전화번호)."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                existing = conn.execute(
+                    text("SELECT id FROM manager_users WHERE id = :id AND is_active = true"),
+                    {"id": manager_id},
+                ).fetchone()
+                if not existing:
+                    return {"status": "error", "message": "매니저를 찾을 수 없습니다."}
+
+                updates = {}
+                for field in ["contact_name", "position", "phone"]:
+                    if field in data and data[field] is not None:
+                        updates[field] = data[field]
+
+                if not updates:
+                    return {"status": "error", "message": "수정할 항목이 없습니다."}
+
+                set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+                updates["id"] = manager_id
+                conn.execute(text(f"UPDATE manager_users SET {set_clause} WHERE id = :id"), updates)
+                conn.commit()
+
+                return {
+                    "status": "success",
+                    "message": "프로필이 수정되었습니다.",
+                    "updated_fields": list(updates.keys()),
+                }
+        finally:
+            engine.dispose()
+
+    def change_password(self, user_id: str, role: str, old_password: str, new_password: str) -> dict:
+        """비밀번호 변경 (팀장/매니저 공용)."""
+        table = "users" if role == "master" else "manager_users"
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text(f"SELECT password_hash FROM {table} WHERE id = :id"),
+                    {"id": user_id},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "사용자를 찾을 수 없습니다."}
+
+                if not _verify_password(old_password, row._mapping["password_hash"]):
+                    return {"status": "error", "message": "현재 비밀번호가 일치하지 않습니다."}
+
+                new_hash = _hash_password(new_password)
+                conn.execute(
+                    text(f"UPDATE {table} SET password_hash = :hash WHERE id = :id"),
+                    {"hash": new_hash, "id": user_id},
+                )
+                conn.commit()
+
+                return {"status": "success", "message": "비밀번호가 변경되었습니다."}
+        finally:
+            engine.dispose()
+
+    def get_organization(self, owner_id: str) -> dict:
+        """팀장의 전체 조직 정보 (멀티테넌시 — 팀장 + 매니저 + 초대코드 + 브랜드)."""
+        engine = create_engine(self._db_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                # 팀장 정보
+                owner = conn.execute(
+                    text(
+                        "SELECT id, company_name, biz_number, contact_name, email, phone, "
+                        "store_count, plan, created_at FROM users WHERE id = :id"
+                    ),
+                    {"id": owner_id},
+                ).fetchone()
+
+                if not owner:
+                    return {"status": "error", "message": "사용자를 찾을 수 없습니다."}
+
+                # 매니저 목록
+                managers = conn.execute(
+                    text(
+                        "SELECT id, contact_name, position, email, phone, "
+                        "is_active, is_approved, assigned_gu, assigned_dongs, created_at "
+                        "FROM manager_users WHERE owner_id = :id ORDER BY created_at DESC"
+                    ),
+                    {"id": owner_id},
+                ).fetchall()
+
+                # 초대코드 목록
+                invites = conn.execute(
+                    text(
+                        "SELECT code, max_uses, used_count, is_active, created_at, expires_at "
+                        "FROM invite_codes WHERE owner_id = :id ORDER BY created_at DESC"
+                    ),
+                    {"id": owner_id},
+                ).fetchall()
+
+                # 브랜드 매핑
+                brand = conn.execute(
+                    text(
+                        "SELECT brand_name, franchise_count, avg_sales, mapo_store_count "
+                        "FROM biz_brand_mapping WHERE biz_number = :biz"
+                    ),
+                    {"biz": owner._mapping["biz_number"]},
+                ).fetchone()
+
+                return {
+                    "status": "success",
+                    "organization": {
+                        "owner": {
+                            "id": str(owner._mapping["id"]),
+                            "company_name": owner._mapping["company_name"],
+                            "contact_name": owner._mapping["contact_name"],
+                            "email": owner._mapping["email"],
+                            "plan": owner._mapping["plan"],
+                            "store_count": owner._mapping["store_count"],
+                            "created_at": str(owner._mapping["created_at"]),
+                        },
+                        "brand": dict(brand._mapping) if brand else None,
+                        "managers": [
+                            {
+                                "id": str(m._mapping["id"]),
+                                "contact_name": m._mapping["contact_name"],
+                                "position": m._mapping["position"],
+                                "email": m._mapping["email"],
+                                "is_active": m._mapping["is_active"],
+                                "is_approved": m._mapping["is_approved"],
+                                "assigned_gu": m._mapping["assigned_gu"],
+                                "assigned_dongs": m._mapping["assigned_dongs"],
+                                "created_at": str(m._mapping["created_at"]),
+                            }
+                            for m in managers
+                        ],
+                        "invite_codes": [
+                            {
+                                "code": i._mapping["code"],
+                                "max_uses": i._mapping["max_uses"],
+                                "used_count": i._mapping["used_count"],
+                                "is_active": i._mapping["is_active"],
+                                "created_at": str(i._mapping["created_at"]),
+                                "expires_at": str(i._mapping["expires_at"]) if i._mapping["expires_at"] else None,
+                            }
+                            for i in invites
+                        ],
+                        "stats": {
+                            "total_managers": len(managers),
+                            "active_managers": sum(1 for m in managers if m._mapping["is_active"]),
+                            "approved_managers": sum(1 for m in managers if m._mapping["is_approved"]),
+                            "pending_managers": sum(
+                                1 for m in managers if not m._mapping["is_approved"] and m._mapping["is_active"]
+                            ),
+                            "active_invite_codes": sum(1 for i in invites if i._mapping["is_active"]),
+                        },
+                    },
+                }
+        finally:
+            engine.dispose()

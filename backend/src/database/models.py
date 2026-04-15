@@ -339,6 +339,7 @@ class SimulationResult(Base):
         server_default=func.now(),
         comment="요청 생성 일시",
     )
+    workspace_id = Column(String(100), index=True, comment="워크스페이스 ID (멀티테넌시)")
     input_params = Column(JSONB, comment="시뮬레이션 입력 파라미터 (JSON)")
     output_result = Column(JSONB, comment="시뮬레이션 분석 결과 (JSON)")
     status = Column(String(20), default="pending", comment="처리 상태 (pending/running/done/error)")
