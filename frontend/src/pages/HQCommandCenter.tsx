@@ -10,7 +10,7 @@
  * TODO (Phase 2+): 실제 JWT 인증 + workspace API 연동
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +18,11 @@ import { useToast } from '../components/Toast';
 import { useAuth } from '../auth/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
 import { SEOUL_REGIONS } from '../data/seoulRegions';
+import {
+  useManagerList,
+  formatRelativeTime,
+  type Manager as HookManager,
+} from '../hooks/useManagerList';
 import {
   Building2,
   Users,
@@ -37,6 +42,7 @@ import {
   Trash2,
   Pencil,
   AlertTriangle,
+  ShieldAlert,
 } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
@@ -54,6 +60,10 @@ export default function HQCommandCenter() {
   const { showToast } = useToast();
   const { user } = useAuth();
   const [isIssuing, setIsIssuing] = useState(false);
+
+  // 매니저 목록 공유 (사이드바 badge + TeamManagementView 동기화)
+  const managerList = useManagerList();
+  const pendingCount = managerList.pending.length;
 
   // URL ?tab= 파라미터 변경 시 탭 동기화
   useEffect(() => {
@@ -129,7 +139,7 @@ export default function HQCommandCenter() {
             onClick={() => setActiveMenu('team')}
             icon={<Users className="w-4 h-4" />}
             label="팀 및 권역 관리"
-            badge="1"
+            badge={pendingCount > 0 ? String(pendingCount) : undefined}
           />
           <MenuButton
             active={activeMenu === 'pipeline'}
@@ -228,7 +238,15 @@ export default function HQCommandCenter() {
         {/* 렌더링 영역 */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           <div className="max-w-[1920px] w-full mx-auto xl:px-10 2xl:px-16">
-            {activeMenu === 'team' && <TeamManagementView />}
+            {activeMenu === 'team' && (
+              <TeamManagementView
+                managers={managerList.managers}
+                pending={managerList.pending}
+                active={managerList.active}
+                isLoading={managerList.isLoading}
+                refetch={managerList.refetch}
+              />
+            )}
             {activeMenu === 'pipeline' && <PipelineKanbanView />}
             {activeMenu === 'tuning' && <BrandTuningView />}
             {activeMenu === 'billing' && <BillingManagementView />}
@@ -376,32 +394,9 @@ function RegionSelect({
   );
 }
 
-type Manager = {
-  id: string;
-  contact_name: string;
-  position: string;
-  email: string;
-  phone: string;
-  is_active: boolean;
-  is_approved: boolean;
-  created_at: string;
-  assigned_gu: string | null;
-  assigned_dongs: string[] | null;
-};
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return '—';
-  const diff = Date.now() - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return '방금 전';
-  if (minutes < 60) return `${minutes}분 전`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}일 전`;
-  return date.toISOString().slice(0, 10);
-}
+// Manager 타입 + formatRelativeTime은 ../hooks/useManagerList 에서 import 사용.
+// (중복 정의 제거, 순환 import 회피 위해 hook 측에 canonical 정의를 둠)
+type Manager = HookManager;
 
 /* ─────────── ManagerActionsMenu — 활성 매니저 더보기 드롭다운 ─────────── */
 function ManagerActionsMenu({
@@ -787,21 +782,29 @@ function PendingManagerCard({
             name={manager.contact_name}
             isUser={true}
             tone="muted"
-            className="w-10 h-10 text-sm rounded-full"
+            className="w-12 h-12 text-lg rounded-full"
           />
-          <div>
-            <p className="text-sm font-bold text-[#e2e8f0]">
-              {manager.contact_name}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-base font-bold text-[#e2e8f0]">
+                {manager.contact_name}
+              </span>
+              <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded text-[9px] font-bold uppercase tracking-wider border border-rose-500/20">
+                Pending
+              </span>
               {manager.position && (
-                <span className="ml-2 text-[10px] font-mono text-[#9ca3af] uppercase tracking-wider">
+                <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[9px] font-bold uppercase tracking-wider">
                   {manager.position}
                 </span>
               )}
-            </p>
-            <p className="text-xs text-[#9ca3af]">
-              초대 코드 입력 완료 ({formatRelativeTime(manager.created_at)})
-            </p>
-            <p className="text-[10px] text-[#6b7280] font-mono mt-0.5">{manager.email}</p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[#6b7280]">
+              <span className="font-mono">{manager.email}</span>
+              <span className="hidden sm:inline">·</span>
+              <span className="hidden sm:inline">
+                초대 코드 입력 완료 ({formatRelativeTime(manager.created_at)})
+              </span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -880,59 +883,54 @@ function PendingManagerCard({
   );
 }
 
-function TeamManagementView() {
+function TeamManagementView({
+  managers,
+  pending,
+  active,
+  isLoading,
+  refetch,
+}: {
+  managers: HookManager[];
+  pending: HookManager[];
+  active: HookManager[];
+  isLoading: boolean;
+  refetch: () => Promise<void>;
+}) {
   const { showToast } = useToast();
   const { user } = useAuth();
-  const [managers, setManagers] = useState<Manager[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   // 활성 매니저 관리 모달 (reassign / delete)
-  const [reassignTarget, setReassignTarget] = useState<Manager | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Manager | null>(null);
-
-  const fetchManagers = useCallback(async () => {
-    if (!user?.id) return;
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/auth/managers?owner_id=${encodeURIComponent(user.id)}`);
-      const data = await res.json();
-      if (data.status === 'success' && Array.isArray(data.managers)) {
-        // assigned_dongs 방어적 정규화 — 백엔드에서 JSON text/array 둘 다 올 수 있음
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const normalized: Manager[] = data.managers.map((m: any) => {
-          let dongs: string[] | null = null;
-          const raw = m.assigned_dongs;
-          if (Array.isArray(raw)) {
-            dongs = raw.filter((d) => typeof d === "string");
-          } else if (typeof raw === "string" && raw.trim().length > 0) {
-            try {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed)) {
-                dongs = parsed.filter((d) => typeof d === "string");
-              }
-            } catch {
-              dongs = null;
-            }
-          }
-          return {
-            ...m,
-            assigned_dongs: dongs,
-          } as Manager;
-        });
-        setManagers(normalized);
-      } else {
-        showToast('error', data.message || '매니저 목록 조회에 실패했습니다.');
-      }
-    } catch {
-      showToast('error', '서버 연결에 실패했습니다.');
-    } finally {
-      setIsLoading(false);
+  const [reassignTarget, setReassignTarget] = useState<HookManager | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HookManager | null>(null);
+  // 활성 멤버 정렬
+  const [sortBy, setSortBy] = useState<string>("이름순 (가나다)");
+  const sortedActive = useMemo(() => {
+    const arr = [...active];
+    if (sortBy === "이름순 (가나다)") {
+      return arr.sort((a, b) =>
+        a.contact_name.localeCompare(b.contact_name, "ko"),
+      );
     }
-  }, [user?.id, showToast]);
-
-  useEffect(() => {
-    fetchManagers();
-  }, [fetchManagers]);
+    if (sortBy === "담당 권역순") {
+      return arr.sort((a, b) => {
+        // 미배정은 끝으로 밀기 (한글 "ㅎ" 이후로 정렬)
+        const guA = a.assigned_gu || "힣";
+        const guB = b.assigned_gu || "힣";
+        const byGu = guA.localeCompare(guB, "ko");
+        if (byGu !== 0) return byGu;
+        return a.contact_name.localeCompare(b.contact_name, "ko");
+      });
+    }
+    if (sortBy === "최근 가입순") {
+      return arr.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+    }
+    return arr;
+  }, [active, sortBy]);
+  // managers 사용하지 않는 경고 방지 (hook에서 pending/active로 분리됨)
+  void managers;
 
   const handleApprove = useCallback(
     async (managerId: string, gu?: string, dongs?: string[]) => {
@@ -951,7 +949,7 @@ function TeamManagementView() {
         const data = await res.json();
         if (data.status === 'success') {
           showToast('success', data.message || '매니저를 승인했습니다.');
-          fetchManagers();
+          refetch();
         } else {
           showToast('error', data.message || '승인에 실패했습니다.');
         }
@@ -961,7 +959,7 @@ function TeamManagementView() {
         setBusyId(null);
       }
     },
-    [user?.id, busyId, showToast, fetchManagers],
+    [user?.id, busyId, showToast, refetch],
   );
 
   const handleReject = useCallback(
@@ -977,7 +975,7 @@ function TeamManagementView() {
         const data = await res.json();
         if (data.status === 'success') {
           showToast('success', data.message || '매니저를 거절했습니다.');
-          fetchManagers();
+          refetch();
         } else {
           showToast('error', data.message || '거절에 실패했습니다.');
         }
@@ -987,7 +985,7 @@ function TeamManagementView() {
         setBusyId(null);
       }
     },
-    [user?.id, busyId, showToast, fetchManagers],
+    [user?.id, busyId, showToast, refetch],
   );
 
   // 재할당(approve와 동일 엔드포인트, 이미 승인된 매니저도 UPDATE로 동작)
@@ -1008,7 +1006,7 @@ function TeamManagementView() {
         const data = await res.json();
         if (data.status === "success") {
           showToast("success", "담당 권역이 업데이트되었습니다.");
-          fetchManagers();
+          refetch();
           setReassignTarget(null);
         } else {
           showToast("error", data.message || "권역 변경에 실패했습니다.");
@@ -1019,7 +1017,7 @@ function TeamManagementView() {
         setBusyId(null);
       }
     },
-    [user?.id, busyId, showToast, fetchManagers],
+    [user?.id, busyId, showToast, refetch],
   );
 
   // 퇴사 처리 — reject 엔드포인트 재사용 (is_active=false)
@@ -1031,8 +1029,7 @@ function TeamManagementView() {
     [handleReject],
   );
 
-  const pending = managers.filter((m) => m.is_active && !m.is_approved);
-  const active = managers.filter((m) => m.is_active && m.is_approved);
+  // pending, active는 props로 받음 (hook에서 이미 필터링됨)
 
   return (
     <div className="flex flex-col gap-8">
@@ -1052,10 +1049,15 @@ function TeamManagementView() {
             <div className="w-5 h-5 border-2 border-[#3a3633] border-t-[#818cf8] rounded-full animate-spin" />
           </div>
         ) : pending.length === 0 ? (
-          <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-8 text-center">
-            <p className="text-sm text-[#9ca3af]">승인 대기 중인 매니저가 없습니다.</p>
-            <p className="text-[10px] text-[#6b7280] mt-1">
-              상단 '초대코드 발급' 버튼으로 팀원을 초대하세요.
+          <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
+              <ShieldAlert className="w-5 h-5 text-[#6b7280]" />
+            </div>
+            <p className="text-sm font-bold text-[#a3a3a3] mb-1">
+              대기 중인 요청이 없습니다.
+            </p>
+            <p className="text-xs text-[#6b7280]">
+              우측 상단의 <span className="text-[#818cf8] font-bold">초대코드 발급</span> 버튼을 눌러 팀원을 초대하세요.
             </p>
           </div>
         ) : (
@@ -1073,93 +1075,111 @@ function TeamManagementView() {
         )}
       </section>
 
-      {/* 2. 활성 멤버 리스트 */}
+      {/* 2. 활성 멤버 리스트 (Card List — v12.3 + 정렬 필터) */}
       <section>
-        <h3 className="text-sm font-bold mb-4 text-[#9ca3af]">
-          활성 워크스페이스 멤버 ({active.length})
-        </h3>
-        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl overflow-hidden shadow-lg">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-[#1e1b18]/50 border-b border-[#3a3633] text-xs font-mono text-[#9ca3af] uppercase tracking-wider">
-              <tr>
-                <th className="p-4 font-medium">이름 / 직급</th>
-                <th className="p-4 font-medium">담당 권역</th>
-                <th className="p-4 font-medium">가입일</th>
-                <th className="p-4 font-medium">상태</th>
-                <th className="p-4 font-medium text-right">관리</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm divide-y divide-[#3a3633]">
-              {active.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-xs text-[#9ca3af]">
-                    활성 매니저가 없습니다. 승인 대기 중인 매니저를 승인해보세요.
-                  </td>
-                </tr>
-              ) : (
-                active.map((m) => (
-                  <tr key={m.id} className="hover:bg-[#1e1b18]/50 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <BrandLogo
-                          name={m.contact_name}
-                          isUser={true}
-                          tone="accent"
-                          className="w-8 h-8 text-xs rounded-full"
-                        />
-                        <div>
-                          <p className="font-bold text-[#e2e8f0]">{m.contact_name}</p>
-                          <p className="text-[10px] text-[#9ca3af]">
-                            {m.position || 'Regional Manager'}
-                          </p>
-                        </div>
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <h3 className="text-sm font-bold text-[#e2e8f0]">
+            활성 워크스페이스 멤버 ({active.length})
+          </h3>
+          {active.length > 1 && (
+            <div className="w-48 shrink-0">
+              <RegionSelect
+                value={sortBy}
+                onChange={setSortBy}
+                options={["이름순 (가나다)", "담당 권역순", "최근 가입순"]}
+                placeholder="정렬..."
+              />
+            </div>
+          )}
+        </div>
+
+        {active.length === 0 ? (
+          <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-10 flex flex-col items-center justify-center text-center">
+            <Users className="w-8 h-8 text-[#404040] mb-3" />
+            <p className="text-sm font-bold text-[#a3a3a3] mb-1">
+              활성 멤버가 없습니다.
+            </p>
+            <p className="text-xs text-[#6b7280]">
+              위에서 승인 대기 중인 매니저를 승인하여 팀을 구성하세요.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {sortedActive.map((m) => {
+              const hasDongs = m.assigned_dongs && m.assigned_dongs.length > 0;
+              const dongSummary = hasDongs
+                ? (m.assigned_dongs!.length > 3
+                    ? `${m.assigned_dongs!.slice(0, 2).join(", ")} 외 ${m.assigned_dongs!.length - 2}곳`
+                    : m.assigned_dongs!.join(", "))
+                : "동 미지정";
+              return (
+                <div
+                  key={m.id}
+                  className="bg-[#1e1b18] border border-[#3a3633] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between hover:border-[#818cf8]/50 hover:bg-[#2c2825]/30 transition-all duration-300 group shadow-sm gap-4 md:gap-0"
+                >
+                  {/* Left: Avatar + Info */}
+                  <div className="flex items-center gap-4">
+                    <BrandLogo
+                      name={m.contact_name}
+                      isUser={true}
+                      tone="accent"
+                      className="w-12 h-12 text-lg rounded-full shrink-0"
+                    />
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base font-bold text-white truncate">
+                          {m.contact_name}
+                        </span>
+                        <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
+                          {m.position || "Regional Mgr"}
+                        </span>
                       </div>
-                    </td>
-                    <td className="p-4">
-                      {m.assigned_gu || (m.assigned_dongs && m.assigned_dongs.length > 0) ? (
-                        <div className="flex flex-wrap gap-1 items-center">
-                          {m.assigned_gu && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#818cf8]/15 text-[#818cf8] border border-[#818cf8]/30 rounded-md text-[10px] font-bold">
-                              <MapPin className="w-3 h-3" />
-                              {m.assigned_gu}
-                            </span>
-                          )}
-                          {m.assigned_dongs?.map((dong) => (
-                            <span
-                              key={dong}
-                              className="px-1.5 py-0.5 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded text-[9px] font-bold"
-                            >
-                              {dong}
-                            </span>
-                          ))}
-                        </div>
+                      <div className="flex items-center gap-2 text-xs text-[#6b7280]">
+                        <span className="font-mono truncate">{m.email}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Region + Status + Actions */}
+                  <div className="flex items-center justify-between md:justify-end gap-6 md:gap-8 ml-16 md:ml-0">
+                    {/* Assigned Region */}
+                    <div className="flex flex-col items-start md:items-end gap-1.5">
+                      {m.assigned_gu ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded-md text-[10px] font-bold">
+                          <MapPin className="w-3 h-3" />
+                          {m.assigned_gu}
+                        </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#3a3633]/50 text-[#9ca3af] border border-[#3a3633] rounded-md text-[10px] font-bold">
-                          <MapPin className="w-3 h-3" /> 미지정
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#3a3633]/50 text-[#a3a3a3] border border-[#3a3633] rounded-md text-[10px] font-bold">
+                          <MapPin className="w-3 h-3" /> 미배정
                         </span>
                       )}
-                    </td>
-                    <td className="p-4 text-xs text-[#9ca3af]">
-                      {formatRelativeTime(m.created_at)}
-                    </td>
-                    <td className="p-4">
+                      <span className="text-[10px] text-[#6b7280]">
+                        {dongSummary}
+                      </span>
+                    </div>
+
+                    {/* Activity Status (고정 Active) */}
+                    <div className="w-20 flex justify-end shrink-0">
                       <span className="flex items-center gap-1.5 text-xs text-emerald-500 font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                         Active
                       </span>
-                    </td>
-                    <td className="p-4 text-right">
+                    </div>
+
+                    {/* Actions Menu (기존 컴포넌트 재사용) */}
+                    <div className="shrink-0">
                       <ManagerActionsMenu
                         onReassign={() => setReassignTarget(m)}
                         onDelete={() => setDeleteTarget(m)}
                       />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* 담당 권역 변경 모달 */}

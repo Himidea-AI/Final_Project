@@ -123,6 +123,7 @@ import {
 
 import AgentMapVisualizer from "./components/AgentMapVisualizer";
 import HybridSliderInput from "./components/ui/HybridSliderInput";
+import { useManagerList, formatRelativeTime } from "./hooks/useManagerList";
 import {
   AreaChart,
   Area,
@@ -625,33 +626,16 @@ function IntroScene({
   onSimulatorClick: () => void;
   onContactClick: () => void;
 }) {
-  const { isLoggedIn, user } = useAuth();
-  const navTo = useTransition();
-
-  // 로그인 아이콘 클릭 — 로그인 안 돼있으면 /login, 돼있으면 역할별 홈으로
-  const handleLoginIconClick = () => {
-    if (isLoggedIn) {
-      if (user?.role === "manager") navTo("/simulator");
-      else navTo("/hq");
-    } else {
-      onLoginClick();
-    }
-  };
-
   return (
     <div className="relative z-10 h-full w-full overflow-hidden">
-      {/* 🔐 Top-right login / dashboard 아이콘 버튼 */}
+      {/* 🔐 Top-right 로그인 버튼 — 항상 간소하게 "로그인" 표시, 클릭 시 /login */}
       <button
-        onClick={handleLoginIconClick}
-        className="absolute top-6 right-6 z-40 group flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] transition-all duration-300 shadow-[0_0_20px_rgba(0,0,0,0.4)] hover:shadow-[0_0_25px_rgba(129,140,248,0.3)]"
-        title={isLoggedIn ? "대시보드로 이동" : "로그인"}
+        onClick={onLoginClick}
+        className="absolute top-6 right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#9ca3af] hover:text-[#818cf8]"
+        title="Login"
       >
-        <div className="w-7 h-7 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/40 flex items-center justify-center group-hover:bg-[#818cf8]/20 transition-colors">
-          <LogIn className="w-3.5 h-3.5 text-[#818cf8]" />
-        </div>
-        <span className="text-xs font-bold text-[#e2e8f0] tracking-wider">
-          {isLoggedIn ? (user?.contact_name || "대시보드") : "로그인"}
-        </span>
+        <LogIn className="w-3 h-3" />
+        <span className="text-[11px] font-bold tracking-wider uppercase">Login</span>
       </button>
 
       {/* Background Watermark Logo (idea 5) — 화면을 가로지르는 거대한 반투명 로고 */}
@@ -693,10 +677,14 @@ function IntroScene({
           </span>
         </div>
 
-        {/* Menu — 균일 사이즈, 일렬 정렬 */}
+        {/* Menu — SIMULATOR가 핵심이라 1단계 더 큼, 나머지는 보조 사이즈 */}
         <nav className="flex flex-col gap-3">
           {MENU_ITEMS.map((item, i) => {
             const isActive = activeMenuIndex === i;
+            const isSimulator = i === 1;
+            const sizeClasses = isSimulator
+              ? "text-3xl sm:text-5xl md:text-6xl lg:text-7xl"
+              : "text-2xl sm:text-4xl md:text-5xl lg:text-6xl";
             return (
               <button
                 key={item}
@@ -715,7 +703,7 @@ function IntroScene({
                     }`}
                 />
                 <span
-                  className={`inline-block text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  className={`inline-block ${sizeClasses} font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                     isActive
                       ? "text-[#e2e8f0] translate-x-0"
                       : "text-[#3a3633] -translate-x-2 group-hover:text-[#9ca3af]"
@@ -2925,22 +2913,63 @@ function LogoutButton() {
   );
 }
 
+/**
+ * Notification Mock Items — 도메인 특화 샘플 3종
+ * (실제 API 연동 전 demo 용도. 승인 대기는 실 데이터로 별도 렌더)
+ */
+const NOTIFICATION_MOCK_ITEMS = [
+  {
+    id: "mock-legal",
+    type: "critical" as const,
+    iconType: "legal" as const,
+    title:
+      "[권리금 경고] 연남동 B권역, 최근 3년 상가임대차 갱신 거절 분쟁 급증 (Legal Agent)",
+    time: "1시간 전",
+    action: "법률 리스크 상세 리포트는 준비 중입니다.",
+  },
+  {
+    id: "mock-cannibal",
+    type: "warning" as const,
+    iconType: "cannibal" as const,
+    title:
+      "[간섭도 주의] 서교동 신규 출점 시 기존 3호점(홍대점) 예상 매출 -18% 타격 감지",
+    time: "2시간 전",
+    action: "카니발리제이션 분석 대시보드는 준비 중입니다.",
+  },
+  {
+    id: "mock-sim",
+    type: "success" as const,
+    iconType: "sim" as const,
+    title:
+      "[분석 완료] 마포구 망원동 112-4 일대 시뮬레이션 완료 및 보관함 저장됨",
+    time: "5시간 전",
+    action: "보관함 파이프라인은 준비 중입니다.",
+  },
+];
+
 function GlobalLimelightNav() {
   const nav = useTransition();
-  const { isLoggedIn, logout } = useAuth();
+  const { isLoggedIn, user, logout } = useAuth();
+  const { showToast } = useToast();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
   const [openDropdown, setOpenDropdown] = useState<"bell" | "user" | null>(null);
-  const [unreadCount, setUnreadCount] = useState(1); // TODO Phase 2: GET /notifications/unread-count API polling으로 교체
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
+  const { pending: pendingManagers } = useManagerList();
+  const isMaster = isLoggedIn && user?.role !== "manager";
+  // 마스터만 mock 알림 노출 (매니저는 승인 대기 없음 + 도메인 알림 관련 없음)
+  const mockItems = isMaster ? NOTIFICATION_MOCK_ITEMS : [];
+  const totalUnread = pendingManagers.length + mockItems.length;
 
   type NavItemType = "folder" | "bell" | "settings" | "user";
   const navItems: { type: NavItemType; icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
     { type: "folder", icon: <Folder />, label: "출점 파이프라인" },
     { type: "user", icon: <User />, label: "내 프로필" },
     { type: "settings", icon: <Settings />, label: "브랜드 AI 튜닝" },
-    { type: "bell", icon: <Bell />, label: "알림", hasNoti: unreadCount > 0 },
+    { type: "bell", icon: <Bell />, label: "알림", hasNoti: totalUnread > 0 },
   ];
 
   const targetIndex = hoverIndex !== null ? hoverIndex : activeIndex;
@@ -3022,30 +3051,135 @@ function GlobalLimelightNav() {
 
       {/* 드롭다운 — overflow-hidden 바깥에서 렌더링 */}
 
-      {/* 알림 드롭다운 (Bell) */}
+      {/* 🔔 알림 드롭다운 (Bell) — 실 승인 대기 + 도메인 특화 mock 혼합 (v11.3) */}
       {openDropdown === "bell" && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
-          <div className="absolute top-12 right-0 w-72 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
-            <div className="px-4 py-2 border-b border-[#3a3633] flex justify-between items-center">
-              <span className="text-xs font-bold text-[#e2e8f0]">최근 알림</span>
-              <span onClick={() => setUnreadCount(0)} className="text-[10px] text-[#818cf8] cursor-pointer hover:underline">모두 읽음</span>
+          <div className="absolute top-12 right-0 w-80 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-[#3a3633] flex justify-between items-center bg-[#2c2825]/50">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[#e2e8f0]">최근 알림</span>
+                {totalUnread > 0 && (
+                  <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-500 text-[9px] font-black rounded-full">
+                    {totalUnread}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  showToast("info", "모든 알림을 읽음 처리했습니다.");
+                  setOpenDropdown(null);
+                }}
+                className="text-[10px] text-[#818cf8] font-bold hover:text-[#6366f1] transition-colors"
+              >
+                모두 읽음
+              </button>
             </div>
-            <div className="max-h-64 overflow-y-auto custom-scrollbar">
-              <div className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] flex gap-3">
-                <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs text-[#e2e8f0] leading-tight">새로운 매니저 워크스페이스 승인 대기중 (최점포 님)</p>
-                  <p className="text-[10px] text-[#9ca3af] mt-1">10분 전</p>
+
+            {/* Notification List */}
+            <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
+              {totalUnread === 0 ? (
+                <div className="px-4 py-10 text-center">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-2 opacity-60" />
+                  <p className="text-[11px] text-[#9ca3af]">새 알림이 없습니다</p>
                 </div>
-              </div>
-              <div className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors flex gap-3">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs text-[#e2e8f0] leading-tight">마포구 연남동 AI 시뮬레이션 완료 및 저장됨</p>
-                  <p className="text-[10px] text-[#9ca3af] mt-1">2시간 전</p>
-                </div>
-              </div>
+              ) : (
+                <>
+                  {/* 실 데이터 — 매니저 승인 대기 */}
+                  {pendingManagers.map((m) => (
+                    <div
+                      key={m.id}
+                      onClick={() => {
+                        setOpenDropdown(null);
+                        nav("/hq?tab=team");
+                      }}
+                      className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] flex gap-3 group"
+                    >
+                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40 transition-colors">
+                        <ShieldAlert className="w-4 h-4 text-rose-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-[#e2e8f0] leading-snug group-hover:text-white transition-colors">
+                          <strong className="font-bold text-white mr-1">
+                            [권한 승인]
+                          </strong>
+                          새로운 매니저 워크스페이스 승인 대기 ({m.contact_name} 님)
+                        </p>
+                        <p className="text-[10px] text-[#9ca3af] mt-1.5 font-mono">
+                          {formatRelativeTime(m.created_at)} · {m.email}
+                        </p>
+                      </div>
+                      <div className="shrink-0 flex items-center justify-center w-2">
+                        <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Mock 3종 — 법률/카니발/완료 */}
+                  {mockItems.map((item) => {
+                    const tag = item.title.split("]")[0] + "]";
+                    const body = item.title.split("]").slice(1).join("]").trim();
+                    const bgCls =
+                      item.type === "critical"
+                        ? "bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40"
+                        : item.type === "warning"
+                        ? "bg-amber-500/10 border-amber-500/20 group-hover:border-amber-500/40"
+                        : "bg-emerald-500/10 border-emerald-500/20 group-hover:border-emerald-500/40";
+                    const Icon =
+                      item.iconType === "legal"
+                        ? Scale
+                        : item.iconType === "cannibal"
+                        ? AlertTriangle
+                        : CheckCircle2;
+                    const iconColor =
+                      item.type === "critical"
+                        ? "text-rose-500"
+                        : item.type === "warning"
+                        ? "text-amber-500"
+                        : "text-emerald-500";
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          showToast("info", item.action);
+                          setOpenDropdown(null);
+                        }}
+                        className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] last:border-b-0 flex gap-3 group"
+                      >
+                        <div className={`shrink-0 mt-0.5 p-1.5 rounded-lg border transition-colors ${bgCls}`}>
+                          <Icon className={`w-4 h-4 ${iconColor}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-[#e2e8f0] leading-snug group-hover:text-white transition-colors">
+                            <strong className="font-bold text-white mr-1">{tag}</strong>
+                            {body}
+                          </p>
+                          <p className="text-[10px] text-[#9ca3af] mt-1.5 font-mono">
+                            {item.time}
+                          </p>
+                        </div>
+                        <div className="shrink-0 flex items-center justify-center w-2">
+                          <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-2 border-t border-[#3a3633]">
+              <button
+                onClick={() => {
+                  showToast("info", "전체 알림 센터는 준비 중입니다.");
+                  setOpenDropdown(null);
+                }}
+                className="w-full py-2 text-[10px] font-bold text-[#9ca3af] hover:text-white hover:bg-[#2c2825] rounded-lg transition-colors"
+              >
+                알림 센터 전체 보기
+              </button>
             </div>
           </div>
         </>
