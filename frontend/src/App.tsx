@@ -118,9 +118,18 @@ import {
   CircleDotDashed,
   BarChartBig,
   Map as MapIcon,
+  LogIn,
 } from "lucide-react";
 
 import AgentMapVisualizer from "./components/AgentMapVisualizer";
+import HybridSliderInput from "./components/ui/HybridSliderInput";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  Tooltip as RechartsTooltipWrapper,
+  ResponsiveContainer,
+} from "recharts";
 
 /* ═══════════════════════════════════════════════════════
    DATA
@@ -157,7 +166,7 @@ const DISTRICTS = [
 
 const MAPO_IDX = DISTRICTS.findIndex((d) => d.name === "마포구");
 
-const MENU_ITEMS = ["ABOUT SPOTTER", "GET STARTED", "SIMULATOR", "CONTACT"];
+const MENU_ITEMS = ["ABOUT SPOTTER", "SIMULATOR", "CONTACT"];
 
 const DONG_DATA: Record<string, string[]> = {
   "강남구": ["신사동","논현1동","논현2동","압구정동","청담동","삼성1동","삼성2동","대치1동","대치2동","대치4동","역삼1동","역삼2동","도곡1동","도곡2동","개포1동","개포2동","개포3동","개포4동","일원본동","일원1동","수서동","세곡동"],
@@ -605,22 +614,46 @@ function IntroScene({
   activeMenuIndex,
   setActiveMenuIndex,
   onAboutClick,
-  onJoinUsClick,
+  onLoginClick,
   onSimulatorClick,
   onContactClick,
 }: {
   activeMenuIndex: number;
   setActiveMenuIndex: (i: number) => void;
   onAboutClick: () => void;
-  onJoinUsClick: () => void;
+  onLoginClick: () => void;
   onSimulatorClick: () => void;
   onContactClick: () => void;
 }) {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const navTo = useTransition();
+
+  // 로그인 아이콘 클릭 — 로그인 안 돼있으면 /login, 돼있으면 역할별 홈으로
+  const handleLoginIconClick = () => {
+    if (isLoggedIn) {
+      if (user?.role === "manager") navTo("/simulator");
+      else navTo("/hq");
+    } else {
+      onLoginClick();
+    }
+  };
 
   return (
     <div className="relative z-10 h-full w-full overflow-hidden">
+      {/* 🔐 Top-right login / dashboard 아이콘 버튼 */}
+      <button
+        onClick={handleLoginIconClick}
+        className="absolute top-6 right-6 z-40 group flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] transition-all duration-300 shadow-[0_0_20px_rgba(0,0,0,0.4)] hover:shadow-[0_0_25px_rgba(129,140,248,0.3)]"
+        title={isLoggedIn ? "대시보드로 이동" : "로그인"}
+      >
+        <div className="w-7 h-7 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/40 flex items-center justify-center group-hover:bg-[#818cf8]/20 transition-colors">
+          <LogIn className="w-3.5 h-3.5 text-[#818cf8]" />
+        </div>
+        <span className="text-xs font-bold text-[#e2e8f0] tracking-wider">
+          {isLoggedIn ? (user?.contact_name || "대시보드") : "로그인"}
+        </span>
+      </button>
+
       {/* Background Watermark Logo (idea 5) — 화면을 가로지르는 거대한 반투명 로고 */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
         <img
@@ -656,14 +689,13 @@ function IntroScene({
         <div className="flex items-center gap-4 mb-10 text-xs tracking-[0.3em] text-gray-500 uppercase">
           <div className="w-px h-4 bg-gray-600" />
           <span>
-            0{activeMenuIndex + 1} / 04 — GET TO KNOW
+            0{activeMenuIndex + 1} / 0{MENU_ITEMS.length} — GET TO KNOW
           </span>
         </div>
 
         {/* Menu — 균일 사이즈, 일렬 정렬 */}
         <nav className="flex flex-col gap-3">
-          {MENU_ITEMS.map((rawItem, i) => {
-            const item = (i === 1 && isLoggedIn) ? "GO TO DASHBOARD" : rawItem;
+          {MENU_ITEMS.map((item, i) => {
             const isActive = activeMenuIndex === i;
             return (
               <button
@@ -673,9 +705,8 @@ function IntroScene({
                 onMouseEnter={() => setActiveMenuIndex(i)}
                 onClick={() => {
                   if (i === 0) onAboutClick();
-                  if (i === 1) isLoggedIn ? navTo("/simulator") : onJoinUsClick();
-                  if (i === 2) onSimulatorClick();
-                  if (i === 3) onContactClick();
+                  if (i === 1) onSimulatorClick();
+                  if (i === 2) onContactClick();
                 }}
               >
                 {/* Indicator bar */}
@@ -1533,6 +1564,84 @@ function ContactPage({ onBack }: { onBack: () => void }) {
    AnalysisResult.data.market_report → 7개 항목별 차트 데이터
 */
 
+/* ═══════════════════════════════════════════════════════
+   Chart Mock Data + Custom Tooltip (Recharts 기반, Patch v13.0)
+   — simResult → 실 API 데이터로 교체될 임시 mock
+   ═══════════════════════════════════════════════════════ */
+const CHART_BASE_DATE = (() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
+
+// 24H 시간대별 데이터 (today 06:00 → 익일 02:00)
+const DAILY_CHART_DATA = [
+  { time: CHART_BASE_DATE.getTime() + 6 * 3600000, revenue: 150, traffic: 120 },
+  { time: CHART_BASE_DATE.getTime() + 10 * 3600000, revenue: 480, traffic: 320 },
+  { time: CHART_BASE_DATE.getTime() + 14 * 3600000, revenue: 350, traffic: 250 },
+  { time: CHART_BASE_DATE.getTime() + 18 * 3600000, revenue: 850, traffic: 580 },
+  { time: CHART_BASE_DATE.getTime() + 22 * 3600000, revenue: 920, traffic: 450 },
+  { time: CHART_BASE_DATE.getTime() + 26 * 3600000, revenue: 200, traffic: 100 },
+];
+
+// 12M 매출 예측 (LSTM 출력 placeholder)
+const MONTHLY_CHART_DATA = Array.from({ length: 12 }).map((_, i) => {
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  d.setMonth(d.getMonth() + i);
+  return {
+    time: d.getTime(),
+    revenue: Math.floor(Math.random() * 500) + 500,
+    traffic: Math.floor(Math.random() * 300) + 300,
+  };
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function RechartsDarkTooltip(props: any) {
+  const { active, payload, label } = props;
+  const mode: "daily" | "monthly" = props.chartMode ?? "daily";
+  if (!active || !payload || !payload.length) return null;
+  const date = new Date(label);
+  const title =
+    mode === "daily"
+      ? `${String(date.getHours() % 24).padStart(2, "0")}:00`
+      : `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
+
+  return (
+    <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl px-4 py-3 text-xs min-w-[180px]">
+      <div className="text-[10px] text-[#9ca3af] font-mono mb-2 tracking-widest uppercase">
+        {title}
+      </div>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      {payload.map((p: any) => {
+        const isRevenue = p.dataKey === "revenue";
+        return (
+          <div
+            key={p.dataKey}
+            className="flex items-center justify-between gap-3 py-0.5"
+          >
+            <div className="flex items-center gap-2">
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ background: p.stroke }}
+              />
+              <span className="text-[#9ca3af]">
+                {isRevenue ? "예상 매출" : "유동인구"}
+              </span>
+            </div>
+            <span className="text-white font-bold">
+              {isRevenue
+                ? `₩ ${(p.value * 10000).toLocaleString()}`
+                : `${(p.value * 100).toLocaleString()} 명`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * SimulatorDashboard — 시뮬레이션 분석 결과 대시보드
  * idle → loading(Progress Bar) → result(KPI + 차트 + 테이블)
@@ -1888,7 +1997,6 @@ function SimulatorDashboard({
   const accent = "text-[#818cf8]";
   const accentBg = "bg-[#818cf8]";
   const panel = "bg-[#2c2825] border-[#3a3633] shadow-2xl";
-  const inputTrack = "accent-[#818cf8]";
 
   return (
     <div ref={dashboardRef} className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar">
@@ -2037,53 +2145,29 @@ function SimulatorDashboard({
             </div>
           </div>
 
-          {/* ─────────── 분석 조건 (기존 sliders) ─────────── */}
+          {/* ─────────── 분석 조건 (Hybrid Slider + Input) ─────────── */}
           <div className="pt-5 border-t border-[#3a3633]">
-            {/* Radius slider */}
-            <div className="mb-6">
-              <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
-                  상권 반경
-                  <span className="text-[#818cf8] cursor-help" title="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장">&#9432;</span>
-                </label>
-                <span className={`text-xs font-mono ${accent}`}>{radius}m</span>
-              </div>
-              <input
-                type="range"
-                min={100}
-                max={1500}
-                value={radius}
-                onChange={(e) => setRadius(Number(e.target.value))}
-                className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-              />
-              <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                <span>100m</span>
-                <span>1500m</span>
-              </div>
-            </div>
+            <HybridSliderInput
+              label="상권 반경"
+              value={radius}
+              onChange={setRadius}
+              min={100}
+              max={1500}
+              step={50}
+              unit="m"
+              infoText="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장"
+            />
 
-            {/* Budget slider */}
-            <div className="mb-6">
-              <div className="flex justify-between mb-2">
-                <label className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}>
-                  임대료 예산
-                  <span className="text-[#818cf8] cursor-help" title="월 임대료 예산. 마포구 평균 1층 기준 200~400만원">&#9432;</span>
-                </label>
-                <span className={`text-xs font-mono ${accent}`}>{budget}만원</span>
-              </div>
-              <input
-                type="range"
-                min={50}
-                max={1000}
-                value={budget}
-                onChange={(e) => setBudget(Number(e.target.value))}
-                className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-              />
-              <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                <span>50만</span>
-                <span>1000만</span>
-              </div>
-            </div>
+            <HybridSliderInput
+              label="임대료 예산"
+              value={budget}
+              onChange={setBudget}
+              min={50}
+              max={1000}
+              step={10}
+              unit="만원"
+              infoText="월 임대료 예산. 마포구 평균 1층 기준 200~400만원"
+            />
 
             {/* Toggle switch */}
             <div className="mb-2">
@@ -2140,26 +2224,17 @@ function SimulatorDashboard({
           >
             <div className="p-4 rounded-xl border border-[#3a3633] bg-[#1e1b18]/50 space-y-6">
               {/* 1. 매장 면적 */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className={`text-xs font-medium ${textSecondary}`}>
-                    매장 면적
-                  </label>
-                  <span className={`text-xs font-mono ${accent}`}>{storeArea}평</span>
-                </div>
-                <input
-                  type="range"
-                  min={5}
-                  max={100}
-                  value={storeArea}
-                  onChange={(e) => setStoreArea(Number(e.target.value))}
-                  className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-                />
-                <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                  <span>5평</span>
-                  <span>100평</span>
-                </div>
-              </div>
+              <HybridSliderInput
+                label="매장 면적"
+                value={storeArea}
+                onChange={setStoreArea}
+                min={5}
+                max={100}
+                step={1}
+                unit="평"
+                infoText="공간 기반 수익성(평당 매출) 계산에 사용됩니다."
+                className="mb-0"
+              />
 
               {/* 2. 목표 객단가 */}
               <div>
@@ -2215,31 +2290,18 @@ function SimulatorDashboard({
               </div>
 
               {/* 4. 초기 자본금 */}
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className={`text-xs font-medium ${textSecondary}`}>
-                    초기 자본금
-                  </label>
-                  <span className={`text-xs font-mono ${accent}`}>
-                    {initialCapital >= 10000
-                      ? `${(initialCapital / 10000).toFixed(1)}억`
-                      : `${initialCapital}만`}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={1000}
-                  max={50000}
-                  step={500}
-                  value={initialCapital}
-                  onChange={(e) => setInitialCapital(Number(e.target.value))}
-                  className={`w-full h-1.5 rounded-full appearance-none cursor-pointer ${inputTrack} bg-[#3a3633]`}
-                />
-                <div className={`flex justify-between text-[10px] mt-1 ${textSecondary}`}>
-                  <span>1천만</span>
-                  <span>5억</span>
-                </div>
-              </div>
+              <HybridSliderInput
+                label="초기 자본금"
+                value={initialCapital}
+                onChange={setInitialCapital}
+                min={1000}
+                max={50000}
+                step={100}
+                unit="만원"
+                infoText="권리금/보증금 제외, 인테리어 및 초기 운영비 기준입니다."
+                minLabel="1천만"
+                className="mb-0"
+              />
 
               <p className={`text-[10px] ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}>
                 * 권리금/보증금 제외, 인테리어·초기 운영비 기준
@@ -2479,29 +2541,76 @@ function SimulatorDashboard({
                           <button onClick={() => setChartView("monthly")} className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${chartView === "monthly" ? "bg-[#3a3633] text-indigo-400" : "text-[#9ca3af] hover:text-white"}`}>12M 예측</button>
                         </div>
                       </div>
-                      <div onClick={() => setActiveDrawer("traffic")} className="flex-1 relative w-full flex items-end cursor-pointer group/chart hover:bg-[#818cf8]/[0.03] rounded-lg transition-colors">
-                        <svg viewBox="0 0 1000 300" className="absolute inset-0 w-full h-full pb-5 pl-2 overflow-visible group-hover/chart:[&_path]:drop-shadow-[0_0_4px_rgba(129,140,248,0.4)] transition-all" preserveAspectRatio="none">
-                          {chartView === "daily" ? (
-                            <>
-                              <path d="M 0 280 C 100 280, 150 200, 250 180 C 350 160, 400 250, 500 240 C 600 230, 700 80, 800 100 C 900 120, 950 200, 1000 220 L 1000 300 L 0 300 Z" fill="url(#grayGradient)" opacity="0.3" />
-                              <path d="M 0 280 C 100 280, 150 200, 250 180 C 350 160, 400 250, 500 240 C 600 230, 700 80, 800 100 C 900 120, 950 200, 1000 220" fill="none" stroke="#a3a3a3" strokeWidth="3" />
-                              <path d="M 0 290 C 150 290, 200 150, 300 120 C 400 90, 450 200, 550 180 C 650 160, 750 40, 850 50 C 950 60, 980 150, 1000 160 L 1000 300 L 0 300 Z" fill="url(#indigoGradient)" opacity="0.4" />
-                              <path d="M 0 290 C 150 290, 200 150, 300 120 C 400 90, 450 200, 550 180 C 650 160, 750 40, 850 50 C 950 60, 980 150, 1000 160" fill="none" stroke="#818cf8" strokeWidth="4" />
-                            </>
-                          ) : (
-                            <>
-                              <path d="M 0 150 L 90 140 L 181 160 L 272 120 L 363 110 L 454 90 L 545 100 L 636 70 L 727 60 L 818 80 L 909 50 L 1000 40 L 1000 300 L 0 300 Z" fill="url(#indigoGradient)" opacity="0.3" />
-                              <path d="M 0 150 L 90 140 L 181 160 L 272 120 L 363 110 L 454 90 L 545 100 L 636 70 L 727 60 L 818 80 L 909 50 L 1000 40" fill="none" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                            </>
-                          )}
-                          <defs>
-                            <linearGradient id="indigoGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#818cf8" stopOpacity="0.8" /><stop offset="100%" stopColor="#818cf8" stopOpacity="0" /></linearGradient>
-                            <linearGradient id="grayGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#a3a3a3" stopOpacity="0.5" /><stop offset="100%" stopColor="#a3a3a3" stopOpacity="0" /></linearGradient>
-                          </defs>
-                        </svg>
-                        <div className="absolute -bottom-3 left-0 w-full flex justify-between text-[10px] text-[#d1d5db] font-mono pl-2">
-                          {chartView === "daily" ? <><span>06:00</span><span>10:00</span><span>14:00</span><span>18:00</span><span>22:00</span><span>02:00</span></> : <><span>1M</span><span>3M</span><span>6M</span><span>9M</span><span>12M</span></>}
-                        </div>
+                      <div
+                        onClick={() => setActiveDrawer("traffic")}
+                        className="flex-1 relative w-full cursor-pointer group/chart hover:bg-[#818cf8]/[0.03] rounded-lg transition-colors min-h-0"
+                      >
+                        <motion.div
+                          key={`chart-reveal-${chartView}`}
+                          initial={{ clipPath: "inset(0 100% 0 0)" }}
+                          animate={{ clipPath: "inset(0 0 0 0)" }}
+                          transition={{ duration: 1.4, ease: "linear" }}
+                          className="w-full h-full"
+                        >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart
+                            data={chartView === "daily" ? DAILY_CHART_DATA : MONTHLY_CHART_DATA}
+                            margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
+                          >
+                            <defs>
+                              <linearGradient id="rcRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#818cf8" stopOpacity={0.5} />
+                                <stop offset="100%" stopColor="#818cf8" stopOpacity={0} />
+                              </linearGradient>
+                              <linearGradient id="rcTrafficGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#9ca3af" stopOpacity={0.2} />
+                                <stop offset="100%" stopColor="#9ca3af" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <XAxis
+                              dataKey="time"
+                              type="number"
+                              domain={["dataMin", "dataMax"]}
+                              scale="time"
+                              tickFormatter={(t: number) => {
+                                const d = new Date(t);
+                                return chartView === "daily"
+                                  ? `${String(d.getHours() % 24).padStart(2, "0")}:00`
+                                  : `${d.getMonth() + 1}월`;
+                              }}
+                              stroke="#9ca3af"
+                              fontSize={10}
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fill: "#d1d5db" }}
+                            />
+                            <RechartsTooltipWrapper
+                              content={<RechartsDarkTooltip chartMode={chartView} />}
+                              cursor={{
+                                stroke: "#818cf8",
+                                strokeWidth: 1,
+                                strokeDasharray: "4 4",
+                              }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="traffic"
+                              stroke="#d1d5db"
+                              strokeWidth={2}
+                              fill="url(#rcTrafficGradient)"
+                              isAnimationActive={false}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#818cf8"
+                              strokeWidth={3}
+                              fill="url(#rcRevenueGradient)"
+                              isAnimationActive={false}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                        </motion.div>
                       </div>
                     </div>
 
@@ -2598,11 +2707,26 @@ function SimulatorDashboard({
                       </div>
                       <div className="relative w-[180px] h-[180px] my-2">
                         <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
+                          <defs>
+                            <clipPath id="radarReveal">
+                              <motion.circle
+                                cx={100}
+                                cy={100}
+                                initial={{ r: 0 }}
+                                animate={{ r: 70 }}
+                                transition={{ duration: 1.4, ease: "linear" }}
+                              />
+                            </clipPath>
+                          </defs>
+                          {/* Grid + axis (항상 표시) */}
                           <polygon points="100,40 147,63 158,113 126,154 74,154 42,113 53,63" fill="#1e1b18" stroke="#3a3633" strokeWidth="1" />
                           <polygon points="100,70 123.5,81.5 129,106.5 113,127 87,127 71,106.5 76.5,81.5" fill="none" stroke="#3a3633" strokeWidth="1" strokeDasharray="2 2" />
                           <line x1="100" y1="100" x2="100" y2="40" stroke="#3a3633" /><line x1="100" y1="100" x2="147" y2="63" stroke="#3a3633" /><line x1="100" y1="100" x2="158" y2="113" stroke="#3a3633" /><line x1="100" y1="100" x2="126" y2="154" stroke="#3a3633" /><line x1="100" y1="100" x2="74" y2="154" stroke="#3a3633" /><line x1="100" y1="100" x2="42" y2="113" stroke="#3a3633" /><line x1="100" y1="100" x2="53" y2="63" stroke="#3a3633" />
-                          <polygon points="100,50 140,70 145,110 115,140 85,130 60,105 70,75" fill="rgba(99,102,241,0.4)" stroke="#818cf8" strokeWidth="2" className="drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-                          <circle cx="100" cy="50" r="3" fill="#fff" /><circle cx="140" cy="70" r="3" fill="#fff" /><circle cx="145" cy="110" r="3" fill="#fff" /><circle cx="115" cy="140" r="3" fill="#fff" /><circle cx="85" cy="130" r="3" fill="#fff" /><circle cx="60" cy="105" r="3" fill="#fff" /><circle cx="70" cy="75" r="3" fill="#fff" />
+                          {/* Data polygon + dots — 가운데에서 퍼지는 clipPath reveal */}
+                          <g clipPath="url(#radarReveal)">
+                            <polygon points="100,50 140,70 145,110 115,140 85,130 60,105 70,75" fill="rgba(99,102,241,0.4)" stroke="#818cf8" strokeWidth="2" className="drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
+                            <circle cx="100" cy="50" r="3" fill="#fff" /><circle cx="140" cy="70" r="3" fill="#fff" /><circle cx="145" cy="110" r="3" fill="#fff" /><circle cx="115" cy="140" r="3" fill="#fff" /><circle cx="85" cy="130" r="3" fill="#fff" /><circle cx="60" cy="105" r="3" fill="#fff" /><circle cx="70" cy="75" r="3" fill="#fff" />
+                          </g>
                           <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="100" y="32" fill="#e5e5e5" fontSize="10" fontWeight="bold" textAnchor="middle"><title>유동인구: 82/100 (마포구 상위 12%)</title>유동인구</text>
                           <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="157" y="60" fill="#a3a3a3" fontSize="10" textAnchor="start"><title>매출: 74/100 (월 3,240만 추정)</title>매출</text>
                           <text onClick={() => setActiveDrawer("attractiveness")} className="cursor-pointer hover:fill-[#818cf8] transition-colors" x="168" y="117" fill="#a3a3a3" fontSize="10" textAnchor="start"><title>성장성: 56/100 (전년 대비 +3.2%)</title>성장성</text>
@@ -3715,12 +3839,15 @@ function DashboardPanelView({ districtName, isVariantB }: { districtName: string
    SpotterAgentWorkflow — AI 에이전트 파이프라인 시각화
    LangGraph 5-노드 워크플로우를 Drawer 안에서 표시
    ═══════════════════════════════════════════════════════ */
+// 🌟 백엔드 아키텍처 변경(Parallel Analysis) 완벽 반영
+// - Supervisor LLM 제거 → 하드코딩 parallel_analysis 라우터로 교체
+// - Market / Population / Legal 3개 에이전트 동시(Parallel) 실행
 const spotterAgentTasks = [
   {
-    id: "1", title: "Supervisor Node (의사결정 지능)", description: "입력된 상권 조건(마포구 연남동)을 분석하고 하위 에이전트들에게 분석 태스크를 할당합니다.", status: "completed" as const, priority: "high", dependencies: [] as string[],
+    id: "1", title: "Parallel Analysis Node (병렬 라우터)", description: "LLM 개입 없이 하드코딩된 코드로 3개의 전문 에이전트를 동시에(Parallel) 병렬 호출하여 속도를 극대화합니다.", status: "completed" as const, priority: "high", dependencies: [] as string[],
     subtasks: [
-      { id: "1.1", title: "파라미터 추출 및 쿼리 최적화", description: "사용자 입력값 파싱 및 DB 쿼리 파라미터 생성", status: "completed" as const, tools: ["Query Parser"] },
-      { id: "1.2", title: "하위 에이전트 태스크 분배", description: "Market, Population, Legal 에이전트 병렬 호출", status: "completed" as const, tools: ["LangGraph Router"] },
+      { id: "1.1", title: "파라미터 추출 및 쿼리 최적화", description: "사용자 입력값 파싱 및 DB 쿼리 파라미터 생성", status: "completed" as const, tools: ["Python", "Regex"] },
+      { id: "1.2", title: "하위 에이전트 병렬 분배 (Simultaneous Dispatch)", description: "Market, Population, Legal 에이전트 동시 실행 트리거", status: "completed" as const, tools: ["LangGraph Parallel"] },
     ],
   },
   {
@@ -3739,14 +3866,14 @@ const spotterAgentTasks = [
     ],
   },
   {
-    id: "4", title: "Legal Analyst (법률 리스크 RAG)", description: "상가임대차보호법 및 지역 규제 데이터를 검색하여 권리금/임대료 리스크를 판단합니다.", status: "pending" as const, priority: "high", dependencies: ["1"],
+    id: "4", title: "Legal Analyst (법률 리스크 RAG)", description: "상가임대차보호법 및 지역 규제 데이터를 검색하여 권리금/임대료 리스크를 판단합니다.", status: "in-progress" as const, priority: "high", dependencies: ["1"],
     subtasks: [
-      { id: "4.1", title: "문서 청크 검색 (Similarity Search)", description: "관련 법률 문서 및 최근 판례 RAG 검색", status: "pending" as const, tools: ["Sentence-Transformers", "Vector DB"] },
+      { id: "4.1", title: "문서 청크 검색 (Similarity Search)", description: "관련 법률 문서 및 최근 판례 RAG 검색", status: "in-progress" as const, tools: ["Sentence-Transformers", "Vector DB"] },
       { id: "4.2", title: "리스크 요약 및 경고 생성", description: "검색된 판례를 바탕으로 LLM 기반 위험 요소 3줄 요약", status: "pending" as const, tools: ["Gemini 1.5 Pro"] },
     ],
   },
   {
-    id: "5", title: "Strategy Synthesizer (최종 리포트 생성)", description: "모든 에이전트의 결과를 취합하여 7대 지표를 정규화하고 최종 인사이트를 작성합니다.", status: "pending" as const, priority: "high", dependencies: ["2", "3", "4"],
+    id: "5", title: "Strategy Synthesizer (최종 종합)", description: "병렬 실행된 3개 에이전트의 결과를 취합하여 7대 지표를 정규화하고 최종 인사이트를 작성합니다.", status: "pending" as const, priority: "high", dependencies: ["2", "3", "4"],
     subtasks: [
       { id: "5.1", title: "0~100점 정규화 (Normalization)", description: "7개 주요 메트릭을 레이더 차트용 점수로 변환", status: "pending" as const, tools: ["Math Module"] },
       { id: "5.2", title: "종합 매력도 및 BEP 산출", description: "투자금 대비 손익분기점(BEP) 도달 개월 수 계산", status: "pending" as const, tools: ["ROI Calculator"] },
@@ -3762,12 +3889,20 @@ type AgentTask = {
 
 function SpotterAgentWorkflow() {
   const [tasks, setTasks] = useState<AgentTask[]>(spotterAgentTasks as AgentTask[]);
-  const [expandedTasks, setExpandedTasks] = useState<string[]>(["2", "3"]);
+  // 병렬 실행 중인 3개 (Market/Population/Legal) 모두 펼쳐두어 동시성 시각화
+  const [expandedTasks, setExpandedTasks] = useState<string[]>(["2", "3", "4"]);
   const [expandedSubtasks, setExpandedSubtasks] = useState<Record<string, boolean>>({});
 
+  // 병렬(Parallel) 처리 시뮬레이션 — 3개 에이전트가 약간의 시차로 동시 완료
   useEffect(() => {
-    const timer = setTimeout(() => { toggleSubtaskStatus("2", "2.2"); }, 2500);
-    return () => clearTimeout(timer);
+    const t1 = setTimeout(() => toggleSubtaskStatus("2", "2.2"), 2000);
+    const t2 = setTimeout(() => toggleSubtaskStatus("3", "3.2"), 2500);
+    const t3 = setTimeout(() => toggleSubtaskStatus("4", "4.1"), 3000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3979,12 +4114,17 @@ export default function App() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Preloader
-  const [loadProgress, setLoadProgress] = useState(0);
-  const [isAppLoaded, setIsAppLoaded] = useState(false);
+  // Preloader — sessionStorage 플래그로 한 탭 세션당 1회만 재생 (새로고침 시 스킵)
+  const [loadProgress, setLoadProgress] = useState(100);
+  const [isAppLoaded, setIsAppLoaded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem("spotter_booted") === "1";
+  });
   const [loadLogs, setLoadLogs] = useState<string[]>([]);
 
   useEffect(() => {
+    if (isAppLoaded) return; // 이미 부팅된 세션이면 프리로더 스킵
+    setLoadProgress(0);
     setLoadLogs(["[SYSTEM] KERNEL BOOT SEQUENCE INITIATED..."]);
     const duration = 3000;
     const interval = 30;
@@ -4004,11 +4144,19 @@ export default function App() {
 
       if (currentStep >= steps) {
         clearInterval(timer);
-        setTimeout(() => setIsAppLoaded(true), 1700);
+        setTimeout(() => {
+          setIsAppLoaded(true);
+          try {
+            sessionStorage.setItem("spotter_booted", "1");
+          } catch {
+            /* private mode — silent fail */
+          }
+        }, 1700);
       }
     }, interval);
 
     return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** 암전 트랜지션 + 라우팅 */
@@ -4083,7 +4231,7 @@ export default function App() {
               activeMenuIndex={activeMenuIndex}
               setActiveMenuIndex={setActiveMenuIndex}
               onAboutClick={() => transitionTo("about")}
-              onJoinUsClick={() => transitionTo("login")}
+              onLoginClick={() => transitionTo("login")}
               onSimulatorClick={() => transitionTo("accordion")}
               onContactClick={() => transitionTo("contact")}
             />
@@ -4129,7 +4277,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/hq" element={<ProtectedRoute><HQCommandCenter /></ProtectedRoute>} />
+        <Route path="/hq" element={<ProtectedRoute requireRole="master"><HQCommandCenter /></ProtectedRoute>} />
         <Route path="/login" element={<LoginPage onLogoClick={() => transitionTo("intro")} />} />
       </Routes>
 
