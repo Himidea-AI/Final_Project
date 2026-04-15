@@ -32,12 +32,15 @@ app = FastAPI(
 app_graph = compile_workflow()
 
 # CORS 설정: 프론트엔드(localhost:3000) 접근 허용 및 Docker nginx (localhost) 허용
+_cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost").split(
+    ","
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 # [디폴트 값] 마포구청 (혹은 홍대입구역) 좌표 - 데이터 수집 실패 시 대비
@@ -141,6 +144,14 @@ async def get_status(job_id: str):
 @app.post("/analyze")
 async def analyze_location(input_data: SimulationInput):
     """상권 분석 및 지도 데이터 요청"""
+    from src.config.constants import MAPO_DISTRICTS
+
+    if input_data.target_district not in MAPO_DISTRICTS:
+        return {
+            "status": "error",
+            "message": f"지원하지 않는 행정동입니다: {input_data.target_district}. 마포구 16개 동만 지원합니다.",
+        }
+
     request_id = str(uuid.uuid4())
     print(f"--- [API] /analyze 요청 수신: {input_data.target_district} ({input_data.business_type}) ---")
 
@@ -357,6 +368,14 @@ async def reject_manager(manager_id: str, body: ManagerApprovalBody):
 @app.post("/simulate")
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
+    from src.config.constants import MAPO_DISTRICTS
+
+    if input_data.target_district not in MAPO_DISTRICTS:
+        return {
+            "status": "error",
+            "message": f"지원하지 않는 행정동입니다: {input_data.target_district}. 마포구 16개 동만 지원합니다.",
+        }
+
     request_id = str(uuid.uuid4())
     initial_state = {
         "messages": [HumanMessage(content=f"{input_data.target_district} 시뮬레이션 시작")],
