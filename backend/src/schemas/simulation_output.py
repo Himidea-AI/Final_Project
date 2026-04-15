@@ -1,11 +1,13 @@
 """
 시뮬레이션 결과 출력 모델 — API에서 클라이언트로 반환하는 결과 스키마
 """
+
 from pydantic import BaseModel, Field
 
 
 class MonthlyProjection(BaseModel):
     """월별 매출 및 수익 예측"""
+
     month: int
     revenue: int = 0
     cumulative_profit: int = 0
@@ -13,6 +15,7 @@ class MonthlyProjection(BaseModel):
 
 class DistrictComparison(BaseModel):
     """동별 비교 결과"""
+
     district: str
     score: float = 0.0
     revenue: int = 0
@@ -23,17 +26,42 @@ class DistrictComparison(BaseModel):
 
 class LegalRisk(BaseModel):
     """법률 리스크 항목"""
+
     type: str
     risk_level: str
     detail: str
 
 
+class MapCenter(BaseModel):
+    lat: float
+    lng: float
+
+
+class MapMarker(BaseModel):
+    id: str
+    lat: float
+    lng: float
+    label: str
+    type: str
+
+
+class MapData(BaseModel):
+    center: MapCenter
+    markers: list[MapMarker] = Field(default_factory=list)
+
+
 class SimulationOutput(BaseModel):
     """시뮬레이션 결과 출력 스키마"""
+
     request_id: str
     target_district: str
     simulation_months: int
     monthly_projection: list[MonthlyProjection] = Field(default_factory=list)
     comparison: list[DistrictComparison] = Field(default_factory=list)
+    overall_legal_risk: str = "safe"
     legal_risks: list[LegalRisk] = Field(default_factory=list)
+    analysis_report: str = ""
+    analysis_metrics: dict = Field(default_factory=dict)
+    map_data: MapData | None = None
+    financial_report: dict = Field(default_factory=dict)
     ai_recommendation: str = ""
