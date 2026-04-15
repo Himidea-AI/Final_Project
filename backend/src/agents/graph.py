@@ -34,10 +34,7 @@ async def parallel_analysis_node(state: AgentState) -> dict:
         merged_metrics.update(result.get("analysis_metrics", {}))
 
     # overall_legal_risk는 legal 결과 우선
-    overall_legal_risk = (
-        legal_result.get("overall_legal_risk")
-        or state.get("overall_legal_risk", "caution")
-    )
+    overall_legal_risk = legal_result.get("overall_legal_risk") or state.get("overall_legal_risk", "caution")
 
     print("--- [PARALLEL ANALYSIS] 3개 에이전트 완료 ---")
 

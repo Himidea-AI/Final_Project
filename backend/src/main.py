@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.schemas.simulation_input import SimulationInput
+from src.schemas.simulation_output import SimulationOutput
 from src.agents.graph import compile_workflow
 from src.services.biz_mapper import BizMapper
 from src.services.auth import AuthService
@@ -151,6 +152,10 @@ async def analyze_location(input_data: SimulationInput):
         "target_district": input_data.target_district,
         "market_data": {},
         "legal_info": [],
+        "scouting_results": [],
+        "top_3_candidates": [],
+        "winner_district": input_data.target_district,
+        "brand_analysis": {},
         "analysis_results": {},
         "analysis_metrics": {},
         "overall_legal_risk": "safe",
@@ -354,7 +359,7 @@ async def reject_manager(manager_id: str, body: ManagerApprovalBody):
         return {"status": "error", "message": str(e)}
 
 
-@app.post("/simulate")
+@app.post("/simulate", response_model=SimulationOutput)
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
     request_id = str(uuid.uuid4())
@@ -365,6 +370,10 @@ async def run_simulation(input_data: SimulationInput):
         "target_district": input_data.target_district,
         "market_data": {},
         "legal_info": [],
+        "scouting_results": [],
+        "top_3_candidates": [],
+        "winner_district": input_data.target_district,
+        "brand_analysis": {},
         "analysis_results": {},
         "analysis_metrics": {},
         "overall_legal_risk": "safe",
