@@ -2968,7 +2968,7 @@ function GlobalLimelightNav() {
   const navItems: { type: NavItemType; icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
     { type: "folder", icon: <Folder />, label: "출점 파이프라인" },
     { type: "user", icon: <User />, label: "내 프로필" },
-    { type: "settings", icon: <Settings />, label: "브랜드 AI 튜닝" },
+    { type: "settings", icon: <Settings />, label: "내 정보 관리" },
     { type: "bell", icon: <Bell />, label: "알림", hasNoti: totalUnread > 0 },
   ];
 
@@ -2997,7 +2997,7 @@ function GlobalLimelightNav() {
       nav("/hq?tab=pipeline");
     } else if (type === "settings") {
       setOpenDropdown(null);
-      nav("/hq?tab=tuning");
+      nav("/hq?tab=mypage");
     } else if (type === "bell") {
       setOpenDropdown(openDropdown === "bell" ? null : "bell");
     } else if (type === "user") {
