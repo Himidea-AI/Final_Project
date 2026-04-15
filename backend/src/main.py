@@ -76,10 +76,18 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         for r in legal_risks_raw
     ]
 
+    # 랭킹 데이터
+    district_rankings = analysis.get("district_rankings", [])
+    winner_district = analysis.get("winner_district", target_dist)
+    top_3_candidates = analysis.get("top_3_candidates", [])
+
     # [B1 고도화] 응답 구조 재설계
     response_data = {
         "request_id": request_id,
         "target_district": target_dist,
+        "winner_district": winner_district,
+        "top_3_candidates": top_3_candidates,
+        "district_rankings": district_rankings,
         "analysis_report": analysis.get("market_summary", ""),  # 줄글 리포트
         "analysis_metrics": metrics,  # 차트용 정량 데이터
         "simulation_months": 12,
