@@ -18,15 +18,56 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 
 ## 기술 스택
 
-| 영역 | 스택 |
+### 인프라 / 배포
+
+| 항목 | 기술 |
 |------|------|
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS + Recharts + React-Leaflet |
-| Backend | FastAPI + Uvicorn + Pydantic v2 + SQLAlchemy |
-| AI/Agent | LangChain + LangGraph + Anthropic SDK + OpenAI SDK |
-| RAG | ChromaDB + OpenAI Embeddings + lxml + PyPDF2 |
-| Deep Learning | PyTorch + scikit-learn + SHAP |
-| Database | PostgreSQL 16 + Redis 7 + ChromaDB |
-| DevOps | Docker + Docker Compose + Nginx |
+| 컨테이너 | Docker, Docker Compose |
+| 프론트 서빙 | Nginx |
+| 백엔드 서버 | Uvicorn |
+| DB | AWS RDS (PostgreSQL 16 + pgvector) |
+| 캐시 | Redis 7 |
+
+### 백엔드
+
+| 분류 | 기술 |
+|------|------|
+| 프레임워크 | FastAPI, Pydantic v2 |
+| ORM / 마이그레이션 | SQLAlchemy 2.0, Alembic, asyncpg, psycopg3 |
+| AI 오케스트레이션 | LangGraph, LangChain |
+| LLM | Claude (Anthropic), Gemini (Google), OpenAI |
+| 임베딩 / RAG | pgvector, sentence-transformers, LangChain-HuggingFace |
+| 딥러닝 모델 | PyTorch (LSTM/GRU/TCN), scikit-learn, SHAP |
+| 데이터 처리 | pandas, numpy, geopandas |
+| PDF 파싱 | pdfplumber, PyPDF2 |
+| 관측성 | LangSmith |
+| 인증 | bcrypt |
+| HTTP 클라이언트 | httpx, requests, tenacity (재시도) |
+
+### 프론트엔드
+
+| 분류 | 기술 |
+|------|------|
+| 프레임워크 | React 18, TypeScript 5, Vite 6 |
+| 스타일 | Tailwind CSS, PostCSS |
+| 지도 | Leaflet, react-leaflet |
+| 차트 | Recharts |
+| 애니메이션 | Framer Motion |
+| HTTP | Axios |
+| 마크다운 | react-markdown |
+| 내보내기 | jsPDF, html2canvas, xlsx |
+| 아이콘 | lucide-react |
+| 라우팅 | react-router-dom v6 |
+
+### 개발 도구
+
+| 분류 | 기술 |
+|------|------|
+| Python 포맷터 | Ruff (check + format) |
+| JS 포맷터 | Prettier |
+| JS 린터 | ESLint |
+| Git 훅 | pre-commit (Ruff + Prettier 자동 실행) |
+| 이슈 트래킹 | Jira |
 
 ## 팀원별 담당 영역
 
