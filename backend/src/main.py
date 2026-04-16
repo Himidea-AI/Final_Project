@@ -319,7 +319,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "analysis_report": analysis.get("market_summary", ""),
         "analysis_metrics": metrics,
         "simulation_months": 12,
-        "monthly_projection": quarterly,
+        "quarterly_projection": quarterly,
         "comparison": [
             {
                 "district": target_dist,
@@ -766,7 +766,7 @@ async def run_simulation(input_data: SimulationInput):
             "legal_risks": [],
             "overall_legal_risk": "safe",
             "simulation_months": 12,
-            "monthly_projection": [],
+            "quarterly_projection": [],
             "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",
             "analysis_metrics": {},
             "map_data": None,

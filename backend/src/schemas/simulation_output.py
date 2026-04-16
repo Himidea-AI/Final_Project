@@ -15,6 +15,7 @@ class QuarterlyProjection(BaseModel):
     confidence_upper: int = 0
 
 
+
 # 하위 호환성 유지
 MonthlyProjection = QuarterlyProjection
 
@@ -89,7 +90,7 @@ class SimulationOutput(BaseModel):
     request_id: str
     target_district: str
     simulation_months: int = 12
-    monthly_projection: list[QuarterlyProjection] = Field(default_factory=list)
+    quarterly_projection: list[QuarterlyProjection] = Field(default_factory=list)
     comparison: list[DistrictComparison] = Field(default_factory=list)
     overall_legal_risk: str = "safe"
     legal_risks: list[LegalRisk] = Field(default_factory=list)

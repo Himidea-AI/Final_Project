@@ -29,10 +29,7 @@ export interface ExistingStore {
   monthly_revenue: number;
 }
 
-/**
- * 분기별 매출 예측 (v12.5: monthly→quarterly 네이밍 전환, backend B2 refactor 반영)
- * 백엔드 응답 키는 `monthly_projection`이지만 엔트리는 quarter 단위 (레거시 호환 차원에서 키명 유지)
- */
+/** 분기별 매출 예측 */
 export interface QuarterlyProjection {
   quarter: number;
   revenue: number;
@@ -68,7 +65,7 @@ export interface SimulationOutput {
   analysis_report: string;    // 줄글 리포트
   analysis_metrics: AnalysisMetrics; // 차트용 정량 데이터
   simulation_months: number;
-  monthly_projection: QuarterlyProjection[];
+  quarterly_projection: QuarterlyProjection[];
   comparison: DistrictComparison[];
   legal_risks: LegalRisk[];
   ai_recommendation?: string; // 기존 호환성 유지
