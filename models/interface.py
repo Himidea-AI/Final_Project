@@ -6,7 +6,7 @@ A1(찬영) 딥러닝 모델 출력을 B2(수지니) 12개월 시뮬레이션 입
 
 - lstm_forecast : 월 예상매출, 신뢰구간
 - revenue_predictor : 생존률, 리스크 레벨, 12개월 월별 생존률
-- revenue_predictor/bep : BEP 개월수, 월별 손익
+- revenue_predictor/bep : BEP 개월수, 분기별 손익
 
 모델 가중치가 없는 개발 환경에서는 mock 데이터를 반환한다.
 """
@@ -98,7 +98,7 @@ def _mock_bep(industry_name: str) -> dict:
         "monthly_profit": bep_result["monthly_profit"],
         "total_initial_investment": bep_result["total_initial_investment"],
         "annual_roi": bep_result["annual_roi"],
-        "monthly_simulation": simulation,
+        "quarterly_simulation": simulation,   # 실제 4개 분기 데이터 (키명 quarterly로 정정)
     }
 
 
@@ -136,8 +136,8 @@ def _run_survival(dong_code: str, industry_code: str) -> dict:
 
 
 def _run_bep(
-    monthly_avg: float,
-    monthly_predictions: list[dict],
+    quarterly_avg: float,           # 분기 평균 매출 (파라미터명 quarterly로 정정)
+    quarterly_predictions: list[dict],  # 분기 예측 4개 (파라미터명 quarterly로 정정)
     industry_name: str,
     cost_config: dict | None,
 ) -> dict:
@@ -148,12 +148,12 @@ def _run_bep(
         cost_config = BEPCalculator.get_default_costs(industry_name)
 
     calc = BEPCalculator(cost_config)
-    bep_result = calc.calculate_bep(monthly_avg)
+    bep_result = calc.calculate_bep(quarterly_avg)  # 분기 평균 매출로 BEP 계산
 
-    monthly_revenues = [p["predicted_sales"] for p in monthly_predictions]
-    monthly_simulation_raw = calc.simulate_monthly(monthly_revenues)
+    quarterly_revenues = [p["predicted_sales"] for p in quarterly_predictions]  # 분기별 매출 리스트
+    quarterly_simulation_raw = calc.simulate_monthly(quarterly_revenues)  # simulate_monthly 함수명은 bep.py 유지
     simulation = []
-    for row in monthly_simulation_raw:
+    for row in quarterly_simulation_raw:  # 분기 시뮬레이션 루프
         simulation.append(
             {
                 "month": row["month"],
@@ -170,7 +170,7 @@ def _run_bep(
         "monthly_profit": bep_result["monthly_profit"],
         "total_initial_investment": bep_result["total_initial_investment"],
         "annual_roi": bep_result["annual_roi"],
-        "monthly_simulation": simulation,
+        "quarterly_simulation": simulation,   # 분기별 4개 시뮬레이션 결과
     }
 
 
@@ -286,7 +286,7 @@ class ModelOutput:
                     "revenue_forecast": { quarterly_avg, quarterly_predictions },
                     "survival": { survival_rate, risk_level, monthly_survival_rates },
                     "bep": { bep_months, monthly_profit, total_initial_investment,
-                             annual_roi, monthly_simulation },
+                             annual_roi, quarterly_simulation },
                     "metadata": { model_version, generated_at, data_period },
                 }
         """
@@ -315,8 +315,8 @@ class ModelOutput:
             quarterly_avg = revenue_forecast["quarterly_avg"]
             quarterly_preds = revenue_forecast["quarterly_predictions"]
             bep = _run_bep(
-                monthly_avg=quarterly_avg,
-                monthly_predictions=quarterly_preds,
+                quarterly_avg=quarterly_avg,        # 분기 평균 매출 전달
+                quarterly_predictions=quarterly_preds,  # 분기 예측 4개 전달
                 industry_name=industry_name,
                 cost_config=cost_config,
             )

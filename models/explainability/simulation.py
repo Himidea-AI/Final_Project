@@ -4,14 +4,14 @@
 models/interface.py의 ModelOutput.generate() 결과(bep, quarterly_predictions)를
 프론트엔드가 소비할 수 있는 형태로 변환한다.
 
-[중요] bep["monthly_simulation"] 실제 구조:
+[중요] bep["quarterly_simulation"] 실제 구조:
   interface.py의 _run_bep()는 quarterly_predictions(4개 분기값)를
-  simulate_monthly()에 그대로 넘기므로, 출력도 4개 원소(month 1~4)이다.
-  month 1 = Q1, month 2 = Q2, month 3 = Q3, month 4 = Q4 로 대응.
+  simulate_monthly()에 그대로 넘기므로, 출력도 4개 원소(quarter 1~4)이다.
+  quarter 1 = Q1, quarter 2 = Q2, quarter 3 = Q3, quarter 4 = Q4 로 대응.
 
 주요 역할:
   - build_quarterly_projection : BEP 4개 분기 + TCN 신뢰구간 결합 → 분기별 4개
-  - build_monthly_projection   : BEP 4개 분기 데이터 → dict 리스트 (나중에 MonthlyProjection 연결)
+  - build_quarterly_simple     : BEP 4개 분기 데이터 → dict 리스트 (나중에 MonthlyProjection 연결)
   - build_scenarios            : TCN 분기 예측 → 낙관/기본/비관 3가지 시나리오
 
 담당: B2 — 수지니
@@ -37,7 +37,7 @@ _VALID_CONFIDENCE = {"base", "optimistic", "pessimistic"}
 
 
 def build_quarterly_projection(
-    bep_monthly_simulation: list[dict],
+    bep_quarterly_simulation: list[dict],
     quarterly_predictions: list[dict],
     confidence: str = "base",
 ) -> list[dict]:
@@ -45,15 +45,15 @@ def build_quarterly_projection(
     BEP 분기 시뮬레이션(실제 4개, month 1~4)과 TCN 분기 예측 신뢰구간을
     결합하여 분기별 4개 결과를 반환한다.
 
-    [bep_monthly_simulation 구조 주의]
+    [bep_quarterly_simulation 구조 주의]
       interface.py가 4개 분기 매출값을 simulate_monthly()에 넘기므로
       실제 원소 수는 4개(month 1/2/3/4 = Q1/Q2/Q3/Q4).
       month 1~3 그룹핑(→12개월 전제)은 잘못된 가정이므로 사용하지 않는다.
       대신 인덱스로 직접 접근:
-        bep_monthly_simulation[0] → Q1 데이터
-        bep_monthly_simulation[1] → Q2 데이터
-        bep_monthly_simulation[2] → Q3 데이터
-        bep_monthly_simulation[3] → Q4 데이터
+        bep_quarterly_simulation[0] → Q1 데이터
+        bep_quarterly_simulation[1] → Q2 데이터
+        bep_quarterly_simulation[2] → Q3 데이터
+        bep_quarterly_simulation[3] → Q4 데이터
 
     confidence 파라미터:
       "base"        → TCN predicted_sales   (모델 포인트 예측)
@@ -61,8 +61,8 @@ def build_quarterly_projection(
       "pessimistic" → TCN confidence_lower  (95% 신뢰구간 하한)
 
     Args:
-        bep_monthly_simulation: interface.generate()["bep"]["monthly_simulation"]
-                                실제 4개 dict, 각 원소: month(1~4), revenue, cost,
+        bep_quarterly_simulation: interface.generate()["bep"]["quarterly_simulation"]
+                                실제 4개 dict, 각 원소: quarter(1~4), revenue, cost,
                                 profit, cumulative_profit, bep_reached
         quarterly_predictions:  interface.generate()["revenue_forecast"]["quarterly_predictions"]
                                 4개 dict, 각 원소: quarter_offset(1~4), predicted_sales,
@@ -108,16 +108,16 @@ def build_quarterly_projection(
     results: list[dict] = []
 
     for q in range(1, 5):  # Q1~Q4 (1, 2, 3, 4)
-        # bep_monthly_simulation은 실제 4개 원소(인덱스 0~3)
+        # bep_quarterly_simulation은 실제 4개 원소(인덱스 0~3)
         # q=1 → 인덱스 0(Q1), q=2 → 인덱스 1(Q2), ... 직접 접근
         bep_idx = q - 1
-        if bep_idx < len(bep_monthly_simulation):
+        if bep_idx < len(bep_quarterly_simulation):
             # 해당 분기의 BEP 누적수익 추출 (float → int 변환)
-            bep_row = bep_monthly_simulation[bep_idx]
+            bep_row = bep_quarterly_simulation[bep_idx]
             cumulative_profit = int(bep_row.get("cumulative_profit", 0))
         else:
             # 데이터가 없는 분기는 0으로 대체 (데이터 부족 방어)
-            logger.warning("bep_monthly_simulation 인덱스 %d 없음 — 0으로 대체", bep_idx)
+            logger.warning("bep_quarterly_simulation 인덱스 %d 없음 — 0으로 대체", bep_idx)
             cumulative_profit = 0
 
         # TCN 분기 예측 데이터에서 revenue, 신뢰구간 추출 (float → int 변환)
@@ -146,18 +146,18 @@ def build_quarterly_projection(
 
 
 # ---------------------------------------------------------------------------
-# 2. build_monthly_projection
+# 2. build_quarterly_simple
 # ---------------------------------------------------------------------------
 
 
-def build_monthly_projection(
-    bep_monthly_simulation: list[dict],
+def build_quarterly_simple(
+    bep_quarterly_simulation: list[dict],
 ) -> list[dict]:
     """
     BEP 시뮬레이션 결과에서 프론트엔드 필요 필드만 추출하여 반환한다.
 
     [실제 데이터 단위 주의]
-      입력 bep_monthly_simulation은 이름과 달리 실제 4개 분기 데이터이다.
+      입력 bep_quarterly_simulation은 이름과 달리 실제 4개 분기 데이터이다.
       (interface.py에서 분기 매출 4개를 simulate_monthly()에 넘기기 때문)
       따라서 이 함수의 반환 원소도 4개(분기)이며,
       month 필드값은 1~4 (분기 번호)를 그대로 반환한다.
@@ -169,8 +169,8 @@ def build_monthly_projection(
       MonthlyProjection으로 변환 예정.
 
     Args:
-        bep_monthly_simulation: interface.generate()["bep"]["monthly_simulation"]
-                                실제 4개 분기 dict, 각 원소: month(1~4), revenue, cost,
+        bep_quarterly_simulation: interface.generate()["bep"]["quarterly_simulation"]
+                                실제 4개 분기 dict, 각 원소: quarter(1~4), revenue, cost,
                                 profit, cumulative_profit, bep_reached
 
     Returns:
@@ -183,7 +183,7 @@ def build_monthly_projection(
     """
     results: list[dict] = []
 
-    for row in bep_monthly_simulation:
+    for row in bep_quarterly_simulation:
         # float → int 형변환
         # — BEP 계산 결과가 float로 나오므로 스키마(MonthlyProjection) int 타입에 맞게 변환
         results.append(
@@ -195,7 +195,7 @@ def build_monthly_projection(
         )
 
     logger.info(
-        "build_monthly_projection 완료 — 원소 수=%d (실제 분기 데이터)",
+        "build_quarterly_simple 완료 — 원소 수=%d (실제 분기 데이터)",
         len(results),
     )
     return results
