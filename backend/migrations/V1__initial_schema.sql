@@ -316,3 +316,23 @@ CREATE TABLE IF NOT EXISTS kakao_store (
 CREATE INDEX IF NOT EXISTS ix_kakao_store_brand_name ON kakao_store (brand_name);
 CREATE INDEX IF NOT EXISTS ix_kakao_store_category   ON kakao_store (category);
 CREATE INDEX IF NOT EXISTS ix_kakao_store_dong_name  ON kakao_store (dong_name);
+
+
+-- =============================================================================
+-- 13. 네이버 부동산 상가 공실 (naver_vacancy)
+-- 출처: 네이버 부동산 모바일 API 크롤링 (상가 rletTpCd=SHP)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS naver_vacancy (
+    id              SERIAL          NOT NULL,
+    trade_type      VARCHAR(10),                -- 거래유형 (매매/전세/월세)
+    trade_code      VARCHAR(5),                 -- 거래코드 (B1/B2/B3)
+    lat             FLOAT,                      -- 위도
+    lon             FLOAT,                      -- 경도
+    listing_count   INTEGER,                    -- 매물 건수
+    dong_name       VARCHAR(20),                -- 행정동명
+    lgeo            VARCHAR(30),                -- 네이버 지오코드
+    collected_at    TIMESTAMPTZ     DEFAULT now(),
+    PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS ix_naver_vacancy_dong  ON naver_vacancy (dong_name);
+CREATE INDEX IF NOT EXISTS ix_naver_vacancy_trade ON naver_vacancy (trade_type);

@@ -418,6 +418,26 @@ class BizBrandMapping(Base):
     )
 
 
+class NaverVacancy(Base):
+    """네이버 부동산 상가 공실 데이터 — 마포구 상가 임대/매매 매물"""
+
+    __tablename__ = "naver_vacancy"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    trade_type = Column(String(10), comment="거래유형 (매매/전세/월세)")
+    trade_code = Column(String(5), comment="거래코드 (B1/B2/B3)")
+    lat = Column(Float, comment="위도")
+    lon = Column(Float, comment="경도")
+    listing_count = Column(Integer, comment="매물 건수")
+    dong_name = Column(String(20), index=True, comment="행정동명")
+    lgeo = Column(String(30), comment="네이버 지오코드")
+    collected_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="수집 일시",
+    )
+
+
 class KakaoStore(Base):
     """카카오 로컬 API 기반 실시간 점포 데이터 — 마포구 프랜차이즈 브랜드"""
 
