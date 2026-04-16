@@ -221,7 +221,7 @@ def _predict_revenue_gru(
 # ---------------------------------------------------------------------------
 
 
-def backtest_gru(test_year: int = 2024) -> dict:
+def backtest_gru(test_year: int = 2024, weights_suffix: str = "") -> dict:
     """GRU 매출 예측 모델의 백테스트를 실행한다.
 
     2019~2023 데이터를 기반으로 2024년 4분기 매출을 예측하고
@@ -252,6 +252,7 @@ def backtest_gru(test_year: int = 2024) -> dict:
     # data_prep은 lstm_forecast에서 재사용 — 동일한 피처/전처리 적용
     from models.lstm_forecast.data_prep import (
         ALL_FEATURES,
+        EXCLUDE_COMBOS,  # 극단적 이상치 조합 (염리동 중식, 성산1동 제과) 제외용
         build_timeseries,
         load_sales_data,
         load_store_data,
@@ -282,8 +283,11 @@ def backtest_gru(test_year: int = 2024) -> dict:
     # 2. GRU 모델 + 스케일러 로드
     # -----------------------------------------------------------------------
     # 파인튜닝 가중치 사용 (마포구 특화 학습 결과)
-    weights_path = WEIGHTS_DIR / "finetuned_mapo_gru.pt"
-    scalers_path = WEIGHTS_DIR / "finetune_gru_scalers.pkl"
+    # weights_suffix가 있으면 파일명에 추가 (예: run2 → _run2 → finetuned_mapo_gru_run2.pt)
+    # 없으면 기존 기본 파일명 그대로 사용
+    _sfx = f"_{weights_suffix}" if weights_suffix else ""
+    weights_path = WEIGHTS_DIR / f"finetuned_mapo_gru{_sfx}.pt"
+    scalers_path = WEIGHTS_DIR / f"finetune_gru_scalers{_sfx}.pkl"
 
     if not weights_path.exists():
         return {
@@ -335,6 +339,13 @@ def backtest_gru(test_year: int = 2024) -> dict:
     for _, row in actual_agg.iterrows():
         dong_code = str(row["dong_code"])
         industry_code = str(row["industry_code"])
+
+        # 극단적 이상치 조합 제외 — MAPE 300%+ 조합은 백테스트 지표를 왜곡하므로 제외
+        # (염리동 중식: 연간 860만원, 성산1동 제과: 연간 1,673만원 — 매출 규모가 너무 작아 MAPE 폭발)
+        if (dong_code, industry_code) in EXCLUDE_COMBOS:
+            skipped += 1
+            logger.debug("이상치 조합 제외: dong=%s, industry=%s", dong_code, industry_code)
+            continue
 
         # test_year 이전 데이터만 사용하여 4분기 자기회귀 예측
         pred_sales = _predict_revenue_gru(
@@ -448,7 +459,7 @@ def backtest_gru(test_year: int = 2024) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def save_results_csv(result: dict) -> Path:
+def save_results_csv(result: dict, results_csv: Path | None = None) -> Path:
     """백테스트 결과를 CSV 파일로 저장한다.
 
     LSTM backtest_revenue.py는 print만 있고 저장 기능이 없었음.
@@ -458,6 +469,9 @@ def save_results_csv(result: dict) -> Path:
     ----------
     result : dict
         backtest_gru()의 반환값
+    results_csv : Path, optional
+        저장할 CSV 경로. None이면 기본값(RESULTS_CSV) 사용.
+        --weights-suffix 실행 시 suffix 포함 경로를 전달하면 별도 파일로 저장됨.
 
     Returns
     -------
@@ -468,6 +482,9 @@ def save_results_csv(result: dict) -> Path:
     if "error" in result:
         logger.warning("오류 결과는 저장하지 않습니다: %s", result["error"])
         return None
+
+    # 저장 경로: 인자로 받은 경로 우선, 없으면 모듈 기본 경로(RESULTS_CSV) 사용
+    csv_path = results_csv if results_csv is not None else RESULTS_CSV
 
     # results 디렉토리 없으면 생성
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -489,10 +506,10 @@ def save_results_csv(result: dict) -> Path:
     ]
     df = df[[c for c in col_order if c in df.columns]]
 
-    df.to_csv(RESULTS_CSV, index=False, encoding="utf-8-sig")
-    logger.info("결과 저장 완료: %s (%d rows)", RESULTS_CSV, len(df))
+    df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    logger.info("결과 저장 완료: %s (%d rows)", csv_path, len(df))
 
-    return RESULTS_CSV
+    return csv_path
 
 
 # ---------------------------------------------------------------------------
@@ -552,16 +569,26 @@ if __name__ == "__main__":
         default=2024,
         help="평가 대상 연도 (기본 2024)",
     )
+    parser.add_argument(
+        "--weights-suffix",
+        type=str,
+        default="",
+        help="가중치/스케일러/CSV 파일명 suffix (예: run2 → finetuned_mapo_gru_run2.pt, gru_backtest_results_run2.csv)",
+    )
     args = parser.parse_args()
 
-    # 백테스트 실행
-    result = backtest_gru(test_year=args.year)
+    # 백테스트 실행 — weights_suffix 전달 (기본값 "" = 기존 동작 유지)
+    result = backtest_gru(test_year=args.year, weights_suffix=args.weights_suffix)
 
     # 콘솔 출력
     print_report_gru(result)
 
     # CSV 저장 (오류 없을 경우에만)
     if "error" not in result:
-        saved_path = save_results_csv(result)
+        # suffix가 있으면 결과 CSV도 suffix 포함 파일명으로 저장
+        # 없으면 기본 파일명(gru_backtest_results.csv) 그대로 사용
+        _sfx = f"_{args.weights_suffix}" if args.weights_suffix else ""
+        results_csv = RESULTS_DIR / f"gru_backtest_results{_sfx}.csv"
+        saved_path = save_results_csv(result, results_csv=results_csv)
         if saved_path:
             print(f"\n결과 저장 완료: {saved_path}")

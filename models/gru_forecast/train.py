@@ -312,7 +312,9 @@ def pretrain(config: dict | None = None) -> Path:
     )
 
     # 스케일러 저장 — 추론 시 역변환에 필요
-    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / "pretrain_gru_scalers.pkl")
+    # save_path stem에서 suffix 추출 (예: "pretrained_gru_run2" → "_run2", "pretrained_gru" → "")
+    _pt_suffix = save_path.stem.replace("pretrained_gru", "")
+    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / f"pretrain_gru_scalers{_pt_suffix}.pkl")
 
     return save_path
 
@@ -432,7 +434,9 @@ def finetune(config: dict | None = None) -> Path:
     )
 
     # 스케일러 저장
-    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / "finetune_gru_scalers.pkl")
+    # save_path stem에서 suffix 추출 (예: "finetuned_mapo_gru_run2" → "_run2", "finetuned_mapo_gru" → "")
+    _ft_suffix = save_path.stem.replace("finetuned_mapo_gru", "")
+    _save_scalers(feat_scaler, tgt_scaler, save_path.parent / f"finetune_gru_scalers{_ft_suffix}.pkl")
 
     return save_path
 
@@ -500,7 +504,30 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=None, help="배치 크기")
     parser.add_argument("--patience", type=int, default=None, help="조기 종료 patience")
     parser.add_argument("--window-size", type=int, default=None, help="입력 시퀀스 길이")
+    parser.add_argument(
+        "--save-suffix",
+        type=str,
+        default=None,
+        help="가중치/스케일러 파일명 suffix (예: run2 → pretrained_gru_run2.pt, pretrain_gru_scalers_run2.pkl)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="재현성을 위한 랜덤 시드 (미설정 시 비결정적 학습)",
+    )
     args = parser.parse_args()
+
+    # 시드 설정 (재현성) — --seed 지정 시에만 실행, 미지정 시 기존과 동일하게 동작
+    if args.seed is not None:
+        import random
+
+        import numpy as np
+
+        random.seed(args.seed)           # Python 표준 random 시드 고정
+        np.random.seed(args.seed)        # NumPy 시드 고정
+        torch.manual_seed(args.seed)     # PyTorch CPU 시드 고정
+        torch.cuda.manual_seed_all(args.seed)  # PyTorch GPU 시드 고정 (CPU 환경에서도 무해)
 
     # CLI 인자로 config 오버라이드
     overrides: dict = {}
@@ -518,6 +545,16 @@ def main() -> None:
         overrides["patience"] = args.patience
     if args.window_size:
         overrides["window_size"] = args.window_size
+
+    # --save-suffix 처리: suffix가 있으면 가중치 저장 경로를 suffix 포함 경로로 교체
+    # suffix 없으면 overrides에 save_path 미포함 → DEFAULT_*_CONFIG 기본값 그대로 사용
+    if args.save_suffix:
+        s = args.save_suffix
+        if args.mode == "pretrain":
+            overrides["save_path"] = str(WEIGHTS_DIR / f"pretrained_gru_{s}.pt")
+        else:
+            overrides["save_path"] = str(WEIGHTS_DIR / f"finetuned_mapo_gru_{s}.pt")
+            overrides["pretrained_path"] = str(WEIGHTS_DIR / f"pretrained_gru_{s}.pt")
 
     if args.mode == "pretrain":
         pretrain(overrides if overrides else None)

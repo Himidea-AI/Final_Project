@@ -105,11 +105,27 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
     """
     LLM 호출 — LLM_PROVIDER 환경변수로 백엔드를 선택.
 
-    LLM_PROVIDER=ollama     : 로컬 Ollama (기본값, 무료)
+    LLM_PROVIDER=openai     : OpenAI gpt-4.1-mini (기본값)
+    LLM_PROVIDER=ollama     : 로컬 Ollama (무료)
     LLM_PROVIDER=anthropic  : Anthropic Claude API (유료)
     LLM_PROVIDER=gemini     : Google Gemini API (유료)
     """
-    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+
+    if provider == "openai":
+        from openai import OpenAI
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or ""
 
     if provider == "anthropic":
         import anthropic as _anthropic
@@ -169,9 +185,23 @@ async def _async_call_llm(system_prompt: str, user_message: str) -> str:
     _call_llm의 비동기 버전 — asyncio.gather()로 LLM 호출을 병렬 실행할 때 사용.
 
     LLM_PROVIDER 환경변수로 백엔드를 선택 (동기 버전과 동일한 로직).
-    Gemini 429 재시도는 asyncio.sleep으로 이벤트 루프를 블로킹하지 않음.
     """
-    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+
+    if provider == "openai":
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = await client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or ""
 
     if provider == "anthropic":
         import anthropic as _anthropic
@@ -917,7 +947,6 @@ async def _run_legal_pipeline(state: dict) -> dict:
     기존 순차 실행 대비 ~35~68초 → ~8~12초로 단축.
     동일 brand+district+business_type 조합은 Redis에 24시간 캐시.
     """
-    import hashlib
 
     import redis.asyncio as aioredis
 
@@ -1049,9 +1078,18 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     # Phase 2: 12개 법률 항목을 단일 LLM 배치 호출로 처리 (12회 → 1회)
     _BATCH_TYPES = [
-        "franchise_law", "commercial_lease_law", "food_hygiene", "safety_regulation",
-        "building_law", "fire_safety_law", "labor_law", "vat_law",
-        "privacy_law", "accessibility_law", "sewage_law", "fair_trade_law",
+        "franchise_law",
+        "commercial_lease_law",
+        "food_hygiene",
+        "safety_regulation",
+        "building_law",
+        "fire_safety_law",
+        "labor_law",
+        "vat_law",
+        "privacy_law",
+        "accessibility_law",
+        "sewage_law",
+        "fair_trade_law",
     ]
     _BATCH_LABELS = {
         "franchise_law": "가맹사업법 (영업지역 보장·정보공개서)",
@@ -1092,9 +1130,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     if len(docs_context) > 5000:
         docs_context = docs_context[:5000] + "..."
 
-    items_desc = "\n".join(
-        f'{i+1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES)
-    )
+    items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
     batch_prompt = (
         f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
         f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
@@ -1126,12 +1162,26 @@ async def _run_legal_pipeline(state: dict) -> dict:
         seen = {r["type"] for r in batch_results}
         for t in _BATCH_TYPES:
             if t not in seen:
-                batch_results.append({"type": t, "level": "caution", "summary": "LLM 응답 누락 — 수동 검토 필요", "articles": [], "recommendation": "전문가 상담 권장"})
+                batch_results.append(
+                    {
+                        "type": t,
+                        "level": "caution",
+                        "summary": "LLM 응답 누락 — 수동 검토 필요",
+                        "articles": [],
+                        "recommendation": "전문가 상담 권장",
+                    }
+                )
         print(f"[legal_node] 배치 LLM 완료 — {len(batch_results)}개 항목 처리")
     except Exception as e:
         print(f"[legal_node] 배치 LLM 실패: {e} — 전체 caution 처리")
         batch_results = [
-            {"type": t, "level": "caution", "summary": f"LLM 분석 실패: {e}", "articles": [], "recommendation": "전문가 상담 권장"}
+            {
+                "type": t,
+                "level": "caution",
+                "summary": f"LLM 분석 실패: {e}",
+                "articles": [],
+                "recommendation": "전문가 상담 권장",
+            }
             for t in _BATCH_TYPES
         ]
 
@@ -1139,20 +1189,54 @@ async def _run_legal_pipeline(state: dict) -> dict:
     _batch_map = {r["type"]: r for r in batch_results}
 
     risks = [
-        _batch_map.get("franchise_law", {"type": "franchise_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("commercial_lease_law", {"type": "commercial_lease_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get(
+            "franchise_law",
+            {"type": "franchise_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
+        _batch_map.get(
+            "commercial_lease_law",
+            {"type": "commercial_lease_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
         zoning_result,
-        _batch_map.get("food_hygiene", {"type": "food_hygiene", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("safety_regulation", {"type": "safety_regulation", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get(
+            "food_hygiene",
+            {"type": "food_hygiene", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
+        _batch_map.get(
+            "safety_regulation",
+            {"type": "safety_regulation", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
         ftc_result,
-        _batch_map.get("building_law", {"type": "building_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("fire_safety_law", {"type": "fire_safety_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("labor_law", {"type": "labor_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("vat_law", {"type": "vat_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("privacy_law", {"type": "privacy_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("accessibility_law", {"type": "accessibility_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("sewage_law", {"type": "sewage_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
-        _batch_map.get("fair_trade_law", {"type": "fair_trade_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}),
+        _batch_map.get(
+            "building_law",
+            {"type": "building_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
+        _batch_map.get(
+            "fire_safety_law",
+            {"type": "fire_safety_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
+        _batch_map.get(
+            "labor_law", {"type": "labor_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}
+        ),
+        _batch_map.get(
+            "vat_law", {"type": "vat_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}
+        ),
+        _batch_map.get(
+            "privacy_law",
+            {"type": "privacy_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
+        _batch_map.get(
+            "accessibility_law",
+            {"type": "accessibility_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
+        _batch_map.get(
+            "sewage_law",
+            {"type": "sewage_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
+        _batch_map.get(
+            "fair_trade_law",
+            {"type": "fair_trade_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+        ),
     ]
 
     # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe
@@ -1178,7 +1262,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
         try:
             await _redis.set(
                 cache_key,
-                json.dumps({"legal_risks": risks, "legal_info": legal_info, "overall_legal_risk": overall_level}, ensure_ascii=False),
+                json.dumps(
+                    {"legal_risks": risks, "legal_info": legal_info, "overall_legal_risk": overall_level},
+                    ensure_ascii=False,
+                ),
                 ex=_CACHE_TTL,
             )
             print(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
@@ -1190,11 +1277,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
     return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
 
 
-def legal_node(state) -> dict:
+async def legal_node(state) -> dict:
     """
     법규검토 Agent 메인 노드 — LangGraph에서 호출되는 진입점.
 
-    2단계 풀 파이프라인(_run_legal_pipeline)을 동기 컨텍스트에서 실행.
+    2단계 풀 파이프라인(_run_legal_pipeline)을 직접 await로 실행.
     Pydantic AgentState / TypedDict AgentState 양쪽 모두 지원.
 
     파이프라인:
@@ -1203,8 +1290,5 @@ def legal_node(state) -> dict:
     """
     if not isinstance(state, dict):
         state = state.model_dump()
-    return _run_async(_run_legal_pipeline(state))
+    return await _run_legal_pipeline(state)
 
-
-# graph.py(B1) 호환성 별칭
-legal_analyst_node = legal_node

@@ -2,6 +2,7 @@
 조건부 경로 로직 — Supervisor 노드의 분기 판단
 재분석이 필요한지, 리포트를 생성할지 결정
 """
+
 from src.agents.state import AgentState
 
 
@@ -25,7 +26,7 @@ def should_reanalyze(state: AgentState) -> str:
     # TODO: 데이터 완성도 체크
     # TODO: iteration_count 기반 루프 제어
 
-    if state.iteration_count >= MAX_ITERATIONS:
+    if state.get("iteration_count", 0) >= MAX_ITERATIONS:
         return "generate_report"
 
     # 기본: 리포트 생성
