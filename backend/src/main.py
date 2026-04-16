@@ -10,18 +10,48 @@ current_dir = Path(__file__).parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
-from fastapi import FastAPI
+import redis.asyncio as aioredis
+from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
+from src.config.settings import settings
 from src.schemas.simulation_input import SimulationInput
 from src.schemas.simulation_output import SimulationOutput
 from src.agents.graph import compile_workflow
 from src.services.biz_mapper import BizMapper
 from src.services.auth import AuthService
+
+# ---------------------------------------------------------------------------
+# Rate Limiting 설정
+# ---------------------------------------------------------------------------
+# LLM 파이프라인 엔드포인트(/simulate, /analyze)를 IP당 시간당 최대 횟수로 제한
+_RATE_LIMITED_PATHS = {"/simulate", "/analyze"}
+_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "10"))   # 시간당 최대 요청 수
+_RATE_LIMIT_WINDOW = 3600                                         # 1시간(초)
+
+
+async def _check_rate_limit(ip: str) -> tuple[bool, int]:
+    """
+    Redis 고정 윈도우 방식으로 IP별 요청 횟수를 확인합니다.
+    반환값: (초과 여부, 현재 카운트)
+    Redis 연결 실패 시 제한 없이 통과(fail-open)합니다.
+    """
+    try:
+        async with aioredis.from_url(settings.redis_url, decode_responses=True) as r:
+            key = f"rate:{ip}"
+            count = await r.incr(key)
+            if count == 1:
+                await r.expire(key, _RATE_LIMIT_WINDOW)
+            return count > _RATE_LIMIT_MAX, count
+    except Exception as e:
+        print(f"[RATE LIMIT] Redis 연결 실패 (통과 허용): {e}")
+        return False, 0
+
 
 app = FastAPI(
     title="마포구 프랜차이즈 상권분석 시뮬레이터",
@@ -43,6 +73,29 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
 )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """IP당 시간당 RATE_LIMIT_MAX회로 LLM 파이프라인 엔드포인트를 보호합니다."""
+    if request.url.path in _RATE_LIMITED_PATHS:
+        # X-Forwarded-For → 실제 클라이언트 IP (Nginx 프록시 환경 대응)
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (
+            request.client.host if request.client else "unknown"
+        )
+        exceeded, count = await _check_rate_limit(client_ip)
+        if exceeded:
+            print(f"[RATE LIMIT] {client_ip} 시간당 한도 초과 ({count}/{_RATE_LIMIT_MAX})")
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "status": "error",
+                    "message": f"요청 횟수가 초과되었습니다. 시간당 최대 {_RATE_LIMIT_MAX}회 요청 가능합니다.",
+                },
+            )
+    return await call_next(request)
+
 
 # [디폴트 값] 마포구청 (혹은 홍대입구역) 좌표 - 데이터 수집 실패 시 대비
 DEFAULT_LAT = 37.5663
