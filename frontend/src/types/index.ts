@@ -13,13 +13,13 @@ export interface SimulationInput {
   monthly_rent: number;
   simulation_months: number;
   scenarios: string[];
-  // New fields
+  // New fields (백엔드 SimulationInput 스키마와 필드명 일치)
   store_area?: number;
   target_price_range?: string;
   operating_hours?: string[];
   initial_capital?: number;
-  use_weighted_population?: boolean;
-  radius_m?: number;
+  population_weight?: boolean;
+  commercial_radius?: number;
 }
 
 /** 기존 매장 정보 */
@@ -65,6 +65,16 @@ export interface SimulationOutput {
   legal_risks: LegalRisk[];
   ai_recommendation?: string; // 기존 호환성 유지
   map_data?: any;
+  // /simulate 응답에 포함되는 chartData용 7개 정규화 지표 (0~100)
+  market_report?: {
+    floating_population: number;
+    rent_index: number;
+    competition_intensity: number;
+    estimated_revenue: number;
+    survival_rate: number;
+    growth_potential: number;
+    accessibility: number;
+  };
 }
 
 export interface AnalysisMetrics {
