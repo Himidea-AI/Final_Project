@@ -289,7 +289,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     try:
         sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
         quarterly = build_quarterly_projection(
-            bep_monthly_simulation=sim_result["bep"]["quarterly_simulation"],
+            bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
             confidence="base",
         )
