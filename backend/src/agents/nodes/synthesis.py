@@ -79,6 +79,15 @@ async def synthesis_node(state: AgentState) -> dict:
             for r in scouting_results[:4]
         )
 
+    # 공실 정보 추출 (scouting_results에 vacancy_rate 포함 시)
+    vacancy_summary = ""
+    if scouting_results:
+        winner_row = next((r for r in scouting_results if r["district"] == winner_district), None)
+        if winner_row and winner_row.get("vacancy_rate", 0) > 0:
+            vr = winner_row["vacancy_rate"]
+            vacancy_label = "높음(상권 주의)" if vr >= 10 else ("보통" if vr >= 5 else "낮음(상권 활발)")
+            vacancy_summary = f"공실률({winner_district}): {vr}% — {vacancy_label} (2026년 4월 기준 네이버 부동산 상가 월세 매물)"
+
     # 2. LLM 합성용 컨텍스트 구성
     # [토큰 절감] 중간 에이전트 리포트 전문 대신 핵심 수치만 전달
     # market_report: 앞 150자 (등급·성장률 수치가 앞부분에 집중됨)
@@ -98,7 +107,8 @@ async def synthesis_node(state: AgentState) -> dict:
         f"입지랭킹: {ranking_summary}\n"
         f"상권({target_district}): {market_summary_short}\n"
         f"인구({target_district}): {pop_summary_short}\n"
-        f"법률(14개):\n{legal_summary_for_llm}\n"
+        + (f"{vacancy_summary}\n" if vacancy_summary else "")
+        + f"법률(14개):\n{legal_summary_for_llm}\n"
         f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
         f"자본금={initial_capital:,}원 | 임대예산={monthly_rent_budget:,}원({store_area}평)\n\n"
         "요구사항:\n"

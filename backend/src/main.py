@@ -232,10 +232,20 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         for r in legal_risks_raw
     ]
 
+    # 한글 surrogate 문자 제거 헬퍼 (N1 fix)
+    def _sanitize(val):
+        if isinstance(val, str):
+            return val.encode("utf-8", errors="ignore").decode("utf-8")
+        if isinstance(val, list):
+            return [_sanitize(v) for v in val]
+        if isinstance(val, dict):
+            return {k: _sanitize(v) for k, v in val.items()}
+        return val
+
     # 랭킹 데이터
-    district_rankings = analysis.get("district_rankings", [])
-    winner_district = analysis.get("winner_district", target_dist)
-    top_3_candidates = analysis.get("top_3_candidates", [])
+    district_rankings = _sanitize(analysis.get("district_rankings", []))
+    winner_district = _sanitize(analysis.get("winner_district", target_dist))
+    top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
     final_report = analysis.get("final_report") or {}

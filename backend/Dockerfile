@@ -41,6 +41,10 @@ COPY --from=builder /opt/venv /opt/venv
 # 가상 환경 환경변수 등록 (가상환경의 파이썬/uvicorn을 우선 사용)
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONDONTWRITEBYTECODE=1
+# 한글 인코딩 깨짐 방지: Python UTF-8 모드 + 로케일 설정
+ENV PYTHONUTF8=1
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # 애플리케이션 소스 코드 및 주요 AI 모듈 복사 (Context: 프로젝트 루트)
 COPY backend/ .
