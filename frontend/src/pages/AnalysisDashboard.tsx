@@ -60,7 +60,7 @@ const AnalysisDashboard: React.FC = () => {
       setStatusMessage(LOADING_STEPS[stepIdx].m);
     }
   }, [progress, loading]);
-  
+
 
 
 
@@ -249,16 +249,15 @@ const AnalysisDashboard: React.FC = () => {
                       </motion.div>
                     ))}
                   </div>
-
-                    </div>
-                  </div>
-
-                {/* 우측: 정성 리포트 패널 */}
-                <div className="lg:col-span-8 h-[calc(100vh-280px)] min-h-[600px] sticky top-32">
-                  <ReportViewer report={result.analysis_report} />
                 </div>
-              </motion.div>
-            ) : (
+              </div>
+
+              {/* 우측: 정성 리포트 패널 */}
+              <div className="lg:col-span-8 h-[calc(100vh-280px)] min-h-[600px] sticky top-32">
+                <ReportViewer report={result.analysis_report} />
+              </div>
+            </motion.div>
+          ) : (
             <motion.div
               key="idle"
               initial={{ opacity: 0 }}
@@ -282,9 +281,9 @@ const AnalysisDashboard: React.FC = () => {
               </p>
             </motion.div>
           )}
-      </AnimatePresence>
+        </AnimatePresence>
 
-      <style>{`
+        <style>{`
         @keyframes fadeSlideIn {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
