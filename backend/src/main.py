@@ -152,14 +152,9 @@ _MAPO_DONG_CODE_MAP: Dict[str, str] = {
     "상암동":  "11440740",
 }
 
-# 업종명(한국어) → 골목상권 업종코드
-_BIZ_TO_INDUSTRY_CODE: Dict[str, str] = {
-    "카페":   "CS100010",
-    "한식":   "CS100001",
-    "치킨":   "CS100005",
-    "편의점": "CS300001",
-    "베이커리": "CS100011",
-}
+# 업종명(한국어) → 골목상권 업종코드: tools.py MarketDataTool._SALES_CODE_MAP 재사용
+from src.agents.tools import MarketDataTool as _MarketDataTool
+_BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 
 async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
@@ -292,7 +287,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     _dong_code = _MAPO_DONG_CODE_MAP.get(target_dist, "11440600")   # 기본값: 서교동
     _industry_code = _BIZ_TO_INDUSTRY_CODE.get(_biz_name, "CS100010")  # 기본값: 카페
     try:
-        sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name)
+        sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
         quarterly = build_quarterly_projection(
             bep_monthly_simulation=sim_result["bep"]["monthly_simulation"],
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
