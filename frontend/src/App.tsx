@@ -61,6 +61,8 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
 import { runSimulation } from './api/client';
+import type { QuarterlyProjection } from './types';
+import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
 import html2canvas from 'html2canvas';
@@ -73,6 +75,8 @@ interface SimResult {
   riskLevel: string;
   recommendation: string;
   chartData: { label: string; value: number }[];
+  // 분기별 매출 예측 데이터 (TCN 모델 출력)
+  quarterlyProjection: QuarterlyProjection[];
 }
 
 import {
@@ -2430,6 +2434,8 @@ function SimulatorDashboard({
               { label: '접근성', value: mr.accessibility },
             ]
           : CHART_DATA,
+        // 분기별 매출 예측 (TCN 모델 출력, 없으면 빈 배열)
+        quarterlyProjection: simRes.quarterly_projection ?? [],
       });
       setReportState('result');
     } catch (err) {
@@ -2442,6 +2448,8 @@ function SimulatorDashboard({
         riskLevel: mock.riskLevel,
         recommendation: mock.recommendation,
         chartData: mock.chartData,
+        // mock fallback 시 분기 데이터 없음
+        quarterlyProjection: [],
       });
       setReportState('result');
     }
@@ -3286,6 +3294,19 @@ function SimulatorDashboard({
                                 </motion.div>
                               </div>
                             </div>
+
+                            {/* 분기별 매출 예측 차트 (TCN 모델 출력) — quarterly_projection 있을 때만 렌더링 */}
+                            {simResult?.quarterlyProjection &&
+                              simResult.quarterlyProjection.length > 0 && (
+                                <div className="mt-6">
+                                  <h3 className="text-lg font-semibold mb-3">
+                                    분기별 매출 예측 (TCN)
+                                  </h3>
+                                  <QuarterlyProjectionChart
+                                    data={simResult.quarterlyProjection}
+                                  />
+                                </div>
+                              )}
 
                             {/* Table */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
