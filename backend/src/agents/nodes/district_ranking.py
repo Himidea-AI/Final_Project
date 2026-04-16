@@ -21,13 +21,17 @@ from src.database.models import NaverVacancy, StoreQuarterly
 _CACHE_TTL = 86400  # 24시간
 
 
-async def _load_vacancy_map() -> dict[str, float]:
+async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
     """
     동별 공실률 계산 (2026-04 기준 네이버 부동산 월세 매물)
 
     공실률 = 월세 매물 수 / 최신 분기 영업 점포 수 * 100
     store_quarterly 최신 분기 기준 (방법 B — 더 정확)
-    DB 조회 실패 시 빈 dict 반환 (공실 패널티 비활성화)
+
+    Returns:
+        (vacancy_rate_map, success): DB 로드 성공 여부 플래그 포함.
+        성공 시 success=True, 실패 시 빈 dict + success=False
+        (프론트/응답에서 '공실 데이터 반영됨' vs '공실 미반영' 구분 표시용)
     """
     try:
         async with db_client.get_session() as session:
@@ -64,11 +68,11 @@ async def _load_vacancy_map() -> dict[str, float]:
 
         print(f"[district_ranking] 공실률 로드 완료 — 상위 3개: "
               f"{sorted(vacancy_rate_map.items(), key=lambda x: -x[1])[:3]}")
-        return vacancy_rate_map
+        return vacancy_rate_map, True
 
     except Exception as e:
         print(f"[district_ranking] 공실률 로드 실패 (패널티 비활성화): {e}")
-        return {}
+        return {}, False
 
 
 async def _score_single_district(dong_name: str, business_type: str) -> dict:
@@ -205,10 +209,11 @@ async def district_ranking_node(state: AgentState) -> dict:
 
     # 16개 동 점수 + 공실률 병렬 로드
     tasks = [_score_single_district(dong, business_type) for dong in MAPO_DISTRICTS]
-    raw_scores, vacancy_rate_map = await asyncio.gather(
+    raw_scores, vacancy_result = await asyncio.gather(
         asyncio.gather(*tasks),
         _load_vacancy_map(),
     )
+    vacancy_rate_map, vacancy_applied = vacancy_result
 
     ranked = _normalize_and_rank(
         list(raw_scores),
@@ -221,11 +226,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     winner = ranked[0]["district"] if ranked else state.get("target_district", "서교동")
     top_3 = [r["district"] for r in ranked[1:4]]
 
-    print(f"--- [DISTRICT RANKING] 완료 — 1위: {winner}, 후보: {top_3} ---")
+    print(f"--- [DISTRICT RANKING] 완료 — 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied} ---")
 
     return {
         "scouting_results": ranked,
         "winner_district": winner,
         "top_3_candidates": top_3,
+        "vacancy_applied": vacancy_applied,  # 공실 DB 로드 성공 여부
         "current_agent": "district_ranking",
     }

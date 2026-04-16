@@ -104,6 +104,8 @@ export interface SimulationOutput {
   top_3_candidates?: string[];
   district_rankings?: DistrictRanking[];
   overall_legal_risk?: 'safe' | 'caution' | 'danger' | string;
+  // 공실 DB 로드 성공 여부 — false면 랭킹에 공실 페널티 미반영 (프론트 배지 표시용)
+  vacancy_applied?: boolean;
   // [A1 재무] backend main.py:337 — 선택 필드
   financial_report?: Record<string, unknown>;
   // [B2 SHAP] TCN 피처 기여도 분석 결과
