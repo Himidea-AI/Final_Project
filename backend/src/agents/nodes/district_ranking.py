@@ -51,12 +51,30 @@ async def _score_single_district(dong_name: str, business_type: str) -> dict:
         return {"district": dong_name, "sales_growth": 0.0, "pop_growth": 0.0, "avg_rent": 0.0}
 
 
-def _normalize_and_rank(raw: list[dict]) -> list[dict]:
+def _normalize_and_rank(
+    raw: list[dict],
+    population_weight: bool = True,
+    monthly_rent_budget: int = 0,
+    store_area: float = 15.0,
+) -> list[dict]:
     """
     16개 동의 원시 지표를 0~100으로 정규화 후 가중 합산 → 내림차순 정렬
+
+    population_weight=True  : 매출35% + 인구45% + 임대료20%
+    population_weight=False : 매출50% + 인구10% + 임대료40%
+    monthly_rent_budget > 0 : 예산 초과 동에 페널티 적용
     """
     if not raw:
         return []
+
+    # 동적 가중치
+    if population_weight:
+        w_sales, w_pop, w_rent = 0.35, 0.45, 0.20
+    else:
+        w_sales, w_pop, w_rent = 0.50, 0.10, 0.40
+
+    # 예산 기반 평당 허용 임대료 계산 (0이면 필터 비활성화)
+    budget_per_3_3m2 = (monthly_rent_budget / max(store_area, 1)) if monthly_rent_budget > 0 else 0
 
     def _minmax(vals: list[float], reverse: bool = False) -> list[float]:
         lo, hi = min(vals), max(vals)
@@ -71,7 +89,16 @@ def _normalize_and_rank(raw: list[dict]) -> list[dict]:
 
     ranked = []
     for i, r in enumerate(raw):
-        score = sales_norm[i] * 0.4 + pop_norm[i] * 0.3 + rent_norm[i] * 0.3
+        score = sales_norm[i] * w_sales + pop_norm[i] * w_pop + rent_norm[i] * w_rent
+
+        # 예산 초과 페널티: 평당 임대료가 예산의 1.5배 이상이면 점수 50% 감점
+        if budget_per_3_3m2 > 0 and r["avg_rent"] > 0:
+            if r["avg_rent"] > budget_per_3_3m2 * 1.5:
+                score *= 0.5
+            elif r["avg_rent"] > budget_per_3_3m2:
+                ratio = r["avg_rent"] / budget_per_3_3m2
+                score *= max(1.0 - (ratio - 1.0) * 0.5, 0.5)
+
         ranked.append({
             **r,
             "score": round(score, 1),
@@ -99,7 +126,14 @@ async def district_ranking_node(state: AgentState) -> dict:
       top_3_candidates  : 2~4순위 행정동 리스트
     """
     business_type = state.get("business_type", "카페")
-    print(f"--- [DISTRICT RANKING] 마포구 {len(MAPO_DISTRICTS)}개 행정동 스코어링 시작 ---")
+    population_weight = state.get("population_weight", True)
+    monthly_rent_budget = state.get("monthly_rent_budget", 0)
+    store_area = state.get("store_area", 15.0)
+
+    print(
+        f"--- [DISTRICT RANKING] 마포구 {len(MAPO_DISTRICTS)}개 행정동 스코어링 시작 "
+        f"(인구가중치={population_weight}, 예산={monthly_rent_budget:,}원, 면적={store_area}평) ---"
+    )
 
     if db_client.engine is None:
         await db_client.connect()
@@ -108,7 +142,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     tasks = [_score_single_district(dong, business_type) for dong in MAPO_DISTRICTS]
     raw_scores = await asyncio.gather(*tasks)
 
-    ranked = _normalize_and_rank(list(raw_scores))
+    ranked = _normalize_and_rank(
+        list(raw_scores),
+        population_weight=population_weight,
+        monthly_rent_budget=monthly_rent_budget,
+        store_area=store_area,
+    )
 
     winner = ranked[0]["district"] if ranked else state.get("target_district", "서교동")
     top_3 = [r["district"] for r in ranked[1:4]]
