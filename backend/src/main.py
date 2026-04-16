@@ -10,6 +10,11 @@ current_dir = Path(__file__).parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
+# models/ 패키지 임포트를 위해 프로젝트 루트(Final_Project/)를 path에 추가
+_project_root = str(Path(__file__).parent.parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
@@ -25,6 +30,12 @@ from src.schemas.simulation_output import SimulationOutput
 from src.agents.graph import compile_workflow
 from src.services.biz_mapper import BizMapper
 from src.services.auth import AuthService
+
+from models.interface import ModelOutput
+from models.explainability.simulation import (
+    build_quarterly_projection,
+    build_scenarios,
+)
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -120,6 +131,30 @@ _BIZ_TYPE_NORMALIZE: Dict[str, str] = {
     "convenience": "편의점",
     "bakery": "베이커리",
 }
+
+# 마포구 행정동명 → 행정동 코드 (서울 열린데이터 기준)
+_MAPO_DONG_CODE_MAP: Dict[str, str] = {
+    "아현동":  "11440520",
+    "공덕동":  "11440530",
+    "도화동":  "11440540",
+    "용강동":  "11440550",
+    "염리동":  "11440570",
+    "신수동":  "11440580",
+    "서강동":  "11440590",
+    "서교동":  "11440600",
+    "합정동":  "11440610",
+    "망원1동": "11440620",
+    "대흥동":  "11440560",
+    "망원2동": "11440660",
+    "연남동":  "11440640",
+    "성산1동": "11440710",
+    "성산2동": "11440720",
+    "상암동":  "11440740",
+}
+
+# 업종명(한국어) → 골목상권 업종코드: tools.py MarketDataTool._SALES_CODE_MAP 재사용
+from src.agents.tools import MarketDataTool as _MarketDataTool
+_BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 
 async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
@@ -218,10 +253,24 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     grade = str(metrics.get("district_grade") or "NORMAL").upper()
 
     # 임대료: SAFE=저렴(높은 점수), DANGER=비쌈(낮은 점수)
-    rent_index = {"SAFE": 80, "CAUTION": 50, "DANGER": 25, "상": 25, "중": 50, "하": 80}.get(rent_raw, 50)
-    estimated_revenue = {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
+    rent_index = {
+        "SAFE": 80,
+        "CAUTION": 50,
+        "DANGER": 25,
+        "상": 25,
+        "중": 50,
+        "하": 80,
+    }.get(rent_raw, 50)
+    estimated_revenue = {
+        "EXCELLENT": 90,
+        "GOOD": 75,
+        "NORMAL": 60,
+        "RISKY": 40,
+    }.get(grade, 60)
     competition_intensity = min(int(competition_score * 100), 100)
-    district_score = float({"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60))
+    district_score = float(
+        {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
+    )
 
     market_report = {
         "floating_population": min(int(pop_score * 10), 100),
@@ -232,6 +281,21 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "growth_potential": min(int(abs(growth_rate) * 5), 100),
         "accessibility": 75,
     }
+
+    # [Simulation 실제 연동] B2 ModelOutput + build_quarterly_projection 연결
+    _biz_name = state.get("business_type", "카페")
+    _dong_code = _MAPO_DONG_CODE_MAP.get(target_dist, "11440600")   # 기본값: 서교동
+    _industry_code = _BIZ_TO_INDUSTRY_CODE.get(_biz_name, "CS100010")  # 기본값: 카페
+    try:
+        sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
+        quarterly = build_quarterly_projection(
+            bep_monthly_simulation=sim_result["bep"]["quarterly_simulation"],
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+            confidence="base",
+        )
+    except Exception as _sim_err:
+        print(f"[SIM] ModelOutput 호출 실패 (mock 사용): {_sim_err}")
+        quarterly = [{"month": 1, "revenue": 30_000_000, "cumulative_profit": -150_000_000}]
 
     # [B1 고도화] 응답 구조 재설계
     response_data = {
@@ -245,13 +309,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "analysis_report": analysis.get("market_summary", ""),
         "analysis_metrics": metrics,
         "simulation_months": 12,
-        "monthly_projection": [
-            {
-                "month": 1,
-                "revenue": md.get("avg_revenue", 30000000),
-                "cumulative_profit": -150000000,
-            }
-        ],
+        "monthly_projection": quarterly,
         "comparison": [
             {
                 "district": target_dist,
@@ -279,7 +337,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "financial_report": md.get("financial_metrics", {}),
     }
 
-    print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")
+    print(
+        f"\nDEBUG: [{target_dist}] API 응답 전송 "
+        f"(Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)"
+    )
     return response_data
 
 
