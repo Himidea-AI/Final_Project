@@ -328,6 +328,55 @@ async def analyze_location(input_data: SimulationInput):
 
 
 # ---------------------------------------------------------------------------
+# 경량 랭킹 엔드포인트 — LLM 없이 빠른 입지 순위 조회
+# ---------------------------------------------------------------------------
+
+
+@app.post("/analyze/quick")
+async def analyze_quick(input_data: SimulationInput):
+    """
+    LLM 없는 경량 랭킹 엔드포인트 (district_ranking 에이전트만 실행).
+
+    전체 LLM 파이프라인 (~30s) 대신 DB 쿼리만으로 행정동 순위를 즉시 반환합니다.
+    rate limiting 적용 없음 (LLM 비용 없음).
+
+    응답: { district_rankings, winner_district, top_3_candidates }
+    """
+    from src.agents.nodes.district_ranking import district_ranking_node
+    from src.agents.nodes.market_analyst import db_client
+
+    normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
+
+    print(f"--- [API] /analyze/quick 요청: {input_data.target_district} / {normalized_biz} ---")
+
+    minimal_state = {
+        "business_type": normalized_biz,
+        "target_district": getattr(input_data, "target_district", "서교동"),
+        "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
+        "store_area": getattr(input_data, "store_area", 15.0),
+        "population_weight": getattr(input_data, "population_weight", True),
+    }
+
+    try:
+        if db_client.engine is None:
+            await db_client.connect()
+
+        ranking_result = await district_ranking_node(minimal_state)
+
+        return {
+            "status": "success",
+            "data": {
+                "winner_district": ranking_result["winner_district"],
+                "top_3_candidates": ranking_result["top_3_candidates"],
+                "district_rankings": ranking_result["scouting_results"],
+            },
+        }
+    except Exception as e:
+        print(f"!!! [QUICK API ERROR] !!! {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # 사업자등록번호 → 프랜차이즈 매핑 API
 # ---------------------------------------------------------------------------
 
