@@ -5,12 +5,18 @@
 from pydantic import BaseModel, Field
 
 
-class MonthlyProjection(BaseModel):
-    """월별 매출 및 수익 예측"""
+class QuarterlyProjection(BaseModel):
+    """분기별 매출 및 수익 예측 (B2 TCN + BEP 결합)"""
 
-    month: int
+    quarter: int
     revenue: int = 0
     cumulative_profit: int = 0
+    confidence_lower: int = 0
+    confidence_upper: int = 0
+
+
+# 하위 호환성 유지
+MonthlyProjection = QuarterlyProjection
 
 
 class DistrictComparison(BaseModel):
@@ -50,13 +56,40 @@ class MapData(BaseModel):
     markers: list[MapMarker] = Field(default_factory=list)
 
 
+class MarketReport(BaseModel):
+    """프론트엔드 차트용 7개 정규화 지표 (0~100)"""
+
+    floating_population: int = 0
+    rent_index: int = 50
+    competition_intensity: int = 0
+    estimated_revenue: int = 60
+    survival_rate: int = 30
+    growth_potential: int = 0
+    accessibility: int = 75
+
+
+class DistrictRanking(BaseModel):
+    """입지 랭킹 엔트리 (district_ranking_node 반환 형식)"""
+
+    rank: int = 0
+    district: str
+    score: float = 0.0
+    sales_growth: float = 0.0
+    pop_growth: float = 0.0
+    avg_rent: float = 0.0
+    sales_score: float = 0.0
+    pop_score: float = 0.0
+    rent_score: float = 0.0
+    vacancy_rate: float = 0.0
+
+
 class SimulationOutput(BaseModel):
     """시뮬레이션 결과 출력 스키마"""
 
     request_id: str
     target_district: str
-    simulation_months: int
-    monthly_projection: list[MonthlyProjection] = Field(default_factory=list)
+    simulation_months: int = 12
+    monthly_projection: list[QuarterlyProjection] = Field(default_factory=list)
     comparison: list[DistrictComparison] = Field(default_factory=list)
     overall_legal_risk: str = "safe"
     legal_risks: list[LegalRisk] = Field(default_factory=list)
@@ -65,3 +98,7 @@ class SimulationOutput(BaseModel):
     map_data: MapData | None = None
     financial_report: dict = Field(default_factory=dict)
     ai_recommendation: str = ""
+    market_report: MarketReport | None = None
+    winner_district: str = ""
+    top_3_candidates: list[str] = Field(default_factory=list)
+    district_rankings: list[DistrictRanking] = Field(default_factory=list)
