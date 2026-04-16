@@ -16,6 +16,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../auth/AuthContext';
+import { useTransition } from '../App';
 import { BrandLogo } from '../components/BrandLogo';
 import { SEOUL_REGIONS } from '../data/seoulRegions';
 import {
@@ -43,17 +44,31 @@ import {
   Pencil,
   AlertTriangle,
   ShieldAlert,
+  UserCog,
+  Shield,
+  Loader2,
 } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
    Types
    ═══════════════════════════════════════════════════════ */
-type MenuId = 'team' | 'pipeline' | 'tuning' | 'billing';
+type MenuId = 'team' | 'pipeline' | 'tuning' | 'billing' | 'mypage';
 
 /* ═══════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════ */
 export default function HQCommandCenter() {
+  const { user } = useAuth();
+
+  // 매니저는 별도의 워크스페이스 (시뮬레이션 기록 + 의뢰 목록)
+  if (user?.role === 'manager') {
+    return <ManagerWorkspace />;
+  }
+
+  return <MasterCommandCenter />;
+}
+
+function MasterCommandCenter() {
   const [searchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as MenuId | null;
   const [activeMenu, setActiveMenu] = useState<MenuId>(tabFromUrl || 'team');
@@ -67,7 +82,7 @@ export default function HQCommandCenter() {
 
   // URL ?tab= 파라미터 변경 시 탭 동기화
   useEffect(() => {
-    if (tabFromUrl && ['team', 'pipeline', 'tuning', 'billing'].includes(tabFromUrl)) {
+    if (tabFromUrl && ['team', 'pipeline', 'tuning', 'billing', 'mypage'].includes(tabFromUrl)) {
       setActiveMenu(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -163,6 +178,12 @@ export default function HQCommandCenter() {
             icon={<CreditCard className="w-4 h-4" />}
             label="결제 및 API 토큰"
           />
+          <MenuButton
+            active={activeMenu === 'mypage'}
+            onClick={() => setActiveMenu('mypage')}
+            icon={<UserCog className="w-4 h-4" />}
+            label="내 정보 관리"
+          />
         </div>
 
         {/* 하단 유저 프로필 — auth.user 기반 동적 (master / manager 분기) */}
@@ -202,36 +223,39 @@ export default function HQCommandCenter() {
             {activeMenu === 'pipeline' && '출점 파이프라인 보드'}
             {activeMenu === 'tuning' && '자사 브랜드 AI 튜닝 (Master Data)'}
             {activeMenu === 'billing' && '결제 및 API 토큰 관리'}
+            {activeMenu === 'mypage' && '내 정보 관리'}
           </h2>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => {
-                if (activeMenu === 'team') {
-                  void handleIssueInviteCode();
-                } else {
-                  showToast('info', '해당 기능은 정식 서비스에서 제공됩니다.');
-                }
-              }}
-              disabled={activeMenu === 'team' && isIssuing}
-              className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {activeMenu === 'team' && isIssuing ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-[#1e1b18]/40 border-t-[#1e1b18] rounded-full animate-spin" />
-                  발급 중...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  {activeMenu === 'team'
-                    ? '초대코드 발급'
-                    : activeMenu === 'pipeline'
-                      ? '새 시뮬레이션'
-                      : '저장'}
-                </>
-              )}
-            </button>
+            {activeMenu !== 'mypage' && (
+              <button
+                onClick={() => {
+                  if (activeMenu === 'team') {
+                    void handleIssueInviteCode();
+                  } else {
+                    showToast('info', '해당 기능은 정식 서비스에서 제공됩니다.');
+                  }
+                }}
+                disabled={activeMenu === 'team' && isIssuing}
+                className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {activeMenu === 'team' && isIssuing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-[#1e1b18]/40 border-t-[#1e1b18] rounded-full animate-spin" />
+                    발급 중...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    {activeMenu === 'team'
+                      ? '초대코드 발급'
+                      : activeMenu === 'pipeline'
+                        ? '새 시뮬레이션'
+                        : '저장'}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </header>
 
@@ -250,6 +274,7 @@ export default function HQCommandCenter() {
             {activeMenu === 'pipeline' && <PipelineKanbanView />}
             {activeMenu === 'tuning' && <BrandTuningView />}
             {activeMenu === 'billing' && <BillingManagementView />}
+            {activeMenu === 'mypage' && <MyPageView />}
           </div>
         </div>
       </div>
@@ -1660,6 +1685,573 @@ function BillingManagementView() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   View 5: My Page (내 정보 관리 + Danger Zone)
+   ═══════════════════════════════════════════════════════ */
+function MyPageView() {
+  const { user, logout } = useAuth();
+  const { showToast } = useToast();
+  const nav = useTransition();
+
+  const isManager = user?.role === 'manager';
+
+  const [contactName, setContactName] = useState(user?.contact_name || '');
+  const [position, setPosition] = useState(user?.position || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [storeCount, setStoreCount] = useState<string>(user?.store_count || '');
+
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [actionType, setActionType] = useState<'update' | 'delete'>('update');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // 최초 mount 시 백엔드 최신 프로필 반영
+  useEffect(() => {
+    if (!user?.id) return;
+    setIsLoadingProfile(true);
+    const endpoint = isManager
+      ? `/api/auth/manager/${user.id}/profile`
+      : `/api/auth/user/${user.id}`;
+    fetch(endpoint)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.status === 'success' && data.profile) {
+          const p = data.profile;
+          setContactName(p.contact_name || '');
+          setPosition(p.position || '');
+          setPhone(p.phone || '');
+          if (p.store_count !== undefined && p.store_count !== null) {
+            setStoreCount(String(p.store_count));
+          }
+        }
+      })
+      .catch(() => {
+        /* 네트워크 오류는 조용히 — 이미 localStorage로 기본값 세팅됨 */
+      })
+      .finally(() => setIsLoadingProfile(false));
+  }, [user?.id, isManager]);
+
+  const handleActionRequest = (type: 'update' | 'delete') => {
+    setActionType(type);
+    setPasswordInput('');
+    setPasswordError('');
+    if (type === 'delete') {
+      setShowDeleteAlert(true);
+    } else {
+      setShowPasswordModal(true);
+    }
+  };
+
+  const handlePasswordConfirm = async () => {
+    if (passwordInput.length < 8) {
+      setPasswordError('비밀번호는 8자 이상이어야 합니다.');
+      return;
+    }
+    if (!user?.id) return;
+    setIsSaving(true);
+    setPasswordError('');
+
+    try {
+      if (actionType === 'update') {
+        // 프로필 수정 API 호출 (백엔드가 내부에서 비밀번호 검증은 별도 로직 필요 —
+        // 현재 스펙상 비밀번호는 UX 확인용으로만 사용하고 PUT /auth/user/{id}로 전송)
+        const endpoint = isManager
+          ? `/api/auth/manager/${user.id}/profile`
+          : `/api/auth/user/${user.id}`;
+        const body: Record<string, unknown> = {
+          contact_name: contactName,
+          position,
+          phone,
+        };
+        if (!isManager && storeCount.trim() !== '') {
+          const parsed = Number(storeCount);
+          if (!Number.isNaN(parsed)) body.store_count = parsed;
+        }
+        const res = await fetch(endpoint, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast('success', '정보가 성공적으로 변경되었습니다.');
+          setShowPasswordModal(false);
+        } else {
+          setPasswordError(data.message || '변경 실패. 다시 시도해주세요.');
+        }
+      } else {
+        // 탈퇴 — 백엔드 DELETE 엔드포인트 미구현. 현재는 placeholder
+        showToast(
+          'info',
+          '탈퇴 요청이 접수되었습니다. (백엔드 구현 대기 중 — IM3 Jira로 전달 예정)',
+        );
+        setShowPasswordModal(false);
+        setTimeout(() => {
+          logout();
+          nav('/');
+        }, 1200);
+      }
+    } catch {
+      setPasswordError('서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl flex flex-col gap-6">
+      {/* 내 정보 수정 (Profile Settings) */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
+        className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-8 shadow-lg"
+      >
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-bold text-white mb-2">내 정보 관리</h3>
+            <p className="text-xs text-[#9ca3af]">
+              {isManager
+                ? '매니저 프로필 정보를 수정할 수 있습니다.'
+                : '팀장(마스터) 권한 이양 및 담당자 변경을 위해 가입 정보를 수정할 수 있습니다.'}
+            </p>
+          </div>
+          {isLoadingProfile && (
+            <Loader2 className="w-4 h-4 text-[#818cf8] animate-spin shrink-0" />
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
+              이름
+            </label>
+            <input
+              type="text"
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+              placeholder="홍길동"
+              className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
+              이메일 (ID)
+              <span className="ml-2 text-[9px] font-mono text-[#6b7280] uppercase">
+                Read-only
+              </span>
+            </label>
+            <input
+              type="email"
+              value={user?.email || ''}
+              readOnly
+              disabled
+              className="w-full bg-[#1e1b18]/50 border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-[#9ca3af] font-mono cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
+              직책
+            </label>
+            <input
+              type="text"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              placeholder="팀장 / 과장 / 매니저"
+              className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
+              연락처
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="010-0000-0000"
+              className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+            />
+          </div>
+          {!isManager && (
+            <div className="md:col-span-2">
+              <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
+                가맹점 수
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={storeCount}
+                onChange={(e) => setStoreCount(e.target.value)}
+                placeholder="0"
+                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 flex justify-end">
+          <button
+            onClick={() => handleActionRequest('update')}
+            disabled={!contactName.trim()}
+            className="px-6 py-2.5 bg-[#818cf8] text-[#1e1b18] text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-[#6366f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            변경사항 저장
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Danger Zone — 회원 탈퇴 (팀장 전용) */}
+      {!isManager ? (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.08, ease: [0.19, 1, 0.22, 1] }}
+          className="bg-[#1e1b18] border border-rose-500/30 rounded-2xl p-8 shadow-lg"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Shield className="w-4 h-4 text-rose-500" />
+            <h3 className="text-lg font-bold text-rose-500">Danger Zone</h3>
+          </div>
+          <p className="text-xs text-[#9ca3af] mb-6">
+            워크스페이스를 탈퇴하고 모든 데이터를 DB에서 영구적으로 파기합니다. 이
+            작업은 되돌릴 수 없습니다.
+          </p>
+          <button
+            onClick={() => handleActionRequest('delete')}
+            className="px-6 py-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/30 hover:bg-rose-500 hover:text-white text-sm font-bold rounded-lg transition-colors"
+          >
+            회원 탈퇴 및 워크스페이스 삭제
+          </button>
+        </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.08, ease: [0.19, 1, 0.22, 1] }}
+          className="bg-[#1e1b18] border border-[#3a3633] rounded-2xl p-6 flex items-start gap-4"
+        >
+          <div className="w-9 h-9 rounded-full bg-[#2c2825] flex items-center justify-center shrink-0 mt-0.5">
+            <Shield className="w-4 h-4 text-[#818cf8]" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-[#e2e8f0] mb-1">
+              계정 해지는 팀장을 통해 진행됩니다
+            </p>
+            <p className="text-xs text-[#9ca3af] leading-relaxed">
+              매니저 계정은 개별 탈퇴가 불가합니다. 퇴사 등으로 계정 해지가 필요하면
+              소속 팀장에게 '팀 및 권역 관리 → 매니저 제거'를 요청해주세요.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* 회원 탈퇴 경고 Alert 모달 */}
+      <AnimatePresence>
+        {showDeleteAlert && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-[#050505]/80 backdrop-blur-sm"
+              onClick={() => setShowDeleteAlert(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
+              className="relative bg-[#1e1b18] border border-rose-500/50 rounded-2xl p-8 shadow-[0_0_50px_rgba(244,63,94,0.15)] max-w-md w-full"
+            >
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center mb-4 border border-rose-500/20">
+                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              </div>
+              <h3 className="text-xl font-black text-white mb-2">
+                정말로 탈퇴하시겠습니까?
+              </h3>
+              <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-lg mb-6">
+                <p className="text-sm text-rose-400 font-bold leading-relaxed">
+                  구독 후 1회 이상 시뮬레이션을 실행한 경우, 중간에 탈퇴하더라도 남은
+                  기간에 대한 환불이 불가합니다.
+                </p>
+              </div>
+              <p className="text-xs text-[#9ca3af] mb-8">
+                탈퇴 시 귀하의 계정과 시뮬레이션 히스토리 등 모든 데이터가 영구적으로
+                삭제됩니다.
+              </p>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowDeleteAlert(false)}
+                  className="px-4 py-2 bg-[#2c2825] hover:bg-[#3a3633] text-[#e2e8f0] text-sm font-bold rounded-lg transition-colors border border-[#3a3633]"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteAlert(false);
+                    setShowPasswordModal(true);
+                  }}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-lg transition-colors shadow-[0_0_15px_rgba(244,63,94,0.4)]"
+                >
+                  탈퇴합니다
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 비밀번호 재확인 모달 */}
+      <AnimatePresence>
+        {showPasswordModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-[#050505]/80 backdrop-blur-sm"
+              onClick={() => !isSaving && setShowPasswordModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
+              className="relative bg-[#2c2825] border border-[#3a3633] rounded-2xl p-8 shadow-2xl max-w-sm w-full"
+            >
+              <h3 className="text-lg font-bold text-white mb-2">본인 인증</h3>
+              <p className="text-xs text-[#9ca3af] mb-6">
+                {actionType === 'delete'
+                  ? '안전한 탈퇴 처리를 위해'
+                  : '정보 수정을 위해'}{' '}
+                현재 비밀번호를 입력해주세요.
+              </p>
+              <input
+                type="password"
+                autoFocus
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setPasswordError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handlePasswordConfirm();
+                }}
+                placeholder="비밀번호 입력"
+                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#818cf8] mb-2 transition-colors"
+              />
+              {passwordError && (
+                <p className="text-[11px] text-rose-400 mb-4">{passwordError}</p>
+              )}
+              {!passwordError && <div className="mb-4" />}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowPasswordModal(false)}
+                  disabled={isSaving}
+                  className="px-4 py-2 text-[#9ca3af] hover:text-white text-sm font-bold transition-colors disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handlePasswordConfirm}
+                  disabled={isSaving || passwordInput.length < 8}
+                  className={`px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    actionType === 'delete'
+                      ? 'bg-rose-500 hover:bg-rose-600'
+                      : 'bg-[#818cf8] hover:bg-[#6366f1]'
+                  }`}
+                >
+                  {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  확인
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Manager Workspace — 매니저 전용 HQ
+   ═══════════════════════════════════════════════════════
+   마스터의 Command Center와 달리 매니저는 아래 2개만 필요:
+   1. 내 워크스페이스 — 내가 실행한 시뮬레이션 기록 + 나에게 들어온 의뢰
+   2. 내 정보 관리 — MyPageView 재사용
+   TODO(backend): GET /simulations?manager_id=... + 의뢰 관계 테이블 (IM3 Jira 전달 예정)
+   ═══════════════════════════════════════════════════════ */
+type ManagerMenuId = 'workspace' | 'mypage';
+
+function ManagerWorkspace() {
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') as ManagerMenuId | null;
+  const [activeMenu, setActiveMenu] = useState<ManagerMenuId>(
+    tabFromUrl === 'mypage' ? 'mypage' : 'workspace',
+  );
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (tabFromUrl && ['workspace', 'mypage'].includes(tabFromUrl)) {
+      setActiveMenu(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
+  return (
+    <div className="absolute inset-0 z-20 flex bg-[#1e1b18] text-[#e2e8f0] font-sans overflow-hidden select-none">
+      {/* 좌측 사이드바 */}
+      <div className="w-64 bg-[#2c2825] border-r border-[#3a3633] flex flex-col z-20 shrink-0">
+        <div className="h-20 flex items-center px-6 border-b border-[#3a3633] gap-3 mt-24">
+          <BrandLogo
+            name={user?.contact_name || 'Manager'}
+            isUser={true}
+            tone="accent"
+            className="w-8 h-8 text-xs rounded-full shrink-0"
+          />
+          <div className="flex flex-col min-w-0">
+            <span className="font-black text-sm text-[#e2e8f0] truncate">
+              {user?.contact_name || 'Manager'}
+            </span>
+            <span className="text-[9px] text-[#818cf8] font-mono tracking-widest uppercase">
+              Regional Manager
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-2">
+          <p className="px-2 text-[10px] font-bold text-[#9ca3af] mb-2 tracking-widest">
+            WORKSPACE
+          </p>
+          <MenuButton
+            active={activeMenu === 'workspace'}
+            onClick={() => setActiveMenu('workspace')}
+            icon={<LayoutTemplate className="w-4 h-4" />}
+            label="내 워크스페이스"
+          />
+
+          <p className="px-2 text-[10px] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
+            SETTINGS
+          </p>
+          <MenuButton
+            active={activeMenu === 'mypage'}
+            onClick={() => setActiveMenu('mypage')}
+            icon={<UserCog className="w-4 h-4" />}
+            label="내 정보 관리"
+          />
+        </div>
+
+        <div className="p-4 border-t border-[#3a3633]">
+          <div className="flex items-center gap-3 p-2 rounded-lg">
+            <BrandLogo
+              name={user?.contact_name || '매니저'}
+              isUser={true}
+              tone="accent"
+              className="w-8 h-8 text-xs rounded-full shrink-0"
+            />
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-xs font-bold text-[#e2e8f0] truncate">
+                {user?.contact_name || '매니저'}
+              </span>
+              <span className="text-[10px] text-[#818cf8] truncate">
+                Regional Access
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 우측 메인 영역 */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#1e1b18]">
+        <header className="h-20 border-b border-[#3a3633] flex items-center justify-between px-8 bg-[#1e1b18]/80 backdrop-blur-md z-10 shrink-0 mt-24">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            {activeMenu === 'workspace' && '내 워크스페이스'}
+            {activeMenu === 'mypage' && '내 정보 관리'}
+          </h2>
+        </header>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+          <div className="max-w-[1920px] w-full mx-auto xl:px-10 2xl:px-16">
+            {activeMenu === 'workspace' && <ManagerWorkspaceView />}
+            {activeMenu === 'mypage' && <MyPageView />}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───── Manager Workspace View ─────
+   내 시뮬레이션 기록 + 의뢰 목록 (백엔드 API 대기 중 — 빈 상태 + placeholder) */
+function ManagerWorkspaceView() {
+  return (
+    <div className="flex flex-col gap-8">
+      {/* 내 시뮬레이션 기록 */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#818cf8]" />
+            내 시뮬레이션 기록
+          </h3>
+          <span className="text-[10px] font-mono text-[#6b7280] uppercase tracking-widest">
+            Recent Runs
+          </span>
+        </div>
+        <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-10 flex flex-col items-center justify-center text-center">
+          <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
+            <BarChart3 className="w-5 h-5 text-[#6b7280]" />
+          </div>
+          <p className="text-sm font-bold text-[#a3a3a3] mb-1">
+            아직 실행한 시뮬레이션이 없습니다.
+          </p>
+          <p className="text-xs text-[#6b7280] mb-4">
+            상단 메뉴의 SIMULATOR에서 첫 시뮬레이션을 실행해보세요.
+          </p>
+          <p className="text-[10px] font-mono text-[#818cf8]/60 uppercase tracking-wider">
+            [Backend 연동 대기 중 — IM3 Jira]
+          </p>
+        </div>
+      </section>
+
+      {/* 시뮬레이션 의뢰 목록 */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
+            <Users className="w-4 h-4 text-[#818cf8]" />
+            시뮬레이션 의뢰 목록
+          </h3>
+          <span className="text-[10px] font-mono text-[#6b7280] uppercase tracking-widest">
+            Client Requests
+          </span>
+        </div>
+        <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-10 flex flex-col items-center justify-center text-center">
+          <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
+            <Users className="w-5 h-5 text-[#6b7280]" />
+          </div>
+          <p className="text-sm font-bold text-[#a3a3a3] mb-1">
+            들어온 의뢰가 없습니다.
+          </p>
+          <p className="text-xs text-[#6b7280] mb-4">
+            팀장이 의뢰 요청을 배정하면 이 목록에 표시됩니다.
+          </p>
+          <p className="text-[10px] font-mono text-[#818cf8]/60 uppercase tracking-wider">
+            [Backend 연동 대기 중 — IM3 Jira]
+          </p>
         </div>
       </section>
     </div>

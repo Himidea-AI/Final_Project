@@ -13,15 +13,8 @@
  * - AnalysisResult.data.market_report: 7개 항목 (floating_population 등)
  * - 타입 정의는 src/types/index.ts 참고
  */
-import axios from "axios";
-import type {
-  SimulationInput,
-  SimulationOutput,
-  JobStatus,
-  AnalysisResult,
-} from "../types";
-
-
+import axios from 'axios';
+import type { SimulationInput, SimulationOutput, JobStatus, AnalysisResult } from '../types';
 
 /**
  * [v11.5 멀티테넌시 사전 준비]
@@ -35,12 +28,12 @@ import type {
  *   - Header: X-Tenant-ID
  *   - JWT workspace_id ↔ X-Tenant-ID 이중 검증 (불일치 시 403)
  */
-const MOCK_WORKSPACE_ID = "spotter-demo-workspace-01";
+const MOCK_WORKSPACE_ID = 'spotter-demo-workspace-01';
 
 const apiClient = axios.create({
-  baseURL: "/api",
+  baseURL: '/api',
   timeout: 120000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 /**
@@ -49,36 +42,30 @@ const apiClient = axios.create({
  */
 apiClient.interceptors.request.use((config) => {
   // TODO: 실제 인증 구현 시 JWT에서 workspace_id 추출하여 교체
-  config.headers["X-Tenant-ID"] = MOCK_WORKSPACE_ID;
+  config.headers['X-Tenant-ID'] = MOCK_WORKSPACE_ID;
   return config;
 });
 
 /** 서버 상태 확인 */
 export async function healthCheck() {
-  const response = await apiClient.get("/health");
+  const response = await apiClient.get('/health');
   return response.data;
 }
 
 /** 시뮬레이션 실행 요청 */
-export async function runSimulation(
-  input: SimulationInput
-): Promise<SimulationOutput> {
-  const response = await apiClient.post("/simulate", input);
+export async function runSimulation(input: SimulationInput): Promise<SimulationOutput> {
+  const response = await apiClient.post('/simulate', input);
   return response.data;
 }
 
 /** 상권 분석 및 지도 데이터 요청 */
-export async function analyzeLocation(
-  input: SimulationInput
-): Promise<AnalysisResult> {
-  const response = await apiClient.post("/analyze", input);
+export async function analyzeLocation(input: SimulationInput): Promise<AnalysisResult> {
+  const response = await apiClient.post('/analyze', input);
   return response.data;
 }
 
 /** 시뮬레이션 리포트 조회 */
-export async function getReport(
-  requestId: string
-): Promise<SimulationOutput> {
+export async function getReport(requestId: string): Promise<SimulationOutput> {
   const response = await apiClient.get(`/report/${requestId}`);
   return response.data;
 }
@@ -86,6 +73,13 @@ export async function getReport(
 /** 시뮬레이션 진행 상태 조회 */
 export async function getStatus(jobId: string): Promise<JobStatus> {
   const response = await apiClient.get(`/status/${jobId}`);
+  return response.data;
+}
+
+/** 유동인구 실시간 조회 (서울 열린데이터 API) */
+export async function getLivePopulation(dongs?: string[]): Promise<any> {
+  const params = dongs ? `?dongs=${encodeURIComponent(dongs.join(','))}` : '';
+  const response = await apiClient.get(`/population/live${params}`);
   return response.data;
 }
 

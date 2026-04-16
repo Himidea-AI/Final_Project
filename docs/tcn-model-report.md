@@ -463,5 +463,26 @@ TCN의 RF=4(window_size와 동일)는 최적 설계이지만, 패턴 변화가 4
 - `validation/results/tcn_backtest_results_run2.csv` (run2)
 - `validation/results/tcn_backtest_results_run3.csv` (run3)
 
-### 실험 B: 시드 설정 O
-→ 추후 추가 예정
+### 실험 B: 시드 설정 O (3회)
+
+> 시드 고정(torch / numpy / random seed 동일 설정) 조건에서 3회 독립 학습 후 백테스트 결과.
+> 각 회차는 사전학습 → 파인튜닝 → 백테스트 전 과정을 새로 실행함.
+> 평가 기준: 2024년 마포구 154개 동×업종 조합 (EXCLUDE_COMBOS 2건 제외)
+
+| 회차 | 시드 | MAPE | MAE | RMSE | R² |
+|------|------|------|-----|------|----|
+| seed47 | 47 | 11.48% | 7.8억 | 23.9억 | 0.9934 |
+| seed415 | 415 | 11.52% | 9.1억 | 23.8억 | 0.9935 |
+| seed2026 | 2026 | 11.28% | 9.0억 | 22.5억 | 0.9942 |
+| **평균** | | **11.43%** | **8.6억** | **23.4억** | **0.9937** |
+| **표준편차** | | **0.11%** | — | — | — |
+
+- 3회 MAPE 범위: 11.28% ~ 11.52% (최대 편차 0.24%p)
+- 3개 모델 중 시드 고정 시 가장 안정적 (표준편차 0.11%p, LSTM 0.61%p / GRU 0.80%p 대비 월등히 낮음)
+- seed2026이 가장 우수 (MAPE 11.28%), seed415가 가장 낮음 (11.52%)
+- R² 0.993~0.994 구간으로 세 모델 중 가장 높은 설명력
+
+**참조 CSV 파일:**
+- `validation/results/tcn_backtest_results_seed47.csv` (seed47)
+- `validation/results/tcn_backtest_results_seed415.csv` (seed415)
+- `validation/results/tcn_backtest_results_seed2026.csv` (seed2026)
