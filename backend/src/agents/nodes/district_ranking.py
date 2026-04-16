@@ -62,8 +62,10 @@ async def _load_vacancy_map() -> dict[str, float]:
             else:
                 vacancy_rate_map[dong] = 0.0
 
-        print(f"[district_ranking] 공실률 로드 완료 — 상위 3개: "
-              f"{sorted(vacancy_rate_map.items(), key=lambda x: -x[1])[:3]}")
+        print(
+            f"[district_ranking] 공실률 로드 완료 — 상위 3개: "
+            f"{sorted(vacancy_rate_map.items(), key=lambda x: -x[1])[:3]}"
+        )
         return vacancy_rate_map
 
     except Exception as e:
@@ -72,7 +74,10 @@ async def _load_vacancy_map() -> dict[str, float]:
 
 
 async def _score_single_district(dong_name: str, business_type: str) -> dict:
-    """단일 행정동 원시 지표 수집 (예외 발생 시 0 반환)"""
+    """
+    단일 행정동 원시 지표 수집.
+    DB 데이터 없는 항목은 None으로 반환 — 0.0과 구분하여 정규화 왜곡 방지.
+    """
     try:
         sales_data, pop_data, rent_data = await asyncio.gather(
             market_tool.get_commercial_insights(dong_name, business_type),
@@ -81,27 +86,31 @@ async def _score_single_district(dong_name: str, business_type: str) -> dict:
             return_exceptions=True,
         )
 
-        sales_growth = 0.0
+        # None = DB 데이터 없음, 0.0 = 실제 성장률 0
+        sales_growth = None
         if not isinstance(sales_data, Exception) and "error" not in (sales_data or {}):
             sales_growth = float(sales_data.get("qoq_growth") or 0)
 
-        pop_growth = 0.0
+        pop_growth = None
         if not isinstance(pop_data, Exception) and "error" not in (pop_data or {}):
             pop_growth = float(pop_data.get("qoq_growth") or 0)
 
-        avg_rent = 0.0
+        avg_rent = None
         if not isinstance(rent_data, Exception) and "error" not in (rent_data or {}):
-            avg_rent = float(rent_data.get("avg_rent_3_3m2") or 0)
+            val = rent_data.get("avg_rent_3_3m2")
+            if val:
+                avg_rent = float(val)
 
+        print(f"[district_ranking] {dong_name}: sales={sales_growth}, pop={pop_growth}, rent={avg_rent}")
         return {
             "district": dong_name,
-            "sales_growth": round(sales_growth, 2),
-            "pop_growth": round(pop_growth, 2),
+            "sales_growth": sales_growth,
+            "pop_growth": pop_growth,
             "avg_rent": avg_rent,
         }
     except Exception as e:
         print(f"[district_ranking] {dong_name} 점수 산출 실패 (무시): {e}")
-        return {"district": dong_name, "sales_growth": 0.0, "pop_growth": 0.0, "avg_rent": 0.0}
+        return {"district": dong_name, "sales_growth": None, "pop_growth": None, "avg_rent": None}
 
 
 def _normalize_and_rank(
@@ -133,23 +142,42 @@ def _normalize_and_rank(
     # 예산 기반 평당 허용 임대료 계산 (0이면 필터 비활성화)
     budget_per_3_3m2 = (monthly_rent_budget / max(store_area, 1)) if monthly_rent_budget > 0 else 0
 
-    def _minmax(vals: list[float], reverse: bool = False) -> list[float]:
-        lo, hi = min(vals), max(vals)
-        if hi == lo:
+    def _minmax(vals: list[float | None], reverse: bool = False) -> list[float]:
+        """
+        None = DB 데이터 없음 → 중간값(50) 부여, 실데이터만 min-max 정규화.
+        전체가 None이거나 실데이터 편차 없으면 50 반환.
+        """
+        real = [v for v in vals if v is not None]
+        if not real:
             return [50.0] * len(vals)
-        norm = [(v - lo) / (hi - lo) * 100 for v in vals]
-        return [100 - n for n in norm] if reverse else norm
+        lo, hi = min(real), max(real)
+        results = []
+        for v in vals:
+            if v is None:
+                results.append(50.0)  # 데이터 없음 → 중간값
+            elif hi == lo:
+                results.append(50.0)
+            else:
+                norm = (v - lo) / (hi - lo) * 100
+                results.append(100 - norm if reverse else norm)
+        return results
 
     sales_norm = _minmax([r["sales_growth"] for r in raw])
     pop_norm = _minmax([r["pop_growth"] for r in raw])
     rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True)  # 낮은 임대료 = 높은 점수
+
+    # 데이터 커버리지 로그
+    sales_hit = sum(1 for r in raw if r["sales_growth"] is not None)
+    pop_hit = sum(1 for r in raw if r["pop_growth"] is not None)
+    rent_hit = sum(1 for r in raw if r["avg_rent"] is not None)
+    print(f"[district_ranking] 데이터 커버리지 — 매출:{sales_hit}/16, 인구:{pop_hit}/16, 임대료:{rent_hit}/16")
 
     ranked = []
     for i, r in enumerate(raw):
         score = sales_norm[i] * w_sales + pop_norm[i] * w_pop + rent_norm[i] * w_rent
 
         # 예산 초과 페널티
-        if budget_per_3_3m2 > 0 and r["avg_rent"] > 0:
+        if budget_per_3_3m2 > 0 and r["avg_rent"] is not None and r["avg_rent"] > 0:
             if r["avg_rent"] > budget_per_3_3m2 * 1.5:
                 score *= 0.5
             elif r["avg_rent"] > budget_per_3_3m2:
@@ -159,18 +187,24 @@ def _normalize_and_rank(
         # 공실률 패널티: 높은 공실 = 상권 활력 저하
         vacancy_rate = vacancy_rate_map.get(r["district"], 0.0)
         if vacancy_rate >= 10.0:
-            score *= 0.70   # 공실률 10% 이상: -30%
+            score *= 0.70  # 공실률 10% 이상: -30%
         elif vacancy_rate >= 5.0:
-            score *= 0.85   # 공실률 5~10%: -15%
+            score *= 0.85  # 공실률 5~10%: -15%
 
-        ranked.append({
-            **r,
-            "score": round(score, 1),
-            "sales_score": round(sales_norm[i], 1),
-            "pop_score": round(pop_norm[i], 1),
-            "rent_score": round(rent_norm[i], 1),
-            "vacancy_rate": vacancy_rate,  # 프론트엔드 표시용
-        })
+        ranked.append(
+            {
+                **r,
+                # None → 0.0으로 직렬화 (프론트엔드 호환)
+                "sales_growth": r["sales_growth"] if r["sales_growth"] is not None else 0.0,
+                "pop_growth": r["pop_growth"] if r["pop_growth"] is not None else 0.0,
+                "avg_rent": r["avg_rent"] if r["avg_rent"] is not None else 0.0,
+                "score": round(score, 1),
+                "sales_score": round(sales_norm[i], 1),
+                "pop_score": round(pop_norm[i], 1),
+                "rent_score": round(rent_norm[i], 1),
+                "vacancy_rate": vacancy_rate,  # 프론트엔드 표시용
+            }
+        )
 
     ranked.sort(key=lambda x: x["score"], reverse=True)
 
