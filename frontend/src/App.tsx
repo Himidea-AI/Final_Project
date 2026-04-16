@@ -61,8 +61,9 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
 import { runSimulation } from './api/client';
-import type { QuarterlyProjection } from './types';
+import type { QuarterlyProjection, ShapResult } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
+import { ShapChart } from './components/SimulationResult/ShapChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
 import html2canvas from 'html2canvas';
@@ -77,6 +78,8 @@ interface SimResult {
   chartData: { label: string; value: number }[];
   // 분기별 매출 예측 데이터 (TCN 모델 출력)
   quarterlyProjection: QuarterlyProjection[];
+  // TCN SHAP 피처 기여도 분석 결과 (없으면 null)
+  shapResult: ShapResult | null;
 }
 
 import {
@@ -2436,6 +2439,8 @@ function SimulatorDashboard({
           : CHART_DATA,
         // 분기별 매출 예측 (TCN 모델 출력, 없으면 빈 배열)
         quarterlyProjection: simRes.quarterly_projection ?? [],
+        // TCN SHAP 분석 결과 (없으면 null)
+        shapResult: simRes.shap_result ?? null,
       });
       setReportState('result');
     } catch (err) {
@@ -2450,6 +2455,8 @@ function SimulatorDashboard({
         chartData: mock.chartData,
         // mock fallback 시 분기 데이터 없음
         quarterlyProjection: [],
+        // mock fallback 시 SHAP 데이터 없음
+        shapResult: null,
       });
       setReportState('result');
     }
@@ -3307,6 +3314,16 @@ function SimulatorDashboard({
                                   />
                                 </div>
                               )}
+
+                            {/* SHAP 피처 기여도 차트 — shapResult 있을 때만 렌더링 */}
+                            {simResult?.shapResult && (
+                              <div className="mt-6">
+                                <h3 className="text-lg font-semibold mb-3">
+                                  매출 기여 피처 분석 (SHAP)
+                                </h3>
+                                <ShapChart data={simResult.shapResult} />
+                              </div>
+                            )}
 
                             {/* Table */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">

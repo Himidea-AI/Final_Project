@@ -41,6 +41,25 @@ export interface QuarterlyProjection {
 /** @deprecated monthly→quarterly 전환됨. QuarterlyProjection 사용 */
 export type MonthlyProjection = QuarterlyProjection;
 
+/** SHAP 피처 기여도 항목 */
+export interface ShapFeatureItem {
+  rank: number;
+  feature: string;       // 피처 영문명
+  feature_ko: string;    // 피처 한국어명
+  shap_value: number;    // SHAP 값 (음수: 매출 감소 기여)
+  abs_shap: number;      // SHAP 절댓값 (중요도 크기)
+  direction: 'positive' | 'negative' | 'neutral';  // 기여 방향
+}
+
+/** SHAP 분석 결과 */
+export interface ShapResult {
+  feature_importance: ShapFeatureItem[];  // 중요도 내림차순 정렬
+  base_value: number;                     // SHAP 기준 예측값
+  predicted_value: number;               // 모델 예측 매출액
+  predicted_value_unit: string;          // 단위 (예: "원")
+  is_mock: boolean;                      // mock 데이터 여부
+}
+
 /** 동별 비교 결과 */
 export interface DistrictComparison {
   district: string;
@@ -87,6 +106,8 @@ export interface SimulationOutput {
   overall_legal_risk?: 'safe' | 'caution' | 'danger' | string;
   // [A1 재무] backend main.py:337 — 선택 필드
   financial_report?: Record<string, unknown>;
+  // [B2 SHAP] TCN 피처 기여도 분석 결과
+  shap_result?: ShapResult | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */

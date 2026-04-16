@@ -84,6 +84,27 @@ class DistrictRanking(BaseModel):
     vacancy_rate: float = 0.0
 
 
+class ShapFeatureItem(BaseModel):
+    """SHAP 피처별 기여도 항목"""
+
+    rank: int
+    feature: str                    # 피처 영문명
+    feature_ko: str                 # 피처 한국어명
+    shap_value: float               # SHAP 값 (음수: 매출 감소 기여)
+    abs_shap: float                 # SHAP 절댓값 (중요도 크기)
+    direction: str                  # "positive" | "negative" | "neutral"
+
+
+class ShapResult(BaseModel):
+    """TCN 모델 SHAP 분석 결과 — explain_tcn_prediction() 반환값과 동일 구조"""
+
+    feature_importance: list[ShapFeatureItem]   # 중요도 내림차순 정렬
+    base_value: float                            # SHAP expected_value (기준 예측값)
+    predicted_value: float                       # 모델 예측 매출액
+    predicted_value_unit: str = "원"             # 단위 (생존률 모델과 구별)
+    is_mock: bool                                # mock 데이터 여부
+
+
 class SimulationOutput(BaseModel):
     """시뮬레이션 결과 출력 스키마"""
 
@@ -103,3 +124,5 @@ class SimulationOutput(BaseModel):
     winner_district: str = ""
     top_3_candidates: list[str] = Field(default_factory=list)
     district_rankings: list[DistrictRanking] = Field(default_factory=list)
+    # TCN SHAP 분석 결과 (없으면 None)
+    shap_result: ShapResult | None = None

@@ -36,6 +36,7 @@ from models.explainability.simulation import (
     build_quarterly_projection,
     build_scenarios,
 )
+from models.explainability.shap_analysis import explain_tcn_prediction
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -307,6 +308,16 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         print(f"[SIM] ModelOutput 호출 실패 (mock 사용): {_sim_err}")
         quarterly = [{"month": 1, "revenue": 30_000_000, "cumulative_profit": -150_000_000}]
 
+    # TCN SHAP 분석 실행 — 피처별 매출 기여도 계산
+    try:
+        shap_result = explain_tcn_prediction(
+            dong_code=_dong_code,
+            industry_code=_industry_code,
+        )
+    except Exception as e:
+        logger.warning("SHAP 분석 실패: %s", e)
+        shap_result = None
+
     # [B1 고도화] 응답 구조 재설계
     response_data = {
         "request_id": request_id,
@@ -345,6 +356,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             ],
         },
         "financial_report": md.get("financial_metrics", {}),
+        # TCN SHAP 분석 결과 (실패 시 None)
+        "shap_result": shap_result,
     }
 
     print(

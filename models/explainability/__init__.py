@@ -18,3 +18,6 @@ from models.explainability.simulation import (
     build_quarterly_projection,
     build_scenarios,
 )
+
+# TCN SHAP 설명 가능성 함수 노출
+from models.explainability.shap_analysis import explain_tcn_prediction
