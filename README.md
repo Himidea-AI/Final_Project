@@ -51,6 +51,115 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 | C1 — 프론트엔드 | 강민 | `frontend/` |
 | C2 — 인프라 + PM | 혁 | Docker, Nginx, `docs/`, `tests/` |
 
+## AI 에이전트 아키텍처
+
+### 병렬 워크플로우 (현재 구조)
+
+```
+START
+  │
+  ▼
+parallel_analysis ──────────────────────────────────────
+  ├── Market Analyst      상권 데이터 수집 + LLM 분석
+  ├── Population Analyst  유동인구 추이 + LLM 분석
+  ├── Legal Analyst       RAG 기반 법률 리스크 14개 항목
+  └── District Ranking    마포구 16개 동 정량 스코어링 (LLM 없음)
+  │         (asyncio.gather — 동시 실행)
+  ▼
+synthesis             4개 결과 종합 → 최종 전략 리포트 생성
+  │
+  ▼
+END
+```
+
+> **변경 이력** : 초기 `Supervisor → 순차 실행` 구조에서 병렬 실행으로 전환. Supervisor / ContextAnalyst 노드 제거. 응답 속도 약 3배 향상 (cold start 기준 ~35초).
+
+### 행정동 입지 랭킹 알고리즘
+
+마포구 16개 행정동을 LLM 없이 순수 Python 연산으로 점수화합니다.
+
+| 지표 | 기본 가중치 | 인구가중치 ON | 인구가중치 OFF |
+|------|-----------|------------|-------------|
+| 매출 성장률 (QoQ) | 40% | 35% | 50% |
+| 유동인구 성장률 (QoQ) | 30% | 45% | 10% |
+| 임대료 저렴도 | 30% | 20% | 40% |
+
+예산 초과 페널티: `월 임대료 예산 ÷ 매장 면적(평)` = 평당 허용 임대료. 초과 시 점수 최대 50% 감점.
+
+### 사용자 입력 → 에이전트 반영 매핑
+
+| 입력값 | 반영 위치 | 효과 |
+|--------|---------|------|
+| 동 선택 | market / population 에이전트 | 심층 분석 텍스트 및 차트 지표 변경 |
+| 업종 선택 | 전 에이전트 DB 쿼리 | 업종별 매출/경쟁/법률 데이터 분리 |
+| 상권 반경 | market_analyst | 경쟁 업체 탐색 반경 (기본 500m) |
+| 임대료 예산 + 매장 면적 | district_ranking | 예산 초과 동 순위 하락 |
+| 인구 가중치 | district_ranking | 가중치 동적 변경 → winner_district 변경 |
+| 목표 객단가 | synthesis LLM | ai_recommendation 텍스트 반영 |
+| 주 타겟 시간대 | synthesis LLM | ai_recommendation 텍스트 반영 |
+| 초기 자본금 | synthesis LLM | ai_recommendation 텍스트 반영 |
+
+### API 주요 응답 필드
+
+`POST /simulate` 및 `POST /analyze` 공통 응답:
+
+```jsonc
+{
+  "ai_recommendation": "AI 최종 분석 요약 (synthesis 에이전트)",
+  "winner_district": "성산2동",            // 1순위 추천 행정동
+  "top_3_candidates": ["성산1동", "망원2동", "염리동"],
+  "district_rankings": [ /* 16개 동 전체 점수 테이블 */ ],
+  "market_report": {                       // 프론트 차트용 0~100 지표
+    "floating_population": 70,
+    "rent_index": 50,
+    "competition_intensity": 60,
+    "estimated_revenue": 75,
+    "survival_rate": 40,
+    "growth_potential": 30,
+    "accessibility": 75
+  },
+  "legal_risks": [ /* 14개 법률 리스크 항목 */ ],
+  "overall_legal_risk": "CAUTION"
+}
+```
+
+### Redis 캐싱 전략
+
+| 에이전트 | 캐시 키 | TTL |
+|---------|--------|-----|
+| market | `market:{district}:{biz_type}` | 24h |
+| population | `population:{district}:{biz_type}` | 24h |
+| legal | `legal:{brand}:{district}:{biz_type}` | 24h |
+| synthesis | `synthesis:{brand}:{district}:{biz}:{budget}:{area}:{pop_weight}` | 24h |
+
+---
+
+## B1 — LangGraph Agent 완료 작업 이력
+
+> 담당: 예진 (`backend/src/agents/`, `backend/src/schemas/`)
+
+### IM3-180 · IM3-32 (2026-04)
+
+| 구분 | 내용 |
+|------|------|
+| 병렬 워크플로우 | Supervisor 제거, 4개 에이전트 `asyncio.gather` 병렬 실행 |
+| District Ranking | 마포구 16개 동 정량 스코어링 에이전트 신규 개발 |
+| LLM 전환 | `gemini-2.5-flash` → `gpt-4.1-mini` (429 쿼터 소진 대응) |
+| 파일 삭제 | `supervisor.py`, `context_analyst.py` 제거 |
+
+### IM3-144 (2026-04)
+
+| 구분 | 내용 |
+|------|------|
+| 프론트 실데이터 연동 | `ai_recommendation`, `market_report`(7개 지표), `winner_district`, `top_3_candidates` API 응답 추가 |
+| 요청 중복 방지 | `_run_pipeline()` dedup — 동시 요청 시 파이프라인 공유로 DB 풀 고갈 방지 |
+| 입력값 전반영 | 9개 사용자 입력 → 랭킹 가중치·예산 필터·synthesis 프롬프트 반영 |
+| 업종코드 정규화 | `"cafe"` → `"CS100010"` 자동 변환 (`_SALES_CODE_MAP` 추가) |
+| `_KAKAO_CATEGORY_MAP` | 영문 업종명(cafe, chicken 등) 매핑 추가 |
+| LLM 프롬프트 개선 | `competition_score` 0.0~1.0 스케일 명시, `rent_affordability` SAFE/CAUTION/DANGER 명시 |
+
+---
+
 ## 실행 방법
 
 ### Docker Compose (권장)
