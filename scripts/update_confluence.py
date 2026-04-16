@@ -45,11 +45,11 @@ B2 시뮬레이션 (12개월 시나리오 + SHAP 분석)
     "industry_code": "CS100010", "industry_name": "커피-음료"
   },
   "revenue_forecast": {
-    "monthly_avg": 47200000,
-    "monthly_predictions": [
-      {"month": 1, "predicted_sales": 45000000, "confidence_lower": 38000000, "confidence_upper": 52000000},
-      {"month": 2, "predicted_sales": 46000000, ...},
-      ... (12개월)
+    "quarterly_avg": 47200000,
+    "quarterly_predictions": [
+      {"quarter_offset": 1, "predicted_sales": 45000000, "confidence_lower": 38000000, "confidence_upper": 52000000},
+      {"quarter_offset": 2, "predicted_sales": 46000000, ...},
+      ... (4분기)
     ]
   },
   "survival": {
@@ -62,10 +62,10 @@ B2 시뮬레이션 (12개월 시나리오 + SHAP 분석)
     "monthly_profit": 2800000,
     "total_initial_investment": 130000000,
     "annual_roi": 25.8,
-    "monthly_simulation": [
-      {"month": 1, "revenue": 45000000, "cost": 42200000, "profit": 2800000,
+    "quarterly_simulation": [
+      {"quarter": 1, "revenue": 45000000, "cost": 42200000, "profit": 2800000,
        "cumulative_profit": -127200000, "bep_reached": false},
-      ... (12개월)
+      ... (4분기)
     ]
   },
   "metadata": {"model_version": "0.1.0", "generated_at": "...", "data_period": "2019Q1~2024Q4"}
@@ -76,11 +76,11 @@ B2 시뮬레이션 (12개월 시나리오 + SHAP 분석)
 <table>
 <thead><tr><th>필드</th><th>타입</th><th>설명</th></tr></thead>
 <tbody>
-<tr><td>monthly_avg</td><td>int</td><td>12개월 평균 예상 월매출 (원)</td></tr>
-<tr><td>monthly_predictions[].month</td><td>int</td><td>월 (1~12)</td></tr>
-<tr><td>monthly_predictions[].predicted_sales</td><td>float</td><td>해당 월 예상매출 (원)</td></tr>
-<tr><td>monthly_predictions[].confidence_lower</td><td>float</td><td>95% 신뢰구간 하한</td></tr>
-<tr><td>monthly_predictions[].confidence_upper</td><td>float</td><td>95% 신뢰구간 상한</td></tr>
+<tr><td>quarterly_avg</td><td>int</td><td>4분기 평균 예상 매출 (원)</td></tr>
+<tr><td>quarterly_predictions[].quarter_offset</td><td>int</td><td>분기 오프셋 (1~4)</td></tr>
+<tr><td>quarterly_predictions[].predicted_sales</td><td>float</td><td>해당 분기 예상매출 (원)</td></tr>
+<tr><td>quarterly_predictions[].confidence_lower</td><td>float</td><td>95% 신뢰구간 하한</td></tr>
+<tr><td>quarterly_predictions[].confidence_upper</td><td>float</td><td>95% 신뢰구간 상한</td></tr>
 </tbody></table>
 <p>LSTM 모델이 4분기를 예측하고, 각 분기를 3개월로 분배. 신뢰구간은 예측값 기반 산출.</p>
 
@@ -101,7 +101,7 @@ B2 시뮬레이션 (12개월 시나리오 + SHAP 분석)
 <tr><td>monthly_profit</td><td>float</td><td>월 순이익 (원)</td></tr>
 <tr><td>total_initial_investment</td><td>float</td><td>초기투자 합계 (보증금+권리금+인테리어+가맹비)</td></tr>
 <tr><td>annual_roi</td><td>float</td><td>연간 ROI (%)</td></tr>
-<tr><td>monthly_simulation[]</td><td>array</td><td>12개월 월별 매출/비용/손익/누적손익/BEP도달여부</td></tr>
+<tr><td>quarterly_simulation[]</td><td>array</td><td>분기별 매출/비용/손익/누적손익/BEP도달여부</td></tr>
 </tbody></table>
 <p>BEP = 초기투자비 / (월매출 - 월고정비 - 월변동비). 비용은 업종별 기본값 또는 사용자 입력.</p>
 
@@ -132,9 +132,9 @@ result = ModelOutput.generate(
     cost_config=None  # 업종 기본값 사용
 )
 
-monthly_sales = result["revenue_forecast"]["monthly_predictions"]
+quarterly_sales = result["revenue_forecast"]["quarterly_predictions"]
 survival = result["survival"]["monthly_survival_rates"]
-bep_sim = result["bep"]["monthly_simulation"]
+bep_sim = result["bep"]["quarterly_simulation"]
 </pre>
 <p>모델 가중치가 없는 환경에서는 자동으로 mock 데이터를 반환하여 B2 개발을 즉시 시작할 수 있습니다.</p>
 """
