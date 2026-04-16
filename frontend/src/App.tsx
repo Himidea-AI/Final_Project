@@ -35,7 +35,7 @@
  * [백엔드 연동]
  *   - api/client.ts의 USE_MOCK = true → Mock 데이터 반환 (프론트 독립 동작)
  *   - USE_MOCK = false로 변경 시 → FastAPI /api/simulate, /api/analyze 호출
- *   - SimulatorDashboard.runSim()에서 runSimulation() + analyzeLocation() 호출
+ *   - SimulatorDashboard.runSim()에서 runSimulation() 호출 (v12.4부터 /simulate 단일 호출)
  *
  * [팀원 참고]
  *   - A1/B1: api/client.ts의 Mock 응답 형태 = 실제 API 응답과 동일해야 함
@@ -60,7 +60,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
-import { runSimulation, analyzeLocation } from './api/client';
+import { runSimulation } from './api/client';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
 import html2canvas from 'html2canvas';
@@ -733,6 +733,24 @@ const BUSINESS_TYPES = [
   '호프-간이주점',
   '커피-음료',
 ];
+
+/**
+ * UI 라벨 → 백엔드 _SALES_CODE_MAP 키 변환.
+ * backend/src/agents/tools.py:30의 매핑 재사용. 누락된 5개(중식/일식/양식/패스트푸드/분식)는
+ * 백엔드 매핑 확장 요청 필요 (TODO: IM3 Jira). 매핑 없으면 한글 그대로 전송되어 fallback.
+ */
+const BUSINESS_TYPE_BACKEND_KEY: Record<string, string> = {
+  '한식음식점': '한식',
+  '중식음식점': '중식음식점', // TODO: 백엔드 매핑 추가 요청
+  '일식음식점': '일식음식점', // TODO: 백엔드 매핑 추가 요청
+  '양식음식점': '양식음식점', // TODO: 백엔드 매핑 추가 요청
+  '제과점': '제과점',
+  '패스트푸드점': '패스트푸드점', // TODO: 백엔드 매핑 추가 요청
+  '치킨전문점': '치킨',
+  '분식전문점': '분식전문점', // TODO: 백엔드 매핑 추가 요청
+  '호프-간이주점': '호프',
+  '커피-음료': '커피',
+};
 
 const PRICE_RANGES = [
   { label: '5천원 이하', value: 'under5k' },
@@ -2004,15 +2022,14 @@ function ContactPage({ onBack }: { onBack: () => void }) {
    result  → 하이엔드 대시보드 (StatCard, SVG 차트, 레이더, 테이블, AI 인사이트)
 
    [백엔드 연동 (api/client.ts)]
-   runSim() → runSimulation() + analyzeLocation() 동시 호출
+   runSim() → runSimulation() 단일 호출 (v12.4: /simulate만 호출, /analyze 제거)
    응답 → SimResult로 변환 → UI 바인딩
-   USE_MOCK=true 시 현실적 Mock 데이터 반환 (2.5초 딜레이)
    API 실패 시 fallback Mock 표시 (에러에도 화면 유지)
 
    [팀원 참고 — B1/A1]
    SimulationOutput.comparison 배열 → 동별 비교 테이블 데이터
    SimulationOutput.legal_risks 배열 → AI 인사이트 법률 경고
-   AnalysisResult.data.market_report → 7개 항목별 차트 데이터
+   SimulationOutput.market_report → 7개 항목별 차트 데이터 (backend main.py:308)
 */
 
 /* ═══════════════════════════════════════════════════════
@@ -2103,6 +2120,7 @@ function SimulatorDashboard({
   const [loadingText, setLoadingText] = useState('INITIALIZING AI ENGINE...');
   const [loadingProgress, setLoadingProgress] = useState(0);
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [chartView, setChartView] = useState<'daily' | 'monthly'>('daily');
   const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
@@ -2366,30 +2384,33 @@ function SimulatorDashboard({
   const runSim = useCallback(async () => {
     setReportState('loading');
     try {
-      const [simRes, analysisRes] = await Promise.all([
-        runSimulation({
-          business_type: 'cafe',
-          brand_name: '',
-          target_district: selectedDongs[0] || '서교동',
-          existing_stores: [],
-          initial_investment: budget * 10000,
-          monthly_rent: budget * 10000,
-          simulation_months: 12,
-          scenarios: [],
-        }),
-        analyzeLocation({
-          business_type: 'cafe',
-          brand_name: '',
-          target_district: selectedDongs[0] || '서교동',
-          existing_stores: [],
-          initial_investment: budget * 10000,
-          monthly_rent: budget * 10000,
-          simulation_months: 12,
-          scenarios: [],
-        }),
-      ]);
+      // [C1 연동] 백엔드 SimulationInput 9개 필드 전부 전송
+      // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환
+      // brand_name: 로그인 유저의 company_name 사용
+      // TODO(existing_stores): 매장 관리 UI 추가 시 실제 데이터 연동 (현재는 빈 배열)
+      const payload = {
+        business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
+        brand_name: user?.company_name || '',
+        target_district: selectedDongs[0] || '서교동',
+        existing_stores: [],
+        initial_investment: initialCapital * 10000, // 만원 → 원
+        monthly_rent: budget * 10000, // 만원 → 원
+        simulation_months: 12,
+        scenarios: [],
+        // 신규 7 필드
+        store_area: storeArea,
+        target_price_range: targetPrice,
+        operating_hours: operatingHours,
+        initial_capital: initialCapital * 10000,
+        commercial_radius: radius,
+        population_weight: weighted,
+      };
 
-      const mr = analysisRes.data?.market_report;
+      // [찬영 요청] /simulate 하나만 호출 (이전에는 /analyze와 중복 호출)
+      // /simulate 응답에 market_report 포함됨 (backend main.py:308)
+      const simRes = await runSimulation(payload);
+
+      const mr = simRes.market_report;
       const topComp = simRes.comparison?.[0];
       const topRisk = simRes.legal_risks?.[0];
 
@@ -2424,7 +2445,19 @@ function SimulatorDashboard({
       });
       setReportState('result');
     }
-  }, [setReportState, selectedDongs, budget, businessType, showToast]);
+  }, [
+    setReportState,
+    selectedDongs,
+    budget,
+    businessType,
+    user?.company_name,
+    storeArea,
+    targetPrice,
+    operatingHours,
+    initialCapital,
+    radius,
+    weighted,
+  ]);
 
   // Loading — 단계별 progress bar + 스트리밍 텍스트 (100~120초 대응)
   useEffect(() => {
