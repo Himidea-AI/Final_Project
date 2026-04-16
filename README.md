@@ -37,7 +37,7 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 | AI 오케스트레이션 | LangGraph, LangChain |
 | LLM | Claude (Anthropic), Gemini (Google), OpenAI |
 | 임베딩 / RAG | pgvector, sentence-transformers, LangChain-HuggingFace |
-| 딥러닝 모델 | PyTorch (LSTM/GRU/TCN), scikit-learn, SHAP |
+| 딥러닝 모델 | PyTorch(TCN), scikit-learn, SHAP |
 | 데이터 처리 | pandas, numpy, geopandas |
 | PDF 파싱 | pdfplumber, PyPDF2 |
 | 관측성 | LangSmith |
