@@ -29,12 +29,20 @@ export interface ExistingStore {
   monthly_revenue: number;
 }
 
-/** 월별 매출 예측 */
-export interface MonthlyProjection {
-  month: number;
+/**
+ * 분기별 매출 예측 (v12.5: monthly→quarterly 네이밍 전환, backend B2 refactor 반영)
+ * 백엔드 응답 키는 `monthly_projection`이지만 엔트리는 quarter 단위 (레거시 호환 차원에서 키명 유지)
+ */
+export interface QuarterlyProjection {
+  quarter: number;
   revenue: number;
   cumulative_profit: number;
+  confidence_lower: number;
+  confidence_upper: number;
 }
+
+/** @deprecated monthly→quarterly 전환됨. QuarterlyProjection 사용 */
+export type MonthlyProjection = QuarterlyProjection;
 
 /** 동별 비교 결과 */
 export interface DistrictComparison {
@@ -60,7 +68,7 @@ export interface SimulationOutput {
   analysis_report: string;    // 줄글 리포트
   analysis_metrics: AnalysisMetrics; // 차트용 정량 데이터
   simulation_months: number;
-  monthly_projection: MonthlyProjection[];
+  monthly_projection: QuarterlyProjection[];
   comparison: DistrictComparison[];
   legal_risks: LegalRisk[];
   ai_recommendation?: string; // 기존 호환성 유지
@@ -75,6 +83,20 @@ export interface SimulationOutput {
     growth_potential: number;
     accessibility: number;
   };
+  // [B1 입지 랭킹] backend main.py:301 response_data 4필드 반영
+  winner_district?: string;
+  top_3_candidates?: string[];
+  district_rankings?: DistrictRanking[];
+  overall_legal_risk?: 'safe' | 'caution' | 'danger' | string;
+  // [A1 재무] backend main.py:337 — 선택 필드
+  financial_report?: Record<string, unknown>;
+}
+
+/** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
+export interface DistrictRanking {
+  district: string;
+  score: number;
+  [key: string]: unknown; // 노드별 확장 필드 허용
 }
 
 export interface AnalysisMetrics {
