@@ -16,14 +16,25 @@ class MarketDataTool:
 
     # 업종 코드 → kakao_store category 매핑
     _KAKAO_CATEGORY_MAP: Dict[str, str] = {
-        "I212": "커피-음료", "카페": "커피-음료", "커피": "커피-음료",
-        "I201": "한식음식점", "한식": "한식음식점", "음식점": "한식음식점",
-        "I206": "치킨전문점", "치킨": "치킨전문점",
+        "I212": "커피-음료", "카페": "커피-음료", "커피": "커피-음료", "cafe": "커피-음료", "coffee": "커피-음료",
+        "I201": "한식음식점", "한식": "한식음식점", "음식점": "한식음식점", "restaurant": "한식음식점",
+        "I206": "치킨전문점", "치킨": "치킨전문점", "chicken": "치킨전문점",
         "I207": "패스트푸드점", "피자": "패스트푸드점",
         "I209": "분식전문점", "분식": "분식전문점",
         "I211": "호프-간이주점", "주점": "호프-간이주점",
         "I213": "제과점", "베이커리": "제과점", "빵": "제과점",
-        "G209": "패스트푸드점", "편의점": "패스트푸드점",
+        "G209": "패스트푸드점", "편의점": "패스트푸드점", "convenience": "편의점",
+    }
+
+    # 사용자 입력 업종명 → DistrictSales.industry_code 매핑 (골목상권 업종코드)
+    _SALES_CODE_MAP: Dict[str, str] = {
+        "카페": "CS100010", "커피": "CS100010", "cafe": "CS100010", "coffee": "CS100010",
+        "I212": "CS100010",
+        "한식": "CS100001", "음식점": "CS100001", "restaurant": "CS100001",
+        "치킨": "CS100006", "chicken": "CS100006",
+        "주점": "CS100009", "호프": "CS100009",
+        "베이커리": "CS100011", "제과점": "CS100011",
+        "편의점": "CS200009", "convenience": "CS200009",
     }
 
     async def get_competitor_stats(self, lat: float, lon: float, industry_m_code: str, radius_m: int = 500) -> Dict[str, Any]:
@@ -115,13 +126,15 @@ class MarketDataTool:
         """
         최근 1년 매출 추이 및 '통계적 요약본' 리턴
         """
+        # 입력값을 DB의 골목상권 업종코드(CS1xxxxx)로 정규화
+        normalized_code = self._SALES_CODE_MAP.get(industry_code, industry_code)
         async with self.db_client.get_session() as session:
             # 1. 최근 4분기 매출 트렌드 (마포구 코드 11440으로 한정)
             sales_stmt = select(DistrictSales)\
                 .where(
                     DistrictSales.dong_code.like('11440%'),
-                    DistrictSales.dong_name == dong_name, 
-                    DistrictSales.industry_code == industry_code
+                    DistrictSales.dong_name == dong_name,
+                    DistrictSales.industry_code == normalized_code
                 )\
                 .order_by(DistrictSales.quarter.desc())\
                 .limit(4)

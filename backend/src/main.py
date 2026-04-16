@@ -53,7 +53,20 @@ _pending_pipelines: Dict[str, "asyncio.Task[Any]"] = {}
 
 
 def _pipeline_key(input_data: Any) -> str:
-    return f"{input_data.target_district}:{input_data.business_type}:{input_data.brand_name}"
+    radius = getattr(input_data, "commercial_radius", 500)
+    pop_w = getattr(input_data, "population_weight", True)
+    rent = getattr(input_data, "monthly_rent", 0)
+    area = getattr(input_data, "store_area", 15.0)
+    return f"{input_data.target_district}:{input_data.business_type}:{input_data.brand_name}:{rent}:{area}:{radius}:{pop_w}"
+
+
+_BIZ_TYPE_NORMALIZE: Dict[str, str] = {
+    "cafe": "카페", "coffee": "카페",
+    "restaurant": "한식", "food": "한식",
+    "chicken": "치킨",
+    "convenience": "편의점",
+    "bakery": "베이커리",
+}
 
 
 async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
@@ -64,11 +77,22 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         print(f"[DEDUP] 동일 요청 대기 중 — 기존 파이프라인 공유: {key}")
         return await _pending_pipelines[key]
 
+    # 프론트엔드가 영문으로 보낼 경우 한국어로 정규화 (DB 쿼리 호환)
+    normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
+    normalized_brand = input_data.brand_name or "미지정 브랜드"
+
     initial_state = {
-        "messages": [HumanMessage(content=f"{input_data.target_district} {input_data.brand_name} 분석 시작")],
-        "business_type": input_data.business_type,
-        "brand_name": input_data.brand_name,
+        "messages": [HumanMessage(content=f"{input_data.target_district} {normalized_brand} 분석 시작")],
+        "business_type": normalized_biz,
+        "brand_name": normalized_brand,
         "target_district": input_data.target_district,
+        "commercial_radius": getattr(input_data, "commercial_radius", 500),
+        "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
+        "store_area": getattr(input_data, "store_area", 15.0),
+        "population_weight": getattr(input_data, "population_weight", True),
+        "target_price_range": getattr(input_data, "target_price_range", "5to10k"),
+        "operating_hours": getattr(input_data, "operating_hours", ["점심", "저녁"]),
+        "initial_capital": getattr(input_data, "initial_capital", 50_000_000),
         "market_data": {},
         "legal_info": [],
         "scouting_results": [],

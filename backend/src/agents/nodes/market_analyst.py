@@ -53,12 +53,13 @@ async def market_analyst_node(state: AgentState) -> dict:
     # [3] 실데이터 수집 (MarketDataTool 사용)
     lat = state.get("market_data", {}).get("lat", 37.5565)
     lon = state.get("market_data", {}).get("lng", 126.9239)
+    commercial_radius = state.get("commercial_radius", 500)
 
     # 병렬 데이터 수집 (속도 최적화)
     import asyncio
     pop_task = market_tool.get_population_trends(target_district)
     sales_task = market_tool.get_commercial_insights(target_district, business_type)
-    comp_task = market_tool.get_competitor_stats(lat, lon, business_type)
+    comp_task = market_tool.get_competitor_stats(lat, lon, business_type, radius_m=commercial_radius)
     rent_task = market_tool.get_rent_insight(target_district)
 
     pop_data, sales_data, comp_data, rent_data = await asyncio.gather(
@@ -98,8 +99,11 @@ async def market_analyst_node(state: AgentState) -> dict:
         "### 출력 요구사항:\n"
         "1. 리포트 본문: 상세 분석과 하단 [프랜차이즈 전략팀 총평] 섹션을 포함할 것. '가장 큰 기회'와 '리스크'를 명시.\n"
         "2. 구조화 데이터: 리포트의 가장 마지막에 아래와 같이 JSON 형식을 포함할 것.\n"
-        "   - 형식: [JSON_START]{ \"grade\": \"등급\", \"growth_rate\": 수치, \"competition_score\": 수치, \"rent_affordability\": \"상타\" }[JSON_END]\n"
-        "   - 등급(grade)은 반드시 [EXCELLENT, GOOD, NORMAL, RISKY] 중 대문자로 하나를 선택할 것.\n"
+        "   - 형식: [JSON_START]{ \"grade\": \"등급\", \"growth_rate\": 수치, \"competition_score\": 수치, \"rent_affordability\": \"등급\" }[JSON_END]\n"
+        "   - grade: 반드시 EXCELLENT | GOOD | NORMAL | RISKY 중 하나 (대문자)\n"
+        "   - growth_rate: 전분기 대비 매출 성장률 (단위: %, 예: 3.5 / -1.2)\n"
+        "   - competition_score: 경쟁 밀집도 (0.0~1.0 사이의 소수, 낮을수록 경쟁 적음)\n"
+        "   - rent_affordability: 임대료 부담 수준. 반드시 SAFE | CAUTION | DANGER 중 하나 (대문자)\n"
         "3. 어조: 비유적 표현이나 문학적 수사 없이, 구체적인 수치와 사실 중심으로 명확하고 이해하기 쉽게 작성하세요. 예비 창업자가 바로 이해할 수 있는 직관적인 표현을 사용하세요."
     )
 

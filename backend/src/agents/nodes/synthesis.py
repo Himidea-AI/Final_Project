@@ -21,9 +21,14 @@ async def synthesis_node(state: AgentState) -> dict:
     brand_name = state.get("brand_name", "미지정 브랜드")
     business_type = state.get("business_type", "카페")
     target_district = state.get("target_district", "마포구")
+    target_price_range = state.get("target_price_range", "")
+    operating_hours = state.get("operating_hours", [])
+    initial_capital = state.get("initial_capital", 0)
+    monthly_rent_budget = state.get("monthly_rent_budget", 0)
+    store_area = state.get("store_area", 15.0)
 
-    # Redis 캐시 조회
-    cache_key = f"synthesis:{brand_name}:{target_district}:{business_type}"
+    # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
+    cache_key = f"synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -84,11 +89,17 @@ async def synthesis_node(state: AgentState) -> dict:
         f"4. 상권 분석 요약 ({target_district}): {market_report[:400]}\n"
         f"5. 유동인구 분석 요약 ({target_district}): {population_report[:400]}\n"
         f"6. 법률 리스크 검토 결과 (14개 항목):\n{legal_summary_for_llm}\n\n"
+        f"7. 창업자 입력 조건:\n"
+        f"   - 목표 객단가: {target_price_range or '미지정'}\n"
+        f"   - 주 타겟 시간대: {', '.join(operating_hours) if operating_hours else '미지정'}\n"
+        f"   - 초기 자본금: {initial_capital:,}원\n"
+        f"   - 월 임대료 예산: {monthly_rent_budget:,}원 (점포 면적 {store_area}평 기준)\n\n"
         "### 요구사항:\n"
         "1. 1순위 추천 지역과 그 이유를 명확히 제시하고, 2~4순위 후보 지역도 간략히 설명하세요.\n"
-        "2. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제안을 하십시오.\n"
-        "3. 반드시 FinalStrategyResult 스키마에 맞춰 정형 데이터를 응답하십시오.\n"
-        f"4. 종합 법률 리스크 등급은 반드시 '{overall_legal_risk}'를 반영하십시오.\n"
+        "2. 창업자 입력 조건(객단가·시간대·자본금·임대료 예산)을 반드시 반영하여 적합성을 판단하세요.\n"
+        "3. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제안을 하십시오.\n"
+        "4. 반드시 FinalStrategyResult 스키마에 맞춰 정형 데이터를 응답하십시오.\n"
+        f"5. 종합 법률 리스크 등급은 반드시 '{overall_legal_risk}'를 반영하십시오.\n"
     )
 
     try:
