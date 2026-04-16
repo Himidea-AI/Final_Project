@@ -63,37 +63,43 @@ def retry_on_429(func):
     return wrapper
 
 
-def _build_llm(model: str):
+def _build_llm(model: str, max_tokens: int | None = None):
     """LLM_PROVIDER 환경변수에 따라 LangChain LLM 객체를 생성."""
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
     if provider == "openai":
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
+        kwargs = dict(
             model=model,
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             temperature=0.1,
         )
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        return ChatOpenAI(**kwargs)
     if provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(
+        kwargs = dict(
             model="gemini-2.0-flash",
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0.1,
         )
+        if max_tokens is not None:
+            kwargs["max_output_tokens"] = max_tokens
+        return ChatGoogleGenerativeAI(**kwargs)
     raise ValueError(f"지원하지 않는 LLM_PROVIDER: {provider}")
 
 
 @retry_on_429
 def get_fast_llm():
-    """Market Analyst, Population, Synthesis용 빠른 모델"""
+    """중간 에이전트용 (market_analyst, population_analyst) — max_tokens=500"""
     if not hasattr(get_fast_llm, "_instance"):
-        get_fast_llm._instance = _build_llm("gpt-4.1-mini")
+        get_fast_llm._instance = _build_llm("gpt-4.1-mini", max_tokens=500)
     return get_fast_llm._instance
 
 
 @retry_on_429
 def get_smart_llm():
-    """복잡한 추론이 필요한 경우용 모델 (현재 fast와 동일 모델 사용)"""
+    """최종 리포트용 (synthesis) — max_tokens=1200"""
     if not hasattr(get_smart_llm, "_instance"):
-        get_smart_llm._instance = _build_llm("gpt-4.1-mini")
+        get_smart_llm._instance = _build_llm("gpt-4.1-mini", max_tokens=1200)
     return get_smart_llm._instance
