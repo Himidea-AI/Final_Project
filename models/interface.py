@@ -98,7 +98,7 @@ def _mock_bep(industry_name: str) -> dict:
         "monthly_profit": bep_result["monthly_profit"],
         "total_initial_investment": bep_result["total_initial_investment"],
         "annual_roi": bep_result["annual_roi"],
-        "quarterly_simulation": simulation,   # 실제 4개 분기 데이터 (키명 quarterly로 정정)
+        "quarterly_simulation": simulation,  # 실제 4개 분기 데이터 (키명 quarterly로 정정)
     }
 
 
@@ -123,6 +123,38 @@ def _run_lstm_forecast(dong_code: str, industry_code: str) -> dict:
     }
 
 
+def _run_tcn_forecast(dong_code: str, industry_code: str) -> dict:
+    """TCN 매출 예측 모델 호출 → 분기별 결과 반환."""
+    from models.tcn_forecast.predict import predict as tcn_predict
+
+    quarterly_results = tcn_predict(dong_code, industry_code, n_months=4)
+
+    quarterly_avg = (
+        sum(qr["predicted_sales"] for qr in quarterly_results) / len(quarterly_results) if quarterly_results else 0.0
+    )
+
+    return {
+        "quarterly_avg": round(quarterly_avg),
+        "quarterly_predictions": quarterly_results,
+    }
+
+
+def _run_gru_forecast(dong_code: str, industry_code: str) -> dict:
+    """GRU 매출 예측 모델 호출 → 분기별 결과 반환."""
+    from models.gru_forecast.predict import predict as gru_predict
+
+    quarterly_results = gru_predict(dong_code, industry_code, n_months=4)
+
+    quarterly_avg = (
+        sum(qr["predicted_sales"] for qr in quarterly_results) / len(quarterly_results) if quarterly_results else 0.0
+    )
+
+    return {
+        "quarterly_avg": round(quarterly_avg),
+        "quarterly_predictions": quarterly_results,
+    }
+
+
 def _run_survival(dong_code: str, industry_code: str) -> dict:
     """생존률 예측 모델 호출."""
     from models.revenue_predictor.predict import predict as survival_predict
@@ -136,7 +168,7 @@ def _run_survival(dong_code: str, industry_code: str) -> dict:
 
 
 def _run_bep(
-    quarterly_avg: float,           # 분기 평균 매출 (파라미터명 quarterly로 정정)
+    quarterly_avg: float,  # 분기 평균 매출 (파라미터명 quarterly로 정정)
     quarterly_predictions: list[dict],  # 분기 예측 4개 (파라미터명 quarterly로 정정)
     industry_name: str,
     cost_config: dict | None,
@@ -170,7 +202,7 @@ def _run_bep(
         "monthly_profit": bep_result["monthly_profit"],
         "total_initial_investment": bep_result["total_initial_investment"],
         "annual_roi": bep_result["annual_roi"],
-        "quarterly_simulation": simulation,   # 분기별 4개 시뮬레이션 결과
+        "quarterly_simulation": simulation,  # 분기별 4개 시뮬레이션 결과
     }
 
 
@@ -181,6 +213,16 @@ def _run_bep(
 
 def _resolve_dong_name(dong_code: str) -> str:
     """dong_code → dong_name 변환. 실패 시 dong_code 그대로 반환."""
+    try:
+        from backend.src.services.dong_resolver import resolve_dong_name
+
+        name = resolve_dong_name(dong_code)
+        if name:
+            return name
+    except Exception:
+        pass
+
+    # fallback: 데이터에서 조회
     try:
         from models.revenue_predictor.data_prep import load_store_data
 
@@ -259,6 +301,7 @@ class ModelOutput:
         industry_code: str,
         industry_name: str,
         cost_config: dict | None = None,
+        model: str = "lstm",
     ) -> dict:
         """전체 모델 파이프라인 실행 후 통합 결과 반환.
 
@@ -292,12 +335,18 @@ class ModelOutput:
         """
         use_mock = False
 
-        # ---- 1) LSTM 매출 예측 (분기별) ----
+        # ---- 1) 매출 예측 (모델 선택: lstm / tcn / gru) ----
+        forecast_fn = {
+            "lstm": _run_lstm_forecast,
+            "tcn": _run_tcn_forecast,
+            "gru": _run_gru_forecast,
+        }.get(model, _run_lstm_forecast)
+
         try:
-            revenue_forecast = _run_lstm_forecast(dong_code, industry_code)
-            logger.info("LSTM 매출 예측 완료")
+            revenue_forecast = forecast_fn(dong_code, industry_code)
+            logger.info("%s 매출 예측 완료", model.upper())
         except Exception as exc:
-            logger.warning("LSTM 매출 예측 실패 (mock 사용): %s", exc)
+            logger.warning("%s 매출 예측 실패 (mock 사용): %s", model.upper(), exc)
             revenue_forecast = _mock_revenue_forecast()
             use_mock = True
 
@@ -315,7 +364,7 @@ class ModelOutput:
             quarterly_avg = revenue_forecast["quarterly_avg"]
             quarterly_preds = revenue_forecast["quarterly_predictions"]
             bep = _run_bep(
-                quarterly_avg=quarterly_avg,        # 분기 평균 매출 전달
+                quarterly_avg=quarterly_avg,  # 분기 평균 매출 전달
                 quarterly_predictions=quarterly_preds,  # 분기 예측 4개 전달
                 industry_name=industry_name,
                 cost_config=cost_config,
