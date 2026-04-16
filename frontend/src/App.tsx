@@ -747,14 +747,14 @@ const BUSINESS_TYPES = [
  * 백엔드 매핑 확장 요청 필요 (TODO: IM3 Jira). 매핑 없으면 한글 그대로 전송되어 fallback.
  */
 const BUSINESS_TYPE_BACKEND_KEY: Record<string, string> = {
-  '한식음식점': '한식',
-  '중식음식점': '중식음식점', // TODO: 백엔드 매핑 추가 요청
-  '일식음식점': '일식음식점', // TODO: 백엔드 매핑 추가 요청
-  '양식음식점': '양식음식점', // TODO: 백엔드 매핑 추가 요청
-  '제과점': '제과점',
-  '패스트푸드점': '패스트푸드점', // TODO: 백엔드 매핑 추가 요청
-  '치킨전문점': '치킨',
-  '분식전문점': '분식전문점', // TODO: 백엔드 매핑 추가 요청
+  한식음식점: '한식',
+  중식음식점: '중식음식점', // TODO: 백엔드 매핑 추가 요청
+  일식음식점: '일식음식점', // TODO: 백엔드 매핑 추가 요청
+  양식음식점: '양식음식점', // TODO: 백엔드 매핑 추가 요청
+  제과점: '제과점',
+  패스트푸드점: '패스트푸드점', // TODO: 백엔드 매핑 추가 요청
+  치킨전문점: '치킨',
+  분식전문점: '분식전문점', // TODO: 백엔드 매핑 추가 요청
   '호프-간이주점': '호프',
   '커피-음료': '커피',
 };
@@ -871,7 +871,7 @@ const mockDetailData: Record<string, DetailDataEntry> = {
     trend: '+5.2 Pts 지속 상승중',
   },
   traffic: {
-    title: '일평균 유동인구 상세',
+    title: '일일 유동인구 상세',
     aiReasoning:
       'KT 통신사 셀룰러 데이터 기반 시간대별 체류 인구 측정. 18-21시 피크, 점심시간(12-14시) 보조 피크. 2030 여성 비중이 평균 대비 23% 높음.',
     peakTime: '18:00 - 21:00',
@@ -2280,7 +2280,7 @@ function SimulatorDashboard({
       ],
       ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
       [
-        '일평균 유동인구',
+        '일일 유동인구',
         popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '42,105 명',
         popData?.date ?? '-2.4%',
       ],
@@ -3150,7 +3150,7 @@ function SimulatorDashboard({
                           />
                           <StatCard
                             onClick={() => setActiveDrawer('traffic')}
-                            title="일평균 유동인구"
+                            title="일일 유동인구"
                             value={
                               popData?.daily_average
                                 ? `${popData.daily_average.toLocaleString()} 명`
@@ -3309,9 +3309,7 @@ function SimulatorDashboard({
                                   <h3 className="text-lg font-semibold mb-3">
                                     분기별 매출 예측 (TCN)
                                   </h3>
-                                  <QuarterlyProjectionChart
-                                    data={simResult.quarterlyProjection}
-                                  />
+                                  <QuarterlyProjectionChart data={simResult.quarterlyProjection} />
                                 </div>
                               )}
 
@@ -3808,7 +3806,7 @@ function SimulatorDashboard({
             trend: '+5.2 Pts',
           },
           {
-            title: '일평균 유동인구',
+            title: '일일 유동인구',
             value: popData?.daily_average
               ? `${popData.daily_average.toLocaleString()} 명`
               : '42,105 명',
@@ -3925,12 +3923,17 @@ function GlobalLimelightNav() {
   const mockItems = isMaster ? NOTIFICATION_MOCK_ITEMS : [];
   const totalUnread = pendingManagers.length + mockItems.length;
 
-  type NavItemType = "folder" | "bell" | "settings" | "user";
-  const navItems: { type: NavItemType; icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
-    { type: "folder", icon: <Folder />, label: "출점 파이프라인" },
-    { type: "user", icon: <User />, label: "내 프로필" },
-    { type: "settings", icon: <Settings />, label: "내 정보 관리" },
-    { type: "bell", icon: <Bell />, label: "알림", hasNoti: totalUnread > 0 },
+  type NavItemType = 'folder' | 'bell' | 'settings' | 'user';
+  const navItems: {
+    type: NavItemType;
+    icon: React.ReactElement;
+    label: string;
+    hasNoti?: boolean;
+  }[] = [
+    { type: 'folder', icon: <Folder />, label: '출점 파이프라인' },
+    { type: 'user', icon: <User />, label: '내 프로필' },
+    { type: 'settings', icon: <Settings />, label: '내 정보 관리' },
+    { type: 'bell', icon: <Bell />, label: '알림', hasNoti: totalUnread > 0 },
   ];
 
   const targetIndex = hoverIndex !== null ? hoverIndex : activeIndex;
@@ -3958,11 +3961,11 @@ function GlobalLimelightNav() {
       nav('/hq?tab=pipeline');
     } else if (type === 'settings') {
       setOpenDropdown(null);
-      nav("/hq?tab=mypage");
-    } else if (type === "bell") {
-      setOpenDropdown(openDropdown === "bell" ? null : "bell");
-    } else if (type === "user") {
-      setOpenDropdown(openDropdown === "user" ? null : "user");
+      nav('/hq?tab=mypage');
+    } else if (type === 'bell') {
+      setOpenDropdown(openDropdown === 'bell' ? null : 'bell');
+    } else if (type === 'user') {
+      setOpenDropdown(openDropdown === 'user' ? null : 'user');
     }
   };
 

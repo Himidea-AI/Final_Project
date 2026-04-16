@@ -115,9 +115,13 @@ async def get_population_by_dongs(dong_names: list[str] | None = None) -> dict:
     if not all_rows:
         return {"status": "error", "message": f"{latest_date} 마포구 유동인구 데이터가 없습니다."}
 
-    # 전날 데이터 (비교용)
-    prev_date = (datetime.strptime(latest_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
-    prev_rows = await _fetch_mapo_population(prev_date)
+    # 전날 데이터 (비교용) — 최신 날짜 기준 1~3일 전 탐색
+    prev_rows = []
+    for offset in range(1, 4):
+        prev_date = (datetime.strptime(latest_date, "%Y%m%d") - timedelta(days=offset)).strftime("%Y%m%d")
+        prev_rows = await _fetch_mapo_population(prev_date)
+        if prev_rows:
+            break
 
     # 3. 요청한 동만 필터
     filtered = [r for r in all_rows if r["ADSTRD_CODE_SE"] in target_codes]
@@ -189,9 +193,12 @@ async def get_population_by_dongs(dong_names: list[str] | None = None) -> dict:
             pop = float(row.get("TOT_LVPOP_CO", 0))
             prev_dong_totals[dong_name] = prev_dong_totals.get(dong_name, 0) + pop
         if prev_dong_totals:
-            prev_avg = round(sum(prev_dong_totals.values()) / len(prev_dong_totals))
-            if prev_avg > 0:
-                change_pct = round((daily_avg - prev_avg) / prev_avg * 100, 1)
+            # 동일한 동 수로 비교 (최신 날짜에 있는 동만)
+            matched_dongs = [d for d in dong_stats if d in prev_dong_totals]
+            if matched_dongs:
+                prev_avg = round(sum(prev_dong_totals[d] for d in matched_dongs) / len(matched_dongs))
+                if prev_avg > 0:
+                    change_pct = round((daily_avg - prev_avg) / prev_avg * 100, 1)
 
     formatted_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}"
 
