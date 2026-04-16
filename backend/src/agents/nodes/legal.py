@@ -958,7 +958,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
-    cache_key = f"legal:{brand}:{district}:{business_type}"
+    cache_key = f"v2:legal:{brand}:{district}:{business_type}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
