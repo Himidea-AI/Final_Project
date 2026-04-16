@@ -62,44 +62,42 @@ async def synthesis_node(state: AgentState) -> dict:
     top_3_candidates = state.get("top_3_candidates", [])
     scouting_results = state.get("scouting_results", [])
 
-    # 랭킹 요약 (상위 4개 동 표시)
+    # 랭킹 요약 (상위 4개 동, 핵심 수치만)
     ranking_summary = ""
     if scouting_results:
-        top4 = scouting_results[:4]
-        ranking_summary = "\n".join(
-            f"  {r['rank']}위. {r['district']} — 종합점수 {r['score']}점 "
-            f"(매출성장 {r['sales_growth']}%, 인구성장 {r['pop_growth']}%, 임대료점수 {r['rent_score']})"
-            for r in top4
+        ranking_summary = " / ".join(
+            f"{r['rank']}위:{r['district']}({r['score']}점)"
+            for r in scouting_results[:4]
         )
 
     # 2. LLM 합성용 컨텍스트 구성
+    # [토큰 절감] 중간 에이전트 리포트 전문 대신 핵심 수치만 전달
+    # market_report: 앞 150자 (등급·성장률 수치가 앞부분에 집중됨)
+    # population_report: 앞 120자 (인구 수치 요약)
+    # legal: summary 60자 이내로 축약 (level이 핵심)
+    market_summary_short = market_report[:150].replace("\n", " ")
+    pop_summary_short = population_report[:120].replace("\n", " ")
+
     legal_summary_for_llm = "\n".join([
-        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} (요약: {r.get('summary', '')[:100]}...)"
+        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:60]}"
         for r in legal_risks
     ])
 
     prompt = (
-        "당신은 프랜차이즈 창업 전략 수석 컨설턴트입니다. "
-        "지금까지 수집된 상권, 인구, 법률, 입지 랭킹 데이터를 종합하여 예비 점주를 위한 최종 전략 리포트를 작성하세요.\n\n"
-        f"### [분석 대상 데이터]\n"
-        f"1. 브랜드: {brand_name} ({business_type})\n"
-        f"2. 사용자 선택 지역: {target_district}\n"
-        f"3. 마포구 입지 랭킹 (1~4위):\n{ranking_summary}\n"
-        f"   → 1순위 추천 지역: {winner_district} / 추천 후보: {', '.join(top_3_candidates) if top_3_candidates else '없음'}\n"
-        f"4. 상권 분석 요약 ({target_district}): {market_report[:400]}\n"
-        f"5. 유동인구 분석 요약 ({target_district}): {population_report[:400]}\n"
-        f"6. 법률 리스크 검토 결과 (14개 항목):\n{legal_summary_for_llm}\n\n"
-        f"7. 창업자 입력 조건:\n"
-        f"   - 목표 객단가: {target_price_range or '미지정'}\n"
-        f"   - 주 타겟 시간대: {', '.join(operating_hours) if operating_hours else '미지정'}\n"
-        f"   - 초기 자본금: {initial_capital:,}원\n"
-        f"   - 월 임대료 예산: {monthly_rent_budget:,}원 (점포 면적 {store_area}평 기준)\n\n"
-        "### 요구사항:\n"
-        "1. 1순위 추천 지역과 그 이유를 명확히 제시하고, 2~4순위 후보 지역도 간략히 설명하세요.\n"
-        "2. 창업자 입력 조건(객단가·시간대·자본금·임대료 예산)을 반드시 반영하여 적합성을 판단하세요.\n"
-        "3. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제안을 하십시오.\n"
-        "4. 반드시 FinalStrategyResult 스키마에 맞춰 정형 데이터를 응답하십시오.\n"
-        f"5. 종합 법률 리스크 등급은 반드시 '{overall_legal_risk}'를 반영하십시오.\n"
+        "프랜차이즈 창업 전략 컨설턴트로서 아래 요약 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
+        f"브랜드:{brand_name}({business_type}) | 선택지역:{target_district} | 법률리스크:{overall_legal_risk}\n"
+        f"입지랭킹: {ranking_summary}\n"
+        f"상권({target_district}): {market_summary_short}\n"
+        f"인구({target_district}): {pop_summary_short}\n"
+        f"법률(14개):\n{legal_summary_for_llm}\n"
+        f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
+        f"자본금={initial_capital:,}원 | 임대예산={monthly_rent_budget:,}원({store_area}평)\n\n"
+        "요구사항:\n"
+        "1. 1순위 추천 지역과 이유, 2~4순위 후보 간략 설명\n"
+        "2. 창업자 조건(객단가·시간대·자본금·임대예산) 적합성 판단\n"
+        "3. 창업 가부 결정 및 전략 제안\n"
+        "4. FinalStrategyResult 스키마로 응답\n"
+        f"5. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
     )
 
     try:
