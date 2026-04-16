@@ -48,6 +48,50 @@ app.add_middleware(
 DEFAULT_LAT = 37.5663
 DEFAULT_LNG = 126.9015
 
+# 동일 파라미터 동시 요청 중복 실행 방지 (simulate + analyze 동시 호출 시 파이프라인 공유)
+_pending_pipelines: Dict[str, "asyncio.Task[Any]"] = {}
+
+
+def _pipeline_key(input_data: Any) -> str:
+    return f"{input_data.target_district}:{input_data.business_type}:{input_data.brand_name}"
+
+
+async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
+    """파이프라인 실행. 동일 키로 이미 실행 중인 Task가 있으면 공유하여 대기."""
+    key = _pipeline_key(input_data)
+
+    if key in _pending_pipelines and not _pending_pipelines[key].done():
+        print(f"[DEDUP] 동일 요청 대기 중 — 기존 파이프라인 공유: {key}")
+        return await _pending_pipelines[key]
+
+    initial_state = {
+        "messages": [HumanMessage(content=f"{input_data.target_district} {input_data.brand_name} 분석 시작")],
+        "business_type": input_data.business_type,
+        "brand_name": input_data.brand_name,
+        "target_district": input_data.target_district,
+        "market_data": {},
+        "legal_info": [],
+        "scouting_results": [],
+        "top_3_candidates": [],
+        "winner_district": input_data.target_district,
+        "brand_analysis": {},
+        "analysis_results": {},
+        "analysis_metrics": {},
+        "overall_legal_risk": "safe",
+        "current_agent": "start",
+        "next_step": "",
+        "errors": [],
+    }
+
+    task: asyncio.Task[Any] = asyncio.create_task(
+        asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0)
+    )
+    _pending_pipelines[key] = task
+    try:
+        return await task
+    finally:
+        _pending_pipelines.pop(key, None)
+
 
 def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Dict[str, Any]:
     """
@@ -63,7 +107,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     lat = md.get("lat") if md.get("lat") else DEFAULT_LAT
     lng = md.get("lng") if md.get("lng") else DEFAULT_LNG
 
-    # 법률 리스크 리스트 변환 (5인 체제 데이터 구조에 맞게 최적화)
+    # 법률 리스크 리스트 변환
     legal_risks_raw = analysis.get("legal_risks") or []
     legal_risks = [
         {
@@ -76,12 +120,53 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         for r in legal_risks_raw
     ]
 
+    # 랭킹 데이터
+    district_rankings = analysis.get("district_rankings", [])
+    winner_district = analysis.get("winner_district", target_dist)
+    top_3_candidates = analysis.get("top_3_candidates", [])
+
+    # ai_recommendation — synthesis FinalStrategyResult.summary
+    final_report = analysis.get("final_report") or {}
+    ai_recommendation = (
+        final_report.get("summary")
+        or analysis.get("market_summary", "")[:120]
+        or ""
+    )
+
+    # market_report — 프론트엔드 chartData용 7개 정규화 지표 (0~100)
+    competition_score = float(metrics.get("competition_score") or 0.5)
+    growth_rate = float(metrics.get("growth_rate") or 5)
+    rent_raw = str(metrics.get("rent_affordability") or "CAUTION").upper()
+    pop_score = float(metrics.get("population_score") or 7)
+    grade = str(metrics.get("district_grade") or "NORMAL").upper()
+
+    # 임대료: SAFE=저렴(높은 점수), DANGER=비쌈(낮은 점수)
+    rent_index = {"SAFE": 80, "CAUTION": 50, "DANGER": 25, "상": 25, "중": 50, "하": 80}.get(rent_raw, 50)
+    estimated_revenue = {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
+    competition_intensity = min(int(competition_score * 100), 100)
+    district_score = float({"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60))
+
+    market_report = {
+        "floating_population": min(int(pop_score * 10), 100),
+        "rent_index": rent_index,
+        "competition_intensity": competition_intensity,
+        "estimated_revenue": estimated_revenue,
+        "survival_rate": max(100 - competition_intensity, 30),
+        "growth_potential": min(int(abs(growth_rate) * 5), 100),
+        "accessibility": 75,
+    }
+
     # [B1 고도화] 응답 구조 재설계
     response_data = {
         "request_id": request_id,
         "target_district": target_dist,
-        "analysis_report": analysis.get("market_summary", ""),  # 줄글 리포트
-        "analysis_metrics": metrics,  # 차트용 정량 데이터
+        "winner_district": winner_district,
+        "top_3_candidates": top_3_candidates,
+        "district_rankings": district_rankings,
+        "ai_recommendation": ai_recommendation,
+        "market_report": market_report,
+        "analysis_report": analysis.get("market_summary", ""),
+        "analysis_metrics": metrics,
         "simulation_months": 12,
         "monthly_projection": [
             {
@@ -93,10 +178,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "comparison": [
             {
                 "district": target_dist,
-                "score": md.get("competition_score", 0.78) * 100,
+                "score": district_score,
                 "revenue": md.get("avg_revenue", 30000000),
                 "bep": 14,
-                "survival": 88,
+                "survival": float(market_report["survival_rate"]),
                 "cannibalization": 4,
             }
         ],
@@ -117,7 +202,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "financial_report": md.get("financial_metrics", {}),
     }
 
-    print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {metrics.get('district_grade', 'N/A')})")
+    print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")
     return response_data
 
 
@@ -156,27 +241,8 @@ async def analyze_location(input_data: SimulationInput):
     request_id = str(uuid.uuid4())
     print(f"--- [API] /analyze 요청 수신: {input_data.target_district} ({input_data.business_type}) ---")
 
-    initial_state = {
-        "messages": [HumanMessage(content=f"{input_data.target_district} {input_data.brand_name} 분석 시작")],
-        "business_type": input_data.business_type,
-        "brand_name": input_data.brand_name,
-        "target_district": input_data.target_district,
-        "market_data": {},
-        "legal_info": [],
-        "scouting_results": [],
-        "top_3_candidates": [],
-        "winner_district": input_data.target_district,
-        "brand_analysis": {},
-        "analysis_results": {},
-        "analysis_metrics": {},
-        "overall_legal_risk": "safe",
-        "current_agent": "start",
-        "next_step": "",
-        "errors": [],
-    }
-
     try:
-        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=90.0)
+        final_state = await _run_pipeline(input_data)
         result = map_state_to_simulation_output(final_state, request_id)
         return {"status": "success", "data": result}
     except Exception as e:
@@ -477,7 +543,7 @@ async def get_live_population(dongs: str | None = None):
 # ---------------------------------------------------------------------------
 
 
-@app.post("/simulate", response_model=SimulationOutput)
+@app.post("/simulate")
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
     from src.config.constants import MAPO_DISTRICTS
@@ -489,26 +555,23 @@ async def run_simulation(input_data: SimulationInput):
         }
 
     request_id = str(uuid.uuid4())
-    initial_state = {
-        "messages": [HumanMessage(content=f"{input_data.target_district} 시뮬레이션 시작")],
-        "business_type": input_data.business_type,
-        "brand_name": input_data.brand_name,
-        "target_district": input_data.target_district,
-        "market_data": {},
-        "legal_info": [],
-        "scouting_results": [],
-        "top_3_candidates": [],
-        "winner_district": input_data.target_district,
-        "brand_analysis": {},
-        "analysis_results": {},
-        "analysis_metrics": {},
-        "overall_legal_risk": "safe",
-        "current_agent": "start",
-        "next_step": "",
-        "errors": [],
-    }
     try:
-        final_state = await asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=90.0)
+        final_state = await _run_pipeline(input_data)
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        print(f"!!! [SIMULATE ERROR] !!! {str(e)}")
+        return {
+            "request_id": request_id,
+            "target_district": input_data.target_district,
+            "ai_recommendation": "",
+            "market_report": None,
+            "comparison": [],
+            "legal_risks": [],
+            "overall_legal_risk": "safe",
+            "simulation_months": 12,
+            "monthly_projection": [],
+            "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",
+            "analysis_metrics": {},
+            "map_data": None,
+            "financial_report": {},
+        }

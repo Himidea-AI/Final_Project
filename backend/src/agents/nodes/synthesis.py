@@ -51,26 +51,44 @@ async def synthesis_node(state: AgentState) -> dict:
     # [중요] 14개의 법률 리스크 데이터 (절대 보존)
     legal_risks = analysis_results.get("legal_risks", [])
     overall_legal_risk = state.get("overall_legal_risk", "Caution")
-    
+
+    # 랭킹 데이터 추출
+    winner_district = state.get("winner_district", target_district)
+    top_3_candidates = state.get("top_3_candidates", [])
+    scouting_results = state.get("scouting_results", [])
+
+    # 랭킹 요약 (상위 4개 동 표시)
+    ranking_summary = ""
+    if scouting_results:
+        top4 = scouting_results[:4]
+        ranking_summary = "\n".join(
+            f"  {r['rank']}위. {r['district']} — 종합점수 {r['score']}점 "
+            f"(매출성장 {r['sales_growth']}%, 인구성장 {r['pop_growth']}%, 임대료점수 {r['rent_score']})"
+            for r in top4
+        )
+
     # 2. LLM 합성용 컨텍스트 구성
     legal_summary_for_llm = "\n".join([
-        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} (요약: {r.get('summary', '')[:100]}...)" 
+        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} (요약: {r.get('summary', '')[:100]}...)"
         for r in legal_risks
     ])
 
     prompt = (
         "당신은 프랜차이즈 창업 전략 수석 컨설턴트입니다. "
-        "지금까지 수집된 상권, 인구, 법률 데이터를 종합하여 예비 점주를 위한 최종 전략 리포트를 작성하세요.\n\n"
+        "지금까지 수집된 상권, 인구, 법률, 입지 랭킹 데이터를 종합하여 예비 점주를 위한 최종 전략 리포트를 작성하세요.\n\n"
         f"### [분석 대상 데이터]\n"
         f"1. 브랜드: {brand_name} ({business_type})\n"
-        f"2. 대상 지역: {target_district}\n"
-        f"3. 상권 분석 요약: {market_report[:500]}\n"
-        f"4. 유동인구 분석 요약: {population_report[:500]}\n"
-        f"5. 법률 리스크 검토 결과 (14개 항목):\n{legal_summary_for_llm}\n\n"
+        f"2. 사용자 선택 지역: {target_district}\n"
+        f"3. 마포구 입지 랭킹 (1~4위):\n{ranking_summary}\n"
+        f"   → 1순위 추천 지역: {winner_district} / 추천 후보: {', '.join(top_3_candidates) if top_3_candidates else '없음'}\n"
+        f"4. 상권 분석 요약 ({target_district}): {market_report[:400]}\n"
+        f"5. 유동인구 분석 요약 ({target_district}): {population_report[:400]}\n"
+        f"6. 법률 리스크 검토 결과 (14개 항목):\n{legal_summary_for_llm}\n\n"
         "### 요구사항:\n"
-        "1. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제안을 하십시오.\n"
-        "2. 반드시 FinalStrategyResult 스키마에 맞춰 정형 데이터를 응답하십시오.\n"
-        f"3. 종합 법률 리스크 등급은 반드시 '{overall_legal_risk}'를 반영하십시오.\n"
+        "1. 1순위 추천 지역과 그 이유를 명확히 제시하고, 2~4순위 후보 지역도 간략히 설명하세요.\n"
+        "2. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제안을 하십시오.\n"
+        "3. 반드시 FinalStrategyResult 스키마에 맞춰 정형 데이터를 응답하십시오.\n"
+        f"4. 종합 법률 리스크 등급은 반드시 '{overall_legal_risk}'를 반영하십시오.\n"
     )
 
     try:
@@ -107,6 +125,11 @@ async def synthesis_node(state: AgentState) -> dict:
     new_analysis_results["market_summary"] = (
         final_strategy.summary + "\n\n" + final_strategy.final_recommendation
     )
+
+    # 랭킹 결과 보존 (main.py → 프론트엔드 전달용)
+    new_analysis_results["district_rankings"] = scouting_results
+    new_analysis_results["winner_district"] = winner_district
+    new_analysis_results["top_3_candidates"] = top_3_candidates
 
     # [검증] legal_risks가 누락되지 않았는지 다시 한 번 확인
     if "legal_risks" not in new_analysis_results:

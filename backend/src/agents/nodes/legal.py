@@ -105,11 +105,27 @@ def _call_llm(system_prompt: str, user_message: str) -> str:
     """
     LLM 호출 — LLM_PROVIDER 환경변수로 백엔드를 선택.
 
-    LLM_PROVIDER=ollama     : 로컬 Ollama (기본값, 무료)
+    LLM_PROVIDER=openai     : OpenAI gpt-4.1-mini (기본값)
+    LLM_PROVIDER=ollama     : 로컬 Ollama (무료)
     LLM_PROVIDER=anthropic  : Anthropic Claude API (유료)
     LLM_PROVIDER=gemini     : Google Gemini API (유료)
     """
-    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+
+    if provider == "openai":
+        from openai import OpenAI
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or ""
 
     if provider == "anthropic":
         import anthropic as _anthropic
@@ -169,9 +185,23 @@ async def _async_call_llm(system_prompt: str, user_message: str) -> str:
     _call_llm의 비동기 버전 — asyncio.gather()로 LLM 호출을 병렬 실행할 때 사용.
 
     LLM_PROVIDER 환경변수로 백엔드를 선택 (동기 버전과 동일한 로직).
-    Gemini 429 재시도는 asyncio.sleep으로 이벤트 루프를 블로킹하지 않음.
     """
-    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+
+    if provider == "openai":
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = await client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or ""
 
     if provider == "anthropic":
         import anthropic as _anthropic
@@ -1262,6 +1292,3 @@ async def legal_node(state) -> dict:
         state = state.model_dump()
     return await _run_legal_pipeline(state)
 
-
-# graph.py(B1) 호환성 별칭
-legal_analyst_node = legal_node
