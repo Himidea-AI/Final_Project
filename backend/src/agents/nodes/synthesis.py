@@ -28,7 +28,7 @@ async def synthesis_node(state: AgentState) -> dict:
     store_area = state.get("store_area", 15.0)
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
-    cache_key = f"synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    cache_key = f"v2:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -39,6 +39,9 @@ async def synthesis_node(state: AgentState) -> dict:
             analysis = dict(state.get("analysis_results", {}))
             analysis["final_report"] = cached_data["final_report"]
             analysis["market_summary"] = cached_data["market_summary"]
+            # [#3] 캐시 히트 시 legal_risks 복원 (캐시에 저장된 값 우선, 없으면 state에서 유지)
+            if "legal_risks" in cached_data:
+                analysis["legal_risks"] = cached_data["legal_risks"]
             await _redis.aclose()
             return {
                 "analysis_results": analysis,
@@ -47,6 +50,12 @@ async def synthesis_node(state: AgentState) -> dict:
             }
     except Exception as e:
         print(f"[synthesis] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        if _redis is not None:  # [#1] 조회 실패 시 연결 누수 방지
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
+        _redis = None
 
     # 1. 데이터 추출 (기존 에이전트들의 결과물)
     analysis_results = state.get("analysis_results", {})
@@ -153,13 +162,18 @@ async def synthesis_node(state: AgentState) -> dict:
                     "final_report": new_analysis_results["final_report"],
                     "market_summary": new_analysis_results["market_summary"],
                     "overall_legal_risk": overall_legal_risk,
+                    "legal_risks": legal_risks,  # [#3] 캐시에 legal_risks 포함하여 히트 시 복원 가능
                 }, ensure_ascii=False),
                 ex=_CACHE_TTL,
             )
             print(f"[synthesis] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
-            await _redis.aclose()
         except Exception as e:
             print(f"[synthesis] Redis 캐시 저장 실패 (무시): {e}")
+        finally:  # [#2] 저장 성공/실패 무관하게 항상 연결 종료
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
 
     return {
         "analysis_results": new_analysis_results,
