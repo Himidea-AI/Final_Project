@@ -98,23 +98,23 @@
   - synthesis 응답 → 프론트 바인딩 (3~4h)
 
 ### 야간/마무리
-- [ ] **Docker 환경 통합 테스트 확인**
+- [x] **Docker 환경 통합 테스트 확인**
   - `docker compose up backend redis` → pytest
   - 봉환 pgvector e2e 테스트 (RDS 기반)
-- [ ] **테스트 스크립트 고도화** — `scripts/run_tests.sh`
+- [x] **테스트 스크립트 고도화** — `scripts/run_tests.sh`
 
 ---
 
 ## 📅 04/16 (목) — Docker 프로덕션 최적화
 
 ### 오전 (AM)
-- [ ] **docker-compose.prod.yml 작성** [IM3-152]
+- [x] **docker-compose.prod.yml 작성** [IM3-152]
   - 개발/프로덕션 분리, restart: always
-- [ ] **볼륨 마운트 최적화**
+- [x] **볼륨 마운트 최적화**
 
 ### 오후 (PM)
-- [ ] **프로덕션 빌드 테스트**
-- [ ] **배포 스크립트** — `scripts/deploy.sh`
+- [x] **프로덕션 빌드 테스트**
+- [x] **배포 스크립트** — `scripts/deploy.sh`
 
 ---
 
