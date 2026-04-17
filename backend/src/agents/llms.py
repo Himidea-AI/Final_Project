@@ -22,7 +22,7 @@ class LLMRetryProxy:
                 err_str = str(e).upper()
                 if any(x in err_str for x in ["429", "RESOURCE_EXHAUSTED", "503", "500", "504", "UNAVAILABLE", "RATE_LIMIT"]):
                     wait_time = base_delay * (2 ** attempt)
-                    print(f"⚠️ [API-SYNC RECOVERY] {wait_time}초 후 재시도... ({attempt+1}/{max_retries}) - Reason: {err_str[:50]}")
+                    print(f"[WARNING] [API-SYNC RECOVERY] {wait_time}초 후 재시도... ({attempt+1}/{max_retries}) - Reason: {err_str[:50]}")
                     time.sleep(wait_time)
                 else:
                     raise e
@@ -38,7 +38,7 @@ class LLMRetryProxy:
                 err_str = str(e).upper()
                 if any(x in err_str for x in ["429", "RESOURCE_EXHAUSTED", "503", "500", "504", "UNAVAILABLE", "RATE_LIMIT"]):
                     wait_time = base_delay * (2 ** attempt)
-                    print(f"⚠️ [API-ASYNC RECOVERY] {wait_time}초 후 재시도... ({attempt+1}/{max_retries}) - Reason: {err_str[:50]}")
+                    print(f"[WARNING] [API-ASYNC RECOVERY] {wait_time}초 후 재시도... ({attempt+1}/{max_retries}) - Reason: {err_str[:50]}")
                     await asyncio.sleep(wait_time)
                 else:
                     raise e

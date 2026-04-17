@@ -91,7 +91,7 @@ async def market_analyst_node(state: AgentState) -> dict:
 
     # 4. 전문 요약 및 구조화된 필드 생성 (Gemini 3 Flash 사용)
     # [API Quota 관리] 호출 전 2초 대기
-    print("⏳ API 할당량 관리를 위해 2초 대기 중...")
+    print("[WAIT] API 할당량 관리를 위해 2초 대기 중...")
     await asyncio.sleep(2)
 
     prompt = (

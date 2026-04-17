@@ -82,7 +82,7 @@ async def parallel_analysis_node(state: AgentState) -> dict:
         f"합계:{token_total}/{_TOKEN_BUDGET_PER_RUN} ---"
     )
     if token_total > _TOKEN_BUDGET_PER_RUN:
-        print(f"⚠️  [TOKEN BUDGET] 추정 토큰 {token_total}이 예산 {_TOKEN_BUDGET_PER_RUN}을 초과했습니다.")
+        print(f"[WARNING] [TOKEN BUDGET] 추정 토큰 {token_total}이 예산 {_TOKEN_BUDGET_PER_RUN}을 초과했습니다.")
 
     return {
         "analysis_results": merged_analysis,

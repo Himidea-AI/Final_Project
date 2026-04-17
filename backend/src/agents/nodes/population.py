@@ -59,7 +59,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         return {"analysis_results": analysis_results, "current_agent": "population_analyst"}
 
     # 2. API 할당량 관리 (2초 대기)
-    print("⏳ API 할당량 관리를 위해 2초 대기 중...")
+    print("[WAIT] API 할당량 관리를 위해 2초 대기 중...")
     await asyncio.sleep(2)
 
     # 3. LLM 분석 프롬프트
