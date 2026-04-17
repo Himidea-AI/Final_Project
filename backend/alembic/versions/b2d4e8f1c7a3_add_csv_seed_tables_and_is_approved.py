@@ -26,6 +26,40 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# 기존 DB에 ad-hoc DDL로 일부 테이블/컬럼이 먼저 만들어져 있을 수 있으므로
+# idempotent 하게 처리 (팀원별 DB 상태 차이 흡수)
+def _has_table(name: str) -> bool:
+    bind = op.get_bind()
+    return sa.inspect(bind).has_table(name, schema="public")
+
+
+def _has_column(table: str, col: str) -> bool:
+    bind = op.get_bind()
+    if not sa.inspect(bind).has_table(table, schema="public"):
+        return False
+    cols = sa.inspect(bind).get_columns(table, schema="public")
+    return any(c["name"] == col for c in cols)
+
+
+def _maybe_create_table(name: str, *columns) -> None:
+    """테이블이 이미 있으면 스킵 (ad-hoc DDL로 먼저 만들어진 경우 대응)."""
+    if _has_table(name):
+        print(f"[alembic] skip create_table (already exists): {name}")
+        return
+    op.create_table(name, *columns)
+
+
+def _maybe_create_index(name: str, table: str, cols: list[str], unique: bool = False) -> None:
+    """테이블 없거나 인덱스 이미 있으면 스킵."""
+    bind = op.get_bind()
+    if not _has_table(table):
+        return
+    existing = sa.inspect(bind).get_indexes(table, schema="public")
+    if any(ix["name"] == name for ix in existing):
+        return
+    op.create_index(name, table, cols, unique=unique)
+
+
 # 매출 테이블 공통 컬럼 (요일/시간대/성별/연령대) ----------------------------
 def _sales_time_gender_age(int_type):
     """golmok_sales, seoul_district_sales 등 공통 매출 컬럼 생성."""
@@ -81,36 +115,38 @@ def _sales_time_gender_age(int_type):
 
 def upgrade() -> None:
     # ---- manager_users.is_approved ----
-    op.add_column(
-        "manager_users",
-        sa.Column(
-            "is_approved",
-            sa.Boolean(),
-            nullable=True,
-            server_default=sa.text("false"),
-            comment="팀장 승인 여부",
-        ),
-    )
+    if not _has_column("manager_users", "is_approved"):
+        op.add_column(
+            "manager_users",
+            sa.Column(
+                "is_approved",
+                sa.Boolean(),
+                nullable=True,
+                server_default=sa.text("false"),
+                comment="팀장 승인 여부",
+            ),
+        )
 
     # ---- simulation_result.workspace_id ----
-    op.add_column(
-        "simulation_result",
-        sa.Column(
-            "workspace_id",
-            sa.String(length=100),
-            nullable=True,
-            comment="워크스페이스 ID (멀티테넌시)",
-        ),
-    )
-    op.create_index(
-        "ix_simulation_result_workspace",
-        "simulation_result",
-        ["workspace_id"],
-        unique=False,
-    )
+    if not _has_column("simulation_result", "workspace_id"):
+        op.add_column(
+            "simulation_result",
+            sa.Column(
+                "workspace_id",
+                sa.String(length=100),
+                nullable=True,
+                comment="워크스페이스 ID (멀티테넌시)",
+            ),
+        )
+        _maybe_create_index(
+            "ix_simulation_result_workspace",
+            "simulation_result",
+            ["workspace_id"],
+            unique=False,
+        )
 
     # ---- golmok_rent ----
-    op.create_table(
+    _maybe_create_table(
         "golmok_rent",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False, comment="자동증가 PK"),
         sa.Column("year", sa.SmallInteger(), nullable=True, comment="기준 연도"),
@@ -123,11 +159,11 @@ def upgrade() -> None:
         sa.Column("rent_total", sa.Integer(), nullable=True, comment="전체 환산임대료"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_golmok_rent_year", "golmok_rent", ["year"], unique=False)
-    op.create_index("ix_golmok_rent_dong_code", "golmok_rent", ["dong_code"], unique=False)
+    _maybe_create_index("ix_golmok_rent_year", "golmok_rent", ["year"], unique=False)
+    _maybe_create_index("ix_golmok_rent_dong_code", "golmok_rent", ["dong_code"], unique=False)
 
     # ---- kakao_store ----
-    op.create_table(
+    _maybe_create_table(
         "kakao_store",
         sa.Column("kakao_id", sa.String(length=20), nullable=False, comment="카카오 장소 ID"),
         sa.Column("place_name", sa.String(length=200), nullable=True),
@@ -149,12 +185,12 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("kakao_id"),
     )
-    op.create_index("ix_kakao_store_brand_name", "kakao_store", ["brand_name"], unique=False)
-    op.create_index("ix_kakao_store_category", "kakao_store", ["category"], unique=False)
-    op.create_index("ix_kakao_store_dong_name", "kakao_store", ["dong_name"], unique=False)
+    _maybe_create_index("ix_kakao_store_brand_name", "kakao_store", ["brand_name"], unique=False)
+    _maybe_create_index("ix_kakao_store_category", "kakao_store", ["category"], unique=False)
+    _maybe_create_index("ix_kakao_store_dong_name", "kakao_store", ["dong_name"], unique=False)
 
     # ---- naver_vacancy ----
-    op.create_table(
+    _maybe_create_table(
         "naver_vacancy",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("trade_type", sa.String(length=10), nullable=True),
@@ -172,11 +208,11 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_naver_vacancy_dong", "naver_vacancy", ["dong_name"], unique=False)
-    op.create_index("ix_naver_vacancy_trade", "naver_vacancy", ["trade_type"], unique=False)
+    _maybe_create_index("ix_naver_vacancy_dong", "naver_vacancy", ["dong_name"], unique=False)
+    _maybe_create_index("ix_naver_vacancy_trade", "naver_vacancy", ["trade_type"], unique=False)
 
     # ---- brand_logo ----
-    op.create_table(
+    _maybe_create_table(
         "brand_logo",
         sa.Column("brand_name", sa.String(length=100), nullable=False, comment="브랜드명"),
         sa.Column("domain", sa.String(length=100), nullable=True),
@@ -192,7 +228,7 @@ def upgrade() -> None:
     )
 
     # ---- cpi_dining_quarterly ----
-    op.create_table(
+    _maybe_create_table(
         "cpi_dining_quarterly",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -201,7 +237,7 @@ def upgrade() -> None:
     )
 
     # ---- golmok_sales ----
-    op.create_table(
+    _maybe_create_table(
         "golmok_sales",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -212,11 +248,11 @@ def upgrade() -> None:
         *_sales_time_gender_age(sa.BigInteger()),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_golmok_sales_quarter", "golmok_sales", ["quarter"], unique=False)
-    op.create_index("ix_golmok_sales_trdar_code", "golmok_sales", ["trdar_code"], unique=False)
+    _maybe_create_index("ix_golmok_sales_quarter", "golmok_sales", ["quarter"], unique=False)
+    _maybe_create_index("ix_golmok_sales_trdar_code", "golmok_sales", ["trdar_code"], unique=False)
 
     # ---- golmok_stores ----
-    op.create_table(
+    _maybe_create_table(
         "golmok_stores",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -231,11 +267,11 @@ def upgrade() -> None:
         sa.Column("franchise_count", sa.BigInteger(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_golmok_stores_quarter", "golmok_stores", ["quarter"], unique=False)
-    op.create_index("ix_golmok_stores_trdar_code", "golmok_stores", ["trdar_code"], unique=False)
+    _maybe_create_index("ix_golmok_stores_quarter", "golmok_stores", ["quarter"], unique=False)
+    _maybe_create_index("ix_golmok_stores_trdar_code", "golmok_stores", ["trdar_code"], unique=False)
 
     # ---- mapo_resident_pop ----
-    op.create_table(
+    _maybe_create_table(
         "mapo_resident_pop",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -244,11 +280,11 @@ def upgrade() -> None:
         sa.Column("resident_pop", sa.Float(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_mapo_resident_pop_quarter", "mapo_resident_pop", ["quarter"], unique=False)
-    op.create_index("ix_mapo_resident_pop_dong_code", "mapo_resident_pop", ["dong_code"], unique=False)
+    _maybe_create_index("ix_mapo_resident_pop_quarter", "mapo_resident_pop", ["quarter"], unique=False)
+    _maybe_create_index("ix_mapo_resident_pop_dong_code", "mapo_resident_pop", ["dong_code"], unique=False)
 
     # ---- seoul_district_sales ----
-    op.create_table(
+    _maybe_create_table(
         "seoul_district_sales",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -261,11 +297,11 @@ def upgrade() -> None:
         *_sales_time_gender_age(sa.BigInteger()),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_seoul_district_sales_quarter", "seoul_district_sales", ["quarter"], unique=False)
-    op.create_index("ix_seoul_district_sales_dong_code", "seoul_district_sales", ["dong_code"], unique=False)
+    _maybe_create_index("ix_seoul_district_sales_quarter", "seoul_district_sales", ["quarter"], unique=False)
+    _maybe_create_index("ix_seoul_district_sales_dong_code", "seoul_district_sales", ["dong_code"], unique=False)
 
     # ---- seoul_district_stores ----
-    op.create_table(
+    _maybe_create_table(
         "seoul_district_stores",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -281,11 +317,11 @@ def upgrade() -> None:
         sa.Column("closure_rate", sa.BigInteger(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_seoul_district_stores_quarter", "seoul_district_stores", ["quarter"], unique=False)
-    op.create_index("ix_seoul_district_stores_dong_code", "seoul_district_stores", ["dong_code"], unique=False)
+    _maybe_create_index("ix_seoul_district_stores_quarter", "seoul_district_stores", ["quarter"], unique=False)
+    _maybe_create_index("ix_seoul_district_stores_dong_code", "seoul_district_stores", ["dong_code"], unique=False)
 
     # ---- seoul_golmok_rent ----
-    op.create_table(
+    _maybe_create_table(
         "seoul_golmok_rent",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("year", sa.BigInteger(), nullable=True),
@@ -299,11 +335,11 @@ def upgrade() -> None:
         sa.Column("quarter_code", sa.BigInteger(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_seoul_golmok_rent_year", "seoul_golmok_rent", ["year"], unique=False)
-    op.create_index("ix_seoul_golmok_rent_dong_code", "seoul_golmok_rent", ["dong_code"], unique=False)
+    _maybe_create_index("ix_seoul_golmok_rent_year", "seoul_golmok_rent", ["year"], unique=False)
+    _maybe_create_index("ix_seoul_golmok_rent_dong_code", "seoul_golmok_rent", ["dong_code"], unique=False)
 
     # ---- seoul_population_quarterly ----
-    op.create_table(
+    _maybe_create_table(
         "seoul_population_quarterly",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -311,13 +347,13 @@ def upgrade() -> None:
         sa.Column("total_pop", sa.Float(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
+    _maybe_create_index(
         "ix_seoul_population_quarterly_quarter",
         "seoul_population_quarterly",
         ["quarter"],
         unique=False,
     )
-    op.create_index(
+    _maybe_create_index(
         "ix_seoul_population_quarterly_dong_code",
         "seoul_population_quarterly",
         ["dong_code"],
@@ -325,7 +361,7 @@ def upgrade() -> None:
     )
 
     # ---- seoul_training_dataset ----
-    op.create_table(
+    _maybe_create_table(
         "seoul_training_dataset",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("quarter", sa.BigInteger(), nullable=True),
@@ -342,13 +378,13 @@ def upgrade() -> None:
         sa.Column("cpi_index", sa.Float(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
+    _maybe_create_index(
         "ix_seoul_training_dataset_quarter",
         "seoul_training_dataset",
         ["quarter"],
         unique=False,
     )
-    op.create_index(
+    _maybe_create_index(
         "ix_seoul_training_dataset_dong_code",
         "seoul_training_dataset",
         ["dong_code"],

@@ -17,17 +17,21 @@
 
 옵션
 ----
-    --csv-dir PATH   CSV 디렉토리 (필수)
-    --skip-ingest    법률 RAG 임베딩 생성 단계 건너뛰기 (HF 모델 다운로드 시간 절약)
-    --dry-run        실제 적재 없이 어떤 테이블이 로드될지만 출력 (seed 단계에 전달)
+    --csv-dir PATH    CSV 디렉토리 (필수)
+    --skip-ingest     법률 RAG 임베딩 생성 단계 건너뛰기 (HF 모델 다운로드 시간 절약)
+    --no-test-user    테스트 계정 자동 생성 단계 건너뛰기
+    --dry-run         실제 적재 없이 어떤 테이블이 로드될지만 출력 (seed 단계에 전달)
+    --force/--force-all  기존 데이터 재적재 (seed 단계에 전달)
 
 단계
 ----
     1) DB 연결 확인
-    2) pgvector 확장 설치 (CREATE EXTENSION IF NOT EXISTS vector)
+    2) pgvector 확장 설치 (--skip-ingest 시 생략)
     3) alembic upgrade head  — 스키마 생성
     4) CSV 시드 (python -m scripts.seed_from_csv)
-    5) 법률 RAG 임베딩 (python data/legal/ingest.py) — 건너뛰기 가능
+    5) 법률 RAG 임베딩 (--skip-ingest 시 생략)
+    6) 테스트 계정 생성 (--no-test-user 시 생략)
+       email=test@spotter.local / password=test1234
 """
 
 from __future__ import annotations
@@ -135,10 +139,26 @@ def run_legal_ingest() -> bool:
     return True
 
 
+def run_create_test_user() -> bool:
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.create_test_user"],
+        cwd=BACKEND_DIR,
+    )
+    if result.returncode != 0:
+        print("[error] 테스트 계정 생성 실패")
+        return False
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="통합 DB 초기화 스크립트")
     parser.add_argument("--csv-dir", type=Path, required=True, help="CSV 디렉토리 경로")
     parser.add_argument("--skip-ingest", action="store_true", help="법률 RAG 임베딩 단계 생략")
+    parser.add_argument(
+        "--no-test-user",
+        action="store_true",
+        help="테스트 계정 (test@spotter.local) 자동 생성 단계 생략",
+    )
     parser.add_argument("--dry-run", action="store_true", help="CSV 시드 단계 dry-run")
     parser.add_argument(
         "--force",
@@ -159,8 +179,12 @@ def main() -> int:
     db_url = _normalize_db_url(os.environ.get("POSTGRES_URL", DEFAULT_DB_URL))
     print(f"[init_db] 대상 DB: {db_url.split('@')[-1]}")
 
-    # pgvector는 RAG 임베딩용 — --skip-ingest 시 생략
-    total = 3 if args.skip_ingest else 5
+    # 단계 수 계산: 기본 5 (연결, alembic, seed, ingest, test_user) + pgvector
+    total = 3
+    if not args.skip_ingest:
+        total += 2  # pgvector + ingest
+    if not args.no_test_user:
+        total += 1  # test user
     step_no = 0
 
     step_no += 1
@@ -189,6 +213,12 @@ def main() -> int:
         step_no += 1
         _step(step_no, total, "법률 RAG 임베딩 재생성")
         if not run_legal_ingest():
+            return 1
+
+    if not args.no_test_user:
+        step_no += 1
+        _step(step_no, total, "테스트 계정 생성")
+        if not run_create_test_user():
             return 1
 
     print(f"\n{'=' * 60}")
