@@ -25,7 +25,7 @@ async def market_analyst_node(state: AgentState) -> dict:
 
     print(f"--- [MARKET ANALYST] {target_district} 실데이터 분석 시작 ---")
 
-    # Redis 캐시 조회
+    # Redis 캐시 조회 (예진 synthesis 패턴 — 조회 실패 시 연결 누수 방지)
     cache_key = f"market:{target_district}:{business_type}"
     _redis = None
     try:
@@ -45,6 +45,12 @@ async def market_analyst_node(state: AgentState) -> dict:
             }
     except Exception as e:
         print(f"[market_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        if _redis is not None:  # 조회 실패 시 연결 누수 방지
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
+        _redis = None
 
     # [1] DB 연결 (필요 시)
     if db_client.engine is None:
@@ -165,7 +171,7 @@ async def market_analyst_node(state: AgentState) -> dict:
     analysis_results = state.get("analysis_results", {})
     analysis_results["market_report"] = market_summary
 
-    # Redis 캐시 저장
+    # Redis 캐시 저장 (finally로 연결 누수 방지)
     if _redis is not None:
         try:
             await _redis.set(
@@ -178,9 +184,13 @@ async def market_analyst_node(state: AgentState) -> dict:
                 ex=_CACHE_TTL,
             )
             print(f"[market_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
-            await _redis.aclose()
         except Exception as e:
             print(f"[market_analyst] Redis 캐시 저장 실패 (무시): {e}")
+        finally:
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
 
     return {
         "market_data": real_market_data,

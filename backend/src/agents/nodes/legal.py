@@ -984,6 +984,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 }
     except Exception as e:
         print(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        if _redis is not None:  # 조회 실패 시 연결 누수 방지
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
+        _redis = None
 
     retriever = LegalDocumentRetriever()
 

@@ -94,21 +94,30 @@ ORDER BY distance_m;
 | `cannibalization.distance_m` | `store_info` | `lat`, `lon` |
 | `indirect.store_count` | `store_quarterly` | `store_count` (다른 industry_code) |
 
-#### `rent_avg` → `rent_cost` 테이블
+#### `rent_avg` → `rent_cost` / `golmok_rent` 테이블
 
 ```sql
--- 해당 상권의 최신 임대료
+-- (A) 상권 단위 임대료 (빌딩/점포 평균)
 SELECT rent, vacancy_rate
 FROM rent_cost
 WHERE data_type = 'building_rent'
   AND area_name = '망원역'        -- dong_mapping.trdar_codes로 상권 확인
   AND year = 2025
 ORDER BY quarter DESC LIMIT 1;
+
+-- (B) 행정동 단위 환산임대료 (1층 vs 기타층 구분 가능)
+SELECT rent_1f, rent_other, rent_total
+FROM golmok_rent
+WHERE dong_code = '11440630'
+  AND gubun = 'dong'
+  AND year = 2024
+ORDER BY quarter DESC LIMIT 1;
 ```
 
-| DistrictData 필드 | DB 테이블 | DB 컬럼 |
-|---|---|---|
-| `rent_avg` | `rent_cost` | `rent` (천원/m2) |
+| DistrictData 필드 | DB 테이블 | DB 컬럼 | 비고 |
+|---|---|---|---|
+| `rent_avg` | `rent_cost` | `rent` (천원/m²) | 상권 단위, 공실률 포함 |
+| `rent_avg` (대안) | `golmok_rent` | `rent_1f` / `rent_total` (원/3.3㎡) | 행정동 단위, 층별 구분 |
 
 #### `closure_rate` → `store_quarterly` 테이블
 
@@ -209,6 +218,70 @@ WHERE dong_code = '11440630';
 
 ---
 
+## 외부 수집 실시간 데이터
+
+### `kakao_store` — 카카오 로컬 API 실시간 점포
+
+`store_info`(소상공인진흥공단 스냅샷) 보완 — 프랜차이즈 브랜드 실시간 집계용.
+
+```sql
+-- 동별 특정 브랜드 점포 수 (정규화된 브랜드명 기준)
+SELECT dong_name, COUNT(*) as store_count
+FROM kakao_store
+WHERE brand_name = '스타벅스'
+GROUP BY dong_name
+ORDER BY store_count DESC;
+
+-- 업종별 점포 + 위경도 (반경 기반 경쟁 분석)
+SELECT place_name, brand_name, lat, lon
+FROM kakao_store
+WHERE dong_name = '합정동'
+  AND category = '카페';
+```
+
+| 용도 | DB 컬럼 |
+|---|---|
+| 특정 브랜드 마포구 전체 점포 수 | `brand_name` (=) + COUNT |
+| 업종별 실시간 점포 위치 | `category`, `lat`, `lon` |
+| 주소·전화·URL | `address`, `road_address`, `phone`, `place_url` |
+
+### `naver_vacancy` — 네이버 부동산 상가 공실
+
+`rent_cost.vacancy_rate` 보완 — 실시간 매물 현황으로 공실 체감도 산출.
+
+```sql
+-- 동별 매물 건수 (거래유형별)
+SELECT dong_name, trade_type, SUM(listing_count) as total_listings
+FROM naver_vacancy
+WHERE dong_name = '합정동'
+GROUP BY dong_name, trade_type;
+```
+
+| 용도 | DB 컬럼 |
+|---|---|
+| 동별 매물 수 | `dong_name`, `listing_count` |
+| 거래 유형 (매매/전세/월세) | `trade_type`, `trade_code` |
+| 위경도 (지도 시각화) | `lat`, `lon` |
+
+### `brand_logo` — 브랜드 로고 URL
+
+UI 렌더링용 — `biz_brand_mapping.brand_name` 로 JOIN.
+
+```sql
+-- 회원의 브랜드 로고 조회
+SELECT bl.logo_url, bl.logo_source
+FROM biz_brand_mapping bbm
+LEFT JOIN brand_logo bl ON bbm.brand_name = bl.brand_name
+WHERE bbm.biz_number = '1208137942';
+```
+
+| 용도 | DB 컬럼 |
+|---|---|
+| 로고 URL | `logo_url` |
+| 수집 소스 (naver / clearbit 등) | `logo_source` |
+
+---
+
 ## 행정동코드 참조
 
 | dong_code | dong_name | 비고 |
@@ -240,24 +313,30 @@ WHERE dong_code = '11440630';
 | CS100010 | 커피-음료 | cafe |
 | CS200001 | 편의점 | convenience |
 | CS200002 | 슈퍼마켓 | - |
-| CS300001 | 일반의류 | - |
 | CS300007 | 미용실 | - |
+
+> 캐노니컬 매핑 소스: `backend/src/agents/tools.py` 의 `_BIZ_TO_INDUSTRY_CODE` 딕셔너리 참고.
 
 ## 시뮬레이션 결과 저장
 
 ```sql
--- 결과 저장 (SimulationOutput → JSONB)
-INSERT INTO simulation_result (request_id, input_params, output_result, status)
+-- 결과 저장 (SimulationOutput → JSONB, workspace_id 로 멀티테넌시 분리)
+INSERT INTO simulation_result (request_id, workspace_id, input_params, output_result, status)
 VALUES (
     gen_random_uuid(),
+    'ws_user_123',                   -- 팀장 회원 ID 기반 워크스페이스
     '{"business_type": "cafe", "target_district": "망원1동", ...}'::jsonb,
     '{"monthly_projection": [...], "comparison": [...], ...}'::jsonb,
     'completed'
 );
 
--- 결과 조회
+-- 워크스페이스별 결과 조회 (인덱스 ix_simulation_result_workspace 활용)
 SELECT request_id, created_at, status,
        output_result->'ai_recommendation' as recommendation
 FROM simulation_result
-WHERE request_id = 'uuid-here';
+WHERE workspace_id = 'ws_user_123'
+ORDER BY created_at DESC;
+
+-- 단건 조회
+SELECT * FROM simulation_result WHERE request_id = 'uuid-here';
 ```

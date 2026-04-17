@@ -40,6 +40,12 @@ async def population_analyst_node(state: AgentState) -> dict:
             }
     except Exception as e:
         print(f"[population_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        if _redis is not None:  # 조회 실패 시 연결 누수 방지
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
+        _redis = None
 
     # 1. 실데이터 수집 (DB 연결 확인)
     if db_client.engine is None:
@@ -107,7 +113,7 @@ async def population_analyst_node(state: AgentState) -> dict:
     analysis_results = state.get("analysis_results", {})
     analysis_results["population_report"] = population_report
 
-    # Redis 캐시 저장
+    # Redis 캐시 저장 (finally로 연결 누수 방지)
     if _redis is not None:
         try:
             await _redis.set(
@@ -116,9 +122,13 @@ async def population_analyst_node(state: AgentState) -> dict:
                 ex=_CACHE_TTL,
             )
             print(f"[population_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
-            await _redis.aclose()
         except Exception as e:
             print(f"[population_analyst] Redis 캐시 저장 실패 (무시): {e}")
+        finally:
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
 
     return {
         "analysis_results": analysis_results,

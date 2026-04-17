@@ -16,7 +16,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -133,25 +133,9 @@ _BIZ_TYPE_NORMALIZE: Dict[str, str] = {
     "bakery": "베이커리",
 }
 
-# 마포구 행정동명 → 행정동 코드 (서울 열린데이터 기준)
-_MAPO_DONG_CODE_MAP: Dict[str, str] = {
-    "아현동":  "11440520",
-    "공덕동":  "11440530",
-    "도화동":  "11440540",
-    "용강동":  "11440550",
-    "염리동":  "11440570",
-    "신수동":  "11440580",
-    "서강동":  "11440590",
-    "서교동":  "11440600",
-    "합정동":  "11440610",
-    "망원1동": "11440620",
-    "대흥동":  "11440560",
-    "망원2동": "11440660",
-    "연남동":  "11440640",
-    "성산1동": "11440710",
-    "성산2동": "11440720",
-    "상암동":  "11440740",
-}
+# 마포구 행정동명 → 행정동 코드 매핑은 dong_resolver 단일 소스 사용
+# (기존 main.py 내 하드코딩 매핑은 dong_resolver와 15/16개 불일치로 TCN에 잘못된 코드 전달 버그 유발)
+from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
 
 # 업종명(한국어) → 골목상권 업종코드: tools.py MarketDataTool._SALES_CODE_MAP 재사용
 from src.agents.tools import MarketDataTool as _MarketDataTool
@@ -295,7 +279,13 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
 
     # [Simulation 실제 연동] B2 ModelOutput + build_quarterly_projection 연결
     _biz_name = state.get("business_type", "카페")
-    _dong_code = _MAPO_DONG_CODE_MAP.get(target_dist, "11440600")   # 기본값: 서교동
+    _dong_code = _resolve_dong_code(target_dist)
+    if _dong_code is None:
+        # silent 서교동 fallback 금지 — 잘못된 동명을 엉뚱한 동 분석으로 응답하는 버그 방지
+        raise HTTPException(
+            status_code=400,
+            detail=f"지원하지 않는 행정동입니다: '{target_dist}'. 마포구 16개 동만 지원됩니다.",
+        )
     _industry_code = _BIZ_TO_INDUSTRY_CODE.get(_biz_name, "CS100010")  # 기본값: 카페
     try:
         sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
@@ -325,6 +315,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "winner_district": winner_district,
         "top_3_candidates": top_3_candidates,
         "district_rankings": district_rankings,
+        "vacancy_applied": state.get("vacancy_applied", False),  # 공실 DB 반영 여부 (프론트 배지용)
         "ai_recommendation": ai_recommendation,
         "market_report": market_report,
         "analysis_report": analysis.get("market_summary", ""),

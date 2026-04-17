@@ -39,7 +39,8 @@ backend/data/legal/processed/chunks.json
 Thumbs.db
 
 # AI Agent local configs
-.claude/
+.claude/*
+!.claude/skills/
 .cursor/
 .antigravity/
 .gemini/

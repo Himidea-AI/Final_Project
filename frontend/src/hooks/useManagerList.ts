@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createElement } from "react";
 import { useAuth } from "../auth/AuthContext";
 
 /**
@@ -34,34 +44,60 @@ export function formatRelativeTime(dateStr: string): string {
   return date.toISOString().slice(0, 10);
 }
 
-const POLL_INTERVAL_MS = 30000; // 30s
+/**
+ * [v12.7 — DB 과부하 대응] 폴링 주기 5분으로 연장
+ * - 이전: 30초. 여러 탭 × 여러 컴포넌트 × 여러 사용자 → RDS 커넥션 폭주
+ * - 변경: 300초. 매니저 가입 이벤트는 하루 몇 건 수준이라 5분 주기도 충분
+ */
+const POLL_INTERVAL_MS = 300_000; // 5분
+
+interface ManagerListState {
+  managers: Manager[];
+  pending: Manager[];
+  active: Manager[];
+  isLoading: boolean;
+  refetch: () => Promise<void>;
+}
+
+const EMPTY_STATE: ManagerListState = {
+  managers: [],
+  pending: [],
+  active: [],
+  isLoading: false,
+  refetch: async () => {},
+};
+
+const ManagerListContext = createContext<ManagerListState>(EMPTY_STATE);
 
 /**
- * useManagerList — 현재 로그인한 마스터 소속 매니저 목록을 가져온다.
+ * ManagerListProvider — 전역 단일 Polling 인스턴스
  *
- * - 매니저 로그인 상태(role === "manager")이거나 비로그인이면 빈 배열 반환
- * - 30초 polling + 수동 refetch 제공
- * - assigned_dongs 방어적 정규화 (백엔드가 JSON string으로 보낼 수도 있음)
- *
- * 사용처:
- * - HQCommandCenter: 사이드바 badge + TeamManagementView 상태 공유
- * - GlobalLimelightNav: Bell 아이콘 알림 점 + 드롭다운
+ * 설계 목적:
+ * - 여러 컴포넌트(GlobalLimelightNav, HQCommandCenter)가 useManagerList()를 호출해도
+ *   실제 fetch + setInterval은 Provider 레벨에서 **1개만** 실행
+ * - Page Visibility API로 탭 비활성 시 폴링 정지 → 브라우저 리소스 + RDS 부하 절감
+ * - 매니저 role 이거나 비로그인 상태면 아예 fetch 안 함
  */
-export function useManagerList() {
+export function ManagerListProvider({ children }: { children: ReactNode }) {
   const { user, isLoggedIn } = useAuth();
   const [managers, setManagers] = useState<Manager[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 최신 user.id를 closure 없이 안전하게 참조하기 위한 ref
+  const userIdRef = useRef<string | null>(user?.id ?? null);
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
   const refetch = useCallback(async () => {
-    if (!isLoggedIn || user?.role === "manager" || !user?.id) {
+    const uid = userIdRef.current;
+    if (!uid || !isLoggedIn || user?.role === "manager") {
       setManagers([]);
       return;
     }
     setIsLoading(true);
     try {
-      const res = await fetch(
-        `/api/auth/managers?owner_id=${encodeURIComponent(user.id)}`,
-      );
+      const res = await fetch(`/api/auth/managers?owner_id=${encodeURIComponent(uid)}`);
       const data = await res.json();
       if (data.status === "success" && Array.isArray(data.managers)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,16 +125,70 @@ export function useManagerList() {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoggedIn, user?.id, user?.role]);
+  }, [isLoggedIn, user?.role]);
 
   useEffect(() => {
-    refetch();
-    const timer = setInterval(refetch, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [refetch]);
+    // 비로그인/매니저면 폴링 전체 중지
+    if (!isLoggedIn || user?.role === "manager") {
+      setManagers([]);
+      return;
+    }
 
-  const pending = managers.filter((m) => m.is_active && !m.is_approved);
-  const active = managers.filter((m) => m.is_active && m.is_approved);
+    let timer: ReturnType<typeof setInterval> | null = null;
 
-  return { managers, pending, active, isLoading, refetch };
+    const startPolling = () => {
+      if (timer) return; // 중복 방지
+      void refetch();
+      timer = setInterval(() => {
+        void refetch();
+      }, POLL_INTERVAL_MS);
+    };
+
+    const stopPolling = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    // Page Visibility: 탭 활성 시만 폴링
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        startPolling();
+      }
+    };
+
+    // 초기: 현재 visibility 상태 따라 분기
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isLoggedIn, user?.role, refetch]);
+
+  const value = useMemo<ManagerListState>(() => {
+    const pending = managers.filter((m) => m.is_active && !m.is_approved);
+    const active = managers.filter((m) => m.is_active && m.is_approved);
+    return { managers, pending, active, isLoading, refetch };
+  }, [managers, isLoading, refetch]);
+
+  return createElement(ManagerListContext.Provider, { value }, children);
+}
+
+/**
+ * useManagerList — ManagerListProvider Context consumer.
+ *
+ * 사용처:
+ * - HQCommandCenter: 사이드바 badge + TeamManagementView 상태 공유
+ * - GlobalLimelightNav: Bell 아이콘 알림 점 + 드롭다운
+ */
+export function useManagerList() {
+  return useContext(ManagerListContext);
 }
