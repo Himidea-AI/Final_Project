@@ -70,7 +70,7 @@ def _mock_shap_values(feature_cols: list[str]) -> dict:
         {
             "rank": rank + 1,
             "feature": feature_cols[i],
-            "feature_ko": _FEATURE_KO.get(feature_cols[i], feature_cols[i]),
+            "feature_ko": _TCN_FEATURE_KO.get(feature_cols[i], feature_cols[i]),  # TCN 31개 피처 한글명 — _FEATURE_KO(8개) 대신 _TCN_FEATURE_KO(31개) 사용
             "shap_value": round(float(shap_vals[i]), 6),
             "abs_shap": round(float(abs(shap_vals[i])), 6),
             # 기여 방향: 실제 경로와 동일한 필드 구조 유지
@@ -402,6 +402,7 @@ def explain_tcn_prediction(
             predicted_value = float(
                 tgt_scaler.inverse_transform([[raw_output.item()]])[0][0]
             )
+            predicted_value = float(np.expm1(predicted_value))  # log1p 역변환 복원 — tgt_scaler가 log1p 도메인이므로 expm1 필수 (predict.py L188~189 참조)
         except Exception:
             # 역변환 실패 시 raw 출력 그대로 사용
             predicted_value = float(raw_output.item())
