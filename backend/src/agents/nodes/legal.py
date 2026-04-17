@@ -799,6 +799,57 @@ async def check_fair_trade_law(state: AgentState, docs: list[dict]) -> dict:
         }
 
 
+async def _search_ftc_from_db(brand_name: str) -> dict | None:
+    """
+    ftc_brand_franchise 테이블에서 브랜드 정보 검색 (DB 직접 조회).
+
+    API 호출 없이 DB에 적재된 34,000+ 건의 정보공개서 데이터에서 검색.
+    최신 연도 기준으로 반환하며, 폐점률을 계산하여 리스크 판정에 사용.
+    """
+    from src.agents.nodes.market_analyst import db_client
+
+    try:
+        if db_client.engine is None:
+            await db_client.connect()
+
+        async with db_client.get_session() as session:
+            from sqlalchemy import text
+
+            # LIKE 검색 (부분 일치)
+            stmt = text("""
+                SELECT yr, "corpNm", "brandNm", "frcsCnt", "newFrcsRgsCnt",
+                       "ctrtEndCnt", "ctrtCncltnCnt", "avrgSlsAmt"
+                FROM ftc_brand_franchise
+                WHERE "brandNm" LIKE :pattern
+                ORDER BY yr DESC
+                LIMIT 1
+            """)
+            row = (await session.execute(stmt, {"pattern": f"%{brand_name}%"})).fetchone()
+
+            if not row:
+                return None
+
+            store_count = int(row.frcsCnt or 0)
+            end_count = int(row.ctrtEndCnt or 0)
+            cancel_count = int(row.ctrtCncltnCnt or 0)
+            avg_sales = int(row.avrgSlsAmt or 0) * 10000  # 만원 단위 → 원 단위
+
+            churn_rate = (end_count + cancel_count) / max(store_count, 1)
+
+            return {
+                "brand_name": row.brandNm,
+                "corp_name": row.corpNm,
+                "store_count_total": store_count,
+                "churn_rate": round(churn_rate, 4),
+                "avg_sales_amount": avg_sales,
+                "franchise_fee": 0,  # DB에 가맹금 컬럼 없음
+            }
+
+    except Exception as e:
+        print(f"[_search_ftc_from_db] DB 조회 실패: {e}")
+        return None
+
+
 async def check_ftc_franchise(state: AgentState) -> dict:
     """
     공정위 가맹사업 정보공개서 검토 — 브랜드 폐점률·매출·가맹금 리스크 판정.
@@ -822,28 +873,27 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             "recommendation": "브랜드명 입력 후 재검토 권장",
         }
 
-    if not settings.ftc_api_key:
+    # 1차: DB에서 검색 (ftc_brand_franchise 테이블 — 16,000+ 브랜드)
+    # 2차: API 실패 시에도 DB fallback
+    detail = await _search_ftc_from_db(brand)
+
+    if not detail and settings.ftc_api_key:
+        try:
+            client = FtcFranchiseClient(api_key=settings.ftc_api_key)
+            detail = await client.get_brand_detail(brand)
+        except Exception as e:
+            print(f"[check_ftc_franchise] API 실패 (DB fallback 사용): {e}")
+
+    if not detail:
         return {
             "type": "ftc_franchise",
             "level": "caution",
-            "summary": "FTC_API_KEY가 설정되지 않아 공정위 정보공개서 조회를 건너뜁니다.",
+            "summary": f"'{brand}' 브랜드의 공정위 정보공개서를 찾을 수 없습니다.",
             "articles": [],
-            "recommendation": "환경변수 FTC_API_KEY 설정 후 재검토 권장",
+            "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
         }
 
     try:
-        client = FtcFranchiseClient(api_key=settings.ftc_api_key)
-        detail = await client.get_brand_detail(brand)
-
-        if not detail:
-            return {
-                "type": "ftc_franchise",
-                "level": "caution",
-                "summary": f"'{brand}' 브랜드의 공정위 정보공개서를 찾을 수 없습니다.",
-                "articles": [],
-                "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
-            }
-
         churn_rate = detail.get("churn_rate", 0.0)
         avg_sales = detail.get("avg_sales_amount", 0)
         franchise_fee = detail.get("franchise_fee", 0)

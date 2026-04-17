@@ -89,6 +89,7 @@ def mock_dependencies():
         patch("src.agents.nodes.legal._async_call_llm") as mock_llm,
         patch("src.agents.nodes.legal.LawApiClient") as MockLawApi,
         patch("src.agents.nodes.legal.FtcFranchiseClient"),
+        patch("src.agents.nodes.legal._search_ftc_from_db", new_callable=AsyncMock, return_value=None),
         patch("src.agents.nodes.legal.settings") as mock_settings,
         patch.dict("sys.modules", {"redis.asyncio": mock_redis_mod, "redis": MagicMock()}),
     ):
