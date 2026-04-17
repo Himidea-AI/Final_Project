@@ -1012,7 +1012,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # zoning: I/O 없는 규칙 기반 — 즉시 실행 후 Phase 1 병렬 대기
     zoning_result = await check_zoning_regulation(state)
 
-    # Phase 1: RAG×13 + 판례×4 + FTC API 병렬 실행 (총 18개)
+    # Phase 1: RAG×13 + 판례×6 + FTC API 병렬 실행 (총 20개)
     # return_exceptions=True — 한 개 실패해도 나머지 결과 유지
     _phase1_results = await asyncio.gather(
         # RAG 검색 (13개)
@@ -1029,11 +1029,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
         retriever.search(accessibility_q, top_k=5, source_filter=LegalDocumentRetriever.ACCESSIBILITY_LAW_SOURCES),
         retriever.search(sewage_q, top_k=5, source_filter=LegalDocumentRetriever.SEWAGE_LAW_SOURCES),
         retriever.search(fair_trade_q, top_k=5, source_filter=LegalDocumentRetriever.FAIR_TRADE_SOURCES),
-        # 판례 검색 (4개)
-        law_client.search_precedents("가맹사업", display=3),
-        law_client.search_precedents("권리금", display=3),
-        law_client.search_precedents("식품위생", display=3),
-        law_client.search_precedents("다중이용업소", display=3),
+        # 판례 검색 (6개) — 키워드를 구체화하여 판례 품질 향상
+        law_client.search_precedents("가맹사업 영업지역", display=3),
+        law_client.search_precedents("권리금 회수", display=3),
+        law_client.search_precedents("식품위생 영업허가", display=3),
+        law_client.search_precedents("다중이용업소 소방", display=3),
+        law_client.search_precedents("건축물 용도변경 근린생활시설", display=2),
+        law_client.search_precedents("근로계약 최저임금", display=2),
         # FTC API — RAG docs 불필요, Phase 1에서 선행 실행
         check_ftc_franchise(state),
         return_exceptions=True,
@@ -1076,10 +1078,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
         lease_prec,
         food_prec,
         safety_prec,
+        building_prec,
+        labor_prec,
         ftc_result,
     ) = (
-        *[_safe_list(_phase1_results[i]) for i in range(17)],
-        _safe_ftc(_phase1_results[17]),
+        *[_safe_list(_phase1_results[i]) for i in range(19)],
+        _safe_ftc(_phase1_results[19]),
     )
 
     # Phase 2: 12개 법률 항목을 단일 LLM 배치 호출로 처리 (12회 → 1회)
@@ -1098,18 +1102,18 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "fair_trade_law",
     ]
     _BATCH_LABELS = {
-        "franchise_law": "가맹사업법 (영업지역 보장·정보공개서)",
-        "commercial_lease_law": "상가임대차보호법 (권리금·계약갱신)",
-        "food_hygiene": "식품위생법 (영업신고·위생교육)",
-        "safety_regulation": "다중이용업소법 (소방·안전시설)",
-        "building_law": "건축법 (건축물 용도·용도변경)",
-        "fire_safety_law": "소방시설법 (스프링클러·소방안전관리자)",
-        "labor_law": "근로기준법 (근로계약서·최저임금·4대보험)",
-        "vat_law": "부가가치세법 (사업자등록·과세유형)",
-        "privacy_law": "개인정보보호법 (고객정보·CCTV)",
-        "accessibility_law": "장애인편의증진법 (편의시설 설치)",
-        "sewage_law": "하수도법 (오수처리·유류분리기)",
-        "fair_trade_law": "공정거래법 (불공정거래·거래강제)",
+        "franchise_law": "가맹사업법 — 영업지역 침해 여부, 정보공개서 기재사항, 가맹금 예치 의무",
+        "commercial_lease_law": "상가임대차보호법 — 권리금 회수기회 보호(제10조의4), 계약갱신요구권(10년), 환산보증금(서울 9억)",
+        "food_hygiene": "식품위생법 — 영업 종류별 신고·허가 의무, 위생교육 이수, 영업장 시설 기준",
+        "safety_regulation": "다중이용업소법 — 면적·업종 기준 해당 여부, 소방시설 설치, 안전시설 완비증명서",
+        "building_law": "건축법 — 건축물 용도 적합(근린생활시설 등), 용도변경 신고·허가, 불법건축물 리스크",
+        "fire_safety_law": "소방시설법 — 면적별 소방시설 설치(스프링클러·소화기), 소방안전관리자 선임, 정기점검",
+        "labor_law": "근로기준법 — 근로계약서 작성·교부, 최저임금(2026년 기준), 주휴수당·가산임금, 4대보험",
+        "vat_law": "부가가치세법 — 사업자등록(개업 전), 일반과세 vs 간이과세(연 8천만원), 세금계산서 발행",
+        "privacy_law": "개인정보보호법 — 고객 정보 수집 동의, 개인정보 처리방침 공개, CCTV 안내판 부착",
+        "accessibility_law": "장애인편의증진법 — 편의시설 설치 대상(300㎡ 이상), 경사로·장애인화장실·점자블록",
+        "sewage_law": "하수도법/물환경보전법 — 오수처리시설, 유류분리기(그리스트랩) 설치, 폐수 배출 기준",
+        "fair_trade_law": "공정거래법 — 가맹본부 불공정 거래 금지, 부당 거래 강제(필수 물품 고가 공급), 공정위 신고",
     }
 
     # 모든 RAG 문서를 법률별로 정리하여 컨텍스트 구성
@@ -1119,9 +1123,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "commercial_lease_law": lease_docs + lease_prec,
         "food_hygiene": food_docs + food_prec,
         "safety_regulation": safety_docs + safety_prec,
-        "building_law": building_docs,
+        "building_law": building_docs + building_prec,
         "fire_safety_law": fire_docs,
-        "labor_law": labor_docs,
+        "labor_law": labor_docs + labor_prec,
         "vat_law": vat_docs,
         "privacy_law": privacy_docs,
         "accessibility_law": accessibility_docs,
@@ -1141,11 +1145,16 @@ async def _run_legal_pipeline(state: dict) -> dict:
         f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
         f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
         f"위 자료를 바탕으로 아래 12개 법률 항목의 창업 리스크를 평가하세요.\n"
-        f"리스크 레벨: safe(문제없음) / caution(주의필요) / danger(위반위험)\n\n"
+        f"각 항목의 '—' 뒤에 적힌 검토 포인트를 반드시 확인하세요.\n\n"
+        f"리스크 레벨 기준:\n"
+        f"- safe: 법률 위반 가능성 없음, 일반적 준수사항만 존재\n"
+        f"- caution: 사전 확인·준비 필요, 미이행 시 과태료·행정처분 가능\n"
+        f"- danger: 법률 위반 가능성 높음, 영업정지·허가취소·형사처벌 위험\n\n"
         f"[평가 항목]\n{items_desc}\n\n"
-        "반드시 아래 형식의 JSON 배열만 출력하세요 (설명 없이 배열만):\n"
-        '[{"type":"franchise_law","level":"caution","summary":"요약 1~2문장","recommendation":"권고사항"},'
-        '{"type":"commercial_lease_law",...}, ...]'
+        "아래 JSON 배열 형식으로만 응답하세요. JSON 앞뒤에 설명·마크다운·코드블록을 붙이지 마세요.\n"
+        "12개 항목을 빠짐없이 포함하세요. summary는 1~2문장, recommendation은 구체적 행동 권고:\n"
+        '[{"type":"franchise_law","level":"caution","summary":"요약","recommendation":"권고"},'
+        '{"type":"commercial_lease_law","level":"...","summary":"...","recommendation":"..."}, ...]'
     )
 
     batch_results: list[dict] = []
@@ -1254,7 +1263,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     else:
         overall_level = "safe"
 
-    precedents = franchise_prec + lease_prec + food_prec + safety_prec
+    precedents = franchise_prec + lease_prec + food_prec + safety_prec + building_prec + labor_prec
     legal_info = (legal_info_docs + precedents) or [
         {"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks
     ]
@@ -1297,4 +1306,3 @@ async def legal_node(state) -> dict:
     if not isinstance(state, dict):
         state = state.model_dump()
     return await _run_legal_pipeline(state)
-

@@ -4,17 +4,22 @@
 LLM 없이 Python 연산만으로 16개 행정동을 정량 점수화하여 순위를 산출합니다.
 market / population / legal 에이전트와 asyncio.gather로 병렬 실행됩니다.
 
-점수 산식 (100점 만점):
-  - 매출 성장률 (QoQ)  40%
-  - 유동인구 성장률 (QoQ) 30%
-  - 임대료 저렴도       30%
-  - 공실률 패널티: 공실률 높은 동 점수 감점 (네이버 부동산 월세 매물 기준, 2026-04)
+점수 산식 (100점 만점, 동적 가중치):
+  population_weight=True  (기본): 매출 35% + 인구 45% + 임대료 20%
+  population_weight=False       : 매출 50% + 인구 10% + 임대료 40%
+
+추가 패널티:
+  - 임대료 예산 초과: 1.5배 초과 시 -50%, 1~1.5배 초과 시 비례 감점
+  - 공실률 패널티: 5~10% → -15%, 10%+ → -30% (네이버 부동산 월세 매물 기준, 2026-04)
 """
 
 import asyncio
+import json
+import redis.asyncio as aioredis
 from sqlalchemy import select, func
 from src.schemas.state import AgentState
 from src.config.constants import MAPO_DISTRICTS
+from src.config.settings import settings
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.database.models import NaverVacancy, StoreQuarterly
 
@@ -66,8 +71,10 @@ async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
             else:
                 vacancy_rate_map[dong] = 0.0
 
-        print(f"[district_ranking] 공실률 로드 완료 — 상위 3개: "
-              f"{sorted(vacancy_rate_map.items(), key=lambda x: -x[1])[:3]}")
+        print(
+            f"[district_ranking] 공실률 로드 완료 — 상위 3개: "
+            f"{sorted(vacancy_rate_map.items(), key=lambda x: -x[1])[:3]}"
+        )
         return vacancy_rate_map, True
 
     except Exception as e:
@@ -163,18 +170,20 @@ def _normalize_and_rank(
         # 공실률 패널티: 높은 공실 = 상권 활력 저하
         vacancy_rate = vacancy_rate_map.get(r["district"], 0.0)
         if vacancy_rate >= 10.0:
-            score *= 0.70   # 공실률 10% 이상: -30%
+            score *= 0.70  # 공실률 10% 이상: -30%
         elif vacancy_rate >= 5.0:
-            score *= 0.85   # 공실률 5~10%: -15%
+            score *= 0.85  # 공실률 5~10%: -15%
 
-        ranked.append({
-            **r,
-            "score": round(score, 1),
-            "sales_score": round(sales_norm[i], 1),
-            "pop_score": round(pop_norm[i], 1),
-            "rent_score": round(rent_norm[i], 1),
-            "vacancy_rate": vacancy_rate,  # 프론트엔드 표시용
-        })
+        ranked.append(
+            {
+                **r,
+                "score": round(score, 1),
+                "sales_score": round(sales_norm[i], 1),
+                "pop_score": round(pop_norm[i], 1),
+                "rent_score": round(rent_norm[i], 1),
+                "vacancy_rate": vacancy_rate,  # 프론트엔드 표시용
+            }
+        )
 
     ranked.sort(key=lambda x: x["score"], reverse=True)
 
@@ -198,6 +207,32 @@ async def district_ranking_node(state: AgentState) -> dict:
     population_weight = state.get("population_weight", True)
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
+
+    # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환
+    cache_key = f"v2:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    _redis = None
+    try:
+        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        cached = await _redis.get(cache_key)
+        if cached:
+            cached_data = json.loads(cached)
+            print(f"[district_ranking] 캐시 히트: {cache_key}")
+            await _redis.aclose()
+            return {
+                "scouting_results": cached_data["scouting_results"],
+                "winner_district": cached_data["winner_district"],
+                "top_3_candidates": cached_data["top_3_candidates"],
+                "vacancy_applied": cached_data["vacancy_applied"],
+                "current_agent": "district_ranking",
+            }
+    except Exception as e:
+        print(f"[district_ranking] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        if _redis is not None:
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
+        _redis = None
 
     print(
         f"--- [DISTRICT RANKING] 마포구 {len(MAPO_DISTRICTS)}개 행정동 스코어링 시작 "
@@ -227,6 +262,31 @@ async def district_ranking_node(state: AgentState) -> dict:
     top_3 = [r["district"] for r in ranked[1:4]]
 
     print(f"--- [DISTRICT RANKING] 완료 — 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied} ---")
+
+    # Redis 캐시 저장
+    if _redis is not None:
+        try:
+            await _redis.set(
+                cache_key,
+                json.dumps(
+                    {
+                        "scouting_results": ranked,
+                        "winner_district": winner,
+                        "top_3_candidates": top_3,
+                        "vacancy_applied": vacancy_applied,
+                    },
+                    ensure_ascii=False,
+                ),
+                ex=_CACHE_TTL,
+            )
+            print(f"[district_ranking] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+        except Exception as e:
+            print(f"[district_ranking] Redis 캐시 저장 실패 (무시): {e}")
+        finally:
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
 
     return {
         "scouting_results": ranked,
