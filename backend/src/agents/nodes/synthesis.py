@@ -97,18 +97,28 @@ async def synthesis_node(state: AgentState) -> dict:
     pop_summary_short = population_report[:120].replace("\n", " ")
 
     legal_summary_for_llm = "\n".join([
-        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:60]}"
+        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}"
         for r in legal_risks
     ])
 
+    # 법률 DANGER 시 대안 지역 강조
+    if overall_legal_risk == "danger":
+        legal_override = (
+            f"\n⚠️ 경고: 법률 리스크 DANGER. {target_district} 출점은 법률 위반 가능성이 높습니다. "
+            f"final_recommendation에 대안 지역({', '.join(top_3_candidates[:2]) if top_3_candidates else '다른 지역'})을 최우선 제시하세요."
+        )
+    else:
+        legal_override = ""
+
     prompt = (
-        "프랜차이즈 창업 전략 컨설턴트로서 아래 요약 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
+        "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
         f"브랜드:{brand_name}({business_type}) | 선택지역:{target_district} | 법률리스크:{overall_legal_risk}\n"
         f"입지랭킹: {ranking_summary}\n"
-        f"상권({target_district}): {market_summary_short}\n"
-        f"인구({target_district}): {pop_summary_short}\n"
+        f"상권({target_district}):\n{market_report[:1500]}\n"
+        f"인구({target_district}):\n{population_report[:1500]}\n"
         + (f"{vacancy_summary}\n" if vacancy_summary else "")
         + f"법률(14개):\n{legal_summary_for_llm}\n"
+        f"{legal_override}\n"
         f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
         f"자본금={initial_capital:,}원 | 임대예산={monthly_rent_budget:,}원({store_area}평)\n\n"
         "요구사항:\n"
