@@ -43,16 +43,17 @@ async def _search_ftc_from_db(brand_name: str) -> dict | None:
         async with db_client.get_session() as session:
             from sqlalchemy import text
 
-            # LIKE 검색 (부분 일치)
+            # LIKE 검색 (부분 일치) — 브랜드명 내 %,_ 문자 이스케이프
+            safe_brand = brand_name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             stmt = text("""
                 SELECT yr, "corpNm", "brandNm", "frcsCnt", "newFrcsRgsCnt",
                        "ctrtEndCnt", "ctrtCncltnCnt", "avrgSlsAmt"
                 FROM ftc_brand_franchise
-                WHERE "brandNm" LIKE :pattern
+                WHERE "brandNm" LIKE :pattern ESCAPE '\\'
                 ORDER BY yr DESC
                 LIMIT 1
             """)
-            row = (await session.execute(stmt, {"pattern": f"%{brand_name}%"})).fetchone()
+            row = (await session.execute(stmt, {"pattern": f"%{safe_brand}%"})).fetchone()
 
             if not row:
                 return None
@@ -558,8 +559,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
     analysis["overall_legal_risk"] = overall_level
 
     # Redis 캐시 저장 — overall_legal_risk 포함
-    if _redis is not None:
-        try:
+    # finally 블록으로 파이프라인 중간 exception 시에도 반드시 연결 종료
+    try:
+        if _redis is not None:
             await _redis.set(
                 cache_key,
                 json.dumps(
@@ -569,10 +571,14 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 ex=_CACHE_TTL,
             )
             print(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
-        except Exception as e:
-            print(f"[legal_node] Redis 캐시 저장 실패 (무시하고 계속): {e}")
-        finally:
-            await _redis.aclose()
+    except Exception as e:
+        print(f"[legal_node] Redis 캐시 저장 실패 (무시하고 계속): {e}")
+    finally:
+        if _redis is not None:
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
 
     return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
 

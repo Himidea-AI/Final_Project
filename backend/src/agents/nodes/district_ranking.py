@@ -35,20 +35,17 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
     """
     try:
         async with db_client.get_session() as session:
-            stmt = (
-                select(
-                    NaverVacancy.id,
-                    NaverVacancy.lat,
-                    NaverVacancy.lon,
-                    NaverVacancy.dong_name,
-                    NaverVacancy.listing_count,
-                )
-                .where(
-                    NaverVacancy.trade_type == "월세",
-                    NaverVacancy.dong_name.in_(dong_names),
-                    NaverVacancy.lat.isnot(None),
-                    NaverVacancy.lon.isnot(None),
-                )
+            stmt = select(
+                NaverVacancy.id,
+                NaverVacancy.lat,
+                NaverVacancy.lon,
+                NaverVacancy.dong_name,
+                NaverVacancy.listing_count,
+            ).where(
+                NaverVacancy.trade_type == "월세",
+                NaverVacancy.dong_name.in_(dong_names),
+                NaverVacancy.lat.isnot(None),
+                NaverVacancy.lon.isnot(None),
             )
             rows = (await session.execute(stmt)).fetchall()
         spots = [
@@ -66,6 +63,7 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
     except Exception as e:
         print(f"[district_ranking] 공실 스팟 로드 실패: {e}")
         return []
+
 
 # 동일 invocation 내 중복 DB 쿼리 방지용 비동기 Task 공유 dict.
 # district_ranking_node와 population_analyst_node가 asyncio.gather로 병렬 실행되어
@@ -347,6 +345,10 @@ async def district_ranking_node(state: AgentState) -> dict:
                 pass
         _redis = None
 
+    # 직접 호출 시(예: /analyze/quick) parallel_analysis_node를 거치지 않으므로
+    # stale Task 방지를 위해 자체 초기화
+    _clear_shared_population_cache()
+
     print(
         f"--- [DISTRICT RANKING] 마포구 {len(MAPO_DISTRICTS)}개 행정동 스코어링 시작 "
         f"(인구가중치={population_weight}, 예산={monthly_rent_budget:,}원, 면적={store_area}평) ---"
@@ -380,7 +382,9 @@ async def district_ranking_node(state: AgentState) -> dict:
     dong_names = list(dict.fromkeys([winner, target_district] + top_3))
     vacancy_spots = await _load_vacancy_spots(dong_names)
 
-    print(f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied}, 스팟={len(vacancy_spots)}개 ---")
+    print(
+        f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied}, 스팟={len(vacancy_spots)}개 ---"
+    )
 
     # Redis 캐시 저장
     if _redis is not None:
