@@ -4220,6 +4220,148 @@ function SimulatorDashboard({
                               </div>
                             )}
 
+                            {/* [C1 신규] 핵심 소비층 분석 카드 (demographic_depth) */}
+                            {(() => {
+                              const d = simResult?.demographicReport;
+                              if (!d) return null;
+                              const genderKo = (g: string) =>
+                                (
+                                  ({
+                                    male: '남성',
+                                    female: '여성',
+                                    mixed: '혼합',
+                                  }) as Record<string, string>
+                                )[g] ?? g;
+                              const incomeLevelKo = (l: string) =>
+                                (
+                                  ({
+                                    high: '상',
+                                    mid: '중',
+                                    low: '하',
+                                    unknown: 'N/A',
+                                  }) as Record<string, string>
+                                )[l] ?? l;
+                              const core = d.core_demographic;
+                              const top3 = d.top_3_age_groups ?? [];
+                              const peakHours = d.peak_consumption_hours ?? [];
+                              return (
+                                <div className="rounded-xl bg-slate-900/95 p-5 shadow-2xl ring-1 ring-slate-700/50">
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
+                                      💳 핵심 소비층 분석
+                                    </h3>
+                                    {d.elderly_ratio != null && (
+                                      <span className="text-xs text-slate-400">
+                                        고령: {d.elderly_ratio.toFixed(1)}%
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {core && (core.age || core.gender) && (
+                                    <div className="mt-3 rounded-lg bg-gradient-to-r from-cyan-500/10 to-transparent p-3">
+                                      <div className="text-xs uppercase tracking-wider text-cyan-400">
+                                        주 소비층
+                                      </div>
+                                      <div className="mt-1 flex items-baseline gap-2 flex-wrap">
+                                        <span className="text-2xl font-bold text-slate-100">
+                                          {core.age ? `${core.age}대` : ''}{' '}
+                                          {genderKo(core.gender ?? '')}
+                                        </span>
+                                        {typeof core.share === 'number' && (
+                                          <span className="text-sm text-slate-400">
+                                            {(core.share * 100).toFixed(1)}% 매출 기여
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {top3.length > 0 && (
+                                    <div className="mt-4 space-y-2">
+                                      <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                        연령대 TOP 3
+                                      </div>
+                                      {top3.map((a) => (
+                                        <div
+                                          key={a.age_group}
+                                          className="flex items-center gap-2 text-xs"
+                                        >
+                                          <span className="w-12 text-slate-300">
+                                            {a.age_group}대
+                                          </span>
+                                          <div className="flex-1 rounded-full bg-slate-800/50">
+                                            <div
+                                              className="h-2 rounded-full bg-cyan-400"
+                                              style={{
+                                                width: `${Math.min(100, Math.max(0, a.share * 100))}%`,
+                                              }}
+                                            />
+                                          </div>
+                                          <span className="w-12 text-right text-slate-400">
+                                            {(a.share * 100).toFixed(1)}%
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                                    <div className="rounded-lg bg-slate-800/50 p-2">
+                                      <div className="text-slate-400">피크</div>
+                                      <div className="mt-1 font-semibold text-slate-100">
+                                        {peakHours[0] ?? 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-800/50 p-2">
+                                      <div className="text-slate-400">평/주말</div>
+                                      <div className="mt-1 font-semibold text-slate-100">
+                                        {typeof d.weekday_weekend_ratio === 'number'
+                                          ? d.weekday_weekend_ratio.toFixed(2)
+                                          : 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-800/50 p-2">
+                                      <div className="text-slate-400">소득</div>
+                                      <div className="mt-1 font-semibold text-slate-100">
+                                        {incomeLevelKo(d.area_income_level ?? 'unknown')}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {d.resident_visitor_ratio != null && (
+                                    <div className="mt-3 text-xs text-slate-400">
+                                      📍 외부 방문객 비율:{' '}
+                                      {(d.resident_visitor_ratio * 100).toFixed(1)}%
+                                    </div>
+                                  )}
+
+                                  {d.brand_target_match_score != null && (
+                                    <div className="mt-3 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
+                                      <div className="flex items-baseline gap-2 flex-wrap">
+                                        <span className="text-xs uppercase tracking-wider text-amber-300">
+                                          브랜드 타겟 매칭
+                                        </span>
+                                        <span className="text-lg font-bold text-amber-200">
+                                          {d.brand_target_match_score.toFixed(0)}/100
+                                        </span>
+                                      </div>
+                                      {d.match_rationale && (
+                                        <p className="mt-1 text-xs text-slate-300">
+                                          {d.match_rationale}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {d.narrative && (
+                                    <p className="mt-4 text-xs leading-relaxed text-slate-400">
+                                      {d.narrative}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* Insights */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col flex-1">
                               {/* Header with dynamic counter */}
