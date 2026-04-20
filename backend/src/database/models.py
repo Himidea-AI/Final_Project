@@ -14,10 +14,12 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -777,3 +779,52 @@ class SeoulTrainingDataset(Base):
     close_count = Column(BigInteger)
     total_pop = Column(Float)
     cpi_index = Column(Float)
+
+
+class SeoulRealtimeHotspots(Base):
+    """서울 27개 주요 POI 실시간 혼잡도/인구/성별/연령 (30분 주기 누적)"""
+
+    __tablename__ = "seoul_realtime_hotspots"
+    __table_args__ = (Index("idx_seoul_realtime_hotspots_area_time", "area_cd", "collected_at"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    area_cd = Column(String(20), nullable=False, comment="POI 코드")
+    area_nm = Column(String(50), nullable=False, comment="POI 명")
+    collected_at = Column(DateTime(timezone=True), nullable=False, comment="수집 시각")
+    congest_level = Column(String(10), comment="혼잡도 등급 (여유/보통/약간 붐빔/붐빔)")
+    congest_msg = Column(Text, comment="혼잡도 메시지")
+    pop_min = Column(Integer, comment="추정 실시간 인구 하한")
+    pop_max = Column(Integer, comment="추정 실시간 인구 상한")
+    male_rate = Column(Float, comment="남성 비율 (%)")
+    female_rate = Column(Float, comment="여성 비율 (%)")
+    age_0_10 = Column(Float, comment="0~9세 비율 (%)")
+    age_10s = Column(Float, comment="10대 비율 (%)")
+    age_20s = Column(Float, comment="20대 비율 (%)")
+    age_30s = Column(Float, comment="30대 비율 (%)")
+    age_40s = Column(Float, comment="40대 비율 (%)")
+    age_50s = Column(Float, comment="50대 비율 (%)")
+    age_60s = Column(Float, comment="60대 비율 (%)")
+    age_70_plus = Column(Float, comment="70대 이상 비율 (%)")
+    resident_rate = Column(Float, comment="상주인구 비율 (%)")
+    visitor_rate = Column(Float, comment="방문자 비율 (%)")
+    cmrc_total_level = Column(String(10), comment="상권 종합 레벨")
+    cmrc_payment_cnt = Column(String(20), comment="실시간 결제 건수 구간")
+    cmrc_payment_amt_min = Column(String(30), comment="결제 금액 하한")
+    cmrc_payment_amt_max = Column(String(30), comment="결제 금액 상한")
+
+
+class ElderlyRatioRegion(Base):
+    """시군구 월별 고령인구비율 (65세 이상 / 전체 인구)"""
+
+    __tablename__ = "elderly_ratio_region"
+    __table_args__ = (
+        UniqueConstraint("region", "ym", name="elderly_ratio_region_region_ym_key"),
+        Index("idx_err_region", "region"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    region = Column(Text, nullable=False, comment="행정구역명 (시/군/구)")
+    ym = Column(Integer, nullable=False, comment="연월 (YYYYMM)")
+    elderly_ratio = Column(Float, comment="고령인구비율 (%)")
+    elderly_pop = Column(BigInteger, comment="65세 이상 인구")
+    total_pop = Column(BigInteger, comment="전체 인구")
