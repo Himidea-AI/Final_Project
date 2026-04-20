@@ -132,19 +132,36 @@
 
 # 4주차 — 서비스 배포 + 고도화
 
-## 📅 04/20 (월) — EC2/Lightsail 배포
+## 📅 04/20 (월) — EC2/Lightsail 배포 [완료] ✅
+
+> [!IMPORTANT]
+> 서비스 배포 완료! 고정 IP: `54.180.23.30`
+> - 프론트엔드: http://54.180.23.30
+> - 백엔드 API: http://54.180.23.30:8000/health
 
 ### 오전 (AM)
-- [ ] **Lightsail 인스턴스 생성** [IM3-153]
-  - 4~8GB RAM, Amazon Linux 2023
-  - Docker + docker-compose 설치
-- [ ] **git clone + .env 프로덕션 설정**
+- [x] **Lightsail 인스턴스 생성** [IM3-153]
+  - General purpose, 4GB RAM, Amazon Linux 2023, Dual-stack
+  - 고정 IP 할당: `54.180.23.30`
+  - Docker 27 + docker-compose 설치
+- [x] **git clone + .env 프로덕션 설정**
+  - 루트 `.env` + `frontend/.env` (카카오맵 키) 서버 세팅 완료
+  - API 키 전체 실제 값으로 교체 (SEMAS, SGIS, MOLIT, FTC, NTS, NAVER 등)
 
 ### 오후 (PM)
-- [ ] **docker compose up --build -d**
-  - frontend + backend + redis 기동
-  - RDS 연결 확인
-- [ ] **방화벽/보안그룹** — 80, 443, 22 포트만 오픈
+- [x] **docker-compose -f docker-compose.prod.yml up --build -d**
+  - frontend(Nginx:80) + backend(uvicorn:8000) + redis(6379) 3개 컨테이너 정상 기동
+  - `env_file: .env` 추가하여 백엔드 환경변수 주입 수정
+- [x] **RDS 보안그룹 인바운드 규칙 추가**
+  - PostgreSQL(5432) ← Lightsail IP `54.180.23.30/32` 허용
+  - 이 설정 누락으로 로그인 Pending 이슈 발생 → 즉시 해결
+- [x] **방화벽(Lightsail Firewall)** — 80, 443, 8000, 22 포트 오픈
+- [x] **서비스 전체 동작 확인**
+  - `/health` 200 OK ✅
+  - 프론트엔드 렌더링 정상 ✅
+  - `/auth/login` 로그인 정상 ✅
+  - `/population/live` 유동인구 API 정상 ✅
+- [x] **팀 슬랙에 배포 URL 공유 완료**
 
 ---
 
