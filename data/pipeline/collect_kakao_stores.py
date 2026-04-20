@@ -510,7 +510,7 @@ def collect_all() -> pd.DataFrame:
 
 
 def load_to_db(df: pd.DataFrame, db_url: str) -> int:
-    """DataFrame → kakao_store 테이블 적재."""
+    """DataFrame → kakao_store 테이블 적재 (TRUNCATE+INSERT, 브랜드 모드 전용)."""
     engine = create_engine(db_url)
     Base.metadata.create_all(engine, checkfirst=True)
 
@@ -526,6 +526,50 @@ def load_to_db(df: pd.DataFrame, db_url: str) -> int:
         chunksize=500,
     )
     return len(df)
+
+
+UPSERT_SQL = text(
+    """
+    INSERT INTO kakao_store (
+        kakao_id, place_name, brand_name, category, category_detail,
+        address, road_address, dong_name, lat, lon, phone, place_url,
+        is_franchise
+    ) VALUES (
+        :kakao_id, :place_name, :brand_name, :category, :category_detail,
+        :address, :road_address, :dong_name, :lat, :lon, :phone, :place_url,
+        :is_franchise
+    )
+    ON CONFLICT (kakao_id) DO UPDATE SET
+        place_name = EXCLUDED.place_name,
+        category = EXCLUDED.category,
+        category_detail = EXCLUDED.category_detail,
+        address = EXCLUDED.address,
+        road_address = EXCLUDED.road_address,
+        dong_name = EXCLUDED.dong_name,
+        lat = EXCLUDED.lat,
+        lon = EXCLUDED.lon,
+        phone = EXCLUDED.phone,
+        place_url = EXCLUDED.place_url,
+        is_franchise = kakao_store.is_franchise OR EXCLUDED.is_franchise,
+        brand_name = COALESCE(EXCLUDED.brand_name, kakao_store.brand_name),
+        collected_at = NOW();
+    """
+)
+
+
+def upsert_stores(df: pd.DataFrame, db_url: str, chunksize: int = 500) -> int:
+    """DataFrame → kakao_store UPSERT. is_franchise 는 OR 머지, brand_name 은 COALESCE.
+
+    kakao_store_hours FK 보존 (TRUNCATE 하지 않음).
+    """
+    engine = create_engine(db_url)
+    Base.metadata.create_all(engine, checkfirst=True)
+
+    records = df.to_dict(orient="records")
+    with engine.begin() as conn:
+        for i in range(0, len(records), chunksize):
+            conn.execute(UPSERT_SQL, records[i : i + chunksize])
+    return len(records)
 
 
 def main():
