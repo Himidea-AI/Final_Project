@@ -207,6 +207,46 @@ def _run_bep(
 
 
 # ---------------------------------------------------------------------------
+# 타겟 고객 세그먼트 분석
+# ---------------------------------------------------------------------------
+
+
+def _run_customer_revenue(
+    dong_code: str,
+    industry_code: str,
+    profile_dict: dict | None = None,
+    monthly_sales: float | None = None,
+    quarter_num: int = 1,
+) -> dict:
+    """타겟 고객 매출 기여 예측 (P1-C MLP).
+
+    Parameters
+    ----------
+    dong_code : str
+    industry_code : str
+    profile_dict : dict, optional
+        프로필 딕셔너리. 키: age_groups, gender, time_slots, day_type.
+        None이면 기본 프로필(전체 고객) 사용.
+    monthly_sales : float, optional
+        기준 월 매출. 있으면 세그먼트 절대 매출도 반환.
+    quarter_num : int
+        분기 번호 (1~4).
+    """
+    from models.customer_revenue.predict import SegmentProfile
+    from models.customer_revenue.predict import predict as segment_predict
+
+    if profile_dict is None:
+        profile_dict = {}
+    profile = SegmentProfile(
+        age_groups=profile_dict.get("age_groups", []),
+        gender=profile_dict.get("gender", "all"),
+        time_slots=profile_dict.get("time_slots", []),
+        day_type=profile_dict.get("day_type", "all"),
+    )
+    return segment_predict(dong_code, industry_code, profile, monthly_sales, quarter_num)
+
+
+# ---------------------------------------------------------------------------
 # 동 이름 조회
 # ---------------------------------------------------------------------------
 
@@ -302,6 +342,7 @@ class ModelOutput:
         industry_name: str,
         cost_config: dict | None = None,
         model: str = "lstm",
+        segment_profile: dict | None = None,
     ) -> dict:
         """전체 모델 파이프라인 실행 후 통합 결과 반환.
 
@@ -331,6 +372,8 @@ class ModelOutput:
                     "closure_risk": { risk_score, risk_level, top_signals, model, is_mock },
                     "bep": { bep_months, monthly_profit, total_initial_investment,
                              annual_roi, quarterly_simulation },
+                    "segment_analysis": { segment_ratio, segment_sales, profile_summary,
+                                          dimension_ratios } | None,
                     "metadata": { model_version, generated_at, data_period },
                 }
         """
@@ -388,6 +431,24 @@ class ModelOutput:
             bep = _mock_bep(industry_name)
             use_mock = True
 
+        # ---- 5) 타겟 고객 세그먼트 분석 (P1-C, 선택적) ----
+        segment_analysis: dict | None = None
+        if segment_profile is not None:
+            try:
+                quarterly_avg = revenue_forecast.get("quarterly_avg")
+                # 현재 월 기준 분기 계산 (계절성 반영)
+                current_quarter = (datetime.now(tz=UTC).month - 1) // 3 + 1
+                segment_analysis = _run_customer_revenue(
+                    dong_code,
+                    industry_code,
+                    profile_dict=segment_profile,
+                    monthly_sales=quarterly_avg,
+                    quarter_num=current_quarter,
+                )
+                logger.info("세그먼트 분석 완료: %s", segment_analysis.get("profile_summary"))
+            except Exception as exc:
+                logger.warning("세그먼트 분석 실패 (건너뜀): %s", exc)
+
         # ---- dong_name 조회 ----
         dong_name = _resolve_dong_name(dong_code) if not use_mock else dong_code
 
@@ -402,6 +463,7 @@ class ModelOutput:
             "closure_rate": closure_rate_result,
             "closure_risk": closure_risk_result,
             "bep": bep,
+            "segment_analysis": segment_analysis,
             "metadata": {
                 "model_version": MODEL_VERSION,
                 "generated_at": datetime.now(tz=UTC).isoformat(),
