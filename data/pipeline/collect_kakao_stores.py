@@ -572,32 +572,135 @@ def upsert_stores(df: pd.DataFrame, db_url: str, chunksize: int = 500) -> int:
     return len(records)
 
 
-def main():
+# 음식점(FD6), 카페(CE7) 두 코드만 사용
+CATEGORY_GROUP_CODES = ["FD6", "CE7"]
+
+
+def _doc_to_row(doc: dict) -> dict | None:
+    """카카오 document → kakao_store row dict. 마포 외면 None."""
+    addr = doc.get("address_name", "")
+    road = doc.get("road_address_name", "")
+    if "마포구" not in addr and "마포구" not in road:
+        return None
+
+    place_name = doc["place_name"]
+    category_name = doc.get("category_name", "")
+    category = classify_category(category_name)
+
+    # 브랜드 매칭 시도: NORMALIZE_RULES에 걸리는 경우만 is_franchise=True
+    brand: str | None = None
+    for pat, bname in NORMALIZE_RULES:
+        if re.match(pat, place_name):
+            brand = bname
+            break
+
+    return {
+        "kakao_id": doc["id"],
+        "place_name": place_name,
+        "brand_name": brand,
+        "category": category,
+        "category_detail": category_name,
+        "address": addr,
+        "road_address": road,
+        "dong_name": extract_dong(addr),
+        "lat": float(doc["y"]),
+        "lon": float(doc["x"]),
+        "phone": doc.get("phone", ""),
+        "place_url": doc.get("place_url", ""),
+        "is_franchise": brand is not None,
+    }
+
+
+def collect_all_by_category(
+    bbox: tuple[float, float, float, float] | None = None,
+    cell_m: int = 500,
+) -> pd.DataFrame:
+    """그리드 × FD6/CE7로 전수 수집."""
+    if bbox is None:
+        parts = [float(x) for x in MAPO_RECT.split(",")]
+        bbox = (parts[0], parts[1], parts[2], parts[3])
+
+    cells = generate_grid(bbox, cell_m=cell_m)
+    print(f"그리드: {len(cells)}셀 (bbox={bbox}, cell={cell_m}m)")
+
+    seen: set[str] = set()
+    rows: list[dict] = []
+    for idx, cell in enumerate(cells, 1):
+        for code in CATEGORY_GROUP_CODES:
+            try:
+                docs = collect_cell(code, cell)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [{idx}/{len(cells)}] {code} 셀 실패 {cell}: {exc}")
+                continue
+            for doc in docs:
+                kid = doc.get("id")
+                if not kid or kid in seen:
+                    continue
+                row = _doc_to_row(doc)
+                if row is None:
+                    continue
+                seen.add(kid)
+                rows.append(row)
+        if idx % 20 == 0:
+            print(f"  진행 {idx}/{len(cells)} 셀, 누적 {len(rows)}건")
+
+    df = pd.DataFrame(rows)
+    print(f"\n총 {len(df)}건 수집 (마포 필터, dedupe 후)")
+    return df
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="카카오 로컬 API → kakao_store 적재")
+    parser.add_argument(
+        "--mode",
+        choices=["brands", "categories"],
+        default="brands",
+        help="brands=기존 150개 프랜차이즈 키워드, categories=FD6+CE7 전수",
+    )
     parser.add_argument("--db-url", default=DB_URL)
-    parser.add_argument("--csv-only", action="store_true", help="CSV만 저장, DB 적재 안 함")
+    parser.add_argument("--csv-only", action="store_true", help="CSV만 저장")
+    parser.add_argument("--cell-m", type=int, default=500, help="그리드 셀 크기(m)")
     args = parser.parse_args()
 
-    print("=== 카카오 로컬 API 마포구 점포 수집 시작 ===\n")
-    df = collect_all()
+    if args.mode == "brands":
+        print("=== 카카오 로컬 API 프랜차이즈 수집 시작 ===\n")
+        df = collect_all()
+        out_csv = OUT_CSV
+    else:
+        print("=== 카카오 로컬 API 전수 수집 (카테고리 모드) ===\n")
+        df = collect_all_by_category(cell_m=args.cell_m)
+        out_csv = OUT_CSV.with_name("kakao_store_full_mapo.csv")
 
-    # CSV 저장
-    df.to_csv(OUT_CSV, index=False, encoding="utf-8-sig")
-    print(f"\nCSV 저장: {OUT_CSV}")
+    df.to_csv(out_csv, index=False, encoding="utf-8-sig")
+    print(f"\nCSV 저장: {out_csv}")
 
-    if not args.csv_only:
+    if args.csv_only:
+        return
+
+    if args.mode == "brands":
         cnt = load_to_db(df, args.db_url)
-        print(f"DB 적재: {cnt}건 → kakao_store")
+        print(f"DB 적재 (TRUNCATE+INSERT): {cnt}건 → kakao_store")
+    else:
+        cnt = upsert_stores(df, args.db_url)
+        print(f"DB 적재 (UPSERT): {cnt}건 → kakao_store")
 
-    # 카테고리별 Top 3 출력
-    print("\n=== 카테고리별 브랜드 Top 3 ===\n")
-    for cat in BRANDS:
-        subset = df[df["category"] == cat]
-        top3 = subset["brand_name"].value_counts().head(3)
-        print(f"  {cat}:")
-        for rank, (brand, cnt) in enumerate(top3.items(), 1):
-            print(f"    {rank}. {brand} : {cnt}개")
-        print()
+    if args.mode == "brands":
+        print("\n=== 카테고리별 브랜드 Top 3 ===\n")
+        for cat in BRANDS:
+            subset = df[df["category"] == cat]
+            top3 = subset["brand_name"].value_counts().head(3)
+            print(f"  {cat}:")
+            for rank, (brand, n) in enumerate(top3.items(), 1):
+                print(f"    {rank}. {brand} : {n}개")
+            print()
+    else:
+        print("\n=== 카테고리별 점포수 / 프랜차이즈 비율 ===\n")
+        summary = (
+            df.groupby("category")
+            .agg(total=("kakao_id", "count"), franchise=("is_franchise", "sum"))
+            .sort_values("total", ascending=False)
+        )
+        print(summary.to_string())
 
 
 if __name__ == "__main__":
