@@ -105,6 +105,8 @@ async def parallel_analysis_node(state: AgentState) -> dict:
         "scouting_results": ranking_result.get("scouting_results", []),
         "winner_district": ranking_result.get("winner_district", state.get("target_district", "")),
         "top_3_candidates": ranking_result.get("top_3_candidates", []),
+        "vacancy_applied": ranking_result.get("vacancy_applied", False),
+        "vacancy_spots": ranking_result.get("vacancy_spots", []),
         "current_agent": "parallel_analysis",
     }
 

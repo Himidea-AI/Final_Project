@@ -19,13 +19,53 @@ import json
 import redis.asyncio as aioredis
 from sqlalchemy import select, func
 from src.schemas.state import AgentState
-from src.config.constants import MAPO_DISTRICTS
+from src.config.constants import DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
 from src.config.settings import settings
 from src.agents.nodes.market_analyst import db_client, market_tool
-from src.agents.nodes.legal import _DISTRICT_ZONE_MAP, _ZONING_RULES
 from src.database.models import NaverVacancy, StoreQuarterly
 
 _CACHE_TTL = 86400  # 24시간
+
+
+async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
+    """
+    지정 동들의 실제 공실 좌표 목록 반환 (월세 매물, 좌표 유효한 것만)
+
+    Returns: [{id, lat, lon, dong_name, listing_count}, ...]
+    """
+    try:
+        async with db_client.get_session() as session:
+            stmt = (
+                select(
+                    NaverVacancy.id,
+                    NaverVacancy.lat,
+                    NaverVacancy.lon,
+                    NaverVacancy.dong_name,
+                    NaverVacancy.listing_count,
+                )
+                .where(
+                    NaverVacancy.trade_type == "월세",
+                    NaverVacancy.dong_name.in_(dong_names),
+                    NaverVacancy.lat.isnot(None),
+                    NaverVacancy.lon.isnot(None),
+                )
+            )
+            rows = (await session.execute(stmt)).fetchall()
+        spots = [
+            {
+                "id": r.id,
+                "lat": r.lat,
+                "lon": r.lon,
+                "dong_name": r.dong_name,
+                "listing_count": r.listing_count or 1,
+            }
+            for r in rows
+        ]
+        print(f"[district_ranking] 공실 스팟 {len(spots)}개 로드 (동: {dong_names})")
+        return spots
+    except Exception as e:
+        print(f"[district_ranking] 공실 스팟 로드 실패: {e}")
+        return []
 
 # 동일 invocation 내 중복 DB 쿼리 방지용 비동기 Task 공유 dict.
 # district_ranking_node와 population_analyst_node가 asyncio.gather로 병렬 실행되어
@@ -107,7 +147,10 @@ async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
 
 
 async def _score_single_district(dong_name: str, business_type: str) -> dict:
-    """단일 행정동 원시 지표 수집 (예외 발생 시 0 반환)"""
+    """
+    단일 행정동 원시 지표 수집.
+    DB 데이터 없는 항목은 None으로 반환 — 0.0과 구분하여 정규화 왜곡 방지.
+    """
     try:
         sales_data, pop_data, rent_data = await asyncio.gather(
             market_tool.get_commercial_insights(dong_name, business_type),
@@ -116,27 +159,31 @@ async def _score_single_district(dong_name: str, business_type: str) -> dict:
             return_exceptions=True,
         )
 
-        sales_growth = 0.0
+        # None = DB 데이터 없음, 0.0 = 실제 성장률 0
+        sales_growth = None
         if not isinstance(sales_data, Exception) and "error" not in (sales_data or {}):
             sales_growth = float(sales_data.get("qoq_growth") or 0)
 
-        pop_growth = 0.0
+        pop_growth = None
         if not isinstance(pop_data, Exception) and "error" not in (pop_data or {}):
             pop_growth = float(pop_data.get("qoq_growth") or 0)
 
-        avg_rent = 0.0
+        avg_rent = None
         if not isinstance(rent_data, Exception) and "error" not in (rent_data or {}):
-            avg_rent = float(rent_data.get("avg_rent_3_3m2") or 0)
+            val = rent_data.get("avg_rent_3_3m2")
+            if val:
+                avg_rent = float(val)
 
+        print(f"[district_ranking] {dong_name}: sales={sales_growth}, pop={pop_growth}, rent={avg_rent}")
         return {
             "district": dong_name,
-            "sales_growth": round(sales_growth, 2),
-            "pop_growth": round(pop_growth, 2),
+            "sales_growth": sales_growth,
+            "pop_growth": pop_growth,
             "avg_rent": avg_rent,
         }
     except Exception as e:
         print(f"[district_ranking] {dong_name} 점수 산출 실패 (무시): {e}")
-        return {"district": dong_name, "sales_growth": 0.0, "pop_growth": 0.0, "avg_rent": 0.0}
+        return {"district": dong_name, "sales_growth": None, "pop_growth": None, "avg_rent": None}
 
 
 def _normalize_and_rank(
@@ -170,23 +217,42 @@ def _normalize_and_rank(
     # 예산 기반 평당 허용 임대료 계산 (0이면 필터 비활성화)
     budget_per_3_3m2 = (monthly_rent_budget / max(store_area, 1)) if monthly_rent_budget > 0 else 0
 
-    def _minmax(vals: list[float], reverse: bool = False) -> list[float]:
-        lo, hi = min(vals), max(vals)
-        if hi == lo:
+    def _minmax(vals: list[float | None], reverse: bool = False) -> list[float]:
+        """
+        None = DB 데이터 없음 → 중간값(50) 부여, 실데이터만 min-max 정규화.
+        전체가 None이거나 실데이터 편차 없으면 50 반환.
+        """
+        real = [v for v in vals if v is not None]
+        if not real:
             return [50.0] * len(vals)
-        norm = [(v - lo) / (hi - lo) * 100 for v in vals]
-        return [100 - n for n in norm] if reverse else norm
+        lo, hi = min(real), max(real)
+        results = []
+        for v in vals:
+            if v is None:
+                results.append(50.0)  # 데이터 없음 → 중간값
+            elif hi == lo:
+                results.append(50.0)
+            else:
+                norm = (v - lo) / (hi - lo) * 100
+                results.append(100 - norm if reverse else norm)
+        return results
 
     sales_norm = _minmax([r["sales_growth"] for r in raw])
     pop_norm = _minmax([r["pop_growth"] for r in raw])
     rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True)  # 낮은 임대료 = 높은 점수
+
+    # 데이터 커버리지 로그
+    sales_hit = sum(1 for r in raw if r["sales_growth"] is not None)
+    pop_hit = sum(1 for r in raw if r["pop_growth"] is not None)
+    rent_hit = sum(1 for r in raw if r["avg_rent"] is not None)
+    print(f"[district_ranking] 데이터 커버리지 — 매출:{sales_hit}/16, 인구:{pop_hit}/16, 임대료:{rent_hit}/16")
 
     ranked = []
     for i, r in enumerate(raw):
         score = sales_norm[i] * w_sales + pop_norm[i] * w_pop + rent_norm[i] * w_rent
 
         # 예산 초과 페널티
-        if budget_per_3_3m2 > 0 and r["avg_rent"] > 0:
+        if budget_per_3_3m2 > 0 and r["avg_rent"] is not None and r["avg_rent"] > 0:
             if r["avg_rent"] > budget_per_3_3m2 * 1.5:
                 score *= 0.5
             elif r["avg_rent"] > budget_per_3_3m2:
@@ -200,14 +266,14 @@ def _normalize_and_rank(
         elif vacancy_rate >= 5.0:
             score *= 0.85  # 공실률 5~10%: -15%
 
-        # 용도지역 규제 패널티: legal_node와 동일한 _DISTRICT_ZONE_MAP/_ZONING_RULES 사용
+        # 용도지역 규제 패널티: legal_node와 동일한 DISTRICT_ZONE_MAP/ZONING_RULES 사용
         zoning_risk = "safe"
         if business_type:
             type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(
                 business_type, business_type
             )
-            zone = _DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
-            rules = _ZONING_RULES.get(zone, {"허용": [], "제한": []})
+            zone = DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
+            rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
             if type_label in rules["제한"]:
                 zoning_risk = "danger"
                 score *= 0.50  # 영업 제한 업종: -50%
@@ -218,12 +284,16 @@ def _normalize_and_rank(
         ranked.append(
             {
                 **r,
+                # None → 0.0으로 직렬화 (프론트엔드 호환)
+                "sales_growth": r["sales_growth"] if r["sales_growth"] is not None else 0.0,
+                "pop_growth": r["pop_growth"] if r["pop_growth"] is not None else 0.0,
+                "avg_rent": r["avg_rent"] if r["avg_rent"] is not None else 0.0,
                 "score": round(score, 1),
                 "sales_score": round(sales_norm[i], 1),
                 "pop_score": round(pop_norm[i], 1),
                 "rent_score": round(rent_norm[i], 1),
-                "vacancy_rate": vacancy_rate,  # 프론트엔드 표시용
-                "zoning_risk": zoning_risk,  # 프론트엔드 표시용
+                "vacancy_rate": vacancy_rate,
+                "zoning_risk": zoning_risk,
             }
         )
 
@@ -250,12 +320,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
 
-    # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환
-    cache_key = f"v2:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
+    cache_key = f"v3:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        cached = await _redis.get(cache_key)
+        cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
             print(f"[district_ranking] 캐시 히트: {cache_key}")
@@ -264,7 +334,8 @@ async def district_ranking_node(state: AgentState) -> dict:
                 "scouting_results": cached_data["scouting_results"],
                 "winner_district": cached_data["winner_district"],
                 "top_3_candidates": cached_data["top_3_candidates"],
-                "vacancy_applied": cached_data["vacancy_applied"],
+                "vacancy_applied": cached_data.get("vacancy_applied", False),
+                "vacancy_spots": cached_data.get("vacancy_spots", []),
                 "current_agent": "district_ranking",
             }
     except Exception as e:
@@ -304,7 +375,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     winner = ranked[0]["district"] if ranked else state.get("target_district", "서교동")
     top_3 = [r["district"] for r in ranked[1:4]]
 
-    print(f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied} ---")
+    # winner + top_3 + 사용자 선택 동의 실제 공실 좌표 조회
+    target_district = state.get("target_district", winner)
+    dong_names = list(dict.fromkeys([winner, target_district] + top_3))
+    vacancy_spots = await _load_vacancy_spots(dong_names)
+
+    print(f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied}, 스팟={len(vacancy_spots)}개 ---")
 
     # Redis 캐시 저장
     if _redis is not None:
@@ -335,6 +411,7 @@ async def district_ranking_node(state: AgentState) -> dict:
         "scouting_results": ranked,
         "winner_district": winner,
         "top_3_candidates": top_3,
-        "vacancy_applied": vacancy_applied,  # 공실 DB 로드 성공 여부
+        "vacancy_applied": vacancy_applied,
+        "vacancy_spots": vacancy_spots,
         "current_agent": "district_ranking",
     }

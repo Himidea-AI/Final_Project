@@ -75,6 +75,7 @@ export interface LegalRisk {
   type: string;
   risk_level: string;
   detail: string;
+  recommendation?: string;
 }
 
 /** 시뮬레이션 결과 출력 */
@@ -121,9 +122,20 @@ export interface SimulationOutput {
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
 export interface DistrictRanking {
+  rank: number;
   district: string;
   score: number;
-  [key: string]: unknown; // 노드별 확장 필드 허용
+  sales_growth: number;
+  sales_score: number;
+  pop_growth: number;
+  pop_score: number;
+  avg_rent: number;
+  rent_score: number;
+  vacancy_rate: number;
+  zoning_risk: 'safe' | 'caution' | 'danger';
+  bep_months?: number | null;
+  closure_rate?: number | null;
+  [key: string]: unknown;
 }
 
 export interface AnalysisMetrics {
@@ -131,6 +143,8 @@ export interface AnalysisMetrics {
   growth_rate: number;
   competition_score: number;
   rent_affordability: string;
+  main_target_age?: string;
+  peak_time?: string;
 }
 
 /** Job 상태 */

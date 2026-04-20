@@ -13,118 +13,18 @@
 
 import asyncio
 import json
-import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.llms import get_fast_llm
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
+from src.config.constants import DISTRICT_ZONE_MAP, ZONING_RULES
 from src.config.settings import settings
 from src.schemas.state import AgentState
 from src.schemas.structured_output import LegalBatchOutput
 from src.services.ftc_franchise import FtcFranchiseClient
 from src.services.law_api import LawApiClient
-
-
-# ── 용도지역별 허용 업종 규칙 ────────────────────────────────────────────────
-# 마포구 내 주요 용도지역과 음식점/카페 영업 가능 여부
-# (실제 입지 확인 시 국토부 토지이음 API로 보완 필요)
-_ZONING_RULES: dict[str, dict] = {
-    "제1종전용주거지역": {"허용": [], "제한": ["카페", "음식점", "편의점"]},
-    "제2종전용주거지역": {"허용": [], "제한": ["카페", "음식점", "편의점"]},
-    "제1종일반주거지역": {"허용": ["편의점"], "제한": ["카페", "음식점"]},
-    "제2종일반주거지역": {"허용": ["편의점", "카페"], "제한": ["음식점"]},
-    "제3종일반주거지역": {"허용": ["편의점", "카페", "음식점"], "제한": []},
-    "준주거지역": {"허용": ["편의점", "카페", "음식점"], "제한": []},
-    "일반상업지역": {"허용": ["편의점", "카페", "음식점"], "제한": []},
-    "근린상업지역": {"허용": ["편의점", "카페", "음식점"], "제한": []},
-}
-
-# 마포구 대부분의 상권(서교동, 합정동, 공덕동 등)은 근린상업/일반상업 지역
-# 행정동 16개 + 법정동 별칭 포함 (법정동으로 입력해도 동일 결과 반환)
-_DISTRICT_ZONE_MAP: dict[str, str] = {
-    # ── 행정동 (16개) ──────────────────────────────────────────
-    "서교동": "일반상업지역",
-    "합정동": "근린상업지역",
-    "공덕동": "일반상업지역",
-    "망원1동": "근린상업지역",
-    "망원2동": "근린상업지역",
-    "연남동": "제3종일반주거지역",
-    "대흥동": "제2종일반주거지역",
-    "염리동": "제2종일반주거지역",
-    "성산1동": "근린상업지역",
-    "성산2동": "근린상업지역",
-    "상암동": "일반상업지역",
-    "아현동": "근린상업지역",
-    "도화동": "근린상업지역",
-    "용강동": "근린상업지역",
-    "신수동": "제2종일반주거지역",
-    "서강동": "근린상업지역",
-    # ── 법정동 별칭 → 행정동 용도지역으로 매핑 ────────────────
-    # 망원1·2동 권역
-    "망원동": "근린상업지역",
-    # 성산1·2동 권역
-    "성산동": "근린상업지역",
-    # 공덕동 권역
-    "토정동": "일반상업지역",
-    "마포동": "일반상업지역",
-    "신정동": "일반상업지역",
-    "대도동": "일반상업지역",
-    # 도화동 권역
-    "현석동": "근린상업지역",
-    # 서강동 권역
-    "창전동": "근린상업지역",
-    "노고산동": "근린상업지역",
-    "산천동": "근린상업지역",
-    # 합정동 권역
-    "양화동": "근린상업지역",
-    # 대흥동 권역
-    "용문동": "제2종일반주거지역",
-    # 아현동 권역
-    "공덕1동": "일반상업지역",
-    "공덕2동": "일반상업지역",
-    # 상암동 권역
-    "성암동": "일반상업지역",
-    "중암동": "일반상업지역",
-}
-
-
-def _extract_risk_level(llm_response: str) -> str:
-    """
-    LLM 응답에서 리스크 레벨 파싱.
-
-    1차: 응답 전체에서 JSON {"risk_level": "..."} 패턴 탐색 (마크다운 코드블록 포함)
-    2차: 마지막 줄 JSON 파싱
-    3차: 키워드 매칭 fallback (LLM이 JSON 형식을 따르지 않은 경우)
-    """
-    import json
-
-    # 마크다운 코드블록 제거: ```json ... ``` 또는 ``` ... ```
-    cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", llm_response, flags=re.DOTALL).strip()
-
-    # 1차: 응답 전체에서 JSON 패턴 탐색 (가장 신뢰도 높음)
-    match = re.search(r'\{"risk_level"\s*:\s*"(safe|caution|danger)"\}', cleaned)
-    if match:
-        return match.group(1)
-
-    # 2차: 마지막 줄 JSON 파싱
-    last_line = cleaned.splitlines()[-1].strip() if cleaned else ""
-    try:
-        data = json.loads(last_line)
-        level = data.get("risk_level", "").lower()
-        if level in ("safe", "caution", "danger"):
-            return level
-    except (json.JSONDecodeError, AttributeError):
-        pass
-
-    # 3차 fallback: 키워드 매칭
-    lower = cleaned.lower()
-    if "위험" in lower or "danger" in lower or "위반" in lower:
-        return "danger"
-    if "안전" in lower or "safe" in lower or "문제없" in lower:
-        return "safe"
-    return "caution"
 
 
 async def _search_ftc_from_db(brand_name: str) -> dict | None:
@@ -286,8 +186,8 @@ async def check_zoning_regulation(state: AgentState) -> dict:
     district = state.get("target_district", "")
     business_type = state.get("business_type", "")  # "cafe" | "restaurant" | "convenience"
 
-    zone = _DISTRICT_ZONE_MAP.get(district, "근린상업지역")  # 알 수 없는 동은 상업지역으로 가정
-    rules = _ZONING_RULES.get(zone, {"허용": [], "제한": []})
+    zone = DISTRICT_ZONE_MAP.get(district, "근린상업지역")  # 알 수 없는 동은 상업지역으로 가정
+    rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
 
     # business_type 코드 → 한글 매핑
     type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(business_type, business_type)
@@ -336,11 +236,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
-    cache_key = f"v2:legal:{brand}:{district}:{business_type}"
+    cache_key = f"v3:legal:{brand}:{district}:{business_type}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        cached = await _redis.get(cache_key)
+        cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
             legal_risks = cached_data.get("legal_risks")

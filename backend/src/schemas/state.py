@@ -45,6 +45,8 @@ class AgentState(TypedDict):
     top_3_candidates: list[str]  # 선별된 상위 3개 행정동 리스트
     winner_district: str  # 최종 선정된 1순위 지역명 (Winner)
     brand_analysis: dict[str, Any]  # 브랜드 전국 평균 vs 지역 분석 결과
+    vacancy_spots: list[dict[str, Any]]  # 추천 동들의 실제 공실 좌표 목록
+    vacancy_applied: bool  # 공실 DB 반영 여부
 
     # 5. 분석 결과 및 상태 제어
     analysis_results: dict[str, Any]

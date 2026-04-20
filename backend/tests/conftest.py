@@ -14,10 +14,12 @@ import sys
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-# .env 파일 로드 — settings.py 임포트 전에 실행하여 POSTGRES_URL 등 반영
+# .env 파일 로드 — 루트 .env를 명시적으로 지정 (backend/ 내에 .env가 없으므로)
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(_ROOT_ENV)
 
 # settings 모듈 임포트 전에 환경변수 설정 (싱글톤 초기화 시 반영됨)
 os.environ["APP_MODE"] = "PROD"

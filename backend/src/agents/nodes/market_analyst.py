@@ -30,7 +30,7 @@ async def market_analyst_node(state: AgentState) -> dict:
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        cached = await _redis.get(cache_key)
+        cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
             print(f"[market_analyst] 캐시 히트: {cache_key}")
@@ -57,8 +57,28 @@ async def market_analyst_node(state: AgentState) -> dict:
         await db_client.connect()
 
     # [3] 실데이터 수집 (MarketDataTool 사용)
-    lat = state.get("market_data", {}).get("lat", 37.5565)
-    lon = state.get("market_data", {}).get("lng", 126.9239)
+    # 마포구 16개 행정동 중심 좌표 (경쟁사 반경 분석용)
+    _DONG_COORDS: dict = {
+        "아현동":  (37.5502, 126.9594),
+        "공덕동":  (37.5430, 126.9519),
+        "도화동":  (37.5393, 126.9457),
+        "용강동":  (37.5382, 126.9383),
+        "대흥동":  (37.5480, 126.9437),
+        "염리동":  (37.5523, 126.9474),
+        "신수동":  (37.5453, 126.9361),
+        "서강동":  (37.5493, 126.9347),
+        "서교동":  (37.5565, 126.9239),
+        "합정동":  (37.5497, 126.9143),
+        "망원1동": (37.5558, 126.9059),
+        "망원2동": (37.5531, 126.9021),
+        "연남동":  (37.5617, 126.9226),
+        "성산1동": (37.5663, 126.9069),
+        "성산2동": (37.5706, 126.9111),
+        "상암동":  (37.5789, 126.8899),
+    }
+    _default_lat, _default_lng = _DONG_COORDS.get(target_district, (37.5565, 126.9239))
+    lat = state.get("market_data", {}).get("lat") or _default_lat
+    lon = state.get("market_data", {}).get("lng") or _default_lng
     commercial_radius = state.get("commercial_radius", 500)
 
     # 병렬 데이터 수집 (속도 최적화)

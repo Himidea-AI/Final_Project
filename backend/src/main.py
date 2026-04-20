@@ -180,6 +180,8 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "scouting_results": [],
         "top_3_candidates": [],
         "winner_district": input_data.target_district,
+        "vacancy_spots": [],
+        "vacancy_applied": False,
         "brand_analysis": {},
         "analysis_results": {},
         "analysis_metrics": {},
@@ -226,6 +228,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 r.get("level", "safe").lower(), "LOW"
             ),
             "detail": r.get("summary", ""),
+            "recommendation": r.get("recommendation", ""),
         }
         for r in legal_risks_raw
     ]
@@ -244,6 +247,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     district_rankings = _sanitize(analysis.get("district_rankings", []))
     winner_district = _sanitize(analysis.get("winner_district", target_dist))
     top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
+    vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
     final_report = analysis.get("final_report") or {}
@@ -329,7 +333,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         shap_result = None
 
     # sim_result에서 타겟 동 예측값 추출 (모델 호출 성공 시)
-    _sim_closure_rate = sim_result["survival"]["closure_rate"] if "sim_result" in locals() else None
+    _sim_closure_rate = sim_result["closure_rate"]["closure_rate"] if "sim_result" in locals() else None
     _sim_bep_months = sim_result["bep"]["bep_months"] if "sim_result" in locals() else None
 
     # market_report에 모델 기반 폐업률 추가 (0~1 소수)
@@ -386,8 +390,21 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                     "label": target_dist,
                     "type": "candidate",
                 }
+            ]
+            + [
+                {
+                    "id": f"vacancy_{s['id']}",
+                    "lat": s["lat"],
+                    "lng": s["lon"],
+                    "label": s["dong_name"],
+                    "type": "vacancy",
+                    "listing_count": s["listing_count"],
+                }
+                for s in vacancy_spots
+                if s.get("lat") and s.get("lon")
             ],
         },
+        "vacancy_spots": vacancy_spots,
         "financial_report": md.get("financial_metrics", {}),
         # TCN SHAP 분석 결과 (실패 시 None)
         "shap_result": shap_result,
@@ -800,6 +817,7 @@ async def run_simulation(input_data: SimulationInput):
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
         import traceback
+
         print(f"!!! [SIMULATE ERROR] !!! {type(e).__name__}: {e}")
         traceback.print_exc()
         return {
