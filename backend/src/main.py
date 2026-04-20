@@ -167,6 +167,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "business_type": normalized_biz,
         "brand_name": normalized_brand,
         "target_district": input_data.target_district,
+        "industry_filter": getattr(input_data, "industry_filter", None),
         "commercial_radius": getattr(input_data, "commercial_radius", 500),
         "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
         "store_area": getattr(input_data, "store_area", 15.0),
@@ -188,6 +189,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "current_agent": "start",
         "next_step": "",
         "errors": [],
+        "competitor_intel_result": {},
     }
 
     task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0))
@@ -218,7 +220,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     lat = md.get("lat") if md.get("lat") else DEFAULT_LAT
     lng = md.get("lng") if md.get("lng") else DEFAULT_LNG
 
-    # 법률 리스크 리스트 변환
+    # 법률 리스크 리스트 변환 (articles 포함 — 프론트 근거 조항 drawer용)
     legal_risks_raw = analysis.get("legal_risks") or []
     legal_risks = [
         {
@@ -228,6 +230,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             ),
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
+            "articles": r.get("articles", []),
         }
         for r in legal_risks_raw
     ]
@@ -378,6 +381,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         ],
         "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
         "legal_risks": legal_risks,
+        "demographic_report": analysis.get("demographic_report"),
+        "trend_forecast": analysis.get("trend_forecast"),
         "map_data": {
             "center": {"lat": lat, "lng": lng},
             "markers": [
@@ -406,6 +411,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "financial_report": md.get("financial_metrics", {}),
         # TCN SHAP 분석 결과 (실패 시 None)
         "shap_result": shap_result,
+        # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
+        "competitor_intel": _sanitize(state.get("competitor_intel_result") or {}),
     }
 
     print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")
@@ -830,6 +837,8 @@ async def run_simulation(input_data: SimulationInput):
             "quarterly_projection": [],
             "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",
             "analysis_metrics": {},
+            "demographic_report": None,
+            "trend_forecast": None,
             "map_data": None,
             "financial_report": {},
         }

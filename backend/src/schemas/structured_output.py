@@ -80,3 +80,16 @@ class FinalStrategyResult(BaseModel):
     profit_simulation: ProfitSimulation = Field(..., description="수익 시뮬레이션 결과")
     competitor_analysis: CompetitorAnalysis = Field(..., description="경쟁 점포 분석 결과")
     final_recommendation: str = Field(..., description="최종 전략적 제언 및 결론")
+
+
+class CompetitorIntelOutput(BaseModel):
+    """경쟁 지형·카니발·차별화 전략 LLM 구조화 출력."""
+
+    market_entry_signal: Literal["green", "yellow", "red"] = Field(
+        ..., description="시장 진입 신호등 (green=진입 권장, yellow=조건부, red=비권장)"
+    )
+    differentiation_position: str = Field(..., description="경쟁 지형 내 브랜드의 차별화 포지셔닝 한 줄 요약")
+    key_opportunities: List[str] = Field(default_factory=list, description="포착해야 할 기회 요소 2~4개")
+    key_risks: List[str] = Field(default_factory=list, description="주의해야 할 리스크 요소 2~4개")
+    recommended_actions: List[str] = Field(default_factory=list, description="본사 영업팀 추천 액션 2~4개")
+    narrative: str = Field(..., description="3~5줄 본사 보고용 경쟁 상황·카니발·권고 종합 서술")

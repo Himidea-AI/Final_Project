@@ -70,12 +70,61 @@ export interface DistrictComparison {
   cannibalization: number;
 }
 
+/** 법률 리스크 — 근거 조항 (가맹사업법 등) */
+export interface LegalRiskArticle {
+  article_ref: string;
+  content: string;
+}
+
 /** 법률 리스크 */
 export interface LegalRisk {
   type: string;
   risk_level: string;
   detail: string;
   recommendation?: string;
+  articles?: LegalRiskArticle[];
+}
+
+/** 폐업 위험도 기여 피처 */
+export interface ClosureRiskSignal {
+  feature: string;
+  contribution: number;
+}
+
+/** 폐업 위험도 결과 (B2 수지니) */
+export interface ClosureRisk {
+  risk_score: number;
+  risk_level: 'safe' | 'caution' | 'danger';
+  top_signals: ClosureRiskSignal[];
+  is_mock: boolean;
+}
+
+/** 트렌드 전망 (trend_forecaster 에이전트) */
+export interface TrendForecast {
+  forecast?: {
+    score?: number;
+    direction?: string; // growth | stable | decline
+    confidence?: string; // high | medium | low
+    narrative?: string;
+  };
+  industry_trend?: { direction?: string }; // up | flat | down
+  change_ix?: { change_ix_label?: string }; // 상권확장 | 상권유지 | 상권축소 | 상권쇠퇴
+  macro?: Record<string, unknown>;
+}
+
+/** 인구통계 심층 분석 (demographic_depth 에이전트) */
+export interface DemographicReport {
+  core_demographic: { age: string; gender: string; share: number };
+  top_3_age_groups: { age_group: string; share: number }[];
+  peak_consumption_hours: string[];
+  weekday_weekend_ratio: number;
+  resident_visitor_ratio: number | null;
+  area_income_level: string; // high | mid | low | unknown
+  population_trend: string; // growing | stable | declining | unknown
+  elderly_ratio: number | null;
+  brand_target_match_score: number | null;
+  match_rationale: string | null;
+  narrative: string;
 }
 
 /** 시뮬레이션 결과 출력 */
@@ -118,6 +167,14 @@ export interface SimulationOutput {
     base: { quarter: number; revenue: number }[];
     pessimistic: { quarter: number; revenue: number }[];
   } | null;
+  // [B2 수지니] 폐업 위험도 분석 결과
+  closure_risk?: ClosureRisk | null;
+  // [PR #72] 경쟁 매장 인텔리전스 (500m 반경 카니발/포화도/차별화)
+  competitor_intel?: Record<string, unknown> | null;
+  // [PR #71] 트렌드 전망 (trend_forecaster 에이전트)
+  trend_forecast?: TrendForecast | null;
+  // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)
+  demographic_report?: DemographicReport | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */

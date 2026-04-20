@@ -1,11 +1,13 @@
 """
 시뮬레이션 요청 입력 모델 — 클라이언트에서 API로 보내는 요청 스키마
 """
+
 from pydantic import BaseModel, Field
 
 
 class ExistingStoreInput(BaseModel):
     """기존 매장 정보 입력"""
+
     district: str
     address: str
     monthly_revenue: int = 0
@@ -13,6 +15,7 @@ class ExistingStoreInput(BaseModel):
 
 class SimulationInput(BaseModel):
     """시뮬레이션 요청 입력 스키마"""
+
     business_type: str = Field(..., description="업종 코드 (cafe, restaurant, convenience)")
     brand_name: str = Field(..., description="브랜드명")
     target_district: str = Field(..., description="출점 후보 행정동")
@@ -29,3 +32,6 @@ class SimulationInput(BaseModel):
     initial_capital: int = Field(default=50_000_000, description="초기 자본금 (원)")
     commercial_radius: int = Field(default=500, description="상권 분석 반경 (m)")
     population_weight: bool = Field(default=True, description="인구 가중치 반영 여부")
+    industry_filter: str | None = Field(
+        default=None, description="CS 업종 코드 필터 (예: CS100010). 미지정 시 전체 업종."
+    )
