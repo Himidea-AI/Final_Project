@@ -13,13 +13,16 @@
 
 import asyncio
 import json
+import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
+
+logger = logging.getLogger(__name__)
 
 from src.agents.llms import get_fast_llm
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
-from src.config.constants import DISTRICT_ZONE_MAP, ZONING_RULES
+from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, ZONING_RULES
 from src.config.settings import settings
 from src.schemas.state import AgentState
 from src.schemas.structured_output import LegalBatchOutput
@@ -43,16 +46,17 @@ async def _search_ftc_from_db(brand_name: str) -> dict | None:
         async with db_client.get_session() as session:
             from sqlalchemy import text
 
-            # LIKE 검색 (부분 일치)
+            # LIKE 검색 (부분 일치) — 브랜드명 내 %,_ 문자 이스케이프
+            safe_brand = brand_name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             stmt = text("""
                 SELECT yr, "corpNm", "brandNm", "frcsCnt", "newFrcsRgsCnt",
                        "ctrtEndCnt", "ctrtCncltnCnt", "avrgSlsAmt"
                 FROM ftc_brand_franchise
-                WHERE "brandNm" LIKE :pattern
+                WHERE "brandNm" LIKE :pattern ESCAPE '\\'
                 ORDER BY yr DESC
                 LIMIT 1
             """)
-            row = (await session.execute(stmt, {"pattern": f"%{brand_name}%"})).fetchone()
+            row = (await session.execute(stmt, {"pattern": f"%{safe_brand}%"})).fetchone()
 
             if not row:
                 return None
@@ -74,7 +78,7 @@ async def _search_ftc_from_db(brand_name: str) -> dict | None:
             }
 
     except Exception as e:
-        print(f"[_search_ftc_from_db] DB 조회 실패: {e}")
+        logger.warning(f"[_search_ftc_from_db] DB 조회 실패: {e}")
         return None
 
 
@@ -110,7 +114,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             client = FtcFranchiseClient(api_key=settings.ftc_api_key)
             detail = await client.get_brand_detail(brand)
         except Exception as e:
-            print(f"[check_ftc_franchise] API 실패 (DB fallback 사용): {e}")
+            logger.warning(f"[check_ftc_franchise] API 실패 (DB fallback 사용): {e}")
 
     if not detail:
         return {
@@ -189,8 +193,8 @@ async def check_zoning_regulation(state: AgentState) -> dict:
     zone = DISTRICT_ZONE_MAP.get(district, "근린상업지역")  # 알 수 없는 동은 상업지역으로 가정
     rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
 
-    # business_type 코드 → 한글 매핑
-    type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(business_type, business_type)
+    # business_type 코드 → 한글 매핑 (constants.py 단일 소스)
+    type_label = BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
 
     if type_label in rules["제한"]:
         level = "danger"
@@ -234,9 +238,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
     district = state.get("target_district", "")
     business_type = state.get("business_type", "")
 
+    # 캐시 키 정규화 — 영문/한글 혼용 시 동일 캐시 히트 보장 (constants.py 단일 소스)
+    _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
+
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
-    cache_key = f"v3:legal:{brand}:{district}:{business_type}"
+    cache_key = f"v3:legal:{brand}:{district}:{_normalized_biz}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -246,14 +253,17 @@ async def _run_legal_pipeline(state: dict) -> dict:
             legal_risks = cached_data.get("legal_risks")
             legal_info = cached_data.get("legal_info")
             if legal_risks is None or legal_info is None:
-                print(f"[legal_node] 캐시 데이터 손상 - 재계산: {cache_key}")
+                logger.warning(f"[legal_node] 캐시 데이터 손상 - 재계산: {cache_key}")
             else:
-                print(f"[legal_node] 캐시 히트: {cache_key}")
+                logger.info(f"[legal_node] 캐시 히트: {cache_key}")
                 analysis = dict(state.get("analysis_results") or {})
                 analysis["legal_risks"] = legal_risks
                 overall_cached = cached_data.get("overall_legal_risk", "caution")
                 analysis["overall_legal_risk"] = overall_cached
-                await _redis.aclose()
+                try:
+                    await _redis.aclose()
+                except Exception:
+                    pass
                 return {
                     **state,
                     "analysis_results": analysis,
@@ -261,7 +271,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     "overall_legal_risk": overall_cached,
                 }
     except Exception as e:
-        print(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        logger.warning(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
         if _redis is not None:  # 조회 실패 시 연결 누수 방지
             try:
                 await _redis.aclose()
@@ -269,7 +279,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 pass
         _redis = None
 
-    retriever = LegalDocumentRetriever()
+    # LegalDocumentRetriever — 모듈 레벨 싱글톤 (임베딩 모델 재로딩 방지)
+    if not hasattr(_run_legal_pipeline, "_retriever"):
+        _run_legal_pipeline._retriever = LegalDocumentRetriever()
+    retriever = _run_legal_pipeline._retriever
 
     franchise_q = f"{brand} 영업지역 보장 동일 브랜드 출점 제한 가맹사업법"
     lease_q = "권리금 회수 기회 보호 계약갱신요구권 환산보증금 상가임대차보호법"
@@ -285,7 +298,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
     sewage_q = f"{business_type} 오수처리 유류분리기 그리스트랩 폐수 하수도"
     fair_trade_q = f"{brand} 가맹본부 불공정거래 거래강제 필수물품 공급"
 
-    law_client = LawApiClient()
+    # LawApiClient — 모듈 레벨 싱글톤 (매 요청 인스턴스 생성 방지)
+    if not hasattr(_run_legal_pipeline, "_law_client"):
+        _run_legal_pipeline._law_client = LawApiClient()
+    law_client = _run_legal_pipeline._law_client
 
     # zoning: I/O 없는 규칙 기반 — 즉시 실행 후 Phase 1 병렬 대기
     zoning_result = await check_zoning_regulation(state)
@@ -322,13 +338,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # 예외 결과를 빈 리스트/caution dict로 대체
     def _safe_list(r: object) -> list:
         if isinstance(r, Exception):
-            print(f"[legal_node] Phase 1 검색 실패 (무시하고 계속): {r}")
+            logger.warning(f"[legal_node] Phase 1 검색 실패 (무시하고 계속): {r}")
             return []
         return r  # type: ignore[return-value]
 
     def _safe_ftc(r: object) -> dict:
         if isinstance(r, Exception):
-            print(f"[legal_node] FTC API 실패 (무시하고 계속): {r}")
+            logger.warning(f"[legal_node] FTC API 실패 (무시하고 계속): {r}")
             return {
                 "type": "ftc_franchise",
                 "level": "caution",
@@ -394,6 +410,18 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "fair_trade_law": "공정거래법 — 가맹본부 불공정 거래 금지, 부당 거래 강제(필수 물품 고가 공급), 공정위 신고",
     }
 
+    # 법률별 RAG 조문 번호 추출 (articles 필드 채우기용)
+    def _extract_articles(docs: list[dict]) -> list[str]:
+        """RAG 문서 메타데이터에서 조문 번호(article) 추출, 중복 제거."""
+        seen = set()
+        articles = []
+        for d in docs:
+            art = d.get("metadata", {}).get("article", "")
+            if art and art != "전문" and art not in seen:
+                seen.add(art)
+                articles.append(art)
+        return articles[:5]  # 최대 5개
+
     # 모든 RAG 문서를 법률별로 정리하여 컨텍스트 구성
     docs_context = ""
     docs_map = {
@@ -410,13 +438,14 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "sewage_law": sewage_docs,
         "fair_trade_law": fair_trade_docs,
     }
+    # 법률별 균등 분배 — 12개 법률에 각 최대 1000자씩 (뒤쪽 법률 잘림 방지)
+    _MAX_PER_LAW = 1000
     for law_type, docs in docs_map.items():
         if docs:
-            snippets = " | ".join(d["content"][:600] for d in docs[:4])
+            snippets = " | ".join(d["content"][:400] for d in docs[:3])
+            if len(snippets) > _MAX_PER_LAW:
+                snippets = snippets[:_MAX_PER_LAW] + "…"
             docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
-
-    if len(docs_context) > 12000:
-        docs_context = docs_context[:12000] + "..."
 
     items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
 
@@ -454,7 +483,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         "type": item.type,
                         "level": item.level,
                         "summary": item.summary,
-                        "articles": [],
+                        "articles": _extract_articles(docs_map.get(item.type, [])),
                         "recommendation": item.recommendation,
                     }
                 )
@@ -471,9 +500,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         "recommendation": "전문가 상담 권장",
                     }
                 )
-        print(f"[legal_node] 배치 LLM 완료 (Structured Output) - {len(batch_results)}개 항목 처리")
+        logger.info(f"[legal_node] 배치 LLM 완료 (Structured Output) - {len(batch_results)}개 항목 처리")
     except Exception as e:
-        print(f"[legal_node] 배치 LLM 실패: {e} - 전체 caution 처리")
+        logger.error(f"[legal_node] 배치 LLM 실패: {e} - 전체 caution 처리")
         batch_results = [
             {
                 "type": t,
@@ -558,8 +587,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
     analysis["overall_legal_risk"] = overall_level
 
     # Redis 캐시 저장 — overall_legal_risk 포함
-    if _redis is not None:
-        try:
+    # finally 블록으로 파이프라인 중간 exception 시에도 반드시 연결 종료
+    try:
+        if _redis is not None:
             await _redis.set(
                 cache_key,
                 json.dumps(
@@ -568,11 +598,15 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 ),
                 ex=_CACHE_TTL,
             )
-            print(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
-        except Exception as e:
-            print(f"[legal_node] Redis 캐시 저장 실패 (무시하고 계속): {e}")
-        finally:
-            await _redis.aclose()
+            logger.info(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+    except Exception as e:
+        logger.warning(f"[legal_node] Redis 캐시 저장 실패 (무시하고 계속): {e}")
+    finally:
+        if _redis is not None:
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
 
     return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
 

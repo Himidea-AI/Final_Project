@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from src.config.settings import settings
 from dotenv import load_dotenv
 
-# 커넥션 풀 설정 — 동시 요청 대응
-_POOL_SIZE = 10  # 기본 커넥션 수
-_MAX_OVERFLOW = 20  # 초과 허용 커넥션 수 (최대 30개 동시 접속)
+# 커넥션 풀 설정 — RDS max_connections=81 제약 고려
+# db_client(market/ranking)가 별도 풀을 사용하므로 RAG용은 최소화
+_POOL_SIZE = 3  # 기본 커넥션 수 (10→3 축소)
+_MAX_OVERFLOW = 5  # 초과 허용 커넥션 수 (20→5 축소, 최대 8개)
 _POOL_TIMEOUT = 30  # 커넥션 대기 타임아웃(초)
 _POOL_PRE_PING = True  # 끊긴 커넥션 자동 재연결
 
@@ -23,18 +24,31 @@ load_dotenv()
 _LOCAL_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 
 
+# 모듈 레벨 싱글톤 — 매 요청마다 엔진/임베딩 재생성 방지
+_singleton_instance: "LegalVectorDB | None" = None
+
+
 class LegalVectorDB:
     """
     지연 초기화 방식의 PGVector 클라이언트 — DEV 모드 완벽 지원
 
     langchain_postgres (JSONB 스키마) 기반.
     langchain_community.PGVector와 스키마 비호환 — 혼용 금지.
+    싱글톤: 동일 collection_name이면 엔진/임베딩을 재사용.
     """
 
+    def __new__(cls, collection_name: str = "legal_documents"):
+        global _singleton_instance
+        if _singleton_instance is None or _singleton_instance.collection_name != collection_name:
+            _singleton_instance = super().__new__(cls)
+            _singleton_instance.collection_name = collection_name
+            _singleton_instance._vectorstore = None
+            _singleton_instance._embeddings = None
+        return _singleton_instance
+
     def __init__(self, collection_name: str = "legal_documents"):
-        self.collection_name = collection_name
-        self._vectorstore = None
-        self._embeddings = None
+        # __new__에서 이미 초기화됨 — 중복 초기화 방지
+        pass
 
     @property
     def embeddings(self):
