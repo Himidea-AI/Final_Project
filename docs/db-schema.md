@@ -13,7 +13,7 @@
 | 인구 통계 (마포) | living_population, sgis_population, sgis_household, sgis_business, mapo_resident_pop |
 | 상권/매출 (마포) | golmok_commercial, district_sales, golmok_sales, golmok_stores |
 | 점포 | store_info, store_quarterly |
-| 임대료 | rent_cost, golmok_rent |
+| 임대료 | rent_cost, golmok_rent, small_store_rent_q |
 | 마스터 | dong_mapping |
 | 시뮬레이션 | simulation_result |
 | 회원/인증 | users, manager_users, invite_codes |
@@ -207,6 +207,31 @@
 | `source` | varchar(20) | 데이터 출처 | building_rent |
 
 **data_type 종류**: `building_rent`(매장용빌딩 임대료), `rent_small_store`(소형점포 임대료), `transaction`(실거래가)
+
+---
+
+## 9-1. small_store_rent_q — 소규모상가 임대료 원천 전수 (REB)
+
+> 출처: 한국부동산원 R-ONE OpenAPI (`SttsApiTblData.do`, 7개 STATBL_ID 통합)
+> 기간: 2015 Q1 ~ 2025 Q4 (분기, 11년, 276개 상권)
+> 적재 스크립트: `scripts/collect_reb_small_store_rent.py`
+> PK: id (auto) | UNIQUE: (cls_id, year, quarter) | 인덱스: region, (year, quarter)
+
+| 컬럼명 | 타입 | 설명 | 예시 |
+|--------|------|------|------|
+| `id` | bigserial (PK) | 자동증가 PK | 1 |
+| `cls_id` | int | REB 지역 코드 (조인 키, 안정적 숫자) | 520004 |
+| `cls_full_nm` | text | 전체 계층명 | `서울>도심>광화문` |
+| `cls_nm` | text | 최하위 지역명 | `광화문` |
+| `region` | text | `cls_full_nm` 동일값 (레거시 호환) | `서울>도심>광화문` |
+| `year` | int | 연도 | 2025 |
+| `quarter` | int | 분기 | 4 |
+| `rent` | float | 임대료 (천원/㎡, 전용+공용) | 95.03 |
+| `statbl_id` | text | 원천 통계표 ID (표본 재설정 경계 식별) | A_2024_00279 |
+
+**참고**
+- `rent_cost`의 `data_type='rent_small_store'`가 정제·요약본이라면, 이 테이블은 REB 원천을 그대로 long 포맷으로 보존한 전수 스냅샷입니다.
+- 지역 조인은 `cls_id` 권장 (문자열 `region` 대비 안정).
 
 ---
 
