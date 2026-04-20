@@ -66,6 +66,10 @@ import { QuarterlyProjectionChart } from './components/SimulationResult/Quarterl
 import { ShapChart } from './components/SimulationResult/ShapChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
+import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
+import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
+import { ToastHost } from './components/simulation/ToastHost';
+import { useCompletionToast } from './hooks/useCompletionToast';
 
 interface SimResult {
   score: number;
@@ -6013,6 +6017,10 @@ export default function App() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'loading' | 'result'>('idle');
   const [activeMenuIndex, setActiveMenuIndex] = useState(2);
+
+  // Simulation background tracking (IM3-205): store가 페이지 이동과 독립적으로
+  // 시뮬레이션 상태를 보유. useCompletionToast는 running→done/error 전이 감지.
+  useCompletionToast();
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(null);
 
   // 페이지 전환 시 모든 스크롤 컨테이너를 최상단으로 리셋
@@ -6201,6 +6209,11 @@ export default function App() {
                   element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
                 />
               </Routes>
+
+              {/* IM3-205: 시뮬레이션 백그라운드 추적 — 라우팅 바깥에 마운트 */}
+              <SimulationFloatingWidget />
+              <BeforeUnloadGuard />
+              <ToastHost />
 
               {/* Global header — all scenes except intro */}
               {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
