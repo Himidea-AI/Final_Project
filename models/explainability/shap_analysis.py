@@ -265,10 +265,12 @@ _TCN_FEATURE_KO: dict[str, str] = {
     # RENT_FEATURES (2개) — 임대료 피처
     "rent_1f": "1층 임대료",
     "vacancy_rate": "공실률",
-    # EXTRA_FEATURES (3개) — 외부 지표 피처
+    # EXTRA_FEATURES (5개) — 외부 지표 피처
     "cpi_index": "소비자물가지수",
     "quarter_num": "분기 계절성",
     "trend_score": "네이버 검색 트렌드",
+    "holiday_count": "분기 공휴일 수",
+    "bus_flpop": "버스 정류장 유동인구",
     # GOLMOK_FEATURES (5개) — 골목상권 피처
     "store_franchise": "골목상권 프랜차이즈 점포 수",
     "store_normal": "골목상권 일반 점포 수",
