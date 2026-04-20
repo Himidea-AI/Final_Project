@@ -13,7 +13,7 @@
 | 인구 통계 (마포) | living_population, sgis_population, sgis_household, sgis_business, mapo_resident_pop |
 | 상권/매출 (마포) | golmok_commercial, district_sales, golmok_sales, golmok_stores |
 | 점포 | store_info, store_quarterly |
-| 임대료 | rent_cost, golmok_rent |
+| 임대료 | rent_cost, golmok_rent, small_store_rent_q |
 | 마스터 | dong_mapping |
 | 시뮬레이션 | simulation_result |
 | 회원/인증 | users, manager_users, invite_codes |
@@ -33,7 +33,7 @@
 |--------|------|------|------|
 | `date` | date | 기준 날짜 (PK) | 2024-01-15 |
 | `time_zone` | smallint | 시간대 구분 (0=일합계, 1~23) (PK) | 0 |
-| `dong_code` | varchar(10) | 행정동 코드 (PK) | 11440630 |
+| `dong_code` | varchar(10) | 행정동 코드 (PK) | 11440690 |
 | `dong_name` | varchar(20) | 행정동명 | 망원1동 |
 | `total_pop` | float | 전체 생활인구 | 17043.5 |
 | `male_0_9` ~ `male_70_74`, `male_70_plus` | float | 남성 5세 단위 연령대 (15구간) | 481.4 |
@@ -122,7 +122,7 @@
 | 컬럼명 | 타입 | 설명 | 예시 |
 |--------|------|------|------|
 | `quarter` | int | 분기 (YYYYQ) (PK) | 20244 |
-| `dong_code` | varchar(10) | 행정동코드 (PK) | 11440630 |
+| `dong_code` | varchar(10) | 행정동코드 (PK) | 11440690 |
 | `industry_code` | varchar(20) | 업종코드 (PK) | CS100001 |
 | `dong_name` | varchar(20) | 행정동명 | 망원1동 |
 | `industry_name` | varchar(50) | 업종명 | 한식음식점 |
@@ -150,7 +150,7 @@
 |--------|------|------|------|
 | `store_id` | varchar(20) | 상가업소번호 (PK) | MA0001234567 |
 | `store_name` | varchar(100) | 상호명 | 스타벅스 망원점 |
-| `dong_code` | varchar(10) | 행정동코드 | 11440630 |
+| `dong_code` | varchar(10) | 행정동코드 | 11440690 |
 | `dong_name` | varchar(20) | 행정동명 | 망원1동 |
 | `address` | text | 지번주소 | 마포구 망원동 123-4 |
 | `road_address` | text | 도로명주소 | 마포구 월드컵로 123 |
@@ -171,7 +171,7 @@
 | 컬럼명 | 타입 | 설명 | 예시 |
 |--------|------|------|------|
 | `quarter` | int | 분기 (PK) | 20244 |
-| `dong_code` | varchar(10) | 행정동코드 (PK) | 11440630 |
+| `dong_code` | varchar(10) | 행정동코드 (PK) | 11440690 |
 | `industry_code` | varchar(20) | 업종코드 (PK) | CS100001 |
 | `dong_name` | varchar(20) | 행정동명 | 망원1동 |
 | `industry_name` | varchar(50) | 업종명 | 한식음식점 |
@@ -210,6 +210,31 @@
 
 ---
 
+## 9-1. small_store_rent_q — 소규모상가 임대료 원천 전수 (REB)
+
+> 출처: 한국부동산원 R-ONE OpenAPI (`SttsApiTblData.do`, 7개 STATBL_ID 통합)
+> 기간: 2015 Q1 ~ 2025 Q4 (분기, 11년, 276개 상권)
+> 적재 스크립트: `scripts/collect_reb_small_store_rent.py`
+> PK: id (auto) | UNIQUE: (cls_id, year, quarter) | 인덱스: region, (year, quarter)
+
+| 컬럼명 | 타입 | 설명 | 예시 |
+|--------|------|------|------|
+| `id` | bigserial (PK) | 자동증가 PK | 1 |
+| `cls_id` | int | REB 지역 코드 (조인 키, 안정적 숫자) | 520004 |
+| `cls_full_nm` | text | 전체 계층명 | `서울>도심>광화문` |
+| `cls_nm` | text | 최하위 지역명 | `광화문` |
+| `region` | text | `cls_full_nm` 동일값 (레거시 호환) | `서울>도심>광화문` |
+| `year` | int | 연도 | 2025 |
+| `quarter` | int | 분기 | 4 |
+| `rent` | float | 임대료 (천원/㎡, 전용+공용) | 95.03 |
+| `statbl_id` | text | 원천 통계표 ID (표본 재설정 경계 식별) | A_2024_00279 |
+
+**참고**
+- `rent_cost`의 `data_type='rent_small_store'`가 정제·요약본이라면, 이 테이블은 REB 원천을 그대로 long 포맷으로 보존한 전수 스냅샷입니다.
+- 지역 조인은 `cls_id` 권장 (문자열 `region` 대비 안정).
+
+---
+
 ## 10. golmok_rent — 행정동별 환산임대료
 
 > 출처: 서울 상권분석서비스(신용보증재단 기반) | 기간: 2019 Q1 ~ 2024 Q4
@@ -220,7 +245,7 @@
 | `id` | int (PK, auto) | 자동증가 PK | 1 |
 | `year` | smallint | 기준 연도 | 2024 |
 | `quarter` | smallint | 기준 분기 | 4 |
-| `dong_code` | varchar(10) | 행정동코드 | 11440555 |
+| `dong_code` | varchar(10) | 행정동코드 | 11440740 |
 | `dong_name` | varchar(20) | 행정동명 | 상암동 |
 | `gubun` | varchar(10) | 구분 (gu/dong) | dong |
 | `rent_1f` | int | 1층 환산임대료 (원/3.3㎡) | 217202 |
@@ -238,9 +263,9 @@
 
 | 컬럼명 | 타입 | 설명 | 예시 |
 |--------|------|------|------|
-| `dong_code` | varchar(10) | 행정동코드 (PK) | 11440630 |
+| `dong_code` | varchar(10) | 행정동코드 (PK) | 11440690 |
 | `dong_name` | varchar(20) | 행정동명 | 망원1동 |
-| `resident_pop` | int | 주민등록인구 (2024) | 43960 |
+| `resident_pop` | int | 주민등록인구 (2024Q4) | 18803 |
 | `floating_pop` | float | 평균 생활인구 | 3603433 |
 | `avg_age` | float | 평균나이 | 40.9 |
 | `total_households` | int | 총 가구수 | 14138 |
@@ -250,21 +275,21 @@
 
 | dong_code | dong_name | 비고 |
 |-----------|-----------|------|
-| 11440520 | 아현동 | |
-| 11440530 | 공덕동 | MVP |
-| 11440540 | 도화동 | |
-| 11440550 | 용강동 | |
-| 11440560 | 대흥동 | MVP |
-| 11440570 | 염리동 | |
-| 11440580 | 신수동 | |
-| 11440590 | 서강동 | |
-| 11440600 | 서교동 | |
-| 11440610 | 합정동 | |
-| 11440620 | 망원1동 | MVP |
-| 11440640 | 연남동 | |
-| 11440660 | 망원2동 | |
-| 11440710 | 성산1동 | |
-| 11440720 | 성산2동 | |
+| 11440555 | 아현동 | |
+| 11440565 | 공덕동 | MVP |
+| 11440585 | 도화동 | |
+| 11440590 | 용강동 | |
+| 11440600 | 대흥동 | MVP |
+| 11440610 | 염리동 | |
+| 11440630 | 신수동 | |
+| 11440655 | 서강동 | |
+| 11440660 | 서교동 | |
+| 11440680 | 합정동 | |
+| 11440690 | 망원1동 | MVP |
+| 11440700 | 망원2동 | |
+| 11440710 | 연남동 | |
+| 11440720 | 성산1동 | |
+| 11440730 | 성산2동 | |
 | 11440740 | 상암동 | |
 
 ---
@@ -507,9 +532,9 @@
 |--------|------|------|------|
 | `id` | int (PK, auto) | 자동증가 PK | 1 |
 | `quarter` | bigint | 분기 (YYYYQ) | 20244 |
-| `dong_code` | text | 행정동 코드 | 11440630 |
+| `dong_code` | text | 행정동 코드 | 11440690 |
 | `dong_name` | text | 행정동명 | 망원1동 |
-| `resident_pop` | float | 주민등록 인구 | 43960.0 |
+| `resident_pop` | float | 주민등록 인구 | 18803.0 |
 
 ---
 
