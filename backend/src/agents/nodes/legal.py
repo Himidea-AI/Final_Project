@@ -340,7 +340,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        cached = await _redis.get(cache_key)
+        cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
             legal_risks = cached_data.get("legal_risks")
