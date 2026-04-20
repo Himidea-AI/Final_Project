@@ -819,7 +819,7 @@ interface NeighborhoodRow {
   [key: string]: string;
   name: string;
   score: string;
-  survival: string;
+  closureRate: string;
   bep: string;
 }
 
@@ -831,10 +831,10 @@ const CANNIBALIZATION_ROWS: CannRow[] = [
 ];
 
 const NEIGHBORHOOD_ROWS: NeighborhoodRow[] = [
-  { name: '연남동', score: '87 / 100', survival: '18%', bep: '3.5 개월' },
-  { name: '서교동', score: '84 / 100', survival: '21%', bep: '4.1 개월' },
-  { name: '망원동', score: '76 / 100', survival: '35%', bep: '5.2 개월' },
-  { name: '합정동', score: '71 / 100', survival: '40%', bep: '6.0 개월' },
+  { name: '연남동', score: '87 / 100', closureRate: '18%', bep: '3.5 개월' },
+  { name: '서교동', score: '84 / 100', closureRate: '21%', bep: '4.1 개월' },
+  { name: '망원동', score: '76 / 100', closureRate: '35%', bep: '5.2 개월' },
+  { name: '합정동', score: '71 / 100', closureRate: '40%', bep: '6.0 개월' },
 ];
 
 // 정렬용 값 추출 (문자열 컬럼은 그대로, 숫자 컬럼은 파싱)
@@ -847,7 +847,7 @@ function extractSortValue(row: Record<string, string>, key: string): number | st
     return v.endsWith('km') ? num * 1000 : num;
   }
   // "-2.1%", "82%", "87 / 100", "3.5 개월" 모두 parseFloat로 첫 숫자 추출
-  if (['impact', 'score', 'survival', 'bep'].includes(key)) {
+  if (['impact', 'score', 'closureRate', 'bep'].includes(key)) {
     return parseFloat(v);
   }
   return v; // name, status는 문자열 정렬
@@ -2247,7 +2247,8 @@ function SimulatorDashboard({
     ? simResult.districtRankings.slice(0, 16).map((r) => ({
         name: r.district || '-',
         score: typeof r.score === 'number' ? String(Math.round(r.score)) : '—',
-        survival: typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
+        closureRate:
+          typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
         bep: typeof r.bep_months === 'number' ? `${r.bep_months}개월` : '—',
       }))
     : null;
@@ -2412,7 +2413,7 @@ function SimulatorDashboard({
       // Sheet 3: 행정동 비교
       const neighborhoods: (string | number)[][] = [
         ['행정동', 'AI 점수', '폐업률', '예상 BEP'],
-        ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.survival, r.bep]),
+        ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.closureRate, r.bep]),
       ];
       const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
       ws3['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
@@ -3585,7 +3586,7 @@ function SimulatorDashboard({
                                           <th className="p-3 font-medium">
                                             <SortHeader
                                               label="폐업률"
-                                              sortField="survival"
+                                              sortField="closureRate"
                                               sortKey={sortKey}
                                               sortDir={sortDir}
                                               onSort={handleSort}
@@ -3633,7 +3634,7 @@ function SimulatorDashboard({
                                             icon={<MapPin className="w-3.5 h-3.5" />}
                                             col1={row.name}
                                             col2={row.score}
-                                            col3={row.survival}
+                                            col3={row.closureRate}
                                             status={row.bep}
                                             density={tableDensity}
                                           />
@@ -4783,7 +4784,7 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
                     <tr key={i} className="border-b border-slate-200">
                       <td className="py-3 font-medium text-slate-900">{r.name}</td>
                       <td className="py-3 font-mono text-slate-900">{r.score}</td>
-                      <td className="py-3 font-mono text-slate-900">{r.survival}</td>
+                      <td className="py-3 font-mono text-slate-900">{r.closureRate}</td>
                       <td className="py-3 font-mono text-[#6366f1] font-bold">{r.bep}</td>
                     </tr>
                   ))}
