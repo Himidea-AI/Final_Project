@@ -50,10 +50,10 @@ class TestEstimateCannibalization:
         assert r["total_impact_pct"] == 0
 
     def test_cafe_one_store_at_150m(self):
-        """커피 base 25% × Pancras decay(0.15km) ≈ -24.3%."""
+        """커피 base 25% × Pancras decay(0.15km) ≈ -24.2%."""
         r = estimate_cannibalization({"0-300m": 1}, industry="cafe")
-        # 0.25 * (1-0.1746)^0.15 ≈ 0.25 * 0.9723 = 0.2431
-        assert r["total_impact_pct"] == pytest.approx(-0.243, abs=0.005)
+        # 0.25 * 0.813^0.15 ≈ 0.25 * 0.9694 = 0.2424 (Pancras per-km decay 정정 후)
+        assert r["total_impact_pct"] == pytest.approx(-0.242, abs=0.005)
 
     def test_chicken_less_impact_than_cafe(self):
         """치킨은 배달 중심이라 base 10% < 카페 25%."""

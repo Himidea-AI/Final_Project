@@ -232,7 +232,9 @@ def estimate_cannibalization(
         if count == 0 or bin_label not in bin_midpoint_km:
             continue
         dist_km = bin_midpoint_km[bin_label]
-        decay = (1 - 0.1746) ** dist_km  # Pancras 2013 decay
+        # Pancras 2013: 1마일(1.609km)당 28.1% 감소. per-km decay는 선형 변환이 아닌 지수 루트.
+        # 올바른 변환: (1 - 0.281)^(1/1.609) = 0.813. 기존 선형 변환(0.281/1.609=0.1746) 오류 수정.
+        decay = 0.813**dist_km  # Pancras 2013 decay (per-km)
         total += base_rate * decay * count
 
     type_modifier = {"neighborhood": 1.0, "office": 0.6, "mall": 0.4}.get(store_type, 1.0)

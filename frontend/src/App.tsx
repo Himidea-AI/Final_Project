@@ -2270,11 +2270,12 @@ function SimulatorDashboard({
   }, []);
 
   // 정렬된 행 데이터 — 가맹점 간섭도는 competitor_intel.samples 실데이터 우선
-  // Pancras 2013 기반 거리 감쇠 모델: (1 - 0.1746)^km × base_rate(30%)
+  // Pancras 2013 기반 거리 감쇠 모델: 0.813^km × base_rate(30%)
+  // 원문 "1마일(1.609km)당 28.1% 감소" → per-km decay = (1-0.281)^(1/1.609) = 0.813
   const dynamicCannRows: CannRow[] = simResult?.competitorIntel?.competition_500m?.samples
     ? simResult.competitorIntel.competition_500m.samples.slice(0, 8).map((s) => {
         const dist = s.distance_m;
-        const impactPct = -0.3 * Math.pow(1 - 0.1746, dist / 1000) * 100;
+        const impactPct = -0.3 * Math.pow(0.813, dist / 1000) * 100;
         const status = dist < 300 ? 'Danger' : dist < 800 ? 'Caution' : 'Safe';
         return {
           name: s.place_name,
