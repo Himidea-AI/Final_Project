@@ -46,6 +46,30 @@ function nextStartedAt(): number {
   return _lastStartedAt;
 }
 
+// Stage text shown next to the progress bar. Each entry's `at` is the
+// progress % threshold at which the stage label becomes active.
+const STAGES: readonly { at: number; text: string }[] = [
+  { at: 0, text: 'INITIALIZING AI ENGINE' },
+  { at: 5, text: 'CONNECTING TO DATABASE' },
+  { at: 10, text: 'FETCHING KT TELECOM DATA' },
+  { at: 20, text: 'ANALYZING COMPETITION DENSITY' },
+  { at: 30, text: 'QUERYING POPULATION TRENDS' },
+  { at: 40, text: 'CALCULATING RENT-TO-REVENUE RATIO' },
+  { at: 50, text: 'ANALYZING CANNIBALIZATION RATE' },
+  { at: 60, text: 'CROSS-CHECKING LEGAL RISKS' },
+  { at: 70, text: 'RUNNING WHAT-IF SCENARIOS' },
+  { at: 80, text: 'GENERATING 12-MONTH FORECAST' },
+  { at: 88, text: 'SYNTHESIZING MULTI-AGENT RESULTS' },
+];
+
+function stageFor(progress: number): string {
+  let current = STAGES[0].text;
+  for (const s of STAGES) {
+    if (progress >= s.at) current = s.text;
+  }
+  return current;
+}
+
 export const useSimulationStore = create<SimulationState>((set, get) => ({
   ...INITIAL_STATE,
 
@@ -70,11 +94,24 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       _progressTimer: null,
     });
 
+    // Fake-progress ticker: climbs to 90% over ~100s so the user feels motion
+    // while the real request is in flight. Capped at 90 so the jump to 100
+    // on success remains perceptible.
+    const timer = setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const p = Math.min(90, elapsed * 0.9);
+      set({ progress: p, stage: stageFor(p) });
+    }, 500);
+    set({ _progressTimer: timer });
+
     try {
       const result = await runSimulation(params, abortController.signal);
 
       // Stale response guard — if a newer start has replaced us, abandon.
       if (get().startedAt !== startedAt) return;
+
+      const { _progressTimer } = get();
+      if (_progressTimer) clearInterval(_progressTimer);
 
       set({
         status: 'done',
@@ -82,6 +119,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         stage: 'COMPLETE',
         result,
         _abortController: null,
+        _progressTimer: null,
       });
     } catch (err: unknown) {
       // Stale check — if replaced, don't touch state
@@ -97,12 +135,16 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         return;
       }
 
+      const { _progressTimer } = get();
+      if (_progressTimer) clearInterval(_progressTimer);
+
       const message =
         err instanceof Error ? err.message : typeof err === 'string' ? err : '알 수 없는 오류';
       set({
         status: 'error',
         error: message,
         _abortController: null,
+        _progressTimer: null,
       });
     }
   },

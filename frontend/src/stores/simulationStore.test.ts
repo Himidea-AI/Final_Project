@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import axios from 'axios';
 import { useSimulationStore } from './simulationStore';
 import * as api from '../api/client';
@@ -155,5 +155,41 @@ describe('simulationStore — 교체 실행', () => {
     await Promise.resolve();
 
     expect(useSimulationStore.getState().result?.request_id).toBe('r1');
+  });
+});
+
+describe('simulationStore — 진행률 타이머', () => {
+  beforeEach(() => {
+    useSimulationStore.getState().reset();
+    vi.restoreAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('startSimulation 호출 후 시간에 따라 progress가 증가한다', async () => {
+    vi.spyOn(api, 'runSimulation').mockImplementation(
+      async () => new Promise<SimulationOutput>(() => {}),
+    );
+
+    useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    expect(useSimulationStore.getState().progress).toBe(0);
+
+    vi.advanceTimersByTime(10_000);
+    const p = useSimulationStore.getState().progress;
+    expect(p).toBeGreaterThanOrEqual(8);
+    expect(p).toBeLessThanOrEqual(10);
+  });
+
+  it('progress는 90%를 초과하지 않는다', async () => {
+    vi.spyOn(api, 'runSimulation').mockImplementation(
+      async () => new Promise<SimulationOutput>(() => {}),
+    );
+
+    useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    vi.advanceTimersByTime(200_000);
+    expect(useSimulationStore.getState().progress).toBeLessThanOrEqual(90);
   });
 });
