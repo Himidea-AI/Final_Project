@@ -9,7 +9,9 @@ DongMapping 테이블 또는 하드코딩 매핑 사용.
 
 import os
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+
+from src.database.sync_engine import get_sync_engine
 
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
 DB_URL = os.environ.get(
@@ -56,7 +58,7 @@ def resolve_dong_code(dong_name: str, db_url: str | None = None) -> str | None:
 
     # 2. DB에서 조회
     try:
-        engine = create_engine(db_url or DB_URL, echo=False)
+        engine = get_sync_engine(db_url or DB_URL)
         with engine.connect() as conn:
             row = conn.execute(
                 text("SELECT dong_code FROM dong_mapping WHERE dong_name = :name"),
@@ -85,7 +87,7 @@ def resolve_dong_name(dong_code: str, db_url: str | None = None) -> str | None:
         return DONG_CODE_TO_NAME[dong_code]
 
     try:
-        engine = create_engine(db_url or DB_URL, echo=False)
+        engine = get_sync_engine(db_url or DB_URL)
         with engine.connect() as conn:
             row = conn.execute(
                 text("SELECT dong_name FROM dong_mapping WHERE dong_code = :code"),
