@@ -128,7 +128,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       const isAbort =
         (err as { name?: string })?.name === 'CanceledError' ||
         (err as { name?: string })?.name === 'AbortError' ||
-        axios.isCancel?.(err);
+        axios.isCancel(err);
 
       if (isAbort) {
         // cancelSimulation already cleaned state; nothing to do here
@@ -149,16 +149,20 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     }
   },
   cancelSimulation: () => {
-    const { _abortController, _progressTimer } = get();
+    const { status, _abortController, _progressTimer } = get();
+    if (status !== 'running') return;
     _abortController?.abort();
     if (_progressTimer) clearInterval(_progressTimer);
     set({
       status: 'idle',
       progress: 0,
       stage: '',
+      result: null,
+      error: null,
+      params: null,
+      startedAt: null,
       _abortController: null,
       _progressTimer: null,
-      startedAt: null,
     });
   },
   dismissResult: () => {
