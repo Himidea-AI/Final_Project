@@ -439,15 +439,20 @@ class NaverVacancy(Base):
 
 
 class KakaoStore(Base):
-    """카카오 로컬 API 기반 실시간 점포 데이터 — 마포구 프랜차이즈 브랜드"""
+    """카카오 로컬 API 기반 실시간 점포 데이터 — 마포구 전수 (프랜차이즈 + 개인)"""
 
     __tablename__ = "kakao_store"
 
     kakao_id = Column(String(20), primary_key=True, comment="카카오 장소 ID")
     place_name = Column(String(200), comment="장소명 (점포명)")
-    brand_name = Column(String(100), index=True, comment="정규화된 브랜드명")
-    category = Column(String(30), index=True, comment="10대 업종 카테고리")
-    category_detail = Column(String(200), comment="카카오 카테고리 상세")
+    brand_name = Column(
+        String(100),
+        index=True,
+        nullable=True,
+        comment="정규화된 브랜드명 (프랜차이즈만, 개인 점포는 NULL)",
+    )
+    category = Column(String(30), index=True, comment="10대 업종 카테고리 + '기타'")
+    category_detail = Column(String(200), comment="카카오 카테고리 상세 (category_name)")
     address = Column(Text, comment="지번 주소")
     road_address = Column(Text, comment="도로명 주소")
     dong_name = Column(String(20), index=True, comment="행정동명")
@@ -455,6 +460,13 @@ class KakaoStore(Base):
     lon = Column(Float, comment="경도")
     phone = Column(String(20), comment="전화번호")
     place_url = Column(Text, comment="카카오맵 URL")
+    is_franchise = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+        comment="프랜차이즈 여부 (NORMALIZE_RULES 매칭 결과)",
+    )
     collected_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
