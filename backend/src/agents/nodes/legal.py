@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 from src.agents.llms import get_fast_llm
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
-from src.config.constants import DISTRICT_ZONE_MAP, ZONING_RULES
+from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, ZONING_RULES
 from src.config.settings import settings
 from src.schemas.state import AgentState
 from src.schemas.structured_output import LegalBatchOutput
@@ -193,23 +193,8 @@ async def check_zoning_regulation(state: AgentState) -> dict:
     zone = DISTRICT_ZONE_MAP.get(district, "근린상업지역")  # 알 수 없는 동은 상업지역으로 가정
     rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
 
-    # business_type 코드 → 한글 매핑 (확장 가능)
-    _BIZ_TYPE_LABEL = {
-        "cafe": "카페",
-        "coffee": "카페",
-        "카페": "카페",
-        "restaurant": "음식점",
-        "음식점": "음식점",
-        "convenience": "편의점",
-        "편의점": "편의점",
-        "bakery": "카페",
-        "제과": "카페",
-        "chicken": "음식점",
-        "치킨": "음식점",
-        "fastfood": "음식점",
-        "패스트푸드": "음식점",
-    }
-    type_label = _BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
+    # business_type 코드 → 한글 매핑 (constants.py 단일 소스)
+    type_label = BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
 
     if type_label in rules["제한"]:
         level = "danger"
@@ -253,9 +238,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
     district = state.get("target_district", "")
     business_type = state.get("business_type", "")
 
-    # 캐시 키 정규화 — 영문/한글 혼용 시 동일 캐시 히트 보장
-    _BIZ_NORMALIZE = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}
-    _normalized_biz = _BIZ_NORMALIZE.get(business_type.lower(), business_type)
+    # 캐시 키 정규화 — 영문/한글 혼용 시 동일 캐시 히트 보장 (constants.py 단일 소스)
+    _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
 
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
@@ -276,7 +260,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 analysis["legal_risks"] = legal_risks
                 overall_cached = cached_data.get("overall_legal_risk", "caution")
                 analysis["overall_legal_risk"] = overall_cached
-                await _redis.aclose()
+                try:
+                    await _redis.aclose()
+                except Exception:
+                    pass
                 return {
                     **state,
                     "analysis_results": analysis,

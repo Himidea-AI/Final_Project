@@ -22,7 +22,7 @@ from sqlalchemy import select, func
 
 logger = logging.getLogger(__name__)
 from src.schemas.state import AgentState
-from src.config.constants import DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
+from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
 from src.config.settings import settings
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.database.models import NaverVacancy, StoreQuarterly
@@ -64,7 +64,7 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
         logger.info(f"[district_ranking] 공실 스팟 {len(spots)}개 로드 (동: {dong_names})")
         return spots
     except Exception as e:
-        logger.info(f"[district_ranking] 공실 스팟 로드 실패: {e}")
+        logger.warning(f"[district_ranking] 공실 스팟 로드 실패: {e}")
         return []
 
 
@@ -279,22 +279,7 @@ def _normalize_and_rank(
         # 용도지역 규제 패널티: legal_node와 동일한 DISTRICT_ZONE_MAP/ZONING_RULES 사용
         zoning_risk = "safe"
         if business_type:
-            _BIZ_TYPE_LABEL = {
-                "cafe": "카페",
-                "coffee": "카페",
-                "카페": "카페",
-                "restaurant": "음식점",
-                "음식점": "음식점",
-                "convenience": "편의점",
-                "편의점": "편의점",
-                "bakery": "카페",
-                "제과": "카페",
-                "chicken": "음식점",
-                "치킨": "음식점",
-                "fastfood": "음식점",
-                "패스트푸드": "음식점",
-            }
-            type_label = _BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
+            type_label = BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
             zone = DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
             rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
             if type_label in rules["제한"]:
@@ -343,9 +328,8 @@ async def district_ranking_node(state: AgentState) -> dict:
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
 
-    # 캐시 키 정규화 — 영문/한글 혼용 시 동일 캐시 히트 보장
-    _BIZ_NORMALIZE = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}
-    _normalized_biz = _BIZ_NORMALIZE.get(business_type.lower(), business_type)
+    # 캐시 키 정규화 (constants.py 단일 소스)
+    _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
 
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
     cache_key = f"v3:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
@@ -356,7 +340,10 @@ async def district_ranking_node(state: AgentState) -> dict:
         if cached:
             cached_data = json.loads(cached)
             logger.info(f"[district_ranking] 캐시 히트: {cache_key}")
-            await _redis.aclose()
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
             return {
                 "scouting_results": cached_data["scouting_results"],
                 "winner_district": cached_data["winner_district"],
@@ -426,6 +413,7 @@ async def district_ranking_node(state: AgentState) -> dict:
                         "winner_district": winner,
                         "top_3_candidates": top_3,
                         "vacancy_applied": vacancy_applied,
+                        "vacancy_spots": vacancy_spots,
                     },
                     ensure_ascii=False,
                 ),
