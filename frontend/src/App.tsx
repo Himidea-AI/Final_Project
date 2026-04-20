@@ -2284,12 +2284,33 @@ function SimulatorDashboard({
   }, []);
 
   // 정렬된 행 데이터 — 가맹점 간섭도는 competitor_intel.samples 실데이터 우선
-  // Pancras 2013 기반 거리 감쇠 모델: 0.813^km × base_rate(30%)
-  // 원문 "1마일(1.609km)당 28.1% 감소" → per-km decay = (1-0.281)^(1/1.609) = 0.813
+  // Pancras 2013 거리 감쇠: (1 - 0.281)^(1/1.609) ≈ 0.813 per km
+  // base_rate는 업종별 차등 (backend commercial_intelligence.py와 동기화).
   const dynamicCannRows: CannRow[] = simResult?.competitorIntel?.competition_500m?.samples
     ? simResult.competitorIntel.competition_500m.samples.slice(0, 8).map((s) => {
         const dist = s.distance_m;
-        const impactPct = -0.3 * Math.pow(0.813, dist / 1000) * 100;
+        // Industry base rates mirror backend commercial_intelligence.py:estimate_cannibalization
+        const INDUSTRY_BASE: Record<string, number> = {
+          cafe: 0.25,
+          coffee: 0.25,
+          chicken: 0.1,
+          burger: 0.2,
+          korean: 0.15,
+        };
+        const btKey = (BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType || '').toLowerCase();
+        // 한국어 업종명을 영어 키로 매핑 (커피/카페→coffee, 치킨→chicken, 햄버거→burger, 한식→korean)
+        const industryKey =
+          btKey.includes('커피') || btKey.includes('카페') || btKey === 'coffee' || btKey === 'cafe'
+            ? 'coffee'
+            : btKey.includes('치킨') || btKey === 'chicken'
+              ? 'chicken'
+              : btKey.includes('햄버거') || btKey.includes('패스트푸드') || btKey === 'burger'
+                ? 'burger'
+                : btKey.includes('한식') || btKey === 'korean'
+                  ? 'korean'
+                  : '';
+        const baseRate = INDUSTRY_BASE[industryKey] ?? 0.2;
+        const impactPct = -baseRate * Math.pow(0.813, dist / 1000) * 100;
         const status = dist < 300 ? 'Danger' : dist < 800 ? 'Caution' : 'Safe';
         return {
           name: s.place_name,
