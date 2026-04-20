@@ -11,14 +11,33 @@ IM3-62: RAG 통합 테스트 — LangGraph 연동 검증
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # conftest.py가 os.environ 설정 완료 후 임포트
 from src.chains.retriever import LegalDocumentRetriever
 from src.agents.nodes.legal import legal_node, check_zoning_regulation
+from src.schemas.structured_output import LegalBatchOutput, LegalRiskItem
 
-# LLM mock 응답 — JSON 구조화 출력 형식으로 고정 (Ollama 실행 불필요)
-_MOCK_LLM_RESPONSE = '관련 법률을 검토한 결과 주의가 필요합니다.\n{"risk_level": "caution"}'
+# LLM mock — Structured Output (LegalBatchOutput) 반환용
+_BATCH_TYPES = [
+    "franchise_law", "commercial_lease_law", "food_hygiene", "safety_regulation",
+    "building_law", "fire_safety_law", "labor_law", "vat_law",
+    "privacy_law", "accessibility_law", "sewage_law", "fair_trade_law",
+]
+
+_MOCK_LEGAL_BATCH = LegalBatchOutput(
+    items=[
+        LegalRiskItem(type=t, level="caution", summary=f"{t} 검토 결과 주의 필요", recommendation="전문가 상담 권장")
+        for t in _BATCH_TYPES
+    ]
+)
+
+
+def _make_legal_llm_mock():
+    """get_fast_llm() mock — with_structured_output().ainvoke()가 _MOCK_LEGAL_BATCH 반환"""
+    mock_llm = MagicMock()
+    mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=_MOCK_LEGAL_BATCH)
+    return mock_llm
 
 # legal_node 테스트용 기본 AgentState (TypedDict 호환)
 _BASE_STATE = {
@@ -150,7 +169,7 @@ async def test_retriever_source_filter_safety():
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_output_keys(mock_llm):
     """legal_node 반환값에 analysis_results, legal_info 키가 있는지 확인"""
     result = await legal_node(_BASE_STATE.copy())
@@ -162,7 +181,7 @@ async def test_legal_node_output_keys(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_overall_risk_level(mock_llm):
     """overall_legal_risk가 safe/caution/danger 중 하나이며 14개 리스크 중 최고 레벨인지 확인"""
     result = await legal_node(_BASE_STATE.copy())
@@ -178,7 +197,7 @@ async def test_legal_node_overall_risk_level(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_all_risk_types(mock_llm):
     """14가지 리스크 타입이 모두 포함되는지 확인"""
     result = await legal_node(_BASE_STATE.copy())
@@ -205,7 +224,7 @@ async def test_legal_node_all_risk_types(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_risk_structure(mock_llm):
     """각 리스크 dict가 필수 키를 모두 포함하는지 확인"""
     result = await legal_node(_BASE_STATE.copy())
@@ -218,7 +237,7 @@ async def test_legal_node_risk_structure(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_risk_level_values(mock_llm):
     """level 값이 safe / caution / danger 중 하나인지 확인"""
     result = await legal_node(_BASE_STATE.copy())
@@ -230,7 +249,7 @@ async def test_legal_node_risk_level_values(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_legal_info_not_empty(mock_llm):
     """legal_info가 비어있지 않은지 확인 (실제 문서 or fallback)"""
     result = await legal_node(_BASE_STATE.copy())
@@ -243,7 +262,7 @@ async def test_legal_node_legal_info_not_empty(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_state_passthrough(mock_llm):
     """legal_node가 기존 state 필드를 유지하면서 결과를 추가하는지 확인"""
     state = _BASE_STATE.copy()
@@ -258,7 +277,7 @@ async def test_legal_node_state_passthrough(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_ftc_franchise_db_failure_fallback(mock_llm):
     """
     DB 조회 실패 시(PostgresClient 예외) FTC 판정이 safe/caution/danger 중 하나로
@@ -276,7 +295,7 @@ async def test_ftc_franchise_db_failure_fallback(mock_llm):
 
 
 @pytest.mark.asyncio
-@patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
+@patch("src.agents.nodes.legal.get_fast_llm", return_value=_make_legal_llm_mock())
 async def test_legal_node_fallback_when_no_rag_docs(mock_llm):
     """
     retriever.search()가 빈 리스트를 반환할 때

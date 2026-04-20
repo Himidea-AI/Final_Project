@@ -13,13 +13,16 @@
 
 import asyncio
 import json
-import os
 import re
 
-from src.schemas.state import AgentState
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from src.agents.llms import get_fast_llm
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.settings import settings
+from src.schemas.state import AgentState
+from src.schemas.structured_output import LegalBatchOutput
 from src.services.ftc_franchise import FtcFranchiseClient
 from src.services.law_api import LawApiClient
 
@@ -87,77 +90,6 @@ _DISTRICT_ZONE_MAP: dict[str, str] = {
 }
 
 
-async def _async_call_llm(system_prompt: str, user_message: str) -> str:
-    """
-    _call_llm의 비동기 버전 — asyncio.gather()로 LLM 호출을 병렬 실행할 때 사용.
-
-    LLM_PROVIDER 환경변수로 백엔드를 선택 (동기 버전과 동일한 로직).
-    """
-    provider = os.getenv("LLM_PROVIDER", "openai").lower()
-
-    if provider == "openai":
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = await client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.1,
-            max_tokens=1024,
-        )
-        return response.choices[0].message.content or ""
-
-    if provider == "anthropic":
-        import anthropic as _anthropic
-        from src.config.constants import LLM_MODEL, LLM_TIMEOUT
-
-        client = _anthropic.AsyncAnthropic()
-        message = await client.messages.create(
-            model=LLM_MODEL,
-            max_tokens=1024,
-            timeout=LLM_TIMEOUT,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        if not message.content:
-            raise ValueError("Anthropic LLM 응답이 비어있습니다.")
-        return message.content[0].text
-
-    if provider == "gemini":
-        from langchain_core.messages import HumanMessage, SystemMessage
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
-            temperature=0.1,
-        )
-        for attempt in range(3):
-            try:
-                response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
-                return response.content if isinstance(response.content, str) else str(response.content)
-            except Exception as e:
-                if "429" in str(e) and attempt < 2:
-                    wait = 30 * (2**attempt)  # 30s → 60s
-                    print(f"[Gemini] 429 발생, {wait}초 후 재시도 ({attempt + 1}/2)")
-                    await asyncio.sleep(wait)  # 이벤트 루프 비블로킹 대기
-                else:
-                    raise
-
-    # 기본값: Ollama
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_ollama import ChatOllama
-
-    ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
-    llm = ChatOllama(model=ollama_model, temperature=0.1)
-    prefixed_message = f"/no_think\n{user_message}"
-    response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=prefixed_message)])
-    return response.content if isinstance(response.content, str) else str(response.content)
-
-
 def _extract_risk_level(llm_response: str) -> str:
     """
     LLM 응답에서 리스크 레벨 파싱.
@@ -167,7 +99,6 @@ def _extract_risk_level(llm_response: str) -> str:
     3차: 키워드 매칭 fallback (LLM이 JSON 형식을 따르지 않은 경우)
     """
     import json
-    import re
 
     # 마크다운 코드블록 제거: ```json ... ``` 또는 ``` ... ```
     cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", llm_response, flags=re.DOTALL).strip()
@@ -588,40 +519,47 @@ async def _run_legal_pipeline(state: dict) -> dict:
         docs_context = docs_context[:12000] + "..."
 
     items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
-    batch_prompt = (
-        f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
-        f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
-        f"위 자료를 바탕으로 아래 12개 법률 항목의 창업 리스크를 평가하세요.\n"
-        f"각 항목의 '—' 뒤에 적힌 검토 포인트를 반드시 확인하세요.\n\n"
+
+    system_content = (
+        f"{LEGAL_AGENT_SYSTEM_PROMPT}\n\n"
         f"리스크 레벨 기준:\n"
         f"- safe: 법률 위반 가능성 없음, 일반적 준수사항만 존재\n"
         f"- caution: 사전 확인·준비 필요, 미이행 시 과태료·행정처분 가능\n"
         f"- danger: 법률 위반 가능성 높음, 영업정지·허가취소·형사처벌 위험\n\n"
         f"[평가 항목]\n{items_desc}\n\n"
-        "아래 JSON 배열 형식으로만 응답하세요. JSON 앞뒤에 설명·마크다운·코드블록을 붙이지 마세요.\n"
-        "12개 항목을 빠짐없이 포함하세요. summary는 1~2문장, recommendation은 구체적 행동 권고:\n"
-        '[{"type":"franchise_law","level":"caution","summary":"요약","recommendation":"권고"},'
-        '{"type":"commercial_lease_law","level":"...","summary":"...","recommendation":"..."}, ...]'
+        "12개 항목을 빠짐없이 items 리스트에 포함하세요. summary는 1~2문장, recommendation은 구체적 행동 권고."
+    )
+
+    user_content = (
+        f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
+        f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
+        "위 자료를 바탕으로 12개 법률 항목의 창업 리스크를 평가하세요. "
+        "각 항목의 '—' 뒤에 적힌 검토 포인트를 반드시 확인하세요."
     )
 
     batch_results: list[dict] = []
     try:
-        raw = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, batch_prompt)
-        json_match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if json_match:
-            parsed = json.loads(json_match.group())
-            seen = set()
-            for r in parsed:
-                t = r.get("type", "")
-                if t in _BATCH_TYPES and t not in seen:
-                    r.setdefault("articles", [])
-                    r.setdefault("level", "caution")
-                    r.setdefault("summary", "")
-                    r.setdefault("recommendation", "")
-                    batch_results.append(r)
-                    seen.add(t)
+        llm = get_fast_llm().with_structured_output(LegalBatchOutput)
+        result: LegalBatchOutput = await llm.ainvoke(
+            [
+                SystemMessage(content=system_content),
+                HumanMessage(content=user_content),
+            ]
+        )
+        seen = set()
+        for item in result.items:
+            if item.type in _BATCH_TYPES and item.type not in seen:
+                batch_results.append(
+                    {
+                        "type": item.type,
+                        "level": item.level,
+                        "summary": item.summary,
+                        "articles": [],
+                        "recommendation": item.recommendation,
+                    }
+                )
+                seen.add(item.type)
         # 누락된 항목 caution으로 보완
-        seen = {r["type"] for r in batch_results}
         for t in _BATCH_TYPES:
             if t not in seen:
                 batch_results.append(
@@ -633,7 +571,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         "recommendation": "전문가 상담 권장",
                     }
                 )
-        print(f"[legal_node] 배치 LLM 완료 - {len(batch_results)}개 항목 처리")
+        print(f"[legal_node] 배치 LLM 완료 (Structured Output) - {len(batch_results)}개 항목 처리")
     except Exception as e:
         print(f"[legal_node] 배치 LLM 실패: {e} - 전체 caution 처리")
         batch_results = [

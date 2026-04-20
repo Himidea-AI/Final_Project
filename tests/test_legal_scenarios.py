@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from src.agents.nodes.legal import _extract_risk_level, _run_legal_pipeline  # noqa: E402
+from src.schemas.structured_output import LegalBatchOutput, LegalRiskItem  # noqa: E402
 
 
 def _make_state(
@@ -42,33 +43,22 @@ def _make_state(
     }
 
 
-def _mock_batch_llm_response(all_safe: bool = False) -> str:
-    """배치 LLM이 반환할 JSON 배열 mock"""
-    types = [
-        "franchise_law",
-        "commercial_lease_law",
-        "food_hygiene",
-        "safety_regulation",
-        "building_law",
-        "fire_safety_law",
-        "labor_law",
-        "vat_law",
-        "privacy_law",
-        "accessibility_law",
-        "sewage_law",
-        "fair_trade_law",
-    ]
+_BATCH_TYPES = [
+    "franchise_law", "commercial_lease_law", "food_hygiene", "safety_regulation",
+    "building_law", "fire_safety_law", "labor_law", "vat_law",
+    "privacy_law", "accessibility_law", "sewage_law", "fair_trade_law",
+]
+
+
+def _mock_batch_llm_output(all_safe: bool = False) -> LegalBatchOutput:
+    """배치 LLM Structured Output mock"""
     level = "safe" if all_safe else "caution"
-    items = [
-        {
-            "type": t,
-            "level": level,
-            "summary": f"{t} 검토 완료",
-            "recommendation": "확인 필요" if not all_safe else "",
-        }
-        for t in types
-    ]
-    return json.dumps(items, ensure_ascii=False)
+    return LegalBatchOutput(
+        items=[
+            LegalRiskItem(type=t, level=level, summary=f"{t} 검토 완료", recommendation="확인 필요" if not all_safe else "")
+            for t in _BATCH_TYPES
+        ]
+    )
 
 
 @pytest.fixture
@@ -86,7 +76,7 @@ def mock_dependencies():
 
     with (
         patch("src.agents.nodes.legal.LegalDocumentRetriever") as MockRetriever,
-        patch("src.agents.nodes.legal._async_call_llm") as mock_llm,
+        patch("src.agents.nodes.legal.get_fast_llm") as mock_get_fast_llm,
         patch("src.agents.nodes.legal.LawApiClient") as MockLawApi,
         patch("src.agents.nodes.legal.FtcFranchiseClient"),
         patch("src.agents.nodes.legal._search_ftc_from_db", new_callable=AsyncMock, return_value=None),
@@ -103,8 +93,13 @@ def mock_dependencies():
             if attr.endswith("_SOURCES") or attr == "RELEVANCE_THRESHOLD":
                 setattr(MockRetriever, attr, getattr(RealRetriever, attr))
 
-        # LLM mock: 12개 항목 JSON 배열 반환
-        mock_llm.return_value = _mock_batch_llm_response()
+        # LLM mock: Structured Output 반환
+        # MagicMock을 사용해야 .with_structured_output() 체이닝이 coroutine이 되지 않음
+        mock_llm_instance = MagicMock()
+        mock_llm_instance.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value=_mock_batch_llm_output()
+        )
+        mock_get_fast_llm.return_value = mock_llm_instance
 
         # LawApiClient mock: 빈 판례
         mock_law_instance = MockLawApi.return_value
@@ -116,7 +111,7 @@ def mock_dependencies():
 
         yield {
             "retriever": mock_retriever_instance,
-            "llm": mock_llm,
+            "llm": mock_get_fast_llm,
             "law_api": mock_law_instance,
             "redis": mock_redis,
         }
@@ -275,14 +270,16 @@ class TestScenarioYeonnam:
 
 class TestScenarioLlmFailure:
     """
-    시나리오: LLM이 JSON이 아닌 응답을 반환하거나 예외 발생
+    시나리오: LLM Structured Output 호출이 예외 발생
     기대: 12개 항목 모두 caution으로 fallback, 에러 없이 완료
     """
 
     @pytest.mark.asyncio
     async def test_llm_returns_invalid_json(self, mock_dependencies):
-        """LLM이 JSON이 아닌 텍스트를 반환해도 에러 없이 처리."""
-        mock_dependencies["llm"].return_value = "이것은 유효하지 않은 JSON입니다."
+        """LLM ainvoke가 예외를 발생시켜도 에러 없이 처리 (Structured Output 파싱 실패 시뮬레이션)."""
+        mock_dependencies["llm"].return_value.with_structured_output.return_value.ainvoke = AsyncMock(
+            side_effect=Exception("Structured Output 파싱 실패")
+        )
         state = _make_state("테스트", "서교동", "카페")
         result = await _run_legal_pipeline(state)
 
@@ -297,7 +294,9 @@ class TestScenarioLlmFailure:
     @pytest.mark.asyncio
     async def test_llm_raises_exception(self, mock_dependencies):
         """LLM 호출 자체가 예외를 발생시켜도 에러 없이 처리."""
-        mock_dependencies["llm"].side_effect = Exception("API timeout")
+        mock_dependencies["llm"].return_value.with_structured_output.return_value.ainvoke = AsyncMock(
+            side_effect=Exception("API timeout")
+        )
         state = _make_state("테스트", "서교동", "카페")
         result = await _run_legal_pipeline(state)
 
@@ -307,14 +306,15 @@ class TestScenarioLlmFailure:
     @pytest.mark.asyncio
     async def test_llm_returns_partial_json(self, mock_dependencies):
         """LLM이 12개 중 일부만 반환해도 나머지를 caution으로 보완."""
-        partial = json.dumps(
-            [
-                {"type": "franchise_law", "level": "safe", "summary": "안전", "recommendation": ""},
-                {"type": "food_hygiene", "level": "danger", "summary": "위험", "recommendation": "확인"},
-            ],
-            ensure_ascii=False,
+        partial_output = LegalBatchOutput(
+            items=[
+                LegalRiskItem(type="franchise_law", level="safe", summary="안전", recommendation=""),
+                LegalRiskItem(type="food_hygiene", level="danger", summary="위험", recommendation="확인"),
+            ]
         )
-        mock_dependencies["llm"].return_value = partial
+        mock_dependencies["llm"].return_value.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value=partial_output
+        )
         state = _make_state("테스트", "서교동", "카페")
         result = await _run_legal_pipeline(state)
 
