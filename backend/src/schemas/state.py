@@ -55,3 +55,6 @@ class AgentState(TypedDict):
     current_agent: str  # 현재 작업을 수행 중인 에이전트명
     next_step: str  # Supervisor가 결정한 다음 단계
     errors: list[str]
+
+    # 6. competitor_intel 에이전트 결과 (하이브리드: Python 서비스 + LLM 해석)
+    competitor_intel_result: dict[str, Any]  # CompetitorIntelResult 구조 (services 결과 + LLM output)

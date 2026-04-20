@@ -189,6 +189,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "current_agent": "start",
         "next_step": "",
         "errors": [],
+        "competitor_intel_result": {},
     }
 
     task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0))
@@ -410,6 +411,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "financial_report": md.get("financial_metrics", {}),
         # TCN SHAP 분석 결과 (실패 시 None)
         "shap_result": shap_result,
+        # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
+        "competitor_intel": _sanitize(state.get("competitor_intel_result") or {}),
     }
 
     print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")

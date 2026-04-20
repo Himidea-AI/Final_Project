@@ -140,6 +140,19 @@ async def synthesis_node(state: AgentState) -> dict:
             demographic_context += f"- 브랜드 타겟 매칭: {dc['brand_target_match_score']}/100\n"
             demographic_context += f"  → {dc.get('match_rationale', '')}\n"
 
+    # competitor_intel 요약 (경쟁/카니발/차별화) — legal_risks 와 독립적으로 병합
+    competitor_intel = state.get("competitor_intel_result", {}) or {}
+    if competitor_intel and "error" not in competitor_intel:
+        ci_signal = competitor_intel.get("market_entry_signal", "N/A")
+        ci_narrative = (competitor_intel.get("narrative") or "")[:220].replace("\n", " ")
+        ci_cannibal = competitor_intel.get("cannibalization", {}).get("estimated_revenue_impact_pct", 0)
+        ci_saturation = competitor_intel.get("competition_500m", {}).get("saturation_level", "N/A")
+        competitor_block = (
+            f"\n경쟁인텔({ci_signal}): 500m 포화={ci_saturation}, 카니발={ci_cannibal * 100:.1f}%. {ci_narrative}"
+        )
+    else:
+        competitor_block = ""
+
     prompt = (
         "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
         f"브랜드:{brand_name}({business_type}) | 선택지역:{target_district} | 법률리스크:{overall_legal_risk}\n"
@@ -148,6 +161,7 @@ async def synthesis_node(state: AgentState) -> dict:
         f"인구({target_district}):\n{population_report[:1500]}\n"
         + (f"{vacancy_summary}\n" if vacancy_summary else "")
         + (f"향후 12개월 시장 전망:\n{trend_summary_for_llm}\n" if trend_summary_for_llm else "")
+        + (f"{competitor_block}\n" if competitor_block else "")
         + f"법률(14개):\n{legal_summary_for_llm}\n"
         f"{legal_override}"
         f"{demographic_context}\n"
@@ -156,9 +170,10 @@ async def synthesis_node(state: AgentState) -> dict:
         "요구사항:\n"
         "1. 1순위 추천 지역과 이유, 2~4순위 후보 간략 설명\n"
         "2. 창업자 조건(객단가·시간대·자본금·임대예산) 적합성 판단\n"
-        "3. 창업 가부 결정 및 전략 제안\n"
-        "4. FinalStrategyResult 스키마로 응답\n"
-        f"5. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
+        "3. 경쟁인텔(market_entry_signal·카니발)을 final_recommendation 에 반영\n"
+        "4. 창업 가부 결정 및 전략 제안\n"
+        "5. FinalStrategyResult 스키마로 응답\n"
+        f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
     )
 
     try:
@@ -233,5 +248,6 @@ async def synthesis_node(state: AgentState) -> dict:
     return {
         "analysis_results": new_analysis_results,
         "overall_legal_risk": overall_legal_risk,
+        "competitor_intel_result": competitor_intel,  # state 에서 파이프라인 끝까지 유지
         "current_agent": "synthesis",
     }
