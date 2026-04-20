@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select, func, text
 
 from src.database.postgres import PostgresClient
 from src.database.models import LivingPopulation, DistrictSales, GolmokRent, DongMapping
+
+logger = logging.getLogger(__name__)
 
 
 # POI → 마포구 행정동 코드 역매핑 (seoul_realtime_hotspots.area_cd → district_sales.dong_code)
@@ -505,7 +508,11 @@ class MarketDataTool:
 
     async def _fetch_population_trend(self, dong_code: str) -> str:
         """
-        resident_pop_monthly 최근 6개월(해당 dong_code)에서 전/후 3개월 평균 비교.
+        resident_pop_monthly 최근 최대 6개월(해당 dong_code)에서 전/후 평균 비교.
+
+        - ≥6 rows: 3-vs-3 split (최근 3개월 vs 과거 3개월)
+        - 4-5 rows: half-vs-half split (n=5는 중간 row 무시)
+        - ≤3 rows: 'unknown'
 
         mapping: district_sales.dong_code(8) + '00' = resident_pop_monthly.region_code(10)
         Returns: 'growing' | 'stable' | 'declining' | 'unknown'.
@@ -517,14 +524,14 @@ class MarketDataTool:
                 {"rc": region_code},
             )
             rows = res.fetchall()
-        if len(rows) < 6:
+        n = len(rows)
+        if n < 4:
             return "unknown"
 
-        # rows는 ym DESC → 앞 3개가 최신, 뒤 3개가 과거
-        recent = [r.total_pop for r in rows[:3]]
-        past = [r.total_pop for r in rows[3:6]]
-        recent_avg = sum(recent) / 3
-        past_avg = sum(past) / 3
+        # rows는 ym DESC → 앞 half개가 최신(recent), 뒤 half개가 과거(older)
+        half = n // 2
+        recent_avg = sum(r.total_pop for r in rows[:half]) / half
+        past_avg = sum(r.total_pop for r in rows[-half:]) / half
         if past_avg == 0:
             return "unknown"
         ratio = recent_avg / past_avg
@@ -574,9 +581,27 @@ class MarketDataTool:
 
         income_raw, elderly_raw, trend_raw = results
 
-        income = income_raw if isinstance(income_raw, (int, float)) else None
-        elderly = elderly_raw if isinstance(elderly_raw, (int, float)) else None
-        trend = trend_raw if isinstance(trend_raw, str) else "unknown"
+        if isinstance(income_raw, Exception):
+            logger.warning("area_income fetch failed: %s", income_raw)
+            income = None
+        elif income_raw is None:
+            income = None
+        else:
+            income = float(income_raw)
+
+        if isinstance(elderly_raw, Exception):
+            logger.warning("elderly_ratio fetch failed: %s", elderly_raw)
+            elderly = None
+        elif elderly_raw is None:
+            elderly = None
+        else:
+            elderly = float(elderly_raw)
+
+        if isinstance(trend_raw, Exception):
+            logger.warning("population_trend fetch failed: %s", trend_raw)
+            trend = "unknown"
+        else:
+            trend = trend_raw or "unknown"
 
         return {
             "area_income_per_capita": income,
