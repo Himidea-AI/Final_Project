@@ -47,6 +47,10 @@ Thumbs.db
 .copilot/
 .codex/
 
+# 로컬 전용 마케팅 프로그램 (SNS 자동포스팅 + 광고 성과분석) — 레포에 올리지 않음
+marketing/
+test_api_keys.py
+
 # Jupyter
 .ipynb_checkpoints/
 
