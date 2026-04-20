@@ -116,6 +116,103 @@ class MarketDataTool:
         "convenience": "CS200009",
     }
 
+    # 사용자 입력(CS 코드/브랜드/업종명) → naver_trend_industry.industry 값 매핑
+    # naver DataLab은 '커피'/'카페'를 분리하지만 CS 코드는 CS100010 (카페/음료) 하나로 통합.
+    # 브랜드 단위 정밀 매핑을 위해 브랜드명도 직접 키로 등록.
+    _NAVER_INDUSTRY_MAP: Dict[str, str] = {
+        # CS 업종 코드 → naver industry (AgentState.industry_filter 수용)
+        "CS100001": "한식",
+        "CS100002": "중식",
+        "CS100003": "일식",
+        "CS100004": "양식",
+        "CS100005": "제과",
+        "CS100006": "패스트푸드",
+        "CS100007": "치킨",
+        "CS100008": "분식",
+        "CS100009": "호프",
+        "CS100010": "카페",
+        "CS200009": "편의점",
+        # 한글 업종명 (business_type)
+        "한식": "한식",
+        "중식": "중식",
+        "일식": "일식",
+        "양식": "양식",
+        "제과": "제과",
+        "베이커리": "제과",
+        "빵": "제과",
+        "패스트푸드": "패스트푸드",
+        "버거": "패스트푸드",
+        "치킨": "치킨",
+        "분식": "분식",
+        "호프": "호프",
+        "주점": "호프",
+        "카페": "카페",
+        "커피": "커피",
+        "피자": "피자",
+        "편의점": "편의점",
+        # 영문 (business_type 영문 케이스 방어)
+        "cafe": "카페",
+        "coffee": "커피",
+        "restaurant": "한식",
+        "chicken": "치킨",
+        "burger": "패스트푸드",
+        "pizza": "피자",
+        "convenience": "편의점",
+        # 브랜드 → naver industry (대표 프랜차이즈)
+        "빽다방": "커피",
+        "메가MGC커피": "커피",
+        "메가커피": "커피",
+        "이디야커피": "커피",
+        "이디야": "커피",
+        "컴포즈커피": "커피",
+        "컴포즈": "커피",
+        "스타벅스": "카페",
+        "투썸플레이스": "카페",
+        "투썸": "카페",
+        "할리스": "카페",
+        "폴바셋": "카페",
+        "교촌치킨": "치킨",
+        "교촌": "치킨",
+        "BBQ": "치킨",
+        "bhc": "치킨",
+        "BHC": "치킨",
+        "굽네치킨": "치킨",
+        "굽네": "치킨",
+        "맘스터치": "패스트푸드",
+        "롯데리아": "패스트푸드",
+        "버거킹": "패스트푸드",
+        "맥도날드": "패스트푸드",
+        "도미노피자": "피자",
+        "피자헛": "피자",
+        "미스터피자": "피자",
+        "파리바게뜨": "제과",
+        "뚜레쥬르": "제과",
+        "던킨도너츠": "제과",
+        "던킨": "제과",
+    }
+
+    def resolve_industry(
+        self,
+        industry_filter: Optional[str] = None,
+        brand_name: Optional[str] = None,
+        business_type: Optional[str] = None,
+        default: str = "한식",
+    ) -> str:
+        """사용자 입력 → naver_trend_industry.industry 값.
+
+        우선순위: industry_filter(CS 코드) → brand_name → business_type → default.
+        대소문자 구분 없음 (소문자 fallback).
+        """
+        for candidate in (industry_filter, brand_name, business_type):
+            if not candidate:
+                continue
+            if candidate in self._NAVER_INDUSTRY_MAP:
+                return self._NAVER_INDUSTRY_MAP[candidate]
+            lower = candidate.lower()
+            if lower in self._NAVER_INDUSTRY_MAP:
+                return self._NAVER_INDUSTRY_MAP[lower]
+        return default
+
     async def get_competitor_stats(
         self, lat: float, lon: float, industry_m_code: str, radius_m: int = 500
     ) -> Dict[str, Any]:
@@ -609,3 +706,199 @@ class MarketDataTool:
             "population_trend": trend,
             "income_level": self._classify_income_level(income),
         }
+
+    # ============================================================
+    # trend_forecaster agent support (업종 검색량 / 지역 모멘텀 /
+    # 상권 변화 지표 / 거시 기준금리)
+    # ============================================================
+
+    async def get_industry_trend(self, industry: str, months_back: int = 24) -> Dict[str, Any]:
+        """naver_trend_industry 업종 검색량 월별 추이.
+
+        Args:
+            industry: '커피'/'치킨'/'패스트푸드' 등 naver_trend_industry.industry 값.
+                resolve_industry()로 먼저 정규화할 것.
+            months_back: 최근 N개월.
+
+        Returns:
+            {
+                "samples": [{"period": "2026-04-01", "ratio": 40.5}, ...],
+                "current_ratio": float | None,
+                "yoy_change_pct": float | None,
+                "direction": "rising" | "stable" | "declining" | "unknown",
+            }
+        """
+        async with self.db_client.get_session() as session:
+            query = text(
+                """
+                SELECT period, ratio
+                FROM naver_trend_industry
+                WHERE industry = :industry
+                  AND period >= (CURRENT_DATE - make_interval(months => :months))
+                ORDER BY period ASC
+                """
+            )
+            result = await session.execute(query, {"industry": industry, "months": months_back})
+            rows = result.fetchall()
+
+        if not rows:
+            return {
+                "samples": [],
+                "current_ratio": None,
+                "yoy_change_pct": None,
+                "direction": "unknown",
+            }
+
+        samples = [{"period": str(r[0]), "ratio": float(r[1])} for r in rows]
+        current = samples[-1]["ratio"]
+
+        yoy: Optional[float] = None
+        if len(samples) >= 13:
+            prev = samples[-13]["ratio"]
+            if prev > 0:
+                yoy = ((current - prev) / prev) * 100
+
+        if yoy is None:
+            direction = "unknown"
+        elif yoy > 5:
+            direction = "rising"
+        elif yoy < -5:
+            direction = "declining"
+        else:
+            direction = "stable"
+
+        return {
+            "samples": samples,
+            "current_ratio": current,
+            "yoy_change_pct": yoy,
+            "direction": direction,
+        }
+
+    async def get_dong_trend_quarterly(self, dong_name: str, quarters_back: int = 8) -> Dict[str, Any]:
+        """naver_trend_quarterly 마포 동별 분기 트렌드 스코어.
+
+        ⚠️ 2026-04 기준 최신 분기는 20244 (2024 Q4). 현재 시점과 1.5년 gap.
+
+        Args:
+            dong_name: 한글 동 이름 ('서교동'). target_district 값 그대로 사용.
+            quarters_back: 최근 N분기.
+        """
+        async with self.db_client.get_session() as session:
+            query = text(
+                """
+                SELECT quarter, trend_score
+                FROM naver_trend_quarterly
+                WHERE scope = 'mapo' AND dong_name = :dong_name
+                ORDER BY quarter DESC
+                LIMIT :limit
+                """
+            )
+            result = await session.execute(query, {"dong_name": dong_name, "limit": quarters_back})
+            rows = result.fetchall()
+
+        if not rows:
+            return {
+                "samples": [],
+                "recent_score": None,
+                "slope_pct": None,
+                "max_quarter": None,
+            }
+
+        samples = [{"quarter": int(r[0]), "score": float(r[1])} for r in reversed(rows)]
+        recent = samples[-1]["score"]
+        max_quarter = samples[-1]["quarter"]
+
+        slope: Optional[float] = None
+        if len(samples) >= 2 and samples[0]["score"] > 0:
+            slope = ((recent - samples[0]["score"]) / samples[0]["score"]) * 100
+
+        return {
+            "samples": samples,
+            "recent_score": recent,
+            "slope_pct": slope,
+            "max_quarter": max_quarter,
+        }
+
+    async def get_adstrd_change_ix(self, dong_name: str) -> Dict[str, Any]:
+        """seoul_adstrd_change_ix 상권 변화 지표 (동 단위 최신 + 최근 4분기 이력).
+
+        Args:
+            dong_name: 한글 동 이름. 테이블에 dong_name 컬럼이 있어 code 변환 불필요.
+        """
+        async with self.db_client.get_session() as session:
+            query = text(
+                """
+                SELECT quarter, change_ix, change_ix_name,
+                       opr_sale_mt_avg, cls_sale_mt_avg,
+                       su_opr_sale_mt_avg, su_cls_sale_mt_avg
+                FROM seoul_adstrd_change_ix
+                WHERE dong_name = :dong_name
+                ORDER BY quarter DESC
+                LIMIT 4
+                """
+            )
+            result = await session.execute(query, {"dong_name": dong_name})
+            rows = result.fetchall()
+
+        if not rows:
+            return {"current": None, "history": []}
+
+        latest = rows[0]
+        opr = float(latest[3]) if latest[3] is not None else None
+        cls = float(latest[4]) if latest[4] is not None else None
+        su_opr = float(latest[5]) if latest[5] is not None else None
+        su_cls = float(latest[6]) if latest[6] is not None else None
+
+        return {
+            "current": {
+                "quarter": int(latest[0]),
+                "change_ix_class": latest[1],
+                "change_ix_label": latest[2],
+                "opr_months": opr,
+                "cls_months": cls,
+                "opr_vs_seoul_ratio": (opr / su_opr) if (opr and su_opr) else None,
+                "cls_vs_seoul_ratio": (cls / su_cls) if (cls and su_cls) else None,
+            },
+            "history": [
+                {
+                    "quarter": int(r[0]),
+                    "change_ix_label": r[2],
+                    "opr_months": float(r[3]) if r[3] is not None else None,
+                }
+                for r in rows
+            ],
+        }
+
+    async def get_base_rate_trend(self, months_back: int = 12) -> Dict[str, Any]:
+        """ecos_timeseries 한국은행 기준금리 월별 추이.
+
+        Step 0 검증으로 item_name1 = '한국은행 기준금리' exact match 확정.
+        """
+        async with self.db_client.get_session() as session:
+            query = text(
+                """
+                SELECT period, data_value
+                FROM ecos_timeseries
+                WHERE item_name1 = '한국은행 기준금리'
+                ORDER BY period DESC
+                LIMIT :limit
+                """
+            )
+            result = await session.execute(query, {"limit": months_back})
+            rows = result.fetchall()
+
+        if not rows:
+            return {"current": None, "trend": "unknown", "samples": []}
+
+        samples = [{"period": r[0], "rate": float(r[1])} for r in reversed(rows)]
+        current = samples[-1]["rate"]
+        oldest = samples[0]["rate"]
+
+        if current > oldest + 0.25:
+            trend = "rising"
+        elif current < oldest - 0.25:
+            trend = "declining"
+        else:
+            trend = "stable"
+
+        return {"current": current, "trend": trend, "samples": samples}
