@@ -60,7 +60,13 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
-import type { QuarterlyProjection, ShapResult, ClosureRisk } from './types';
+import type {
+  QuarterlyProjection,
+  ShapResult,
+  ClosureRisk,
+  TrendForecast,
+  DemographicReport,
+} from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
@@ -143,8 +149,15 @@ interface SimResult {
     cannibalization?: { estimated_revenue_impact_pct: number };
     market_entry_signal?: 'green' | 'yellow' | 'red';
     differentiation_position?: string;
+    key_opportunities?: string[];
+    key_risks?: string[];
+    recommended_actions?: string[];
     narrative?: string;
   } | null;
+  // [PR #71] 트렌드 전망 (trend_forecaster 에이전트)
+  trendForecast?: TrendForecast | null;
+  // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)
+  demographicReport?: DemographicReport | null;
 }
 
 import {
@@ -2642,6 +2655,12 @@ function SimulatorDashboard({
         // [PR #72] 경쟁 매장 인텔리전스
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         competitorIntel: (simRes as any).competitor_intel ?? null,
+        // [PR #71] 트렌드 전망
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        trendForecast: (simRes as any).trend_forecast ?? null,
+        // [PR #75] 인구통계 심층 분석
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        demographicReport: (simRes as any).demographic_report ?? null,
       });
       setReportState('result');
     } catch (err) {
@@ -3303,6 +3322,95 @@ function SimulatorDashboard({
                 {/* Single Mode: 기존 대시보드 */}
                 {!isSplitMode && (
                   <>
+                    {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단 */}
+                    {(() => {
+                      const rec = simResult?.recommendation;
+                      const legalRisk = simResult?.overallLegalRisk;
+                      const ciSignal = simResult?.competitorIntel?.market_entry_signal;
+                      // signal 없고 recommendation도 없으면 렌더 안 함
+                      if (!rec && !legalRisk && !ciSignal) return null;
+
+                      // signal: competitor_intel 우선, 없으면 overall_legal_risk 매핑
+                      let signal: 'green' | 'yellow' | 'red' = 'yellow';
+                      if (ciSignal === 'green' || ciSignal === 'yellow' || ciSignal === 'red') {
+                        signal = ciSignal;
+                      } else if (legalRisk === 'safe') signal = 'green';
+                      else if (legalRisk === 'danger') signal = 'red';
+                      else if (legalRisk === 'caution') signal = 'yellow';
+
+                      const sigCfg = {
+                        green: {
+                          emoji: '🟢',
+                          label: 'GREEN',
+                          bg: 'bg-emerald-500/10',
+                          border: 'border-emerald-500/30',
+                          badge: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40',
+                          iconBg: 'bg-emerald-500/10 ring-1 ring-emerald-500/30',
+                        },
+                        yellow: {
+                          emoji: '🟡',
+                          label: 'YELLOW',
+                          bg: 'bg-amber-500/10',
+                          border: 'border-amber-500/30',
+                          badge: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
+                          iconBg: 'bg-amber-500/10 ring-1 ring-amber-500/30',
+                        },
+                        red: {
+                          emoji: '🔴',
+                          label: 'RED',
+                          bg: 'bg-rose-500/10',
+                          border: 'border-rose-500/30',
+                          badge: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
+                          iconBg: 'bg-rose-500/10 ring-1 ring-rose-500/30',
+                        },
+                      }[signal];
+
+                      // headline: rec의 첫 문장 or 첫 60자 + '…'
+                      let oneLiner = '';
+                      if (rec) {
+                        const firstSentence = rec.match(/^(.+?[.!?。])\s/);
+                        if (firstSentence && firstSentence[1].length <= 80) {
+                          oneLiner = firstSentence[1].trim();
+                        } else {
+                          oneLiner = rec.length > 60 ? rec.slice(0, 60).trim() + '…' : rec;
+                        }
+                      }
+
+                      return (
+                        <div
+                          className={`mb-2 overflow-hidden rounded-2xl border ${sigCfg.border} bg-gradient-to-br from-slate-900/95 to-slate-800/70 p-6 shadow-2xl ring-1 ring-slate-700/50`}
+                        >
+                          <div className="flex items-start gap-4">
+                            <div
+                              className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${sigCfg.iconBg} text-3xl`}
+                            >
+                              {sigCfg.emoji}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
+                                  AI VERDICT
+                                </h3>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-xs font-bold ${sigCfg.badge}`}
+                                >
+                                  {sigCfg.label}
+                                </span>
+                              </div>
+                              {oneLiner && (
+                                <p className="mt-2 text-base font-semibold leading-snug text-slate-100">
+                                  {oneLiner}
+                                </p>
+                              )}
+                              {rec && rec !== oneLiner && (
+                                <p className="mt-2 text-sm leading-relaxed text-slate-300">{rec}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     <AIVerdictBanner
                       headline={
                         simResult?.recommendation ||

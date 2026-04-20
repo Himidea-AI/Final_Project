@@ -99,6 +99,34 @@ export interface ClosureRisk {
   is_mock: boolean;
 }
 
+/** 트렌드 전망 (trend_forecaster 에이전트) */
+export interface TrendForecast {
+  forecast?: {
+    score?: number;
+    direction?: string; // growth | stable | decline
+    confidence?: string; // high | medium | low
+    narrative?: string;
+  };
+  industry_trend?: { direction?: string }; // up | flat | down
+  change_ix?: { change_ix_label?: string }; // 상권확장 | 상권유지 | 상권축소 | 상권쇠퇴
+  macro?: Record<string, unknown>;
+}
+
+/** 인구통계 심층 분석 (demographic_depth 에이전트) */
+export interface DemographicReport {
+  core_demographic: { age: string; gender: string; share: number };
+  top_3_age_groups: { age_group: string; share: number }[];
+  peak_consumption_hours: string[];
+  weekday_weekend_ratio: number;
+  resident_visitor_ratio: number | null;
+  area_income_level: string; // high | mid | low | unknown
+  population_trend: string; // growing | stable | declining | unknown
+  elderly_ratio: number | null;
+  brand_target_match_score: number | null;
+  match_rationale: string | null;
+  narrative: string;
+}
+
 /** 시뮬레이션 결과 출력 */
 export interface SimulationOutput {
   request_id: string;
@@ -143,6 +171,10 @@ export interface SimulationOutput {
   closure_risk?: ClosureRisk | null;
   // [PR #72] 경쟁 매장 인텔리전스 (500m 반경 카니발/포화도/차별화)
   competitor_intel?: Record<string, unknown> | null;
+  // [PR #71] 트렌드 전망 (trend_forecaster 에이전트)
+  trend_forecast?: TrendForecast | null;
+  // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)
+  demographic_report?: DemographicReport | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
