@@ -27,6 +27,47 @@ from src.database.models import NaverVacancy, StoreQuarterly
 
 _CACHE_TTL = 86400  # 24시간
 
+
+async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
+    """
+    지정 동들의 실제 공실 좌표 목록 반환 (월세 매물, 좌표 유효한 것만)
+
+    Returns: [{id, lat, lon, dong_name, listing_count}, ...]
+    """
+    try:
+        async with db_client.get_session() as session:
+            stmt = (
+                select(
+                    NaverVacancy.id,
+                    NaverVacancy.lat,
+                    NaverVacancy.lon,
+                    NaverVacancy.dong_name,
+                    NaverVacancy.listing_count,
+                )
+                .where(
+                    NaverVacancy.trade_type == "월세",
+                    NaverVacancy.dong_name.in_(dong_names),
+                    NaverVacancy.lat.isnot(None),
+                    NaverVacancy.lon.isnot(None),
+                )
+            )
+            rows = (await session.execute(stmt)).fetchall()
+        spots = [
+            {
+                "id": r.id,
+                "lat": r.lat,
+                "lon": r.lon,
+                "dong_name": r.dong_name,
+                "listing_count": r.listing_count or 1,
+            }
+            for r in rows
+        ]
+        print(f"[district_ranking] 공실 스팟 {len(spots)}개 로드 (동: {dong_names})")
+        return spots
+    except Exception as e:
+        print(f"[district_ranking] 공실 스팟 로드 실패: {e}")
+        return []
+
 # 동일 invocation 내 중복 DB 쿼리 방지용 비동기 Task 공유 dict.
 # district_ranking_node와 population_analyst_node가 asyncio.gather로 병렬 실행되어
 # 동일 target_district에 대해 market_tool.get_population_trends를 두 번 호출하는 문제를 막는다.
@@ -334,7 +375,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     winner = ranked[0]["district"] if ranked else state.get("target_district", "서교동")
     top_3 = [r["district"] for r in ranked[1:4]]
 
-    print(f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied} ---")
+    # winner + top_3 + 사용자 선택 동의 실제 공실 좌표 조회
+    target_district = state.get("target_district", winner)
+    dong_names = list(dict.fromkeys([winner, target_district] + top_3))
+    vacancy_spots = await _load_vacancy_spots(dong_names)
+
+    print(f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied}, 스팟={len(vacancy_spots)}개 ---")
 
     # Redis 캐시 저장
     if _redis is not None:
@@ -365,6 +411,7 @@ async def district_ranking_node(state: AgentState) -> dict:
         "scouting_results": ranked,
         "winner_district": winner,
         "top_3_candidates": top_3,
-        "vacancy_applied": vacancy_applied,  # 공실 DB 로드 성공 여부
+        "vacancy_applied": vacancy_applied,
+        "vacancy_spots": vacancy_spots,
         "current_agent": "district_ranking",
     }
