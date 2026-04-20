@@ -4,7 +4,6 @@ from pathlib import Path
 import os
 import uuid
 import asyncio
-import logging
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
@@ -168,6 +167,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "business_type": normalized_biz,
         "brand_name": normalized_brand,
         "target_district": input_data.target_district,
+        "industry_filter": getattr(input_data, "industry_filter", None),
         "commercial_radius": getattr(input_data, "commercial_radius", 500),
         "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
         "store_area": getattr(input_data, "store_area", 15.0),
@@ -375,6 +375,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         ],
         "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
         "legal_risks": legal_risks,
+        "demographic_report": analysis.get("demographic_report"),
         "map_data": {
             "center": {"lat": lat, "lng": lng},
             "markers": [
@@ -813,6 +814,7 @@ async def run_simulation(input_data: SimulationInput):
             "quarterly_projection": [],
             "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",
             "analysis_metrics": {},
+            "demographic_report": None,
             "map_data": None,
             "financial_report": {},
         }
