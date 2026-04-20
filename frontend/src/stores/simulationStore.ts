@@ -162,7 +162,17 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     });
   },
   dismissResult: () => {
-    // Implemented in Plan Task 9
+    const { status } = get();
+    if (status !== 'done' && status !== 'error') return;
+    set({
+      status: 'idle',
+      progress: 0,
+      stage: '',
+      result: null,
+      error: null,
+      params: null,
+      startedAt: null,
+    });
   },
   reset: () => {
     const { _abortController, _progressTimer } = get();

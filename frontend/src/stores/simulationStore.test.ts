@@ -193,3 +193,21 @@ describe('simulationStore — 진행률 타이머', () => {
     expect(useSimulationStore.getState().progress).toBeLessThanOrEqual(90);
   });
 });
+
+describe('simulationStore — dismissResult', () => {
+  beforeEach(() => {
+    useSimulationStore.getState().reset();
+    vi.restoreAllMocks();
+  });
+
+  it('done 상태를 idle로 되돌리고 result를 null로 만든다', async () => {
+    vi.spyOn(api, 'runSimulation').mockResolvedValue(MOCK_OUTPUT);
+    await useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    expect(useSimulationStore.getState().status).toBe('done');
+
+    useSimulationStore.getState().dismissResult();
+    const s = useSimulationStore.getState();
+    expect(s.status).toBe('idle');
+    expect(s.result).toBeNull();
+  });
+});
