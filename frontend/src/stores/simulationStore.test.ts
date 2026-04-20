@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import axios from 'axios';
 import { useSimulationStore } from './simulationStore';
 import * as api from '../api/client';
 import type { SimulationInput, SimulationOutput } from '../types';
@@ -66,5 +67,28 @@ describe('simulationStore — startSimulation 성공', () => {
     expect(final.status).toBe('done');
     expect(final.progress).toBe(100);
     expect(final.result).toEqual(MOCK_OUTPUT);
+  });
+});
+
+describe('simulationStore — 에러', () => {
+  beforeEach(() => {
+    useSimulationStore.getState().reset();
+    vi.restoreAllMocks();
+  });
+
+  it('fetch 실패 시 error 상태로 전이한다', async () => {
+    vi.spyOn(api, 'runSimulation').mockRejectedValue(new Error('network down'));
+    await useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    const s = useSimulationStore.getState();
+    expect(s.status).toBe('error');
+    expect(s.error).toContain('network down');
+  });
+
+  it('AbortError는 error로 기록하지 않는다', async () => {
+    const abortErr = new axios.Cancel('canceled');
+    vi.spyOn(api, 'runSimulation').mockRejectedValue(abortErr);
+    await useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    const s = useSimulationStore.getState();
+    expect(s.status).not.toBe('error');
   });
 });

@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { create } from 'zustand';
 import type { SimulationInput, SimulationOutput } from '../types';
 
@@ -66,8 +67,26 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         _abortController: null,
       });
     } catch (err: unknown) {
-      // Error handling added in Plan Task 5
-      throw err;
+      // Stale check — if replaced, don't touch state
+      if (get().startedAt !== startedAt) return;
+
+      const isAbort =
+        (err as { name?: string })?.name === 'CanceledError' ||
+        (err as { name?: string })?.name === 'AbortError' ||
+        axios.isCancel?.(err);
+
+      if (isAbort) {
+        // cancelSimulation already cleaned state; nothing to do here
+        return;
+      }
+
+      const message =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : '알 수 없는 오류';
+      set({
+        status: 'error',
+        error: message,
+        _abortController: null,
+      });
     }
   },
   cancelSimulation: () => {
