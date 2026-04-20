@@ -190,8 +190,23 @@ async def check_zoning_regulation(state: AgentState) -> dict:
     zone = DISTRICT_ZONE_MAP.get(district, "근린상업지역")  # 알 수 없는 동은 상업지역으로 가정
     rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
 
-    # business_type 코드 → 한글 매핑
-    type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(business_type, business_type)
+    # business_type 코드 → 한글 매핑 (확장 가능)
+    _BIZ_TYPE_LABEL = {
+        "cafe": "카페",
+        "coffee": "카페",
+        "카페": "카페",
+        "restaurant": "음식점",
+        "음식점": "음식점",
+        "convenience": "편의점",
+        "편의점": "편의점",
+        "bakery": "카페",
+        "제과": "카페",
+        "chicken": "음식점",
+        "치킨": "음식점",
+        "fastfood": "음식점",
+        "패스트푸드": "음식점",
+    }
+    type_label = _BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
 
     if type_label in rules["제한"]:
         level = "danger"
@@ -235,9 +250,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
     district = state.get("target_district", "")
     business_type = state.get("business_type", "")
 
+    # 캐시 키 정규화 — 영문/한글 혼용 시 동일 캐시 히트 보장
+    _BIZ_NORMALIZE = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}
+    _normalized_biz = _BIZ_NORMALIZE.get(business_type.lower(), business_type)
+
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
-    cache_key = f"v3:legal:{brand}:{district}:{business_type}"
+    cache_key = f"v3:legal:{brand}:{district}:{_normalized_biz}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -395,6 +414,18 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "fair_trade_law": "공정거래법 — 가맹본부 불공정 거래 금지, 부당 거래 강제(필수 물품 고가 공급), 공정위 신고",
     }
 
+    # 법률별 RAG 조문 번호 추출 (articles 필드 채우기용)
+    def _extract_articles(docs: list[dict]) -> list[str]:
+        """RAG 문서 메타데이터에서 조문 번호(article) 추출, 중복 제거."""
+        seen = set()
+        articles = []
+        for d in docs:
+            art = d.get("metadata", {}).get("article", "")
+            if art and art != "전문" and art not in seen:
+                seen.add(art)
+                articles.append(art)
+        return articles[:5]  # 최대 5개
+
     # 모든 RAG 문서를 법률별로 정리하여 컨텍스트 구성
     docs_context = ""
     docs_map = {
@@ -411,13 +442,14 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "sewage_law": sewage_docs,
         "fair_trade_law": fair_trade_docs,
     }
+    # 법률별 균등 분배 — 12개 법률에 각 최대 1000자씩 (뒤쪽 법률 잘림 방지)
+    _MAX_PER_LAW = 1000
     for law_type, docs in docs_map.items():
         if docs:
-            snippets = " | ".join(d["content"][:600] for d in docs[:4])
+            snippets = " | ".join(d["content"][:400] for d in docs[:3])
+            if len(snippets) > _MAX_PER_LAW:
+                snippets = snippets[:_MAX_PER_LAW] + "…"
             docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
-
-    if len(docs_context) > 12000:
-        docs_context = docs_context[:12000] + "..."
 
     items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
 
@@ -455,7 +487,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         "type": item.type,
                         "level": item.level,
                         "summary": item.summary,
-                        "articles": [],
+                        "articles": _extract_articles(docs_map.get(item.type, [])),
                         "recommendation": item.recommendation,
                     }
                 )

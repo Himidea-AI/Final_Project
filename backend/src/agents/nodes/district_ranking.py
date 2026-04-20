@@ -72,14 +72,24 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
 _pop_trends_tasks: dict[str, asyncio.Task] = {}
 
 
+async def _safe_population_trends(dong: str) -> dict:
+    """get_population_trends를 호출하되 exception 시 빈 dict 반환 (다른 awaiter 보호)."""
+    try:
+        return await market_tool.get_population_trends(dong)
+    except Exception as e:
+        print(f"[shared_population_trends] {dong} 인구 데이터 조회 실패: {e}")
+        return {"error": str(e)}
+
+
 def shared_population_trends(dong: str) -> asyncio.Task:
     """동일 dong에 대한 get_population_trends 호출을 단일 Task로 dedupe.
 
     첫 호출자가 Task를 생성하고, 같은 dong에 대한 후속 호출자는 같은 Task를 await한다.
     asyncio는 cooperative multitasking이므로 if-check와 dict 할당 사이에 race condition은 없다.
+    _safe_population_trends로 감싸서 exception이 다른 awaiter에 전파되지 않음.
     """
     if dong not in _pop_trends_tasks:
-        _pop_trends_tasks[dong] = asyncio.create_task(market_tool.get_population_trends(dong))
+        _pop_trends_tasks[dong] = asyncio.create_task(_safe_population_trends(dong))
     return _pop_trends_tasks[dong]
 
 
@@ -123,15 +133,14 @@ async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
             store_rows = (await session.execute(store_stmt)).fetchall()
             store_map = {r.dong_name: int(r.store_count) for r in store_rows if r.store_count}
 
-        # 3) 공실률 계산
+        # 3) 공실률 계산 — 점포 데이터 없는 동은 0.0이 아닌 미반영 처리
         vacancy_rate_map: dict[str, float] = {}
         for dong in MAPO_DISTRICTS:
             wolse = wolse_map.get(dong, 0)
             store_count = store_map.get(dong, 0)
             if store_count > 0:
                 vacancy_rate_map[dong] = round(wolse / store_count * 100, 2)
-            else:
-                vacancy_rate_map[dong] = 0.0
+            # store_count=0이면 vacancy_rate_map에 미포함 → 패널티 0 (데이터 부재와 0% 구분)
 
         print(
             f"[district_ranking] 공실률 로드 완료 - 상위 3개: "
@@ -267,9 +276,22 @@ def _normalize_and_rank(
         # 용도지역 규제 패널티: legal_node와 동일한 DISTRICT_ZONE_MAP/ZONING_RULES 사용
         zoning_risk = "safe"
         if business_type:
-            type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(
-                business_type, business_type
-            )
+            _BIZ_TYPE_LABEL = {
+                "cafe": "카페",
+                "coffee": "카페",
+                "카페": "카페",
+                "restaurant": "음식점",
+                "음식점": "음식점",
+                "convenience": "편의점",
+                "편의점": "편의점",
+                "bakery": "카페",
+                "제과": "카페",
+                "chicken": "음식점",
+                "치킨": "음식점",
+                "fastfood": "음식점",
+                "패스트푸드": "음식점",
+            }
+            type_label = _BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
             zone = DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
             rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
             if type_label in rules["제한"]:
@@ -318,8 +340,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
 
+    # 캐시 키 정규화 — 영문/한글 혼용 시 동일 캐시 히트 보장
+    _BIZ_NORMALIZE = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}
+    _normalized_biz = _BIZ_NORMALIZE.get(business_type.lower(), business_type)
+
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
-    cache_key = f"v3:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    cache_key = f"v3:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
