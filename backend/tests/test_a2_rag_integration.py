@@ -149,10 +149,11 @@ async def test_retriever_source_filter_safety():
 # ──────────────────────────────────────────────────────────────
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_output_keys(mock_llm):
+async def test_legal_node_output_keys(mock_llm):
     """legal_node 반환값에 analysis_results, legal_info 키가 있는지 확인"""
-    result = legal_node(_BASE_STATE.copy())
+    result = await legal_node(_BASE_STATE.copy())
 
     assert "analysis_results" in result, "analysis_results 키 누락"
     assert "legal_info" in result, "legal_info 키 누락"
@@ -160,10 +161,11 @@ def test_legal_node_output_keys(mock_llm):
     assert "overall_legal_risk" in result["analysis_results"], "analysis_results.overall_legal_risk 키 누락"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_overall_risk_level(mock_llm):
+async def test_legal_node_overall_risk_level(mock_llm):
     """overall_legal_risk가 safe/caution/danger 중 하나이며 14개 리스크 중 최고 레벨인지 확인"""
-    result = legal_node(_BASE_STATE.copy())
+    result = await legal_node(_BASE_STATE.copy())
     analysis = result["analysis_results"]
 
     overall = analysis["overall_legal_risk"]
@@ -175,10 +177,11 @@ def test_legal_node_overall_risk_level(mock_llm):
     assert level_order[overall] == max_individual, f"overall_legal_risk({overall})이 개별 최고 레벨과 불일치"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_all_risk_types(mock_llm):
+async def test_legal_node_all_risk_types(mock_llm):
     """14가지 리스크 타입이 모두 포함되는지 확인"""
-    result = legal_node(_BASE_STATE.copy())
+    result = await legal_node(_BASE_STATE.copy())
     risks = result["analysis_results"]["legal_risks"]
 
     risk_types = {r["type"] for r in risks}
@@ -201,10 +204,11 @@ def test_legal_node_all_risk_types(mock_llm):
     assert expected_types.issubset(risk_types), f"누락된 리스크 타입: {expected_types - risk_types}"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_risk_structure(mock_llm):
+async def test_legal_node_risk_structure(mock_llm):
     """각 리스크 dict가 필수 키를 모두 포함하는지 확인"""
-    result = legal_node(_BASE_STATE.copy())
+    result = await legal_node(_BASE_STATE.copy())
     risks = result["analysis_results"]["legal_risks"]
 
     required_keys = {"type", "level", "summary", "articles", "recommendation"}
@@ -213,10 +217,11 @@ def test_legal_node_risk_structure(mock_llm):
         assert not missing, f"{risk.get('type')} 리스크에 키 누락: {missing}"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_risk_level_values(mock_llm):
+async def test_legal_node_risk_level_values(mock_llm):
     """level 값이 safe / caution / danger 중 하나인지 확인"""
-    result = legal_node(_BASE_STATE.copy())
+    result = await legal_node(_BASE_STATE.copy())
     risks = result["analysis_results"]["legal_risks"]
 
     valid_levels = {"safe", "caution", "danger"}
@@ -224,10 +229,11 @@ def test_legal_node_risk_level_values(mock_llm):
         assert risk["level"] in valid_levels, f"{risk['type']} 리스크의 level 값 비정상: {risk['level']}"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_legal_info_not_empty(mock_llm):
+async def test_legal_node_legal_info_not_empty(mock_llm):
     """legal_info가 비어있지 않은지 확인 (실제 문서 or fallback)"""
-    result = legal_node(_BASE_STATE.copy())
+    result = await legal_node(_BASE_STATE.copy())
     legal_info = result["legal_info"]
 
     assert len(legal_info) > 0, "legal_info가 빈 리스트 — RAG 또는 fallback 확인 필요"
@@ -236,22 +242,24 @@ def test_legal_node_legal_info_not_empty(mock_llm):
         assert "metadata" in item, "legal_info 항목에 metadata 키 누락"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_state_passthrough(mock_llm):
+async def test_legal_node_state_passthrough(mock_llm):
     """legal_node가 기존 state 필드를 유지하면서 결과를 추가하는지 확인"""
     state = _BASE_STATE.copy()
     state["brand_name"] = "스타벅스"
     state["target_district"] = "합정동"
 
-    result = legal_node(state)
+    result = await legal_node(state)
 
     assert result["brand_name"] == "스타벅스", "brand_name 필드가 사라짐"
     assert result["target_district"] == "합정동", "target_district 필드가 사라짐"
     assert result["business_type"] == "cafe", "business_type 필드가 사라짐"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_ftc_franchise_db_failure_fallback(mock_llm):
+async def test_ftc_franchise_db_failure_fallback(mock_llm):
     """
     DB 조회 실패 시(PostgresClient 예외) FTC 판정이 safe/caution/danger 중 하나로
     정상 반환되는지 확인 — position_ratio 로직이 예외 처리로 감싸져 있어야 함
@@ -259,7 +267,7 @@ def test_ftc_franchise_db_failure_fallback(mock_llm):
     with patch("src.database.postgres.PostgresClient") as MockPG:
         MockPG.return_value.connect = AsyncMock(side_effect=Exception("DB 연결 실패"))
 
-        result = legal_node(_BASE_STATE.copy())
+        result = await legal_node(_BASE_STATE.copy())
         risks = result["analysis_results"]["legal_risks"]
         ftc_risk = next((r for r in risks if r["type"] == "ftc_franchise"), None)
 
@@ -267,8 +275,9 @@ def test_ftc_franchise_db_failure_fallback(mock_llm):
         assert ftc_risk["level"] in {"safe", "caution", "danger"}, f"DB 실패 후 ftc level 비정상: {ftc_risk['level']}"
 
 
+@pytest.mark.asyncio
 @patch("src.agents.nodes.legal._async_call_llm", new_callable=AsyncMock, return_value=_MOCK_LLM_RESPONSE)
-def test_legal_node_fallback_when_no_rag_docs(mock_llm):
+async def test_legal_node_fallback_when_no_rag_docs(mock_llm):
     """
     retriever.search()가 빈 리스트를 반환할 때
     legal_info가 fallback(risks summary)으로 채워지는지 확인
@@ -279,7 +288,7 @@ def test_legal_node_fallback_when_no_rag_docs(mock_llm):
         mock_instance = MockRetriever.return_value
         mock_instance.search = AsyncMock(return_value=[])
 
-        result = legal_node(_BASE_STATE.copy())
+        result = await legal_node(_BASE_STATE.copy())
         legal_info = result["legal_info"]
 
         assert len(legal_info) > 0, "RAG 결과 없을 때 fallback이 동작하지 않음"
@@ -290,43 +299,48 @@ def test_legal_node_fallback_when_no_rag_docs(mock_llm):
 # ──────────────────────────────────────────────────────────────
 
 
-def test_zoning_commercial_district_cafe_safe():
+@pytest.mark.asyncio
+async def test_zoning_commercial_district_cafe_safe():
     """상업지역(서교동) 카페 → safe"""
     state = {**_BASE_STATE, "target_district": "서교동", "business_type": "cafe"}
-    result = check_zoning_regulation(state)
+    result = await check_zoning_regulation(state)
     assert result["level"] == "safe", f"서교동 카페는 safe여야 함: {result['summary']}"
     assert result["allowed"] is True
 
 
-def test_zoning_residential_cafe_danger():
+@pytest.mark.asyncio
+async def test_zoning_residential_cafe_danger():
     """제1종전용주거지역(강제 매핑) 카페 → danger"""
     state = {**_BASE_STATE, "target_district": "염리동", "business_type": "cafe"}
-    result = check_zoning_regulation(state)
+    result = await check_zoning_regulation(state)
     # 염리동은 제2종일반주거지역 → 카페 허용 → safe
     assert result["level"] in {"safe", "caution", "danger"}
     assert "type" in result
     assert result["type"] == "zoning_regulation"
 
 
-def test_zoning_returns_required_keys():
+@pytest.mark.asyncio
+async def test_zoning_returns_required_keys():
     """check_zoning_regulation 반환 dict 구조 검증"""
     state = {**_BASE_STATE, "target_district": "합정동", "business_type": "restaurant"}
-    result = check_zoning_regulation(state)
+    result = await check_zoning_regulation(state)
 
     required_keys = {"type", "level", "zone", "business_type", "allowed", "summary"}
     missing = required_keys - set(result.keys())
     assert not missing, f"누락된 키: {missing}"
 
 
-def test_zoning_unknown_district_defaults_to_commercial():
+@pytest.mark.asyncio
+async def test_zoning_unknown_district_defaults_to_commercial():
     """등록되지 않은 행정동은 근린상업지역으로 fallback 처리"""
     state = {**_BASE_STATE, "target_district": "존재하지않는동", "business_type": "cafe"}
-    result = check_zoning_regulation(state)
+    result = await check_zoning_regulation(state)
     assert result["zone"] == "근린상업지역", "알 수 없는 동은 근린상업지역이어야 함"
     assert result["level"] == "safe"
 
 
-def test_zoning_mapo_dong_map_coverage():
+@pytest.mark.asyncio
+async def test_zoning_mapo_dong_map_coverage():
     """마포구 주요 행정동 전체가 용도지역 맵에 등록되어 있는지 확인"""
     from src.agents.nodes.legal import _DISTRICT_ZONE_MAP
 
