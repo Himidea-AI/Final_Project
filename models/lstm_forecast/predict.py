@@ -260,7 +260,10 @@ def forecast(
         for _ in range(months):
             pred_scaled = model(current_seq)
             pred_val = pred_scaled.cpu().numpy().flatten()[0]
-            pred_original = tgt_scaler.inverse_transform([[pred_val]])[0][0]
+            # 학습 시 타겟은 log1p 변환된 값 → inverse_transform 후 expm1로 원 단위 복원
+            # (models/tcn_forecast/predict.py:188-189 와 동일 패턴)
+            pred_log = tgt_scaler.inverse_transform([[pred_val]])[0][0]
+            pred_original = float(np.expm1(pred_log))
             predictions.append(float(pred_original))
 
             new_step = current_seq[0, -1, :].clone()

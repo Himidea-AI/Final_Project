@@ -1,7 +1,7 @@
 import json
-import re
 import redis.asyncio as aioredis
 from src.schemas.state import AgentState, MarketData
+from src.schemas.structured_output import MarketAnalysisOutput
 from src.config.settings import settings
 from src.agents.llms import get_fast_llm
 from src.agents.tools import MarketDataTool
@@ -91,57 +91,36 @@ async def market_analyst_node(state: AgentState) -> dict:
 
     # 4. 전문 요약 및 구조화된 필드 생성 (Gemini 3 Flash 사용)
     # [API Quota 관리] 호출 전 2초 대기
-    print("⏳ API 할당량 관리를 위해 2초 대기 중...")
+    print("[WAIT] API 할당량 관리를 위해 2초 대기 중...")
     await asyncio.sleep(2)
 
-    prompt = (
+    system_content = (
         "당신은 상권 분석 전문가이자 프랜차이즈 전략 컨설턴트입니다. "
-        "공급된 실데이터를 분석하여 전문가 리포트와 시각화용 데이터를 정확히 구분하여 출력하세요.\n\n"
+        "공급된 실데이터를 분석하여 전문가 리포트와 정량 지표를 출력하세요.\n\n"
         f"### {target_district} 실데이터 분석 요약:\n"
         f"- 유동인구 추이: {pop_data.get('summary')}\n"
         f"- 매출 통계: {sales_data.get('statistical_summary')}\n"
         f"- 경쟁 및 밀집도: {comp_data.get('summary')}\n"
         f"- 임대료 및 적절성: {rent_data.get('summary')}\n\n"
-        "### 출력 요구사항:\n"
-        "1. 리포트 본문: 상세 분석과 하단 [프랜차이즈 전략팀 총평] 섹션을 포함할 것. '가장 큰 기회'와 '리스크'를 명시.\n"
-        "2. 구조화 데이터: 리포트의 가장 마지막에 아래와 같이 JSON 형식을 포함할 것.\n"
-        "   - 형식: [JSON_START]{ \"grade\": \"등급\", \"growth_rate\": 수치, \"competition_score\": 수치, \"rent_affordability\": \"등급\" }[JSON_END]\n"
-        "   - grade: 반드시 EXCELLENT | GOOD | NORMAL | RISKY 중 하나 (대문자)\n"
-        "   - growth_rate: 전분기 대비 매출 성장률 (단위: %, 예: 3.5 / -1.2)\n"
-        "   - competition_score: 경쟁 밀집도 (0.0~1.0 사이의 소수, 낮을수록 경쟁 적음)\n"
-        "   - rent_affordability: 임대료 부담 수준. 반드시 SAFE | CAUTION | DANGER 중 하나 (대문자)\n"
-        "3. 어조: 비유적 표현이나 문학적 수사 없이, 구체적인 수치와 사실 중심으로 명확하고 이해하기 쉽게 작성하세요. 예비 창업자가 바로 이해할 수 있는 직관적인 표현을 사용하세요."
+        "report 필드: 상세 분석과 [프랜차이즈 전략팀 총평] 섹션 포함. '가장 큰 기회'와 '리스크' 명시.\n"
+        "grade 필드: EXCELLENT / GOOD / NORMAL / RISKY 중 하나 (대문자).\n"
+        "어조: 수치·사실 중심, 예비 창업자가 바로 이해할 수 있는 직관적 표현."
     )
 
     try:
-        llm = get_fast_llm()
-        response = await llm.ainvoke([
-            SystemMessage(content=prompt),
-            HumanMessage(content=f"{target_district} {business_type} 업종의 심화 분석 리포트와 JSON 지표를 작성해줘.")
+        llm = get_fast_llm().with_structured_output(MarketAnalysisOutput)
+        result: MarketAnalysisOutput = await llm.ainvoke([
+            SystemMessage(content=system_content),
+            HumanMessage(content=f"{target_district} {business_type} 업종의 심화 분석을 수행해줘."),
         ])
-        
-        # content 추출 및 전처리
-        if isinstance(response.content, list):
-            raw_content = "".join([c.get("text", "") if isinstance(c, dict) else str(c) for c in response.content])
-        else:
-            raw_content = str(response.content)
 
-        # 1. 리포트 본문 추출
-        market_summary = re.sub(r'\[JSON_START\].*?\[JSON_END\]', '', raw_content, flags=re.DOTALL).strip()
-        
-        # 2. JSON 데이터 추출
-        json_match = re.search(r'\[JSON_START\](.*?)\[JSON_END\]', raw_content, re.DOTALL)
-        if json_match:
-            try:
-                json_str = json_match.group(1).strip()
-                json_str = re.sub(r'```json|```', '', json_str).strip()
-                final_metrics = json.loads(json_str)
-                if "grade" in final_metrics:
-                    final_metrics["district_grade"] = str(final_metrics["grade"]).upper()
-            except Exception as je:
-                final_metrics = {"district_grade": "NORMAL", "error": f"JSON 파싱 실패: {str(je)}"}
-        else:
-            final_metrics = {"district_grade": "NORMAL", "error": "JSON 태그 없음"}
+        market_summary = result.report
+        final_metrics = {
+            "district_grade": result.grade,
+            "growth_rate": result.growth_rate,
+            "competition_score": result.competition_score,
+            "rent_affordability": result.rent_affordability,
+        }
 
     except Exception as e:
         print(f"!!! [MARKET ANALYST ERROR] !!! {str(e)}")

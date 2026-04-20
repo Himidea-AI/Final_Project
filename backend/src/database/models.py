@@ -521,3 +521,247 @@ class ManagerUser(Base):
         server_default=func.now(),
         comment="가입 일시",
     )
+
+
+# ---------------------------------------------------------------------------
+# 외부 수집 / 보조 테이블 (CSV 시드 전용, ORM 사용 최소)
+# ---------------------------------------------------------------------------
+
+
+class BrandLogo(Base):
+    """브랜드 로고 수집 결과"""
+
+    __tablename__ = "brand_logo"
+
+    brand_name = Column(String(100), primary_key=True, comment="브랜드명")
+    domain = Column(String(100), comment="도메인")
+    logo_url = Column(Text, comment="로고 URL")
+    logo_source = Column(String(30), comment="수집 소스")
+    collected_at = Column(DateTime(timezone=True), server_default=func.now(), comment="수집 시각")
+
+
+class CpiDiningQuarterly(Base):
+    """분기별 외식 소비자물가지수 (통계청)"""
+
+    __tablename__ = "cpi_dining_quarterly"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, comment="분기 (YYYYQ)")
+    cpi_index = Column(Float, comment="CPI 지수")
+
+
+class GolmokSales(Base):
+    """골목상권(trdar) 분기 매출 — 서울 상권분석서비스"""
+
+    __tablename__ = "golmok_sales"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, index=True, comment="분기 (YYYYQ)")
+    trdar_code = Column(Text, index=True, comment="상권 코드")
+    industry_code = Column(Text, comment="업종 코드")
+    monthly_sales = Column(BigInteger, comment="월평균 매출")
+    monthly_count = Column(BigInteger, comment="월평균 건수")
+    weekday_sales = Column(BigInteger)
+    weekend_sales = Column(BigInteger)
+    mon_sales = Column(BigInteger)
+    tue_sales = Column(BigInteger)
+    wed_sales = Column(BigInteger)
+    thu_sales = Column(BigInteger)
+    fri_sales = Column(BigInteger)
+    sat_sales = Column(BigInteger)
+    sun_sales = Column(BigInteger)
+    time_00_06_sales = Column(BigInteger)
+    time_06_11_sales = Column(BigInteger)
+    time_11_14_sales = Column(BigInteger)
+    time_14_17_sales = Column(BigInteger)
+    time_17_21_sales = Column(BigInteger)
+    time_21_24_sales = Column(BigInteger)
+    male_sales = Column(BigInteger)
+    female_sales = Column(BigInteger)
+    age_10_sales = Column(BigInteger)
+    age_20_sales = Column(BigInteger)
+    age_30_sales = Column(BigInteger)
+    age_40_sales = Column(BigInteger)
+    age_50_sales = Column(BigInteger)
+    age_60_above_sales = Column(BigInteger)
+    weekday_count = Column(BigInteger)
+    weekend_count = Column(BigInteger)
+    mon_count = Column(BigInteger)
+    tue_count = Column(BigInteger)
+    wed_count = Column(BigInteger)
+    thu_count = Column(BigInteger)
+    fri_count = Column(BigInteger)
+    sat_count = Column(BigInteger)
+    sun_count = Column(BigInteger)
+    time_00_06_count = Column(BigInteger)
+    time_06_11_count = Column(BigInteger)
+    time_11_14_count = Column(BigInteger)
+    time_14_17_count = Column(BigInteger)
+    time_17_21_count = Column(BigInteger)
+    time_21_24_count = Column(BigInteger)
+    male_count = Column(BigInteger)
+    female_count = Column(BigInteger)
+    age_10_count = Column(BigInteger)
+    age_20_count = Column(BigInteger)
+    age_30_count = Column(BigInteger)
+    age_40_count = Column(BigInteger)
+    age_50_count = Column(BigInteger)
+    age_60_above_count = Column(BigInteger)
+
+
+class GolmokStores(Base):
+    """골목상권 분기 점포 통계"""
+
+    __tablename__ = "golmok_stores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, index=True, comment="분기 (YYYYQ)")
+    trdar_code = Column(Text, index=True, comment="상권 코드")
+    industry_code = Column(Text, comment="업종 코드")
+    store_count = Column(BigInteger, comment="점포 수")
+    similar_store_count = Column(BigInteger, comment="유사 점포 수")
+    open_rate = Column(BigInteger, comment="개업률")
+    open_count = Column(BigInteger, comment="개업 수")
+    close_rate = Column(BigInteger, comment="폐업률")
+    close_count = Column(BigInteger, comment="폐업 수")
+    franchise_count = Column(BigInteger, comment="프랜차이즈 수")
+
+
+class MapoResidentPop(Base):
+    """마포구 행정동별 분기 주민등록인구"""
+
+    __tablename__ = "mapo_resident_pop"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, index=True, comment="분기 (YYYYQ)")
+    dong_code = Column(Text, index=True, comment="행정동 코드")
+    dong_name = Column(Text, comment="행정동명")
+    resident_pop = Column(Float, comment="주민등록 인구")
+
+
+class SeoulDistrictSales(Base):
+    """서울 전체 행정동 분기 매출 — 사전학습용"""
+
+    __tablename__ = "seoul_district_sales"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, index=True)
+    dong_code = Column(Text, index=True)
+    dong_name = Column(Text)
+    industry_code = Column(Text)
+    industry_name = Column(Text)
+    monthly_sales = Column(BigInteger)
+    monthly_count = Column(BigInteger)
+    weekday_sales = Column(BigInteger)
+    weekend_sales = Column(BigInteger)
+    mon_sales = Column(BigInteger)
+    tue_sales = Column(BigInteger)
+    wed_sales = Column(BigInteger)
+    thu_sales = Column(BigInteger)
+    fri_sales = Column(BigInteger)
+    sat_sales = Column(BigInteger)
+    sun_sales = Column(BigInteger)
+    time_00_06_sales = Column(BigInteger)
+    time_06_11_sales = Column(BigInteger)
+    time_11_14_sales = Column(BigInteger)
+    time_14_17_sales = Column(BigInteger)
+    time_17_21_sales = Column(BigInteger)
+    time_21_24_sales = Column(BigInteger)
+    male_sales = Column(BigInteger)
+    female_sales = Column(BigInteger)
+    age_10_sales = Column(BigInteger)
+    age_20_sales = Column(BigInteger)
+    age_30_sales = Column(BigInteger)
+    age_40_sales = Column(BigInteger)
+    age_50_sales = Column(BigInteger)
+    age_60_above_sales = Column(BigInteger)
+    weekday_count = Column(BigInteger)
+    weekend_count = Column(BigInteger)
+    mon_count = Column(BigInteger)
+    tue_count = Column(BigInteger)
+    wed_count = Column(BigInteger)
+    thu_count = Column(BigInteger)
+    fri_count = Column(BigInteger)
+    sat_count = Column(BigInteger)
+    sun_count = Column(BigInteger)
+    time_00_06_count = Column(BigInteger)
+    time_06_11_count = Column(BigInteger)
+    time_11_14_count = Column(BigInteger)
+    time_14_17_count = Column(BigInteger)
+    time_17_21_count = Column(BigInteger)
+    time_21_24_count = Column(BigInteger)
+    male_count = Column(BigInteger)
+    female_count = Column(BigInteger)
+    age_10_count = Column(BigInteger)
+    age_20_count = Column(BigInteger)
+    age_30_count = Column(BigInteger)
+    age_40_count = Column(BigInteger)
+    age_50_count = Column(BigInteger)
+    age_60_above_count = Column(BigInteger)
+
+
+class SeoulDistrictStores(Base):
+    """서울 전체 행정동 분기 점포 — 사전학습용"""
+
+    __tablename__ = "seoul_district_stores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, index=True)
+    dong_code = Column(Text, index=True)
+    dong_name = Column(Text)
+    industry_code = Column(Text)
+    industry_name = Column(Text)
+    store_count = Column(BigInteger)
+    similar_store_count = Column(BigInteger)
+    open_count = Column(BigInteger)
+    close_count = Column(BigInteger)
+    franchise_count = Column(BigInteger)
+    closure_rate = Column(BigInteger)
+
+
+class SeoulGolmokRent(Base):
+    """서울 전체 골목상권 환산임대료 — 사전학습용"""
+
+    __tablename__ = "seoul_golmok_rent"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    year = Column(BigInteger, index=True)
+    quarter = Column(BigInteger)
+    dong_code = Column(Text, index=True)
+    dong_name = Column(Text)
+    gubun = Column(Text)
+    rent_1f = Column(Float)
+    rent_other = Column(Float)
+    rent_total = Column(Float)
+    quarter_code = Column(BigInteger)
+
+
+class SeoulPopulationQuarterly(Base):
+    """서울 행정동별 분기 인구"""
+
+    __tablename__ = "seoul_population_quarterly"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, index=True)
+    dong_code = Column(Text, index=True)
+    total_pop = Column(Float)
+
+
+class SeoulTrainingDataset(Base):
+    """서울 LSTM 사전학습용 통합 데이터셋"""
+
+    __tablename__ = "seoul_training_dataset"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    quarter = Column(BigInteger, index=True)
+    dong_code = Column(Text, index=True)
+    dong_name = Column(Text)
+    industry_code = Column(Text)
+    industry_name = Column(Text)
+    monthly_sales = Column(BigInteger)
+    monthly_count = Column(BigInteger)
+    store_count = Column(BigInteger)
+    open_count = Column(BigInteger)
+    close_count = Column(BigInteger)
+    total_pop = Column(Float)
+    cpi_index = Column(Float)

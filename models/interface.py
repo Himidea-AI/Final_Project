@@ -64,6 +64,7 @@ def _mock_survival() -> dict:
         monthly_rates.append(round(max(0.0, min(1.0, cumulative)), 4))
     return {
         "survival_rate": survival_rate,
+        "closure_rate": round(1.0 - survival_rate, 4),
         "risk_level": "safe",
         "monthly_survival_rates": monthly_rates,
     }
@@ -160,10 +161,12 @@ def _run_survival(dong_code: str, industry_code: str) -> dict:
     from models.revenue_predictor.predict import predict as survival_predict
 
     result = survival_predict(dong_code, industry_code)
+    closure_rate = result["closure_rate"]
     return {
-        "survival_rate": result["survival_rate"],
+        "survival_rate": round(1.0 - closure_rate, 4),
+        "closure_rate": closure_rate,
         "risk_level": result["closure_risk_level"],
-        "monthly_survival_rates": result["monthly_survival_rates"],
+        "monthly_survival_rates": result["monthly_closure_rates"],
     }
 
 

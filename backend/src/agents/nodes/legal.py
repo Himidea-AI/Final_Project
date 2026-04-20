@@ -12,30 +12,19 @@
 """
 
 import asyncio
-import concurrent.futures
 import json
-import os
 import re
 
-from src.schemas.state import AgentState
-from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT, build_legal_prompt
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from src.agents.llms import get_fast_llm
+from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.settings import settings
+from src.schemas.state import AgentState
+from src.schemas.structured_output import LegalBatchOutput
 from src.services.ftc_franchise import FtcFranchiseClient
 from src.services.law_api import LawApiClient
-
-
-def _run_async(coro):
-    """
-    동기 컨텍스트에서 비동기 코루틴 실행.
-
-    FastAPI/LangGraph 등 이미 이벤트 루프가 돌고 있는 환경에서
-    asyncio.run()을 직접 호출하면 RuntimeError가 발생한다.
-    별도 스레드에서 새 루프를 만들어 실행하면 안전하게 처리된다.
-    """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(asyncio.run, coro)
-        return future.result()
 
 
 # ── 용도지역별 허용 업종 규칙 ────────────────────────────────────────────────
@@ -101,156 +90,6 @@ _DISTRICT_ZONE_MAP: dict[str, str] = {
 }
 
 
-def _call_llm(system_prompt: str, user_message: str) -> str:
-    """
-    LLM 호출 — LLM_PROVIDER 환경변수로 백엔드를 선택.
-
-    LLM_PROVIDER=openai     : OpenAI gpt-4.1-mini (기본값)
-    LLM_PROVIDER=ollama     : 로컬 Ollama (무료)
-    LLM_PROVIDER=anthropic  : Anthropic Claude API (유료)
-    LLM_PROVIDER=gemini     : Google Gemini API (유료)
-    """
-    provider = os.getenv("LLM_PROVIDER", "openai").lower()
-
-    if provider == "openai":
-        from openai import OpenAI
-
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.1,
-            max_tokens=1024,
-        )
-        return response.choices[0].message.content or ""
-
-    if provider == "anthropic":
-        import anthropic as _anthropic
-        from src.config.constants import LLM_MODEL, LLM_TIMEOUT
-
-        client = _anthropic.Anthropic()
-        message = client.messages.create(
-            model=LLM_MODEL,
-            max_tokens=1024,
-            timeout=LLM_TIMEOUT,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        if not message.content:
-            raise ValueError("Anthropic LLM 응답이 비어있습니다.")
-        return message.content[0].text
-
-    if provider == "gemini":
-        import time
-
-        from langchain_core.messages import HumanMessage, SystemMessage
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
-            temperature=0.1,
-        )
-        # 429 RESOURCE_EXHAUSTED 시 최대 2회 재시도 (지수 백오프)
-        for attempt in range(3):
-            try:
-                response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
-                return response.content if isinstance(response.content, str) else str(response.content)
-            except Exception as e:
-                if "429" in str(e) and attempt < 2:
-                    wait = 30 * (2**attempt)  # 30s → 60s
-                    print(f"[Gemini] 429 발생, {wait}초 후 재시도 ({attempt + 1}/2)")
-                    time.sleep(wait)
-                else:
-                    raise
-
-    # 기본값: Ollama
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_ollama import ChatOllama
-
-    ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
-    llm = ChatOllama(model=ollama_model, temperature=0.1)
-    # qwen3.5 thinking 모델 — /no_think 프리픽스로 추론 단계 스킵해 속도 향상
-    prefixed_message = f"/no_think\n{user_message}"
-    response = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=prefixed_message)])
-    content = response.content if isinstance(response.content, str) else str(response.content)
-    return content
-
-
-async def _async_call_llm(system_prompt: str, user_message: str) -> str:
-    """
-    _call_llm의 비동기 버전 — asyncio.gather()로 LLM 호출을 병렬 실행할 때 사용.
-
-    LLM_PROVIDER 환경변수로 백엔드를 선택 (동기 버전과 동일한 로직).
-    """
-    provider = os.getenv("LLM_PROVIDER", "openai").lower()
-
-    if provider == "openai":
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = await client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.1,
-            max_tokens=1024,
-        )
-        return response.choices[0].message.content or ""
-
-    if provider == "anthropic":
-        import anthropic as _anthropic
-        from src.config.constants import LLM_MODEL, LLM_TIMEOUT
-
-        client = _anthropic.AsyncAnthropic()
-        message = await client.messages.create(
-            model=LLM_MODEL,
-            max_tokens=1024,
-            timeout=LLM_TIMEOUT,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        if not message.content:
-            raise ValueError("Anthropic LLM 응답이 비어있습니다.")
-        return message.content[0].text
-
-    if provider == "gemini":
-        from langchain_core.messages import HumanMessage, SystemMessage
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
-            temperature=0.1,
-        )
-        for attempt in range(3):
-            try:
-                response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_message)])
-                return response.content if isinstance(response.content, str) else str(response.content)
-            except Exception as e:
-                if "429" in str(e) and attempt < 2:
-                    wait = 30 * (2**attempt)  # 30s → 60s
-                    print(f"[Gemini] 429 발생, {wait}초 후 재시도 ({attempt + 1}/2)")
-                    await asyncio.sleep(wait)  # 이벤트 루프 비블로킹 대기
-                else:
-                    raise
-
-    # 기본값: Ollama
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_ollama import ChatOllama
-
-    ollama_model = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
-    llm = ChatOllama(model=ollama_model, temperature=0.1)
-    prefixed_message = f"/no_think\n{user_message}"
-    response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=prefixed_message)])
-    return response.content if isinstance(response.content, str) else str(response.content)
-
-
 def _extract_risk_level(llm_response: str) -> str:
     """
     LLM 응답에서 리스크 레벨 파싱.
@@ -260,7 +99,6 @@ def _extract_risk_level(llm_response: str) -> str:
     3차: 키워드 매칭 fallback (LLM이 JSON 형식을 따르지 않은 경우)
     """
     import json
-    import re
 
     # 마크다운 코드블록 제거: ```json ... ``` 또는 ``` ... ```
     cleaned = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", llm_response, flags=re.DOTALL).strip()
@@ -289,514 +127,55 @@ def _extract_risk_level(llm_response: str) -> str:
     return "caution"
 
 
-async def check_franchise_law(state: AgentState, docs: list[dict]) -> dict:
+async def _search_ftc_from_db(brand_name: str) -> dict | None:
     """
-    가맹사업법 검토 — 영업지역 보장 의무 및 출점 제한 검토.
+    ftc_brand_franchise 테이블에서 브랜드 정보 검색 (DB 직접 조회).
 
-    주요 검토 항목:
-    - 동일 브랜드 기존 점포와의 거리 (영업지역 침해 여부)
-    - 정보공개서 기재 사항 준수
-    - 가맹금 예치 의무
-
-    Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 가맹사업법 문서
-
-    Returns:
-        dict: {type, level, summary, articles, recommendation}
+    API 호출 없이 DB에 적재된 34,000+ 건의 정보공개서 데이터에서 검색.
+    최신 연도 기준으로 반환하며, 폐점률을 계산하여 리스크 판정에 사용.
     """
-    brand = state.get("brand_name") or "해당 브랜드"
-    district = state.get("target_district", "")
-
-    question = (
-        f"'{brand}' 브랜드가 '{district}'에 신규 출점할 때 가맹사업법상 영업지역 침해 리스크는 어떻게 됩니까? "
-        "기존 가맹점과의 거리 보호 의무, 정보공개서 의무를 중심으로 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-
-    user_message = build_legal_prompt(docs, question)
+    from src.agents.nodes.market_analyst import db_client
 
     try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
-        return {
-            "type": "franchise_law",
-            "level": level,
-            "summary": response,
-            "articles": articles,
-            "recommendation": "가맹본부에 영업지역 확인 후 계약 진행 권장" if level != "safe" else "",
-        }
+        if db_client.engine is None:
+            await db_client.connect()
+
+        async with db_client.get_session() as session:
+            from sqlalchemy import text
+
+            # LIKE 검색 (부분 일치)
+            stmt = text("""
+                SELECT yr, "corpNm", "brandNm", "frcsCnt", "newFrcsRgsCnt",
+                       "ctrtEndCnt", "ctrtCncltnCnt", "avrgSlsAmt"
+                FROM ftc_brand_franchise
+                WHERE "brandNm" LIKE :pattern
+                ORDER BY yr DESC
+                LIMIT 1
+            """)
+            row = (await session.execute(stmt, {"pattern": f"%{brand_name}%"})).fetchone()
+
+            if not row:
+                return None
+
+            store_count = int(row.frcsCnt or 0)
+            end_count = int(row.ctrtEndCnt or 0)
+            cancel_count = int(row.ctrtCncltnCnt or 0)
+            avg_sales = int(row.avrgSlsAmt or 0) * 10000  # 만원 단위 → 원 단위
+
+            churn_rate = (end_count + cancel_count) / max(store_count, 1)
+
+            return {
+                "brand_name": row.brandNm,
+                "corp_name": row.corpNm,
+                "store_count_total": store_count,
+                "churn_rate": round(churn_rate, 4),
+                "avg_sales_amount": avg_sales,
+                "franchise_fee": 0,  # DB에 가맹금 컬럼 없음
+            }
+
     except Exception as e:
-        return {
-            "type": "franchise_law",
-            "level": "caution",
-            "summary": f"가맹사업법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_commercial_lease_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    상가임대차보호법 검토 — 임차인 보호 범위 및 권리금 리스크 검토.
-
-    주요 검토 항목:
-    - 권리금 회수 기회 보호 (제10조의4)
-    - 계약갱신요구권 행사 가능 여부 (최대 10년)
-    - 환산보증금 기준 충족 여부 (서울 9억 원)
-
-    Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 상가임대차보호법 문서
-
-    Returns:
-        dict: {type, level, summary, articles, recommendation}
-    """
-    district = state.get("target_district", "")
-
-    question = (
-        f"'{district}'에서 프랜차이즈 점포를 임차할 때 상가임대차보호법상 주요 리스크는 무엇입니까? "
-        "권리금 회수 보호, 계약갱신요구권, 환산보증금 기준을 중심으로 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-
-    user_message = build_legal_prompt(docs, question)
-
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
-        return {
-            "type": "commercial_lease_law",
-            "level": level,
-            "summary": response,
-            "articles": articles,
-            "recommendation": "임대차 계약 전 법무사/변호사 검토 권장" if level == "danger" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "commercial_lease_law",
-            "level": "caution",
-            "summary": f"상가임대차보호법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_food_hygiene(state: AgentState, docs: list[dict]) -> dict:
-    """
-    식품위생법 검토 — 업종별 영업신고/허가 및 위생 기준 검토.
-
-    주요 검토 항목:
-    - 영업 종류별 신고·허가 의무 (식품위생법 시행규칙)
-    - 위생교육 이수 의무
-    - 영업장 시설 기준
-
-    Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 식품위생법 문서
-
-    Returns:
-        dict: {type, level, summary, articles, recommendation}
-    """
-    business_type = state.get("business_type", "")
-    district = state.get("target_district", "")
-
-    question = (
-        f"'{district}'에서 '{business_type}' 업종으로 프랜차이즈 창업 시 식품위생법상 "
-        "영업신고·허가 의무, 위생교육 이수 요건, 시설 기준을 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-
-    user_message = build_legal_prompt(docs, question)
-
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
-        return {
-            "type": "food_hygiene",
-            "level": level,
-            "summary": response,
-            "articles": articles,
-            "recommendation": "영업신고 전 관할 보건소 위생과 확인 권장" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "food_hygiene",
-            "level": "caution",
-            "summary": f"식품위생법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_safety_regulation(state: AgentState, docs: list[dict]) -> dict:
-    """
-    다중이용업소 안전관리법 검토 — 소방·안전 시설 의무 검토.
-
-    주요 검토 항목:
-    - 다중이용업소 해당 여부 (면적·업종 기준)
-    - 소방시설 설치 의무 (간이스프링클러, 비상구 등)
-    - 안전시설 완비증명서 발급 의무
-
-    Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 다중이용업소법 문서
-
-    Returns:
-        dict: {type, level, summary, articles, recommendation}
-    """
-    business_type = state.get("business_type", "")
-
-    question = (
-        f"'{business_type}' 업종 프랜차이즈 창업 시 다중이용업소의 안전관리에 관한 특별법상 "
-        "다중이용업소 해당 여부, 소방시설 설치 의무, 안전시설 완비증명서 발급 요건을 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-
-    user_message = build_legal_prompt(docs, question)
-
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
-        return {
-            "type": "safety_regulation",
-            "level": level,
-            "summary": response,
-            "articles": articles,
-            "recommendation": "소방서 안전시설 완비증명서 사전 확인 필수" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "safety_regulation",
-            "level": "caution",
-            "summary": f"다중이용업소 안전관리법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_building_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    건축법 검토 — 용도변경 및 건축물 용도 적합성 검토.
-
-    주요 검토 항목:
-    - 영업장 건축물 용도 적합 여부 (근린생활시설 등)
-    - 용도변경 신고·허가 의무
-    - 무허가·불법건축물 임차 리스크
-
-    Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 건축법 문서
-
-    Returns:
-        dict: {type, level, summary, articles, recommendation}
-    """
-    business_type = state.get("business_type", "")
-    district = state.get("target_district", "")
-
-    question = (
-        f"'{district}'에서 '{business_type}' 업종으로 창업할 때 건축법상 "
-        "건축물 용도 적합성, 용도변경 신고·허가 의무, 불법건축물 임차 리스크를 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-
-    user_message = build_legal_prompt(docs, question)
-
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
-        return {
-            "type": "building_law",
-            "level": level,
-            "summary": response,
-            "articles": articles,
-            "recommendation": "관할 구청 건축과에서 건축물 대장 및 용도 확인 필수" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "building_law",
-            "level": "caution",
-            "summary": f"건축법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_fire_safety_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    소방시설법 검토 — 소방시설 설치·유지 의무 검토.
-
-    주요 검토 항목:
-    - 업종·면적별 소방시설 설치 의무 (스프링클러, 소화기, 감지기 등)
-    - 소방안전관리자 선임 의무
-    - 소방시설 완공검사 및 정기점검 의무
-
-    Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 소방시설법 문서
-
-    Returns:
-        dict: {type, level, summary, articles, recommendation}
-    """
-    business_type = state.get("business_type", "")
-
-    question = (
-        f"'{business_type}' 업종 창업 시 소방시설 설치 및 관리에 관한 법률상 "
-        "소방시설 설치·유지 의무, 소방안전관리자 선임 요건, 완공검사 및 정기점검 의무를 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-
-    user_message = build_legal_prompt(docs, question)
-
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
-        return {
-            "type": "fire_safety_law",
-            "level": level,
-            "summary": response,
-            "articles": articles,
-            "recommendation": "관할 소방서에서 소방시설 설치계획 사전 협의 권장" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "fire_safety_law",
-            "level": "caution",
-            "summary": f"소방시설법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_labor_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    근로기준법 검토 — 직원 고용 시 필수 준수 사항 검토.
-
-    주요 검토 항목:
-    - 근로계약서 작성·교부 의무
-    - 최저임금 준수 의무
-    - 주휴수당, 연장·야간근로 가산임금 의무
-    - 4대 보험 가입 의무
-
-    Args:
-        docs: _fetch_all_docs_parallel()에서 병렬 검색된 근로기준법 문서
-
-    Returns:
-        dict: {type, level, summary, articles, recommendation}
-    """
-    business_type = state.get("business_type", "")
-
-    question = (
-        f"'{business_type}' 프랜차이즈 창업 시 직원 고용과 관련하여 근로기준법상 "
-        "근로계약서 작성 의무, 최저임금 준수, 주휴수당 및 가산임금, 4대 보험 가입 의무를 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-
-    user_message = build_legal_prompt(docs, question)
-
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        articles = [d["metadata"].get("law_article", "") for d in docs]
-        return {
-            "type": "labor_law",
-            "level": level,
-            "summary": response,
-            "articles": articles,
-            "recommendation": "고용노동부 표준근로계약서 양식 사용 및 노무사 상담 권장" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "labor_law",
-            "level": "caution",
-            "summary": f"근로기준법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_vat_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    부가가치세법 검토 — 사업자 유형 및 세금계산서 의무.
-
-    주요 검토 항목:
-    - 사업자등록 의무 (개업 전 등록)
-    - 일반과세자 vs 간이과세자 기준 (연 매출 8천만 원)
-    - 세금계산서·영수증 발행 의무
-    """
-    business_type = state.get("business_type", "")
-
-    question = (
-        f"'{business_type}' 프랜차이즈 창업 시 부가가치세법상 사업자등록 의무, "
-        "일반과세자·간이과세자 판단 기준, 세금계산서 발행 의무를 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-    user_message = build_legal_prompt(docs, question)
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        return {
-            "type": "vat_law",
-            "level": level,
-            "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
-            "recommendation": "세무사 상담을 통해 과세 유형 사전 결정 권장" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "vat_law",
-            "level": "caution",
-            "summary": f"부가가치세법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_privacy_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    개인정보 보호법 검토 — 고객 데이터 수집·처리 의무.
-
-    주요 검토 항목:
-    - 개인정보 수집 시 동의 의무
-    - 개인정보 처리방침 공개 의무
-    - CCTV 설치 시 안내판 부착 의무
-    """
-    business_type = state.get("business_type", "")
-
-    question = (
-        f"'{business_type}' 프랜차이즈 창업 시 개인정보 보호법상 "
-        "고객 정보 수집·처리 동의 의무, 개인정보 처리방침 공개, CCTV 설치 요건을 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-    user_message = build_legal_prompt(docs, question)
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        return {
-            "type": "privacy_law",
-            "level": level,
-            "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
-            "recommendation": "개인정보 처리방침 및 CCTV 안내문 사전 준비 필요" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "privacy_law",
-            "level": "caution",
-            "summary": f"개인정보 보호법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_accessibility_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    장애인편의증진법 검토 — 편의시설 설치 의무.
-
-    주요 검토 항목:
-    - 대상 시설 해당 여부 (면적 300㎡ 이상 등)
-    - 장애인 주차구역, 경사로, 점자블록 등 편의시설 설치 의무
-    """
-    business_type = state.get("business_type", "")
-
-    question = (
-        f"'{business_type}' 프랜차이즈 창업 시 장애인·노인·임산부 등의 편의증진 보장에 관한 법률상 "
-        "편의시설(경사로, 장애인 화장실, 점자블록 등) 설치 의무 대상 여부와 설치 기준을 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-    user_message = build_legal_prompt(docs, question)
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        return {
-            "type": "accessibility_law",
-            "level": level,
-            "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
-            "recommendation": "인테리어 설계 전 편의시설 설치 의무 여부 관할 구청 확인 권장" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "accessibility_law",
-            "level": "caution",
-            "summary": f"장애인편의증진법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_sewage_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    하수도법/물환경보전법 검토 — 음식점 오수처리 및 유류분리기 설치 의무.
-
-    주요 검토 항목:
-    - 오수처리시설 설치 의무 (음식점)
-    - 유류분리기(그리스 트랩) 설치 의무
-    - 폐수 배출 허용 기준
-    """
-    business_type = state.get("business_type", "")
-
-    question = (
-        f"'{business_type}' 창업 시 하수도법 및 물환경보전법상 "
-        "오수처리시설 설치 의무, 유류분리기(그리스 트랩) 설치 의무, 폐수 배출 기준을 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-    user_message = build_legal_prompt(docs, question)
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        return {
-            "type": "sewage_law",
-            "level": level,
-            "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
-            "recommendation": "인테리어 공사 전 유류분리기 설치 계획 포함 여부 확인 필요" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "sewage_law",
-            "level": "caution",
-            "summary": f"하수도법/물환경보전법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
-
-
-async def check_fair_trade_law(state: AgentState, docs: list[dict]) -> dict:
-    """
-    공정거래법 검토 — 불공정 가맹 계약 조항 리스크.
-
-    주요 검토 항목:
-    - 가맹본부의 불공정 거래 행위 금지
-    - 부당한 거래 강제 (필수 물품 고가 공급 등)
-    - 공정거래위원회 신고 가능 사항
-    """
-    brand = state.get("brand_name") or "해당 브랜드"
-
-    question = (
-        f"'{brand}' 프랜차이즈 가맹 계약 시 독점규제 및 공정거래에 관한 법률상 "
-        "가맹본부의 불공정 거래 행위, 부당한 거래 강제, 필수 물품 공급 관련 리스크를 검토해 주세요. "
-        '답변 맨 마지막 줄에 반드시 다음 JSON만 출력하세요: {"risk_level": "safe"} 또는 {"risk_level": "caution"} 또는 {"risk_level": "danger"}'
-    )
-    user_message = build_legal_prompt(docs, question)
-    try:
-        response = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, user_message)
-        level = _extract_risk_level(response)
-        return {
-            "type": "fair_trade_law",
-            "level": level,
-            "summary": response,
-            "articles": [d["metadata"].get("law_article", "") for d in docs],
-            "recommendation": "가맹 계약서 내 불공정 조항 법무사 검토 권장" if level != "safe" else "",
-        }
-    except Exception as e:
-        return {
-            "type": "fair_trade_law",
-            "level": "caution",
-            "summary": f"공정거래법 검토 중 오류 발생: {e}",
-            "articles": [],
-            "recommendation": "수동 법률 검토 필요",
-        }
+        print(f"[_search_ftc_from_db] DB 조회 실패: {e}")
+        return None
 
 
 async def check_ftc_franchise(state: AgentState) -> dict:
@@ -822,28 +201,27 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             "recommendation": "브랜드명 입력 후 재검토 권장",
         }
 
-    if not settings.ftc_api_key:
+    # 1차: DB에서 검색 (ftc_brand_franchise 테이블 — 16,000+ 브랜드)
+    # 2차: API 실패 시에도 DB fallback
+    detail = await _search_ftc_from_db(brand)
+
+    if not detail and settings.ftc_api_key:
+        try:
+            client = FtcFranchiseClient(api_key=settings.ftc_api_key)
+            detail = await client.get_brand_detail(brand)
+        except Exception as e:
+            print(f"[check_ftc_franchise] API 실패 (DB fallback 사용): {e}")
+
+    if not detail:
         return {
             "type": "ftc_franchise",
             "level": "caution",
-            "summary": "FTC_API_KEY가 설정되지 않아 공정위 정보공개서 조회를 건너뜁니다.",
+            "summary": f"'{brand}' 브랜드의 공정위 정보공개서를 찾을 수 없습니다.",
             "articles": [],
-            "recommendation": "환경변수 FTC_API_KEY 설정 후 재검토 권장",
+            "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
         }
 
     try:
-        client = FtcFranchiseClient(api_key=settings.ftc_api_key)
-        detail = await client.get_brand_detail(brand)
-
-        if not detail:
-            return {
-                "type": "ftc_franchise",
-                "level": "caution",
-                "summary": f"'{brand}' 브랜드의 공정위 정보공개서를 찾을 수 없습니다.",
-                "articles": [],
-                "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
-            }
-
         churn_rate = detail.get("churn_rate", 0.0)
         avg_sales = detail.get("avg_sales_amount", 0)
         franchise_fee = detail.get("franchise_fee", 0)
@@ -968,7 +346,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
             legal_risks = cached_data.get("legal_risks")
             legal_info = cached_data.get("legal_info")
             if legal_risks is None or legal_info is None:
-                print(f"[legal_node] 캐시 데이터 손상 — 재계산: {cache_key}")
+                print(f"[legal_node] 캐시 데이터 손상 - 재계산: {cache_key}")
             else:
                 print(f"[legal_node] 캐시 히트: {cache_key}")
                 analysis = dict(state.get("analysis_results") or {})
@@ -1012,7 +390,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # zoning: I/O 없는 규칙 기반 — 즉시 실행 후 Phase 1 병렬 대기
     zoning_result = await check_zoning_regulation(state)
 
-    # Phase 1: RAG×13 + 판례×4 + FTC API 병렬 실행 (총 18개)
+    # Phase 1: RAG×13 + 판례×6 + FTC API 병렬 실행 (총 20개)
     # return_exceptions=True — 한 개 실패해도 나머지 결과 유지
     _phase1_results = await asyncio.gather(
         # RAG 검색 (13개)
@@ -1029,11 +407,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
         retriever.search(accessibility_q, top_k=5, source_filter=LegalDocumentRetriever.ACCESSIBILITY_LAW_SOURCES),
         retriever.search(sewage_q, top_k=5, source_filter=LegalDocumentRetriever.SEWAGE_LAW_SOURCES),
         retriever.search(fair_trade_q, top_k=5, source_filter=LegalDocumentRetriever.FAIR_TRADE_SOURCES),
-        # 판례 검색 (4개)
-        law_client.search_precedents("가맹사업", display=3),
-        law_client.search_precedents("권리금", display=3),
-        law_client.search_precedents("식품위생", display=3),
-        law_client.search_precedents("다중이용업소", display=3),
+        # 판례 검색 (6개) — 키워드를 구체화하여 판례 품질 향상
+        law_client.search_precedents("가맹사업 영업지역", display=3),
+        law_client.search_precedents("권리금 회수", display=3),
+        law_client.search_precedents("식품위생 영업허가", display=3),
+        law_client.search_precedents("다중이용업소 소방", display=3),
+        law_client.search_precedents("건축물 용도변경 근린생활시설", display=2),
+        law_client.search_precedents("근로계약 최저임금", display=2),
         # FTC API — RAG docs 불필요, Phase 1에서 선행 실행
         check_ftc_franchise(state),
         return_exceptions=True,
@@ -1076,10 +456,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
         lease_prec,
         food_prec,
         safety_prec,
+        building_prec,
+        labor_prec,
         ftc_result,
     ) = (
-        *[_safe_list(_phase1_results[i]) for i in range(17)],
-        _safe_ftc(_phase1_results[17]),
+        *[_safe_list(_phase1_results[i]) for i in range(19)],
+        _safe_ftc(_phase1_results[19]),
     )
 
     # Phase 2: 12개 법률 항목을 단일 LLM 배치 호출로 처리 (12회 → 1회)
@@ -1098,18 +480,18 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "fair_trade_law",
     ]
     _BATCH_LABELS = {
-        "franchise_law": "가맹사업법 (영업지역 보장·정보공개서)",
-        "commercial_lease_law": "상가임대차보호법 (권리금·계약갱신)",
-        "food_hygiene": "식품위생법 (영업신고·위생교육)",
-        "safety_regulation": "다중이용업소법 (소방·안전시설)",
-        "building_law": "건축법 (건축물 용도·용도변경)",
-        "fire_safety_law": "소방시설법 (스프링클러·소방안전관리자)",
-        "labor_law": "근로기준법 (근로계약서·최저임금·4대보험)",
-        "vat_law": "부가가치세법 (사업자등록·과세유형)",
-        "privacy_law": "개인정보보호법 (고객정보·CCTV)",
-        "accessibility_law": "장애인편의증진법 (편의시설 설치)",
-        "sewage_law": "하수도법 (오수처리·유류분리기)",
-        "fair_trade_law": "공정거래법 (불공정거래·거래강제)",
+        "franchise_law": "가맹사업법 — 영업지역 침해 여부, 정보공개서 기재사항, 가맹금 예치 의무",
+        "commercial_lease_law": "상가임대차보호법 — 권리금 회수기회 보호(제10조의4), 계약갱신요구권(10년), 환산보증금(서울 9억)",
+        "food_hygiene": "식품위생법 — 영업 종류별 신고·허가 의무, 위생교육 이수, 영업장 시설 기준",
+        "safety_regulation": "다중이용업소법 — 면적·업종 기준 해당 여부, 소방시설 설치, 안전시설 완비증명서",
+        "building_law": "건축법 — 건축물 용도 적합(근린생활시설 등), 용도변경 신고·허가, 불법건축물 리스크",
+        "fire_safety_law": "소방시설법 — 면적별 소방시설 설치(스프링클러·소화기), 소방안전관리자 선임, 정기점검",
+        "labor_law": "근로기준법 — 근로계약서 작성·교부, 최저임금(2026년 기준), 주휴수당·가산임금, 4대보험",
+        "vat_law": "부가가치세법 — 사업자등록(개업 전), 일반과세 vs 간이과세(연 8천만원), 세금계산서 발행",
+        "privacy_law": "개인정보보호법 — 고객 정보 수집 동의, 개인정보 처리방침 공개, CCTV 안내판 부착",
+        "accessibility_law": "장애인편의증진법 — 편의시설 설치 대상(300㎡ 이상), 경사로·장애인화장실·점자블록",
+        "sewage_law": "하수도법/물환경보전법 — 오수처리시설, 유류분리기(그리스트랩) 설치, 폐수 배출 기준",
+        "fair_trade_law": "공정거래법 — 가맹본부 불공정 거래 금지, 부당 거래 강제(필수 물품 고가 공급), 공정위 신고",
     }
 
     # 모든 RAG 문서를 법률별로 정리하여 컨텍스트 구성
@@ -1119,9 +501,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "commercial_lease_law": lease_docs + lease_prec,
         "food_hygiene": food_docs + food_prec,
         "safety_regulation": safety_docs + safety_prec,
-        "building_law": building_docs,
+        "building_law": building_docs + building_prec,
         "fire_safety_law": fire_docs,
-        "labor_law": labor_docs,
+        "labor_law": labor_docs + labor_prec,
         "vat_law": vat_docs,
         "privacy_law": privacy_docs,
         "accessibility_law": accessibility_docs,
@@ -1130,42 +512,54 @@ async def _run_legal_pipeline(state: dict) -> dict:
     }
     for law_type, docs in docs_map.items():
         if docs:
-            snippets = " / ".join(d["content"][:150] for d in docs[:2])
+            snippets = " | ".join(d["content"][:600] for d in docs[:4])
             docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
 
-    if len(docs_context) > 5000:
-        docs_context = docs_context[:5000] + "..."
+    if len(docs_context) > 12000:
+        docs_context = docs_context[:12000] + "..."
 
     items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
-    batch_prompt = (
+
+    system_content = (
+        f"{LEGAL_AGENT_SYSTEM_PROMPT}\n\n"
+        f"리스크 레벨 기준:\n"
+        f"- safe: 법률 위반 가능성 없음, 일반적 준수사항만 존재\n"
+        f"- caution: 사전 확인·준비 필요, 미이행 시 과태료·행정처분 가능\n"
+        f"- danger: 법률 위반 가능성 높음, 영업정지·허가취소·형사처벌 위험\n\n"
+        f"[평가 항목]\n{items_desc}\n\n"
+        "12개 항목을 빠짐없이 items 리스트에 포함하세요. summary는 1~2문장, recommendation은 구체적 행동 권고."
+    )
+
+    user_content = (
         f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
         f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
-        f"위 자료를 바탕으로 아래 12개 법률 항목의 창업 리스크를 평가하세요.\n"
-        f"리스크 레벨: safe(문제없음) / caution(주의필요) / danger(위반위험)\n\n"
-        f"[평가 항목]\n{items_desc}\n\n"
-        "반드시 아래 형식의 JSON 배열만 출력하세요 (설명 없이 배열만):\n"
-        '[{"type":"franchise_law","level":"caution","summary":"요약 1~2문장","recommendation":"권고사항"},'
-        '{"type":"commercial_lease_law",...}, ...]'
+        "위 자료를 바탕으로 12개 법률 항목의 창업 리스크를 평가하세요. "
+        "각 항목의 '—' 뒤에 적힌 검토 포인트를 반드시 확인하세요."
     )
 
     batch_results: list[dict] = []
     try:
-        raw = await _async_call_llm(LEGAL_AGENT_SYSTEM_PROMPT, batch_prompt)
-        json_match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if json_match:
-            parsed = json.loads(json_match.group())
-            seen = set()
-            for r in parsed:
-                t = r.get("type", "")
-                if t in _BATCH_TYPES and t not in seen:
-                    r.setdefault("articles", [])
-                    r.setdefault("level", "caution")
-                    r.setdefault("summary", "")
-                    r.setdefault("recommendation", "")
-                    batch_results.append(r)
-                    seen.add(t)
+        llm = get_fast_llm().with_structured_output(LegalBatchOutput)
+        result: LegalBatchOutput = await llm.ainvoke(
+            [
+                SystemMessage(content=system_content),
+                HumanMessage(content=user_content),
+            ]
+        )
+        seen = set()
+        for item in result.items:
+            if item.type in _BATCH_TYPES and item.type not in seen:
+                batch_results.append(
+                    {
+                        "type": item.type,
+                        "level": item.level,
+                        "summary": item.summary,
+                        "articles": [],
+                        "recommendation": item.recommendation,
+                    }
+                )
+                seen.add(item.type)
         # 누락된 항목 caution으로 보완
-        seen = {r["type"] for r in batch_results}
         for t in _BATCH_TYPES:
             if t not in seen:
                 batch_results.append(
@@ -1177,9 +571,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         "recommendation": "전문가 상담 권장",
                     }
                 )
-        print(f"[legal_node] 배치 LLM 완료 — {len(batch_results)}개 항목 처리")
+        print(f"[legal_node] 배치 LLM 완료 (Structured Output) - {len(batch_results)}개 항목 처리")
     except Exception as e:
-        print(f"[legal_node] 배치 LLM 실패: {e} — 전체 caution 처리")
+        print(f"[legal_node] 배치 LLM 실패: {e} - 전체 caution 처리")
         batch_results = [
             {
                 "type": t,
@@ -1254,7 +648,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     else:
         overall_level = "safe"
 
-    precedents = franchise_prec + lease_prec + food_prec + safety_prec
+    precedents = franchise_prec + lease_prec + food_prec + safety_prec + building_prec + labor_prec
     legal_info = (legal_info_docs + precedents) or [
         {"content": r["summary"], "metadata": {"source": r["type"], "relevance": 1.0}} for r in risks
     ]
@@ -1297,4 +691,3 @@ async def legal_node(state) -> dict:
     if not isinstance(state, dict):
         state = state.model_dump()
     return await _run_legal_pipeline(state)
-

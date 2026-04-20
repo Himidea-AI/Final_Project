@@ -70,7 +70,7 @@ def _mock_shap_values(feature_cols: list[str]) -> dict:
         {
             "rank": rank + 1,
             "feature": feature_cols[i],
-            "feature_ko": _FEATURE_KO.get(feature_cols[i], feature_cols[i]),
+            "feature_ko": _TCN_FEATURE_KO.get(feature_cols[i], feature_cols[i]),
             "shap_value": round(float(shap_vals[i]), 6),
             "abs_shap": round(float(abs(shap_vals[i])), 6),
             # 기여 방향: 실제 경로와 동일한 필드 구조 유지
@@ -329,7 +329,7 @@ def explain_tcn_prediction(
         _log("WARNING", f"TCN 가중치 또는 스케일러 파일 없음: {weights_path}")
         result = _mock_shap_values(list(ALL_FEATURES))
         result["predicted_value_unit"] = "원"
-        result["predicted_value"] = 15_000_000.0   # mock 매출 기본값 (원)
+        result["predicted_value"] = 15_000_000.0  # mock 매출 기본값 (원)
         return result
 
     # ---- 2) 스케일러 로드 → input_size 결정 ----
@@ -348,7 +348,7 @@ def explain_tcn_prediction(
     try:
         model = TCNForecaster(
             input_size=input_size,
-            n_channels=128,       # DEFAULT_PREDICT_CONFIG와 일치
+            n_channels=128,  # DEFAULT_PREDICT_CONFIG와 일치
             kernel_size=2,
             dilations=[1, 2],
             dropout=0.2,
@@ -364,7 +364,7 @@ def explain_tcn_prediction(
         return result
 
     # ---- 4) 입력 텐서 준비 — predict.py와 동일 로직 재사용 ----
-    window_size = 4   # DEFAULT_PREDICT_CONFIG["window_size"]
+    window_size = 4  # DEFAULT_PREDICT_CONFIG["window_size"]
     feature_cols = list(ALL_FEATURES)
 
     try:
@@ -397,11 +397,12 @@ def explain_tcn_prediction(
     # ---- 5) 모델 순전파 — 기준 예측값 확보 (매출액 원 단위) ----
     with torch.no_grad():
         raw_output = model(input_tensor)
-        # 역변환: 스케일러가 적용된 예측값 → 원 단위 매출액
+        # 역변환: 스케일러 → log 도메인 → 원 단위 매출액
+        # 학습 시 타겟은 log1p 변환된 값이므로 expm1로 복원해야 원 단위가 나옴
+        # (models/tcn_forecast/predict.py:188-189 와 동일 패턴)
         try:
-            predicted_value = float(
-                tgt_scaler.inverse_transform([[raw_output.item()]])[0][0]
-            )
+            pred_log = tgt_scaler.inverse_transform([[raw_output.item()]])[0][0]
+            predicted_value = float(np.expm1(pred_log))
         except Exception:
             # 역변환 실패 시 raw 출력 그대로 사용
             predicted_value = float(raw_output.item())
@@ -447,6 +448,13 @@ def explain_tcn_prediction(
 
     # ---- 7) SHAP 값 후처리: (..., window_size, input_size) → 시간축 평균 → (input_size,) ----
     shap_array = np.array(shap_values_raw)
+
+    # shap GradientExplainer는 single-output 회귀 모델에 targets=1 축을 말단에 추가해 반환함
+    # 예: (batch, window, features, 1). 이후 while/if 로직은 (batch, window, features) 3D를
+    # 가정하므로, targets 축이 살아있으면 축소 단계에서 features 축이 잘못 제거됨.
+    # 따라서 squeeze로 targets 축을 먼저 제거한 뒤 기존 로직 실행.
+    if shap_array.ndim >= 3 and shap_array.shape[-1] == 1:
+        shap_array = shap_array.squeeze(-1)
 
     # 일부 shap 버전에서 list of arrays 형태로 반환 → 앞 차원 순서대로 제거
     while shap_array.ndim >= 4:
@@ -494,7 +502,7 @@ def explain_tcn_prediction(
         "feature_importance": feature_importance,
         "base_value": round(base_value, 6),
         "predicted_value": round(predicted_value, 2),
-        "predicted_value_unit": "원",   # 매출 단위 명시 (생존률과 구별)
+        "predicted_value_unit": "원",  # 매출 단위 명시 (생존률과 구별)
         "is_mock": False,
     }
 
