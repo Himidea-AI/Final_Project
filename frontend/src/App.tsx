@@ -3634,6 +3634,117 @@ function SimulatorDashboard({
                               </div>
                             )}
 
+                            {/* [C1 신규] 향후 12개월 전망 카드 (trend_forecaster) */}
+                            {(() => {
+                              const tf = simResult?.trendForecast;
+                              if (!tf) return null;
+                              const score = tf.forecast?.score;
+                              const direction = tf.forecast?.direction;
+                              const confidence = tf.forecast?.confidence;
+                              const narrative = tf.forecast?.narrative;
+                              const industryDir = tf.industry_trend?.direction;
+                              const changeIxLabel = tf.change_ix?.change_ix_label;
+                              // 최소 데이터도 없으면 렌더 안 함
+                              if (
+                                score == null &&
+                                !direction &&
+                                !narrative &&
+                                !industryDir &&
+                                !changeIxLabel
+                              ) {
+                                return null;
+                              }
+                              const directionCfg: Record<string, { label: string; cls: string }> = {
+                                growth: {
+                                  label: '↑ GROWTH',
+                                  cls: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40',
+                                },
+                                stable: {
+                                  label: '→ STABLE',
+                                  cls: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
+                                },
+                                decline: {
+                                  label: '↓ DECLINE',
+                                  cls: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
+                                },
+                              };
+                              const dirBadge = direction
+                                ? (directionCfg[direction] ?? {
+                                    label: direction,
+                                    cls: 'bg-slate-500/20 text-slate-300 ring-1 ring-slate-500/40',
+                                  })
+                                : null;
+                              const industryDirLabel =
+                                industryDir === 'up'
+                                  ? '↑ 상승'
+                                  : industryDir === 'down'
+                                    ? '↓ 하락'
+                                    : industryDir === 'flat'
+                                      ? '→ 보합'
+                                      : 'N/A';
+                              return (
+                                <div className="mt-6 rounded-xl bg-slate-900/95 p-5 shadow-2xl ring-1 ring-slate-700/50">
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
+                                      📈 향후 12개월 전망
+                                    </h3>
+                                    {confidence && (
+                                      <span className="text-xs text-slate-400">
+                                        신뢰도: {confidence}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {(score != null || dirBadge) && (
+                                    <div className="mt-3 flex items-baseline gap-3 flex-wrap">
+                                      {score != null && (
+                                        <>
+                                          <span className="text-4xl font-bold text-slate-100">
+                                            {Math.round(score)}
+                                          </span>
+                                          <span className="text-sm text-slate-400">/100</span>
+                                        </>
+                                      )}
+                                      {dirBadge && (
+                                        <span
+                                          className={`rounded-full px-2 py-0.5 text-xs font-bold ${dirBadge.cls}`}
+                                        >
+                                          {dirBadge.label}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                      <div className="text-slate-400">업종 트렌드</div>
+                                      <div className="mt-1 font-semibold text-slate-100">
+                                        {industryDirLabel}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                      <div className="text-slate-400">상권 분류</div>
+                                      <div className="mt-1 font-semibold text-slate-100">
+                                        {changeIxLabel ?? 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                      <div className="text-slate-400">진행 방향</div>
+                                      <div className="mt-1 font-semibold text-slate-100">
+                                        {direction ?? 'N/A'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {narrative && (
+                                    <p className="mt-4 text-sm leading-relaxed text-slate-300">
+                                      {narrative}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* Table */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
                               <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
