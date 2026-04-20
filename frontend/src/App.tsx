@@ -3745,6 +3745,159 @@ function SimulatorDashboard({
                               );
                             })()}
 
+                            {/* [C1 신규] 경쟁 + 잠식 분석 풀 카드 (competitor_intel) */}
+                            {(() => {
+                              const ci = simResult?.competitorIntel;
+                              if (!ci) return null;
+                              const comp = ci.competition_500m;
+                              const cann = ci.cannibalization;
+                              const signal = ci.market_entry_signal;
+                              const diff = ci.differentiation_position;
+                              const opps = ci.key_opportunities ?? [];
+                              const risks = ci.key_risks ?? [];
+                              const actions = ci.recommended_actions ?? [];
+                              const narrative = ci.narrative;
+                              // 최소 콘텐츠 없으면 렌더 안 함
+                              if (
+                                !comp &&
+                                !cann &&
+                                !signal &&
+                                !diff &&
+                                opps.length === 0 &&
+                                risks.length === 0 &&
+                                actions.length === 0 &&
+                                !narrative
+                              ) {
+                                return null;
+                              }
+                              const sigBadgeCfg: Record<string, { cls: string; label: string }> = {
+                                green: {
+                                  cls: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/50',
+                                  label: '진입 권장',
+                                },
+                                yellow: {
+                                  cls: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/50',
+                                  label: '조건부',
+                                },
+                                red: {
+                                  cls: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/50',
+                                  label: '비권장',
+                                },
+                              };
+                              const sigBadge = signal ? sigBadgeCfg[signal] : null;
+                              const cannImpactPct =
+                                typeof cann?.estimated_revenue_impact_pct === 'number'
+                                  ? (cann.estimated_revenue_impact_pct * 100).toFixed(1)
+                                  : null;
+                              return (
+                                <div className="rounded-xl bg-slate-900/95 p-5 shadow-2xl ring-1 ring-slate-700/50">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
+                                      🎯 경쟁 + 잠식 분석
+                                    </h3>
+                                    {sigBadge && (
+                                      <span
+                                        className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${sigBadge.cls}`}
+                                      >
+                                        {sigBadge.label}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                      <div className="text-xs text-slate-400">500m 포화도</div>
+                                      <div className="mt-1 text-lg font-semibold text-slate-100">
+                                        {comp?.saturation_level ?? 'N/A'}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        {comp?.total_competitors ?? 0}개 매장
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                      <div className="text-xs text-slate-400">카니발 영향</div>
+                                      <div className="mt-1 text-lg font-semibold text-rose-300">
+                                        {cannImpactPct != null ? `${cannImpactPct}%` : 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-800/50 p-3">
+                                      <div className="text-xs text-slate-400">프랜차이즈/독립</div>
+                                      <div className="mt-1 text-lg font-semibold text-slate-100">
+                                        {comp?.franchise_count ?? 0} /{' '}
+                                        {comp?.independent_count ?? 0}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {diff && (
+                                    <div className="mt-4 rounded-lg bg-cyan-500/10 p-3 ring-1 ring-cyan-500/30">
+                                      <div className="text-xs uppercase tracking-wider text-cyan-400">
+                                        차별화 포지션
+                                      </div>
+                                      <p className="mt-1 text-sm text-slate-100">{diff}</p>
+                                    </div>
+                                  )}
+
+                                  {(opps.length > 0 || risks.length > 0) && (
+                                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {opps.length > 0 && (
+                                        <div>
+                                          <div className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                                            💡 기회
+                                          </div>
+                                          <ul className="mt-2 space-y-1">
+                                            {opps.map((o, i) => (
+                                              <li key={i} className="text-xs text-slate-300">
+                                                • {o}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {risks.length > 0 && (
+                                        <div>
+                                          <div className="text-xs font-semibold uppercase tracking-wider text-rose-400">
+                                            ⚠️ 리스크
+                                          </div>
+                                          <ul className="mt-2 space-y-1">
+                                            {risks.map((r, i) => (
+                                              <li key={i} className="text-xs text-slate-300">
+                                                • {r}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {actions.length > 0 && (
+                                    <div className="mt-4 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
+                                      <div className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                                        📋 추천 액션
+                                      </div>
+                                      <ul className="mt-2 space-y-1">
+                                        {actions.map((a, i) => (
+                                          <li key={i} className="text-xs text-slate-200">
+                                            <span className="font-bold text-amber-300">
+                                              {i + 1}.
+                                            </span>{' '}
+                                            {a}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {narrative && (
+                                    <p className="mt-4 text-xs leading-relaxed text-slate-400">
+                                      {narrative}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* Table */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
                               <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
