@@ -58,7 +58,6 @@ import HQCommandCenter from './pages/HQCommandCenter';
 import LoginPage from './pages/LoginPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
-import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
 import type {
   QuarterlyProjection,
@@ -3410,16 +3409,6 @@ function SimulatorDashboard({
                         </div>
                       );
                     })()}
-
-                    <AIVerdictBanner
-                      headline={
-                        simResult?.recommendation ||
-                        '강력한 입지 독점력과 2030 타겟팅을 통한 고수익 확보 가능 상권'
-                      }
-                      severity="positive"
-                      reason="AI 멀티에이전트(market·population·legal) 종합 분석 결과. 유동인구 밀집도 상위 12%, 인근 동종업계 평균 매출 대비 15% 초과 달성 예측."
-                      isDirect={false}
-                    />
 
                     {/* Main Dashboard Body — dashboardMode 토글 (data | map) */}
                     {dashboardMode === 'data' ? (
