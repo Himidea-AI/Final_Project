@@ -92,3 +92,25 @@ describe('simulationStore — 에러', () => {
     expect(s.status).not.toBe('error');
   });
 });
+
+describe('simulationStore — cancelSimulation', () => {
+  beforeEach(() => {
+    useSimulationStore.getState().reset();
+    vi.restoreAllMocks();
+  });
+
+  it('running을 idle로 되돌리고 abort를 호출한다', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    vi.spyOn(api, 'runSimulation').mockImplementation(async (_p, signal) => {
+      capturedSignal = signal;
+      return new Promise<SimulationOutput>(() => {});
+    });
+
+    useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    expect(useSimulationStore.getState().status).toBe('running');
+
+    useSimulationStore.getState().cancelSimulation();
+    expect(useSimulationStore.getState().status).toBe('idle');
+    expect(capturedSignal?.aborted).toBe(true);
+  });
+});

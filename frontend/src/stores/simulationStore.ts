@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { create } from 'zustand';
+import { runSimulation } from '../api/client';
 import type { SimulationInput, SimulationOutput } from '../types';
 
 export type SimulationStatus = 'idle' | 'running' | 'done' | 'error';
@@ -53,7 +54,6 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     });
 
     try {
-      const { runSimulation } = await import('../api/client');
       const result = await runSimulation(params, abortController.signal);
 
       // Stale response guard — if a newer start has replaced us, abandon.
@@ -90,7 +90,17 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     }
   },
   cancelSimulation: () => {
-    // Implemented in Plan Task 6
+    const { _abortController, _progressTimer } = get();
+    _abortController?.abort();
+    if (_progressTimer) clearInterval(_progressTimer);
+    set({
+      status: 'idle',
+      progress: 0,
+      stage: '',
+      _abortController: null,
+      _progressTimer: null,
+      startedAt: null,
+    });
   },
   dismissResult: () => {
     // Implemented in Plan Task 9
