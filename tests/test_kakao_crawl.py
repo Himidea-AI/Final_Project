@@ -10,7 +10,14 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "data" / "pipeline"),
 )
 
-from collect_kakao_stores import classify_category, generate_grid  # noqa: E402
+import json
+from unittest.mock import MagicMock, patch
+
+from collect_kakao_stores import (  # noqa: E402
+    classify_category,
+    generate_grid,
+    search_category,
+)
 
 
 def test_generate_grid_exact_division():
@@ -85,3 +92,34 @@ def test_classify_etc():
     assert classify_category("음식점 > 간식 > 토스트") == "기타"
     assert classify_category("") == "기타"
     assert classify_category("음식점") == "기타"
+
+
+def _fake_response(documents: list[dict], is_end: bool = True) -> MagicMock:
+    payload = json.dumps({"documents": documents, "meta": {"is_end": is_end}}).encode()
+    resp = MagicMock()
+    resp.read.return_value = payload
+    resp.__enter__ = lambda self: self
+    resp.__exit__ = lambda self, *a: None
+    return resp
+
+
+@patch("collect_kakao_stores.urllib.request.urlopen")
+def test_search_category_builds_correct_url(mock_urlopen):
+    mock_urlopen.return_value = _fake_response([])
+    search_category("FD6", (126.88, 37.53, 126.89, 37.54), page=2)
+
+    req = mock_urlopen.call_args[0][0]
+    url = req.full_url
+    assert "category.json" in url
+    assert "category_group_code=FD6" in url
+    assert "rect=126.88%2C37.53%2C126.89%2C37.54" in url
+    assert "page=2" in url
+    assert req.headers["Authorization"].startswith("KakaoAK ")
+
+
+@patch("collect_kakao_stores.urllib.request.urlopen")
+def test_search_category_returns_documents_and_is_end(mock_urlopen):
+    mock_urlopen.return_value = _fake_response([{"id": "1", "place_name": "a"}], is_end=False)
+    docs, is_end = search_category("CE7", (126.88, 37.53, 126.89, 37.54))
+    assert docs == [{"id": "1", "place_name": "a"}]
+    assert is_end is False

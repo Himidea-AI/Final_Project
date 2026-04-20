@@ -89,6 +89,28 @@ def classify_category(category_name: str) -> str:
     return "기타"
 
 
+def search_category(
+    category_group_code: str,
+    rect: tuple[float, float, float, float],
+    page: int = 1,
+) -> tuple[list[dict], bool]:
+    """카카오 카테고리 검색 API. (documents, is_end) 반환."""
+    rect_str = f"{rect[0]},{rect[1]},{rect[2]},{rect[3]}"
+    params = urllib.parse.urlencode(
+        {
+            "category_group_code": category_group_code,
+            "rect": rect_str,
+            "size": 15,
+            "page": page,
+        }
+    )
+    url = f"https://dapi.kakao.com/v2/local/search/category.json?{params}"
+    req = urllib.request.Request(url, headers={"Authorization": f"KakaoAK {KAKAO_API_KEY}"})
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return data.get("documents", []), data.get("meta", {}).get("is_end", True)
+
+
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
 DB_URL = os.environ.get(
     "POSTGRES_URL",
