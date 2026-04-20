@@ -62,3 +62,13 @@ async def test_realtime_resident_visitor_unmapped_dong(tool: MarketDataTool):
     assert r["visitor_rate"] is None
     assert r["source_poi"] is None
     assert r["sample_size"] == 0
+
+
+@pytest.mark.asyncio
+async def test_area_income_context_seogyo(tool: MarketDataTool):
+    r = await tool.get_area_income_context("11440660")
+    assert r["income_level"] in ("high", "mid", "low", "unknown")
+    assert r["population_trend"] in ("growing", "stable", "declining", "unknown")
+    # 서울특별시 elderly_ratio는 20% 내외 (2026 기준)
+    if r["elderly_ratio"] is not None:
+        assert 15 <= r["elderly_ratio"] <= 30

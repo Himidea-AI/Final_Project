@@ -1,5 +1,8 @@
+import asyncio
 from typing import Any, Dict, List, Optional
+
 from sqlalchemy import select, func, text
+
 from src.database.postgres import PostgresClient
 from src.database.models import LivingPopulation, DistrictSales, GolmokRent, DongMapping
 
@@ -453,4 +456,131 @@ class MarketDataTool:
             "visitor_rate": round(float(row.v_avg), 2) if row.v_avg is not None else None,
             "source_poi": list(pois),
             "sample_size": sample,
+        }
+
+    # ---- 소득/고령/인구추세 헬퍼 (get_area_income_context 내부용) ----
+    # NOTE: 각 헬퍼는 **독립 세션**을 사용합니다. SQLAlchemy AsyncSession + asyncpg는
+    # 단일 커넥션에서 동시 쿼리를 지원하지 않아 (InterfaceError: another operation is
+    # in progress), asyncio.gather 병렬 실행 시 세션을 분리해야 안정적입니다.
+
+    async def _fetch_area_income(self) -> Optional[float]:
+        """
+        kosis_regional_income 서울(region_code='11')의 1인당 개인처분가능소득 최신값.
+
+        item_code='T3' ("1인당 개인처분가능소득") 우선, fallback으로 item_name LIKE.
+        단위: **천원** (2024년 실측 32,224 = 연 약 3,222만원/人).
+        """
+        async with self.db_client.get_session() as session:
+            res = await session.execute(
+                text(
+                    "SELECT value_num FROM kosis_regional_income "
+                    "WHERE region_code = '11' AND item_code = 'T3' "
+                    "ORDER BY period_value DESC LIMIT 1"
+                )
+            )
+            value = res.scalar()
+            if value is not None:
+                return float(value)
+
+            # fallback — item_name 매칭 (스키마 변동 대비)
+            res2 = await session.execute(
+                text(
+                    "SELECT value_num FROM kosis_regional_income "
+                    "WHERE region_code = '11' AND item_name LIKE '%처분가능%' "
+                    "ORDER BY period_value DESC LIMIT 1"
+                )
+            )
+            v2 = res2.scalar()
+            return float(v2) if v2 is not None else None
+
+    async def _fetch_elderly_ratio(self) -> Optional[float]:
+        """elderly_ratio_region 서울특별시 최신 ym의 노인 비율 (%)."""
+        async with self.db_client.get_session() as session:
+            res = await session.execute(
+                text("SELECT elderly_ratio FROM elderly_ratio_region WHERE region = :region ORDER BY ym DESC LIMIT 1"),
+                {"region": "서울특별시"},
+            )
+            v = res.scalar()
+            return float(v) if v is not None else None
+
+    async def _fetch_population_trend(self, dong_code: str) -> str:
+        """
+        resident_pop_monthly 최근 6개월(해당 dong_code)에서 전/후 3개월 평균 비교.
+
+        mapping: district_sales.dong_code(8) + '00' = resident_pop_monthly.region_code(10)
+        Returns: 'growing' | 'stable' | 'declining' | 'unknown'.
+        """
+        region_code = f"{dong_code}00"
+        async with self.db_client.get_session() as session:
+            res = await session.execute(
+                text("SELECT ym, total_pop FROM resident_pop_monthly WHERE region_code = :rc ORDER BY ym DESC LIMIT 6"),
+                {"rc": region_code},
+            )
+            rows = res.fetchall()
+        if len(rows) < 6:
+            return "unknown"
+
+        # rows는 ym DESC → 앞 3개가 최신, 뒤 3개가 과거
+        recent = [r.total_pop for r in rows[:3]]
+        past = [r.total_pop for r in rows[3:6]]
+        recent_avg = sum(recent) / 3
+        past_avg = sum(past) / 3
+        if past_avg == 0:
+            return "unknown"
+        ratio = recent_avg / past_avg
+        if ratio > 1.01:
+            return "growing"
+        if ratio < 0.99:
+            return "declining"
+        return "stable"
+
+    @staticmethod
+    def _classify_income_level(value_num: Optional[float]) -> str:
+        """
+        value_num 단위: 천원 (KOSIS 2024 기준 서울 T3 ≈ 32,224).
+        - high: ≥ 35,000 천원 (3,500만원/年/人)
+        - mid:  25,000 ~ 35,000
+        - low:  < 25,000
+        """
+        if value_num is None:
+            return "unknown"
+        if value_num >= 35000:
+            return "high"
+        if value_num >= 25000:
+            return "mid"
+        return "low"
+
+    async def get_area_income_context(self, dong_code: str) -> Dict[str, Any]:
+        """
+        해당 행정동의 소득·고령·인구추세 컨텍스트 집계.
+
+        3개 서브쿼리를 asyncio.gather로 병렬 실행 (각 헬퍼는 독립 세션 사용).
+        예외 발생 시 해당 필드만 None/'unknown'으로 fallback.
+
+        Returns:
+            {
+                "area_income_per_capita": float | None,  # 천원/年/人 (KOSIS 서울시 단위)
+                "elderly_ratio":          float | None,  # 0-100 %
+                "population_trend":       "growing" | "stable" | "declining" | "unknown",
+                "income_level":           "high" | "mid" | "low" | "unknown",
+            }
+        """
+        results = await asyncio.gather(
+            self._fetch_area_income(),
+            self._fetch_elderly_ratio(),
+            self._fetch_population_trend(dong_code),
+            return_exceptions=True,
+        )
+
+        income_raw, elderly_raw, trend_raw = results
+
+        income = income_raw if isinstance(income_raw, (int, float)) else None
+        elderly = elderly_raw if isinstance(elderly_raw, (int, float)) else None
+        trend = trend_raw if isinstance(trend_raw, str) else "unknown"
+
+        return {
+            "area_income_per_capita": income,
+            "elderly_ratio": elderly,
+            "population_trend": trend,
+            "income_level": self._classify_income_level(income),
         }
