@@ -153,7 +153,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
     key = _pipeline_key(input_data)
 
     if key in _pending_pipelines and not _pending_pipelines[key].done():
-        print(f"[DEDUP] 동일 요청 대기 중 — 기존 파이프라인 공유: {key}")
+        print(f"[DEDUP] 동일 요청 대기 중 - 기존 파이프라인 공유: {key}")
         return await _pending_pipelines[key]
 
     # 프론트엔드가 영문으로 보낼 경우 한국어로 정규화 (DB 쿼리 호환)
@@ -770,7 +770,9 @@ async def run_simulation(input_data: SimulationInput):
         final_state = await _run_pipeline(input_data)
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
-        print(f"!!! [SIMULATE ERROR] !!! {str(e)}")
+        import traceback
+        print(f"!!! [SIMULATE ERROR] !!! {type(e).__name__}: {e}")
+        traceback.print_exc()
         return {
             "request_id": request_id,
             "target_district": input_data.target_district,

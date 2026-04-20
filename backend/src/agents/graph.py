@@ -7,7 +7,7 @@ from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.legal import legal_node
 from src.agents.nodes.synthesis import synthesis_node
-from src.agents.nodes.district_ranking import district_ranking_node
+from src.agents.nodes.district_ranking import district_ranking_node, _clear_shared_population_cache
 
 # 전체 파이프라인 토큰 예산 (입력+출력 합산 추정치 기준)
 # gpt-4.1-mini: 입력 $0.15/1M, 출력 $0.60/1M
@@ -49,6 +49,9 @@ async def parallel_analysis_node(state: AgentState) -> dict:
     t_start = time.perf_counter()
     print("--- [PARALLEL ANALYSIS] 4개 에이전트 병렬 실행 시작 ---")
 
+    # 동일 dong에 대한 get_population_trends 중복 쿼리 방지용 공유 Task 캐시 초기화
+    _clear_shared_population_cache()
+
     market_result, population_result, legal_result, ranking_result = await asyncio.gather(
         market_analyst_node(state),
         population_analyst_node(state),
@@ -78,7 +81,7 @@ async def parallel_analysis_node(state: AgentState) -> dict:
 
     print(
         f"--- [PARALLEL ANALYSIS] 완료 ({elapsed:.1f}s) | "
-        f"토큰 추정 — market:{token_market} pop:{token_pop} legal:{token_legal} "
+        f"토큰 추정 - market:{token_market} pop:{token_pop} legal:{token_legal} "
         f"합계:{token_total}/{_TOKEN_BUDGET_PER_RUN} ---"
     )
     if token_total > _TOKEN_BUDGET_PER_RUN:
