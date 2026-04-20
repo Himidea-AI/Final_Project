@@ -84,6 +84,7 @@ interface SimResult {
     competition_intensity: number;
     estimated_revenue: number;
     survival_rate: number;
+    closure_rate: number | null;
     growth_potential: number;
     accessibility: number;
   };
@@ -94,6 +95,12 @@ interface SimResult {
   legalRisks?: { type: string; risk_level: string; detail: string }[];
   overallLegalRisk?: string;
   vacancyApplied?: boolean;
+  // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
+  scenarios?: {
+    optimistic: { quarter: number; revenue: number }[];
+    base: { quarter: number; revenue: number }[];
+    pessimistic: { quarter: number; revenue: number }[];
+  } | null;
 }
 
 import {
@@ -678,7 +685,7 @@ const CHART_DATA = [
   { label: '임대료', value: 45 },
   { label: '경쟁강도', value: 68 },
   { label: '매출추정', value: 74 },
-  { label: '생존율', value: 91 },
+  { label: '폐업률', value: 9 },
   { label: '성장성', value: 56 },
   { label: '접근성', value: 78 },
 ];
@@ -713,7 +720,7 @@ function generateSmartMock(dongName: string, businessType: string) {
     '임대료',
     '경쟁강도',
     '매출추정',
-    '생존율',
+    '폐업률',
     '성장성',
     '접근성',
   ].map((label, i) => ({
@@ -808,10 +815,10 @@ const CANNIBALIZATION_ROWS: CannRow[] = [
 ];
 
 const NEIGHBORHOOD_ROWS: NeighborhoodRow[] = [
-  { name: '연남동', score: '87 / 100', survival: '82%', bep: '3.5 개월' },
-  { name: '서교동', score: '84 / 100', survival: '79%', bep: '4.1 개월' },
-  { name: '망원동', score: '76 / 100', survival: '65%', bep: '5.2 개월' },
-  { name: '합정동', score: '71 / 100', survival: '60%', bep: '6.0 개월' },
+  { name: '연남동', score: '87 / 100', survival: '18%', bep: '3.5 개월' },
+  { name: '서교동', score: '84 / 100', survival: '21%', bep: '4.1 개월' },
+  { name: '망원동', score: '76 / 100', survival: '35%', bep: '5.2 개월' },
+  { name: '합정동', score: '71 / 100', survival: '40%', bep: '6.0 개월' },
 ];
 
 // 정렬용 값 추출 (문자열 컬럼은 그대로, 숫자 컬럼은 파싱)
@@ -880,7 +887,7 @@ const mockDetailData: Record<string, DetailDataEntry> = {
   attractiveness: {
     title: '상권 종합 매력도 상세',
     aiReasoning:
-      '7개 지표(유동인구·임대료·경쟁강도·매출추정·생존율·성장성·접근성)를 가중 평균. 마포구 25개 동 중 상권 매력도 상위 8% 권역.',
+      '7개 지표(유동인구·임대료·경쟁강도·매출추정·폐업률·성장성·접근성)를 가중 평균. 마포구 25개 동 중 상권 매력도 상위 8% 권역.',
     rank: '마포구 내 상위 8%',
     trend: '+5.2 Pts 지속 상승중',
   },
@@ -2224,7 +2231,7 @@ function SimulatorDashboard({
     ? simResult.districtRankings.slice(0, 16).map((r) => ({
         name: r.district || '-',
         score: typeof r.score === 'number' ? String(Math.round(r.score)) : '—',
-        survival: typeof r.survival_rate === 'number' ? `${Math.round(r.survival_rate)}%` : '—',
+        survival: typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
         bep: typeof r.bep_months === 'number' ? `${r.bep_months}개월` : '—',
       }))
     : null;
@@ -2245,14 +2252,16 @@ function SimulatorDashboard({
     : MONTHLY_CHART_DATA;
 
   // 레이더 차트 7축 꼭지점 — market_report 기반 동적 계산
-  // 순서: 유동인구(12시) → 매출(2시) → 성장성(4시) → 생존율(6시) → 임대료(8시) → 경쟁강도(10시) → 접근성(11시)
-  const RADAR_FALLBACK_VALUES = [82, 74, 56, 91, 45, 68, 78]; // mock fallback
+  // 순서: 유동인구(12시) → 매출(2시) → 성장성(4시) → 폐업률(6시) → 임대료(8시) → 경쟁강도(10시) → 접근성(11시)
+  const RADAR_FALLBACK_VALUES = [82, 74, 56, 9, 45, 68, 78]; // mock fallback
   const radarValues = simResult?.marketReport
     ? [
         simResult.marketReport.floating_population,
         simResult.marketReport.estimated_revenue,
         simResult.marketReport.growth_potential,
-        simResult.marketReport.survival_rate,
+        simResult.marketReport.closure_rate != null
+          ? Math.round(simResult.marketReport.closure_rate * 100)
+          : 100 - simResult.marketReport.survival_rate,
         simResult.marketReport.rent_index,
         simResult.marketReport.competition_intensity,
         simResult.marketReport.accessibility,
@@ -2262,7 +2271,7 @@ function SimulatorDashboard({
     '유동인구',
     '매출',
     '성장성',
-    '생존율',
+    '폐업률',
     '임대료',
     '경쟁강도',
     '접근성',
@@ -2386,7 +2395,7 @@ function SimulatorDashboard({
 
       // Sheet 3: 행정동 비교
       const neighborhoods: (string | number)[][] = [
-        ['행정동', 'AI 점수', '생존율', '예상 BEP'],
+        ['행정동', 'AI 점수', '폐업률', '예상 BEP'],
         ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.survival, r.bep]),
       ];
       const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
@@ -2519,7 +2528,13 @@ function SimulatorDashboard({
               { label: '임대료', value: mr.rent_index },
               { label: '경쟁강도', value: mr.competition_intensity },
               { label: '매출추정', value: mr.estimated_revenue },
-              { label: '생존율', value: mr.survival_rate },
+              {
+                label: '폐업률',
+                value:
+                  mr.closure_rate != null
+                    ? Math.round(mr.closure_rate * 100)
+                    : 100 - mr.survival_rate,
+              },
               { label: '성장성', value: mr.growth_potential },
               { label: '접근성', value: mr.accessibility },
             ]
@@ -2541,6 +2556,8 @@ function SimulatorDashboard({
         overallLegalRisk: (simRes as any).overall_legal_risk,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         vacancyApplied: (simRes as any).vacancy_applied,
+        // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
+        scenarios: simRes.scenarios ?? null,
       });
       setReportState('result');
     } catch (err) {
@@ -3572,7 +3589,7 @@ function SimulatorDashboard({
                                           </th>
                                           <th className="p-3 font-medium">
                                             <SortHeader
-                                              label="생존율"
+                                              label="폐업률"
                                               sortField="survival"
                                               sortKey={sortKey}
                                               sortDir={sortDir}
@@ -3747,7 +3764,7 @@ function SimulatorDashboard({
                                     fontSize="10"
                                     textAnchor="middle"
                                   >
-                                    <title>생존율: 91/100 (3년 생존 82%)</title>생존율
+                                    <title>폐업률</title>폐업률
                                   </text>
                                   <text
                                     onClick={() => setActiveDrawer('attractiveness')}
@@ -4619,7 +4636,7 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
                   성장성
                 </text>
                 <text x="133" y="166" fill="#64748b" fontSize="10" textAnchor="middle">
-                  생존율
+                  폐업률
                 </text>
                 <text x="67" y="166" fill="#64748b" fontSize="10" textAnchor="middle">
                   임대료
@@ -4682,14 +4699,14 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
             <div>
               <h2 className="text-[22px] font-black text-slate-900 mb-1">03. 행정동 비교 분석</h2>
               <p className="text-xs text-slate-500 mb-4">
-                Neighborhood Comparison · 인근 동 AI 점수 / 생존율 / 손익분기점
+                Neighborhood Comparison · 인근 동 AI 점수 / 폐업률 / 손익분기점
               </p>
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b-2 border-slate-300 text-slate-500 text-left uppercase tracking-wider">
                     <th className="py-2.5 font-medium">행정동</th>
                     <th className="py-2.5 font-medium">AI 점수</th>
-                    <th className="py-2.5 font-medium">생존율</th>
+                    <th className="py-2.5 font-medium">폐업률</th>
                     <th className="py-2.5 font-medium">예상 BEP</th>
                   </tr>
                 </thead>
@@ -5319,7 +5336,7 @@ function DashboardPanelView({
   const scoreTrend = isVariantB ? '-2.1 Pts' : '+5.2 Pts';
   const revenueTrend = isVariantB ? '+6.3%' : '+12.5%';
   const radarValues = isVariantB ? [62, 81, 55, 68, 71, 58, 73] : [78, 65, 72, 87, 74, 82, 80];
-  const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '생존율', '성장성', '접근성'];
+  const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
   const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
   const badgeColorMap = [
     'bg-amber-500/10 text-amber-500 border-amber-500/20',

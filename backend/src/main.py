@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import uuid
 import asyncio
+import logging
 from typing import Any, Dict
 
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
@@ -14,6 +15,8 @@ if str(current_dir) not in sys.path:
 _project_root = str(Path(__file__).parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
+
+logger = logging.getLogger(__name__)
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI, HTTPException, Request
@@ -287,12 +290,16 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             detail=f"지원하지 않는 행정동입니다: '{target_dist}'. 마포구 16개 동만 지원됩니다.",
         )
     _industry_code = _BIZ_TO_INDUSTRY_CODE.get(_biz_name, "CS100010")  # 기본값: 카페
+    scenarios = None
     try:
         sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
         quarterly = build_quarterly_projection(
             bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
             confidence="base",
+        )
+        scenarios = build_scenarios(
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
         )
     except Exception as _sim_err:
         print(f"[SIM] ModelOutput 호출 실패 (mock 사용): {_sim_err}")
@@ -308,6 +315,26 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         logger.warning("SHAP 분석 실패: %s", e)
         shap_result = None
 
+    # sim_result에서 타겟 동 예측값 추출 (모델 호출 성공 시)
+    _sim_closure_rate = sim_result["survival"]["closure_rate"] if "sim_result" in locals() else None
+    _sim_bep_months = sim_result["bep"]["bep_months"] if "sim_result" in locals() else None
+
+    # market_report에 모델 기반 폐업률 추가 (0~1 소수)
+    market_report["closure_rate"] = _sim_closure_rate
+
+    # 타겟 동의 bep_months, closure_rate를 district_rankings에 주입
+    district_rankings = [
+        {
+            **r,
+            **(
+                {"bep_months": _sim_bep_months, "closure_rate": _sim_closure_rate}
+                if r.get("district") == target_dist
+                else {}
+            ),
+        }
+        for r in district_rankings
+    ]
+
     # [B1 고도화] 응답 구조 재설계
     response_data = {
         "request_id": request_id,
@@ -322,6 +349,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "analysis_metrics": metrics,
         "simulation_months": 12,
         "quarterly_projection": quarterly,
+        "scenarios": scenarios,
         "comparison": [
             {
                 "district": target_dist,
