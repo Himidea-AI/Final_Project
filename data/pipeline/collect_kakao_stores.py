@@ -66,7 +66,17 @@ def generate_grid(
 
 # category_name prefix → 프로젝트 카테고리 매핑
 # Kakao 실제 포맷: "음식점 > 카페 > ...", "음식점 > 간식 > 제과,베이커리" 등
-# BRANDS 딕셔너리 분류와 일관성 유지하도록 파생 카테고리 포괄
+# BRANDS 딕셔너리 분류와 일관성 유지하도록 파생 카테고리 포괄.
+#
+# '기타' 분류 기준:
+#   category_detail 이 '음식점' / '카페' 로 시작하되 아래 매핑 어디에도
+#   매칭되지 않는 경우. 주로 다음 케이스가 해당된다:
+#     - 아시아음식 하위 (베트남·태국·인도·튀르키예 등): 한중일양 어디에도 안 맞음
+#     - 일반 뷔페 / 해산물뷔페 / 고기뷔페 (한식뷔페는 한식)
+#     - 간식 하위 중 아이스크림 / 초콜릿 (제과 범주와 구분)
+#     - 구내식당 / 푸드코트 / '음식점' 최상위만 표기된 건
+#   음식점·카페로 시작하지 않는 row(보드카페·키즈카페·주차장 등)는
+#   _doc_to_row 에서 수집 단계부터 제외되므로 DB 에 들어오지 않는다.
 _CATEGORY_PREFIX_MAP: list[tuple[str, str]] = [
     # 한식
     ("음식점 > 한식", "한식음식점"),
@@ -108,7 +118,15 @@ _CATEGORY_PREFIX_MAP: list[tuple[str, str]] = [
 
 
 def classify_category(category_name: str) -> str:
-    """카카오 category_name → 프로젝트 10개 카테고리 + '기타'."""
+    """카카오 category_name → 프로젝트 10개 카테고리 + '기타'.
+
+    10개 카테고리: 한식음식점 / 중식음식점 / 일식음식점 / 양식음식점 /
+    치킨전문점 / 분식전문점 / 제과점 / 패스트푸드점 / 호프-간이주점 / 커피-음료.
+
+    '기타' 는 category_name 이 비어있거나, _CATEGORY_PREFIX_MAP 에 등록된
+    어떤 prefix 와도 매칭되지 않는 음식점/카페 (예: 아시아음식, 일반뷔페,
+    아이스크림, 구내식당 등) 에 부여된다.
+    """
     if not category_name:
         return "기타"
     for prefix, label in _CATEGORY_PREFIX_MAP:
