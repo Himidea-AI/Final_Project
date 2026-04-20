@@ -320,12 +320,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
 
-    # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환
+    # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
     cache_key = f"v3:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        cached = await _redis.get(cache_key)
+        cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
             print(f"[district_ranking] 캐시 히트: {cache_key}")
@@ -334,7 +334,8 @@ async def district_ranking_node(state: AgentState) -> dict:
                 "scouting_results": cached_data["scouting_results"],
                 "winner_district": cached_data["winner_district"],
                 "top_3_candidates": cached_data["top_3_candidates"],
-                "vacancy_applied": cached_data["vacancy_applied"],
+                "vacancy_applied": cached_data.get("vacancy_applied", False),
+                "vacancy_spots": cached_data.get("vacancy_spots", []),
                 "current_agent": "district_ranking",
             }
     except Exception as e:

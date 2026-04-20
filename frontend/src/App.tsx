@@ -3803,61 +3803,49 @@ function SimulatorDashboard({
                                 </span>
                               </div>
                               <div className="space-y-3">
+                                {/* 고정 카드 1: 저녁 시간대 매출 */}
+                                <InsightCard
+                                  severity="advisory"
+                                  onClick={() => setActiveDrawer('insight_traffic')}
+                                  icon={<TrendingUp className="w-4 h-4 text-indigo-400" />}
+                                  title="저녁 시간대 매출 집중형"
+                                  desc="18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다."
+                                />
+                                {/* 법률 리스크 통합 카드: safe 제외하고 위험/주의 항목만 서브 표시 */}
                                 {(() => {
-                                  // [C1] legal_risks 상위 3건을 실데이터로 렌더. 없으면 mock fallback
-                                  const risks = simResult?.legalRisks?.slice(0, 3);
-                                  if (risks && risks.length > 0) {
-                                    const severityMap = (
-                                      risk: string,
-                                    ): 'advisory' | 'critical' | 'opportunity' => {
-                                      const r = (risk || '').toLowerCase();
-                                      if (
-                                        r.includes('danger') ||
-                                        r.includes('high') ||
-                                        r.includes('위험') ||
-                                        r.includes('경고')
-                                      )
-                                        return 'critical';
-                                      if (
-                                        r.includes('caution') ||
-                                        r.includes('medium') ||
-                                        r.includes('주의')
-                                      )
-                                        return 'advisory';
-                                      return 'opportunity';
-                                    };
-                                    const iconFor = (sev: string) =>
-                                      sev === 'critical' ? (
-                                        <Scale className="w-4 h-4 text-rose-500" />
-                                      ) : sev === 'advisory' ? (
-                                        <AlertTriangle className="w-4 h-4 text-amber-400" />
-                                      ) : (
-                                        <TrendingUp className="w-4 h-4 text-indigo-400" />
-                                      );
-                                    return risks.map((risk, i) => {
-                                      const sev = severityMap(risk.risk_level);
-                                      return (
-                                        <InsightCard
-                                          key={i}
-                                          severity={sev}
-                                          onClick={() => setActiveDrawer('insight_legal')}
-                                          icon={iconFor(sev)}
-                                          title={risk.type || `법률 리스크 #${i + 1}`}
-                                          desc={risk.detail || '상세 정보 없음'}
-                                        />
-                                      );
-                                    });
-                                  }
-                                  // Fallback mock (백엔드 응답에 legal_risks 없을 때)
-                                  return (
-                                    <>
-                                      <InsightCard
-                                        severity="advisory"
-                                        onClick={() => setActiveDrawer('insight_traffic')}
-                                        icon={<TrendingUp className="w-4 h-4 text-indigo-400" />}
-                                        title="저녁 시간대 매출 집중형"
-                                        desc="18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다."
-                                      />
+                                  const TYPE_LABEL: Record<string, string> = {
+                                    franchise_law: '가맹사업법',
+                                    commercial_lease_law: '상가임대차보호법',
+                                    zoning_regulation: '용도지역 규제',
+                                    food_hygiene: '식품위생법',
+                                    safety_regulation: '안전규정',
+                                    building_law: '건축법',
+                                    fire_safety_law: '소방안전법',
+                                    labor_law: '노동법',
+                                    vat_law: '부가가치세법',
+                                    privacy_law: '개인정보보호법',
+                                    accessibility_law: '장애인편의법',
+                                    sewage_law: '하수도법',
+                                    fair_trade_law: '공정거래법',
+                                    ftc_franchise: '공정위 정보공개서',
+                                  };
+                                  const severityOf = (
+                                    level: string,
+                                  ): 'critical' | 'advisory' | 'safe' => {
+                                    const r = (level || '').toLowerCase();
+                                    if (r === 'danger' || r === 'high') return 'critical';
+                                    if (r === 'caution' || r === 'medium') return 'advisory';
+                                    return 'safe';
+                                  };
+
+                                  // safe 항목 제외 — 위험·주의만 표시
+                                  const dangerRisks = (simResult?.legalRisks ?? []).filter(
+                                    (r) => severityOf(r.risk_level) !== 'safe',
+                                  );
+
+                                  if (dangerRisks.length === 0) {
+                                    // 위험 항목 없으면 mock fallback 카드
+                                    return (
                                       <InsightCard
                                         severity="critical"
                                         onClick={() => setActiveDrawer('insight_legal')}
@@ -3868,16 +3856,79 @@ function SimulatorDashboard({
                                           '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.'
                                         }
                                       />
-                                      <InsightCard
-                                        severity="opportunity"
-                                        onClick={() => setActiveDrawer('insight_target')}
-                                        icon={<Users className="w-4 h-4 text-indigo-400" />}
-                                        title="2030 여성 타겟 구역"
-                                        desc="SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가."
-                                      />
-                                    </>
+                                    );
+                                  }
+
+                                  const topSev = dangerRisks.some(
+                                    (r) => severityOf(r.risk_level) === 'critical',
+                                  )
+                                    ? 'critical'
+                                    : 'advisory';
+
+                                  return (
+                                    <div
+                                      onClick={() => setActiveDrawer('insight_legal')}
+                                      className="flex flex-col gap-2 p-3 rounded-lg bg-[#1e1b18] border border-[#3a3633] cursor-pointer hover:border-[#818cf8] hover:bg-[#818cf8]/[0.05] transition-all group"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <Scale
+                                          className={`w-4 h-4 shrink-0 ${topSev === 'critical' ? 'text-rose-500' : 'text-amber-400'}`}
+                                        />
+                                        <div className="flex-1 flex items-center justify-between gap-2">
+                                          <h4 className="text-[#e2e8f0] font-bold text-xs">
+                                            법률 리스크 종합
+                                          </h4>
+                                          <span className="inline-flex items-center gap-1 shrink-0">
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`}
+                                            />
+                                            <span className="text-[8px] font-mono uppercase tracking-wider text-[#9ca3af]">
+                                              {topSev === 'critical' ? 'CRITICAL' : 'ADVISORY'}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col gap-2 border-t border-[#3a3633] pt-2">
+                                        {dangerRisks.map((risk, i) => {
+                                          const sev = severityOf(risk.risk_level);
+                                          const isCritical = sev === 'critical';
+                                          return (
+                                            <div
+                                              key={i}
+                                              className={`flex gap-2.5 pl-2.5 border-l-2 ${isCritical ? 'border-rose-500' : 'border-amber-400'}`}
+                                            >
+                                              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="text-[#e2e8f0] text-[11px] font-semibold">
+                                                    {TYPE_LABEL[risk.type] || risk.type}
+                                                  </span>
+                                                  <span
+                                                    className={`text-[8px] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-400/20 text-amber-400'}`}
+                                                  >
+                                                    {isCritical ? '위험' : '주의'}
+                                                  </span>
+                                                </div>
+                                                {risk.detail && (
+                                                  <p className="text-[#9ca3af] text-[10px] leading-relaxed">
+                                                    {risk.detail}
+                                                  </p>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   );
                                 })()}
+                                {/* 고정 카드 3: 타겟 구역 */}
+                                <InsightCard
+                                  severity="opportunity"
+                                  onClick={() => setActiveDrawer('insight_target')}
+                                  icon={<Users className="w-4 h-4 text-indigo-400" />}
+                                  title="2030 여성 타겟 구역"
+                                  desc="SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가."
+                                />
                               </div>
 
                               {/* --- AI Workflow & Report Buttons --- */}
