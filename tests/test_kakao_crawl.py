@@ -52,6 +52,8 @@ def test_classify_korean():
     # 도시락은 BRANDS 정의(한솥·본도시락)와 일치시켜 한식으로
     assert classify_category("음식점 > 도시락 > 한솥도시락") == "한식음식점"
     assert classify_category("음식점 > 도시락") == "한식음식점"
+    # 퓨전한식도 한식으로 (본죽&비빔밥cafe 등)
+    assert classify_category("음식점 > 퓨전요리 > 퓨전한식 > 본죽&비빔밥cafe") == "한식음식점"
 
 
 def test_classify_chinese():
