@@ -96,7 +96,13 @@ interface SimResult {
   districtRankings?: { district: string; score: number; [k: string]: any }[];
   winnerDistrict?: string;
   topCandidates?: string[];
-  legalRisks?: { type: string; risk_level: string; detail: string }[];
+  legalRisks?: {
+    type: string;
+    risk_level: string;
+    detail: string;
+    recommendation?: string;
+    articles?: { article_ref: string; content: string }[];
+  }[];
   overallLegalRisk?: string;
   vacancyApplied?: boolean;
   vacancySpots?: {
@@ -3920,6 +3926,31 @@ function SimulatorDashboard({
                                                   <p className="text-[#9ca3af] text-[10px] leading-relaxed">
                                                     {risk.detail}
                                                   </p>
+                                                )}
+                                                {risk.articles && risk.articles.length > 0 && (
+                                                  <details
+                                                    className="mt-1"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                  >
+                                                    <summary className="cursor-pointer text-[10px] text-cyan-300 hover:text-cyan-200 font-mono">
+                                                      근거 조항 {risk.articles.length}건 보기
+                                                    </summary>
+                                                    <ul className="mt-1.5 space-y-1.5 text-[10px]">
+                                                      {risk.articles.map((a, ai) => (
+                                                        <li
+                                                          key={ai}
+                                                          className="rounded border border-[#3a3633] bg-[#171717]/60 p-2"
+                                                        >
+                                                          <div className="font-semibold text-[#e2e8f0]">
+                                                            {a.article_ref}
+                                                          </div>
+                                                          <div className="mt-1 text-[#9ca3af] leading-relaxed whitespace-pre-wrap">
+                                                            {a.content}
+                                                          </div>
+                                                        </li>
+                                                      ))}
+                                                    </ul>
+                                                  </details>
                                                 )}
                                               </div>
                                             </div>
