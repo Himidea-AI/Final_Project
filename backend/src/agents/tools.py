@@ -3,6 +3,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.postgres import PostgresClient
 from src.database.models import StoreInfo, LivingPopulation, DistrictSales, GolmokRent, DongMapping
+from src.services.population_api import MAPO_DONG_CODES
 from src.config.settings import settings
 
 class MarketDataTool:
@@ -101,15 +102,11 @@ class MarketDataTool:
         """
         최근 1년(4분기) 유동인구 추이 및 인구통계 요약 (YoY, QoQ 포함)
         """
-        async with self.db_client.get_session() as session:
-            # 행정동 코드로 매핑
-            mapping_stmt = select(DongMapping.dong_code).where(DongMapping.dong_name == dong_name)
-            mapping_res = await session.execute(mapping_stmt)
-            dong_code = mapping_res.scalar()
-            
-            if not dong_code:
-                return {"error": "행정동 정보를 찾을 수 없습니다."}
+        dong_code = MAPO_DONG_CODES.get(dong_name)
+        if not dong_code:
+            return {"error": "행정동 정보를 찾을 수 없습니다."}
 
+        async with self.db_client.get_session() as session:
             # 최근 4분기 데이터 조회
             pop_stmt = select(
                 LivingPopulation.date,

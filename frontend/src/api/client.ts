@@ -53,8 +53,11 @@ export async function healthCheck() {
 }
 
 /** 시뮬레이션 실행 요청 */
-export async function runSimulation(input: SimulationInput): Promise<SimulationOutput> {
-  const response = await apiClient.post('/simulate', input);
+export async function runSimulation(
+  input: SimulationInput,
+  signal?: AbortSignal,
+): Promise<SimulationOutput> {
+  const response = await apiClient.post('/simulate', input, { signal });
   return response.data;
 }
 

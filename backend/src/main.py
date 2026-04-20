@@ -180,6 +180,8 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "scouting_results": [],
         "top_3_candidates": [],
         "winner_district": input_data.target_district,
+        "vacancy_spots": [],
+        "vacancy_applied": False,
         "brand_analysis": {},
         "analysis_results": {},
         "analysis_metrics": {},
@@ -244,6 +246,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     district_rankings = _sanitize(analysis.get("district_rankings", []))
     winner_district = _sanitize(analysis.get("winner_district", target_dist))
     top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
+    vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
     final_report = analysis.get("final_report") or {}
@@ -385,8 +388,20 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                     "label": target_dist,
                     "type": "candidate",
                 }
+            ] + [
+                {
+                    "id": f"vacancy_{s['id']}",
+                    "lat": s["lat"],
+                    "lng": s["lon"],
+                    "label": s["dong_name"],
+                    "type": "vacancy",
+                    "listing_count": s["listing_count"],
+                }
+                for s in vacancy_spots
+                if s.get("lat") and s.get("lon")
             ],
         },
+        "vacancy_spots": vacancy_spots,
         "financial_report": md.get("financial_metrics", {}),
         # TCN SHAP 분석 결과 (실패 시 None)
         "shap_result": shap_result,

@@ -1,17 +1,5 @@
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
-import {
-  Brain,
-  ShieldAlert,
-  LineChart,
-  Target,
-  MapPin,
-  Users,
-} from "lucide-react";
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Brain, ShieldAlert, LineChart, Target, MapPin, Users } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -25,6 +13,8 @@ export interface LocationData {
   name: string;
   lat: number;
   lng: number;
+  type?: 'candidate' | 'vacancy';
+  listingCount?: number;
 }
 
 export interface AgentMapVisualizerProps {
@@ -38,25 +28,25 @@ interface PixelCoord {
 }
 
 const DEFAULT_LOCATIONS: LocationData[] = [
-  { id: 1, name: "연남파크 A급", lat: 37.562, lng: 126.923 },
-  { id: 2, name: "동진시장 B급", lat: 37.5645, lng: 126.9255 },
-  { id: 3, name: "망원역 C급", lat: 37.5565, lng: 126.9065 },
-  { id: 4, name: "홍대메인 S급", lat: 37.5575, lng: 126.9245 },
-  { id: 5, name: "합정카페거리", lat: 37.5495, lng: 126.9185 },
+  { id: 1, name: '연남파크 A급', lat: 37.562, lng: 126.923 },
+  { id: 2, name: '동진시장 B급', lat: 37.5645, lng: 126.9255 },
+  { id: 3, name: '망원역 C급', lat: 37.5565, lng: 126.9065 },
+  { id: 4, name: '홍대메인 S급', lat: 37.5575, lng: 126.9245 },
+  { id: 5, name: '합정카페거리', lat: 37.5495, lng: 126.9185 },
 ];
 
 // 백엔드 `backend/src/agents/nodes/` 5개 노드와 일치
 const AGENTS = [
-  { id: "market", name: "Market Analyst", icon: <LineChart />, color: "#818cf8" },
-  { id: "population", name: "Population Analyst", icon: <Users />, color: "#10b981" },
-  { id: "supervisor", name: "Supervisor Node", icon: <Brain />, color: "#f59e0b" },
-  { id: "legal", name: "Legal Analyst", icon: <ShieldAlert />, color: "#f43f5e" },
-  { id: "strategy", name: "Strategy Synthesizer", icon: <Target />, color: "#06b6d4" },
+  { id: 'market', name: 'Market Analyst', icon: <LineChart />, color: '#818cf8' },
+  { id: 'population', name: 'Population Analyst', icon: <Users />, color: '#10b981' },
+  { id: 'supervisor', name: 'Supervisor Node', icon: <Brain />, color: '#f59e0b' },
+  { id: 'legal', name: 'Legal Analyst', icon: <ShieldAlert />, color: '#f43f5e' },
+  { id: 'strategy', name: 'Strategy Synthesizer', icon: <Target />, color: '#06b6d4' },
 ];
 
 export default function AgentMapVisualizer({
   locations = DEFAULT_LOCATIONS,
-  height = "600px",
+  height = '600px',
 }: AgentMapVisualizerProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,18 +54,12 @@ export default function AgentMapVisualizer({
   const agentRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [targetPixels, setTargetPixels] = useState<
-    Record<string | number, PixelCoord>
-  >({});
-  const [agentPixels, setAgentPixels] = useState<Record<string, PixelCoord>>(
-    {}
-  );
+  const [targetPixels, setTargetPixels] = useState<Record<string | number, PixelCoord>>({});
+  const [agentPixels, setAgentPixels] = useState<Record<string, PixelCoord>>({});
   const [showLasers, setShowLasers] = useState(false);
 
-  const KAKAO_MAP_API_KEY: string =
-    import.meta.env?.VITE_KAKAO_MAP_API_KEY || "";
-  const IS_MOCK_MODE =
-    !KAKAO_MAP_API_KEY || KAKAO_MAP_API_KEY.includes("YOUR");
+  const KAKAO_MAP_API_KEY: string = import.meta.env?.VITE_KAKAO_MAP_API_KEY || '';
+  const IS_MOCK_MODE = !KAKAO_MAP_API_KEY || KAKAO_MAP_API_KEY.includes('YOUR');
 
   const updateCoordinates = useCallback(() => {
     if (!mapContainerRef.current) return;
@@ -134,10 +118,10 @@ export default function AgentMapVisualizer({
         updateCoordinates();
         setShowLasers(true);
       }, 500);
-      window.addEventListener("resize", handleResize);
+      window.addEventListener('resize', handleResize);
       cleanupFn = () => {
         clearTimeout(timer);
-        window.removeEventListener("resize", handleResize);
+        window.removeEventListener('resize', handleResize);
       };
     } else {
       const initRealMap = () => {
@@ -162,9 +146,9 @@ export default function AgentMapVisualizer({
         mapInstanceRef.current = map;
         setMapLoaded(true);
 
-        kakao.maps.event.addListener(map, "idle", updateCoordinates);
-        kakao.maps.event.addListener(map, "zoom_changed", updateCoordinates);
-        window.addEventListener("resize", handleResize);
+        kakao.maps.event.addListener(map, 'idle', updateCoordinates);
+        kakao.maps.event.addListener(map, 'zoom_changed', updateCoordinates);
+        window.addEventListener('resize', handleResize);
 
         const timer = setTimeout(() => {
           updateCoordinates();
@@ -173,7 +157,7 @@ export default function AgentMapVisualizer({
 
         cleanupFn = () => {
           clearTimeout(timer);
-          window.removeEventListener("resize", handleResize);
+          window.removeEventListener('resize', handleResize);
         };
       };
 
@@ -182,7 +166,7 @@ export default function AgentMapVisualizer({
       if (kakao && kakao.maps) {
         initRealMap();
       } else {
-        const script = document.createElement("script");
+        const script = document.createElement('script');
         script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_MAP_API_KEY}&autoload=false`;
         document.head.appendChild(script);
         script.onload = () =>
@@ -190,9 +174,8 @@ export default function AgentMapVisualizer({
           (window as any).kakao.maps.load(initRealMap);
 
         cleanupFn = () => {
-          if (document.head.contains(script))
-            document.head.removeChild(script);
-          window.removeEventListener("resize", handleResize);
+          if (document.head.contains(script)) document.head.removeChild(script);
+          window.removeEventListener('resize', handleResize);
         };
       }
     }
@@ -211,7 +194,7 @@ export default function AgentMapVisualizer({
             className="w-full h-full"
             style={{
               filter:
-                "invert(100%) hue-rotate(180deg) brightness(85%) contrast(110%) grayscale(30%)",
+                'invert(100%) hue-rotate(180deg) brightness(85%) contrast(110%) grayscale(30%)',
             }}
           />
         )}
@@ -223,11 +206,10 @@ export default function AgentMapVisualizer({
             className="absolute inset-0"
             style={{
               backgroundImage:
-                "linear-gradient(rgba(129, 140, 248, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(129, 140, 248, 0.15) 1px, transparent 1px)",
-              backgroundSize: "50px 50px",
-              transform:
-                "perspective(500px) rotateX(60deg) scale(2) translateY(-100px)",
-              transformOrigin: "top center",
+                'linear-gradient(rgba(129, 140, 248, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(129, 140, 248, 0.15) 1px, transparent 1px)',
+              backgroundSize: '50px 50px',
+              transform: 'perspective(500px) rotateX(60deg) scale(2) translateY(-100px)',
+              transformOrigin: 'top center',
             }}
           />
           <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-[#818cf8]/20 rounded-full animate-[spin_10s_linear_infinite]" />
@@ -242,6 +224,12 @@ export default function AgentMapVisualizer({
         locations.map((loc) => {
           const pixel = targetPixels[loc.id];
           if (!pixel) return null;
+          const isVacancy = loc.type === 'vacancy';
+          const pinColor = isVacancy ? '#10b981' : '#818cf8';
+          const borderClass = isVacancy
+            ? 'border-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.5)]'
+            : 'border-[#818cf8] shadow-[0_0_10px_rgba(129,140,248,0.5)]';
+          const pingClass = isVacancy ? 'bg-[#10b981]' : 'bg-[#818cf8]';
           return (
             <div
               key={`pin-${loc.id}`}
@@ -249,14 +237,16 @@ export default function AgentMapVisualizer({
               style={{
                 left: pixel.x,
                 top: pixel.y,
-                transform: "translate(-50%, -100%)",
+                transform: 'translate(-50%, -100%)',
               }}
             >
-              <div className="bg-[#1e1b18] border border-[#818cf8] text-[#e2e8f0] px-2 py-0.5 rounded text-[9px] font-bold mb-1 shadow-[0_0_10px_rgba(129,140,248,0.5)]">
-                {loc.name}
+              <div
+                className={`bg-[#1e1b18] border text-[#e2e8f0] px-2 py-0.5 rounded text-[9px] font-bold mb-1 ${borderClass}`}
+              >
+                {isVacancy ? `공실${loc.listingCount ? ` ×${loc.listingCount}` : ''}` : loc.name}
               </div>
-              <MapPin className="w-6 h-6 text-[#818cf8] fill-[#818cf8]/20" />
-              <div className="w-2 h-2 bg-[#818cf8] rounded-full animate-ping absolute bottom-1" />
+              <MapPin className="w-6 h-6" style={{ color: pinColor, fill: `${pinColor}33` }} />
+              <div className={`w-2 h-2 rounded-full animate-ping absolute bottom-1 ${pingClass}`} />
             </div>
           );
         })}
@@ -273,10 +263,7 @@ export default function AgentMapVisualizer({
           AGENTS.map((agent, idx) => {
             const start = agentPixels[agent.id];
             const dynamicTargetId = locations[idx % locations.length]?.id;
-            const end =
-              dynamicTargetId !== undefined
-                ? targetPixels[dynamicTargetId]
-                : undefined;
+            const end = dynamicTargetId !== undefined ? targetPixels[dynamicTargetId] : undefined;
             if (!start || !end) return null;
 
             const controlY = Math.min(start.y, end.y) - 150;
@@ -324,7 +311,7 @@ export default function AgentMapVisualizer({
             <div className="w-1.5 h-1.5 rounded-full bg-white mb-1 shadow-[0_0_8px_#fff]" />
             <div
               className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-[#1e1b18]/90 backdrop-blur-md border border-[#3a3633] flex items-center justify-center shadow-xl transition-all duration-300 group-hover:-translate-y-2 group-hover:border-[var(--agent-color)]"
-              style={{ ["--agent-color" as string]: agent.color } as React.CSSProperties}
+              style={{ ['--agent-color' as string]: agent.color } as React.CSSProperties}
             >
               {React.cloneElement(
                 agent.icon as React.ReactElement<{
@@ -332,9 +319,9 @@ export default function AgentMapVisualizer({
                   color?: string;
                 }>,
                 {
-                  className: "w-6 h-6 md:w-8 md:h-8",
+                  className: 'w-6 h-6 md:w-8 md:h-8',
                   color: agent.color,
-                }
+                },
               )}
             </div>
             <span className="mt-3 text-[10px] md:text-xs font-mono font-bold text-[#9ca3af] group-hover:text-white transition-colors bg-[#1e1b18]/80 px-2 py-1 rounded border border-[#3a3633]/50">
