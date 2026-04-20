@@ -613,6 +613,11 @@ def _doc_to_row(doc: dict) -> dict | None:
 
     place_name = doc["place_name"]
     category_name = doc.get("category_name", "")
+
+    # 음식점/카페 외 카테고리(보드카페·키즈카페·주차장·택배 등) 차단
+    if not category_name.startswith(("음식점", "카페")):
+        return None
+
     category = classify_category(category_name)
 
     # 브랜드 매칭 시도: NORMALIZE_RULES에 걸리는 경우만 is_franchise=True
