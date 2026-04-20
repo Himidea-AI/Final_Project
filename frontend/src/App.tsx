@@ -35,7 +35,7 @@
  * [백엔드 연동]
  *   - api/client.ts의 USE_MOCK = true → Mock 데이터 반환 (프론트 독립 동작)
  *   - USE_MOCK = false로 변경 시 → FastAPI /api/simulate, /api/analyze 호출
- *   - SimulatorDashboard.runSim()에서 runSimulation() + analyzeLocation() 호출
+ *   - SimulatorDashboard.runSim()에서 runSimulation() 호출 (v12.4부터 /simulate 단일 호출)
  *
  * [팀원 참고]
  *   - A1/B1: api/client.ts의 Mock 응답 형태 = 실제 API 응답과 동일해야 함
@@ -60,12 +60,16 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
-import { runSimulation, analyzeLocation } from './api/client';
+import type { QuarterlyProjection, ShapResult } from './types';
+import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
+import { ShapChart } from './components/SimulationResult/ShapChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import * as XLSX from 'xlsx';
+import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
+import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
+import { ToastHost } from './components/simulation/ToastHost';
+import { useCompletionToast } from './hooks/useCompletionToast';
+import { useSimulationStore } from './stores/simulationStore';
 
 interface SimResult {
   score: number;
@@ -73,6 +77,46 @@ interface SimResult {
   riskLevel: string;
   recommendation: string;
   chartData: { label: string; value: number }[];
+  // 분기별 매출 예측 데이터 (TCN 모델 출력) — B2 수지니 연동
+  quarterlyProjection: QuarterlyProjection[];
+  // TCN SHAP 피처 기여도 분석 결과 (없으면 null) — B2 수지니 연동
+  shapResult: ShapResult | null;
+  // [C1 응답 필드 반영] v12.6 — 백엔드가 주는데 UI가 안 쓰던 5 영역
+  marketReport?: {
+    floating_population: number;
+    rent_index: number;
+    competition_intensity: number;
+    estimated_revenue: number;
+    survival_rate: number;
+    closure_rate: number | null;
+    growth_potential: number;
+    accessibility: number;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  districtRankings?: { district: string; score: number; [k: string]: any }[];
+  winnerDistrict?: string;
+  topCandidates?: string[];
+  legalRisks?: { type: string; risk_level: string; detail: string }[];
+  overallLegalRisk?: string;
+  vacancyApplied?: boolean;
+  vacancySpots?: {
+    id: number;
+    lat: number;
+    lon: number;
+    dong_name: string;
+    listing_count: number;
+  }[];
+  analysis_metrics?: {
+    main_target_age?: string;
+    peak_time?: string;
+    [k: string]: unknown;
+  };
+  // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
+  scenarios?: {
+    optimistic: { quarter: number; revenue: number }[];
+    base: { quarter: number; revenue: number }[];
+    pessimistic: { quarter: number; revenue: number }[];
+  } | null;
 }
 
 import {
@@ -131,7 +175,7 @@ import {
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
 import HybridSliderInput from './components/ui/HybridSliderInput';
-import { useManagerList, formatRelativeTime } from './hooks/useManagerList';
+import { useManagerList, formatRelativeTime, ManagerListProvider } from './hooks/useManagerList';
 import {
   AreaChart,
   Area,
@@ -657,7 +701,7 @@ const CHART_DATA = [
   { label: '임대료', value: 45 },
   { label: '경쟁강도', value: 68 },
   { label: '매출추정', value: 74 },
-  { label: '생존율', value: 91 },
+  { label: '폐업률', value: 9 },
   { label: '성장성', value: 56 },
   { label: '접근성', value: 78 },
 ];
@@ -692,7 +736,7 @@ function generateSmartMock(dongName: string, businessType: string) {
     '임대료',
     '경쟁강도',
     '매출추정',
-    '생존율',
+    '폐업률',
     '성장성',
     '접근성',
   ].map((label, i) => ({
@@ -734,6 +778,24 @@ const BUSINESS_TYPES = [
   '커피-음료',
 ];
 
+/**
+ * UI 라벨 → 백엔드 _SALES_CODE_MAP 키 변환.
+ * backend/src/agents/tools.py의 _SALES_CODE_MAP(CS100001~CS100010)과 1:1 매칭.
+ * v12.8에서 누락 5개(중식/일식/양식/패스트푸드/분식) 추가 + 치킨·제과 잘못된 CS코드 교정 완료.
+ */
+const BUSINESS_TYPE_BACKEND_KEY: Record<string, string> = {
+  한식음식점: '한식',
+  중식음식점: '중식',
+  일식음식점: '일식',
+  양식음식점: '양식',
+  제과점: '제과점',
+  패스트푸드점: '패스트푸드',
+  치킨전문점: '치킨',
+  분식전문점: '분식',
+  '호프-간이주점': '호프',
+  '커피-음료': '커피',
+};
+
 const PRICE_RANGES = [
   { label: '5천원 이하', value: 'under5k' },
   { label: '5천-1만', value: '5to10k' },
@@ -769,10 +831,10 @@ const CANNIBALIZATION_ROWS: CannRow[] = [
 ];
 
 const NEIGHBORHOOD_ROWS: NeighborhoodRow[] = [
-  { name: '연남동', score: '87 / 100', survival: '82%', bep: '3.5 개월' },
-  { name: '서교동', score: '84 / 100', survival: '79%', bep: '4.1 개월' },
-  { name: '망원동', score: '76 / 100', survival: '65%', bep: '5.2 개월' },
-  { name: '합정동', score: '71 / 100', survival: '60%', bep: '6.0 개월' },
+  { name: '연남동', score: '87 / 100', survival: '18%', bep: '3.5 개월' },
+  { name: '서교동', score: '84 / 100', survival: '21%', bep: '4.1 개월' },
+  { name: '망원동', score: '76 / 100', survival: '35%', bep: '5.2 개월' },
+  { name: '합정동', score: '71 / 100', survival: '40%', bep: '6.0 개월' },
 ];
 
 // 정렬용 값 추출 (문자열 컬럼은 그대로, 숫자 컬럼은 파싱)
@@ -841,12 +903,12 @@ const mockDetailData: Record<string, DetailDataEntry> = {
   attractiveness: {
     title: '상권 종합 매력도 상세',
     aiReasoning:
-      '7개 지표(유동인구·임대료·경쟁강도·매출추정·생존율·성장성·접근성)를 가중 평균. 마포구 25개 동 중 상권 매력도 상위 8% 권역.',
+      '7개 지표(유동인구·임대료·경쟁강도·매출추정·폐업률·성장성·접근성)를 가중 평균. 마포구 25개 동 중 상권 매력도 상위 8% 권역.',
     rank: '마포구 내 상위 8%',
     trend: '+5.2 Pts 지속 상승중',
   },
   traffic: {
-    title: '일평균 유동인구 상세',
+    title: '일일 유동인구 상세',
     aiReasoning:
       'KT 통신사 셀룰러 데이터 기반 시간대별 체류 인구 측정. 18-21시 피크, 점심시간(12-14시) 보조 피크. 2030 여성 비중이 평균 대비 23% 높음.',
     peakTime: '18:00 - 21:00',
@@ -2004,15 +2066,14 @@ function ContactPage({ onBack }: { onBack: () => void }) {
    result  → 하이엔드 대시보드 (StatCard, SVG 차트, 레이더, 테이블, AI 인사이트)
 
    [백엔드 연동 (api/client.ts)]
-   runSim() → runSimulation() + analyzeLocation() 동시 호출
+   runSim() → runSimulation() 단일 호출 (v12.4: /simulate만 호출, /analyze 제거)
    응답 → SimResult로 변환 → UI 바인딩
-   USE_MOCK=true 시 현실적 Mock 데이터 반환 (2.5초 딜레이)
    API 실패 시 fallback Mock 표시 (에러에도 화면 유지)
 
    [팀원 참고 — B1/A1]
    SimulationOutput.comparison 배열 → 동별 비교 테이블 데이터
    SimulationOutput.legal_risks 배열 → AI 인사이트 법률 경고
-   AnalysisResult.data.market_report → 7개 항목별 차트 데이터
+   SimulationOutput.market_report → 7개 항목별 차트 데이터 (backend main.py:308)
 */
 
 /* ═══════════════════════════════════════════════════════
@@ -2103,6 +2164,7 @@ function SimulatorDashboard({
   const [loadingText, setLoadingText] = useState('INITIALIZING AI ENGINE...');
   const [loadingProgress, setLoadingProgress] = useState(0);
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [chartView, setChartView] = useState<'daily' | 'monthly'>('daily');
   const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
@@ -2179,9 +2241,68 @@ function SimulatorDashboard({
     setExpandedRow(null);
   }, []);
 
-  // 정렬된 행 데이터 (Mock)
+  // 정렬된 행 데이터 — 행정동은 district_rankings 실응답 우선, 없으면 Mock fallback
   const sortedCannRows = sortRows(CANNIBALIZATION_ROWS, sortKey, sortDir);
-  const sortedNeighborhoodRows = sortRows(NEIGHBORHOOD_ROWS, sortKey, sortDir);
+  const dynamicNeighborhoodRows: NeighborhoodRow[] | null = simResult?.districtRankings?.length
+    ? simResult.districtRankings.slice(0, 16).map((r) => ({
+        name: r.district || '-',
+        score: typeof r.score === 'number' ? String(Math.round(r.score)) : '—',
+        survival: typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
+        bep: typeof r.bep_months === 'number' ? `${r.bep_months}개월` : '—',
+      }))
+    : null;
+  const sortedNeighborhoodRows = sortRows(
+    dynamicNeighborhoodRows ?? NEIGHBORHOOD_ROWS,
+    sortKey,
+    sortDir,
+  );
+
+  // 분기 매출 예측 차트 데이터 — /simulate 응답의 quarterly_projection을 Recharts time축 형식으로 변환
+  const monthlyChartData = simResult?.quarterlyProjection?.length
+    ? simResult.quarterlyProjection.map((q) => ({
+        time: q.quarter, // X축: 분기 번호 (1~4)
+        revenue: Math.round(q.revenue / 10000), // 원 → 만원 스케일 통일
+        traffic: Math.round(q.confidence_lower / 10000),
+        confidence_upper: Math.round(q.confidence_upper / 10000),
+      }))
+    : MONTHLY_CHART_DATA;
+
+  // 레이더 차트 7축 꼭지점 — market_report 기반 동적 계산
+  // 순서: 유동인구(12시) → 매출(2시) → 성장성(4시) → 폐업률(6시) → 임대료(8시) → 경쟁강도(10시) → 접근성(11시)
+  const RADAR_FALLBACK_VALUES = [82, 74, 56, 9, 45, 68, 78]; // mock fallback
+  const radarValues = simResult?.marketReport
+    ? [
+        simResult.marketReport.floating_population,
+        simResult.marketReport.estimated_revenue,
+        simResult.marketReport.growth_potential,
+        simResult.marketReport.closure_rate != null
+          ? Math.round(simResult.marketReport.closure_rate * 100)
+          : 100 - simResult.marketReport.survival_rate,
+        simResult.marketReport.rent_index,
+        simResult.marketReport.competition_intensity,
+        simResult.marketReport.accessibility,
+      ]
+    : RADAR_FALLBACK_VALUES;
+  const RADAR_LABELS = [
+    '유동인구',
+    '매출',
+    '성장성',
+    '폐업률',
+    '임대료',
+    '경쟁강도',
+    '접근성',
+  ] as const;
+  const radarVertices = radarValues.map((v, k) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * k) / 7;
+    const r = Math.max(0, Math.min(100, v)) * 0.6; // max radius 60px
+    return {
+      x: 100 + Math.cos(angle) * r,
+      y: 100 + Math.sin(angle) * r,
+      value: v,
+      label: RADAR_LABELS[k],
+    };
+  });
+  const radarPointsStr = radarVertices.map((v) => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(' ');
 
   // 오늘 날짜 (리포트 생성 시점)
   const today = new Date();
@@ -2194,6 +2315,7 @@ function SimulatorDashboard({
   // [v12.0] PDF/Excel 다운로드용 ref + 로딩 상태
   const pdfTemplateRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
 
   const handleDownloadPDF = useCallback(async () => {
     if (!pdfTemplateRef.current) return;
@@ -2201,6 +2323,11 @@ function SimulatorDashboard({
     setIsGeneratingPDF(true);
 
     try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ]);
+
       const template = pdfTemplateRef.current;
       const pages = Array.from(template.children) as HTMLElement[];
 
@@ -2226,96 +2353,106 @@ function SimulatorDashboard({
       showToast('success', 'PDF 리포트 생성이 완료되었습니다.');
     } catch (error) {
       console.error('PDF Generation Failed:', error);
-      alert('PDF 생성 중 오류가 발생했습니다.');
+      showToast('error', 'PDF 생성 중 오류가 발생했습니다.');
     } finally {
       setIsGeneratingPDF(false);
     }
   }, [reportFullDate, selectedDongs, showToast]);
 
-  const handleDownloadExcel = useCallback(() => {
+  const handleDownloadExcel = useCallback(async () => {
     setIsDownloadOpen(false);
-    const districtName = selectedDongs[0] || '연남동';
+    setIsGeneratingExcel(true);
 
-    const wb = XLSX.utils.book_new();
+    try {
+      const XLSX = await import('xlsx');
+      const districtName = selectedDongs[0] || '연남동';
 
-    // Sheet 1: 요약
-    const summary: (string | number)[][] = [
-      ['SPOTTER · AI Franchise Intelligence Report'],
-      [],
-      ['분석 대상', `마포구 ${districtName}`],
-      ['생성 일시', reportFullDate],
-      ['Document ID', `SPTR-${Date.now().toString().slice(-8)}`],
-      [],
-      ['KPI 요약'],
-      ['지표', '값', '트렌드'],
-      [
-        '예상 월 매출 (추정)',
-        `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
-        '+12.5%',
-      ],
-      ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
-      [
-        '일평균 유동인구',
-        popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '42,105 명',
-        popData?.date ?? '-2.4%',
-      ],
-      ['카니발리제이션 위험', `${simResult?.riskLevel ?? 'Low'} (12%)`, '안전 권역'],
-      [],
-      ['7 Core Metrics (레이더 차트)'],
-      ['항목', '점수'],
-      ...(simResult?.chartData ?? CHART_DATA).map((d) => [d.label, d.value]),
-    ];
-    const ws1 = XLSX.utils.aoa_to_sheet(summary);
-    ws1['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws1, '요약');
+      const wb = XLSX.utils.book_new();
 
-    // Sheet 2: 가맹점 간섭도
-    const cann: (string | number)[][] = [
-      ['가맹점명', '거리', '예상 매출 하락', '상태'],
-      ...CANNIBALIZATION_ROWS.map((r) => [r.name, r.distance, r.impact, r.status]),
-    ];
-    const ws2 = XLSX.utils.aoa_to_sheet(cann);
-    ws2['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, ws2, '가맹점 간섭도');
+      // Sheet 1: 요약
+      const summary: (string | number)[][] = [
+        ['SPOTTER · AI Franchise Intelligence Report'],
+        [],
+        ['분석 대상', `마포구 ${districtName}`],
+        ['생성 일시', reportFullDate],
+        ['Document ID', `SPTR-${Date.now().toString().slice(-8)}`],
+        [],
+        ['KPI 요약'],
+        ['지표', '값', '트렌드'],
+        [
+          '예상 월 매출 (추정)',
+          `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
+          '+12.5%',
+        ],
+        ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
+        [
+          '일일 유동인구',
+          popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '42,105 명',
+          popData?.date ?? '-2.4%',
+        ],
+        ['카니발리제이션 위험', `${simResult?.riskLevel ?? 'Low'} (12%)`, '안전 권역'],
+        [],
+        ['7 Core Metrics (레이더 차트)'],
+        ['항목', '점수'],
+        ...(simResult?.chartData ?? CHART_DATA).map((d) => [d.label, d.value]),
+      ];
+      const ws1 = XLSX.utils.aoa_to_sheet(summary);
+      ws1['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, ws1, '요약');
 
-    // Sheet 3: 행정동 비교
-    const neighborhoods: (string | number)[][] = [
-      ['행정동', 'AI 점수', '생존율', '예상 BEP'],
-      ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.survival, r.bep]),
-    ];
-    const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
-    ws3['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws3, '행정동 비교');
+      // Sheet 2: 가맹점 간섭도
+      const cann: (string | number)[][] = [
+        ['가맹점명', '거리', '예상 매출 하락', '상태'],
+        ...CANNIBALIZATION_ROWS.map((r) => [r.name, r.distance, r.impact, r.status]),
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(cann);
+      ws2['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, ws2, '가맹점 간섭도');
 
-    // Sheet 4: AI 인사이트
-    const insights: (string | number)[][] = [
-      ['SPOTTER AI 인사이트 — LangGraph Multi-Agent'],
-      [],
-      ['Severity', 'Title', 'Description'],
-      [
-        'ADVISORY',
-        '저녁 시간대 매출 집중형',
-        '18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다.',
-      ],
-      [
-        'CRITICAL',
-        '법률 리스크 경고 (Legal Node)',
-        simResult?.recommendation ||
-          '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.',
-      ],
-      [
-        'OPPORTUNITY',
-        '2030 여성 타겟 구역',
-        'SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가.',
-      ],
-    ];
-    const ws4 = XLSX.utils.aoa_to_sheet(insights);
-    ws4['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 60 }];
-    XLSX.utils.book_append_sheet(wb, ws4, 'AI 인사이트');
+      // Sheet 3: 행정동 비교
+      const neighborhoods: (string | number)[][] = [
+        ['행정동', 'AI 점수', '폐업률', '예상 BEP'],
+        ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.survival, r.bep]),
+      ];
+      const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
+      ws3['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, ws3, '행정동 비교');
 
-    const dateStr = reportFullDate.replace(/\./g, '');
-    XLSX.writeFile(wb, `SPOTTER_마포구_${districtName}_${dateStr}.xlsx`);
-    showToast('success', 'Excel 데이터가 다운로드되었습니다.');
+      // Sheet 4: AI 인사이트
+      const insights: (string | number)[][] = [
+        ['SPOTTER AI 인사이트 — LangGraph Multi-Agent'],
+        [],
+        ['Severity', 'Title', 'Description'],
+        [
+          'ADVISORY',
+          '저녁 시간대 매출 집중형',
+          '18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다.',
+        ],
+        [
+          'CRITICAL',
+          '법률 리스크 경고 (Legal Node)',
+          simResult?.recommendation ||
+            '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.',
+        ],
+        [
+          'OPPORTUNITY',
+          '2030 여성 타겟 구역',
+          'SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가.',
+        ],
+      ];
+      const ws4 = XLSX.utils.aoa_to_sheet(insights);
+      ws4['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 60 }];
+      XLSX.utils.book_append_sheet(wb, ws4, 'AI 인사이트');
+
+      const dateStr = reportFullDate.replace(/\./g, '');
+      XLSX.writeFile(wb, `SPOTTER_마포구_${districtName}_${dateStr}.xlsx`);
+      showToast('success', 'Excel 데이터가 다운로드되었습니다.');
+    } catch (error) {
+      console.error('Excel Generation Failed:', error);
+      showToast('error', 'Excel 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingExcel(false);
+    }
   }, [reportFullDate, selectedDongs, simResult, showToast]);
 
   const toggleOperatingHour = useCallback((hour: string) => {
@@ -2366,30 +2503,39 @@ function SimulatorDashboard({
   const runSim = useCallback(async () => {
     setReportState('loading');
     try {
-      const [simRes, analysisRes] = await Promise.all([
-        runSimulation({
-          business_type: 'cafe',
-          brand_name: '',
-          target_district: selectedDongs[0] || '서교동',
-          existing_stores: [],
-          initial_investment: budget * 10000,
-          monthly_rent: budget * 10000,
-          simulation_months: 12,
-          scenarios: [],
-        }),
-        analyzeLocation({
-          business_type: 'cafe',
-          brand_name: '',
-          target_district: selectedDongs[0] || '서교동',
-          existing_stores: [],
-          initial_investment: budget * 10000,
-          monthly_rent: budget * 10000,
-          simulation_months: 12,
-          scenarios: [],
-        }),
-      ]);
+      // [C1 연동] 백엔드 SimulationInput 9개 필드 전부 전송
+      // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환
+      // brand_name: 로그인 유저의 company_name 사용
+      // TODO(existing_stores): 매장 관리 UI 추가 시 실제 데이터 연동 (현재는 빈 배열)
+      const payload = {
+        business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
+        brand_name: user?.company_name || '',
+        target_district: selectedDongs[0] || '서교동',
+        existing_stores: [],
+        initial_investment: initialCapital * 10000, // 만원 → 원
+        monthly_rent: budget * 10000, // 만원 → 원
+        simulation_months: 12,
+        scenarios: [],
+        // 신규 7 필드
+        store_area: storeArea,
+        target_price_range: targetPrice,
+        operating_hours: operatingHours,
+        initial_capital: initialCapital * 10000,
+        commercial_radius: radius,
+        population_weight: weighted,
+      };
 
-      const mr = analysisRes.data?.market_report;
+      // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
+      // [찬영 요청] /simulate 하나만 호출 (이전에는 /analyze와 중복 호출)
+      // /simulate 응답에 market_report 포함됨 (backend main.py:308)
+      await useSimulationStore.getState().startSimulation(payload);
+      const storeState = useSimulationStore.getState();
+      if (storeState.status !== 'done' || !storeState.result) {
+        throw new Error(storeState.error ?? 'Simulation failed');
+      }
+      const simRes = storeState.result;
+
+      const mr = simRes.market_report;
       const topComp = simRes.comparison?.[0];
       const topRisk = simRes.legal_risks?.[0];
 
@@ -2404,11 +2550,40 @@ function SimulatorDashboard({
               { label: '임대료', value: mr.rent_index },
               { label: '경쟁강도', value: mr.competition_intensity },
               { label: '매출추정', value: mr.estimated_revenue },
-              { label: '생존율', value: mr.survival_rate },
+              {
+                label: '폐업률',
+                value:
+                  mr.closure_rate != null
+                    ? Math.round(mr.closure_rate * 100)
+                    : 100 - mr.survival_rate,
+              },
               { label: '성장성', value: mr.growth_potential },
               { label: '접근성', value: mr.accessibility },
             ]
           : CHART_DATA,
+        // 분기별 매출 예측 (TCN 모델 출력, 없으면 빈 배열) — B2
+        quarterlyProjection: simRes.quarterly_projection ?? [],
+        // TCN SHAP 분석 결과 (없으면 null) — B2
+        shapResult: simRes.shap_result ?? null,
+        // [C1 응답 필드 반영] v12.6 — 백엔드가 주는데 UI가 안 쓰던 5 영역 저장
+        marketReport: mr,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        districtRankings: (simRes as any).district_rankings,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        winnerDistrict: (simRes as any).winner_district,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        topCandidates: (simRes as any).top_3_candidates,
+        legalRisks: simRes.legal_risks,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        overallLegalRisk: (simRes as any).overall_legal_risk,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vacancyApplied: (simRes as any).vacancy_applied,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vacancySpots: (simRes as any).vacancy_spots ?? [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        analysis_metrics: (simRes as any).analysis_metrics,
+        // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
+        scenarios: simRes.scenarios ?? null,
       });
       setReportState('result');
     } catch (err) {
@@ -2421,50 +2596,35 @@ function SimulatorDashboard({
         riskLevel: mock.riskLevel,
         recommendation: mock.recommendation,
         chartData: mock.chartData,
+        // mock fallback 시 분기 데이터 없음
+        quarterlyProjection: [],
+        // mock fallback 시 SHAP 데이터 없음
+        shapResult: null,
       });
       setReportState('result');
     }
-  }, [setReportState, selectedDongs, budget, businessType, showToast]);
+  }, [
+    setReportState,
+    selectedDongs,
+    budget,
+    businessType,
+    user?.company_name,
+    storeArea,
+    targetPrice,
+    operatingHours,
+    initialCapital,
+    radius,
+    weighted,
+  ]);
 
-  // Loading — 단계별 progress bar + 스트리밍 텍스트 (100~120초 대응)
+  // [IM3-205] 로딩 진행률을 simulationStore에서 미러 — store가 500ms 타이머 보유
+  // 기존 로컬 타이머 useEffect는 store로 이관됨
+  const _storeProgress = useSimulationStore((s) => s.progress);
+  const _storeStage = useSimulationStore((s) => s.stage);
   useEffect(() => {
-    if (reportState !== 'loading') {
-      setLoadingProgress(0);
-      return;
-    }
-
-    const stages = [
-      { at: 0, text: 'INITIALIZING AI ENGINE...' },
-      { at: 5, text: 'CONNECTING TO DATABASE...' },
-      { at: 10, text: 'FETCHING KT TELECOM DATA...' },
-      { at: 20, text: 'ANALYZING COMPETITION DENSITY (pgvector)...' },
-      { at: 30, text: 'QUERYING POPULATION TRENDS...' },
-      { at: 40, text: 'CALCULATING RENT-TO-REVENUE RATIO...' },
-      { at: 50, text: 'ANALYZING CANNIBALIZATION RATE...' },
-      { at: 60, text: 'CROSS-CHECKING LEGAL RISKS (RAG 3,775 chunks)...' },
-      { at: 70, text: 'RUNNING WHAT-IF SCENARIOS...' },
-      { at: 80, text: 'GENERATING 12-MONTH FORECAST (LSTM)...' },
-      { at: 88, text: 'SYNTHESIZING MULTI-AGENT RESULTS...' },
-    ];
-
-    // 90%까지 100초에 걸쳐 천천히 올라감
-    const duration = 100000; // 100초
-    const maxProgress = 90;
-    const interval = 500; // 0.5초마다 업데이트
-    const step = (maxProgress / duration) * interval;
-    let current = 0;
-
-    const timer = setInterval(() => {
-      current = Math.min(current + step + Math.random() * 0.3, maxProgress);
-      setLoadingProgress(current);
-
-      // 단계별 텍스트 업데이트
-      const stage = [...stages].reverse().find((s) => current >= s.at);
-      if (stage) setLoadingText(stage.text);
-    }, interval);
-
-    return () => clearInterval(timer);
-  }, [reportState]);
+    setLoadingProgress(_storeProgress);
+    if (_storeStage) setLoadingText(`${_storeStage}...`);
+  }, [_storeProgress, _storeStage]);
 
   // Dark theme only
   const textPrimary = 'text-[#e2e8f0]';
@@ -2929,14 +3089,32 @@ function SimulatorDashboard({
                 {/* Header & Nav */}
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <Zap className="w-5 h-5 text-indigo-400" />
                       <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">
                         상권 분석 리포트
                       </h1>
+                      {simResult?.winnerDistrict && (
+                        <span className="ml-2 px-2.5 py-0.5 bg-[#818cf8]/10 border border-[#818cf8]/40 rounded-full text-[10px] font-bold text-[#818cf8] uppercase tracking-wider">
+                          AI 추천 1위 · {simResult.winnerDistrict}
+                        </span>
+                      )}
+                      {simResult?.vacancyApplied === false && (
+                        <span
+                          className="ml-2 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/40 rounded-full text-[10px] font-bold text-amber-400 uppercase tracking-wider"
+                          title="공실 DB 로드 실패 — 랭킹에 공실 페널티 미반영"
+                        >
+                          공실 미반영
+                        </span>
+                      )}
                     </div>
                     <p className="text-[#9ca3af] text-sm">
                       서울특별시 마포구 {selectedDongs[0] || '연남동'} 일대 시뮬레이션 결과
+                      {simResult?.topCandidates && simResult.topCandidates.length > 0 && (
+                        <span className="ml-2 text-[#6b7280]">
+                          · Top 3: {simResult.topCandidates.join(', ')}
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -2990,14 +3168,14 @@ function SimulatorDashboard({
                     <div className="relative">
                       <button
                         onClick={() => setIsDownloadOpen(!isDownloadOpen)}
-                        disabled={isGeneratingPDF}
+                        disabled={isGeneratingPDF || isGeneratingExcel}
                         className="flex items-center gap-2 px-3 py-2 bg-transparent border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        {isGeneratingPDF ? '생성 중...' : '다운로드'}
+                        {isGeneratingPDF || isGeneratingExcel ? '생성 중...' : '다운로드'}
                         <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
                       </button>
-                      {isDownloadOpen && !isGeneratingPDF && (
+                      {isDownloadOpen && !isGeneratingPDF && !isGeneratingExcel && (
                         <>
                           <div
                             className="fixed inset-0 z-40"
@@ -3102,7 +3280,7 @@ function SimulatorDashboard({
                           />
                           <StatCard
                             onClick={() => setActiveDrawer('traffic')}
-                            title="일평균 유동인구"
+                            title="일일 유동인구"
                             value={
                               popData?.daily_average
                                 ? `${popData.daily_average.toLocaleString()} 명`
@@ -3179,9 +3357,7 @@ function SimulatorDashboard({
                                   <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart
                                       data={
-                                        chartView === 'daily'
-                                          ? DAILY_CHART_DATA
-                                          : MONTHLY_CHART_DATA
+                                        chartView === 'daily' ? DAILY_CHART_DATA : monthlyChartData
                                       }
                                       margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
                                     >
@@ -3211,12 +3387,16 @@ function SimulatorDashboard({
                                         dataKey="time"
                                         type="number"
                                         domain={['dataMin', 'dataMax']}
-                                        scale="time"
+                                        scale={chartView === 'daily' ? 'time' : 'linear'}
                                         tickFormatter={(t: number) => {
-                                          const d = new Date(t);
-                                          return chartView === 'daily'
-                                            ? `${String(d.getHours() % 24).padStart(2, '0')}:00`
-                                            : `${d.getMonth() + 1}월`;
+                                          if (chartView === 'daily') {
+                                            const d = new Date(t);
+                                            return `${String(d.getHours() % 24).padStart(2, '0')}:00`;
+                                          }
+                                          // 분기 모드: quarterlyProjection 있으면 "1Q..4Q", 없으면 (mock) "1월..12월"
+                                          return simResult?.quarterlyProjection?.length
+                                            ? `${t}Q`
+                                            : `${new Date(t).getMonth() + 1}월`;
                                         }}
                                         stroke="#9ca3af"
                                         fontSize={10}
@@ -3248,11 +3428,45 @@ function SimulatorDashboard({
                                         fill="url(#rcRevenueGradient)"
                                         isAnimationActive={false}
                                       />
+                                      {/* 분기 모드 + 실응답에 confidence_upper 있을 때 신뢰 상한선 점선 */}
+                                      {chartView === 'monthly' &&
+                                        simResult?.quarterlyProjection?.length && (
+                                          <Area
+                                            type="monotone"
+                                            dataKey="confidence_upper"
+                                            stroke="#818cf8"
+                                            strokeWidth={1}
+                                            strokeDasharray="3 3"
+                                            fill="none"
+                                            isAnimationActive={false}
+                                          />
+                                        )}
                                     </AreaChart>
                                   </ResponsiveContainer>
                                 </motion.div>
                               </div>
                             </div>
+
+                            {/* 분기별 매출 예측 차트 (TCN 모델 출력) — quarterly_projection 있을 때만 렌더링 */}
+                            {simResult?.quarterlyProjection &&
+                              simResult.quarterlyProjection.length > 0 && (
+                                <div className="mt-6">
+                                  <h3 className="text-lg font-semibold mb-3">
+                                    분기별 매출 예측 (TCN)
+                                  </h3>
+                                  <QuarterlyProjectionChart data={simResult.quarterlyProjection} />
+                                </div>
+                              )}
+
+                            {/* SHAP 피처 기여도 차트 — shapResult 있을 때만 렌더링 */}
+                            {simResult?.shapResult && (
+                              <div className="mt-6">
+                                <h3 className="text-lg font-semibold mb-3">
+                                  매출 기여 피처 분석 (SHAP)
+                                </h3>
+                                <ShapChart data={simResult.shapResult} />
+                              </div>
+                            )}
 
                             {/* Table */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
@@ -3370,7 +3584,7 @@ function SimulatorDashboard({
                                           </th>
                                           <th className="p-3 font-medium">
                                             <SortHeader
-                                              label="생존율"
+                                              label="폐업률"
                                               sortField="survival"
                                               sortKey={sortKey}
                                               sortDir={sortDir}
@@ -3489,22 +3703,18 @@ function SimulatorDashboard({
                                   <line x1="100" y1="100" x2="74" y2="154" stroke="#3a3633" />
                                   <line x1="100" y1="100" x2="42" y2="113" stroke="#3a3633" />
                                   <line x1="100" y1="100" x2="53" y2="63" stroke="#3a3633" />
-                                  {/* Data polygon + dots — 가운데에서 퍼지는 clipPath reveal */}
+                                  {/* Data polygon + dots — market_report 기반 동적 계산 */}
                                   <g clipPath="url(#radarReveal)">
                                     <polygon
-                                      points="100,50 140,70 145,110 115,140 85,130 60,105 70,75"
+                                      points={radarPointsStr}
                                       fill="rgba(99,102,241,0.4)"
                                       stroke="#818cf8"
                                       strokeWidth="2"
                                       className="drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]"
                                     />
-                                    <circle cx="100" cy="50" r="3" fill="#fff" />
-                                    <circle cx="140" cy="70" r="3" fill="#fff" />
-                                    <circle cx="145" cy="110" r="3" fill="#fff" />
-                                    <circle cx="115" cy="140" r="3" fill="#fff" />
-                                    <circle cx="85" cy="130" r="3" fill="#fff" />
-                                    <circle cx="60" cy="105" r="3" fill="#fff" />
-                                    <circle cx="70" cy="75" r="3" fill="#fff" />
+                                    {radarVertices.map((v, i) => (
+                                      <circle key={i} cx={v.x} cy={v.y} r={3} fill="#fff" />
+                                    ))}
                                   </g>
                                   <text
                                     onClick={() => setActiveDrawer('attractiveness')}
@@ -3549,7 +3759,7 @@ function SimulatorDashboard({
                                     fontSize="10"
                                     textAnchor="middle"
                                   >
-                                    <title>생존율: 91/100 (3년 생존 82%)</title>생존율
+                                    <title>폐업률</title>폐업률
                                   </text>
                                   <text
                                     onClick={() => setActiveDrawer('attractiveness')}
@@ -3600,6 +3810,7 @@ function SimulatorDashboard({
                                 </span>
                               </div>
                               <div className="space-y-3">
+                                {/* 고정 카드 1: 저녁 시간대 매출 */}
                                 <InsightCard
                                   severity="advisory"
                                   onClick={() => setActiveDrawer('insight_traffic')}
@@ -3607,22 +3818,131 @@ function SimulatorDashboard({
                                   title="저녁 시간대 매출 집중형"
                                   desc="18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다."
                                 />
-                                <InsightCard
-                                  severity="critical"
-                                  onClick={() => setActiveDrawer('insight_legal')}
-                                  icon={<Scale className="w-4 h-4 text-rose-500" />}
-                                  title="법률 리스크 경고 (Legal Node)"
-                                  desc={
-                                    simResult?.recommendation ||
-                                    '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.'
+                                {/* 법률 리스크 통합 카드: safe 제외하고 위험/주의 항목만 서브 표시 */}
+                                {(() => {
+                                  const TYPE_LABEL: Record<string, string> = {
+                                    franchise_law: '가맹사업법',
+                                    commercial_lease_law: '상가임대차보호법',
+                                    zoning_regulation: '용도지역 규제',
+                                    food_hygiene: '식품위생법',
+                                    safety_regulation: '안전규정',
+                                    building_law: '건축법',
+                                    fire_safety_law: '소방안전법',
+                                    labor_law: '노동법',
+                                    vat_law: '부가가치세법',
+                                    privacy_law: '개인정보보호법',
+                                    accessibility_law: '장애인편의법',
+                                    sewage_law: '하수도법',
+                                    fair_trade_law: '공정거래법',
+                                    ftc_franchise: '공정위 정보공개서',
+                                  };
+                                  const severityOf = (
+                                    level: string,
+                                  ): 'critical' | 'advisory' | 'safe' => {
+                                    const r = (level || '').toLowerCase();
+                                    if (r === 'danger' || r === 'high') return 'critical';
+                                    if (r === 'caution' || r === 'medium') return 'advisory';
+                                    return 'safe';
+                                  };
+
+                                  // safe 항목 제외 — 위험·주의만 표시
+                                  const dangerRisks = (simResult?.legalRisks ?? []).filter(
+                                    (r) => severityOf(r.risk_level) !== 'safe',
+                                  );
+
+                                  if (dangerRisks.length === 0) {
+                                    // 위험 항목 없으면 mock fallback 카드
+                                    return (
+                                      <InsightCard
+                                        severity="critical"
+                                        onClick={() => setActiveDrawer('insight_legal')}
+                                        icon={<Scale className="w-4 h-4 text-rose-500" />}
+                                        title="법률 리스크 경고 (Legal Node)"
+                                        desc={
+                                          simResult?.recommendation ||
+                                          '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.'
+                                        }
+                                      />
+                                    );
                                   }
-                                />
+
+                                  const topSev = dangerRisks.some(
+                                    (r) => severityOf(r.risk_level) === 'critical',
+                                  )
+                                    ? 'critical'
+                                    : 'advisory';
+
+                                  return (
+                                    <div
+                                      onClick={() => setActiveDrawer('insight_legal')}
+                                      className="flex flex-col gap-2 p-3 rounded-lg bg-[#1e1b18] border border-[#3a3633] cursor-pointer hover:border-[#818cf8] hover:bg-[#818cf8]/[0.05] transition-all group"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <Scale
+                                          className={`w-4 h-4 shrink-0 ${topSev === 'critical' ? 'text-rose-500' : 'text-amber-400'}`}
+                                        />
+                                        <div className="flex-1 flex items-center justify-between gap-2">
+                                          <h4 className="text-[#e2e8f0] font-bold text-xs">
+                                            법률 리스크 종합
+                                          </h4>
+                                          <span className="inline-flex items-center gap-1 shrink-0">
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`}
+                                            />
+                                            <span className="text-[8px] font-mono uppercase tracking-wider text-[#9ca3af]">
+                                              {topSev === 'critical' ? 'CRITICAL' : 'ADVISORY'}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col gap-2 border-t border-[#3a3633] pt-2">
+                                        {dangerRisks.map((risk, i) => {
+                                          const sev = severityOf(risk.risk_level);
+                                          const isCritical = sev === 'critical';
+                                          return (
+                                            <div
+                                              key={i}
+                                              className={`flex gap-2.5 pl-2.5 border-l-2 ${isCritical ? 'border-rose-500' : 'border-amber-400'}`}
+                                            >
+                                              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="text-[#e2e8f0] text-[11px] font-semibold">
+                                                    {TYPE_LABEL[risk.type] || risk.type}
+                                                  </span>
+                                                  <span
+                                                    className={`text-[8px] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-400/20 text-amber-400'}`}
+                                                  >
+                                                    {isCritical ? '위험' : '주의'}
+                                                  </span>
+                                                </div>
+                                                {risk.detail && (
+                                                  <p className="text-[#9ca3af] text-[10px] leading-relaxed">
+                                                    {risk.detail}
+                                                  </p>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                                {/* 동적 카드 3: 타겟 고객층 */}
                                 <InsightCard
                                   severity="opportunity"
                                   onClick={() => setActiveDrawer('insight_target')}
                                   icon={<Users className="w-4 h-4 text-indigo-400" />}
-                                  title="2030 여성 타겟 구역"
-                                  desc="SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가."
+                                  title={
+                                    simResult?.analysis_metrics?.main_target_age
+                                      ? `${simResult.analysis_metrics.main_target_age} 타겟 권역`
+                                      : '주요 타겟 고객층'
+                                  }
+                                  desc={
+                                    simResult?.analysis_metrics?.peak_time
+                                      ? `피크 타임: ${simResult.analysis_metrics.peak_time} · 타겟층 집중 마케팅 전략 권장`
+                                      : '유동인구 분석 기반 타겟 고객층 전략을 확인하세요.'
+                                  }
                                 />
                               </div>
 
@@ -3662,9 +3982,22 @@ function SimulatorDashboard({
                               AI AGENT TARGETING SYSTEM
                             </p>
                           </div>
-                          {/* AgentMapVisualizer — 현재는 DEFAULT_LOCATIONS mock, 추후 simResult 기반 props 전달 예정 */}
                           <div className="flex-1 relative">
-                            <AgentMapVisualizer height="100%" />
+                            <AgentMapVisualizer
+                              height="100%"
+                              locations={
+                                simResult?.vacancySpots && simResult.vacancySpots.length > 0
+                                  ? simResult.vacancySpots.map((s) => ({
+                                      id: `vacancy_${s.id}`,
+                                      name: s.dong_name,
+                                      lat: s.lat,
+                                      lng: s.lon,
+                                      type: 'vacancy' as const,
+                                      listingCount: s.listing_count,
+                                    }))
+                                  : undefined
+                              }
+                            />
                           </div>
                         </div>
                       </div>
@@ -3719,6 +4052,7 @@ function SimulatorDashboard({
         onClose={() => setActiveDrawer(null)}
         drawerKey={activeDrawer}
         popData={popData}
+        analysisMetrics={simResult?.analysis_metrics}
       />
 
       {/* [v12.0] Hidden A4 PDF Template — html2canvas 캡처용 (화면 밖) */}
@@ -3737,7 +4071,7 @@ function SimulatorDashboard({
             trend: '+5.2 Pts',
           },
           {
-            title: '일평균 유동인구',
+            title: '일일 유동인구',
             value: popData?.daily_average
               ? `${popData.daily_average.toLocaleString()} 명`
               : '42,105 명',
@@ -3854,12 +4188,17 @@ function GlobalLimelightNav() {
   const mockItems = isMaster ? NOTIFICATION_MOCK_ITEMS : [];
   const totalUnread = pendingManagers.length + mockItems.length;
 
-  type NavItemType = "folder" | "bell" | "settings" | "user";
-  const navItems: { type: NavItemType; icon: React.ReactElement; label: string; hasNoti?: boolean }[] = [
-    { type: "folder", icon: <Folder />, label: "출점 파이프라인" },
-    { type: "user", icon: <User />, label: "내 프로필" },
-    { type: "settings", icon: <Settings />, label: "내 정보 관리" },
-    { type: "bell", icon: <Bell />, label: "알림", hasNoti: totalUnread > 0 },
+  type NavItemType = 'folder' | 'bell' | 'settings' | 'user';
+  const navItems: {
+    type: NavItemType;
+    icon: React.ReactElement;
+    label: string;
+    hasNoti?: boolean;
+  }[] = [
+    { type: 'folder', icon: <Folder />, label: '출점 파이프라인' },
+    { type: 'user', icon: <User />, label: '내 프로필' },
+    { type: 'settings', icon: <Settings />, label: '내 정보 관리' },
+    { type: 'bell', icon: <Bell />, label: '알림', hasNoti: totalUnread > 0 },
   ];
 
   const targetIndex = hoverIndex !== null ? hoverIndex : activeIndex;
@@ -3887,11 +4226,11 @@ function GlobalLimelightNav() {
       nav('/hq?tab=pipeline');
     } else if (type === 'settings') {
       setOpenDropdown(null);
-      nav("/hq?tab=mypage");
-    } else if (type === "bell") {
-      setOpenDropdown(openDropdown === "bell" ? null : "bell");
-    } else if (type === "user") {
-      setOpenDropdown(openDropdown === "user" ? null : "user");
+      nav('/hq?tab=mypage');
+    } else if (type === 'bell') {
+      setOpenDropdown(openDropdown === 'bell' ? null : 'bell');
+    } else if (type === 'user') {
+      setOpenDropdown(openDropdown === 'user' ? null : 'user');
     }
   };
 
@@ -4365,7 +4704,7 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
                   성장성
                 </text>
                 <text x="133" y="166" fill="#64748b" fontSize="10" textAnchor="middle">
-                  생존율
+                  폐업률
                 </text>
                 <text x="67" y="166" fill="#64748b" fontSize="10" textAnchor="middle">
                   임대료
@@ -4428,14 +4767,14 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
             <div>
               <h2 className="text-[22px] font-black text-slate-900 mb-1">03. 행정동 비교 분석</h2>
               <p className="text-xs text-slate-500 mb-4">
-                Neighborhood Comparison · 인근 동 AI 점수 / 생존율 / 손익분기점
+                Neighborhood Comparison · 인근 동 AI 점수 / 폐업률 / 손익분기점
               </p>
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b-2 border-slate-300 text-slate-500 text-left uppercase tracking-wider">
                     <th className="py-2.5 font-medium">행정동</th>
                     <th className="py-2.5 font-medium">AI 점수</th>
-                    <th className="py-2.5 font-medium">생존율</th>
+                    <th className="py-2.5 font-medium">폐업률</th>
                     <th className="py-2.5 font-medium">예상 BEP</th>
                   </tr>
                 </thead>
@@ -4521,13 +4860,24 @@ function DetailDrawer({
   onClose,
   drawerKey,
   popData,
+  analysisMetrics,
 }: {
   isOpen: boolean;
   onClose: () => void;
   drawerKey: DrawerKey;
   popData?: any;
+  analysisMetrics?: { main_target_age?: string; peak_time?: string };
 }) {
-  const data = drawerKey ? mockDetailData[drawerKey] : null;
+  const baseData = drawerKey ? mockDetailData[drawerKey] : null;
+  const data: DetailDataEntry | null =
+    drawerKey === 'insight_target' && analysisMetrics?.main_target_age
+      ? {
+          title: `${analysisMetrics.main_target_age} 타겟 권역 분석`,
+          aiReasoning: `유동인구 분석 결과 주요 타겟층: ${analysisMetrics.main_target_age}. 피크 타임대 체류 인구 기반으로 메뉴·마케팅 전략을 해당 층에 집중하면 객단가 및 재방문율 향상이 기대됩니다.`,
+          mainTarget: analysisMetrics.main_target_age,
+          peakTime: analysisMetrics.peak_time,
+        }
+      : baseData;
 
   return (
     <>
@@ -5065,7 +5415,7 @@ function DashboardPanelView({
   const scoreTrend = isVariantB ? '-2.1 Pts' : '+5.2 Pts';
   const revenueTrend = isVariantB ? '+6.3%' : '+12.5%';
   const radarValues = isVariantB ? [62, 81, 55, 68, 71, 58, 73] : [78, 65, 72, 87, 74, 82, 80];
-  const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '생존율', '성장성', '접근성'];
+  const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
   const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
   const badgeColorMap = [
     'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -5759,6 +6109,10 @@ export default function App() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'loading' | 'result'>('idle');
   const [activeMenuIndex, setActiveMenuIndex] = useState(2);
+
+  // Simulation background tracking (IM3-205): store가 페이지 이동과 독립적으로
+  // 시뮬레이션 상태를 보유. useCompletionToast는 running→done/error 전이 감지.
+  useCompletionToast();
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(null);
 
   // 페이지 전환 시 모든 스크롤 컨테이너를 최상단으로 리셋
@@ -5866,325 +6220,339 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <ToastProvider>
-        <TransitionContext.Provider value={navigateWithTransition}>
-          <div
-            className="w-screen h-screen overflow-hidden select-none bg-background text-foreground"
-            style={{
-              animation: isAppLoaded
-                ? 'none'
-                : 'main-scene-in 1.5s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards',
-            }}
-          >
-            {/* Film Grain Noise Overlay */}
+      <ManagerListProvider>
+        <ToastProvider>
+          <TransitionContext.Provider value={navigateWithTransition}>
             <div
-              className="pointer-events-none fixed inset-0 z-[9998] opacity-[0.04] mix-blend-screen"
+              className="w-screen h-screen overflow-hidden select-none bg-background text-foreground"
               style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                animation: isAppLoaded
+                  ? 'none'
+                  : 'main-scene-in 1.5s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards',
               }}
-            />
-
-            {/* Particle background */}
-            <NetworkBackground isTransitioning={isTransitioning} scene={scene} theme="dark" />
-
-            {/* Route-based scenes */}
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <IntroScene
-                    activeMenuIndex={activeMenuIndex}
-                    setActiveMenuIndex={setActiveMenuIndex}
-                    onAboutClick={() => transitionTo('about')}
-                    onLoginClick={() => transitionTo('login')}
-                    onSimulatorClick={() => transitionTo('accordion')}
-                    onContactClick={() => transitionTo('contact')}
-                  />
-                }
-              />
-              <Route path="/about" element={<AboutPage onBack={() => transitionTo('intro')} />} />
-              <Route path="/joinus" element={<JoinUsPage onBack={() => transitionTo('intro')} />} />
-              <Route
-                path="/explore"
-                element={
-                  <AccordionGallery
-                    hoveredIdx={hoveredDistrictIdx}
-                    setHoveredIdx={setHoveredDistrictIdx}
-                    onMapoClick={() => transitionTo('simulator')}
-                    onLogoClick={() => transitionTo('intro')}
-                  />
-                }
-              />
-              <Route
-                path="/contact"
-                element={<ContactPage onBack={() => transitionTo('intro')} />}
-              />
-              <Route
-                path="/simulator"
-                element={
-                  <ProtectedRoute>
-                    <SimulatorDashboard reportState={reportState} setReportState={setReportState} />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/hq"
-                element={
-                  <ProtectedRoute requireRole="master">
-                    <HQCommandCenter />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/login"
-                element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
-              />
-            </Routes>
-
-            {/* Global header — all scenes except intro */}
-            {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
-              <header className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633] flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/90 backdrop-blur-md z-50 transition-colors duration-500">
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => transitionTo('intro')}
-                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity duration-300"
-                  >
-                    <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-                    <span className="text-sm font-bold tracking-wider text-foreground">
-                      SPOTTER
-                    </span>
-                  </button>
-                  <span className="text-border">/</span>
-                  <button
-                    onClick={() => {
-                      // 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
-                      // (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
-                      if (scene === 'simulator' && reportState === 'result') {
-                        window.history.back();
-                        return;
-                      }
-                      transitionTo(scene === 'simulator' ? 'accordion' : 'intro');
-                    }}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
-                  >
-                    <ChevronRight size={14} className="rotate-180" />
-                    BACK
-                  </button>
-                </div>
-                <div className="flex items-center gap-4 md:gap-6">
-                  <GlobalLimelightNav />
-                  <LogoutButton />
-                </div>
-              </header>
-            )}
-
-            {/* Command Palette (Cmd+K / Ctrl+K) */}
-            <CommandPalette
-              isOpen={isCommandOpen}
-              onClose={() => setIsCommandOpen(false)}
-              onNavigate={(target) => {
-                setIsCommandOpen(false);
-                transitionTo(target as any);
-              }}
-            />
-
-            {/* Transition overlay */}
-            <div
-              className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
-                isTransitioning ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-
-            {/* 3D Hologram Preloader */}
-            {!isAppLoaded && (
+            >
+              {/* Film Grain Noise Overlay */}
               <div
-                className="absolute inset-0 z-[99999] bg-[#1e1b18] flex flex-col items-center justify-center"
+                className="pointer-events-none fixed inset-0 z-[9998] opacity-[0.04] mix-blend-screen"
                 style={{
-                  animation:
-                    loadProgress === 100
-                      ? 'warp-out 1.2s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards'
-                      : 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
                 }}
-              >
-                {/* Noise */}
-                <div
-                  className="absolute inset-0 opacity-[0.05] mix-blend-screen pointer-events-none"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-                  }}
+              />
+
+              {/* Particle background */}
+              <NetworkBackground isTransitioning={isTransitioning} scene={scene} theme="dark" />
+
+              {/* Route-based scenes */}
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <IntroScene
+                      activeMenuIndex={activeMenuIndex}
+                      setActiveMenuIndex={setActiveMenuIndex}
+                      onAboutClick={() => transitionTo('about')}
+                      onLoginClick={() => transitionTo('login')}
+                      onSimulatorClick={() => transitionTo('accordion')}
+                      onContactClick={() => transitionTo('contact')}
+                    />
+                  }
                 />
+                <Route path="/about" element={<AboutPage onBack={() => transitionTo('intro')} />} />
+                <Route
+                  path="/joinus"
+                  element={<JoinUsPage onBack={() => transitionTo('intro')} />}
+                />
+                <Route
+                  path="/explore"
+                  element={
+                    <AccordionGallery
+                      hoveredIdx={hoveredDistrictIdx}
+                      setHoveredIdx={setHoveredDistrictIdx}
+                      onMapoClick={() => transitionTo('simulator')}
+                      onLogoClick={() => transitionTo('intro')}
+                    />
+                  }
+                />
+                <Route
+                  path="/contact"
+                  element={<ContactPage onBack={() => transitionTo('intro')} />}
+                />
+                <Route
+                  path="/simulator"
+                  element={
+                    <ProtectedRoute>
+                      <SimulatorDashboard
+                        reportState={reportState}
+                        setReportState={setReportState}
+                      />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/hq"
+                  element={
+                    <ProtectedRoute requireRole="master">
+                      <HQCommandCenter />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/login"
+                  element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
+                />
+              </Routes>
 
-                {/* 3D Multi-Axis Core */}
-                <div className="scene-3d relative w-[300px] h-[300px] md:w-[500px] md:h-[500px] flex items-center justify-center mt-[-10vh]">
-                  <div className="hologram-wrapper absolute w-full h-full flex items-center justify-center">
-                    {/* Base core glow */}
-                    <div className="absolute w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[40px]" />
+              {/* IM3-205: 시뮬레이션 백그라운드 추적 — 라우팅 바깥에 마운트 */}
+              <SimulationFloatingWidget />
+              <BeforeUnloadGuard />
+              <ToastHost />
 
-                    {/* Ring 1 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[100%] h-[100%] opacity-40"
-                      style={{
-                        transform: 'rotateX(70deg) rotateY(10deg) rotateZ(0deg)',
-                        animation: 'gyro-1 12s linear infinite',
-                      }}
+              {/* Global header — all scenes except intro */}
+              {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
+                <header className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633] flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/90 backdrop-blur-md z-50 transition-colors duration-500">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => transitionTo('intro')}
+                      className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity duration-300"
                     >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="95"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="0.5"
-                        strokeDasharray="2 6"
-                      />
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="90"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="2"
-                        strokeDasharray="10 40 30 20"
-                      />
-                    </svg>
-
-                    {/* Ring 2 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[85%] h-[85%] opacity-60"
-                      style={{
-                        transform: 'rotateX(50deg) rotateY(60deg) rotateZ(0deg)',
-                        animation: 'gyro-2 9s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="85"
-                        fill="none"
-                        stroke="#6366f1"
-                        strokeWidth="3"
-                        strokeDasharray="60 30 10 30"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="100" cy="15" r="5" fill="#818cf8" />
-                    </svg>
-
-                    {/* Ring 3 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[70%] h-[70%] opacity-70"
-                      style={{
-                        transform: 'rotateX(50deg) rotateY(-60deg) rotateZ(0deg)',
-                        animation: 'gyro-3 15s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="75"
-                        fill="none"
-                        stroke="#a5b4fc"
-                        strokeWidth="1"
-                        strokeDasharray="4 8"
-                      />
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="70"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="1.5"
-                        strokeDasharray="40 80"
-                      />
-                    </svg>
-
-                    {/* Ring 4 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[95%] h-[95%] opacity-80"
-                      style={{
-                        transform: 'rotateX(20deg) rotateY(80deg) rotateZ(0deg)',
-                        animation: 'gyro-4 6s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="88"
-                        fill="none"
-                        stroke="#a5b4fc"
-                        strokeWidth="1"
-                        style={{ filter: 'drop-shadow(0 0 8px #a5b4fc)' }}
-                      />
-                      <circle cx="100" cy="12" r="3" fill="#ffffff" />
-                      <circle cx="100" cy="188" r="3" fill="#ffffff" />
-                    </svg>
-
-                    {/* Ring 5 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[115%] h-[115%] opacity-30"
-                      style={{
-                        transform: 'rotateX(80deg) rotateY(-30deg) rotateZ(0deg)',
-                        animation: 'gyro-5 20s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="98"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="1"
-                        strokeDasharray="4 16"
-                      />
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="94"
-                        fill="none"
-                        stroke="#6366f1"
-                        strokeWidth="0.5"
-                      />
-                    </svg>
-
-                    {/* Center percentage */}
-                    <div
-                      className="absolute flex flex-col items-center justify-center pointer-events-none"
-                      style={{ animation: 'energy-pulse 2s ease-in-out infinite' }}
-                    >
-                      <span className="font-black text-6xl md:text-8xl text-indigo-400 tracking-tighter leading-none">
-                        {loadProgress}
-                        <span className="text-3xl md:text-4xl text-indigo-400/60 ml-1">%</span>
+                      <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
+                      <span className="text-sm font-bold tracking-wider text-foreground">
+                        SPOTTER
                       </span>
-                      <span className="font-mono text-[10px] md:text-xs text-indigo-400/80 tracking-[0.3em] mt-2">
-                        SYNCING...
-                      </span>
+                    </button>
+                    <span className="text-border">/</span>
+                    <button
+                      onClick={() => {
+                        // 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
+                        // (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
+                        if (scene === 'simulator' && reportState === 'result') {
+                          window.history.back();
+                          return;
+                        }
+                        transitionTo(scene === 'simulator' ? 'accordion' : 'intro');
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
+                    >
+                      <ChevronRight size={14} className="rotate-180" />
+                      BACK
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-4 md:gap-6">
+                    <GlobalLimelightNav />
+                    <LogoutButton />
+                  </div>
+                </header>
+              )}
+
+              {/* Command Palette (Cmd+K / Ctrl+K) */}
+              <CommandPalette
+                isOpen={isCommandOpen}
+                onClose={() => setIsCommandOpen(false)}
+                onNavigate={(target) => {
+                  setIsCommandOpen(false);
+                  transitionTo(target as any);
+                }}
+              />
+
+              {/* Transition overlay */}
+              <div
+                className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
+                  isTransitioning ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+
+              {/* 3D Hologram Preloader */}
+              {!isAppLoaded && (
+                <div
+                  className="absolute inset-0 z-[99999] bg-[#1e1b18] flex flex-col items-center justify-center"
+                  style={{
+                    animation:
+                      loadProgress === 100
+                        ? 'warp-out 1.2s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards'
+                        : 'none',
+                  }}
+                >
+                  {/* Noise */}
+                  <div
+                    className="absolute inset-0 opacity-[0.05] mix-blend-screen pointer-events-none"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                    }}
+                  />
+
+                  {/* 3D Multi-Axis Core */}
+                  <div className="scene-3d relative w-[300px] h-[300px] md:w-[500px] md:h-[500px] flex items-center justify-center mt-[-10vh]">
+                    <div className="hologram-wrapper absolute w-full h-full flex items-center justify-center">
+                      {/* Base core glow */}
+                      <div className="absolute w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[40px]" />
+
+                      {/* Ring 1 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[100%] h-[100%] opacity-40"
+                        style={{
+                          transform: 'rotateX(70deg) rotateY(10deg) rotateZ(0deg)',
+                          animation: 'gyro-1 12s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="95"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="0.5"
+                          strokeDasharray="2 6"
+                        />
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="90"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="2"
+                          strokeDasharray="10 40 30 20"
+                        />
+                      </svg>
+
+                      {/* Ring 2 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[85%] h-[85%] opacity-60"
+                        style={{
+                          transform: 'rotateX(50deg) rotateY(60deg) rotateZ(0deg)',
+                          animation: 'gyro-2 9s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="85"
+                          fill="none"
+                          stroke="#6366f1"
+                          strokeWidth="3"
+                          strokeDasharray="60 30 10 30"
+                          strokeLinecap="round"
+                        />
+                        <circle cx="100" cy="15" r="5" fill="#818cf8" />
+                      </svg>
+
+                      {/* Ring 3 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[70%] h-[70%] opacity-70"
+                        style={{
+                          transform: 'rotateX(50deg) rotateY(-60deg) rotateZ(0deg)',
+                          animation: 'gyro-3 15s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="75"
+                          fill="none"
+                          stroke="#a5b4fc"
+                          strokeWidth="1"
+                          strokeDasharray="4 8"
+                        />
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="70"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="1.5"
+                          strokeDasharray="40 80"
+                        />
+                      </svg>
+
+                      {/* Ring 4 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[95%] h-[95%] opacity-80"
+                        style={{
+                          transform: 'rotateX(20deg) rotateY(80deg) rotateZ(0deg)',
+                          animation: 'gyro-4 6s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="88"
+                          fill="none"
+                          stroke="#a5b4fc"
+                          strokeWidth="1"
+                          style={{ filter: 'drop-shadow(0 0 8px #a5b4fc)' }}
+                        />
+                        <circle cx="100" cy="12" r="3" fill="#ffffff" />
+                        <circle cx="100" cy="188" r="3" fill="#ffffff" />
+                      </svg>
+
+                      {/* Ring 5 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[115%] h-[115%] opacity-30"
+                        style={{
+                          transform: 'rotateX(80deg) rotateY(-30deg) rotateZ(0deg)',
+                          animation: 'gyro-5 20s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="98"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="1"
+                          strokeDasharray="4 16"
+                        />
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="94"
+                          fill="none"
+                          stroke="#6366f1"
+                          strokeWidth="0.5"
+                        />
+                      </svg>
+
+                      {/* Center percentage */}
+                      <div
+                        className="absolute flex flex-col items-center justify-center pointer-events-none"
+                        style={{ animation: 'energy-pulse 2s ease-in-out infinite' }}
+                      >
+                        <span className="font-black text-6xl md:text-8xl text-indigo-400 tracking-tighter leading-none">
+                          {loadProgress}
+                          <span className="text-3xl md:text-4xl text-indigo-400/60 ml-1">%</span>
+                        </span>
+                        <span className="font-mono text-[10px] md:text-xs text-indigo-400/80 tracking-[0.3em] mt-2">
+                          SYNCING...
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Terminal logs */}
-                <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[10px] md:text-xs text-[#9ca3af] max-w-md">
-                  <div className="flex flex-col gap-1.5">
-                    {loadLogs.map((log, idx) => (
-                      <div
-                        key={idx}
-                        className={idx === loadLogs.length - 1 ? 'text-indigo-400 font-bold' : ''}
-                      >
-                        {log}
-                      </div>
-                    ))}
+                  {/* Terminal logs */}
+                  <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[10px] md:text-xs text-[#9ca3af] max-w-md">
+                    <div className="flex flex-col gap-1.5">
+                      {loadLogs.map((log, idx) => (
+                        <div
+                          key={idx}
+                          className={idx === loadLogs.length - 1 ? 'text-indigo-400 font-bold' : ''}
+                        >
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="w-2 h-3 bg-indigo-500 mt-2 animate-pulse" />
                   </div>
-                  <div className="w-2 h-3 bg-indigo-500 mt-2 animate-pulse" />
                 </div>
-              </div>
-            )}
-          </div>
-        </TransitionContext.Provider>
-      </ToastProvider>
+              )}
+            </div>
+          </TransitionContext.Provider>
+          <SimulationFloatingWidget />
+        </ToastProvider>
+      </ManagerListProvider>
     </AuthProvider>
   );
 }

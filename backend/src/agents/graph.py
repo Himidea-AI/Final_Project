@@ -1,4 +1,5 @@
 import asyncio
+import time
 from langgraph.graph import StateGraph, END
 
 from src.schemas.state import AgentState
@@ -6,7 +7,33 @@ from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.legal import legal_node
 from src.agents.nodes.synthesis import synthesis_node
-from src.agents.nodes.district_ranking import district_ranking_node
+from src.agents.nodes.district_ranking import district_ranking_node, _clear_shared_population_cache
+
+# 전체 파이프라인 토큰 예산 (입력+출력 합산 추정치 기준)
+# gpt-4.1-mini: 입력 $0.15/1M, 출력 $0.60/1M
+_TOKEN_BUDGET_PER_RUN = 8000  # 토큰 초과 시 경고 로그
+
+
+def _estimate_tokens(text: str) -> int:
+    """텍스트 토큰 수 추정 (영문 4자, 한글 2자 ≈ 1토큰 근사)"""
+    return max(len(text) // 3, 1)
+
+
+def _count_result_tokens(result: dict) -> int:
+    """에이전트 결과 dict에서 문자열 필드 토큰 합산"""
+    total = 0
+    for v in result.values():
+        if isinstance(v, str):
+            total += _estimate_tokens(v)
+        elif isinstance(v, dict):
+            total += _count_result_tokens(v)
+        elif isinstance(v, list):
+            for item in v:
+                if isinstance(item, str):
+                    total += _estimate_tokens(item)
+                elif isinstance(item, dict):
+                    total += _count_result_tokens(item)
+    return total
 
 
 async def parallel_analysis_node(state: AgentState) -> dict:
@@ -19,7 +46,11 @@ async def parallel_analysis_node(state: AgentState) -> dict:
     - market / population / legal: 사용자 선택 행정동 심층 분석 (LLM)
     - district_ranking: 마포구 16개 전체 행정동 정량 스코어링 (LLM 없음)
     """
+    t_start = time.perf_counter()
     print("--- [PARALLEL ANALYSIS] 4개 에이전트 병렬 실행 시작 ---")
+
+    # 동일 dong에 대한 get_population_trends 중복 쿼리 방지용 공유 Task 캐시 초기화
+    _clear_shared_population_cache()
 
     market_result, population_result, legal_result, ranking_result = await asyncio.gather(
         market_analyst_node(state),
@@ -41,7 +72,20 @@ async def parallel_analysis_node(state: AgentState) -> dict:
     # overall_legal_risk는 legal 결과 우선
     overall_legal_risk = legal_result.get("overall_legal_risk") or state.get("overall_legal_risk", "caution")
 
-    print("--- [PARALLEL ANALYSIS] 4개 에이전트 완료 ---")
+    # 총 토큰 사용량 추정 및 예산 경고
+    token_market = _count_result_tokens(market_result)
+    token_pop = _count_result_tokens(population_result)
+    token_legal = _count_result_tokens(legal_result)
+    token_total = token_market + token_pop + token_legal
+    elapsed = time.perf_counter() - t_start
+
+    print(
+        f"--- [PARALLEL ANALYSIS] 완료 ({elapsed:.1f}s) | "
+        f"토큰 추정 - market:{token_market} pop:{token_pop} legal:{token_legal} "
+        f"합계:{token_total}/{_TOKEN_BUDGET_PER_RUN} ---"
+    )
+    if token_total > _TOKEN_BUDGET_PER_RUN:
+        print(f"[WARNING] [TOKEN BUDGET] 추정 토큰 {token_total}이 예산 {_TOKEN_BUDGET_PER_RUN}을 초과했습니다.")
 
     return {
         "analysis_results": merged_analysis,
@@ -52,6 +96,8 @@ async def parallel_analysis_node(state: AgentState) -> dict:
         "scouting_results": ranking_result.get("scouting_results", []),
         "winner_district": ranking_result.get("winner_district", state.get("target_district", "")),
         "top_3_candidates": ranking_result.get("top_3_candidates", []),
+        "vacancy_applied": ranking_result.get("vacancy_applied", False),
+        "vacancy_spots": ranking_result.get("vacancy_spots", []),
         "current_agent": "parallel_analysis",
     }
 

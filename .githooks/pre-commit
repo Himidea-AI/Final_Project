@@ -1,0 +1,46 @@
+#!/usr/bin/env sh
+#
+# pre-commit hook — 커밋 시 변경된 파일만 자동 포맷팅
+#
+# 설치: git config core.hooksPath .githooks
+# (팀원 전체 적용: clone 후 위 명령 1회 실행)
+#
+
+# 스테이징된 파일 목록
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# ─────────── 프론트엔드: Prettier ───────────
+FRONTEND_FILES=$(echo "$STAGED_FILES" | grep "^frontend/src/.*\.\(ts\|tsx\|js\|jsx\|css\)$")
+
+if [ -n "$FRONTEND_FILES" ]; then
+    echo "[pre-commit] Prettier 포맷팅..."
+
+    # frontend 디렉토리 기준으로 경로 변환
+    RELATIVE_FILES=$(echo "$FRONTEND_FILES" | sed 's|^frontend/||')
+
+    cd frontend
+    echo "$RELATIVE_FILES" | xargs npx prettier --write 2>/dev/null
+    cd ..
+
+    # 포맷팅된 파일 다시 스테이징
+    echo "$FRONTEND_FILES" | xargs git add
+fi
+
+# ─────────── 백엔드: Ruff ───────────
+PYTHON_FILES=$(echo "$STAGED_FILES" | grep "\.py$")
+
+if [ -n "$PYTHON_FILES" ]; then
+    echo "[pre-commit] Ruff 포맷팅..."
+
+    echo "$PYTHON_FILES" | xargs python -m ruff check --fix --quiet 2>/dev/null
+    echo "$PYTHON_FILES" | xargs python -m ruff format --quiet 2>/dev/null
+
+    # 포맷팅된 파일 다시 스테이징
+    echo "$PYTHON_FILES" | xargs git add
+fi
+
+exit 0

@@ -35,7 +35,7 @@ BIGINT_COLS = {"avrgSlsAmt", "arUnitAvrgSlsAmt"}
 def seed_ftc_brand_franchise():
     """ftc_brand_franchise 테이블에 CSV 데이터 적재 (이미 있으면 스킵)."""
     if not os.path.exists(CSV_PATH):
-        print(f"[seed] CSV 파일 없음: {CSV_PATH} — 스킵")
+        print(f"[seed] CSV 파일 없음: {CSV_PATH} - 스킵")
         return
 
     engine = create_engine(DB_URL, echo=False)
@@ -43,7 +43,7 @@ def seed_ftc_brand_franchise():
         with engine.connect() as conn:
             count = conn.execute(text("SELECT COUNT(*) FROM ftc_brand_franchise")).scalar()
             if count and count > 0:
-                print(f"[seed] ftc_brand_franchise 이미 {count}건 존재 — 스킵")
+                print(f"[seed] ftc_brand_franchise 이미 {count}건 존재 - 스킵")
                 return
 
             print(f"[seed] ftc_brand_franchise CSV 로딩: {CSV_PATH}")
@@ -62,7 +62,7 @@ def seed_ftc_brand_franchise():
                     rows.append(parsed)
 
                 if not rows:
-                    print("[seed] CSV가 비어있음 — 스킵")
+                    print("[seed] CSV가 비어있음 - 스킵")
                     return
 
                 # batch insert

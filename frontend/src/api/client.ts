@@ -9,7 +9,7 @@
  *
  * [B1/A1 담당자 참고]
  * - Mock 응답의 구조 = 실제 API 응답 구조와 동일해야 함
- * - SimulationOutput: comparison[], legal_risks[], monthly_projection[]
+ * - SimulationOutput: comparison[], legal_risks[], quarterly_projection[]
  * - AnalysisResult.data.market_report: 7개 항목 (floating_population 등)
  * - 타입 정의는 src/types/index.ts 참고
  */
@@ -53,8 +53,11 @@ export async function healthCheck() {
 }
 
 /** 시뮬레이션 실행 요청 */
-export async function runSimulation(input: SimulationInput): Promise<SimulationOutput> {
-  const response = await apiClient.post('/simulate', input);
+export async function runSimulation(
+  input: SimulationInput,
+  signal?: AbortSignal,
+): Promise<SimulationOutput> {
+  const response = await apiClient.post('/simulate', input, { signal });
   return response.data;
 }
 

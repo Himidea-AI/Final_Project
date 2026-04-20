@@ -3,6 +3,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.postgres import PostgresClient
 from src.database.models import StoreInfo, LivingPopulation, DistrictSales, GolmokRent, DongMapping
+from src.services.population_api import MAPO_DONG_CODES
 from src.config.settings import settings
 
 class MarketDataTool:
@@ -16,14 +17,43 @@ class MarketDataTool:
 
     # 업종 코드 → kakao_store category 매핑
     _KAKAO_CATEGORY_MAP: Dict[str, str] = {
-        "I212": "커피-음료", "카페": "커피-음료", "커피": "커피-음료",
-        "I201": "한식음식점", "한식": "한식음식점", "음식점": "한식음식점",
-        "I206": "치킨전문점", "치킨": "치킨전문점",
+        "I212": "커피-음료", "카페": "커피-음료", "커피": "커피-음료", "cafe": "커피-음료", "coffee": "커피-음료",
+        "I201": "한식음식점", "한식": "한식음식점", "음식점": "한식음식점", "restaurant": "한식음식점",
+        "I206": "치킨전문점", "치킨": "치킨전문점", "chicken": "치킨전문점",
         "I207": "패스트푸드점", "피자": "패스트푸드점",
         "I209": "분식전문점", "분식": "분식전문점",
         "I211": "호프-간이주점", "주점": "호프-간이주점",
         "I213": "제과점", "베이커리": "제과점", "빵": "제과점",
-        "G209": "패스트푸드점", "편의점": "패스트푸드점",
+        "G209": "패스트푸드점", "편의점": "패스트푸드점", "convenience": "편의점",
+    }
+
+    # 사용자 입력 업종명 → DistrictSales.industry_code 매핑 (골목상권 업종코드)
+    # 서울 골목상권 CS 코드 공식 매핑 (2026-04 기준)
+    # 기존 치킨/제과 코드가 잘못되어 있어 교정 + 중/일/양/패스트푸드/분식 신규 추가
+    _SALES_CODE_MAP: Dict[str, str] = {
+        # CS100001 한식
+        "한식": "CS100001", "한식음식점": "CS100001", "음식점": "CS100001", "restaurant": "CS100001",
+        # CS100002 중식
+        "중식": "CS100002", "중식음식점": "CS100002", "짜장": "CS100002", "짬뽕": "CS100002",
+        # CS100003 일식
+        "일식": "CS100003", "일식음식점": "CS100003", "초밥": "CS100003", "스시": "CS100003",
+        # CS100004 양식
+        "양식": "CS100004", "양식음식점": "CS100004", "파스타": "CS100004", "스테이크": "CS100004",
+        # CS100005 제과/베이커리 (기존 CS100011 오류 → CS100005로 교정)
+        "제과점": "CS100005", "베이커리": "CS100005", "빵": "CS100005",
+        # CS100006 패스트푸드 (기존 코드에선 치킨이 CS100006로 잘못 매핑돼 있었음)
+        "패스트푸드": "CS100006", "패스트푸드점": "CS100006", "버거": "CS100006", "피자": "CS100006",
+        # CS100007 치킨 (기존 CS100006 오류 → CS100007로 교정)
+        "치킨": "CS100007", "치킨전문점": "CS100007", "chicken": "CS100007",
+        # CS100008 분식
+        "분식": "CS100008", "분식전문점": "CS100008", "떡볶이": "CS100008", "김밥": "CS100008",
+        # CS100009 호프/주점
+        "호프": "CS100009", "주점": "CS100009", "호프-간이주점": "CS100009", "맥주": "CS100009",
+        # CS100010 카페/음료
+        "카페": "CS100010", "커피": "CS100010", "커피-음료": "CS100010", "cafe": "CS100010", "coffee": "CS100010",
+        "I212": "CS100010",
+        # 편의점 (CS100 시리즈 외 별도 코드)
+        "편의점": "CS200009", "convenience": "CS200009",
     }
 
     async def get_competitor_stats(self, lat: float, lon: float, industry_m_code: str, radius_m: int = 500) -> Dict[str, Any]:
@@ -72,15 +102,11 @@ class MarketDataTool:
         """
         최근 1년(4분기) 유동인구 추이 및 인구통계 요약 (YoY, QoQ 포함)
         """
-        async with self.db_client.get_session() as session:
-            # 행정동 코드로 매핑
-            mapping_stmt = select(DongMapping.dong_code).where(DongMapping.dong_name == dong_name)
-            mapping_res = await session.execute(mapping_stmt)
-            dong_code = mapping_res.scalar()
-            
-            if not dong_code:
-                return {"error": "행정동 정보를 찾을 수 없습니다."}
+        dong_code = MAPO_DONG_CODES.get(dong_name)
+        if not dong_code:
+            return {"error": "행정동 정보를 찾을 수 없습니다."}
 
+        async with self.db_client.get_session() as session:
             # 최근 4분기 데이터 조회
             pop_stmt = select(
                 LivingPopulation.date,
@@ -115,13 +141,15 @@ class MarketDataTool:
         """
         최근 1년 매출 추이 및 '통계적 요약본' 리턴
         """
+        # 입력값을 DB의 골목상권 업종코드(CS1xxxxx)로 정규화
+        normalized_code = self._SALES_CODE_MAP.get(industry_code, industry_code)
         async with self.db_client.get_session() as session:
             # 1. 최근 4분기 매출 트렌드 (마포구 코드 11440으로 한정)
             sales_stmt = select(DistrictSales)\
                 .where(
                     DistrictSales.dong_code.like('11440%'),
-                    DistrictSales.dong_name == dong_name, 
-                    DistrictSales.industry_code == industry_code
+                    DistrictSales.dong_name == dong_name,
+                    DistrictSales.industry_code == normalized_code
                 )\
                 .order_by(DistrictSales.quarter.desc())\
                 .limit(4)

@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 import os
@@ -5,23 +6,67 @@ import uuid
 import asyncio
 from typing import Any, Dict
 
+logger = logging.getLogger(__name__)
+
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
 current_dir = Path(__file__).parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
-from fastapi import FastAPI
+# models/ 패키지 임포트를 위해 프로젝트 루트(Final_Project/)를 path에 추가
+_project_root = str(Path(__file__).parent.parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+logger = logging.getLogger(__name__)
+
+import redis.asyncio as aioredis
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
+from src.config.settings import settings
 from src.schemas.simulation_input import SimulationInput
-from src.schemas.simulation_output import SimulationOutput
 from src.agents.graph import compile_workflow
 from src.services.biz_mapper import BizMapper
 from src.services.auth import AuthService
+
+from models.interface import ModelOutput
+from models.explainability.simulation import (
+    build_quarterly_projection,
+)
+from models.explainability.shap_analysis import explain_tcn_prediction
+
+# ---------------------------------------------------------------------------
+# Rate Limiting 설정
+# ---------------------------------------------------------------------------
+# LLM 파이프라인 엔드포인트(/simulate, /analyze)를 IP당 시간당 최대 횟수로 제한
+_RATE_LIMITED_PATHS = {"/simulate", "/analyze"}
+_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "10"))  # 시간당 최대 요청 수
+_RATE_LIMIT_WINDOW = 3600  # 1시간(초)
+
+
+async def _check_rate_limit(ip: str) -> tuple[bool, int]:
+    """
+    Redis 고정 윈도우 방식으로 IP별 요청 횟수를 확인합니다.
+    반환값: (초과 여부, 현재 카운트)
+    Redis 연결 실패 시 제한 없이 통과(fail-open)합니다.
+    """
+    try:
+        async with aioredis.from_url(settings.redis_url, decode_responses=True) as r:
+            key = f"rate:{ip}"
+            count = await r.incr(key)
+            if count == 1:
+                await r.expire(key, _RATE_LIMIT_WINDOW)
+            return count > _RATE_LIMIT_MAX, count
+    except Exception as e:
+        print(f"[RATE LIMIT] Redis 연결 실패 (통과 허용): {e}")
+        return False, 0
+
 
 app = FastAPI(
     title="마포구 프랜차이즈 상권분석 시뮬레이터",
@@ -41,8 +86,33 @@ app.add_middleware(
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Tenant-ID"],
 )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """IP당 시간당 RATE_LIMIT_MAX회로 LLM 파이프라인 엔드포인트를 보호합니다."""
+    if request.url.path in _RATE_LIMITED_PATHS:
+        # X-Forwarded-For → 실제 클라이언트 IP (Nginx 프록시 환경 대응)
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        client_ip = (
+            forwarded_for.split(",")[0].strip()
+            if forwarded_for
+            else (request.client.host if request.client else "unknown")
+        )
+        exceeded, count = await _check_rate_limit(client_ip)
+        if exceeded:
+            print(f"[RATE LIMIT] {client_ip} 시간당 한도 초과 ({count}/{_RATE_LIMIT_MAX})")
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "status": "error",
+                    "message": f"요청 횟수가 초과되었습니다. 시간당 최대 {_RATE_LIMIT_MAX}회 요청 가능합니다.",
+                },
+            )
+    return await call_next(request)
+
 
 # [디폴트 값] 마포구청 (혹은 홍대입구역) 좌표 - 데이터 수집 실패 시 대비
 DEFAULT_LAT = 37.5663
@@ -53,7 +123,31 @@ _pending_pipelines: Dict[str, "asyncio.Task[Any]"] = {}
 
 
 def _pipeline_key(input_data: Any) -> str:
-    return f"{input_data.target_district}:{input_data.business_type}:{input_data.brand_name}"
+    radius = getattr(input_data, "commercial_radius", 500)
+    pop_w = getattr(input_data, "population_weight", True)
+    rent = getattr(input_data, "monthly_rent", 0)
+    area = getattr(input_data, "store_area", 15.0)
+    return f"{input_data.target_district}:{input_data.business_type}:{input_data.brand_name}:{rent}:{area}:{radius}:{pop_w}"
+
+
+_BIZ_TYPE_NORMALIZE: Dict[str, str] = {
+    "cafe": "카페",
+    "coffee": "카페",
+    "restaurant": "한식",
+    "food": "한식",
+    "chicken": "치킨",
+    "convenience": "편의점",
+    "bakery": "베이커리",
+}
+
+# 마포구 행정동명 → 행정동 코드 매핑은 dong_resolver 단일 소스 사용
+# (기존 main.py 내 하드코딩 매핑은 dong_resolver와 15/16개 불일치로 TCN에 잘못된 코드 전달 버그 유발)
+from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
+
+# 업종명(한국어) → 골목상권 업종코드: tools.py MarketDataTool._SALES_CODE_MAP 재사용
+from src.agents.tools import MarketDataTool as _MarketDataTool
+
+_BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 
 async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
@@ -61,19 +155,32 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
     key = _pipeline_key(input_data)
 
     if key in _pending_pipelines and not _pending_pipelines[key].done():
-        print(f"[DEDUP] 동일 요청 대기 중 — 기존 파이프라인 공유: {key}")
+        print(f"[DEDUP] 동일 요청 대기 중 - 기존 파이프라인 공유: {key}")
         return await _pending_pipelines[key]
 
+    # 프론트엔드가 영문으로 보낼 경우 한국어로 정규화 (DB 쿼리 호환)
+    normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
+    normalized_brand = input_data.brand_name or "미지정 브랜드"
+
     initial_state = {
-        "messages": [HumanMessage(content=f"{input_data.target_district} {input_data.brand_name} 분석 시작")],
-        "business_type": input_data.business_type,
-        "brand_name": input_data.brand_name,
+        "messages": [HumanMessage(content=f"{input_data.target_district} {normalized_brand} 분석 시작")],
+        "business_type": normalized_biz,
+        "brand_name": normalized_brand,
         "target_district": input_data.target_district,
+        "commercial_radius": getattr(input_data, "commercial_radius", 500),
+        "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
+        "store_area": getattr(input_data, "store_area", 15.0),
+        "population_weight": getattr(input_data, "population_weight", True),
+        "target_price_range": getattr(input_data, "target_price_range", "5to10k"),
+        "operating_hours": getattr(input_data, "operating_hours", ["점심", "저녁"]),
+        "initial_capital": getattr(input_data, "initial_capital", 50_000_000),
         "market_data": {},
         "legal_info": [],
         "scouting_results": [],
         "top_3_candidates": [],
         "winner_district": input_data.target_district,
+        "vacancy_spots": [],
+        "vacancy_applied": False,
         "brand_analysis": {},
         "analysis_results": {},
         "analysis_metrics": {},
@@ -83,9 +190,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "errors": [],
     }
 
-    task: asyncio.Task[Any] = asyncio.create_task(
-        asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0)
-    )
+    task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0))
     _pending_pipelines[key] = task
     try:
         return await task
@@ -100,7 +205,13 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     """
     md = state.get("market_data", {})
     analysis = state.get("analysis_results", {})
-    metrics = state.get("analysis_metrics", {})
+    metrics = state.get("analysis_metrics") or {
+        "district_grade": "NORMAL",
+        "growth_rate": 5,
+        "competition_score": 0.5,
+        "rent_affordability": "CAUTION",
+        "population_score": 7,
+    }
     target_dist = state.get("target_district", "마포구")
 
     # [좌표 기본값 처리]
@@ -116,22 +227,30 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 r.get("level", "safe").lower(), "LOW"
             ),
             "detail": r.get("summary", ""),
+            "recommendation": r.get("recommendation", ""),
         }
         for r in legal_risks_raw
     ]
 
+    # 한글 surrogate 문자 제거 헬퍼 (N1 fix)
+    def _sanitize(val):
+        if isinstance(val, str):
+            return val.encode("utf-8", errors="ignore").decode("utf-8")
+        if isinstance(val, list):
+            return [_sanitize(v) for v in val]
+        if isinstance(val, dict):
+            return {k: _sanitize(v) for k, v in val.items()}
+        return val
+
     # 랭킹 데이터
-    district_rankings = analysis.get("district_rankings", [])
-    winner_district = analysis.get("winner_district", target_dist)
-    top_3_candidates = analysis.get("top_3_candidates", [])
+    district_rankings = _sanitize(analysis.get("district_rankings", []))
+    winner_district = _sanitize(analysis.get("winner_district", target_dist))
+    top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
+    vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
     final_report = analysis.get("final_report") or {}
-    ai_recommendation = (
-        final_report.get("summary")
-        or analysis.get("market_summary", "")[:120]
-        or ""
-    )
+    ai_recommendation = final_report.get("summary") or analysis.get("market_summary", "")[:120] or ""
 
     # market_report — 프론트엔드 chartData용 7개 정규화 지표 (0~100)
     competition_score = float(metrics.get("competition_score") or 0.5)
@@ -141,8 +260,20 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     grade = str(metrics.get("district_grade") or "NORMAL").upper()
 
     # 임대료: SAFE=저렴(높은 점수), DANGER=비쌈(낮은 점수)
-    rent_index = {"SAFE": 80, "CAUTION": 50, "DANGER": 25, "상": 25, "중": 50, "하": 80}.get(rent_raw, 50)
-    estimated_revenue = {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
+    rent_index = {
+        "SAFE": 80,
+        "CAUTION": 50,
+        "DANGER": 25,
+        "상": 25,
+        "중": 50,
+        "하": 80,
+    }.get(rent_raw, 50)
+    estimated_revenue = {
+        "EXCELLENT": 90,
+        "GOOD": 75,
+        "NORMAL": 60,
+        "RISKY": 40,
+    }.get(grade, 60)
     competition_intensity = min(int(competition_score * 100), 100)
     district_score = float({"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60))
 
@@ -153,8 +284,72 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "estimated_revenue": estimated_revenue,
         "survival_rate": max(100 - competition_intensity, 30),
         "growth_potential": min(int(abs(growth_rate) * 5), 100),
-        "accessibility": 75,
+        "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
     }
+
+    # [Simulation 실제 연동] B2 ModelOutput + build_quarterly_projection 연결
+    _biz_name = state.get("business_type", "카페")
+    _dong_code = _resolve_dong_code(target_dist)
+    if _dong_code is None:
+        # silent 서교동 fallback 금지 — 잘못된 동명을 엉뚱한 동 분석으로 응답하는 버그 방지
+        raise HTTPException(
+            status_code=400,
+            detail=f"지원하지 않는 행정동입니다: '{target_dist}'. 마포구 16개 동만 지원됩니다.",
+        )
+    _industry_code = _BIZ_TO_INDUSTRY_CODE.get(_biz_name, "CS100010")  # 기본값: 카페
+    scenarios = None
+    try:
+        sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
+        quarterly = build_quarterly_projection(
+            bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+            confidence="base",
+        )
+        scenarios = build_scenarios(
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+        )
+    except Exception as _sim_err:
+        print(f"[SIM] ModelOutput 호출 실패 (mock 사용): {_sim_err}")
+        quarterly = [
+            {
+                "quarter": q,
+                "revenue": 30_000_000,
+                "cumulative_profit": -150_000_000 + q * 30_000_000,
+                "confidence_lower": 25_000_000,
+                "confidence_upper": 35_000_000,
+            }
+            for q in range(1, 5)
+        ]
+
+    # TCN SHAP 분석 실행 — 피처별 매출 기여도 계산
+    try:
+        shap_result = explain_tcn_prediction(
+            dong_code=_dong_code,
+            industry_code=_industry_code,
+        )
+    except Exception as e:
+        logger.warning("SHAP 분석 실패: %s", e)
+        shap_result = None
+
+    # sim_result에서 타겟 동 예측값 추출 (모델 호출 성공 시)
+    _sim_closure_rate = sim_result["closure_rate"]["closure_rate"] if "sim_result" in locals() else None
+    _sim_bep_months = sim_result["bep"]["bep_months"] if "sim_result" in locals() else None
+
+    # market_report에 모델 기반 폐업률 추가 (0~1 소수)
+    market_report["closure_rate"] = _sim_closure_rate
+
+    # 타겟 동의 bep_months, closure_rate를 district_rankings에 주입
+    district_rankings = [
+        {
+            **r,
+            **(
+                {"bep_months": _sim_bep_months, "closure_rate": _sim_closure_rate}
+                if r.get("district") == target_dist
+                else {}
+            ),
+        }
+        for r in district_rankings
+    ]
 
     # [B1 고도화] 응답 구조 재설계
     response_data = {
@@ -163,26 +358,22 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "winner_district": winner_district,
         "top_3_candidates": top_3_candidates,
         "district_rankings": district_rankings,
+        "vacancy_applied": state.get("vacancy_applied", False),  # 공실 DB 반영 여부 (프론트 배지용)
         "ai_recommendation": ai_recommendation,
         "market_report": market_report,
         "analysis_report": analysis.get("market_summary", ""),
         "analysis_metrics": metrics,
         "simulation_months": 12,
-        "monthly_projection": [
-            {
-                "month": 1,
-                "revenue": md.get("avg_revenue", 30000000),
-                "cumulative_profit": -150000000,
-            }
-        ],
+        "quarterly_projection": quarterly,
+        "scenarios": scenarios,
         "comparison": [
             {
                 "district": target_dist,
                 "score": district_score,
                 "revenue": md.get("avg_revenue", 30000000),
-                "bep": 14,
+                "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
                 "survival": float(market_report["survival_rate"]),
-                "cannibalization": 4,
+                "cannibalization": float(metrics.get("cannibalization_impact") or 4),
             }
         ],
         "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
@@ -197,9 +388,24 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                     "label": target_dist,
                     "type": "candidate",
                 }
+            ]
+            + [
+                {
+                    "id": f"vacancy_{s['id']}",
+                    "lat": s["lat"],
+                    "lng": s["lon"],
+                    "label": s["dong_name"],
+                    "type": "vacancy",
+                    "listing_count": s["listing_count"],
+                }
+                for s in vacancy_spots
+                if s.get("lat") and s.get("lon")
             ],
         },
+        "vacancy_spots": vacancy_spots,
         "financial_report": md.get("financial_metrics", {}),
+        # TCN SHAP 분석 결과 (실패 시 None)
+        "shap_result": shap_result,
     }
 
     print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")
@@ -247,6 +453,55 @@ async def analyze_location(input_data: SimulationInput):
         return {"status": "success", "data": result}
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 경량 랭킹 엔드포인트 — LLM 없이 빠른 입지 순위 조회
+# ---------------------------------------------------------------------------
+
+
+@app.post("/analyze/quick")
+async def analyze_quick(input_data: SimulationInput):
+    """
+    LLM 없는 경량 랭킹 엔드포인트 (district_ranking 에이전트만 실행).
+
+    전체 LLM 파이프라인 (~30s) 대신 DB 쿼리만으로 행정동 순위를 즉시 반환합니다.
+    rate limiting 적용 없음 (LLM 비용 없음).
+
+    응답: { district_rankings, winner_district, top_3_candidates }
+    """
+    from src.agents.nodes.district_ranking import district_ranking_node
+    from src.agents.nodes.market_analyst import db_client
+
+    normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
+
+    print(f"--- [API] /analyze/quick 요청: {input_data.target_district} / {normalized_biz} ---")
+
+    minimal_state = {
+        "business_type": normalized_biz,
+        "target_district": getattr(input_data, "target_district", "서교동"),
+        "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
+        "store_area": getattr(input_data, "store_area", 15.0),
+        "population_weight": getattr(input_data, "population_weight", True),
+    }
+
+    try:
+        if db_client.engine is None:
+            await db_client.connect()
+
+        ranking_result = await district_ranking_node(minimal_state)
+
+        return {
+            "status": "success",
+            "data": {
+                "winner_district": ranking_result["winner_district"],
+                "top_3_candidates": ranking_result["top_3_candidates"],
+                "district_rankings": ranking_result["scouting_results"],
+            },
+        }
+    except Exception as e:
+        print(f"!!! [QUICK API ERROR] !!! {str(e)}")
         return {"status": "error", "message": str(e)}
 
 
@@ -559,7 +814,10 @@ async def run_simulation(input_data: SimulationInput):
         final_state = await _run_pipeline(input_data)
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
-        print(f"!!! [SIMULATE ERROR] !!! {str(e)}")
+        import traceback
+
+        print(f"!!! [SIMULATE ERROR] !!! {type(e).__name__}: {e}")
+        traceback.print_exc()
         return {
             "request_id": request_id,
             "target_district": input_data.target_district,
@@ -569,7 +827,7 @@ async def run_simulation(input_data: SimulationInput):
             "legal_risks": [],
             "overall_legal_risk": "safe",
             "simulation_months": 12,
-            "monthly_projection": [],
+            "quarterly_projection": [],
             "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",
             "analysis_metrics": {},
             "map_data": None,

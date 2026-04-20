@@ -21,19 +21,27 @@ async def synthesis_node(state: AgentState) -> dict:
     brand_name = state.get("brand_name", "미지정 브랜드")
     business_type = state.get("business_type", "카페")
     target_district = state.get("target_district", "마포구")
+    target_price_range = state.get("target_price_range", "")
+    operating_hours = state.get("operating_hours", [])
+    initial_capital = state.get("initial_capital", 0)
+    monthly_rent_budget = state.get("monthly_rent_budget", 0)
+    store_area = state.get("store_area", 15.0)
 
-    # Redis 캐시 조회
-    cache_key = f"synthesis:{brand_name}:{target_district}:{business_type}"
+    # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
+    cache_key = f"v2:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        cached = await _redis.get(cache_key)
+        cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
             print(f"[synthesis] 캐시 히트: {cache_key}")
             analysis = dict(state.get("analysis_results", {}))
             analysis["final_report"] = cached_data["final_report"]
             analysis["market_summary"] = cached_data["market_summary"]
+            # [#3] 캐시 히트 시 legal_risks 복원 (캐시에 저장된 값 우선, 없으면 state에서 유지)
+            if "legal_risks" in cached_data:
+                analysis["legal_risks"] = cached_data["legal_risks"]
             await _redis.aclose()
             return {
                 "analysis_results": analysis,
@@ -42,6 +50,12 @@ async def synthesis_node(state: AgentState) -> dict:
             }
     except Exception as e:
         print(f"[synthesis] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        if _redis is not None:  # [#1] 조회 실패 시 연결 누수 방지
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
+        _redis = None
 
     # 1. 데이터 추출 (기존 에이전트들의 결과물)
     analysis_results = state.get("analysis_results", {})
@@ -57,38 +71,62 @@ async def synthesis_node(state: AgentState) -> dict:
     top_3_candidates = state.get("top_3_candidates", [])
     scouting_results = state.get("scouting_results", [])
 
-    # 랭킹 요약 (상위 4개 동 표시)
+    # 랭킹 요약 (상위 4개 동, 핵심 수치만)
     ranking_summary = ""
     if scouting_results:
-        top4 = scouting_results[:4]
-        ranking_summary = "\n".join(
-            f"  {r['rank']}위. {r['district']} — 종합점수 {r['score']}점 "
-            f"(매출성장 {r['sales_growth']}%, 인구성장 {r['pop_growth']}%, 임대료점수 {r['rent_score']})"
-            for r in top4
+        ranking_summary = " / ".join(
+            f"{r['rank']}위:{r['district']}({r['score']}점)"
+            for r in scouting_results[:4]
         )
 
+    # 공실 정보 추출 (scouting_results에 vacancy_rate 포함 시)
+    vacancy_summary = ""
+    if scouting_results:
+        winner_row = next((r for r in scouting_results if r["district"] == winner_district), None)
+        if winner_row and winner_row.get("vacancy_rate", 0) > 0:
+            vr = winner_row["vacancy_rate"]
+            vacancy_label = "높음(상권 주의)" if vr >= 10 else ("보통" if vr >= 5 else "낮음(상권 활발)")
+            vacancy_summary = f"공실률({winner_district}): {vr}% — {vacancy_label} (2026년 4월 기준 네이버 부동산 상가 월세 매물)"
+
     # 2. LLM 합성용 컨텍스트 구성
+    # [토큰 절감] 중간 에이전트 리포트 전문 대신 핵심 수치만 전달
+    # market_report: 앞 150자 (등급·성장률 수치가 앞부분에 집중됨)
+    # population_report: 앞 120자 (인구 수치 요약)
+    # legal: summary 60자 이내로 축약 (level이 핵심)
+    market_summary_short = market_report[:150].replace("\n", " ")
+    pop_summary_short = population_report[:120].replace("\n", " ")
+
     legal_summary_for_llm = "\n".join([
-        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} (요약: {r.get('summary', '')[:100]}...)"
+        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}"
         for r in legal_risks
     ])
 
+    # 법률 DANGER 시 대안 지역 강조
+    if overall_legal_risk == "danger":
+        legal_override = (
+            f"\n⚠️ 경고: 법률 리스크 DANGER. {target_district} 출점은 법률 위반 가능성이 높습니다. "
+            f"final_recommendation에 대안 지역({', '.join(top_3_candidates[:2]) if top_3_candidates else '다른 지역'})을 최우선 제시하세요."
+        )
+    else:
+        legal_override = ""
+
     prompt = (
-        "당신은 프랜차이즈 창업 전략 수석 컨설턴트입니다. "
-        "지금까지 수집된 상권, 인구, 법률, 입지 랭킹 데이터를 종합하여 예비 점주를 위한 최종 전략 리포트를 작성하세요.\n\n"
-        f"### [분석 대상 데이터]\n"
-        f"1. 브랜드: {brand_name} ({business_type})\n"
-        f"2. 사용자 선택 지역: {target_district}\n"
-        f"3. 마포구 입지 랭킹 (1~4위):\n{ranking_summary}\n"
-        f"   → 1순위 추천 지역: {winner_district} / 추천 후보: {', '.join(top_3_candidates) if top_3_candidates else '없음'}\n"
-        f"4. 상권 분석 요약 ({target_district}): {market_report[:400]}\n"
-        f"5. 유동인구 분석 요약 ({target_district}): {population_report[:400]}\n"
-        f"6. 법률 리스크 검토 결과 (14개 항목):\n{legal_summary_for_llm}\n\n"
-        "### 요구사항:\n"
-        "1. 1순위 추천 지역과 그 이유를 명확히 제시하고, 2~4순위 후보 지역도 간략히 설명하세요.\n"
-        "2. 모든 데이터를 종합하여 신뢰할 수 있는 창업 가부를 결정하고 전략적 제안을 하십시오.\n"
-        "3. 반드시 FinalStrategyResult 스키마에 맞춰 정형 데이터를 응답하십시오.\n"
-        f"4. 종합 법률 리스크 등급은 반드시 '{overall_legal_risk}'를 반영하십시오.\n"
+        "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
+        f"브랜드:{brand_name}({business_type}) | 선택지역:{target_district} | 법률리스크:{overall_legal_risk}\n"
+        f"입지랭킹: {ranking_summary}\n"
+        f"상권({target_district}):\n{market_report[:1500]}\n"
+        f"인구({target_district}):\n{population_report[:1500]}\n"
+        + (f"{vacancy_summary}\n" if vacancy_summary else "")
+        + f"법률(14개):\n{legal_summary_for_llm}\n"
+        f"{legal_override}\n"
+        f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
+        f"자본금={initial_capital:,}원 | 임대예산={monthly_rent_budget:,}원({store_area}평)\n\n"
+        "요구사항:\n"
+        "1. 1순위 추천 지역과 이유, 2~4순위 후보 간략 설명\n"
+        "2. 창업자 조건(객단가·시간대·자본금·임대예산) 적합성 판단\n"
+        "3. 창업 가부 결정 및 전략 제안\n"
+        "4. FinalStrategyResult 스키마로 응답\n"
+        f"5. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
     )
 
     try:
@@ -144,13 +182,18 @@ async def synthesis_node(state: AgentState) -> dict:
                     "final_report": new_analysis_results["final_report"],
                     "market_summary": new_analysis_results["market_summary"],
                     "overall_legal_risk": overall_legal_risk,
+                    "legal_risks": legal_risks,  # [#3] 캐시에 legal_risks 포함하여 히트 시 복원 가능
                 }, ensure_ascii=False),
                 ex=_CACHE_TTL,
             )
             print(f"[synthesis] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
-            await _redis.aclose()
         except Exception as e:
             print(f"[synthesis] Redis 캐시 저장 실패 (무시): {e}")
+        finally:  # [#2] 저장 성공/실패 무관하게 항상 연결 종료
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
 
     return {
         "analysis_results": new_analysis_results,

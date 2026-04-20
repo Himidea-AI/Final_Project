@@ -34,6 +34,172 @@ KAKAO_API_KEY = os.environ.get("KAKAO_API_KEY", "8348393ff2ba1edb7a8779be210a719
 # 마포구 바운딩 박스 (서,남,동,북)
 MAPO_RECT = "126.88,37.53,126.96,37.59"
 
+# 위도 1도 ≈ 111km (고정). 경도 1도 ≈ 111km × cos(lat) — 마포(~37.56°)에서 ≈ 88km.
+_LAT_M_PER_DEG = 111_000.0
+_LON_M_PER_DEG_MAPO = 88_000.0  # cos(37.56°) × 111000
+
+
+def generate_grid(
+    bbox: tuple[float, float, float, float],
+    cell_m: int = 500,
+) -> list[tuple[float, float, float, float]]:
+    """bbox(west, south, east, north)를 cell_m 미터 격자로 분할.
+
+    반환값: [(w, s, e, n), ...] 리스트. 경계가 딱 떨어지지 않으면 마지막 셀이 더 작다.
+    """
+    west, south, east, north = bbox
+    lat_step = cell_m / _LAT_M_PER_DEG
+    lon_step = cell_m / _LON_M_PER_DEG_MAPO
+
+    cells: list[tuple[float, float, float, float]] = []
+    lat = south
+    while lat < north:
+        lon = west
+        next_lat = min(lat + lat_step, north)
+        while lon < east:
+            next_lon = min(lon + lon_step, east)
+            cells.append((lon, lat, next_lon, next_lat))
+            lon = next_lon
+        lat = next_lat
+    return cells
+
+
+# category_name prefix → 프로젝트 카테고리 매핑
+# Kakao 실제 포맷: "음식점 > 카페 > ...", "음식점 > 간식 > 제과,베이커리" 등
+# BRANDS 딕셔너리 분류와 일관성 유지하도록 파생 카테고리 포괄.
+#
+# '기타' 분류 기준:
+#   category_detail 이 '음식점' / '카페' 로 시작하되 아래 매핑 어디에도
+#   매칭되지 않는 경우. 주로 다음 케이스가 해당된다:
+#     - 아시아음식 하위 (베트남·태국·인도·튀르키예 등): 한중일양 어디에도 안 맞음
+#     - 일반 뷔페 / 해산물뷔페 / 고기뷔페 (한식뷔페는 한식)
+#     - 간식 하위 중 아이스크림 / 초콜릿 (제과 범주와 구분)
+#     - 구내식당 / 푸드코트 / '음식점' 최상위만 표기된 건
+#   음식점·카페로 시작하지 않는 row(보드카페·키즈카페·주차장 등)는
+#   _doc_to_row 에서 수집 단계부터 제외되므로 DB 에 들어오지 않는다.
+_CATEGORY_PREFIX_MAP: list[tuple[str, str]] = [
+    # 한식
+    ("음식점 > 한식", "한식음식점"),
+    ("음식점 > 도시락", "한식음식점"),  # 한솥·본도시락
+    ("음식점 > 퓨전요리 > 퓨전한식", "한식음식점"),  # 본죽&비빔밥cafe
+    ("음식점 > 샤브샤브", "한식음식점"),  # 등촌샤브칼국수
+    ("음식점 > 뷔페 > 한식뷔페", "한식음식점"),
+    ("음식점 > 기사식당", "한식음식점"),
+    # 중식
+    ("음식점 > 중식", "중식음식점"),
+    ("음식점 > 퓨전요리 > 퓨전중식", "중식음식점"),
+    # 일식
+    ("음식점 > 일식", "일식음식점"),
+    ("음식점 > 퓨전요리 > 퓨전일식", "일식음식점"),
+    ("음식점 > 퓨전요리 > 아비꼬", "일식음식점"),  # 아비꼬 카레
+    # 양식
+    ("음식점 > 양식", "양식음식점"),
+    ("음식점 > 패밀리레스토랑", "양식음식점"),  # 빕스·아웃백·매드포갈릭·애슐리
+    # 치킨
+    ("음식점 > 치킨", "치킨전문점"),
+    ("음식점 > 간식 > 닭강정", "치킨전문점"),  # 가마로강정
+    # 분식
+    ("음식점 > 분식", "분식전문점"),
+    # 패스트푸드
+    ("음식점 > 패스트푸드", "패스트푸드점"),
+    ("음식점 > 간식 > 토스트", "패스트푸드점"),  # 이삭토스트
+    ("음식점 > 샐러드", "패스트푸드점"),  # 슬로우캘리·포케올데이·샐러디
+    # 제과
+    ("음식점 > 간식 > 제과", "제과점"),
+    ("음식점 > 제과", "제과점"),
+    ("음식점 > 간식 > 도넛", "제과점"),  # 던킨·크리스피크림
+    ("음식점 > 간식 > 떡,한과", "제과점"),
+    # 호프
+    ("음식점 > 술집", "호프-간이주점"),
+    # 커피
+    ("음식점 > 카페", "커피-음료"),
+    ("카페", "커피-음료"),  # fallback
+]
+
+
+def classify_category(category_name: str) -> str:
+    """카카오 category_name → 프로젝트 10개 카테고리 + '기타'.
+
+    10개 카테고리: 한식음식점 / 중식음식점 / 일식음식점 / 양식음식점 /
+    치킨전문점 / 분식전문점 / 제과점 / 패스트푸드점 / 호프-간이주점 / 커피-음료.
+
+    '기타' 는 category_name 이 비어있거나, _CATEGORY_PREFIX_MAP 에 등록된
+    어떤 prefix 와도 매칭되지 않는 음식점/카페 (예: 아시아음식, 일반뷔페,
+    아이스크림, 구내식당 등) 에 부여된다.
+    """
+    if not category_name:
+        return "기타"
+    for prefix, label in _CATEGORY_PREFIX_MAP:
+        if category_name.startswith(prefix):
+            return label
+    return "기타"
+
+
+def search_category(
+    category_group_code: str,
+    rect: tuple[float, float, float, float],
+    page: int = 1,
+) -> tuple[list[dict], bool]:
+    """카카오 카테고리 검색 API. (documents, is_end) 반환."""
+    rect_str = f"{rect[0]},{rect[1]},{rect[2]},{rect[3]}"
+    params = urllib.parse.urlencode(
+        {
+            "category_group_code": category_group_code,
+            "rect": rect_str,
+            "size": 15,
+            "page": page,
+        }
+    )
+    url = f"https://dapi.kakao.com/v2/local/search/category.json?{params}"
+    req = urllib.request.Request(url, headers={"Authorization": f"KakaoAK {KAKAO_API_KEY}"})
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return data.get("documents", []), data.get("meta", {}).get("is_end", True)
+
+
+MAX_PAGE = 3  # 카카오 API: page 1~3 (15 × 3 = 45건)
+
+
+def _split_rect(
+    rect: tuple[float, float, float, float],
+) -> list[tuple[float, float, float, float]]:
+    """bbox를 4분할 (남서/남동/북서/북동)."""
+    w, s, e, n = rect
+    mid_lon = (w + e) / 2
+    mid_lat = (s + n) / 2
+    return [
+        (w, s, mid_lon, mid_lat),
+        (mid_lon, s, e, mid_lat),
+        (w, mid_lat, mid_lon, n),
+        (mid_lon, mid_lat, e, n),
+    ]
+
+
+def collect_cell(
+    category_group_code: str,
+    rect: tuple[float, float, float, float],
+    max_depth: int = 3,
+    _depth: int = 0,
+) -> list[dict]:
+    """한 셀의 모든 문서 수집. page3까지도 is_end=False면 4분할 재귀."""
+    docs: list[dict] = []
+    reached_limit = False
+
+    for page in range(1, MAX_PAGE + 1):
+        batch, is_end = search_category(category_group_code, rect, page)
+        docs.extend(batch)
+        if is_end:
+            break
+        if page == MAX_PAGE:
+            reached_limit = True
+        time.sleep(0.05)
+
+    if reached_limit and _depth < max_depth:
+        for sub in _split_rect(rect):
+            docs.extend(collect_cell(category_group_code, sub, max_depth=max_depth, _depth=_depth + 1))
+    return docs
+
+
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
 DB_URL = os.environ.get(
     "POSTGRES_URL",
@@ -390,7 +556,7 @@ def collect_all() -> pd.DataFrame:
 
 
 def load_to_db(df: pd.DataFrame, db_url: str) -> int:
-    """DataFrame → kakao_store 테이블 적재."""
+    """DataFrame → kakao_store 테이블 적재 (TRUNCATE+INSERT, 브랜드 모드 전용)."""
     engine = create_engine(db_url)
     Base.metadata.create_all(engine, checkfirst=True)
 
@@ -408,32 +574,184 @@ def load_to_db(df: pd.DataFrame, db_url: str) -> int:
     return len(df)
 
 
-def main():
+UPSERT_SQL = text(
+    """
+    INSERT INTO kakao_store (
+        kakao_id, place_name, brand_name, category, category_detail,
+        address, road_address, dong_name, lat, lon, phone, place_url,
+        is_franchise
+    ) VALUES (
+        :kakao_id, :place_name, :brand_name, :category, :category_detail,
+        :address, :road_address, :dong_name, :lat, :lon, :phone, :place_url,
+        :is_franchise
+    )
+    ON CONFLICT (kakao_id) DO UPDATE SET
+        place_name = EXCLUDED.place_name,
+        category = EXCLUDED.category,
+        category_detail = EXCLUDED.category_detail,
+        address = EXCLUDED.address,
+        road_address = EXCLUDED.road_address,
+        dong_name = EXCLUDED.dong_name,
+        lat = EXCLUDED.lat,
+        lon = EXCLUDED.lon,
+        phone = EXCLUDED.phone,
+        place_url = EXCLUDED.place_url,
+        is_franchise = kakao_store.is_franchise OR EXCLUDED.is_franchise,
+        brand_name = COALESCE(EXCLUDED.brand_name, kakao_store.brand_name),
+        collected_at = NOW();
+    """
+)
+
+
+def upsert_stores(df: pd.DataFrame, db_url: str, chunksize: int = 500) -> int:
+    """DataFrame → kakao_store UPSERT. is_franchise 는 OR 머지, brand_name 은 COALESCE.
+
+    kakao_store_hours FK 보존 (TRUNCATE 하지 않음).
+    """
+    engine = create_engine(db_url)
+    Base.metadata.create_all(engine, checkfirst=True)
+
+    records = df.to_dict(orient="records")
+    with engine.begin() as conn:
+        for i in range(0, len(records), chunksize):
+            conn.execute(UPSERT_SQL, records[i : i + chunksize])
+    return len(records)
+
+
+# 음식점(FD6), 카페(CE7) 두 코드만 사용
+CATEGORY_GROUP_CODES = ["FD6", "CE7"]
+
+
+def _doc_to_row(doc: dict) -> dict | None:
+    """카카오 document → kakao_store row dict. 마포 외면 None."""
+    addr = doc.get("address_name", "")
+    road = doc.get("road_address_name", "")
+    if "마포구" not in addr and "마포구" not in road:
+        return None
+
+    place_name = doc["place_name"]
+    category_name = doc.get("category_name", "")
+
+    # 음식점/카페 외 카테고리(보드카페·키즈카페·주차장·택배 등) 차단
+    if not category_name.startswith(("음식점", "카페")):
+        return None
+
+    category = classify_category(category_name)
+
+    # 브랜드 매칭 시도: NORMALIZE_RULES에 걸리는 경우만 is_franchise=True
+    brand: str | None = None
+    for pat, bname in NORMALIZE_RULES:
+        if re.match(pat, place_name):
+            brand = bname
+            break
+
+    return {
+        "kakao_id": doc["id"],
+        "place_name": place_name,
+        "brand_name": brand,
+        "category": category,
+        "category_detail": category_name,
+        "address": addr,
+        "road_address": road,
+        "dong_name": extract_dong(addr),
+        "lat": float(doc["y"]),
+        "lon": float(doc["x"]),
+        "phone": doc.get("phone", ""),
+        "place_url": doc.get("place_url", ""),
+        "is_franchise": brand is not None,
+    }
+
+
+def collect_all_by_category(
+    bbox: tuple[float, float, float, float] | None = None,
+    cell_m: int = 500,
+) -> pd.DataFrame:
+    """그리드 × FD6/CE7로 전수 수집."""
+    if bbox is None:
+        parts = [float(x) for x in MAPO_RECT.split(",")]
+        bbox = (parts[0], parts[1], parts[2], parts[3])
+
+    cells = generate_grid(bbox, cell_m=cell_m)
+    print(f"그리드: {len(cells)}셀 (bbox={bbox}, cell={cell_m}m)")
+
+    seen: set[str] = set()
+    rows: list[dict] = []
+    for idx, cell in enumerate(cells, 1):
+        for code in CATEGORY_GROUP_CODES:
+            try:
+                docs = collect_cell(code, cell)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [{idx}/{len(cells)}] {code} 셀 실패 {cell}: {exc}")
+                continue
+            for doc in docs:
+                kid = doc.get("id")
+                if not kid or kid in seen:
+                    continue
+                row = _doc_to_row(doc)
+                if row is None:
+                    continue
+                seen.add(kid)
+                rows.append(row)
+        if idx % 20 == 0:
+            print(f"  진행 {idx}/{len(cells)} 셀, 누적 {len(rows)}건")
+
+    df = pd.DataFrame(rows)
+    print(f"\n총 {len(df)}건 수집 (마포 필터, dedupe 후)")
+    return df
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="카카오 로컬 API → kakao_store 적재")
+    parser.add_argument(
+        "--mode",
+        choices=["brands", "categories"],
+        default="brands",
+        help="brands=기존 150개 프랜차이즈 키워드, categories=FD6+CE7 전수",
+    )
     parser.add_argument("--db-url", default=DB_URL)
-    parser.add_argument("--csv-only", action="store_true", help="CSV만 저장, DB 적재 안 함")
+    parser.add_argument("--csv-only", action="store_true", help="CSV만 저장")
+    parser.add_argument("--cell-m", type=int, default=500, help="그리드 셀 크기(m)")
     args = parser.parse_args()
 
-    print("=== 카카오 로컬 API 마포구 점포 수집 시작 ===\n")
-    df = collect_all()
+    if args.mode == "brands":
+        print("=== 카카오 로컬 API 프랜차이즈 수집 시작 ===\n")
+        df = collect_all()
+        out_csv = OUT_CSV
+    else:
+        print("=== 카카오 로컬 API 전수 수집 (카테고리 모드) ===\n")
+        df = collect_all_by_category(cell_m=args.cell_m)
+        out_csv = OUT_CSV.with_name("kakao_store_full_mapo.csv")
 
-    # CSV 저장
-    df.to_csv(OUT_CSV, index=False, encoding="utf-8-sig")
-    print(f"\nCSV 저장: {OUT_CSV}")
+    df.to_csv(out_csv, index=False, encoding="utf-8-sig")
+    print(f"\nCSV 저장: {out_csv}")
 
-    if not args.csv_only:
+    if args.csv_only:
+        return
+
+    if args.mode == "brands":
         cnt = load_to_db(df, args.db_url)
-        print(f"DB 적재: {cnt}건 → kakao_store")
+        print(f"DB 적재 (TRUNCATE+INSERT): {cnt}건 → kakao_store")
+    else:
+        cnt = upsert_stores(df, args.db_url)
+        print(f"DB 적재 (UPSERT): {cnt}건 → kakao_store")
 
-    # 카테고리별 Top 3 출력
-    print("\n=== 카테고리별 브랜드 Top 3 ===\n")
-    for cat in BRANDS:
-        subset = df[df["category"] == cat]
-        top3 = subset["brand_name"].value_counts().head(3)
-        print(f"  {cat}:")
-        for rank, (brand, cnt) in enumerate(top3.items(), 1):
-            print(f"    {rank}. {brand} : {cnt}개")
-        print()
+    if args.mode == "brands":
+        print("\n=== 카테고리별 브랜드 Top 3 ===\n")
+        for cat in BRANDS:
+            subset = df[df["category"] == cat]
+            top3 = subset["brand_name"].value_counts().head(3)
+            print(f"  {cat}:")
+            for rank, (brand, n) in enumerate(top3.items(), 1):
+                print(f"    {rank}. {brand} : {n}개")
+            print()
+    else:
+        print("\n=== 카테고리별 점포수 / 프랜차이즈 비율 ===\n")
+        summary = (
+            df.groupby("category")
+            .agg(total=("kakao_id", "count"), franchise=("is_franchise", "sum"))
+            .sort_values("total", ascending=False)
+        )
+        print(summary.to_string())
 
 
 if __name__ == "__main__":

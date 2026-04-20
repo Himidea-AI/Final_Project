@@ -40,46 +40,46 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PRETRAIN_CONFIG: dict = {
     "db_url": DB_URL,
-    "dong_prefix": None,        # 서울 전체 데이터로 사전학습
+    "dong_prefix": None,  # 서울 전체 데이터로 사전학습
     "csv_path": None,
-    "window_size": 4,           # GRU/LSTM과 동일 조건 — receptive field=4와 일치
+    "window_size": 4,  # 4분기(1년) 입력 — receptive field=4와 일치
     "batch_size": 64,
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
-    "feature_cols": None,       # None = ALL_FEATURES (31개)
+    "feature_cols": None,  # None = ALL_FEATURES (33개)
     # 모델 하이퍼파라미터
-    "n_channels": 128,          # GRU의 hidden_size=128과 동일 조건
-    "kernel_size": 2,           # window_size=4 기준 최적 커널 크기
-    "dilations": [1, 2],        # receptive field = 1 + 1×(1+2) = 4
+    "n_channels": 128,  # GRU의 hidden_size=128과 동일 조건
+    "kernel_size": 2,  # receptive field 최적 커널 크기
+    "dilations": [1, 2],  # receptive field = 1 + 1×(1+2) = 4 (window_size=4 커버)
     "dropout": 0.2,
     # 학습 하이퍼파라미터
     "epochs": 100,
     "lr": 1e-3,
     "weight_decay": 1e-5,
-    "patience": 10,             # 조기종료: 10에폭 동안 개선 없으면 종료
+    "patience": 10,  # 조기종료: 10에폭 동안 개선 없으면 종료
     # 출력 경로 — tcn_forecast/weights/ 사용
     "save_path": str(WEIGHTS_DIR / "pretrained_tcn.pt"),
 }
 
 DEFAULT_FINETUNE_CONFIG: dict = {
     "db_url": DB_URL,
-    "dong_prefix": "11440",     # 마포구만 파인튜닝
+    "dong_prefix": "11440",  # 마포구만 파인튜닝
     "csv_path": None,
-    "window_size": 4,           # GRU/LSTM과 동일 조건
-    "batch_size": 32,           # 파인튜닝은 배치 작게 (데이터 적음)
+    "window_size": 4,  # 4분기(1년) 입력 — pretrain과 동일 조건
+    "batch_size": 32,  # 파인튜닝은 배치 작게 (데이터 적음)
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
     "feature_cols": None,
     # 모델 하이퍼파라미터
     "n_channels": 128,
     "kernel_size": 2,
-    "dilations": [1, 2],
+    "dilations": [1, 2],  # receptive field = 4 (pretrain과 동일)
     "dropout": 0.2,
     # 파인튜닝 하이퍼파라미터
     "pretrained_path": str(WEIGHTS_DIR / "pretrained_tcn.pt"),
-    "freeze_epochs": 10,        # 1단계: TCN 고정, FC만 학습
+    "freeze_epochs": 10,  # 1단계: TCN 고정, FC만 학습
     "freeze_lr": 5e-4,
-    "unfreeze_epochs": 50,      # 2단계: 전체 파라미터 낮은 학습률로 학습
+    "unfreeze_epochs": 50,  # 2단계: 전체 파라미터 낮은 학습률로 학습
     "unfreeze_lr": 1e-4,
     "weight_decay": 1e-5,
     "patience": 10,
@@ -276,7 +276,9 @@ def pretrain(config: dict | None = None) -> Path:
     train_loader, val_loader, feat_scaler, tgt_scaler, input_size = prepare_dataloaders(cfg)
     logger.info(
         "DataLoader 준비 완료: input_size=%d, train=%d, val=%d batches",
-        input_size, len(train_loader), len(val_loader),
+        input_size,
+        len(train_loader),
+        len(val_loader),
     )
 
     # TCN 모델 초기화
@@ -533,9 +535,9 @@ def main() -> None:
 
         import numpy as np
 
-        random.seed(args.seed)           # Python 표준 random 시드 고정
-        np.random.seed(args.seed)        # NumPy 시드 고정
-        torch.manual_seed(args.seed)     # PyTorch CPU 시드 고정
+        random.seed(args.seed)  # Python 표준 random 시드 고정
+        np.random.seed(args.seed)  # NumPy 시드 고정
+        torch.manual_seed(args.seed)  # PyTorch CPU 시드 고정
         torch.cuda.manual_seed_all(args.seed)  # PyTorch GPU 시드 고정 (CPU 환경에서도 무해)
 
     # CLI 인자로 config 오버라이드

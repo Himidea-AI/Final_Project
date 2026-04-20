@@ -2,12 +2,15 @@
 PostgreSQL 비동기 클라이언트 — SQLAlchemy 2.0 async engine + session
 """
 
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .models import Base
+
+_DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 
 class PostgresClient:
@@ -21,7 +24,15 @@ class PostgresClient:
     async def connect(self) -> None:
         """async engine + session factory 초기화."""
         async_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://")
-        self.engine = create_async_engine(async_url, echo=False, pool_size=5)
+        self.engine = create_async_engine(
+            async_url,
+            echo=False,
+            pool_size=5 if _DEBUG else 20,
+            max_overflow=5 if _DEBUG else 30,
+            pool_timeout=30,
+            pool_recycle=3600,
+            pool_pre_ping=True,
+        )
         self._session_factory = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
 
     async def disconnect(self) -> None:
