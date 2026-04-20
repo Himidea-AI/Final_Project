@@ -233,7 +233,8 @@ def estimate_cannibalization(
             continue
         dist_km = bin_midpoint_km[bin_label]
         # Pancras 2013: 1마일(1.609km)당 28.1% 감소. per-km decay는 선형 변환이 아닌 지수 루트.
-        # 올바른 변환: (1 - 0.281)^(1/1.609) = 0.813. 기존 선형 변환(0.281/1.609=0.1746) 오류 수정.
+        # 올바른 변환: (1 - 0.281)^(1/1.609) ≈ 0.8146 (rounded to 0.813).
+        # 기존 선형 변환(0.281/1.609=0.1746)은 오류로 수정. (테스트 허용 오차 ±0.005)
         decay = 0.813**dist_km  # Pancras 2013 decay (per-km)
         total += base_rate * decay * count
 

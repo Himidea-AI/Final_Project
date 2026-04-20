@@ -3329,15 +3329,26 @@ function SimulatorDashboard({
                       // signal 없고 recommendation도 없으면 렌더 안 함
                       if (!rec && !legalRisk && !ciSignal) return null;
 
-                      // signal: competitor_intel 우선, 없으면 overall_legal_risk 매핑
-                      let signal: 'green' | 'yellow' | 'red' = 'yellow';
+                      // signal: competitor_intel 우선, 없으면 overall_legal_risk 매핑.
+                      // 신호가 어느 쪽에서도 없으면 null → 중립 렌더 (YELLOW 강제 금지).
+                      let signal: 'green' | 'yellow' | 'red' | null = null;
                       if (ciSignal === 'green' || ciSignal === 'yellow' || ciSignal === 'red') {
                         signal = ciSignal;
                       } else if (legalRisk === 'safe') signal = 'green';
                       else if (legalRisk === 'danger') signal = 'red';
                       else if (legalRisk === 'caution') signal = 'yellow';
 
-                      const sigCfg = {
+                      const sigCfg: Record<
+                        'green' | 'yellow' | 'red',
+                        {
+                          emoji: string;
+                          label: string;
+                          bg: string;
+                          border: string;
+                          badge: string;
+                          iconBg: string;
+                        }
+                      > = {
                         green: {
                           emoji: '🟢',
                           label: 'GREEN',
@@ -3362,47 +3373,61 @@ function SimulatorDashboard({
                           badge: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
                           iconBg: 'bg-rose-500/10 ring-1 ring-rose-500/30',
                         },
-                      }[signal];
+                      };
+                      const cfg = signal ? sigCfg[signal] : null;
 
-                      // headline: rec의 첫 문장 or 첫 60자 + '…'
+                      // headline: rec의 첫 문장 or 첫 60자 + '…' (한글/영문 EOS, trailing WS 없이도 매칭)
                       let oneLiner = '';
                       if (rec) {
-                        const firstSentence = rec.match(/^(.+?[.!?。])\s/);
+                        const firstSentence = rec.match(/^(.+?[.!?。])(?:\s|$)/);
                         if (firstSentence && firstSentence[1].length <= 80) {
                           oneLiner = firstSentence[1].trim();
                         } else {
                           oneLiner = rec.length > 60 ? rec.slice(0, 60).trim() + '…' : rec;
                         }
                       }
+                      // rec이 oneLiner로 시작하면 꼬리만 표시 (중복 렌더 방지)
+                      const tailOfRec =
+                        rec && oneLiner && rec.startsWith(oneLiner)
+                          ? rec.slice(oneLiner.length).trim()
+                          : rec;
+
+                      const borderCls = cfg ? cfg.border : 'border-slate-700/50';
 
                       return (
                         <div
-                          className={`mb-2 overflow-hidden rounded-2xl border ${sigCfg.border} bg-gradient-to-br from-slate-900/95 to-slate-800/70 p-6 shadow-2xl ring-1 ring-slate-700/50`}
+                          className={`mb-2 overflow-hidden rounded-2xl border ${borderCls} bg-gradient-to-br from-slate-900/95 to-slate-800/70 p-6 shadow-2xl ring-1 ring-slate-700/50`}
                         >
                           <div className="flex items-start gap-4">
-                            <div
-                              className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${sigCfg.iconBg} text-3xl`}
-                            >
-                              {sigCfg.emoji}
-                            </div>
+                            {cfg && (
+                              <div
+                                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${cfg.iconBg} text-3xl`}
+                              >
+                                {cfg.emoji}
+                              </div>
+                            )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
                                   AI VERDICT
                                 </h3>
-                                <span
-                                  className={`rounded-full px-2 py-0.5 text-xs font-bold ${sigCfg.badge}`}
-                                >
-                                  {sigCfg.label}
-                                </span>
+                                {cfg && (
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-xs font-bold ${cfg.badge}`}
+                                  >
+                                    {cfg.label}
+                                  </span>
+                                )}
                               </div>
                               {oneLiner && (
                                 <p className="mt-2 text-base font-semibold leading-snug text-slate-100">
                                   {oneLiner}
                                 </p>
                               )}
-                              {rec && rec !== oneLiner && (
-                                <p className="mt-2 text-sm leading-relaxed text-slate-300">{rec}</p>
+                              {tailOfRec && tailOfRec !== oneLiner && (
+                                <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                                  {tailOfRec}
+                                </p>
                               )}
                             </div>
                           </div>
@@ -3643,7 +3668,12 @@ function SimulatorDashboard({
                               ) {
                                 return null;
                               }
+                              // TrendForecastOutput.forecast_direction 5값 전체 처리
                               const directionCfg: Record<string, { label: string; cls: string }> = {
+                                strong_growth: {
+                                  label: '↑↑ STRONG GROWTH',
+                                  cls: 'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-400/60',
+                                },
                                 growth: {
                                   label: '↑ GROWTH',
                                   cls: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40',
@@ -3655,6 +3685,10 @@ function SimulatorDashboard({
                                 decline: {
                                   label: '↓ DECLINE',
                                   cls: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
+                                },
+                                strong_decline: {
+                                  label: '↓↓ STRONG DECLINE',
+                                  cls: 'bg-rose-500/30 text-rose-200 ring-1 ring-rose-400/60',
                                 },
                               };
                               const dirBadge = direction
@@ -3704,7 +3738,8 @@ function SimulatorDashboard({
                                     </div>
                                   )}
 
-                                  <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
+                                  {/* directionCfg 배지가 이미 진행방향을 표시하므로 "진행 방향" tile 제거 */}
+                                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
                                     <div className="rounded-lg bg-slate-800/50 p-3">
                                       <div className="text-slate-400">업종 트렌드</div>
                                       <div className="mt-1 font-semibold text-slate-100">
@@ -3715,12 +3750,6 @@ function SimulatorDashboard({
                                       <div className="text-slate-400">상권 분류</div>
                                       <div className="mt-1 font-semibold text-slate-100">
                                         {changeIxLabel ?? 'N/A'}
-                                      </div>
-                                    </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                      <div className="text-slate-400">진행 방향</div>
-                                      <div className="mt-1 font-semibold text-slate-100">
-                                        {direction ?? 'N/A'}
                                       </div>
                                     </div>
                                   </div>

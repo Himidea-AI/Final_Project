@@ -52,7 +52,8 @@ class TestEstimateCannibalization:
     def test_cafe_one_store_at_150m(self):
         """커피 base 25% × Pancras decay(0.15km) ≈ -24.2%."""
         r = estimate_cannibalization({"0-300m": 1}, industry="cafe")
-        # 0.25 * 0.813^0.15 ≈ 0.25 * 0.9694 = 0.2424 (Pancras per-km decay 정정 후)
+        # 0.25 * 0.813^0.15 ≈ 0.25 * 0.9694 = 0.2424
+        # (per-km decay = (1-0.281)^(1/1.609) ≈ 0.8146, 반올림해 0.813 사용. 허용오차 ±0.005)
         assert r["total_impact_pct"] == pytest.approx(-0.242, abs=0.005)
 
     def test_chicken_less_impact_than_cafe(self):
