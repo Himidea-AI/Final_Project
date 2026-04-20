@@ -23,7 +23,12 @@ export function ToastHost() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed top-6 right-6 z-[60] flex flex-col gap-2">
+    <div
+      role="region"
+      aria-live="polite"
+      aria-label="알림"
+      className="pointer-events-none fixed top-6 right-6 z-[60] flex flex-col gap-2"
+    >
       {toasts.map((t) => {
         const style = VARIANT_STYLES[t.variant] ?? VARIANT_STYLES.info;
         return (
@@ -37,17 +42,19 @@ export function ToastHost() {
               {t.description && (
                 <div className="mt-0.5 text-xs text-slate-300">{t.description}</div>
               )}
-              {t.action && (
-                <button
-                  onClick={() => {
-                    t.action!.onClick();
-                    dismiss(t.id);
-                  }}
-                  className="mt-2 text-xs font-medium text-cyan-300 hover:text-cyan-200"
-                >
-                  {t.action.label} →
-                </button>
-              )}
+              {t.action
+                ? ((action) => (
+                    <button
+                      onClick={() => {
+                        action.onClick();
+                        dismiss(t.id);
+                      }}
+                      className="mt-2 text-xs font-medium text-cyan-300 hover:text-cyan-200"
+                    >
+                      {action.label} →
+                    </button>
+                  ))(t.action)
+                : null}
             </div>
             <button
               onClick={() => dismiss(t.id)}
