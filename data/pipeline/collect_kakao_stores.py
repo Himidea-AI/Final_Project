@@ -111,6 +111,49 @@ def search_category(
     return data.get("documents", []), data.get("meta", {}).get("is_end", True)
 
 
+MAX_PAGE = 3  # 카카오 API: page 1~3 (15 × 3 = 45건)
+
+
+def _split_rect(
+    rect: tuple[float, float, float, float],
+) -> list[tuple[float, float, float, float]]:
+    """bbox를 4분할 (남서/남동/북서/북동)."""
+    w, s, e, n = rect
+    mid_lon = (w + e) / 2
+    mid_lat = (s + n) / 2
+    return [
+        (w, s, mid_lon, mid_lat),
+        (mid_lon, s, e, mid_lat),
+        (w, mid_lat, mid_lon, n),
+        (mid_lon, mid_lat, e, n),
+    ]
+
+
+def collect_cell(
+    category_group_code: str,
+    rect: tuple[float, float, float, float],
+    max_depth: int = 3,
+    _depth: int = 0,
+) -> list[dict]:
+    """한 셀의 모든 문서 수집. page3까지도 is_end=False면 4분할 재귀."""
+    docs: list[dict] = []
+    reached_limit = False
+
+    for page in range(1, MAX_PAGE + 1):
+        batch, is_end = search_category(category_group_code, rect, page)
+        docs.extend(batch)
+        if is_end:
+            break
+        if page == MAX_PAGE:
+            reached_limit = True
+        time.sleep(0.05)
+
+    if reached_limit and _depth < max_depth:
+        for sub in _split_rect(rect):
+            docs.extend(collect_cell(category_group_code, sub, max_depth=max_depth, _depth=_depth + 1))
+    return docs
+
+
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
 DB_URL = os.environ.get(
     "POSTGRES_URL",

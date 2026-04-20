@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 from collect_kakao_stores import (  # noqa: E402
     classify_category,
+    collect_cell,
     generate_grid,
     search_category,
 )
@@ -123,3 +124,70 @@ def test_search_category_returns_documents_and_is_end(mock_urlopen):
     docs, is_end = search_category("CE7", (126.88, 37.53, 126.89, 37.54))
     assert docs == [{"id": "1", "place_name": "a"}]
     assert is_end is False
+
+
+def _fake_doc(i: int) -> dict:
+    return {
+        "id": str(i),
+        "place_name": f"가게{i}",
+        "category_name": "음식점 > 한식 > 국밥",
+        "address_name": "서울 마포구 공덕동 123",
+        "road_address_name": "서울 마포구 공덕로 1",
+        "x": "126.95",
+        "y": "37.55",
+        "phone": "02-0000-0000",
+        "place_url": "http://kakao.example/1",
+    }
+
+
+@patch("collect_kakao_stores.search_category")
+def test_collect_cell_single_page_stops_when_is_end(mock_search):
+    mock_search.return_value = ([_fake_doc(1), _fake_doc(2)], True)
+    result = collect_cell("FD6", (126.88, 37.53, 126.89, 37.54))
+    assert len(result) == 2
+    assert mock_search.call_count == 1
+
+
+@patch("collect_kakao_stores.search_category")
+def test_collect_cell_walks_pages_until_is_end(mock_search):
+    # page1: 15건 !is_end, page2: 15건 !is_end, page3: 10건 is_end
+    mock_search.side_effect = [
+        ([_fake_doc(i) for i in range(15)], False),
+        ([_fake_doc(i) for i in range(15, 30)], False),
+        ([_fake_doc(i) for i in range(30, 40)], True),
+    ]
+    result = collect_cell("FD6", (126.88, 37.53, 126.89, 37.54))
+    assert len(result) == 40
+    assert mock_search.call_count == 3
+
+
+@patch("collect_kakao_stores.search_category")
+def test_collect_cell_subdivides_when_page3_not_is_end(mock_search):
+    # 부모 셀 page1~3 모두 15건 && is_end=False → 4분할 재귀.
+    # 자식 셀들은 모두 1건씩, is_end=True.
+    parent_pages = [
+        ([_fake_doc(i) for i in range(15)], False),
+        ([_fake_doc(i) for i in range(15, 30)], False),
+        ([_fake_doc(i) for i in range(30, 45)], False),
+    ]
+    child_cells = [([_fake_doc(100 + i)], True) for i in range(4)]
+    mock_search.side_effect = parent_pages + child_cells
+
+    result = collect_cell("FD6", (126.88, 37.53, 126.89, 37.54), max_depth=1)
+    # 부모 45 + 자식 4 = 49
+    assert len(result) == 49
+    # 3 (parent pages) + 4 (children) = 7 calls
+    assert mock_search.call_count == 7
+
+
+@patch("collect_kakao_stores.search_category")
+def test_collect_cell_honors_max_depth(mock_search):
+    # max_depth=0 에서 page3까지 차면 더 안 쪼갠다
+    mock_search.side_effect = [
+        ([_fake_doc(i) for i in range(15)], False),
+        ([_fake_doc(i) for i in range(15, 30)], False),
+        ([_fake_doc(i) for i in range(30, 45)], False),
+    ]
+    result = collect_cell("FD6", (126.88, 37.53, 126.89, 37.54), max_depth=0)
+    assert len(result) == 45
+    assert mock_search.call_count == 3
