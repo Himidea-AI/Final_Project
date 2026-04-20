@@ -35,12 +35,28 @@ const INITIAL_STATE = {
   _progressTimer: null,
 };
 
+// Monotonic timestamp generator — guarantees uniqueness even when
+// startSimulation is invoked twice within the same millisecond.
+// Used as the stale-response guard key; see the two `startedAt !== get().startedAt`
+// checks inside startSimulation.
+let _lastStartedAt = 0;
+function nextStartedAt(): number {
+  const now = Date.now();
+  _lastStartedAt = now > _lastStartedAt ? now : _lastStartedAt + 1;
+  return _lastStartedAt;
+}
+
 export const useSimulationStore = create<SimulationState>((set, get) => ({
   ...INITIAL_STATE,
 
   startSimulation: async (params) => {
+    // Replacement policy: if running, cancel first.
+    const { _abortController: prevAbort, _progressTimer: prevTimer } = get();
+    prevAbort?.abort();
+    if (prevTimer) clearInterval(prevTimer);
+
     const abortController = new AbortController();
-    const startedAt = Date.now();
+    const startedAt = nextStartedAt();
 
     set({
       status: 'running',
@@ -51,6 +67,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       params,
       startedAt,
       _abortController: abortController,
+      _progressTimer: null,
     });
 
     try {

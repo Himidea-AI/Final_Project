@@ -114,3 +114,46 @@ describe('simulationStore — cancelSimulation', () => {
     expect(capturedSignal?.aborted).toBe(true);
   });
 });
+
+describe('simulationStore — 교체 실행', () => {
+  beforeEach(() => {
+    useSimulationStore.getState().reset();
+    vi.restoreAllMocks();
+  });
+
+  it('실행 중 startSimulation 재호출 시 이전 AbortController가 abort된다', async () => {
+    const signals: AbortSignal[] = [];
+    vi.spyOn(api, 'runSimulation').mockImplementation(async (_p, signal) => {
+      signals.push(signal!);
+      return new Promise<SimulationOutput>(() => {});
+    });
+
+    useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    useSimulationStore.getState().startSimulation({ ...MOCK_INPUT, brand_name: 'Other' });
+
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+    expect(useSimulationStore.getState().params?.brand_name).toBe('Other');
+    expect(useSimulationStore.getState().progress).toBe(0);
+  });
+
+  it('교체 후 이전 fetch가 뒤늦게 resolve되어도 무시된다 (stale guard)', async () => {
+    let resolveFirst!: (v: SimulationOutput) => void;
+    const firstPromise = new Promise<SimulationOutput>((res) => {
+      resolveFirst = res;
+    });
+    vi.spyOn(api, 'runSimulation')
+      .mockImplementationOnce(() => firstPromise)
+      .mockResolvedValueOnce(MOCK_OUTPUT);
+
+    useSimulationStore.getState().startSimulation(MOCK_INPUT);
+    await useSimulationStore.getState().startSimulation({ ...MOCK_INPUT, brand_name: 'B' });
+
+    expect(useSimulationStore.getState().status).toBe('done');
+
+    resolveFirst({ ...MOCK_OUTPUT, request_id: 'STALE' } as SimulationOutput);
+    await Promise.resolve();
+
+    expect(useSimulationStore.getState().result?.request_id).toBe('r1');
+  });
+});
