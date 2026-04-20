@@ -36,8 +36,39 @@ const INITIAL_STATE = {
 export const useSimulationStore = create<SimulationState>((set, get) => ({
   ...INITIAL_STATE,
 
-  startSimulation: async () => {
-    // Implemented in Plan Task 4
+  startSimulation: async (params) => {
+    const abortController = new AbortController();
+    const startedAt = Date.now();
+
+    set({
+      status: 'running',
+      progress: 0,
+      stage: 'INITIALIZING AI ENGINE',
+      result: null,
+      error: null,
+      params,
+      startedAt,
+      _abortController: abortController,
+    });
+
+    try {
+      const { runSimulation } = await import('../api/client');
+      const result = await runSimulation(params, abortController.signal);
+
+      // Stale response guard — if a newer start has replaced us, abandon.
+      if (get().startedAt !== startedAt) return;
+
+      set({
+        status: 'done',
+        progress: 100,
+        stage: 'COMPLETE',
+        result,
+        _abortController: null,
+      });
+    } catch (err: unknown) {
+      // Error handling added in Plan Task 5
+      throw err;
+    }
   },
   cancelSimulation: () => {
     // Implemented in Plan Task 6
