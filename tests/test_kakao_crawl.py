@@ -49,6 +49,9 @@ def test_generate_grid_mapo_size():
 def test_classify_korean():
     assert classify_category("음식점 > 한식 > 국밥") == "한식음식점"
     assert classify_category("음식점 > 한식") == "한식음식점"
+    # 도시락은 BRANDS 정의(한솥·본도시락)와 일치시켜 한식으로
+    assert classify_category("음식점 > 도시락 > 한솥도시락") == "한식음식점"
+    assert classify_category("음식점 > 도시락") == "한식음식점"
 
 
 def test_classify_chinese():
@@ -97,8 +100,8 @@ def test_classify_pub():
 
 
 def test_classify_etc():
-    assert classify_category("음식점 > 도시락") == "기타"
     assert classify_category("음식점 > 간식 > 토스트") == "기타"
+    assert classify_category("음식점 > 아시아음식 > 베트남음식") == "기타"
     assert classify_category("") == "기타"
     assert classify_category("음식점") == "기타"
 
