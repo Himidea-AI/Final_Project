@@ -9,6 +9,7 @@ from src.config.settings import settings
 
 _CACHE_TTL = 86400  # 24시간
 
+
 async def synthesis_node(state: AgentState) -> dict:
     """
     최종 합성 에이전트 (Synthesis Agent):
@@ -74,10 +75,7 @@ async def synthesis_node(state: AgentState) -> dict:
     # 랭킹 요약 (상위 4개 동, 핵심 수치만)
     ranking_summary = ""
     if scouting_results:
-        ranking_summary = " / ".join(
-            f"{r['rank']}위:{r['district']}({r['score']}점)"
-            for r in scouting_results[:4]
-        )
+        ranking_summary = " / ".join(f"{r['rank']}위:{r['district']}({r['score']}점)" for r in scouting_results[:4])
 
     # 공실 정보 추출 (scouting_results에 vacancy_rate 포함 시)
     vacancy_summary = ""
@@ -86,7 +84,9 @@ async def synthesis_node(state: AgentState) -> dict:
         if winner_row and winner_row.get("vacancy_rate", 0) > 0:
             vr = winner_row["vacancy_rate"]
             vacancy_label = "높음(상권 주의)" if vr >= 10 else ("보통" if vr >= 5 else "낮음(상권 활발)")
-            vacancy_summary = f"공실률({winner_district}): {vr}% — {vacancy_label} (2026년 4월 기준 네이버 부동산 상가 월세 매물)"
+            vacancy_summary = (
+                f"공실률({winner_district}): {vr}% — {vacancy_label} (2026년 4월 기준 네이버 부동산 상가 월세 매물)"
+            )
 
     # 2. LLM 합성용 컨텍스트 구성
     # [토큰 절감] 중간 에이전트 리포트 전문 대신 핵심 수치만 전달
@@ -96,10 +96,9 @@ async def synthesis_node(state: AgentState) -> dict:
     market_summary_short = market_report[:150].replace("\n", " ")
     pop_summary_short = population_report[:120].replace("\n", " ")
 
-    legal_summary_for_llm = "\n".join([
-        f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}"
-        for r in legal_risks
-    ])
+    legal_summary_for_llm = "\n".join(
+        [f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}" for r in legal_risks]
+    )
 
     # 법률 DANGER 시 대안 지역 강조
     if overall_legal_risk == "danger":
@@ -110,6 +109,19 @@ async def synthesis_node(state: AgentState) -> dict:
     else:
         legal_override = ""
 
+    # competitor_intel 요약 (경쟁/카니발/차별화) — legal_risks 와 독립적으로 병합
+    competitor_intel = state.get("competitor_intel_result", {}) or {}
+    if competitor_intel and "error" not in competitor_intel:
+        ci_signal = competitor_intel.get("market_entry_signal", "N/A")
+        ci_narrative = (competitor_intel.get("narrative") or "")[:220].replace("\n", " ")
+        ci_cannibal = competitor_intel.get("cannibalization", {}).get("estimated_revenue_impact_pct", 0)
+        ci_saturation = competitor_intel.get("competition_500m", {}).get("saturation_level", "N/A")
+        competitor_block = (
+            f"\n경쟁인텔({ci_signal}): 500m 포화={ci_saturation}, 카니발={ci_cannibal * 100:.1f}%. {ci_narrative}"
+        )
+    else:
+        competitor_block = ""
+
     prompt = (
         "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
         f"브랜드:{brand_name}({business_type}) | 선택지역:{target_district} | 법률리스크:{overall_legal_risk}\n"
@@ -117,6 +129,7 @@ async def synthesis_node(state: AgentState) -> dict:
         f"상권({target_district}):\n{market_report[:1500]}\n"
         f"인구({target_district}):\n{population_report[:1500]}\n"
         + (f"{vacancy_summary}\n" if vacancy_summary else "")
+        + (f"{competitor_block}\n" if competitor_block else "")
         + f"법률(14개):\n{legal_summary_for_llm}\n"
         f"{legal_override}\n"
         f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
@@ -124,23 +137,26 @@ async def synthesis_node(state: AgentState) -> dict:
         "요구사항:\n"
         "1. 1순위 추천 지역과 이유, 2~4순위 후보 간략 설명\n"
         "2. 창업자 조건(객단가·시간대·자본금·임대예산) 적합성 판단\n"
-        "3. 창업 가부 결정 및 전략 제안\n"
-        "4. FinalStrategyResult 스키마로 응답\n"
-        f"5. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
+        "3. 경쟁인텔(market_entry_signal·카니발)을 final_recommendation 에 반영\n"
+        "4. 창업 가부 결정 및 전략 제안\n"
+        "5. FinalStrategyResult 스키마로 응답\n"
+        f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
     )
 
     try:
         # LLM 호출 (Structured Output)
         llm = get_smart_llm().with_structured_output(FinalStrategyResult)
-        
+
         # API 할당량 관리를 위한 미세 대기
         await asyncio.sleep(1.5)
-        
-        final_strategy: FinalStrategyResult = await llm.ainvoke([
-            SystemMessage(content=prompt),
-            HumanMessage(content=f"{brand_name}의 {target_district} 출점 최종 전략 보고서를 완성해줘.")
-        ])
-        
+
+        final_strategy: FinalStrategyResult = await llm.ainvoke(
+            [
+                SystemMessage(content=prompt),
+                HumanMessage(content=f"{brand_name}의 {target_district} 출점 최종 전략 보고서를 완성해줘."),
+            ]
+        )
+
         print(f"--- [SYNTHESIS] 최종 보고서 생성 완료 (등급: {final_strategy.overall_legal_risk}) ---")
 
     except Exception as e:
@@ -153,16 +169,14 @@ async def synthesis_node(state: AgentState) -> dict:
             overall_legal_risk=overall_legal_risk,
             profit_simulation={"monthly_revenue": 0, "net_profit": 0, "margin_rate": 0.0},
             competitor_analysis={"count": 0, "density": "NORMAL"},
-            final_recommendation=f"분석 중 기술적 오류가 발생했습니다: {str(e)}"
+            final_recommendation=f"분석 중 기술적 오류가 발생했습니다: {str(e)}",
         )
 
     # 3. 데이터 업데이트 (기존 legal_risks를 100% 보존하며 final_report 추가)
     new_analysis_results = dict(analysis_results)
     new_analysis_results["final_report"] = final_strategy.model_dump()
     # main.py가 analysis_report로 읽는 키
-    new_analysis_results["market_summary"] = (
-        final_strategy.summary + "\n\n" + final_strategy.final_recommendation
-    )
+    new_analysis_results["market_summary"] = final_strategy.summary + "\n\n" + final_strategy.final_recommendation
 
     # 랭킹 결과 보존 (main.py → 프론트엔드 전달용)
     new_analysis_results["district_rankings"] = scouting_results
@@ -178,12 +192,15 @@ async def synthesis_node(state: AgentState) -> dict:
         try:
             await _redis.set(
                 cache_key,
-                json.dumps({
-                    "final_report": new_analysis_results["final_report"],
-                    "market_summary": new_analysis_results["market_summary"],
-                    "overall_legal_risk": overall_legal_risk,
-                    "legal_risks": legal_risks,  # [#3] 캐시에 legal_risks 포함하여 히트 시 복원 가능
-                }, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "final_report": new_analysis_results["final_report"],
+                        "market_summary": new_analysis_results["market_summary"],
+                        "overall_legal_risk": overall_legal_risk,
+                        "legal_risks": legal_risks,  # [#3] 캐시에 legal_risks 포함하여 히트 시 복원 가능
+                    },
+                    ensure_ascii=False,
+                ),
                 ex=_CACHE_TTL,
             )
             print(f"[synthesis] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
@@ -198,5 +215,6 @@ async def synthesis_node(state: AgentState) -> dict:
     return {
         "analysis_results": new_analysis_results,
         "overall_legal_risk": overall_legal_risk,
-        "current_agent": "synthesis"
+        "competitor_intel_result": competitor_intel,  # state 에서 파이프라인 끝까지 유지
+        "current_agent": "synthesis",
     }

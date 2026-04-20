@@ -8,6 +8,7 @@ from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.legal import legal_node
 from src.agents.nodes.synthesis import synthesis_node
 from src.agents.nodes.district_ranking import district_ranking_node, _clear_shared_population_cache
+from src.agents.nodes.competitor_intel import competitor_intel_node
 
 # 전체 파이프라인 토큰 예산 (입력+출력 합산 추정치 기준)
 # gpt-4.1-mini: 입력 $0.15/1M, 출력 $0.60/1M
@@ -38,25 +39,26 @@ def _count_result_tokens(result: dict) -> int:
 
 async def parallel_analysis_node(state: AgentState) -> dict:
     """
-    4개 에이전트 병렬 실행
+    5개 에이전트 병렬 실행
 
-    market_analyst / population_analyst / legal_node / district_ranking 을
+    market_analyst / population_analyst / legal_node / district_ranking / competitor_intel 을
     asyncio.gather로 동시에 실행하고 결과를 합산합니다.
 
-    - market / population / legal: 사용자 선택 행정동 심층 분석 (LLM)
+    - market / population / legal / competitor_intel: 사용자 선택 행정동 심층 분석 (LLM)
     - district_ranking: 마포구 16개 전체 행정동 정량 스코어링 (LLM 없음)
     """
     t_start = time.perf_counter()
-    print("--- [PARALLEL ANALYSIS] 4개 에이전트 병렬 실행 시작 ---")
+    print("--- [PARALLEL ANALYSIS] 5개 에이전트 병렬 실행 시작 ---")
 
     # 동일 dong에 대한 get_population_trends 중복 쿼리 방지용 공유 Task 캐시 초기화
     _clear_shared_population_cache()
 
-    market_result, population_result, legal_result, ranking_result = await asyncio.gather(
+    market_result, population_result, legal_result, ranking_result, competitor_result = await asyncio.gather(
         market_analyst_node(state),
         population_analyst_node(state),
         legal_node(state),
         district_ranking_node(state),
+        competitor_intel_node(state),
     )
 
     # analysis_results 병합
@@ -98,6 +100,7 @@ async def parallel_analysis_node(state: AgentState) -> dict:
         "top_3_candidates": ranking_result.get("top_3_candidates", []),
         "vacancy_applied": ranking_result.get("vacancy_applied", False),
         "vacancy_spots": ranking_result.get("vacancy_spots", []),
+        "competitor_intel_result": competitor_result.get("competitor_intel_result", {}),
         "current_agent": "parallel_analysis",
     }
 
