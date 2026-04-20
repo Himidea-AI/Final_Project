@@ -63,8 +63,9 @@ async def population_analyst_node(state: AgentState) -> dict:
         analysis_results["population_report"] = f"{target_district} 인구 데이터 조회 실패: {pop_data['error']}"
         return {"analysis_results": analysis_results, "current_agent": "population_analyst"}
 
-    # 성별/연령 우세 고객층 도출
+    # 성별/연령/피크시간 도출 (실측 매출 건수 기반)
     demo_summary = ""
+    real_peak_time = None
     if "error" not in demo_data:
         demographics = {
             "남성": demo_data.get("male", 0) or 0,
@@ -75,11 +76,13 @@ async def population_analyst_node(state: AgentState) -> dict:
         }
         top_gender = "남성" if demographics["남성"] >= demographics["여성"] else "여성"
         age_groups = {k: v for k, v in demographics.items() if k.endswith("대")}
-        top_age = max(age_groups, key=age_groups.get) if age_groups else "20대"
+        top_age = max(age_groups, key=age_groups.get) if any(v > 0 for v in age_groups.values()) else "20대"
+        real_peak_time = demo_data.get("peak_time")
         demo_summary = (
             f"- 주요 성별: {top_gender} (남성 {demographics['남성']:,} / 여성 {demographics['여성']:,})\n"
             f"- 연령대별: 20대 {demographics['20대']:,} / 30대 {demographics['30대']:,} / 40대 {demographics['40대']:,}\n"
-            f"- 최다 고객층: {top_age} {top_gender}"
+            f"- 최다 고객층: {top_age} {top_gender}\n"
+            + (f"- 피크 시간대: {real_peak_time}" if real_peak_time else "")
         )
 
     # 2. API 할당량 관리 (2초 대기)
@@ -98,8 +101,8 @@ async def population_analyst_node(state: AgentState) -> dict:
         + (f"\n### 인구통계학적 특성 (실측 데이터):\n{demo_summary}\n" if demo_summary else "")
         + "\nreport 필드: 유동인구의 양적/질적 변화를 분석하고 창업 시 고려할 인구학적 통계치를 포함하세요.\n"
         "main_target_age 필드: 위 실측 인구통계 데이터를 반드시 반영하여 '20대 여성', '30대 남성', '20~30대 여성' 등 구체적인 성별+연령 조합으로 작성하세요.\n"
-        "peak_time 필드: 업종과 지역 특성을 고려한 피크 시간대를 '18:00~21:00' 형식으로 작성하세요.\n"
-        "어조: 정교하고 분석적인 톤을 유지하세요."
+        + (f"peak_time 필드: 반드시 '{real_peak_time}'로 작성하세요 (실측 매출 건수 기준 피크 시간대).\n" if real_peak_time else "peak_time 필드: 업종과 지역 특성을 고려한 피크 시간대를 '18:00~21:00' 형식으로 작성하세요.\n")
+        + "어조: 정교하고 분석적인 톤을 유지하세요."
     )
 
     try:
