@@ -91,15 +91,25 @@ def _build_llm(model: str, max_tokens: int | None = None):
 
 @retry_on_429
 def get_fast_llm():
-    """중간 에이전트용 (market_analyst, population_analyst) — max_tokens=500"""
+    """Market Analyst, Population Analyst용 경량 모델 (Structured Output — max_tokens 미설정)
+    모델: FAST_LLM_MODEL 환경변수 우선, 미설정 시 gpt-4.1-mini / gemini-2.0-flash
+    """
     if not hasattr(get_fast_llm, "_instance"):
-        get_fast_llm._instance = _build_llm("gpt-4.1-mini", max_tokens=500)
+        provider = os.getenv("LLM_PROVIDER", "openai").lower()
+        default = "gpt-4.1-mini" if provider == "openai" else "gemini-2.0-flash"
+        model = os.getenv("FAST_LLM_MODEL", default)
+        get_fast_llm._instance = _build_llm(model)
     return get_fast_llm._instance
 
 
 @retry_on_429
 def get_smart_llm():
-    """최종 리포트용 (synthesis) — max_tokens=1200"""
+    """Synthesis 전용 고품질 모델 — 최종 리포트 합성에만 사용
+    모델: SMART_LLM_MODEL 환경변수 우선, 미설정 시 gpt-4.1 / gemini-2.5-flash
+    """
     if not hasattr(get_smart_llm, "_instance"):
-        get_smart_llm._instance = _build_llm("gpt-4.1-mini", max_tokens=1200)
+        provider = os.getenv("LLM_PROVIDER", "openai").lower()
+        default = "gpt-4.1-mini" if provider == "openai" else "gemini-2.0-flash"
+        model = os.getenv("SMART_LLM_MODEL", default)
+        get_smart_llm._instance = _build_llm(model)
     return get_smart_llm._instance
