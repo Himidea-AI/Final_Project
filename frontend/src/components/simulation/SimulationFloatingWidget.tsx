@@ -38,7 +38,14 @@ export function SimulationFloatingWidget() {
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-slate-700">
+        <div
+          className="h-1.5 overflow-hidden rounded-full bg-slate-700"
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="시뮬레이션 진행률"
+        >
           <div
             className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
             style={{ width: `${progress}%` }}
