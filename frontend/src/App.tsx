@@ -211,6 +211,8 @@ import {
   BarChartBig,
   Map as MapIcon,
   LogIn,
+  Lightbulb,
+  ClipboardList,
 } from 'lucide-react';
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
@@ -3330,7 +3332,7 @@ function SimulatorDashboard({
                       if (!rec && !legalRisk && !ciSignal) return null;
 
                       // signal: competitor_intel 우선, 없으면 overall_legal_risk 매핑.
-                      // 신호가 어느 쪽에서도 없으면 null → 중립 렌더 (YELLOW 강제 금지).
+                      // 신호가 어느 쪽에서도 없으면 null → 중립 렌더.
                       let signal: 'green' | 'yellow' | 'red' | null = null;
                       if (ciSignal === 'green' || ciSignal === 'yellow' || ciSignal === 'red') {
                         signal = ciSignal;
@@ -3341,34 +3343,30 @@ function SimulatorDashboard({
                       const sigCfg: Record<
                         'green' | 'yellow' | 'red',
                         {
-                          emoji: string;
+                          icon: JSX.Element;
                           label: string;
-                          bg: string;
                           border: string;
                           badge: string;
                           iconBg: string;
                         }
                       > = {
                         green: {
-                          emoji: '🟢',
+                          icon: <CheckCircle2 className="h-6 w-6 text-emerald-400" />,
                           label: 'GREEN',
-                          bg: 'bg-emerald-500/10',
                           border: 'border-emerald-500/30',
                           badge: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40',
                           iconBg: 'bg-emerald-500/10 ring-1 ring-emerald-500/30',
                         },
                         yellow: {
-                          emoji: '🟡',
+                          icon: <AlertTriangle className="h-6 w-6 text-amber-400" />,
                           label: 'YELLOW',
-                          bg: 'bg-amber-500/10',
                           border: 'border-amber-500/30',
                           badge: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
                           iconBg: 'bg-amber-500/10 ring-1 ring-amber-500/30',
                         },
                         red: {
-                          emoji: '🔴',
+                          icon: <ShieldAlert className="h-6 w-6 text-rose-400" />,
                           label: 'RED',
-                          bg: 'bg-rose-500/10',
                           border: 'border-rose-500/30',
                           badge: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
                           iconBg: 'bg-rose-500/10 ring-1 ring-rose-500/30',
@@ -3376,9 +3374,10 @@ function SimulatorDashboard({
                       };
                       const cfg = signal ? sigCfg[signal] : null;
 
-                      // headline: rec의 첫 문장 or 첫 60자 + '…' (한글/영문 EOS, trailing WS 없이도 매칭)
+                      // headline: rec의 첫 문장 or 첫 60자 + '…'
                       let oneLiner = '';
                       if (rec) {
+                        // 한글/영문 문장 끝 문자 매칭 (trailing whitespace 없이도 OK)
                         const firstSentence = rec.match(/^(.+?[.!?。])(?:\s|$)/);
                         if (firstSentence && firstSentence[1].length <= 80) {
                           oneLiner = firstSentence[1].trim();
@@ -3392,23 +3391,23 @@ function SimulatorDashboard({
                           ? rec.slice(oneLiner.length).trim()
                           : rec;
 
-                      const borderCls = cfg ? cfg.border : 'border-slate-700/50';
+                      const borderCls = cfg ? cfg.border : 'border-[#3a3633]';
 
                       return (
                         <div
-                          className={`mb-2 overflow-hidden rounded-2xl border ${borderCls} bg-gradient-to-br from-slate-900/95 to-slate-800/70 p-6 shadow-2xl ring-1 ring-slate-700/50`}
+                          className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-[#2c2825] p-5 shadow-xl`}
                         >
                           <div className="flex items-start gap-4">
                             {cfg && (
                               <div
-                                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${cfg.iconBg} text-3xl`}
+                                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${cfg.iconBg}`}
                               >
-                                {cfg.emoji}
+                                {cfg.icon}
                               </div>
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
+                                <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
                                   AI VERDICT
                                 </h3>
                                 {cfg && (
@@ -3420,12 +3419,12 @@ function SimulatorDashboard({
                                 )}
                               </div>
                               {oneLiner && (
-                                <p className="mt-2 text-base font-semibold leading-snug text-slate-100">
+                                <p className="mt-2 text-base font-semibold leading-snug text-[#e2e8f0]">
                                   {oneLiner}
                                 </p>
                               )}
                               {tailOfRec && tailOfRec !== oneLiner && (
-                                <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                                <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
                                   {tailOfRec}
                                 </p>
                               )}
@@ -3668,7 +3667,6 @@ function SimulatorDashboard({
                               ) {
                                 return null;
                               }
-                              // TrendForecastOutput.forecast_direction 5값 전체 처리
                               const directionCfg: Record<string, { label: string; cls: string }> = {
                                 strong_growth: {
                                   label: '↑↑ STRONG GROWTH',
@@ -3706,13 +3704,16 @@ function SimulatorDashboard({
                                       ? '→ 보합'
                                       : 'N/A';
                               return (
-                                <div className="mt-6 rounded-xl bg-slate-900/95 p-5 shadow-2xl ring-1 ring-slate-700/50">
+                                <div className="mt-6 rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
                                   <div className="flex items-center justify-between">
-                                    <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
-                                      📈 향후 12개월 전망
-                                    </h3>
+                                    <div className="flex items-center gap-2">
+                                      <TrendingUp className="h-4 w-4 text-[#818cf8]" />
+                                      <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        향후 12개월 전망
+                                      </h3>
+                                    </div>
                                     {confidence && (
-                                      <span className="text-xs text-slate-400">
+                                      <span className="text-xs text-[#9ca3af]">
                                         신뢰도: {confidence}
                                       </span>
                                     )}
@@ -3722,10 +3723,10 @@ function SimulatorDashboard({
                                     <div className="mt-3 flex items-baseline gap-3 flex-wrap">
                                       {score != null && (
                                         <>
-                                          <span className="text-4xl font-bold text-slate-100">
+                                          <span className="text-4xl font-bold text-[#e2e8f0]">
                                             {Math.round(score)}
                                           </span>
-                                          <span className="text-sm text-slate-400">/100</span>
+                                          <span className="text-sm text-[#9ca3af]">/100</span>
                                         </>
                                       )}
                                       {dirBadge && (
@@ -3738,24 +3739,23 @@ function SimulatorDashboard({
                                     </div>
                                   )}
 
-                                  {/* directionCfg 배지가 이미 진행방향을 표시하므로 "진행 방향" tile 제거 */}
                                   <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                      <div className="text-slate-400">업종 트렌드</div>
-                                      <div className="mt-1 font-semibold text-slate-100">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-[#9ca3af]">업종 트렌드</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
                                         {industryDirLabel}
                                       </div>
                                     </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                      <div className="text-slate-400">상권 분류</div>
-                                      <div className="mt-1 font-semibold text-slate-100">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-[#9ca3af]">상권 분류</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
                                         {changeIxLabel ?? 'N/A'}
                                       </div>
                                     </div>
                                   </div>
 
                                   {narrative && (
-                                    <p className="mt-4 text-sm leading-relaxed text-slate-300">
+                                    <p className="mt-4 text-sm leading-relaxed text-[#e2e8f0]">
                                       {narrative}
                                     </p>
                                   )}
@@ -3808,11 +3808,14 @@ function SimulatorDashboard({
                                   ? (cann.estimated_revenue_impact_pct * 100).toFixed(1)
                                   : null;
                               return (
-                                <div className="rounded-xl bg-slate-900/95 p-5 shadow-2xl ring-1 ring-slate-700/50">
+                                <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
                                   <div className="flex items-center justify-between flex-wrap gap-2">
-                                    <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
-                                      🎯 경쟁 + 잠식 분석
-                                    </h3>
+                                    <div className="flex items-center gap-2">
+                                      <Crosshair className="h-4 w-4 text-[#818cf8]" />
+                                      <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        경쟁 + 잠식 분석
+                                      </h3>
+                                    </div>
                                     {sigBadge && (
                                       <span
                                         className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${sigBadge.cls}`}
@@ -3823,24 +3826,24 @@ function SimulatorDashboard({
                                   </div>
 
                                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                      <div className="text-xs text-slate-400">500m 포화도</div>
-                                      <div className="mt-1 text-lg font-semibold text-slate-100">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-xs text-[#9ca3af]">500m 포화도</div>
+                                      <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
                                         {comp?.saturation_level ?? 'N/A'}
                                       </div>
                                       <div className="text-xs text-slate-500">
                                         {comp?.total_competitors ?? 0}개 매장
                                       </div>
                                     </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                      <div className="text-xs text-slate-400">카니발 영향</div>
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-xs text-[#9ca3af]">카니발 영향</div>
                                       <div className="mt-1 text-lg font-semibold text-rose-300">
                                         {cannImpactPct != null ? `${cannImpactPct}%` : 'N/A'}
                                       </div>
                                     </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-3">
-                                      <div className="text-xs text-slate-400">프랜차이즈/독립</div>
-                                      <div className="mt-1 text-lg font-semibold text-slate-100">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-xs text-[#9ca3af]">프랜차이즈/독립</div>
+                                      <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
                                         {comp?.franchise_count ?? 0} /{' '}
                                         {comp?.independent_count ?? 0}
                                       </div>
@@ -3848,11 +3851,11 @@ function SimulatorDashboard({
                                   </div>
 
                                   {diff && (
-                                    <div className="mt-4 rounded-lg bg-cyan-500/10 p-3 ring-1 ring-cyan-500/30">
-                                      <div className="text-xs uppercase tracking-wider text-cyan-400">
+                                    <div className="mt-4 rounded-lg bg-[#818cf8]/10 p-3 ring-1 ring-[#818cf8]/30">
+                                      <div className="text-xs uppercase tracking-wider text-[#a5b4fc]">
                                         차별화 포지션
                                       </div>
-                                      <p className="mt-1 text-sm text-slate-100">{diff}</p>
+                                      <p className="mt-1 text-sm text-[#e2e8f0]">{diff}</p>
                                     </div>
                                   )}
 
@@ -3860,12 +3863,13 @@ function SimulatorDashboard({
                                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                                       {opps.length > 0 && (
                                         <div>
-                                          <div className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-                                            💡 기회
+                                          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                                            <Lightbulb className="h-4 w-4 text-emerald-400" />
+                                            <span>기회</span>
                                           </div>
                                           <ul className="mt-2 space-y-1">
                                             {opps.map((o, i) => (
-                                              <li key={i} className="text-xs text-slate-300">
+                                              <li key={i} className="text-xs text-[#e2e8f0]">
                                                 • {o}
                                               </li>
                                             ))}
@@ -3874,12 +3878,13 @@ function SimulatorDashboard({
                                       )}
                                       {risks.length > 0 && (
                                         <div>
-                                          <div className="text-xs font-semibold uppercase tracking-wider text-rose-400">
-                                            ⚠️ 리스크
+                                          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-400">
+                                            <AlertTriangle className="h-4 w-4 text-rose-400" />
+                                            <span>리스크</span>
                                           </div>
                                           <ul className="mt-2 space-y-1">
                                             {risks.map((r, i) => (
-                                              <li key={i} className="text-xs text-slate-300">
+                                              <li key={i} className="text-xs text-[#e2e8f0]">
                                                 • {r}
                                               </li>
                                             ))}
@@ -3891,12 +3896,13 @@ function SimulatorDashboard({
 
                                   {actions.length > 0 && (
                                     <div className="mt-4 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
-                                      <div className="text-xs font-semibold uppercase tracking-wider text-amber-400">
-                                        📋 추천 액션
+                                      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400">
+                                        <ClipboardList className="h-4 w-4 text-amber-400" />
+                                        <span>추천 액션</span>
                                       </div>
                                       <ul className="mt-2 space-y-1">
                                         {actions.map((a, i) => (
-                                          <li key={i} className="text-xs text-slate-200">
+                                          <li key={i} className="text-xs text-[#e2e8f0]">
                                             <span className="font-bold text-amber-300">
                                               {i + 1}.
                                             </span>{' '}
@@ -3908,7 +3914,7 @@ function SimulatorDashboard({
                                   )}
 
                                   {narrative && (
-                                    <p className="mt-4 text-xs leading-relaxed text-slate-400">
+                                    <p className="mt-4 text-xs leading-relaxed text-[#9ca3af]">
                                       {narrative}
                                     </p>
                                   )}
@@ -4416,30 +4422,33 @@ function SimulatorDashboard({
                               const top3 = d.top_3_age_groups ?? [];
                               const peakHours = d.peak_consumption_hours ?? [];
                               return (
-                                <div className="rounded-xl bg-slate-900/95 p-5 shadow-2xl ring-1 ring-slate-700/50">
+                                <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
                                   <div className="flex items-center justify-between">
-                                    <h3 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
-                                      💳 핵심 소비층 분석
-                                    </h3>
+                                    <div className="flex items-center gap-2">
+                                      <Users className="h-4 w-4 text-[#818cf8]" />
+                                      <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        핵심 소비층 분석
+                                      </h3>
+                                    </div>
                                     {d.elderly_ratio != null && (
-                                      <span className="text-xs text-slate-400">
+                                      <span className="text-xs text-[#9ca3af]">
                                         고령: {d.elderly_ratio.toFixed(1)}%
                                       </span>
                                     )}
                                   </div>
 
                                   {core && (core.age || core.gender) && (
-                                    <div className="mt-3 rounded-lg bg-gradient-to-r from-cyan-500/10 to-transparent p-3">
-                                      <div className="text-xs uppercase tracking-wider text-cyan-400">
+                                    <div className="mt-3 rounded-lg bg-[#818cf8]/10 p-3 ring-1 ring-[#818cf8]/30">
+                                      <div className="text-xs uppercase tracking-wider text-[#a5b4fc]">
                                         주 소비층
                                       </div>
                                       <div className="mt-1 flex items-baseline gap-2 flex-wrap">
-                                        <span className="text-2xl font-bold text-slate-100">
+                                        <span className="text-2xl font-bold text-[#e2e8f0]">
                                           {core.age ? `${core.age}대` : ''}{' '}
                                           {genderKo(core.gender ?? '')}
                                         </span>
                                         {typeof core.share === 'number' && (
-                                          <span className="text-sm text-slate-400">
+                                          <span className="text-sm text-[#9ca3af]">
                                             {(core.share * 100).toFixed(1)}% 매출 기여
                                           </span>
                                         )}
@@ -4449,7 +4458,7 @@ function SimulatorDashboard({
 
                                   {top3.length > 0 && (
                                     <div className="mt-4 space-y-2">
-                                      <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                      <div className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af]">
                                         연령대 TOP 3
                                       </div>
                                       {top3.map((a) => (
@@ -4457,18 +4466,18 @@ function SimulatorDashboard({
                                           key={a.age_group}
                                           className="flex items-center gap-2 text-xs"
                                         >
-                                          <span className="w-12 text-slate-300">
+                                          <span className="w-12 text-[#e2e8f0]">
                                             {a.age_group}대
                                           </span>
-                                          <div className="flex-1 rounded-full bg-slate-800/50">
+                                          <div className="flex-1 rounded-full bg-[#1e1b18]/50">
                                             <div
-                                              className="h-2 rounded-full bg-cyan-400"
+                                              className="h-2 rounded-full bg-[#818cf8]"
                                               style={{
                                                 width: `${Math.min(100, Math.max(0, a.share * 100))}%`,
                                               }}
                                             />
                                           </div>
-                                          <span className="w-12 text-right text-slate-400">
+                                          <span className="w-12 text-right text-[#9ca3af]">
                                             {(a.share * 100).toFixed(1)}%
                                           </span>
                                         </div>
@@ -4477,32 +4486,35 @@ function SimulatorDashboard({
                                   )}
 
                                   <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                                    <div className="rounded-lg bg-slate-800/50 p-2">
-                                      <div className="text-slate-400">피크</div>
-                                      <div className="mt-1 font-semibold text-slate-100">
-                                        {peakHours[0] ?? 'N/A'}
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-2">
+                                      <div className="text-[#9ca3af]">피크</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                        {peakHours.slice(0, 2).join(' · ') || 'N/A'}
                                       </div>
                                     </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-2">
-                                      <div className="text-slate-400">평/주말</div>
-                                      <div className="mt-1 font-semibold text-slate-100">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-2">
+                                      <div className="text-[#9ca3af]">평/주말</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
                                         {typeof d.weekday_weekend_ratio === 'number'
                                           ? d.weekday_weekend_ratio.toFixed(2)
                                           : 'N/A'}
                                       </div>
                                     </div>
-                                    <div className="rounded-lg bg-slate-800/50 p-2">
-                                      <div className="text-slate-400">소득</div>
-                                      <div className="mt-1 font-semibold text-slate-100">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-2">
+                                      <div className="text-[#9ca3af]">소득</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
                                         {incomeLevelKo(d.area_income_level ?? 'unknown')}
                                       </div>
                                     </div>
                                   </div>
 
                                   {d.resident_visitor_ratio != null && (
-                                    <div className="mt-3 text-xs text-slate-400">
-                                      📍 외부 방문객 비율:{' '}
-                                      {(d.resident_visitor_ratio * 100).toFixed(1)}%
+                                    <div className="mt-3 flex items-center gap-1.5 text-xs text-[#9ca3af]">
+                                      <MapPin className="h-3 w-3 text-slate-400" />
+                                      <span>
+                                        외부 방문객 비율:{' '}
+                                        {(d.resident_visitor_ratio * 100).toFixed(1)}%
+                                      </span>
                                     </div>
                                   )}
 
@@ -4517,7 +4529,7 @@ function SimulatorDashboard({
                                         </span>
                                       </div>
                                       {d.match_rationale && (
-                                        <p className="mt-1 text-xs text-slate-300">
+                                        <p className="mt-1 text-xs text-[#e2e8f0]">
                                           {d.match_rationale}
                                         </p>
                                       )}
@@ -4525,7 +4537,7 @@ function SimulatorDashboard({
                                   )}
 
                                   {d.narrative && (
-                                    <p className="mt-4 text-xs leading-relaxed text-slate-400">
+                                    <p className="mt-4 text-xs leading-relaxed text-[#9ca3af]">
                                       {d.narrative}
                                     </p>
                                   )}
