@@ -19,10 +19,9 @@ import json
 import redis.asyncio as aioredis
 from sqlalchemy import select, func
 from src.schemas.state import AgentState
-from src.config.constants import MAPO_DISTRICTS
+from src.config.constants import DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
 from src.config.settings import settings
 from src.agents.nodes.market_analyst import db_client, market_tool
-from src.agents.nodes.legal import _DISTRICT_ZONE_MAP, _ZONING_RULES
 from src.database.models import NaverVacancy, StoreQuarterly
 
 _CACHE_TTL = 86400  # 24시간
@@ -267,14 +266,14 @@ def _normalize_and_rank(
         elif vacancy_rate >= 5.0:
             score *= 0.85  # 공실률 5~10%: -15%
 
-        # 용도지역 규제 패널티: legal_node와 동일한 _DISTRICT_ZONE_MAP/_ZONING_RULES 사용
+        # 용도지역 규제 패널티: legal_node와 동일한 DISTRICT_ZONE_MAP/ZONING_RULES 사용
         zoning_risk = "safe"
         if business_type:
             type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(
                 business_type, business_type
             )
-            zone = _DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
-            rules = _ZONING_RULES.get(zone, {"허용": [], "제한": []})
+            zone = DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
+            rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
             if type_label in rules["제한"]:
                 zoning_risk = "danger"
                 score *= 0.50  # 영업 제한 업종: -50%

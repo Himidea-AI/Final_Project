@@ -1005,6 +1005,28 @@ class KakaoStoreHours(Base):
     collected_at = Column(DateTime)
 
 
+class KakaoStoreMenu(Base):
+    """카카오 panel3 응답의 menu.menus.items[] 저장 — 점포별 메뉴/가격."""
+
+    __tablename__ = "kakao_store_menu"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    kakao_id = Column(
+        String(20),
+        ForeignKey("kakao_store.kakao_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="점포 FK",
+    )
+    product_id = Column(Integer, comment="카카오 내부 메뉴 ID")
+    menu_name = Column(Text, nullable=False, comment="메뉴명")
+    price = Column(Integer, index=True, comment="가격(원)")
+    description = Column(Text, comment="메뉴 설명")
+    photo_url = Column(Text, comment="사진 URL")
+    mod_at = Column(DateTime, comment="카카오 측 최종 수정일")
+    collected_at = Column(DateTime(timezone=True), server_default=func.now(), comment="수집 일시")
+
+
 class KosisRegionalIncome(Base):
     """kosis_regional_income — reflected from DB (2026-04-20)."""
 
