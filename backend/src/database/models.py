@@ -828,3 +828,707 @@ class ElderlyRatioRegion(Base):
     elderly_ratio = Column(Float, comment="고령인구비율 (%)")
     elderly_pop = Column(BigInteger, comment="65세 이상 인구")
     total_pop = Column(BigInteger, comment="전체 인구")
+
+
+# ---------------------------------------------------------------------------
+# 2026-04-17~20 신규 적재 테이블 (34종) — DB reflection 자동 생성
+# ---------------------------------------------------------------------------
+
+
+class AptTradeReal(Base):
+    """apt_trade_real — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "apt_trade_real"
+
+    id = Column(BigInteger, primary_key=True)
+    sigungu = Column(Text)
+    jibun_addr = Column(Text)
+    bon_beon = Column(Text)
+    bu_beon = Column(Text)
+    apt_name = Column(Text)
+    area_sqm = Column(Float)
+    deal_ym = Column(Integer)
+    deal_day = Column(Integer)
+    price_won = Column(BigInteger)
+    cancel_date = Column(Text)
+    floor = Column(Integer)
+    seller = Column(Text)
+    buyer = Column(Text)
+    build_year = Column(Integer)
+    road_addr = Column(Text)
+    realty_type = Column(Text)
+    deal_type = Column(Text)
+    region_full = Column(Text)
+    cancel_reason = Column(Text)
+    property_type = Column(Text)
+
+
+class BusBoardingDaily(Base):
+    """bus_boarding_daily — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "bus_boarding_daily"
+
+    id = Column(BigInteger, primary_key=True)
+    use_date = Column(Date, nullable=False)
+    route_no = Column(String(20))
+    route_name = Column(Text)
+    ars_id = Column(String(15))
+    station_name = Column(Text)
+    boarding_count = Column(Integer)
+    alighting_count = Column(Integer)
+
+
+class DistrictSalesSeoul(Base):
+    """district_sales_seoul — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "district_sales_seoul"
+
+    id = Column(BigInteger, primary_key=True)
+    quarter = Column(Integer, nullable=False)
+    dong_code = Column(String(15), nullable=False)
+    dong_name = Column(Text)
+    industry_code = Column(String(20), nullable=False)
+    industry_name = Column(Text)
+    monthly_sales = Column(BigInteger)
+    monthly_count = Column(Integer)
+    raw_json = Column(JSONB)
+
+
+class DongSubwayAccess(Base):
+    """dong_subway_access — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "dong_subway_access"
+
+    dong_name = Column(String(30), primary_key=True)
+    center_lat = Column(Float)
+    center_lon = Column(Float)
+    nearest_subway = Column(String(50))
+    subway_distance_m = Column(Integer)
+    subway_count_1km = Column(Integer)
+
+
+class EcosKeyStatistics(Base):
+    """ecos_key_statistics — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "ecos_key_statistics"
+
+    class_name = Column(Text)
+    keystat_name = Column(Text, primary_key=True)
+    data_value = Column(Float)
+    cycle = Column(String(20), primary_key=True)
+    unit_name = Column(Text)
+    collected_at = Column(DateTime)
+
+
+class EcosTimeseries(Base):
+    """ecos_timeseries — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "ecos_timeseries"
+
+    stat_code = Column(String(20), primary_key=True)
+    stat_name = Column(Text)
+    item_code1 = Column(String(30), primary_key=True)
+    item_name1 = Column(Text)
+    item_code2 = Column(String(30), primary_key=True)
+    item_name2 = Column(Text)
+    cycle = Column(String(10))
+    period = Column(String(20), primary_key=True)
+    data_value = Column(Float)
+    unit_name = Column(Text)
+
+
+class HolidayCalendar(Base):
+    """holiday_calendar — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "holiday_calendar"
+
+    date = Column(Date, primary_key=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    day = Column(Integer, nullable=False)
+    dow = Column(Integer, nullable=False)
+    dow_name = Column(String(10))
+    is_weekend = Column(Boolean, nullable=False)
+    is_holiday = Column(Boolean, nullable=False)
+    holiday_name = Column(String(50))
+    is_substitute = Column(Boolean)
+    day_type = Column(String(15))
+
+
+class JeonseMonthlyRent(Base):
+    """jeonse_monthly_rent — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "jeonse_monthly_rent"
+
+    id = Column(BigInteger, primary_key=True)
+    rcpt_year = Column(Integer)
+    gu_code = Column(String(10))
+    gu_name = Column(Text)
+    dong_code = Column(String(15))
+    dong_name = Column(Text)
+    jibun_type = Column(Integer)
+    jibun_type_name = Column(Text)
+    bon_beon = Column(Integer)
+    bu_beon = Column(Integer)
+    floor = Column(Integer)
+    contract_date = Column(Integer)
+    trade_type = Column(String(10))
+    area_sqm = Column(Float)
+    deposit_manwon = Column(BigInteger)
+    monthly_rent_manwon = Column(BigInteger)
+    building_name = Column(Text)
+    build_year = Column(Integer)
+    building_type = Column(Text)
+    contract_period = Column(Text)
+    new_renew = Column(Text)
+    renew_right_used = Column(Text)
+    prev_deposit = Column(Float)
+    prev_monthly_rent = Column(Float)
+
+
+class KakaoStoreHours(Base):
+    """kakao_store_hours — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "kakao_store_hours"
+
+    kakao_id = Column(String(20), primary_key=True)
+    headline_code = Column(String(20))
+    headline_text = Column(Text)
+    mon_hours = Column(Text)
+    tue_hours = Column(Text)
+    wed_hours = Column(Text)
+    thu_hours = Column(Text)
+    fri_hours = Column(Text)
+    sat_hours = Column(Text)
+    sun_hours = Column(Text)
+    hours_json = Column(JSONB)
+    collected_at = Column(DateTime)
+
+
+class KosisRegionalIncome(Base):
+    """kosis_regional_income — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "kosis_regional_income"
+
+    id = Column(BigInteger, primary_key=True)
+    tbl_id = Column(String(30), nullable=False)
+    tbl_name = Column(Text)
+    region_code = Column(String(20))
+    region_name = Column(Text)
+    item_code = Column(String(20))
+    item_name = Column(Text)
+    unit = Column(Text)
+    period_code = Column(String(10))
+    period_name = Column(String(20))
+    period_value = Column(String(20))
+    value_num = Column(Float)
+    src_last_chn_de = Column(Date)
+
+
+class LawLegislations(Base):
+    """law_legislations — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "law_legislations"
+
+    item_id = Column(String(50), primary_key=True)
+    title = Column(Text, nullable=False)
+    law_short_name = Column(Text)
+    promulgation_date = Column(Date)
+    enforce_date = Column(Date)
+    promulgation_no = Column(String(50))
+    ministry_name = Column(Text)
+    law_type = Column(Text)
+    law_revision_type = Column(Text)
+    detail_link = Column(Text)
+    raw_json = Column(JSONB)
+    queries = Column(Text)
+    collected_at = Column(DateTime)
+
+
+class LawPrecedents(Base):
+    """law_precedents — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "law_precedents"
+
+    item_id = Column(String(50), primary_key=True)
+    case_number = Column(String(100))
+    case_name = Column(Text)
+    case_type_code = Column(String(20))
+    case_type_name = Column(String(50))
+    sentence = Column(String(20))
+    sentence_date = Column(Date)
+    court_name = Column(Text)
+    judgment_type = Column(String(50))
+    detail_link = Column(Text)
+    data_source = Column(Text)
+    raw_json = Column(JSONB)
+    queries = Column(Text)
+    collected_at = Column(DateTime)
+
+
+class MapoSnsSentiment(Base):
+    """mapo_sns_sentiment — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "mapo_sns_sentiment"
+
+    id = Column(BigInteger, primary_key=True)
+    place_name = Column(Text, nullable=False)
+    date = Column(Date, nullable=False)
+    positive_count = Column(Integer)
+    negative_count = Column(Integer)
+    neutral_count = Column(Integer)
+
+
+class MolitNrgTrade(Base):
+    """molit_nrg_trade — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "molit_nrg_trade"
+
+    id = Column(BigInteger, primary_key=True)
+    lawd_cd = Column(String(10), nullable=False)
+    gu_name = Column(String(20))
+    deal_ym = Column(Integer, nullable=False)
+    deal_day = Column(Integer)
+    deal_amount = Column(BigInteger)
+    building_use = Column(Text)
+    building_ar = Column(Float)
+    plottage_ar = Column(Float)
+    building_type = Column(Text)
+    realty_type = Column(Text)
+    floor = Column(Text)
+    build_year = Column(Text)
+    sgg_nm = Column(Text)
+    umd_nm = Column(Text)
+    jibun = Column(Text)
+    cdeal_type = Column(Text)
+    cdeal_day = Column(Text)
+    dealing_gbn = Column(Text)
+
+
+class NaverTrendIndustry(Base):
+    """naver_trend_industry — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "naver_trend_industry"
+
+    id = Column(BigInteger, primary_key=True)
+    industry = Column(Text, nullable=False)
+    period = Column(Date, nullable=False)
+    ratio = Column(Float)
+
+
+class NaverTrendMonthly(Base):
+    """naver_trend_monthly — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "naver_trend_monthly"
+
+    id = Column(BigInteger, primary_key=True)
+    keyword = Column(Text, nullable=False)
+    period = Column(Date, nullable=False)
+    ratio = Column(Float)
+    scope = Column(String(10), nullable=False)
+
+
+class NaverTrendQuarterly(Base):
+    """naver_trend_quarterly — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "naver_trend_quarterly"
+
+    id = Column(BigInteger, primary_key=True)
+    quarter = Column(Integer, nullable=False)
+    dong_name = Column(String(30), nullable=False)
+    trend_score = Column(Float)
+    scope = Column(String(10), nullable=False)
+
+
+class RentCostSummary2025(Base):
+    """rent_cost_summary_2025 — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "rent_cost_summary_2025"
+
+    id = Column(BigInteger, primary_key=True)
+    region1 = Column(Text)
+    region2 = Column(Text)
+    rent_1000won_sqm = Column(Float)
+    vacancy_rate_pct = Column(Float)
+    investment_return_pct = Column(Float)
+    income_return_pct = Column(Float)
+    capital_return_pct = Column(Float)
+    source_file = Column(Text)
+
+
+class ResidentPopMonthly(Base):
+    """resident_pop_monthly — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "resident_pop_monthly"
+
+    region_full = Column(Text, primary_key=True)
+    region_code = Column(String(15))
+    ym = Column(Integer, primary_key=True)
+    total_pop = Column(Integer)
+    households = Column(Integer)
+    pop_per_household = Column(Float)
+    male_pop = Column(Integer)
+    female_pop = Column(Integer)
+    male_female_ratio = Column(Float)
+
+
+class SeoulAdstrdChangeIx(Base):
+    """seoul_adstrd_change_ix — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_adstrd_change_ix"
+
+    quarter = Column(Integer, primary_key=True)
+    dong_code = Column(String(15), primary_key=True)
+    dong_name = Column(Text)
+    change_ix = Column(String(10))
+    change_ix_name = Column(String(50))
+    opr_sale_mt_avg = Column(Float)
+    cls_sale_mt_avg = Column(Float)
+    su_opr_sale_mt_avg = Column(Float)
+    su_cls_sale_mt_avg = Column(Float)
+
+
+class SeoulAdstrdFclty(Base):
+    """seoul_adstrd_fclty — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_adstrd_fclty"
+
+    quarter = Column(Integer, primary_key=True)
+    dong_code = Column(String(15), primary_key=True)
+    dong_name = Column(Text)
+    viatr_fclty_co = Column(Integer)
+    pblofc_co = Column(Integer)
+    bank_co = Column(Integer)
+    gehspt_co = Column(Integer)
+    gnrl_hsptl_co = Column(Integer)
+    parmacy_co = Column(Integer)
+    kndrgr_co = Column(Integer)
+    elesch_co = Column(Integer)
+    mskul_co = Column(Integer)
+    hgschl_co = Column(Integer)
+    univ_co = Column(Integer)
+    drts_co = Column(Integer)
+    supmk_co = Column(Integer)
+    theat_co = Column(Integer)
+    stayng_fclty_co = Column(Integer)
+    arprt_co = Column(Integer)
+    rlroad_statn_co = Column(Integer)
+    bus_trminl_co = Column(Integer)
+    subway_statn_co = Column(Integer)
+    bus_sttn_co = Column(Integer)
+
+
+class SeoulAdstrdFlpop(Base):
+    """seoul_adstrd_flpop — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_adstrd_flpop"
+
+    quarter = Column(Integer, primary_key=True)
+    dong_code = Column(String(15), primary_key=True)
+    dong_name = Column(Text)
+    total_flpop = Column(Integer)
+    male_flpop = Column(Integer)
+    female_flpop = Column(Integer)
+    age_10 = Column(Integer)
+    age_20 = Column(Integer)
+    age_30 = Column(Integer)
+    age_40 = Column(Integer)
+    age_50 = Column(Integer)
+    age_60_above = Column(Integer)
+    time_00_06 = Column(Integer)
+    time_06_11 = Column(Integer)
+    time_11_14 = Column(Integer)
+    time_14_17 = Column(Integer)
+    time_17_21 = Column(Integer)
+    time_21_24 = Column(Integer)
+    mon = Column(Integer)
+    tue = Column(Integer)
+    wed = Column(Integer)
+    thu = Column(Integer)
+    fri = Column(Integer)
+    sat = Column(Integer)
+    sun = Column(Integer)
+
+
+class SeoulAdstrdStor(Base):
+    """seoul_adstrd_stor — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_adstrd_stor"
+
+    quarter = Column(Integer, primary_key=True)
+    dong_code = Column(String(15), primary_key=True)
+    dong_name = Column(Text)
+    industry_code = Column(String(20), primary_key=True)
+    industry_name = Column(Text)
+    store_count = Column(Integer)
+    similar_store_count = Column(Integer)
+    open_rate = Column(Float)
+    open_count = Column(Integer)
+    close_rate = Column(Float)
+    close_count = Column(Integer)
+    franchise_count = Column(Integer)
+
+
+class SeoulSignguChangeIx(Base):
+    """seoul_signgu_change_ix — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_signgu_change_ix"
+
+    quarter = Column(Integer, primary_key=True)
+    signgu_code = Column(String(10), primary_key=True)
+    signgu_name = Column(Text)
+    change_ix = Column(String(10))
+    change_ix_name = Column(String(50))
+    opr_sale_mt_avg = Column(Float)
+    cls_sale_mt_avg = Column(Float)
+    su_opr_sale_mt_avg = Column(Float)
+    su_cls_sale_mt_avg = Column(Float)
+
+
+class SeoulSignguFclty(Base):
+    """seoul_signgu_fclty — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_signgu_fclty"
+
+    quarter = Column(Integer, primary_key=True)
+    signgu_code = Column(String(10), primary_key=True)
+    signgu_name = Column(Text)
+    viatr_fclty_co = Column(Integer)
+    pblofc_co = Column(Integer)
+    bank_co = Column(Integer)
+    gehspt_co = Column(Integer)
+    gnrl_hsptl_co = Column(Integer)
+    parmacy_co = Column(Integer)
+    kndrgr_co = Column(Integer)
+    elesch_co = Column(Integer)
+    mskul_co = Column(Integer)
+    hgschl_co = Column(Integer)
+    univ_co = Column(Integer)
+    drts_co = Column(Integer)
+    supmk_co = Column(Integer)
+    theat_co = Column(Integer)
+    stayng_fclty_co = Column(Integer)
+    arprt_co = Column(Integer)
+    rlroad_statn_co = Column(Integer)
+    bus_trminl_co = Column(Integer)
+    subway_statn_co = Column(Integer)
+    bus_sttn_co = Column(Integer)
+
+
+class SeoulSignguFlpop(Base):
+    """seoul_signgu_flpop — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_signgu_flpop"
+
+    quarter = Column(Integer, primary_key=True)
+    signgu_code = Column(String(10), primary_key=True)
+    signgu_name = Column(Text)
+    total_flpop = Column(Integer)
+    male_flpop = Column(Integer)
+    female_flpop = Column(Integer)
+    age_10 = Column(Integer)
+    age_20 = Column(Integer)
+    age_30 = Column(Integer)
+    age_40 = Column(Integer)
+    age_50 = Column(Integer)
+    age_60_above = Column(Integer)
+    time_00_06 = Column(Integer)
+    time_06_11 = Column(Integer)
+    time_11_14 = Column(Integer)
+    time_14_17 = Column(Integer)
+    time_17_21 = Column(Integer)
+    time_21_24 = Column(Integer)
+    mon = Column(Integer)
+    tue = Column(Integer)
+    wed = Column(Integer)
+    thu = Column(Integer)
+    fri = Column(Integer)
+    sat = Column(Integer)
+    sun = Column(Integer)
+
+
+class SeoulSignguSelng(Base):
+    """seoul_signgu_selng — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_signgu_selng"
+
+    quarter = Column(Integer, primary_key=True)
+    signgu_code = Column(String(10), primary_key=True)
+    signgu_name = Column(Text)
+    industry_code = Column(String(20), primary_key=True)
+    industry_name = Column(Text)
+    monthly_sales = Column(BigInteger)
+    monthly_count = Column(BigInteger)
+    weekday_sales = Column(BigInteger)
+    weekend_sales = Column(BigInteger)
+    mon_sales = Column(BigInteger)
+    tue_sales = Column(BigInteger)
+    wed_sales = Column(BigInteger)
+    thu_sales = Column(BigInteger)
+    fri_sales = Column(BigInteger)
+    sat_sales = Column(BigInteger)
+    sun_sales = Column(BigInteger)
+
+
+class SeoulSignguStor(Base):
+    """seoul_signgu_stor — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_signgu_stor"
+
+    quarter = Column(Integer, primary_key=True)
+    signgu_code = Column(String(10), primary_key=True)
+    signgu_name = Column(Text)
+    industry_code = Column(String(20), primary_key=True)
+    industry_name = Column(Text)
+    store_count = Column(Integer)
+    similar_store_count = Column(Integer)
+    open_rate = Column(Float)
+    open_count = Column(Integer)
+    close_rate = Column(Float)
+    close_count = Column(Integer)
+    franchise_count = Column(Integer)
+
+
+class SeoulTrdarChangeIx(Base):
+    """seoul_trdar_change_ix — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_trdar_change_ix"
+
+    quarter = Column(Integer, primary_key=True)
+    trdar_code = Column(String(15), primary_key=True)
+    trdar_name = Column(Text)
+    trdar_se = Column(String(10))
+    trdar_se_name = Column(String(30))
+    change_ix = Column(String(10))
+    change_ix_name = Column(String(50))
+    opr_sale_mt_avg = Column(Float)
+    cls_sale_mt_avg = Column(Float)
+    su_opr_sale_mt_avg = Column(Float)
+    su_cls_sale_mt_avg = Column(Float)
+
+
+class SeoulTrdarFclty(Base):
+    """seoul_trdar_fclty — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_trdar_fclty"
+
+    quarter = Column(Integer, primary_key=True)
+    trdar_code = Column(String(15), primary_key=True)
+    trdar_name = Column(Text)
+    trdar_se = Column(String(10))
+    trdar_se_name = Column(String(30))
+    viatr_fclty_co = Column(Integer)
+    pblofc_co = Column(Integer)
+    bank_co = Column(Integer)
+    gehspt_co = Column(Integer)
+    gnrl_hsptl_co = Column(Integer)
+    parmacy_co = Column(Integer)
+    kndrgr_co = Column(Integer)
+    elesch_co = Column(Integer)
+    mskul_co = Column(Integer)
+    hgschl_co = Column(Integer)
+    univ_co = Column(Integer)
+    drts_co = Column(Integer)
+    supmk_co = Column(Integer)
+    theat_co = Column(Integer)
+    stayng_fclty_co = Column(Integer)
+    arprt_co = Column(Integer)
+    rlroad_statn_co = Column(Integer)
+    bus_trminl_co = Column(Integer)
+    subway_statn_co = Column(Integer)
+    bus_sttn_co = Column(Integer)
+
+
+class SeoulTrdarFlpop(Base):
+    """seoul_trdar_flpop — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "seoul_trdar_flpop"
+
+    quarter = Column(Integer, primary_key=True)
+    trdar_code = Column(String(15), primary_key=True)
+    trdar_name = Column(Text)
+    trdar_se = Column(String(10))
+    trdar_se_name = Column(String(30))
+    total_flpop = Column(Integer)
+    male_flpop = Column(Integer)
+    female_flpop = Column(Integer)
+    age_10 = Column(Integer)
+    age_20 = Column(Integer)
+    age_30 = Column(Integer)
+    age_40 = Column(Integer)
+    age_50 = Column(Integer)
+    age_60_above = Column(Integer)
+    time_00_06 = Column(Integer)
+    time_06_11 = Column(Integer)
+    time_11_14 = Column(Integer)
+    time_14_17 = Column(Integer)
+    time_17_21 = Column(Integer)
+    time_21_24 = Column(Integer)
+    mon = Column(Integer)
+    tue = Column(Integer)
+    wed = Column(Integer)
+    thu = Column(Integer)
+    fri = Column(Integer)
+    sat = Column(Integer)
+    sun = Column(Integer)
+
+
+class SmallStoreRentQ(Base):
+    """small_store_rent_q — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "small_store_rent_q"
+
+    id = Column(BigInteger, primary_key=True)
+    cls_id = Column(Integer, nullable=False)
+    cls_full_nm = Column(Text, nullable=False)
+    cls_nm = Column(Text)
+    region = Column(Text, nullable=False)
+    year = Column(Integer, nullable=False)
+    quarter = Column(Integer, nullable=False)
+    rent = Column(Float)
+    statbl_id = Column(Text)
+
+
+class VacancyEnriched(Base):
+    """vacancy_enriched — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "vacancy_enriched"
+
+    id = Column(BigInteger, primary_key=True)
+    lat = Column(Float)
+    lon = Column(Float)
+    dong_name = Column(String(30))
+    nearest_subway = Column(String(50))
+    subway_distance = Column(Integer)
+    restaurant_500m = Column(Integer)
+    cafe_500m = Column(Integer)
+    mart_500m = Column(Integer)
+    address = Column(Text)
+    road_address = Column(Text)
+    building_name = Column(String(200))
+    listing_count = Column(Integer)
+
+
+class WeatherDaily(Base):
+    """weather_daily — reflected from DB (2026-04-20)."""
+
+    __tablename__ = "weather_daily"
+
+    date = Column(Date, primary_key=True)
+    stn = Column(String(10), primary_key=True)
+    stn_name = Column(String(20))
+    wind_avg = Column(Float)
+    wind_max = Column(Float)
+    temp_avg = Column(Float)
+    temp_max = Column(Float)
+    temp_min = Column(Float)
+    humidity_avg = Column(Float)
+    humidity_min = Column(Float)
+    pressure_avg = Column(Float)
+    cloud_avg = Column(Float)
+    sunshine_hours = Column(Float)
+    insolation = Column(Float)
+    rain_day = Column(Float)
+    rain_60m_max = Column(Float)
+    snow_new = Column(Float)
+    snow_max = Column(Float)

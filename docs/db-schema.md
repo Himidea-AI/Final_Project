@@ -701,3 +701,53 @@ python -m scripts.seed_from_csv --dir <새CSV폴더> --force-all
 ```
 
 보호 대상 테이블 (`--force` 시 스킵): `users`, `manager_users`, `invite_codes`, `simulation_result`, `biz_brand_mapping`.
+
+---
+
+## 데이터 무결성 점검 & 알려진 주의사항 (2026-04-20 A1 감사)
+
+### 🔧 2026-04-20 수행된 정리
+- **백업 테이블 5종 DROP**: `living_population_backup_20260420` (968k), `jeonse_monthly_rent_backup_20260420` (168k), `mapo_resident_pop_backup_20260420` (408), `district_sales_by_age_backup_20260420` (30), `dong_mapping_backup_20260420` (16) — 재적재 완료 후 잔여물.
+- **폐기 테이블 2종 DROP**:
+  - `district_sales_by_age` (30건) — dong_code/name 불일치, quarter 포맷 깨짐, 서울 전체 랜덤 분포로 복구 불가.
+  - `molit_nrg_trade_xlsx` (0건) — 컬럼 매핑 버그로 적재 실패, `molit_nrg_trade` 로 대체됨.
+- **`kakao_store` 정리**: 비음식점/카페(보드카페·키즈카페·주차장 등) 52건 삭제, prefix 매핑 11종 확장, is_franchise 정합성 515건 교정. 최종 4,029건.
+- **ORM 동기화**: `backend/src/database/models.py` 에 2026-04-17~20 신규 적재 34종 테이블 클래스 추가. DB ↔ ORM 완전 일치 (65 = 65).
+
+### ⚠️ 알려진 주의사항
+
+#### 1. 행정동 vs 법정동 코드 체계 구분
+| 체계 | 자리수 | 예 | 사용 테이블 |
+|---|---|---|---|
+| **행정동** (운영 기본) | 8자리 | `11440555`(아현동) | `dong_mapping`, `living_population`, `district_sales`, 모든 `seoul_adstrd_*` 등 |
+| **법정동** | 10자리 | `1144010100`(아현동) | `jeonse_monthly_rent` (국토부 전월세 신고 원본 체계) |
+| **구 단위 집계** | 5~8자리 | `11440`, `11440000` | `golmok_rent`, `mapo_resident_pop` 일부 행 |
+
+→ **조인 시** `dong_mapping` 기반 조인은 행정동 테이블에만 가능. 법정동 체계 테이블은 별도 변환 테이블 필요.
+
+#### 2. 구 단위 집계 row 존재 테이블
+`golmok_rent`, `mapo_resident_pop` 은 동별 데이터와 **구 단위 집계 row**(dong_code=`11440`/`11440000`)가 섞여 있음. 동 단위 집계 쿼리 시 `dong_code IN (SELECT dong_code FROM dong_mapping)` 필터링 필수.
+
+#### 3. `golmok_commercial.industry_code = 'ALL'`
+유동인구(data_type='floating_pop') row 는 업종 구분 없이 `industry_code='ALL'` 로 저장됨 (57,624건). 업종별 집계 시 `industry_code != 'ALL'` 필터 필수.
+
+#### 4. 분기(quarter) 포맷 2가지 혼재
+- **YYYYQ** (4~5자리, 예 `20244`): 대다수 테이블 (`district_sales`, `golmok_sales`, `seoul_adstrd_stor` 등)
+- **1자리 1~4** (연도 정보 없음): `golmok_rent`, `rent_cost`, `seoul_golmok_rent`, `small_store_rent_q` — 단일 연도 스냅샷 테이블
+
+→ quarter 단순 비교 조인 금지. 연도·분기 분리해서 조인 구성.
+
+#### 5. 중복 성격 테이블 구분
+| 유사 테이블 | 차이 |
+|---|---|
+| `store_quarterly` (3,840, 마포) vs `seoul_adstrd_stor` (849,552, 서울) | 후자가 전자를 포함. 마포만 분석이면 `seoul_adstrd_stor WHERE dong_code LIKE '11440%'` 사용 권장 |
+| `district_sales` (3,703, 마포) vs `district_sales_seoul` (475,334, 서울) | 후자가 상위집합. 이중 관리 중 — 장기적으로 `district_sales_seoul` 단일화 검토 |
+| `seoul_district_stores` (100,587) vs `seoul_adstrd_stor` (849,552) | 구버전/신버전 관계 추정. `seoul_adstrd_stor` 가 최신 적재. |
+
+#### 6. 정합성 양호 확인 항목
+- `kakao_store` PK(kakao_id) 4,029건 고유, NULL 0
+- `store_info` PK(store_id) 30,488건 고유, NULL 0
+- `kakao_store ↔ kakao_store_hours` FK 고아 0건
+- `kakao_store.{lat, lon, dong_name}` NULL 0%
+- `store_info.{lat, lon, industry_l, dong_code}` NULL 0%
+
