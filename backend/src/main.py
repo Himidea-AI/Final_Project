@@ -4,7 +4,6 @@ from pathlib import Path
 import os
 import uuid
 import asyncio
-import logging
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
@@ -332,7 +331,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         shap_result = None
 
     # sim_result에서 타겟 동 예측값 추출 (모델 호출 성공 시)
-    _sim_closure_rate = sim_result["survival"]["closure_rate"] if "sim_result" in locals() else None
+    _sim_closure_rate = sim_result["closure_rate"]["closure_rate"] if "sim_result" in locals() else None
     _sim_bep_months = sim_result["bep"]["bep_months"] if "sim_result" in locals() else None
 
     # market_report에 모델 기반 폐업률 추가 (0~1 소수)

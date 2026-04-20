@@ -205,17 +205,17 @@ class TCNForecaster(nn.Module):
         1. Input Projection: Linear(input_size → n_channels)
         2. TemporalBlock(dilation=1): receptive field 2
         3. TemporalBlock(dilation=2): receptive field 4 (누적)
-        4. FC Head: Linear → ReLU → Dropout → Linear(1)
+        4. TemporalBlock(dilation=4): receptive field 8 (누적)
+        5. FC Head: Linear → ReLU → Dropout → Linear(1)
 
-    window_size=4 기준 dilation 선택 이유:
+    window_size=8 기준 dilation 선택 이유:
         RF = 1 + (kernel_size-1) × sum(dilations)
-        RF = 1 + 1 × (1+2) = 4  ← window_size=4와 정확히 일치
-        dilation=4 추가 시 RF=8로 초과 → 제외
+        RF = 1 + 1 × (1+2+4) = 8  ← window_size=8과 정확히 일치
 
     Parameters
     ----------
     input_size : int
-        입력 피처 수 (매출, 점포 수, 인구 등 31개).
+        입력 피처 수 (매출, 점포 수, 인구 등 33개).
     n_channels : int
         TCN 내부 채널 수. GRU의 hidden_size에 대응. 기본 128.
     kernel_size : int

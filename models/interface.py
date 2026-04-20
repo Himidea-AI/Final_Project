@@ -53,20 +53,19 @@ def _mock_revenue_forecast() -> dict:
     }
 
 
-def _mock_survival() -> dict:
-    """생존률 mock 데이터."""
-    survival_rate = 0.72
-    monthly_decay = survival_rate ** (1 / 3)
+def _mock_closure_rate() -> dict:
+    """폐업률 mock 데이터."""
+    closure_rate = 0.28
+    monthly_decay = (1.0 - closure_rate) ** (1 / 3)
     monthly_rates = []
     cumulative = 1.0
     for _ in range(12):
         cumulative *= monthly_decay
-        monthly_rates.append(round(max(0.0, min(1.0, cumulative)), 4))
+        monthly_rates.append(round(max(0.0, min(1.0, 1.0 - cumulative)), 4))
     return {
-        "survival_rate": survival_rate,
-        "closure_rate": round(1.0 - survival_rate, 4),
+        "closure_rate": closure_rate,
         "risk_level": "safe",
-        "monthly_survival_rates": monthly_rates,
+        "monthly_closure_rates": monthly_rates,
     }
 
 
@@ -156,17 +155,15 @@ def _run_gru_forecast(dong_code: str, industry_code: str) -> dict:
     }
 
 
-def _run_survival(dong_code: str, industry_code: str) -> dict:
-    """생존률 예측 모델 호출."""
-    from models.revenue_predictor.predict import predict as survival_predict
+def _run_closure_rate(dong_code: str, industry_code: str) -> dict:
+    """폐업률 예측 모델 호출."""
+    from models.revenue_predictor.predict import predict as closure_predict
 
-    result = survival_predict(dong_code, industry_code)
-    closure_rate = result["closure_rate"]
+    result = closure_predict(dong_code, industry_code)
     return {
-        "survival_rate": round(1.0 - closure_rate, 4),
-        "closure_rate": closure_rate,
+        "closure_rate": result["closure_rate"],
         "risk_level": result["closure_risk_level"],
-        "monthly_survival_rates": result["monthly_closure_rates"],
+        "monthly_closure_rates": result["monthly_closure_rates"],
     }
 
 
@@ -330,7 +327,8 @@ class ModelOutput:
                 {
                     "input": { dong_code, dong_name, industry_code, industry_name },
                     "revenue_forecast": { quarterly_avg, quarterly_predictions },
-                    "survival": { survival_rate, risk_level, monthly_survival_rates },
+                    "closure_rate": { closure_rate, risk_level, monthly_closure_rates },
+                    "closure_risk": { risk_score, risk_level, top_signals, model, is_mock },
                     "bep": { bep_months, monthly_profit, total_initial_investment,
                              annual_roi, quarterly_simulation },
                     "metadata": { model_version, generated_at, data_period },
@@ -353,16 +351,28 @@ class ModelOutput:
             revenue_forecast = _mock_revenue_forecast()
             use_mock = True
 
-        # ---- 2) 생존률 예측 ----
+        # ---- 2) 폐업률 예측 ----
         try:
-            survival = _run_survival(dong_code, industry_code)
-            logger.info("생존률 예측 완료")
+            closure_rate_result = _run_closure_rate(dong_code, industry_code)
+            logger.info("폐업률 예측 완료")
         except Exception as exc:
-            logger.warning("생존률 예측 실패 (mock 사용): %s", exc)
-            survival = _mock_survival()
+            logger.warning("폐업률 예측 실패 (mock 사용): %s", exc)
+            closure_rate_result = _mock_closure_rate()
             use_mock = True
 
-        # ---- 3) BEP 계산 ----
+        # ---- 3) 폐업위험도 예측 (LightGBM + TCN 앙상블) ----
+        try:
+            from models.closure_risk.predict import predict as closure_risk_predict
+
+            closure_risk_result = closure_risk_predict(dong_code, industry_code)
+            logger.info("폐업위험도 예측 완료 (score=%.3f)", closure_risk_result["risk_score"])
+        except Exception as exc:
+            logger.warning("폐업위험도 예측 실패 (mock 사용): %s", exc)
+            from models.closure_risk.predict import _mock_result
+
+            closure_risk_result = _mock_result()
+
+        # ---- 4) BEP 계산 ----
         try:
             quarterly_avg = revenue_forecast["quarterly_avg"]
             quarterly_preds = revenue_forecast["quarterly_predictions"]
@@ -389,7 +399,8 @@ class ModelOutput:
                 "industry_name": industry_name,
             },
             "revenue_forecast": revenue_forecast,
-            "survival": survival,
+            "closure_rate": closure_rate_result,
+            "closure_risk": closure_risk_result,
             "bep": bep,
             "metadata": {
                 "model_version": MODEL_VERSION,
