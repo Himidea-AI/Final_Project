@@ -102,10 +102,48 @@ def test_classify_pub():
 
 
 def test_classify_etc():
-    assert classify_category("음식점 > 간식 > 토스트") == "기타"
+    # 한중일양 어디에도 안 맞는 케이스만 기타
     assert classify_category("음식점 > 아시아음식 > 베트남음식") == "기타"
+    assert classify_category("음식점 > 간식 > 아이스크림") == "기타"
+    assert classify_category("음식점 > 뷔페 > 해산물뷔페") == "기타"
+    assert classify_category("가정,생활 > 여가시설 > 보드카페") == "기타"
     assert classify_category("") == "기타"
     assert classify_category("음식점") == "기타"
+
+
+def test_classify_korean_extended():
+    """BRANDS 일관성 유지용 확장 매핑."""
+    assert classify_category("음식점 > 샤브샤브 > 등촌샤브칼국수") == "한식음식점"
+    assert classify_category("음식점 > 뷔페 > 한식뷔페") == "한식음식점"
+    assert classify_category("음식점 > 기사식당") == "한식음식점"
+
+
+def test_classify_western_extended():
+    assert classify_category("음식점 > 패밀리레스토랑 > 빕스") == "양식음식점"
+    assert classify_category("음식점 > 패밀리레스토랑 > 애슐리") == "양식음식점"
+
+
+def test_classify_japanese_extended():
+    assert classify_category("음식점 > 퓨전요리 > 퓨전일식") == "일식음식점"
+    assert classify_category("음식점 > 퓨전요리 > 아비꼬") == "일식음식점"
+
+
+def test_classify_chinese_extended():
+    assert classify_category("음식점 > 퓨전요리 > 퓨전중식") == "중식음식점"
+
+
+def test_classify_chicken_extended():
+    assert classify_category("음식점 > 간식 > 닭강정 > 가마로강정") == "치킨전문점"
+
+
+def test_classify_fastfood_extended():
+    assert classify_category("음식점 > 간식 > 토스트 > 이삭토스트") == "패스트푸드점"
+    assert classify_category("음식점 > 샐러드 > 슬로우캘리") == "패스트푸드점"
+
+
+def test_classify_bakery_extended():
+    assert classify_category("음식점 > 간식 > 도넛 > 던킨") == "제과점"
+    assert classify_category("음식점 > 간식 > 떡,한과") == "제과점"
 
 
 def _fake_response(documents: list[dict], is_end: bool = True) -> MagicMock:
