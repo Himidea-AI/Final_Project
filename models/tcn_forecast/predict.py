@@ -44,7 +44,7 @@ DEFAULT_PREDICT_CONFIG: dict = {
     # TCN 파인튜닝 가중치 경로
     "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn.pt"),
     "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers.pkl"),
-    # train config와 일치: window_size=4, n_channels=128
+    # train config와 일치: window_size=4, n_channels=128, dilations=[1,2]
     "window_size": 4,
     "n_channels": 128,
     "kernel_size": 2,
@@ -52,7 +52,7 @@ DEFAULT_PREDICT_CONFIG: dict = {
     "dropout": 0.2,
     "target_col": "monthly_sales",
     "feature_cols": None,
-    "confidence_z": 1.96,   # 95% 신뢰구간 (GRU/LSTM과 동일)
+    "confidence_z": 1.96,  # 95% 신뢰구간
 }
 
 
@@ -81,7 +81,7 @@ def predict(
     industry_code : str
         업종 코드 (예: 'CS100001').
     n_months : int
-        예측할 분기 수 (기본 4 = 1년).
+        예측할 분기 수 (기본 8 = 2년).
     config : dict, optional
         설정 오버라이드.
 
@@ -96,7 +96,7 @@ def predict(
         }
     """
     cfg = {**DEFAULT_PREDICT_CONFIG, **(config or {})}
-    device = torch.device("cpu")   # 추론은 CPU에서 수행
+    device = torch.device("cpu")  # 추론은 CPU에서 수행
 
     weights_path = Path(cfg["weights_path"])
     scalers_path = Path(cfg["scalers_path"])
@@ -107,8 +107,7 @@ def predict(
     # 가중치 파일 존재 확인
     if not weights_path.exists():
         raise FileNotFoundError(
-            f"TCN 모델 가중치를 찾을 수 없습니다: {weights_path}\n"
-            "먼저 학습(pretrain/finetune)을 실행하세요."
+            f"TCN 모델 가중치를 찾을 수 없습니다: {weights_path}\n먼저 학습(pretrain/finetune)을 실행하세요."
         )
 
     # 스케일러 파일 존재 확인
@@ -157,9 +156,7 @@ def predict(
     recent = group[actual_features].values.astype(np.float32)
 
     if len(recent) < window_size:
-        raise ValueError(
-            f"과거 데이터가 부족합니다: {len(recent)}분기 (최소 {window_size}분기 필요)"
-        )
+        raise ValueError(f"과거 데이터가 부족합니다: {len(recent)}분기 (최소 {window_size}분기 필요)")
 
     # 피처 스케일링
     seq = feat_scaler.transform(recent[-window_size:])
@@ -181,7 +178,7 @@ def predict(
 
         for _ in range(n_months):
             # TCN 순전파 → 스케일된 예측값
-            pred_scaled = model(current_seq)            # (1, 1)
+            pred_scaled = model(current_seq)  # (1, 1)
             pred_val = pred_scaled.cpu().numpy().flatten()[0]
 
             # 역변환: 스케일 → 로그 → 원래 매출 단위
@@ -204,8 +201,9 @@ def predict(
     results: list[dict] = []
 
     for i, pred_sales in enumerate(predictions):
-        # 불확실성 증가 계수: 5%, 10%, 15%, 20%
-        uncertainty_factor = 0.05 * (i + 1)
+        # 불확실성 증가 계수: 스텝당 3% 증가, 최대 25% 상한
+        # (4분기: 12%, 8분기: 24% — 장기 예측 시 과도한 구간 팽창 방지)
+        uncertainty_factor = min(0.03 * (i + 1), 0.25)
         margin = abs(pred_sales) * uncertainty_factor * confidence_z
 
         results.append(

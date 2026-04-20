@@ -75,6 +75,8 @@ EXTRA_FEATURES = [
     "cpi_index",
     "quarter_num",  # 계절성 피처 (1~4)
     "trend_score",  # 네이버 검색 트렌드 (서울 전체)
+    "holiday_count",  # 분기 내 공휴일 수 (holiday_calendar)
+    "bus_flpop",  # 동별 분기 버스 승하차 집계 (bus_boarding_daily)
 ]
 
 GOLMOK_FEATURES = [
@@ -354,6 +356,17 @@ def _impute_missing(
     if "trend_score" in df.columns:
         df["trend_score"] = df["trend_score"].fillna(0)
 
+    # 공휴일 수: 분기별 ffill 후 0 대체
+    if "holiday_count" in df.columns:
+        df["holiday_count"] = df["holiday_count"].ffill().bfill().fillna(0)
+
+    # 버스 유동인구: 동별 선형 보간 후 0 대체
+    if "bus_flpop" in df.columns:
+        df["bus_flpop"] = df.groupby("dong_code")["bus_flpop"].transform(
+            lambda x: x.interpolate(method="linear", limit_direction="both")
+        )
+        df["bus_flpop"] = df["bus_flpop"].fillna(0)
+
     # 나머지 피처: fillna(0)
     if feature_cols is None:
         feature_cols = ALL_FEATURES
@@ -496,6 +509,77 @@ def build_timeseries(
     # 계절성 피처 추가 (분기 번호 1~4)
     if "quarter" in df.columns:
         df["quarter_num"] = (df["quarter"] % 10).astype(float)
+
+    # 공휴일 수 피처 (holiday_calendar DB — 분기별 공휴일 count)
+    try:
+        from sqlalchemy import create_engine
+
+        engine = create_engine(DB_URL + "?connect_timeout=3", echo=False)
+        holiday_df = pd.read_sql(
+            """
+            SELECT
+                (EXTRACT(YEAR FROM date)::int * 10 + EXTRACT(QUARTER FROM date)::int) AS quarter,
+                COUNT(*) AS holiday_count
+            FROM holiday_calendar
+            WHERE is_holiday = true OR is_substitute = true
+            GROUP BY quarter
+            """,
+            engine,
+        )
+        engine.dispose()
+        holiday_df["quarter"] = holiday_df["quarter"].astype(int)
+        df = df.merge(holiday_df, on="quarter", how="left")
+        df["holiday_count"] = df["holiday_count"].fillna(0).astype(float)
+    except Exception:
+        df["holiday_count"] = 0.0
+
+    # 버스 유동인구 피처 (CSV 캐시 우선, DB fallback)
+    # 사전 집계 CSV: scripts/cache_bus_flpop.py 실행 후 생성
+    # CSV 없으면 DB에서 실시간 집계 (371만 행 GROUP BY — 느림)
+    _bus_csv = DATA_DIR / "bus_flpop_quarterly.csv"
+    try:
+        if _bus_csv.exists():
+            bus_agg = pd.read_csv(_bus_csv, dtype={"dong_code": str})
+            bus_agg["quarter"] = bus_agg["quarter"].astype(int)
+            df = df.merge(bus_agg[["quarter", "dong_code", "bus_flpop"]], on=["quarter", "dong_code"], how="left")
+            df["bus_flpop"] = df["bus_flpop"].fillna(0).astype(float)
+        else:
+            # DB fallback (느린 경로 — 사전 캐싱 권장: python -m scripts.cache_bus_flpop)
+            logger.warning("bus_flpop CSV 없음, DB 실시간 집계 시도 (느릴 수 있음)")
+            from sqlalchemy import create_engine
+
+            engine = create_engine(DB_URL + "?connect_timeout=3", echo=False)
+            bus_df = pd.read_sql(
+                """
+                SELECT
+                    (EXTRACT(YEAR FROM use_date)::int * 10 + EXTRACT(QUARTER FROM use_date)::int) AS quarter,
+                    station_name,
+                    SUM(boarding_count + alighting_count) AS bus_flpop_raw
+                FROM bus_boarding_daily
+                GROUP BY quarter, station_name
+                """,
+                engine,
+            )
+            engine.dispose()
+
+            if not bus_df.empty and "dong_name" in df.columns:
+                dong_names = df["dong_name"].dropna().unique().tolist()
+                bus_df["matched_dong"] = bus_df["station_name"].apply(
+                    lambda s: next((d for d in dong_names if d.replace("동", "") in str(s)), None)
+                )
+                bus_agg2 = (
+                    bus_df[bus_df["matched_dong"].notna()]
+                    .groupby(["quarter", "matched_dong"], as_index=False)["bus_flpop_raw"]
+                    .sum()
+                    .rename(columns={"matched_dong": "dong_name", "bus_flpop_raw": "bus_flpop"})
+                )
+                bus_agg2["quarter"] = bus_agg2["quarter"].astype(int)
+                df = df.merge(bus_agg2, on=["quarter", "dong_name"], how="left")
+                df["bus_flpop"] = df["bus_flpop"].fillna(0).astype(float)
+            else:
+                df["bus_flpop"] = 0.0
+    except Exception:
+        df["bus_flpop"] = 0.0
 
     # 코로나 시기 가중치 (2020~2021 → 0.5, 나머지 → 1.0)
     if "quarter" in df.columns:
