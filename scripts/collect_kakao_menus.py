@@ -132,11 +132,14 @@ def parse_menu_items(menu: dict | None) -> list[dict]:
         price = it.get("price")
         if isinstance(price, str):
             price = int("".join(filter(str.isdigit, price)) or 0)
+        # Kakao 센티넬 -1 (가격 미등록) 은 NULL 로 정규화
+        if not isinstance(price, int) or price <= 0:
+            price = None
         rows.append(
             {
                 "product_id": int(pid),
                 "menu_name": (it.get("name") or "").strip() or "(무명)",
-                "price": price if isinstance(price, int) else None,
+                "price": price,
                 "description": it.get("desc"),
                 "photo_url": it.get("photo_url"),
                 "mod_at": mod_dt,
