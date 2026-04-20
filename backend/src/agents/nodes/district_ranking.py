@@ -26,8 +26,29 @@ from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MA
 from src.config.settings import settings
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.database.models import NaverVacancy, StoreQuarterly
+from src.services.population_api import MAPO_DONG_CODES
 
 _CACHE_TTL = 86400  # 24시간
+
+# ── SEMAS / NAVER 클라이언트 (싱글톤, API 키 없으면 None) ──
+_semas_client = None
+_naver_client = None
+
+
+def _init_optional_clients():
+    """API 키가 있을 때만 클라이언트 생성 (서버 시작 시 1회)"""
+    global _semas_client, _naver_client
+    if _semas_client is None and settings.semas_api_key:
+        from src.services.semas_api import SemasAPIClient
+
+        _semas_client = SemasAPIClient(api_key=settings.semas_api_key)
+    if _naver_client is None and settings.naver_client_id and settings.naver_client_secret:
+        from src.services.sns_trend import NaverTrendClient
+
+        _naver_client = NaverTrendClient(
+            client_id=settings.naver_client_id,
+            client_secret=settings.naver_client_secret,
+        )
 
 
 async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
@@ -156,18 +177,56 @@ async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
         return {}, False
 
 
+async def _fetch_semas_density(dong_name: str, business_type: str) -> int | None:
+    """SEMAS API — 행정동 업종 밀집도 (점포 수). API 키 없거나 실패 시 None."""
+    if _semas_client is None:
+        return None
+    try:
+        dong_code = MAPO_DONG_CODES.get(dong_name)
+        if not dong_code:
+            return None
+        biz_code = {"카페": "Q01A01", "음식점": "Q01A02", "편의점": "Q02A01"}.get(
+            BIZ_TYPE_LABEL.get(business_type.lower(), business_type), "Q01"
+        )
+        result = await _semas_client.get_business_density(dong_code, biz_code)
+        items = result.get("items", [])
+        return sum(item.get("store_count", 0) for item in items) if items else None
+    except Exception as e:
+        logger.debug(f"[district_ranking] SEMAS 밀집도 조회 실패 ({dong_name}): {e}")
+        return None
+
+
+async def _fetch_naver_trend(dong_name: str, business_type: str) -> float | None:
+    """NAVER DataLab — 동+업종 검색 트렌드 성장률(%). API 키 없거나 실패 시 None."""
+    if _naver_client is None:
+        return None
+    try:
+        biz_label = BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
+        result = await _naver_client.get_district_trend(dong_name, biz_label)
+        growth = result.get("growth_rate")
+        return float(growth) if growth is not None else None
+    except Exception as e:
+        logger.debug(f"[district_ranking] NAVER 트렌드 조회 실패 ({dong_name}): {e}")
+        return None
+
+
 async def _score_single_district(dong_name: str, business_type: str) -> dict:
     """
     단일 행정동 원시 지표 수집.
     DB 데이터 없는 항목은 None으로 반환 — 0.0과 구분하여 정규화 왜곡 방지.
+    SEMAS 밀집도, NAVER 트렌드는 API 키 있을 때만 조회 (없으면 None).
     """
     try:
-        sales_data, pop_data, rent_data = await asyncio.gather(
+        # 기본 3축 + 선택 2축 병렬 조회
+        results = await asyncio.gather(
             market_tool.get_commercial_insights(dong_name, business_type),
             shared_population_trends(dong_name),
             market_tool.get_rent_insight(dong_name),
+            _fetch_semas_density(dong_name, business_type),
+            _fetch_naver_trend(dong_name, business_type),
             return_exceptions=True,
         )
+        sales_data, pop_data, rent_data, semas_density, naver_trend = results
 
         # None = DB 데이터 없음, 0.0 = 실제 성장률 0
         sales_growth = None
@@ -184,16 +243,34 @@ async def _score_single_district(dong_name: str, business_type: str) -> dict:
             if val:
                 avg_rent = float(val)
 
-        logger.debug(f"[district_ranking] {dong_name}: sales={sales_growth}, pop={pop_growth}, rent={avg_rent}")
+        # SEMAS/NAVER는 Exception이면 None 처리
+        if isinstance(semas_density, Exception):
+            semas_density = None
+        if isinstance(naver_trend, Exception):
+            naver_trend = None
+
+        logger.debug(
+            f"[district_ranking] {dong_name}: sales={sales_growth}, pop={pop_growth}, "
+            f"rent={avg_rent}, density={semas_density}, trend={naver_trend}"
+        )
         return {
             "district": dong_name,
             "sales_growth": sales_growth,
             "pop_growth": pop_growth,
             "avg_rent": avg_rent,
+            "semas_density": semas_density,
+            "naver_trend": naver_trend,
         }
     except Exception as e:
         logger.warning(f"[district_ranking] {dong_name} 점수 산출 실패 (무시): {e}")
-        return {"district": dong_name, "sales_growth": None, "pop_growth": None, "avg_rent": None}
+        return {
+            "district": dong_name,
+            "sales_growth": None,
+            "pop_growth": None,
+            "avg_rent": None,
+            "semas_density": None,
+            "naver_trend": None,
+        }
 
 
 def _normalize_and_rank(
@@ -251,15 +328,40 @@ def _normalize_and_rank(
     pop_norm = _minmax([r["pop_growth"] for r in raw])
     rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True)  # 낮은 임대료 = 높은 점수
 
+    # SEMAS 밀집도 (역방향 — 적을수록 좋음: 경쟁 낮음)
+    density_vals = [r.get("semas_density") for r in raw]
+    has_density = any(v is not None for v in density_vals)
+    density_norm = _minmax(density_vals, reverse=True) if has_density else None
+
+    # NAVER 트렌드 (정방향 — 높을수록 좋음: 상승 상권)
+    trend_vals = [r.get("naver_trend") for r in raw]
+    has_trend = any(v is not None for v in trend_vals)
+    trend_norm = _minmax(trend_vals) if has_trend else None
+
     # 데이터 커버리지 로그
     sales_hit = sum(1 for r in raw if r["sales_growth"] is not None)
     pop_hit = sum(1 for r in raw if r["pop_growth"] is not None)
     rent_hit = sum(1 for r in raw if r["avg_rent"] is not None)
-    logger.info(f"[district_ranking] 데이터 커버리지 — 매출:{sales_hit}/16, 인구:{pop_hit}/16, 임대료:{rent_hit}/16")
+    density_hit = sum(1 for v in density_vals if v is not None)
+    trend_hit = sum(1 for v in trend_vals if v is not None)
+    logger.info(
+        f"[district_ranking] 데이터 커버리지 — 매출:{sales_hit}/16, 인구:{pop_hit}/16, "
+        f"임대료:{rent_hit}/16, 밀집도:{density_hit}/16, 트렌드:{trend_hit}/16"
+    )
+
+    # 가중치 재분배: 추가 축이 있으면 기존 축에서 일부 할당
+    # 밀집도 5%, 트렌드 5% → 기존 매출에서 차감
+    w_density = 0.05 if has_density else 0.0
+    w_trend = 0.05 if has_trend else 0.0
+    w_sales_adj = w_sales - w_density - w_trend  # 추가 축 없으면 원래 가중치 유지
 
     ranked = []
     for i, r in enumerate(raw):
-        score = sales_norm[i] * w_sales + pop_norm[i] * w_pop + rent_norm[i] * w_rent
+        score = sales_norm[i] * w_sales_adj + pop_norm[i] * w_pop + rent_norm[i] * w_rent
+        if density_norm is not None:
+            score += density_norm[i] * w_density
+        if trend_norm is not None:
+            score += trend_norm[i] * w_trend
 
         # 예산 초과 페널티
         if budget_per_3_3m2 > 0 and r["avg_rent"] is not None and r["avg_rent"] > 0:
@@ -300,6 +402,10 @@ def _normalize_and_rank(
                 "sales_score": round(sales_norm[i], 1),
                 "pop_score": round(pop_norm[i], 1),
                 "rent_score": round(rent_norm[i], 1),
+                "density_score": round(density_norm[i], 1) if density_norm else None,
+                "trend_score": round(trend_norm[i], 1) if trend_norm else None,
+                "semas_density": r.get("semas_density"),
+                "naver_trend": r.get("naver_trend"),
                 "vacancy_rate": vacancy_rate,
                 "zoning_risk": zoning_risk,
             }
@@ -369,6 +475,8 @@ async def district_ranking_node(state: AgentState) -> dict:
         f"--- [DISTRICT RANKING] 마포구 {len(MAPO_DISTRICTS)}개 행정동 스코어링 시작 "
         f"(인구가중치={population_weight}, 예산={monthly_rent_budget:,}원, 면적={store_area}평) ---"
     )
+
+    _init_optional_clients()
 
     if db_client.engine is None:
         await db_client.connect()
