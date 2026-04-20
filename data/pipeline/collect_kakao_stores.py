@@ -34,6 +34,36 @@ KAKAO_API_KEY = os.environ.get("KAKAO_API_KEY", "8348393ff2ba1edb7a8779be210a719
 # 마포구 바운딩 박스 (서,남,동,북)
 MAPO_RECT = "126.88,37.53,126.96,37.59"
 
+# 위도 1도 ≈ 111km (고정). 경도 1도 ≈ 111km × cos(lat) — 마포(~37.56°)에서 ≈ 88km.
+_LAT_M_PER_DEG = 111_000.0
+_LON_M_PER_DEG_MAPO = 88_000.0  # cos(37.56°) × 111000
+
+
+def generate_grid(
+    bbox: tuple[float, float, float, float],
+    cell_m: int = 500,
+) -> list[tuple[float, float, float, float]]:
+    """bbox(west, south, east, north)를 cell_m 미터 격자로 분할.
+
+    반환값: [(w, s, e, n), ...] 리스트. 경계가 딱 떨어지지 않으면 마지막 셀이 더 작다.
+    """
+    west, south, east, north = bbox
+    lat_step = cell_m / _LAT_M_PER_DEG
+    lon_step = cell_m / _LON_M_PER_DEG_MAPO
+
+    cells: list[tuple[float, float, float, float]] = []
+    lat = south
+    while lat < north:
+        lon = west
+        next_lat = min(lat + lat_step, north)
+        while lon < east:
+            next_lon = min(lon + lon_step, east)
+            cells.append((lon, lat, next_lon, next_lat))
+            lon = next_lon
+        lat = next_lat
+    return cells
+
+
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
 DB_URL = os.environ.get(
     "POSTGRES_URL",
