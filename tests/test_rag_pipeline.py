@@ -26,12 +26,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from src.agents.nodes.legal import (  # noqa: E402
-    _DISTRICT_ZONE_MAP,
-    _extract_risk_level,
-    check_zoning_regulation,
-)
-from src.chains.prompts import build_legal_prompt  # noqa: E402
+from src.agents.nodes.legal import check_zoning_regulation  # noqa: E402
+from src.config.constants import DISTRICT_ZONE_MAP  # noqa: E402
 from src.chains.retriever import LegalDocumentRetriever  # noqa: E402
 from src.config.constants import MAPO_DISTRICTS  # noqa: E402
 
@@ -339,9 +335,9 @@ class TestZoningRegulation:
 
     @pytest.mark.asyncio
     async def test_all_16_districts_mapped(self):
-        """마포구 16개 행정동이 모두 _DISTRICT_ZONE_MAP에 매핑되어 있는지 확인."""
+        """마포구 16개 행정동이 모두 DISTRICT_ZONE_MAP에 매핑되어 있는지 확인."""
         for dong in MAPO_DISTRICTS:
-            assert dong in _DISTRICT_ZONE_MAP, f"'{dong}'이 _DISTRICT_ZONE_MAP에 없음"
+            assert dong in DISTRICT_ZONE_MAP, f"'{dong}'이 DISTRICT_ZONE_MAP에 없음"
 
     @pytest.mark.asyncio
     async def test_commercial_district_cafe_safe(self):
@@ -401,7 +397,7 @@ class TestZoningRegulation:
             "용문동": "제2종일반주거지역",
         }
         for dong, expected_zone in aliases.items():
-            assert _DISTRICT_ZONE_MAP.get(dong) == expected_zone, f"'{dong}' 매핑이 잘못됨"
+            assert DISTRICT_ZONE_MAP.get(dong) == expected_zone, f"'{dong}' 매핑이 잘못됨"
 
     @pytest.mark.asyncio
     async def test_all_48_combinations_no_error(self):
@@ -428,96 +424,3 @@ class TestZoningRegulation:
             assert result["level"] == "danger", f"{dong}+음식점이 danger가 아님: {result['level']}"
 
 
-# ── 4. build_legal_prompt 테스트 ─────────────────────────────────────────────
-
-
-class TestBuildLegalPrompt:
-    def test_empty_docs(self):
-        """검색 결과 없을 때 '관련 조문 없음' 메시지 포함."""
-        result = build_legal_prompt([], "가맹금 예치 의무는 무엇인가요?")
-        assert "관련 법률 문서를 찾을 수 없습니다" in result
-        assert "가맹금 예치 의무" in result
-
-    def test_with_docs(self):
-        """docs가 있을 때 출처와 조문 번호가 포함되는지 확인."""
-        docs = [
-            {
-                "content": "제3조(가맹금 예치) 가맹본부는 가맹금을 예치기관에 예치해야 합니다.",
-                "metadata": {"source": "가맹사업법", "article": "제3조", "relevance": 0.95},
-            }
-        ]
-        result = build_legal_prompt(docs, "가맹금 예치 의무는 무엇인가요?")
-        assert "가맹사업법" in result
-        assert "제3조" in result
-        assert "가맹금 예치" in result
-
-    def test_multiple_docs_numbered(self):
-        """여러 문서가 [1], [2] 형태로 번호 매겨지는지 확인."""
-        docs = [
-            {"content": "제10조 내용", "metadata": {"source": "상가임대차보호법", "article": "제10조"}},
-            {"content": "제12조 내용", "metadata": {"source": "가맹사업법", "article": "제12조"}},
-        ]
-        result = build_legal_prompt(docs, "질문")
-        assert "[1]" in result
-        assert "[2]" in result
-
-    def test_empty_content_doc_skipped(self):
-        """content가 빈 문서는 건너뛰는지 확인."""
-        docs = [
-            {"content": "", "metadata": {"source": "빈문서"}},
-            {"content": "실제 내용", "metadata": {"source": "유효문서"}},
-        ]
-        result = build_legal_prompt(docs, "질문")
-        assert "빈문서" not in result
-        assert "유효문서" in result
-
-
-# ── 5. _extract_risk_level 파싱 안정성 테스트 ────────────────────────────────
-
-
-class TestExtractRiskLevel:
-    """
-    이 테스트가 하는 일:
-    법률 에이전트가 LLM 응답에서 리스크 레벨(safe/caution/danger)을 파싱할 때,
-    LLM이 다양한 형식으로 응답해도 올바르게 추출하는지 확인합니다.
-    배치 LLM 프롬프트의 JSON 파싱 실패를 줄이기 위해 중요합니다.
-    """
-
-    def test_json_at_end(self):
-        """응답 마지막 줄에 JSON이 있는 정상 케이스."""
-        response = '법률 검토 결과입니다.\n{"risk_level": "safe"}'
-        assert _extract_risk_level(response) == "safe"
-
-    def test_json_in_code_block(self):
-        """마크다운 코드블록 안에 JSON이 있는 경우."""
-        response = '검토 완료.\n```json\n{"risk_level": "danger"}\n```'
-        assert _extract_risk_level(response) == "danger"
-
-    def test_json_in_middle(self):
-        """응답 중간에 JSON이 있는 경우."""
-        response = '결론: {"risk_level": "caution"} 이상입니다.'
-        assert _extract_risk_level(response) == "caution"
-
-    def test_keyword_fallback_danger(self):
-        """JSON 없이 "위험" 키워드로 danger 판정."""
-        response = "이 경우는 법률 위반 위험이 높습니다."
-        assert _extract_risk_level(response) == "danger"
-
-    def test_keyword_fallback_safe(self):
-        """JSON 없이 "안전" 키워드로 safe 판정."""
-        response = "법률적으로 안전한 상황입니다."
-        assert _extract_risk_level(response) == "safe"
-
-    def test_keyword_fallback_default_caution(self):
-        """키워드도 없으면 caution으로 기본값 반환."""
-        response = "검토가 필요합니다."
-        assert _extract_risk_level(response) == "caution"
-
-    def test_empty_response(self):
-        """빈 응답은 caution."""
-        assert _extract_risk_level("") == "caution"
-
-    def test_code_block_without_json_label(self):
-        """```만 있고 json 라벨이 없는 코드블록."""
-        response = '분석 결과:\n```\n{"risk_level": "safe"}\n```'
-        assert _extract_risk_level(response) == "safe"

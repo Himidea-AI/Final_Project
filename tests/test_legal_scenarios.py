@@ -25,7 +25,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from src.agents.nodes.legal import _extract_risk_level, _run_legal_pipeline  # noqa: E402
+from src.agents.nodes.legal import _run_legal_pipeline  # noqa: E402
 from src.schemas.structured_output import LegalBatchOutput, LegalRiskItem  # noqa: E402
 
 
@@ -351,24 +351,3 @@ class TestScenarioNoBrand:
         assert ftc["level"] == "caution"
         assert "브랜드명" in ftc["summary"] or "입력되지" in ftc["summary"]
 
-
-# ── _extract_risk_level 추가 엣지 케이스 ──────────────────────────────────────
-
-
-class TestExtractRiskLevelEdgeCases:
-    """배치 LLM 프롬프트 개선 후 JSON 파싱 안정성 추가 검증"""
-
-    def test_nested_json_in_text(self):
-        """텍스트 안에 여러 JSON이 있을 때 risk_level JSON을 정확히 추출."""
-        response = '분석: {"other": "data"} 결론: {"risk_level": "danger"}'
-        assert _extract_risk_level(response) == "danger"
-
-    def test_korean_keyword_violation(self):
-        """'위반' 키워드도 danger로 판정."""
-        response = "해당 조항을 위반할 가능성이 있습니다."
-        assert _extract_risk_level(response) == "danger"
-
-    def test_korean_keyword_no_problem(self):
-        """'문제없' 키워드는 safe로 판정."""
-        response = "법률적으로 문제없습니다."
-        assert _extract_risk_level(response) == "safe"
