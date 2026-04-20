@@ -106,6 +106,11 @@ interface SimResult {
     dong_name: string;
     listing_count: number;
   }[];
+  analysis_metrics?: {
+    main_target_age?: string;
+    peak_time?: string;
+    [k: string]: unknown;
+  };
   // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
   scenarios?: {
     optimistic: { quarter: number; revenue: number }[];
@@ -2575,6 +2580,8 @@ function SimulatorDashboard({
         vacancyApplied: (simRes as any).vacancy_applied,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         vacancySpots: (simRes as any).vacancy_spots ?? [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        analysis_metrics: (simRes as any).analysis_metrics,
         // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
         scenarios: simRes.scenarios ?? null,
       });
@@ -3921,13 +3928,21 @@ function SimulatorDashboard({
                                     </div>
                                   );
                                 })()}
-                                {/* 고정 카드 3: 타겟 구역 */}
+                                {/* 동적 카드 3: 타겟 고객층 */}
                                 <InsightCard
                                   severity="opportunity"
                                   onClick={() => setActiveDrawer('insight_target')}
                                   icon={<Users className="w-4 h-4 text-indigo-400" />}
-                                  title="2030 여성 타겟 구역"
-                                  desc="SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가."
+                                  title={
+                                    simResult?.analysis_metrics?.main_target_age
+                                      ? `${simResult.analysis_metrics.main_target_age} 타겟 권역`
+                                      : '주요 타겟 고객층'
+                                  }
+                                  desc={
+                                    simResult?.analysis_metrics?.peak_time
+                                      ? `피크 타임: ${simResult.analysis_metrics.peak_time} · 타겟층 집중 마케팅 전략 권장`
+                                      : '유동인구 분석 기반 타겟 고객층 전략을 확인하세요.'
+                                  }
                                 />
                               </div>
 
@@ -4037,6 +4052,7 @@ function SimulatorDashboard({
         onClose={() => setActiveDrawer(null)}
         drawerKey={activeDrawer}
         popData={popData}
+        analysisMetrics={simResult?.analysis_metrics}
       />
 
       {/* [v12.0] Hidden A4 PDF Template — html2canvas 캡처용 (화면 밖) */}
@@ -4844,13 +4860,24 @@ function DetailDrawer({
   onClose,
   drawerKey,
   popData,
+  analysisMetrics,
 }: {
   isOpen: boolean;
   onClose: () => void;
   drawerKey: DrawerKey;
   popData?: any;
+  analysisMetrics?: { main_target_age?: string; peak_time?: string };
 }) {
-  const data = drawerKey ? mockDetailData[drawerKey] : null;
+  const baseData = drawerKey ? mockDetailData[drawerKey] : null;
+  const data: DetailDataEntry | null =
+    drawerKey === 'insight_target' && analysisMetrics?.main_target_age
+      ? {
+          title: `${analysisMetrics.main_target_age} 타겟 권역 분석`,
+          aiReasoning: `유동인구 분석 결과 주요 타겟층: ${analysisMetrics.main_target_age}. 피크 타임대 체류 인구 기반으로 메뉴·마케팅 전략을 해당 층에 집중하면 객단가 및 재방문율 향상이 기대됩니다.`,
+          mainTarget: analysisMetrics.main_target_age,
+          peakTime: analysisMetrics.peak_time,
+        }
+      : baseData;
 
   return (
     <>
@@ -6523,6 +6550,7 @@ export default function App() {
               )}
             </div>
           </TransitionContext.Provider>
+          <SimulationFloatingWidget />
         </ToastProvider>
       </ManagerListProvider>
     </AuthProvider>

@@ -131,6 +131,8 @@ export interface AnalysisMetrics {
   growth_rate: number;
   competition_score: number;
   rent_affordability: string;
+  main_target_age?: string;
+  peak_time?: string;
 }
 
 /** Job 상태 */
