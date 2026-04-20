@@ -44,20 +44,20 @@ export type MonthlyProjection = QuarterlyProjection;
 /** SHAP 피처 기여도 항목 */
 export interface ShapFeatureItem {
   rank: number;
-  feature: string;       // 피처 영문명
-  feature_ko: string;    // 피처 한국어명
-  shap_value: number;    // SHAP 값 (음수: 매출 감소 기여)
-  abs_shap: number;      // SHAP 절댓값 (중요도 크기)
-  direction: 'positive' | 'negative' | 'neutral';  // 기여 방향
+  feature: string; // 피처 영문명
+  feature_ko: string; // 피처 한국어명
+  shap_value: number; // SHAP 값 (음수: 매출 감소 기여)
+  abs_shap: number; // SHAP 절댓값 (중요도 크기)
+  direction: 'positive' | 'negative' | 'neutral'; // 기여 방향
 }
 
 /** SHAP 분석 결과 */
 export interface ShapResult {
-  feature_importance: ShapFeatureItem[];  // 중요도 내림차순 정렬
-  base_value: number;                     // SHAP 기준 예측값
-  predicted_value: number;               // 모델 예측 매출액
-  predicted_value_unit: string;          // 단위 (예: "원")
-  is_mock: boolean;                      // mock 데이터 여부
+  feature_importance: ShapFeatureItem[]; // 중요도 내림차순 정렬
+  base_value: number; // SHAP 기준 예측값
+  predicted_value: number; // 모델 예측 매출액
+  predicted_value_unit: string; // 단위 (예: "원")
+  is_mock: boolean; // mock 데이터 여부
 }
 
 /** 동별 비교 결과 */
@@ -81,7 +81,7 @@ export interface LegalRisk {
 export interface SimulationOutput {
   request_id: string;
   target_district: string;
-  analysis_report: string;    // 줄글 리포트
+  analysis_report: string; // 줄글 리포트
   analysis_metrics: AnalysisMetrics; // 차트용 정량 데이터
   simulation_months: number;
   quarterly_projection: QuarterlyProjection[];
@@ -96,6 +96,7 @@ export interface SimulationOutput {
     competition_intensity: number;
     estimated_revenue: number;
     survival_rate: number;
+    closure_rate: number | null;
     growth_potential: number;
     accessibility: number;
   };
@@ -110,6 +111,12 @@ export interface SimulationOutput {
   financial_report?: Record<string, unknown>;
   // [B2 SHAP] TCN 피처 기여도 분석 결과
   shap_result?: ShapResult | null;
+  // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오
+  scenarios?: {
+    optimistic: { quarter: number; revenue: number }[];
+    base: { quarter: number; revenue: number }[];
+    pessimistic: { quarter: number; revenue: number }[];
+  } | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
@@ -129,7 +136,7 @@ export interface AnalysisMetrics {
 /** Job 상태 */
 export interface JobStatus {
   job_id: string;
-  status: "pending" | "in_progress" | "completed" | "failed";
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
   progress: number;
 }
 

@@ -68,7 +68,7 @@ class LegalVectorDB:
                     use_jsonb=True,
                 )
             except Exception as e:
-                print(f"[LegalVectorDB] WARNING: PGVector 초기화 실패 — RAG 검색 불가 ({e})")
+                print(f"[LegalVectorDB] WARNING: PGVector 초기화 실패 - RAG 검색 불가 ({e})")
                 return None
         return self._vectorstore
 
