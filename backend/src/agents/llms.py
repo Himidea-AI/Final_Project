@@ -9,6 +9,7 @@ load_dotenv()
 
 class LLMRetryProxy:
     """LLM 객체의 invoke/ainvoke를 낚아채서 429 재시도를 수행하는 프록시 클래스"""
+
     def __init__(self, llm):
         self._llm = llm
 
@@ -20,9 +21,14 @@ class LLMRetryProxy:
                 return self._llm.invoke(*args, **kwargs)
             except Exception as e:
                 err_str = str(e).upper()
-                if any(x in err_str for x in ["429", "RESOURCE_EXHAUSTED", "503", "500", "504", "UNAVAILABLE", "RATE_LIMIT"]):
-                    wait_time = base_delay * (2 ** attempt)
-                    print(f"⚠️ [API-SYNC RECOVERY] {wait_time}초 후 재시도... ({attempt+1}/{max_retries}) - Reason: {err_str[:50]}")
+                if any(
+                    x in err_str
+                    for x in ["429", "RESOURCE_EXHAUSTED", "503", "500", "504", "UNAVAILABLE", "RATE_LIMIT"]
+                ):
+                    wait_time = base_delay * (2**attempt)
+                    print(
+                        f"[WARNING] [API-SYNC RECOVERY] {wait_time}초 후 재시도... ({attempt + 1}/{max_retries}) - Reason: {err_str[:50]}"
+                    )
                     time.sleep(wait_time)
                 else:
                     raise e
@@ -36,9 +42,14 @@ class LLMRetryProxy:
                 return await self._llm.ainvoke(*args, **kwargs)
             except Exception as e:
                 err_str = str(e).upper()
-                if any(x in err_str for x in ["429", "RESOURCE_EXHAUSTED", "503", "500", "504", "UNAVAILABLE", "RATE_LIMIT"]):
-                    wait_time = base_delay * (2 ** attempt)
-                    print(f"⚠️ [API-ASYNC RECOVERY] {wait_time}초 후 재시도... ({attempt+1}/{max_retries}) - Reason: {err_str[:50]}")
+                if any(
+                    x in err_str
+                    for x in ["429", "RESOURCE_EXHAUSTED", "503", "500", "504", "UNAVAILABLE", "RATE_LIMIT"]
+                ):
+                    wait_time = base_delay * (2**attempt)
+                    print(
+                        f"[WARNING] [API-ASYNC RECOVERY] {wait_time}초 후 재시도... ({attempt + 1}/{max_retries}) - Reason: {err_str[:50]}"
+                    )
                     await asyncio.sleep(wait_time)
                 else:
                     raise e
@@ -60,6 +71,7 @@ def retry_on_429(func):
         if isinstance(llm, LLMRetryProxy):
             return llm
         return LLMRetryProxy(llm)
+
     return wrapper
 
 
@@ -68,6 +80,7 @@ def _build_llm(model: str, max_tokens: int | None = None):
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
     if provider == "openai":
         from langchain_openai import ChatOpenAI
+
         kwargs = dict(
             model=model,
             openai_api_key=os.getenv("OPENAI_API_KEY"),
@@ -78,8 +91,9 @@ def _build_llm(model: str, max_tokens: int | None = None):
         return ChatOpenAI(**kwargs)
     if provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
+
         kwargs = dict(
-            model="gemini-2.0-flash",
+            model=model,
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0.1,
         )
@@ -104,8 +118,11 @@ def get_fast_llm():
 
 @retry_on_429
 def get_smart_llm():
-    """Synthesis 전용 고품질 모델 — 최종 리포트 합성에만 사용
-    모델: SMART_LLM_MODEL 환경변수 우선, 미설정 시 gpt-4.1 / gemini-2.5-flash
+    """Synthesis 전용 LLM — 최종 리포트 합성에만 사용.
+
+    기본값은 fast LLM과 동일(gpt-4.1-mini / gemini-2.0-flash). Synthesis는 상위 에이전트가
+    이미 정리한 결과를 구조화 스키마로 재구성하는 작업이라 mini로 충분함.
+    품질 비교 후 상위 모델이 필요하면 SMART_LLM_MODEL 환경변수로 옵트인 (예: gpt-4.1).
     """
     if not hasattr(get_smart_llm, "_instance"):
         provider = os.getenv("LLM_PROVIDER", "openai").lower()

@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 import os
@@ -5,6 +6,8 @@ import uuid
 import asyncio
 import logging
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
 current_dir = Path(__file__).parent
@@ -29,7 +32,6 @@ from pydantic import BaseModel
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.config.settings import settings
 from src.schemas.simulation_input import SimulationInput
-from src.schemas.simulation_output import SimulationOutput
 from src.agents.graph import compile_workflow
 from src.services.biz_mapper import BizMapper
 from src.services.auth import AuthService
@@ -37,7 +39,6 @@ from src.services.auth import AuthService
 from models.interface import ModelOutput
 from models.explainability.simulation import (
     build_quarterly_projection,
-    build_scenarios,
 )
 from models.explainability.shap_analysis import explain_tcn_prediction
 
@@ -46,8 +47,8 @@ from models.explainability.shap_analysis import explain_tcn_prediction
 # ---------------------------------------------------------------------------
 # LLM 파이프라인 엔드포인트(/simulate, /analyze)를 IP당 시간당 최대 횟수로 제한
 _RATE_LIMITED_PATHS = {"/simulate", "/analyze"}
-_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "10"))   # 시간당 최대 요청 수
-_RATE_LIMIT_WINDOW = 3600                                         # 1시간(초)
+_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "10"))  # 시간당 최대 요청 수
+_RATE_LIMIT_WINDOW = 3600  # 1시간(초)
 
 
 async def _check_rate_limit(ip: str) -> tuple[bool, int]:
@@ -96,8 +97,10 @@ async def rate_limit_middleware(request: Request, call_next):
     if request.url.path in _RATE_LIMITED_PATHS:
         # X-Forwarded-For → 실제 클라이언트 IP (Nginx 프록시 환경 대응)
         forwarded_for = request.headers.get("X-Forwarded-For")
-        client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (
-            request.client.host if request.client else "unknown"
+        client_ip = (
+            forwarded_for.split(",")[0].strip()
+            if forwarded_for
+            else (request.client.host if request.client else "unknown")
         )
         exceeded, count = await _check_rate_limit(client_ip)
         if exceeded:
@@ -129,8 +132,10 @@ def _pipeline_key(input_data: Any) -> str:
 
 
 _BIZ_TYPE_NORMALIZE: Dict[str, str] = {
-    "cafe": "카페", "coffee": "카페",
-    "restaurant": "한식", "food": "한식",
+    "cafe": "카페",
+    "coffee": "카페",
+    "restaurant": "한식",
+    "food": "한식",
     "chicken": "치킨",
     "convenience": "편의점",
     "bakery": "베이커리",
@@ -142,6 +147,7 @@ from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
 
 # 업종명(한국어) → 골목상권 업종코드: tools.py MarketDataTool._SALES_CODE_MAP 재사용
 from src.agents.tools import MarketDataTool as _MarketDataTool
+
 _BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 
@@ -150,7 +156,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
     key = _pipeline_key(input_data)
 
     if key in _pending_pipelines and not _pending_pipelines[key].done():
-        print(f"[DEDUP] 동일 요청 대기 중 — 기존 파이프라인 공유: {key}")
+        print(f"[DEDUP] 동일 요청 대기 중 - 기존 파이프라인 공유: {key}")
         return await _pending_pipelines[key]
 
     # 프론트엔드가 영문으로 보낼 경우 한국어로 정규화 (DB 쿼리 호환)
@@ -183,9 +189,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "errors": [],
     }
 
-    task: asyncio.Task[Any] = asyncio.create_task(
-        asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0)
-    )
+    task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0))
     _pending_pipelines[key] = task
     try:
         return await task
@@ -200,7 +204,13 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     """
     md = state.get("market_data", {})
     analysis = state.get("analysis_results", {})
-    metrics = state.get("analysis_metrics", {})
+    metrics = state.get("analysis_metrics") or {
+        "district_grade": "NORMAL",
+        "growth_rate": 5,
+        "competition_score": 0.5,
+        "rent_affordability": "CAUTION",
+        "population_score": 7,
+    }
     target_dist = state.get("target_district", "마포구")
 
     # [좌표 기본값 처리]
@@ -237,11 +247,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
     final_report = analysis.get("final_report") or {}
-    ai_recommendation = (
-        final_report.get("summary")
-        or analysis.get("market_summary", "")[:120]
-        or ""
-    )
+    ai_recommendation = final_report.get("summary") or analysis.get("market_summary", "")[:120] or ""
 
     # market_report — 프론트엔드 chartData용 7개 정규화 지표 (0~100)
     competition_score = float(metrics.get("competition_score") or 0.5)
@@ -266,9 +272,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "RISKY": 40,
     }.get(grade, 60)
     competition_intensity = min(int(competition_score * 100), 100)
-    district_score = float(
-        {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
-    )
+    district_score = float({"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60))
 
     market_report = {
         "floating_population": min(int(pop_score * 10), 100),
@@ -277,7 +281,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "estimated_revenue": estimated_revenue,
         "survival_rate": max(100 - competition_intensity, 30),
         "growth_potential": min(int(abs(growth_rate) * 5), 100),
-        "accessibility": 75,
+        "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
     }
 
     # [Simulation 실제 연동] B2 ModelOutput + build_quarterly_projection 연결
@@ -303,7 +307,16 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         )
     except Exception as _sim_err:
         print(f"[SIM] ModelOutput 호출 실패 (mock 사용): {_sim_err}")
-        quarterly = [{"month": 1, "revenue": 30_000_000, "cumulative_profit": -150_000_000}]
+        quarterly = [
+            {
+                "quarter": q,
+                "revenue": 30_000_000,
+                "cumulative_profit": -150_000_000 + q * 30_000_000,
+                "confidence_lower": 25_000_000,
+                "confidence_upper": 35_000_000,
+            }
+            for q in range(1, 5)
+        ]
 
     # TCN SHAP 분석 실행 — 피처별 매출 기여도 계산
     try:
@@ -355,9 +368,9 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 "district": target_dist,
                 "score": district_score,
                 "revenue": md.get("avg_revenue", 30000000),
-                "bep": 14,
+                "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
                 "survival": float(market_report["survival_rate"]),
-                "cannibalization": 4,
+                "cannibalization": float(metrics.get("cannibalization_impact") or 4),
             }
         ],
         "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
@@ -379,10 +392,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "shap_result": shap_result,
     }
 
-    print(
-        f"\nDEBUG: [{target_dist}] API 응답 전송 "
-        f"(Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)"
-    )
+    print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")
     return response_data
 
 
@@ -788,7 +798,9 @@ async def run_simulation(input_data: SimulationInput):
         final_state = await _run_pipeline(input_data)
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
-        print(f"!!! [SIMULATE ERROR] !!! {str(e)}")
+        import traceback
+        print(f"!!! [SIMULATE ERROR] !!! {type(e).__name__}: {e}")
+        traceback.print_exc()
         return {
             "request_id": request_id,
             "target_district": input_data.target_district,

@@ -4,7 +4,8 @@ import redis.asyncio as aioredis
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.schemas.state import AgentState
 from src.schemas.structured_output import PopulationAnalysisOutput
-from src.agents.nodes.market_analyst import market_tool, db_client
+from src.agents.nodes.market_analyst import db_client
+from src.agents.nodes.district_ranking import shared_population_trends
 from src.agents.llms import get_fast_llm
 from src.config.settings import settings
 
@@ -50,7 +51,8 @@ async def population_analyst_node(state: AgentState) -> dict:
     # 1. 실데이터 수집 (DB 연결 확인)
     if db_client.engine is None:
         await db_client.connect()
-    pop_data = await market_tool.get_population_trends(target_district)
+    # district_ranking_node와 동일 dong에 대한 호출은 shared_population_trends가 dedupe
+    pop_data = await shared_population_trends(target_district)
 
     if "error" in pop_data:
         print(f"!!! [POPULATION ANALYST DATA ERROR] !!! {pop_data['error']}")
@@ -59,7 +61,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         return {"analysis_results": analysis_results, "current_agent": "population_analyst"}
 
     # 2. API 할당량 관리 (2초 대기)
-    print("⏳ API 할당량 관리를 위해 2초 대기 중...")
+    print("[WAIT] API 할당량 관리를 위해 2초 대기 중...")
     await asyncio.sleep(2)
 
     # 3. LLM 분석 (Structured Output)
