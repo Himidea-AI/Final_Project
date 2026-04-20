@@ -219,7 +219,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     lat = md.get("lat") if md.get("lat") else DEFAULT_LAT
     lng = md.get("lng") if md.get("lng") else DEFAULT_LNG
 
-    # 법률 리스크 리스트 변환
+    # 법률 리스크 리스트 변환 (articles 포함 — 프론트 근거 조항 drawer용)
     legal_risks_raw = analysis.get("legal_risks") or []
     legal_risks = [
         {
@@ -229,6 +229,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             ),
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
+            "articles": r.get("articles", []),
         }
         for r in legal_risks_raw
     ]
