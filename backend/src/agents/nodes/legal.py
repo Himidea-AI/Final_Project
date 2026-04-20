@@ -1184,11 +1184,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
     }
     for law_type, docs in docs_map.items():
         if docs:
-            snippets = " / ".join(d["content"][:150] for d in docs[:2])
+            snippets = " | ".join(d["content"][:400] for d in docs[:4])
             docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
 
-    if len(docs_context) > 5000:
-        docs_context = docs_context[:5000] + "..."
+    if len(docs_context) > 12000:
+        docs_context = docs_context[:12000] + "..."
 
     items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
     batch_prompt = (

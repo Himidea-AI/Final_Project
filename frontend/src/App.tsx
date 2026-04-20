@@ -66,9 +66,6 @@ import { QuarterlyProjectionChart } from './components/SimulationResult/Quarterl
 import { ShapChart } from './components/SimulationResult/ShapChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import * as XLSX from 'xlsx';
 
 interface SimResult {
   score: number;
@@ -155,11 +152,7 @@ import {
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
 import HybridSliderInput from './components/ui/HybridSliderInput';
-import {
-  useManagerList,
-  formatRelativeTime,
-  ManagerListProvider,
-} from './hooks/useManagerList';
+import { useManagerList, formatRelativeTime, ManagerListProvider } from './hooks/useManagerList';
 import {
   AreaChart,
   Area,
@@ -2265,7 +2258,15 @@ function SimulatorDashboard({
         simResult.marketReport.accessibility,
       ]
     : RADAR_FALLBACK_VALUES;
-  const RADAR_LABELS = ['유동인구', '매출', '성장성', '생존율', '임대료', '경쟁강도', '접근성'] as const;
+  const RADAR_LABELS = [
+    '유동인구',
+    '매출',
+    '성장성',
+    '생존율',
+    '임대료',
+    '경쟁강도',
+    '접근성',
+  ] as const;
   const radarVertices = radarValues.map((v, k) => {
     const angle = -Math.PI / 2 + (2 * Math.PI * k) / 7;
     const r = Math.max(0, Math.min(100, v)) * 0.6; // max radius 60px
@@ -2289,6 +2290,7 @@ function SimulatorDashboard({
   // [v12.0] PDF/Excel 다운로드용 ref + 로딩 상태
   const pdfTemplateRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
 
   const handleDownloadPDF = useCallback(async () => {
     if (!pdfTemplateRef.current) return;
@@ -2296,6 +2298,11 @@ function SimulatorDashboard({
     setIsGeneratingPDF(true);
 
     try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ]);
+
       const template = pdfTemplateRef.current;
       const pages = Array.from(template.children) as HTMLElement[];
 
@@ -2321,96 +2328,106 @@ function SimulatorDashboard({
       showToast('success', 'PDF 리포트 생성이 완료되었습니다.');
     } catch (error) {
       console.error('PDF Generation Failed:', error);
-      alert('PDF 생성 중 오류가 발생했습니다.');
+      showToast('error', 'PDF 생성 중 오류가 발생했습니다.');
     } finally {
       setIsGeneratingPDF(false);
     }
   }, [reportFullDate, selectedDongs, showToast]);
 
-  const handleDownloadExcel = useCallback(() => {
+  const handleDownloadExcel = useCallback(async () => {
     setIsDownloadOpen(false);
-    const districtName = selectedDongs[0] || '연남동';
+    setIsGeneratingExcel(true);
 
-    const wb = XLSX.utils.book_new();
+    try {
+      const XLSX = await import('xlsx');
+      const districtName = selectedDongs[0] || '연남동';
 
-    // Sheet 1: 요약
-    const summary: (string | number)[][] = [
-      ['SPOTTER · AI Franchise Intelligence Report'],
-      [],
-      ['분석 대상', `마포구 ${districtName}`],
-      ['생성 일시', reportFullDate],
-      ['Document ID', `SPTR-${Date.now().toString().slice(-8)}`],
-      [],
-      ['KPI 요약'],
-      ['지표', '값', '트렌드'],
-      [
-        '예상 월 매출 (추정)',
-        `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
-        '+12.5%',
-      ],
-      ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
-      [
-        '일일 유동인구',
-        popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '42,105 명',
-        popData?.date ?? '-2.4%',
-      ],
-      ['카니발리제이션 위험', `${simResult?.riskLevel ?? 'Low'} (12%)`, '안전 권역'],
-      [],
-      ['7 Core Metrics (레이더 차트)'],
-      ['항목', '점수'],
-      ...(simResult?.chartData ?? CHART_DATA).map((d) => [d.label, d.value]),
-    ];
-    const ws1 = XLSX.utils.aoa_to_sheet(summary);
-    ws1['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws1, '요약');
+      const wb = XLSX.utils.book_new();
 
-    // Sheet 2: 가맹점 간섭도
-    const cann: (string | number)[][] = [
-      ['가맹점명', '거리', '예상 매출 하락', '상태'],
-      ...CANNIBALIZATION_ROWS.map((r) => [r.name, r.distance, r.impact, r.status]),
-    ];
-    const ws2 = XLSX.utils.aoa_to_sheet(cann);
-    ws2['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, ws2, '가맹점 간섭도');
+      // Sheet 1: 요약
+      const summary: (string | number)[][] = [
+        ['SPOTTER · AI Franchise Intelligence Report'],
+        [],
+        ['분석 대상', `마포구 ${districtName}`],
+        ['생성 일시', reportFullDate],
+        ['Document ID', `SPTR-${Date.now().toString().slice(-8)}`],
+        [],
+        ['KPI 요약'],
+        ['지표', '값', '트렌드'],
+        [
+          '예상 월 매출 (추정)',
+          `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
+          '+12.5%',
+        ],
+        ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
+        [
+          '일일 유동인구',
+          popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '42,105 명',
+          popData?.date ?? '-2.4%',
+        ],
+        ['카니발리제이션 위험', `${simResult?.riskLevel ?? 'Low'} (12%)`, '안전 권역'],
+        [],
+        ['7 Core Metrics (레이더 차트)'],
+        ['항목', '점수'],
+        ...(simResult?.chartData ?? CHART_DATA).map((d) => [d.label, d.value]),
+      ];
+      const ws1 = XLSX.utils.aoa_to_sheet(summary);
+      ws1['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, ws1, '요약');
 
-    // Sheet 3: 행정동 비교
-    const neighborhoods: (string | number)[][] = [
-      ['행정동', 'AI 점수', '생존율', '예상 BEP'],
-      ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.survival, r.bep]),
-    ];
-    const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
-    ws3['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws3, '행정동 비교');
+      // Sheet 2: 가맹점 간섭도
+      const cann: (string | number)[][] = [
+        ['가맹점명', '거리', '예상 매출 하락', '상태'],
+        ...CANNIBALIZATION_ROWS.map((r) => [r.name, r.distance, r.impact, r.status]),
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(cann);
+      ws2['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, ws2, '가맹점 간섭도');
 
-    // Sheet 4: AI 인사이트
-    const insights: (string | number)[][] = [
-      ['SPOTTER AI 인사이트 — LangGraph Multi-Agent'],
-      [],
-      ['Severity', 'Title', 'Description'],
-      [
-        'ADVISORY',
-        '저녁 시간대 매출 집중형',
-        '18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다.',
-      ],
-      [
-        'CRITICAL',
-        '법률 리스크 경고 (Legal Node)',
-        simResult?.recommendation ||
-          '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.',
-      ],
-      [
-        'OPPORTUNITY',
-        '2030 여성 타겟 구역',
-        'SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가.',
-      ],
-    ];
-    const ws4 = XLSX.utils.aoa_to_sheet(insights);
-    ws4['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 60 }];
-    XLSX.utils.book_append_sheet(wb, ws4, 'AI 인사이트');
+      // Sheet 3: 행정동 비교
+      const neighborhoods: (string | number)[][] = [
+        ['행정동', 'AI 점수', '생존율', '예상 BEP'],
+        ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.survival, r.bep]),
+      ];
+      const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
+      ws3['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, ws3, '행정동 비교');
 
-    const dateStr = reportFullDate.replace(/\./g, '');
-    XLSX.writeFile(wb, `SPOTTER_마포구_${districtName}_${dateStr}.xlsx`);
-    showToast('success', 'Excel 데이터가 다운로드되었습니다.');
+      // Sheet 4: AI 인사이트
+      const insights: (string | number)[][] = [
+        ['SPOTTER AI 인사이트 — LangGraph Multi-Agent'],
+        [],
+        ['Severity', 'Title', 'Description'],
+        [
+          'ADVISORY',
+          '저녁 시간대 매출 집중형',
+          '18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다.',
+        ],
+        [
+          'CRITICAL',
+          '법률 리스크 경고 (Legal Node)',
+          simResult?.recommendation ||
+            '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.',
+        ],
+        [
+          'OPPORTUNITY',
+          '2030 여성 타겟 구역',
+          'SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가.',
+        ],
+      ];
+      const ws4 = XLSX.utils.aoa_to_sheet(insights);
+      ws4['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 60 }];
+      XLSX.utils.book_append_sheet(wb, ws4, 'AI 인사이트');
+
+      const dateStr = reportFullDate.replace(/\./g, '');
+      XLSX.writeFile(wb, `SPOTTER_마포구_${districtName}_${dateStr}.xlsx`);
+      showToast('success', 'Excel 데이터가 다운로드되었습니다.');
+    } catch (error) {
+      console.error('Excel Generation Failed:', error);
+      showToast('error', 'Excel 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingExcel(false);
+    }
   }, [reportFullDate, selectedDongs, simResult, showToast]);
 
   const toggleOperatingHour = useCallback((hour: string) => {
@@ -3139,14 +3156,14 @@ function SimulatorDashboard({
                     <div className="relative">
                       <button
                         onClick={() => setIsDownloadOpen(!isDownloadOpen)}
-                        disabled={isGeneratingPDF}
+                        disabled={isGeneratingPDF || isGeneratingExcel}
                         className="flex items-center gap-2 px-3 py-2 bg-transparent border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        {isGeneratingPDF ? '생성 중...' : '다운로드'}
+                        {isGeneratingPDF || isGeneratingExcel ? '생성 중...' : '다운로드'}
                         <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
                       </button>
-                      {isDownloadOpen && !isGeneratingPDF && (
+                      {isDownloadOpen && !isGeneratingPDF && !isGeneratingExcel && (
                         <>
                           <div
                             className="fixed inset-0 z-40"
@@ -3328,9 +3345,7 @@ function SimulatorDashboard({
                                   <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart
                                       data={
-                                        chartView === 'daily'
-                                          ? DAILY_CHART_DATA
-                                          : monthlyChartData
+                                        chartView === 'daily' ? DAILY_CHART_DATA : monthlyChartData
                                       }
                                       margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
                                     >
@@ -3787,11 +3802,22 @@ function SimulatorDashboard({
                                   // [C1] legal_risks 상위 3건을 실데이터로 렌더. 없으면 mock fallback
                                   const risks = simResult?.legalRisks?.slice(0, 3);
                                   if (risks && risks.length > 0) {
-                                    const severityMap = (risk: string): 'advisory' | 'critical' | 'opportunity' => {
+                                    const severityMap = (
+                                      risk: string,
+                                    ): 'advisory' | 'critical' | 'opportunity' => {
                                       const r = (risk || '').toLowerCase();
-                                      if (r.includes('danger') || r.includes('high') || r.includes('위험') || r.includes('경고'))
+                                      if (
+                                        r.includes('danger') ||
+                                        r.includes('high') ||
+                                        r.includes('위험') ||
+                                        r.includes('경고')
+                                      )
                                         return 'critical';
-                                      if (r.includes('caution') || r.includes('medium') || r.includes('주의'))
+                                      if (
+                                        r.includes('caution') ||
+                                        r.includes('medium') ||
+                                        r.includes('주의')
+                                      )
                                         return 'advisory';
                                       return 'opportunity';
                                     };
@@ -6097,321 +6123,327 @@ export default function App() {
       <ManagerListProvider>
         <ToastProvider>
           <TransitionContext.Provider value={navigateWithTransition}>
-          <div
-            className="w-screen h-screen overflow-hidden select-none bg-background text-foreground"
-            style={{
-              animation: isAppLoaded
-                ? 'none'
-                : 'main-scene-in 1.5s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards',
-            }}
-          >
-            {/* Film Grain Noise Overlay */}
             <div
-              className="pointer-events-none fixed inset-0 z-[9998] opacity-[0.04] mix-blend-screen"
+              className="w-screen h-screen overflow-hidden select-none bg-background text-foreground"
               style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                animation: isAppLoaded
+                  ? 'none'
+                  : 'main-scene-in 1.5s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards',
               }}
-            />
-
-            {/* Particle background */}
-            <NetworkBackground isTransitioning={isTransitioning} scene={scene} theme="dark" />
-
-            {/* Route-based scenes */}
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <IntroScene
-                    activeMenuIndex={activeMenuIndex}
-                    setActiveMenuIndex={setActiveMenuIndex}
-                    onAboutClick={() => transitionTo('about')}
-                    onLoginClick={() => transitionTo('login')}
-                    onSimulatorClick={() => transitionTo('accordion')}
-                    onContactClick={() => transitionTo('contact')}
-                  />
-                }
-              />
-              <Route path="/about" element={<AboutPage onBack={() => transitionTo('intro')} />} />
-              <Route path="/joinus" element={<JoinUsPage onBack={() => transitionTo('intro')} />} />
-              <Route
-                path="/explore"
-                element={
-                  <AccordionGallery
-                    hoveredIdx={hoveredDistrictIdx}
-                    setHoveredIdx={setHoveredDistrictIdx}
-                    onMapoClick={() => transitionTo('simulator')}
-                    onLogoClick={() => transitionTo('intro')}
-                  />
-                }
-              />
-              <Route
-                path="/contact"
-                element={<ContactPage onBack={() => transitionTo('intro')} />}
-              />
-              <Route
-                path="/simulator"
-                element={
-                  <ProtectedRoute>
-                    <SimulatorDashboard reportState={reportState} setReportState={setReportState} />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/hq"
-                element={
-                  <ProtectedRoute requireRole="master">
-                    <HQCommandCenter />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/login"
-                element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
-              />
-            </Routes>
-
-            {/* Global header — all scenes except intro */}
-            {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
-              <header className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633] flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/90 backdrop-blur-md z-50 transition-colors duration-500">
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => transitionTo('intro')}
-                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity duration-300"
-                  >
-                    <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-                    <span className="text-sm font-bold tracking-wider text-foreground">
-                      SPOTTER
-                    </span>
-                  </button>
-                  <span className="text-border">/</span>
-                  <button
-                    onClick={() => {
-                      // 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
-                      // (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
-                      if (scene === 'simulator' && reportState === 'result') {
-                        window.history.back();
-                        return;
-                      }
-                      transitionTo(scene === 'simulator' ? 'accordion' : 'intro');
-                    }}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
-                  >
-                    <ChevronRight size={14} className="rotate-180" />
-                    BACK
-                  </button>
-                </div>
-                <div className="flex items-center gap-4 md:gap-6">
-                  <GlobalLimelightNav />
-                  <LogoutButton />
-                </div>
-              </header>
-            )}
-
-            {/* Command Palette (Cmd+K / Ctrl+K) */}
-            <CommandPalette
-              isOpen={isCommandOpen}
-              onClose={() => setIsCommandOpen(false)}
-              onNavigate={(target) => {
-                setIsCommandOpen(false);
-                transitionTo(target as any);
-              }}
-            />
-
-            {/* Transition overlay */}
-            <div
-              className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
-                isTransitioning ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-
-            {/* 3D Hologram Preloader */}
-            {!isAppLoaded && (
+            >
+              {/* Film Grain Noise Overlay */}
               <div
-                className="absolute inset-0 z-[99999] bg-[#1e1b18] flex flex-col items-center justify-center"
+                className="pointer-events-none fixed inset-0 z-[9998] opacity-[0.04] mix-blend-screen"
                 style={{
-                  animation:
-                    loadProgress === 100
-                      ? 'warp-out 1.2s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards'
-                      : 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
                 }}
-              >
-                {/* Noise */}
-                <div
-                  className="absolute inset-0 opacity-[0.05] mix-blend-screen pointer-events-none"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-                  }}
+              />
+
+              {/* Particle background */}
+              <NetworkBackground isTransitioning={isTransitioning} scene={scene} theme="dark" />
+
+              {/* Route-based scenes */}
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <IntroScene
+                      activeMenuIndex={activeMenuIndex}
+                      setActiveMenuIndex={setActiveMenuIndex}
+                      onAboutClick={() => transitionTo('about')}
+                      onLoginClick={() => transitionTo('login')}
+                      onSimulatorClick={() => transitionTo('accordion')}
+                      onContactClick={() => transitionTo('contact')}
+                    />
+                  }
                 />
+                <Route path="/about" element={<AboutPage onBack={() => transitionTo('intro')} />} />
+                <Route
+                  path="/joinus"
+                  element={<JoinUsPage onBack={() => transitionTo('intro')} />}
+                />
+                <Route
+                  path="/explore"
+                  element={
+                    <AccordionGallery
+                      hoveredIdx={hoveredDistrictIdx}
+                      setHoveredIdx={setHoveredDistrictIdx}
+                      onMapoClick={() => transitionTo('simulator')}
+                      onLogoClick={() => transitionTo('intro')}
+                    />
+                  }
+                />
+                <Route
+                  path="/contact"
+                  element={<ContactPage onBack={() => transitionTo('intro')} />}
+                />
+                <Route
+                  path="/simulator"
+                  element={
+                    <ProtectedRoute>
+                      <SimulatorDashboard
+                        reportState={reportState}
+                        setReportState={setReportState}
+                      />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/hq"
+                  element={
+                    <ProtectedRoute requireRole="master">
+                      <HQCommandCenter />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/login"
+                  element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
+                />
+              </Routes>
 
-                {/* 3D Multi-Axis Core */}
-                <div className="scene-3d relative w-[300px] h-[300px] md:w-[500px] md:h-[500px] flex items-center justify-center mt-[-10vh]">
-                  <div className="hologram-wrapper absolute w-full h-full flex items-center justify-center">
-                    {/* Base core glow */}
-                    <div className="absolute w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[40px]" />
-
-                    {/* Ring 1 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[100%] h-[100%] opacity-40"
-                      style={{
-                        transform: 'rotateX(70deg) rotateY(10deg) rotateZ(0deg)',
-                        animation: 'gyro-1 12s linear infinite',
-                      }}
+              {/* Global header — all scenes except intro */}
+              {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
+                <header className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633] flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/90 backdrop-blur-md z-50 transition-colors duration-500">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => transitionTo('intro')}
+                      className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity duration-300"
                     >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="95"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="0.5"
-                        strokeDasharray="2 6"
-                      />
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="90"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="2"
-                        strokeDasharray="10 40 30 20"
-                      />
-                    </svg>
-
-                    {/* Ring 2 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[85%] h-[85%] opacity-60"
-                      style={{
-                        transform: 'rotateX(50deg) rotateY(60deg) rotateZ(0deg)',
-                        animation: 'gyro-2 9s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="85"
-                        fill="none"
-                        stroke="#6366f1"
-                        strokeWidth="3"
-                        strokeDasharray="60 30 10 30"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="100" cy="15" r="5" fill="#818cf8" />
-                    </svg>
-
-                    {/* Ring 3 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[70%] h-[70%] opacity-70"
-                      style={{
-                        transform: 'rotateX(50deg) rotateY(-60deg) rotateZ(0deg)',
-                        animation: 'gyro-3 15s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="75"
-                        fill="none"
-                        stroke="#a5b4fc"
-                        strokeWidth="1"
-                        strokeDasharray="4 8"
-                      />
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="70"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="1.5"
-                        strokeDasharray="40 80"
-                      />
-                    </svg>
-
-                    {/* Ring 4 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[95%] h-[95%] opacity-80"
-                      style={{
-                        transform: 'rotateX(20deg) rotateY(80deg) rotateZ(0deg)',
-                        animation: 'gyro-4 6s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="88"
-                        fill="none"
-                        stroke="#a5b4fc"
-                        strokeWidth="1"
-                        style={{ filter: 'drop-shadow(0 0 8px #a5b4fc)' }}
-                      />
-                      <circle cx="100" cy="12" r="3" fill="#ffffff" />
-                      <circle cx="100" cy="188" r="3" fill="#ffffff" />
-                    </svg>
-
-                    {/* Ring 5 */}
-                    <svg
-                      viewBox="0 0 200 200"
-                      className="absolute w-[115%] h-[115%] opacity-30"
-                      style={{
-                        transform: 'rotateX(80deg) rotateY(-30deg) rotateZ(0deg)',
-                        animation: 'gyro-5 20s linear infinite',
-                      }}
-                    >
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="98"
-                        fill="none"
-                        stroke="#818cf8"
-                        strokeWidth="1"
-                        strokeDasharray="4 16"
-                      />
-                      <circle
-                        cx="100"
-                        cy="100"
-                        r="94"
-                        fill="none"
-                        stroke="#6366f1"
-                        strokeWidth="0.5"
-                      />
-                    </svg>
-
-                    {/* Center percentage */}
-                    <div
-                      className="absolute flex flex-col items-center justify-center pointer-events-none"
-                      style={{ animation: 'energy-pulse 2s ease-in-out infinite' }}
-                    >
-                      <span className="font-black text-6xl md:text-8xl text-indigo-400 tracking-tighter leading-none">
-                        {loadProgress}
-                        <span className="text-3xl md:text-4xl text-indigo-400/60 ml-1">%</span>
+                      <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
+                      <span className="text-sm font-bold tracking-wider text-foreground">
+                        SPOTTER
                       </span>
-                      <span className="font-mono text-[10px] md:text-xs text-indigo-400/80 tracking-[0.3em] mt-2">
-                        SYNCING...
-                      </span>
+                    </button>
+                    <span className="text-border">/</span>
+                    <button
+                      onClick={() => {
+                        // 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
+                        // (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
+                        if (scene === 'simulator' && reportState === 'result') {
+                          window.history.back();
+                          return;
+                        }
+                        transitionTo(scene === 'simulator' ? 'accordion' : 'intro');
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
+                    >
+                      <ChevronRight size={14} className="rotate-180" />
+                      BACK
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-4 md:gap-6">
+                    <GlobalLimelightNav />
+                    <LogoutButton />
+                  </div>
+                </header>
+              )}
+
+              {/* Command Palette (Cmd+K / Ctrl+K) */}
+              <CommandPalette
+                isOpen={isCommandOpen}
+                onClose={() => setIsCommandOpen(false)}
+                onNavigate={(target) => {
+                  setIsCommandOpen(false);
+                  transitionTo(target as any);
+                }}
+              />
+
+              {/* Transition overlay */}
+              <div
+                className={`fixed inset-0 z-50 bg-black pointer-events-none transition-opacity duration-[800ms] ${
+                  isTransitioning ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+
+              {/* 3D Hologram Preloader */}
+              {!isAppLoaded && (
+                <div
+                  className="absolute inset-0 z-[99999] bg-[#1e1b18] flex flex-col items-center justify-center"
+                  style={{
+                    animation:
+                      loadProgress === 100
+                        ? 'warp-out 1.2s cubic-bezier(0.19, 1, 0.22, 1) 0.5s forwards'
+                        : 'none',
+                  }}
+                >
+                  {/* Noise */}
+                  <div
+                    className="absolute inset-0 opacity-[0.05] mix-blend-screen pointer-events-none"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+                    }}
+                  />
+
+                  {/* 3D Multi-Axis Core */}
+                  <div className="scene-3d relative w-[300px] h-[300px] md:w-[500px] md:h-[500px] flex items-center justify-center mt-[-10vh]">
+                    <div className="hologram-wrapper absolute w-full h-full flex items-center justify-center">
+                      {/* Base core glow */}
+                      <div className="absolute w-[40%] h-[40%] rounded-full bg-indigo-500/20 blur-[40px]" />
+
+                      {/* Ring 1 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[100%] h-[100%] opacity-40"
+                        style={{
+                          transform: 'rotateX(70deg) rotateY(10deg) rotateZ(0deg)',
+                          animation: 'gyro-1 12s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="95"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="0.5"
+                          strokeDasharray="2 6"
+                        />
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="90"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="2"
+                          strokeDasharray="10 40 30 20"
+                        />
+                      </svg>
+
+                      {/* Ring 2 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[85%] h-[85%] opacity-60"
+                        style={{
+                          transform: 'rotateX(50deg) rotateY(60deg) rotateZ(0deg)',
+                          animation: 'gyro-2 9s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="85"
+                          fill="none"
+                          stroke="#6366f1"
+                          strokeWidth="3"
+                          strokeDasharray="60 30 10 30"
+                          strokeLinecap="round"
+                        />
+                        <circle cx="100" cy="15" r="5" fill="#818cf8" />
+                      </svg>
+
+                      {/* Ring 3 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[70%] h-[70%] opacity-70"
+                        style={{
+                          transform: 'rotateX(50deg) rotateY(-60deg) rotateZ(0deg)',
+                          animation: 'gyro-3 15s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="75"
+                          fill="none"
+                          stroke="#a5b4fc"
+                          strokeWidth="1"
+                          strokeDasharray="4 8"
+                        />
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="70"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="1.5"
+                          strokeDasharray="40 80"
+                        />
+                      </svg>
+
+                      {/* Ring 4 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[95%] h-[95%] opacity-80"
+                        style={{
+                          transform: 'rotateX(20deg) rotateY(80deg) rotateZ(0deg)',
+                          animation: 'gyro-4 6s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="88"
+                          fill="none"
+                          stroke="#a5b4fc"
+                          strokeWidth="1"
+                          style={{ filter: 'drop-shadow(0 0 8px #a5b4fc)' }}
+                        />
+                        <circle cx="100" cy="12" r="3" fill="#ffffff" />
+                        <circle cx="100" cy="188" r="3" fill="#ffffff" />
+                      </svg>
+
+                      {/* Ring 5 */}
+                      <svg
+                        viewBox="0 0 200 200"
+                        className="absolute w-[115%] h-[115%] opacity-30"
+                        style={{
+                          transform: 'rotateX(80deg) rotateY(-30deg) rotateZ(0deg)',
+                          animation: 'gyro-5 20s linear infinite',
+                        }}
+                      >
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="98"
+                          fill="none"
+                          stroke="#818cf8"
+                          strokeWidth="1"
+                          strokeDasharray="4 16"
+                        />
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r="94"
+                          fill="none"
+                          stroke="#6366f1"
+                          strokeWidth="0.5"
+                        />
+                      </svg>
+
+                      {/* Center percentage */}
+                      <div
+                        className="absolute flex flex-col items-center justify-center pointer-events-none"
+                        style={{ animation: 'energy-pulse 2s ease-in-out infinite' }}
+                      >
+                        <span className="font-black text-6xl md:text-8xl text-indigo-400 tracking-tighter leading-none">
+                          {loadProgress}
+                          <span className="text-3xl md:text-4xl text-indigo-400/60 ml-1">%</span>
+                        </span>
+                        <span className="font-mono text-[10px] md:text-xs text-indigo-400/80 tracking-[0.3em] mt-2">
+                          SYNCING...
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Terminal logs */}
-                <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[10px] md:text-xs text-[#9ca3af] max-w-md">
-                  <div className="flex flex-col gap-1.5">
-                    {loadLogs.map((log, idx) => (
-                      <div
-                        key={idx}
-                        className={idx === loadLogs.length - 1 ? 'text-indigo-400 font-bold' : ''}
-                      >
-                        {log}
-                      </div>
-                    ))}
+                  {/* Terminal logs */}
+                  <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[10px] md:text-xs text-[#9ca3af] max-w-md">
+                    <div className="flex flex-col gap-1.5">
+                      {loadLogs.map((log, idx) => (
+                        <div
+                          key={idx}
+                          className={idx === loadLogs.length - 1 ? 'text-indigo-400 font-bold' : ''}
+                        >
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="w-2 h-3 bg-indigo-500 mt-2 animate-pulse" />
                   </div>
-                  <div className="w-2 h-3 bg-indigo-500 mt-2 animate-pulse" />
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           </TransitionContext.Provider>
         </ToastProvider>
       </ManagerListProvider>

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 class CandidateAnalysis(BaseModel):
     """개별 후보 지역 분석 결과"""
@@ -26,6 +26,23 @@ class CompetitorAnalysis(BaseModel):
     """경쟁사 분석 요약"""
     count: int = Field(..., description="경쟁 점포 수")
     density: str = Field(..., description="경쟁 밀집도 (LOW/NORMAL/HIGH)")
+
+class MarketAnalysisOutput(BaseModel):
+    """상권 분석 에이전트 구조화 출력"""
+    report: str = Field(..., description="상권 분석 리포트 본문 (전략팀 총평, 가장 큰 기회·리스크 포함)")
+    grade: Literal["EXCELLENT", "GOOD", "NORMAL", "RISKY"] = Field(..., description="상권 등급")
+    growth_rate: float = Field(default=0.0, description="매출 성장률 수치 (예: 3.5)")
+    competition_score: float = Field(default=0.0, description="경쟁 강도 점수 0.0~1.0")
+    rent_affordability: str = Field(default="중", description="임대료 적정성: 상 / 중 / 하")
+
+
+class PopulationAnalysisOutput(BaseModel):
+    """유동인구 분석 에이전트 구조화 출력"""
+    report: str = Field(..., description="유동인구 특성 분석 리포트 본문")
+    population_score: int = Field(default=5, description="유동인구 점수 1~10")
+    main_target_age: str = Field(default="20~30대", description="주요 타겟 연령대 (예: 20~30대)")
+    peak_time: str = Field(default="미확인", description="피크 시간대 (예: 오후 12시~2시)")
+
 
 class FinalStrategyResult(BaseModel):
     """최종 종합 리포트 정형 데이터 (JSON)"""
