@@ -64,6 +64,10 @@ def test_classify_western():
 
 
 def test_classify_cafe():
+    # 실제 Kakao 포맷
+    assert classify_category("음식점 > 카페 > 커피전문점 > 스타벅스") == "커피-음료"
+    assert classify_category("음식점 > 카페") == "커피-음료"
+    # fallback 포맷
     assert classify_category("카페 > 커피전문점 > 스타벅스") == "커피-음료"
     assert classify_category("카페") == "커피-음료"
 
@@ -77,6 +81,10 @@ def test_classify_snack():
 
 
 def test_classify_bakery():
+    # 실제 Kakao 포맷: "음식점 > 간식 > 제과,베이커리"
+    assert classify_category("음식점 > 간식 > 제과,베이커리 > 파리바게뜨") == "제과점"
+    assert classify_category("음식점 > 간식 > 제과,베이커리") == "제과점"
+    # fallback
     assert classify_category("음식점 > 제과,베이커리 > 파리바게뜨") == "제과점"
 
 
