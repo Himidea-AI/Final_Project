@@ -41,3 +41,24 @@ async def test_demographic_sales_breakdown_seogyo_coffee(tool: MarketDataTool):
 async def test_demographic_sales_breakdown_unknown_dong(tool: MarketDataTool):
     r = await tool.get_demographic_sales_breakdown("99999999")
     assert "error" in r
+
+
+@pytest.mark.asyncio
+async def test_realtime_resident_visitor_seogyo(tool: MarketDataTool):
+    r = await tool.get_realtime_resident_visitor("11440660")
+    # 7-day window 내 데이터가 없을 수 있으므로 shape만 확인
+    assert "resident_rate" in r
+    assert "visitor_rate" in r
+    assert "source_poi" in r
+    assert "sample_size" in r
+    assert r["source_poi"] == ["POI007"]
+
+
+@pytest.mark.asyncio
+async def test_realtime_resident_visitor_unmapped_dong(tool: MarketDataTool):
+    # 염리동 (11440610) — POI 매핑 없음
+    r = await tool.get_realtime_resident_visitor("11440610")
+    assert r["resident_rate"] is None
+    assert r["visitor_rate"] is None
+    assert r["source_poi"] is None
+    assert r["sample_size"] == 0

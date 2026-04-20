@@ -405,3 +405,52 @@ class MarketDataTool:
                     "weekend": _i(row.weekend),
                 },
             }
+
+    async def get_realtime_resident_visitor(self, dong_code: str) -> Dict[str, Any]:
+        """
+        seoul_realtime_hotspots에서 최근 7일 평균 거주(resident_rate) / 방문(visitor_rate) 비율 조회.
+
+        POI 위치 데이터를 행정동 단위로 역매핑 (`_MAPO_POI_REVERSE`).
+        매핑되지 않은 dong_code는 null 응답.
+
+        Args:
+            dong_code: 행정동 코드 8자리
+
+        Returns:
+            {
+                "resident_rate": float | None,    # 0-100 %
+                "visitor_rate":  float | None,    # 0-100 %
+                "source_poi":    list[str] | None,
+                "sample_size":   int,              # 7일 내 수집된 행 수
+            }
+        """
+        pois = _MAPO_POI_REVERSE.get(dong_code)
+        if not pois:
+            return {
+                "resident_rate": None,
+                "visitor_rate": None,
+                "source_poi": None,
+                "sample_size": 0,
+            }
+
+        async with self.db_client.get_session() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT AVG(resident_rate) AS r_avg, AVG(visitor_rate) AS v_avg, "
+                        "COUNT(*) AS n "
+                        "FROM seoul_realtime_hotspots "
+                        "WHERE area_cd = ANY(:pois) "
+                        "AND collected_at >= NOW() - INTERVAL '7 days'"
+                    ),
+                    {"pois": pois},
+                )
+            ).fetchone()
+
+        sample = int(row.n or 0)
+        return {
+            "resident_rate": round(float(row.r_avg), 2) if row.r_avg is not None else None,
+            "visitor_rate": round(float(row.v_avg), 2) if row.v_avg is not None else None,
+            "source_poi": list(pois),
+            "sample_size": sample,
+        }
