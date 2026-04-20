@@ -60,12 +60,16 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
-import { runSimulation } from './api/client';
 import type { QuarterlyProjection, ShapResult } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
+import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
+import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
+import { ToastHost } from './components/simulation/ToastHost';
+import { useCompletionToast } from './hooks/useCompletionToast';
+import { useSimulationStore } from './stores/simulationStore';
 
 interface SimResult {
   score: number;
@@ -2509,9 +2513,15 @@ function SimulatorDashboard({
         population_weight: weighted,
       };
 
+      // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
       // [찬영 요청] /simulate 하나만 호출 (이전에는 /analyze와 중복 호출)
       // /simulate 응답에 market_report 포함됨 (backend main.py:308)
-      const simRes = await runSimulation(payload);
+      await useSimulationStore.getState().startSimulation(payload);
+      const storeState = useSimulationStore.getState();
+      if (storeState.status !== 'done' || !storeState.result) {
+        throw new Error(storeState.error ?? 'Simulation failed');
+      }
+      const simRes = storeState.result;
 
       const mr = simRes.market_report;
       const topComp = simRes.comparison?.[0];
@@ -2591,45 +2601,14 @@ function SimulatorDashboard({
     weighted,
   ]);
 
-  // Loading — 단계별 progress bar + 스트리밍 텍스트 (100~120초 대응)
+  // [IM3-205] 로딩 진행률을 simulationStore에서 미러 — store가 500ms 타이머 보유
+  // 기존 로컬 타이머 useEffect는 store로 이관됨
+  const _storeProgress = useSimulationStore((s) => s.progress);
+  const _storeStage = useSimulationStore((s) => s.stage);
   useEffect(() => {
-    if (reportState !== 'loading') {
-      setLoadingProgress(0);
-      return;
-    }
-
-    const stages = [
-      { at: 0, text: 'INITIALIZING AI ENGINE...' },
-      { at: 5, text: 'CONNECTING TO DATABASE...' },
-      { at: 10, text: 'FETCHING KT TELECOM DATA...' },
-      { at: 20, text: 'ANALYZING COMPETITION DENSITY (pgvector)...' },
-      { at: 30, text: 'QUERYING POPULATION TRENDS...' },
-      { at: 40, text: 'CALCULATING RENT-TO-REVENUE RATIO...' },
-      { at: 50, text: 'ANALYZING CANNIBALIZATION RATE...' },
-      { at: 60, text: 'CROSS-CHECKING LEGAL RISKS (RAG 3,775 chunks)...' },
-      { at: 70, text: 'RUNNING WHAT-IF SCENARIOS...' },
-      { at: 80, text: 'GENERATING 12-MONTH FORECAST (LSTM)...' },
-      { at: 88, text: 'SYNTHESIZING MULTI-AGENT RESULTS...' },
-    ];
-
-    // 90%까지 100초에 걸쳐 천천히 올라감
-    const duration = 100000; // 100초
-    const maxProgress = 90;
-    const interval = 500; // 0.5초마다 업데이트
-    const step = (maxProgress / duration) * interval;
-    let current = 0;
-
-    const timer = setInterval(() => {
-      current = Math.min(current + step + Math.random() * 0.3, maxProgress);
-      setLoadingProgress(current);
-
-      // 단계별 텍스트 업데이트
-      const stage = [...stages].reverse().find((s) => current >= s.at);
-      if (stage) setLoadingText(stage.text);
-    }, interval);
-
-    return () => clearInterval(timer);
-  }, [reportState]);
+    setLoadingProgress(_storeProgress);
+    if (_storeStage) setLoadingText(`${_storeStage}...`);
+  }, [_storeProgress, _storeStage]);
 
   // Dark theme only
   const textPrimary = 'text-[#e2e8f0]';
@@ -6030,6 +6009,10 @@ export default function App() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'loading' | 'result'>('idle');
   const [activeMenuIndex, setActiveMenuIndex] = useState(2);
+
+  // Simulation background tracking (IM3-205): store가 페이지 이동과 독립적으로
+  // 시뮬레이션 상태를 보유. useCompletionToast는 running→done/error 전이 감지.
+  useCompletionToast();
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(null);
 
   // 페이지 전환 시 모든 스크롤 컨테이너를 최상단으로 리셋
@@ -6218,6 +6201,11 @@ export default function App() {
                   element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
                 />
               </Routes>
+
+              {/* IM3-205: 시뮬레이션 백그라운드 추적 — 라우팅 바깥에 마운트 */}
+              <SimulationFloatingWidget />
+              <BeforeUnloadGuard />
+              <ToastHost />
 
               {/* Global header — all scenes except intro */}
               {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
