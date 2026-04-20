@@ -10,8 +10,10 @@ import os
 from difflib import SequenceMatcher
 
 import httpx
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+from src.database.sync_engine import get_sync_engine
 
 # DB 접속 — 환경변수 우선, 없으면 docker-compose 기본값
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
@@ -104,7 +106,7 @@ class BizMapper:
         ILIKE로 DB에서 후보를 가져온 뒤, 점수 기반 정렬.
         2024년 데이터 우선, 없으면 2023년.
         """
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         rows = []
         try:
             with engine.connect() as conn:
@@ -185,7 +187,7 @@ class BizMapper:
 
     def count_mapo_stores(self, brand_name: str) -> int:
         """store_info 테이블에서 브랜드명과 매칭되는 마포구 점포 수 카운트."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 result = conn.execute(

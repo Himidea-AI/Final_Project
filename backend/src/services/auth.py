@@ -7,8 +7,9 @@ import uuid
 from datetime import datetime, timezone
 
 import bcrypt
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
+from src.database.sync_engine import get_sync_engine
 from src.services.biz_mapper import BizMapper, DB_URL
 
 
@@ -41,7 +42,7 @@ class AuthService:
         Returns:
             dict: 생성된 회원 정보 + 매핑된 브랜드 정보
         """
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
 
         try:
             # 1. 이메일 중복 체크
@@ -174,7 +175,7 @@ class AuthService:
         Returns:
             dict: 로그인 결과 (회원 정보 + 매핑된 브랜드)
         """
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -245,7 +246,7 @@ class AuthService:
 
     def generate_invite_code(self, owner_id: str, max_uses: int = 10) -> dict:
         """팀장이 초대코드를 발급한다."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 owner = conn.execute(
@@ -281,7 +282,7 @@ class AuthService:
 
     def verify_invite_code(self, code: str) -> dict:
         """초대코드를 검증하고, 유효하면 팀장의 기업정보를 반환한다."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -328,7 +329,7 @@ class AuthService:
         Args:
             data: inviteCode, contactName, position, email, phone, password
         """
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 # 1. 초대코드 검증
@@ -422,7 +423,7 @@ class AuthService:
 
     def manager_login(self, email: str, password: str) -> dict:
         """매니저 로그인 — 이메일/비밀번호 검증 후 소속 팀장 기업정보 포함 반환."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -475,7 +476,7 @@ class AuthService:
 
     def get_managers(self, owner_id: str) -> dict:
         """팀장 소속 매니저 전체 목록을 조회한다 (승인 상태 포함)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 rows = conn.execute(
@@ -518,7 +519,7 @@ class AuthService:
         assigned_dongs: list[str] | None = None,
     ) -> dict:
         """팀장이 매니저 가입을 승인한다 (담당 구/행정동 지정 포함)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -559,7 +560,7 @@ class AuthService:
 
     def reject_manager(self, owner_id: str, manager_id: str) -> dict:
         """팀장이 매니저 가입을 거절한다 (비활성화)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -593,7 +594,7 @@ class AuthService:
 
     def get_user_profile(self, user_id: str) -> dict:
         """팀장 프로필 조회 (브랜드 매핑 포함)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -656,7 +657,7 @@ class AuthService:
 
     def get_manager_profile(self, manager_id: str) -> dict:
         """매니저 프로필 조회 (소속 팀장 기업정보 포함)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -696,7 +697,7 @@ class AuthService:
 
     def update_user_profile(self, user_id: str, data: dict) -> dict:
         """팀장 프로필 수정 (이름, 직책, 전화번호, 가맹점 수)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 existing = conn.execute(text("SELECT id FROM users WHERE id = :id"), {"id": user_id}).fetchone()
@@ -726,7 +727,7 @@ class AuthService:
 
     def update_manager_profile(self, manager_id: str, data: dict) -> dict:
         """매니저 프로필 수정 (이름, 직책, 전화번호)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 existing = conn.execute(
@@ -760,7 +761,7 @@ class AuthService:
     def change_password(self, user_id: str, role: str, old_password: str, new_password: str) -> dict:
         """비밀번호 변경 (팀장/매니저 공용)."""
         table = "users" if role == "master" else "manager_users"
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 row = conn.execute(
@@ -787,7 +788,7 @@ class AuthService:
 
     def get_organization(self, owner_id: str) -> dict:
         """팀장의 전체 조직 정보 (멀티테넌시 — 팀장 + 매니저 + 초대코드 + 브랜드)."""
-        engine = create_engine(self._db_url, echo=False)
+        engine = get_sync_engine(self._db_url)
         try:
             with engine.connect() as conn:
                 # 팀장 정보

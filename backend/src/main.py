@@ -227,6 +227,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 r.get("level", "safe").lower(), "LOW"
             ),
             "detail": r.get("summary", ""),
+            "recommendation": r.get("recommendation", ""),
         }
         for r in legal_risks_raw
     ]
@@ -387,7 +388,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                     "label": target_dist,
                     "type": "candidate",
                 }
-            ] + [
+            ]
+            + [
                 {
                     "id": f"vacancy_{s['id']}",
                     "lat": s["lat"],
@@ -813,6 +815,7 @@ async def run_simulation(input_data: SimulationInput):
         return map_state_to_simulation_output(final_state, request_id)
     except Exception as e:
         import traceback
+
         print(f"!!! [SIMULATE ERROR] !!! {type(e).__name__}: {e}")
         traceback.print_exc()
         return {

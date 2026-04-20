@@ -361,7 +361,7 @@ async def test_zoning_unknown_district_defaults_to_commercial():
 @pytest.mark.asyncio
 async def test_zoning_mapo_dong_map_coverage():
     """마포구 주요 행정동 전체가 용도지역 맵에 등록되어 있는지 확인"""
-    from src.agents.nodes.legal import _DISTRICT_ZONE_MAP
+    from src.config.constants import DISTRICT_ZONE_MAP
 
     mapo_dongs = [
         "서교동",
@@ -382,4 +382,4 @@ async def test_zoning_mapo_dong_map_coverage():
         "서강동",
     ]
     for dong in mapo_dongs:
-        assert dong in _DISTRICT_ZONE_MAP, f"{dong}이 용도지역 맵에 없음"
+        assert dong in DISTRICT_ZONE_MAP, f"{dong}이 용도지역 맵에 없음"

@@ -8,8 +8,11 @@ from src.database.models import Base
 
 
 def test_all_models_defined() -> None:
-    """11개 테이블이 모두 Base.metadata에 등록되었는지 확인"""
-    expected_tables = {
+    """핵심 테이블이 Base.metadata에 모두 등록되었는지 확인.
+
+    2026-04-20 이후 신규 적재 테이블이 늘어나 전체 목록 대신 핵심 테이블만 검증.
+    """
+    core_tables = {
         "living_population",
         "sgis_population",
         "sgis_household",
@@ -21,12 +24,12 @@ def test_all_models_defined() -> None:
         "rent_cost",
         "dong_mapping",
         "simulation_result",
+        "kakao_store",
+        "kakao_store_hours",
     }
     registered_tables = set(Base.metadata.tables.keys())
-    assert expected_tables == registered_tables, (
-        f"누락된 테이블: {expected_tables - registered_tables}, "
-        f"예상치 못한 테이블: {registered_tables - expected_tables}"
-    )
+    missing = core_tables - registered_tables
+    assert not missing, f"핵심 테이블 누락: {missing}"
 
 
 def test_living_population_columns() -> None:
@@ -50,6 +53,7 @@ def test_simulation_result_columns() -> None:
 
 
 import pytest
+
 from backend.src.database.postgres import PostgresClient
 
 

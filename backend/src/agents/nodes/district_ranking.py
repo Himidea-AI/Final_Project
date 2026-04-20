@@ -19,10 +19,9 @@ import json
 import redis.asyncio as aioredis
 from sqlalchemy import select, func
 from src.schemas.state import AgentState
-from src.config.constants import MAPO_DISTRICTS
+from src.config.constants import DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
 from src.config.settings import settings
 from src.agents.nodes.market_analyst import db_client, market_tool
-from src.agents.nodes.legal import _DISTRICT_ZONE_MAP, _ZONING_RULES
 from src.database.models import NaverVacancy, StoreQuarterly
 
 _CACHE_TTL = 86400  # 24시간
@@ -267,14 +266,14 @@ def _normalize_and_rank(
         elif vacancy_rate >= 5.0:
             score *= 0.85  # 공실률 5~10%: -15%
 
-        # 용도지역 규제 패널티: legal_node와 동일한 _DISTRICT_ZONE_MAP/_ZONING_RULES 사용
+        # 용도지역 규제 패널티: legal_node와 동일한 DISTRICT_ZONE_MAP/ZONING_RULES 사용
         zoning_risk = "safe"
         if business_type:
             type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(
                 business_type, business_type
             )
-            zone = _DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
-            rules = _ZONING_RULES.get(zone, {"허용": [], "제한": []})
+            zone = DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
+            rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
             if type_label in rules["제한"]:
                 zoning_risk = "danger"
                 score *= 0.50  # 영업 제한 업종: -50%
@@ -321,12 +320,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
 
-    # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환
-    cache_key = f"v2:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
+    cache_key = f"v3:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-        cached = await _redis.get(cache_key)
+        cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
             print(f"[district_ranking] 캐시 히트: {cache_key}")
@@ -335,7 +334,8 @@ async def district_ranking_node(state: AgentState) -> dict:
                 "scouting_results": cached_data["scouting_results"],
                 "winner_district": cached_data["winner_district"],
                 "top_3_candidates": cached_data["top_3_candidates"],
-                "vacancy_applied": cached_data["vacancy_applied"],
+                "vacancy_applied": cached_data.get("vacancy_applied", False),
+                "vacancy_spots": cached_data.get("vacancy_spots", []),
                 "current_agent": "district_ranking",
             }
     except Exception as e:
