@@ -68,3 +68,7 @@ scripts/jira_update.py
 
 # Docker
 *.log
+
+# 검증 스크립트 임시 출력
+backend/scripts/_*.txt
+backend/scripts/verify/_*.txt

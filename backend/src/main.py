@@ -381,6 +381,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
         "legal_risks": legal_risks,
         "demographic_report": analysis.get("demographic_report"),
+        "trend_forecast": analysis.get("trend_forecast"),
         "map_data": {
             "center": {"lat": lat, "lng": lng},
             "markers": [
@@ -834,6 +835,7 @@ async def run_simulation(input_data: SimulationInput):
             "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",
             "analysis_metrics": {},
             "demographic_report": None,
+            "trend_forecast": None,
             "map_data": None,
             "financial_report": {},
         }

@@ -29,7 +29,8 @@ async def synthesis_node(state: AgentState) -> dict:
     store_area = state.get("store_area", 15.0)
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
-    cache_key = f"v2:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    # v3: trend_forecast 섹션 추가 — 기존 v2 캐시는 자동 미스 (재계산 1회)
+    cache_key = f"v3:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -100,6 +101,19 @@ async def synthesis_node(state: AgentState) -> dict:
         [f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}" for r in legal_risks]
     )
 
+    # trend_forecaster 결과 요약 (legal 뒤에 독립 배치, legal 블록 미접촉)
+    trend_forecast_data = analysis_results.get("trend_forecast", {})
+    trend_summary_for_llm = ""
+    if trend_forecast_data and "forecast" in trend_forecast_data:
+        f = trend_forecast_data["forecast"]
+        industry_dir = trend_forecast_data.get("industry_trend", {}).get("direction", "unknown")
+        change_label = (trend_forecast_data.get("change_ix") or {}).get("change_ix_label", "N/A")
+        trend_summary_for_llm = (
+            f"- 전망 점수: {f.get('score')}/100 ({f.get('direction')}, 신뢰도 {f.get('confidence')})\n"
+            f"- 업종 검색량 방향: {industry_dir} | 상권 분류: {change_label}\n"
+            f"- 요약: {(f.get('narrative') or '')[:250]}"
+        )
+
     # 법률 DANGER 시 대안 지역 강조
     if overall_legal_risk == "danger":
         legal_override = (
@@ -133,6 +147,7 @@ async def synthesis_node(state: AgentState) -> dict:
         f"상권({target_district}):\n{market_report[:1500]}\n"
         f"인구({target_district}):\n{population_report[:1500]}\n"
         + (f"{vacancy_summary}\n" if vacancy_summary else "")
+        + (f"향후 12개월 시장 전망:\n{trend_summary_for_llm}\n" if trend_summary_for_llm else "")
         + f"법률(14개):\n{legal_summary_for_llm}\n"
         f"{legal_override}"
         f"{demographic_context}\n"
