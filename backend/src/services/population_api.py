@@ -41,10 +41,15 @@ async def _find_latest_date(client: httpx.AsyncClient) -> str | None:
     for days_ago in range(1, 15):
         date_str = (datetime.now() - timedelta(days=days_ago)).strftime("%Y%m%d")
         url = f"{BASE_URL}/{API_KEY}/json/SPOP_LOCAL_RESD_DONG/1/1/{date_str}"
-        resp = await client.get(url)
-        data = resp.json()
-        if "SPOP_LOCAL_RESD_DONG" in data:
-            return date_str
+        try:
+            resp = await client.get(url)
+            if not resp.content:
+                continue
+            data = resp.json()
+            if "SPOP_LOCAL_RESD_DONG" in data:
+                return date_str
+        except Exception:
+            continue
     return None
 
 
@@ -58,8 +63,13 @@ async def _fetch_mapo_population(date_str: str) -> list[dict]:
         while True:
             end = start + page_size - 1
             url = f"{BASE_URL}/{API_KEY}/json/SPOP_LOCAL_RESD_DONG/{start}/{end}/{date_str}"
-            resp = await client.get(url)
-            data = resp.json()
+            try:
+                resp = await client.get(url)
+                if not resp.content:
+                    break
+                data = resp.json()
+            except Exception:
+                break
 
             if "SPOP_LOCAL_RESD_DONG" not in data:
                 break

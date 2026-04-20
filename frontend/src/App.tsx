@@ -99,6 +99,13 @@ interface SimResult {
   legalRisks?: { type: string; risk_level: string; detail: string }[];
   overallLegalRisk?: string;
   vacancyApplied?: boolean;
+  vacancySpots?: {
+    id: number;
+    lat: number;
+    lon: number;
+    dong_name: string;
+    listing_count: number;
+  }[];
   // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
   scenarios?: {
     optimistic: { quarter: number; revenue: number }[];
@@ -2566,6 +2573,8 @@ function SimulatorDashboard({
         overallLegalRisk: (simRes as any).overall_legal_risk,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         vacancyApplied: (simRes as any).vacancy_applied,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        vacancySpots: (simRes as any).vacancy_spots ?? [],
         // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
         scenarios: simRes.scenarios ?? null,
       });
@@ -3907,9 +3916,22 @@ function SimulatorDashboard({
                               AI AGENT TARGETING SYSTEM
                             </p>
                           </div>
-                          {/* AgentMapVisualizer — 현재는 DEFAULT_LOCATIONS mock, 추후 simResult 기반 props 전달 예정 */}
                           <div className="flex-1 relative">
-                            <AgentMapVisualizer height="100%" />
+                            <AgentMapVisualizer
+                              height="100%"
+                              locations={
+                                simResult?.vacancySpots && simResult.vacancySpots.length > 0
+                                  ? simResult.vacancySpots.map((s) => ({
+                                      id: `vacancy_${s.id}`,
+                                      name: s.dong_name,
+                                      lat: s.lat,
+                                      lng: s.lon,
+                                      type: 'vacancy' as const,
+                                      listingCount: s.listing_count,
+                                    }))
+                                  : undefined
+                              }
+                            />
                           </div>
                         </div>
                       </div>
