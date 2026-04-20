@@ -10,7 +10,7 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "data" / "pipeline"),
 )
 
-from collect_kakao_stores import generate_grid  # noqa: E402
+from collect_kakao_stores import classify_category, generate_grid  # noqa: E402
 
 
 def test_generate_grid_exact_division():
@@ -36,3 +36,52 @@ def test_generate_grid_mapo_size():
     """마포 전체 bbox를 500m로 나누면 150~250 셀 범위."""
     cells = generate_grid((126.88, 37.53, 126.96, 37.59), cell_m=500)
     assert 150 <= len(cells) <= 250
+
+
+def test_classify_korean():
+    assert classify_category("음식점 > 한식 > 국밥") == "한식음식점"
+    assert classify_category("음식점 > 한식") == "한식음식점"
+
+
+def test_classify_chinese():
+    assert classify_category("음식점 > 중식 > 짜장면") == "중식음식점"
+
+
+def test_classify_japanese():
+    assert classify_category("음식점 > 일식 > 돈까스") == "일식음식점"
+
+
+def test_classify_western():
+    assert classify_category("음식점 > 양식 > 이탈리안") == "양식음식점"
+
+
+def test_classify_cafe():
+    assert classify_category("카페 > 커피전문점 > 스타벅스") == "커피-음료"
+    assert classify_category("카페") == "커피-음료"
+
+
+def test_classify_chicken():
+    assert classify_category("음식점 > 치킨 > BBQ치킨") == "치킨전문점"
+
+
+def test_classify_snack():
+    assert classify_category("음식점 > 분식 > 떡볶이") == "분식전문점"
+
+
+def test_classify_bakery():
+    assert classify_category("음식점 > 제과,베이커리 > 파리바게뜨") == "제과점"
+
+
+def test_classify_fastfood():
+    assert classify_category("음식점 > 패스트푸드 > 햄버거") == "패스트푸드점"
+
+
+def test_classify_pub():
+    assert classify_category("음식점 > 술집 > 호프") == "호프-간이주점"
+
+
+def test_classify_etc():
+    assert classify_category("음식점 > 도시락") == "기타"
+    assert classify_category("음식점 > 간식 > 토스트") == "기타"
+    assert classify_category("") == "기타"
+    assert classify_category("음식점") == "기타"

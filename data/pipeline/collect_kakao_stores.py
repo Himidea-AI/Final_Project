@@ -64,6 +64,31 @@ def generate_grid(
     return cells
 
 
+# category_name prefix → 프로젝트 카테고리 매핑
+_CATEGORY_PREFIX_MAP: list[tuple[str, str]] = [
+    ("음식점 > 한식", "한식음식점"),
+    ("음식점 > 중식", "중식음식점"),
+    ("음식점 > 일식", "일식음식점"),
+    ("음식점 > 양식", "양식음식점"),
+    ("음식점 > 치킨", "치킨전문점"),
+    ("음식점 > 분식", "분식전문점"),
+    ("음식점 > 패스트푸드", "패스트푸드점"),
+    ("음식점 > 제과", "제과점"),
+    ("음식점 > 술집", "호프-간이주점"),
+    ("카페", "커피-음료"),
+]
+
+
+def classify_category(category_name: str) -> str:
+    """카카오 category_name → 프로젝트 10개 카테고리 + '기타'."""
+    if not category_name:
+        return "기타"
+    for prefix, label in _CATEGORY_PREFIX_MAP:
+        if category_name.startswith(prefix):
+            return label
+    return "기타"
+
+
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
 DB_URL = os.environ.get(
     "POSTGRES_URL",
