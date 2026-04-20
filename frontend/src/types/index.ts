@@ -70,12 +70,33 @@ export interface DistrictComparison {
   cannibalization: number;
 }
 
+/** 법률 리스크 — 근거 조항 (가맹사업법 등) */
+export interface LegalRiskArticle {
+  article_ref: string;
+  content: string;
+}
+
 /** 법률 리스크 */
 export interface LegalRisk {
   type: string;
   risk_level: string;
   detail: string;
   recommendation?: string;
+  articles?: LegalRiskArticle[];
+}
+
+/** 폐업 위험도 기여 피처 */
+export interface ClosureRiskSignal {
+  feature: string;
+  contribution: number;
+}
+
+/** 폐업 위험도 결과 (B2 수지니) */
+export interface ClosureRisk {
+  risk_score: number;
+  risk_level: 'safe' | 'caution' | 'danger';
+  top_signals: ClosureRiskSignal[];
+  is_mock: boolean;
 }
 
 /** 시뮬레이션 결과 출력 */
@@ -118,6 +139,10 @@ export interface SimulationOutput {
     base: { quarter: number; revenue: number }[];
     pessimistic: { quarter: number; revenue: number }[];
   } | null;
+  // [B2 수지니] 폐업 위험도 분석 결과
+  closure_risk?: ClosureRisk | null;
+  // [PR #72] 경쟁 매장 인텔리전스 (500m 반경 카니발/포화도/차별화)
+  competitor_intel?: Record<string, unknown> | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
