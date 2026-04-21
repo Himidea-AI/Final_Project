@@ -10,13 +10,24 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import torch
+from dotenv import load_dotenv
 
-from models.customer_revenue.data_prep import DONG_TO_IDX, INDUSTRY_TO_IDX, load_mappings
-from models.customer_revenue.model import WEIGHTS_DIR, MLPPredictor, build_model
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
+_host = os.environ.get("POSTGRES_HOST", "192.168.0.28")
+_port = os.environ.get("POSTGRES_PORT", "5432")
+_db = os.environ.get("POSTGRES_DB", "mapo_simulator")
+DB_URL = os.environ.get("POSTGRES_URL", f"postgresql://postgres:{_pw}@{_host}:{_port}/{_db}")
+
+from models.customer_revenue.data_prep import DONG_TO_IDX, INDUSTRY_TO_IDX, load_mappings  # noqa: E402
+from models.customer_revenue.model import WEIGHTS_DIR, MLPPredictor, build_model  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +65,26 @@ _TIME_MAP: dict[str, str] = {
 _DAY_MAP: dict[str, str] = {
     "weekday": "weekday_ratio",
     "weekend": "weekend_ratio",
+}
+
+# 시간대 슬롯 → time_zone 값 매핑 (living_population.time_zone: 1~23)
+_TIME_ZONE_MAP: dict[str, tuple[int, ...]] = {
+    "time_00_06": (1, 2, 3, 4, 5, 6),
+    "time_06_11": (7, 8, 9, 10, 11),
+    "time_11_14": (12, 13, 14),
+    "time_14_17": (15, 16, 17),
+    "time_17_21": (18, 19, 20, 21),
+    "time_21_24": (22, 23),
+}
+
+# 연령대 → 5세 단위 컬럼 접미사 매핑 (gender prefix 조합: male_/female_)
+_AGE_COL_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "10대": ("10_14", "15_19"),
+    "20대": ("20_24", "25_29"),
+    "30대": ("30_34", "35_39"),
+    "40대": ("40_44", "45_49"),
+    "50대": ("50_54", "55_59"),
+    "60대이상": ("60_64", "65_69", "70_74", "70_plus"),
 }
 
 # 전체 세그먼트 순서 (model.SEGMENT_COLS와 동기화)
@@ -124,6 +155,124 @@ class SegmentProfile:
 
 
 # ---------------------------------------------------------------------------
+# living_population 교차 비율 캐시 + 로더
+# ---------------------------------------------------------------------------
+
+_living_pop_cache: dict[tuple[str, str], float] = {}
+
+
+def _load_living_pop_ratio(
+    dong_code: str,
+    profile: SegmentProfile,
+    db_url: str = DB_URL,
+) -> float | None:
+    """living_population 실측값으로 교차 세그먼트 비율을 계산한다.
+
+    프로필(연령×성별×시간대×요일)에 해당하는 생활인구를 집계하여
+    해당 동 전체 인구 대비 비율을 반환한다. DB 접속 실패 시 None.
+
+    Parameters
+    ----------
+    dong_code : str
+        행정동 코드 (마포구 16개 동).
+    profile : SegmentProfile
+        타겟 고객 프로필.
+    db_url : str
+        PostgreSQL 접속 URL.
+
+    Returns
+    -------
+    float or None
+        교차 세그먼트 비율 (0~1). DB 실패 시 None.
+    """
+    cache_key = (dong_code, profile.summary())
+    if cache_key in _living_pop_cache:
+        return _living_pop_cache[cache_key]
+
+    try:
+        from sqlalchemy import create_engine, text
+
+        # 시간대 필터
+        if profile.time_slots:
+            tz_values = []
+            for ts in profile.time_slots:
+                tz_values.extend(_TIME_ZONE_MAP.get(ts, ()))
+            tz_filter = f"AND time_zone IN ({','.join(str(v) for v in tz_values)})"
+        else:
+            tz_filter = "AND time_zone != 0"  # 일합계(0) 제외, 전체 시간대
+
+        # 요일 필터
+        if profile.day_type == "weekday":
+            dow_filter = "AND EXTRACT(DOW FROM date) IN (1,2,3,4,5)"
+        elif profile.day_type == "weekend":
+            dow_filter = "AND EXTRACT(DOW FROM date) IN (0,6)"
+        else:
+            dow_filter = ""
+
+        # 성별×연령 집계 컬럼 결정
+        genders = ["male", "female"] if profile.gender == "all" else [profile.gender]
+        age_suffixes: list[str] = []
+        if profile.age_groups:
+            for ag in profile.age_groups:
+                age_suffixes.extend(_AGE_COL_SUFFIXES.get(ag, ()))
+        else:
+            # 전체 연령: 5세 단위 전체
+            all_suffixes = (
+                "0_9",
+                "10_14",
+                "15_19",
+                "20_24",
+                "25_29",
+                "30_34",
+                "35_39",
+                "40_44",
+                "45_49",
+                "50_54",
+                "55_59",
+                "60_64",
+                "65_69",
+                "70_74",
+                "70_plus",
+            )
+            age_suffixes = list(all_suffixes)
+
+        if age_suffixes:
+            seg_cols = " + ".join(f"COALESCE({g}_{s}, 0)" for g in genders for s in age_suffixes)
+        else:
+            seg_cols = "total_pop"
+
+        query = text(f"""
+            SELECT
+                SUM({seg_cols}) AS seg_pop,
+                SUM(total_pop)  AS total_pop
+            FROM living_population
+            WHERE dong_code = :dong_code
+              {tz_filter}
+              {dow_filter}
+        """)  # noqa: S608
+
+        engine = create_engine(db_url, echo=False, connect_args={"connect_timeout": 5})
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(query, {"dong_code": dong_code}).fetchone()
+        finally:
+            engine.dispose()
+
+        if row is None or not row.total_pop:
+            return None
+
+        ratio = float(row.seg_pop or 0) / float(row.total_pop)
+        ratio = max(0.0, min(ratio, 1.0))
+        _living_pop_cache[cache_key] = ratio
+        logger.debug("living_pop 교차 비율 [%s %s]: %.4f", dong_code, profile.summary(), ratio)
+        return ratio
+
+    except Exception as exc:
+        logger.debug("living_pop 조회 실패, MLP fallback: %s", exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # 모델 캐시
 # ---------------------------------------------------------------------------
 
@@ -161,16 +310,18 @@ def _load_model() -> tuple[MLPPredictor, dict, dict]:
 # ---------------------------------------------------------------------------
 
 
-def _combined_ratio(ratios: np.ndarray, profile: SegmentProfile) -> float:
+def _combined_ratio(
+    ratios: np.ndarray,
+    profile: SegmentProfile,
+    dong_code: str | None = None,
+) -> float:
     """
     예측된 세그먼트 비율 벡터(16차원)에서 프로필에 해당하는 결합 비율을 계산한다.
 
     결합 방식:
-        - 연령: 선택된 연령대 비율의 합 (서로 다른 그룹이므로 합산)
-        - 성별: 선택된 성별 비율 (전체이면 1.0)
-        - 시간대: 선택된 시간대 비율의 합
-        - 요일: 선택된 요일 비율 (전체이면 1.0)
-        - 최종: (연령 합) × (성별) × (시간대 합) × (요일) — 독립 가정
+        - MLP 독립 가정: (연령 합) × (성별) × (시간대 합) × (요일)
+        - living_population 실측 교차 비율과 50:50 가중 평균 (dong_code 있을 때)
+        - DB 조회 실패 시 MLP 독립 가정만 사용 (fallback)
 
     Returns
     -------
@@ -206,7 +357,15 @@ def _combined_ratio(ratios: np.ndarray, profile: SegmentProfile) -> float:
     else:
         day_ratio = 1.0
 
-    return age_ratio * gender_ratio * time_ratio * day_ratio
+    mlp_ratio = age_ratio * gender_ratio * time_ratio * day_ratio
+
+    # living_population 실측 교차 비율 보정 (50:50 가중 평균)
+    if dong_code:
+        living_ratio = _load_living_pop_ratio(dong_code, profile)
+        if living_ratio is not None:
+            return mlp_ratio * 0.5 + living_ratio * 0.5
+
+    return mlp_ratio
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +425,7 @@ def predict(
     with torch.no_grad():
         ratios = model(d_idx, i_idx, q_enc).squeeze(0).numpy()  # (16,)
 
-    seg_ratio = _combined_ratio(ratios, profile)
+    seg_ratio = _combined_ratio(ratios, profile, dong_code=dong_code)
     seg_sales = round(monthly_sales * seg_ratio) if monthly_sales is not None else None
 
     # 차원별 비율 (디버깅/설명용)
