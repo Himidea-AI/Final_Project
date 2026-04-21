@@ -18,7 +18,8 @@ class SimulationInput(BaseModel):
 
     business_type: str = Field(..., description="업종 코드 (cafe, restaurant, convenience)")
     brand_name: str = Field(..., description="브랜드명")
-    target_district: str = Field(..., description="출점 후보 행정동")
+    target_district: str = Field(..., description="출점 후보 행정동 (대표 1개)")
+    target_districts: list[str] = Field(default_factory=list, description="사용자가 선택한 후보 행정동 목록 (복수 선택 지원)")
     existing_stores: list[ExistingStoreInput] = Field(default_factory=list, description="기존 매장 목록")
     initial_investment: int = Field(default=150_000_000, description="초기 투자금 (원)")
     monthly_rent: int = Field(default=0, description="월 임대료 (원, 0이면 자동 추정)")
