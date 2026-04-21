@@ -27,8 +27,8 @@ class PostgresClient:
         self.engine = create_async_engine(
             async_url,
             echo=False,
-            pool_size=5 if _DEBUG else 20,
-            max_overflow=5 if _DEBUG else 30,
+            pool_size=3,          # RDS db.t3.micro max_connections=81 제약
+            max_overflow=5,        # 다중 엔진 인스턴스 고려 (최대 8개/엔진)
             pool_timeout=30,
             pool_recycle=3600,
             pool_pre_ping=True,
