@@ -17,6 +17,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.llms import get_fast_llm
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.config.settings import settings
 from src.schemas.state import AgentState
 from src.schemas.structured_output import CompetitorIntelOutput
@@ -226,36 +227,68 @@ async def competitor_intel_node(state: AgentState) -> dict:
     logger.info(f"[competitor_intel] 시작 — {target_district} / {brand_name}")
     print(f"--- [COMPETITOR_INTEL] {target_district} / {brand_name} 분석 시작 ---")
 
+    def _make_competitor_attr(verdict: str, reasoning: str, confidence: float = 0.7) -> dict:
+        return build_attribution(
+            agent_id="competitor_intel",
+            display_name="경쟁 인텔",
+            kind="Hybrid",
+            sources=["kakao_store", "ftc_brand_franchise", "store_quarterly"],
+            verdict=verdict,
+            reasoning=reasoning,
+            confidence=confidence,
+        )
+
     # brand_name 필수
     if not brand_name:
+        _attr = _make_competitor_attr(
+            "브랜드명 미입력 · 분석 제한",
+            "브랜드명이 없어 카니발리제이션·벤치마크 비교 불가.",
+            0.2,
+        )
         return {
             "competitor_intel_result": {
                 "error": "brand_name 이 없어 카니발리제이션 분석을 수행할 수 없습니다.",
                 "narrative": "경쟁 정보 분석을 위해 브랜드명 입력이 필요합니다.",
+                "agent_attribution": _attr,
             },
             "current_agent": "competitor_intel",
+            "agent_attribution": _attr,
         }
 
     # dong 이름 → code
     dong_code = resolve_dong_code(target_district)
     if not dong_code:
+        _attr = _make_competitor_attr(
+            "행정동 식별 실패 · 분석 제한",
+            f"{target_district} dong_code를 찾지 못해 반경 분석 불가.",
+            0.2,
+        )
         return {
             "competitor_intel_result": {
                 "error": f"dong_code 를 찾을 수 없습니다: {target_district}",
                 "narrative": "대상 행정동을 식별할 수 없어 분석을 건너뜁니다.",
+                "agent_attribution": _attr,
             },
             "current_agent": "competitor_intel",
+            "agent_attribution": _attr,
         }
 
     # 업종 정보
     keyword, ind_code, ind_label = _resolve_industry(brand_name, business_type)
     if not keyword:
+        _attr = _make_competitor_attr(
+            "업종 매핑 실패 · 분석 제한",
+            f"브랜드/업종 매핑 실패: {brand_name}/{business_type}",
+            0.2,
+        )
         return {
             "competitor_intel_result": {
                 "error": f"브랜드/업종 매핑 실패: {brand_name}/{business_type}",
                 "narrative": "지원하지 않는 브랜드/업종 조합입니다.",
+                "agent_attribution": _attr,
             },
             "current_agent": "competitor_intel",
+            "agent_attribution": _attr,
         }
 
     # Redis 캐시 조회
@@ -263,19 +296,42 @@ async def competitor_intel_node(state: AgentState) -> dict:
     cached = await _try_cache_get(cache_key)
     if cached:
         print(f"[competitor_intel] 캐시 히트: {cache_key}")
-        return {"competitor_intel_result": cached, "current_agent": "competitor_intel"}
+        _cached_signal = cached.get("market_entry_signal", "N/A") if isinstance(cached, dict) else "N/A"
+        _cached_sat = (
+            (cached.get("competition_500m") or {}).get("saturation_level", "N/A") if isinstance(cached, dict) else "N/A"
+        )
+        _cached_narr = cached.get("narrative", "") if isinstance(cached, dict) else ""
+        _cached_attr = _make_competitor_attr(
+            f"진입 신호 {_cached_signal} · 포화 {_cached_sat}",
+            str(_cached_narr)[:300] if _cached_narr else "경쟁 인텔 (캐시 · Pancras 2013 decay 모델 반영)",
+            0.8,
+        )
+        cached_with_attr = dict(cached) if isinstance(cached, dict) else {"cached": cached}
+        cached_with_attr["agent_attribution"] = _cached_attr
+        return {
+            "competitor_intel_result": cached_with_attr,
+            "current_agent": "competitor_intel",
+            "agent_attribution": _cached_attr,
+        }
 
     # Python 서비스 데이터 수집 (동기 DB 호출이라 별도 스레드)
     try:
         data = await asyncio.to_thread(_run_data_collection, dong_code, brand_name, keyword, ind_code, ind_label)
     except Exception as e:
         logger.exception(f"[competitor_intel] 서비스 호출 실패: {e}")
+        _attr = _make_competitor_attr(
+            "서비스 호출 실패 · 분석 제한",
+            f"경쟁 데이터 수집 오류: {type(e).__name__}",
+            0.2,
+        )
         return {
             "competitor_intel_result": {
                 "error": f"서비스 호출 실패: {type(e).__name__}: {e}",
                 "narrative": "경쟁 데이터 수집 중 오류가 발생했습니다.",
+                "agent_attribution": _attr,
             },
             "current_agent": "competitor_intel",
+            "agent_attribution": _attr,
         }
 
     adjusted_revenue = _compute_adjusted_revenue(
@@ -321,7 +377,16 @@ async def competitor_intel_node(state: AgentState) -> dict:
     # 캐시 저장
     await _try_cache_set(cache_key, result)
 
+    competitor_attr = _make_competitor_attr(
+        f"진입 신호 {llm_parsed.get('market_entry_signal', 'N/A')} · 포화 {(data.get('competition_500m') or {}).get('saturation_level', 'N/A')}",
+        str(llm_parsed.get("narrative") or "")[:300]
+        or "경쟁 인텔 종합 (Pancras 2013 distance-decay 기반 카니발 보정).",
+        0.8,
+    )
+    result["agent_attribution"] = competitor_attr
+
     return {
         "competitor_intel_result": result,
         "current_agent": "competitor_intel",
+        "agent_attribution": competitor_attr,
     }

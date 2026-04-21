@@ -416,6 +416,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "closure_risk": sim_result.get("closure_risk") if "sim_result" in locals() else None,
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
         "competitor_intel": _sanitize(state.get("competitor_intel_result") or {}),
+        # 15섹션 통합 리포트 §11 UI 카드용 — 각 에이전트 판단 근거 (synthesis 집계)
+        "agent_attributions": _sanitize(analysis.get("agent_attributions") or state.get("agent_attributions") or []),
     }
 
     print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")

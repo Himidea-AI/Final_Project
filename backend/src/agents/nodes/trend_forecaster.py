@@ -11,6 +11,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.llms import get_fast_llm
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.agents.tools import MarketDataTool
 from src.config.settings import settings
 from src.database.postgres import PostgresClient
@@ -52,16 +53,36 @@ async def trend_forecaster_node(state: AgentState) -> dict:
             print(f"[trend_forecaster] 캐시 히트: {cache_key}")
             cached_data = json.loads(cached)
             await _redis.aclose()
+            _cached_report = cached_data.get("report") or {}
+            _cached_forecast = _cached_report.get("forecast", {}) if isinstance(_cached_report, dict) else {}
+            _cached_narr = _cached_forecast.get("narrative", "") if isinstance(_cached_forecast, dict) else ""
+            cached_trend_attr = build_attribution(
+                agent_id="trend_forecaster",
+                display_name="추세 예측",
+                kind="LLM",
+                sources=[
+                    "naver_trend_industry",
+                    "naver_trend_quarterly",
+                    "seoul_adstrd_change_ix",
+                    "ecos_timeseries",
+                ],
+                verdict=f"12개월 전망 {_cached_forecast.get('score', 0)}/100 · {_cached_forecast.get('direction', 'N/A')}",
+                reasoning=str(_cached_narr)[:300] if _cached_narr else "추세 예측 (캐시)",
+                confidence=0.75,
+            )
+            _cached_analysis = {
+                **state.get("analysis_results", {}),
+                "trend_forecast": _cached_report,
+                "trend_forecaster_result": {"agent_attribution": cached_trend_attr},
+            }
             return {
-                "analysis_results": {
-                    **state.get("analysis_results", {}),
-                    "trend_forecast": cached_data["report"],
-                },
+                "analysis_results": _cached_analysis,
                 "analysis_metrics": {
                     **state.get("analysis_metrics", {}),
                     **cached_data["metrics"],
                 },
                 "current_agent": "trend_forecaster",
+                "agent_attribution": cached_trend_attr,
             }
     except Exception as e:
         print(f"[trend_forecaster] Redis 캐시 조회 실패 (무시하고 계속): {e}")
@@ -86,6 +107,20 @@ async def trend_forecaster_node(state: AgentState) -> dict:
         )
     except Exception as e:
         print(f"!!! [TREND FORECASTER ERROR] !!! DB 수집 실패: {e}")
+        error_trend_attr = build_attribution(
+            agent_id="trend_forecaster",
+            display_name="추세 예측",
+            kind="LLM",
+            sources=[
+                "naver_trend_industry",
+                "naver_trend_quarterly",
+                "seoul_adstrd_change_ix",
+                "ecos_timeseries",
+            ],
+            verdict="DB 수집 실패 · 분석 제한",
+            reasoning=f"{target_district} {industry} 전망 데이터 수집 실패: {str(e)[:200]}",
+            confidence=0.2,
+        )
         return {
             "analysis_results": {
                 **state.get("analysis_results", {}),
@@ -93,9 +128,11 @@ async def trend_forecaster_node(state: AgentState) -> dict:
                     "error": str(e),
                     "narrative": f"{target_district} {industry} 전망 데이터 수집 실패.",
                 },
+                "trend_forecaster_result": {"agent_attribution": error_trend_attr},
             },
             "current_agent": "trend_forecaster",
             "errors": state.get("errors", []) + [f"trend_forecaster: {e}"],
+            "agent_attribution": error_trend_attr,
         }
 
     # [4] LLM 호출 전 API quota 관리
@@ -223,14 +260,31 @@ async def trend_forecaster_node(state: AgentState) -> dict:
             except Exception:
                 pass
 
+    trend_attr = build_attribution(
+        agent_id="trend_forecaster",
+        display_name="추세 예측",
+        kind="LLM",
+        sources=[
+            "naver_trend_industry",
+            "naver_trend_quarterly",
+            "seoul_adstrd_change_ix",
+            "ecos_timeseries",
+        ],
+        verdict=f"12개월 전망 {parsed.forecast_score}/100 · {parsed.forecast_direction}",
+        reasoning=str(parsed.narrative)[:300] if parsed and parsed.narrative else "추세 예측 데이터 기반",
+        confidence=0.75,
+    )
+
     return {
         "analysis_results": {
             **state.get("analysis_results", {}),
             "trend_forecast": report,
+            "trend_forecaster_result": {"agent_attribution": trend_attr},
         },
         "analysis_metrics": {
             **state.get("analysis_metrics", {}),
             **metrics,
         },
         "current_agent": "trend_forecaster",
+        "agent_attribution": trend_attr,
     }

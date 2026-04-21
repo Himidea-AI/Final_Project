@@ -14,6 +14,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.llms import get_fast_llm
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.config.settings import settings
 from src.schemas.demographic import (
@@ -193,11 +194,37 @@ async def demographic_depth_node(state: AgentState) -> dict:
         if cached:
             print(f"[demographic] 캐시 히트: {cache_key}")
             analysis = dict(state.get("analysis_results", {}) or {})
-            analysis["demographic_report"] = json.loads(cached)
+            _cached_report = json.loads(cached)
+            analysis["demographic_report"] = _cached_report
             await _redis.aclose()
+            _core = _cached_report.get("core_demographic") if isinstance(_cached_report, dict) else None
+            _age = (_core or {}).get("age", "N/A") if isinstance(_core, dict) else "N/A"
+            _gender = (_core or {}).get("gender", "") if isinstance(_core, dict) else ""
+            _share_raw = (_core or {}).get("share", 0) if isinstance(_core, dict) else 0
+            try:
+                _share_pct = round(float(_share_raw) * 100, 1)
+            except Exception:
+                _share_pct = 0
+            cached_demo_attr = build_attribution(
+                agent_id="demographic_depth",
+                display_name="소비자 심층",
+                kind="LLM",
+                sources=[
+                    "district_sales",
+                    "seoul_realtime_hotspots",
+                    "kosis_regional_income",
+                    "elderly_ratio_region",
+                ],
+                verdict=f"주 소비층 {_age} {_gender} ({_share_pct}%)",
+                reasoning=(_cached_report.get("narrative", "") if isinstance(_cached_report, dict) else "")[:300]
+                or "소비자 심층 분석 (캐시)",
+                confidence=0.8,
+            )
+            analysis["demographic_depth_result"] = {"agent_attribution": cached_demo_attr}
             return {
                 "analysis_results": analysis,
                 "current_agent": "demographic_depth",
+                "agent_attribution": cached_demo_attr,
             }
     except Exception as e:
         print(f"[demographic] Redis 캐시 조회 실패 (무시): {e}")
@@ -244,9 +271,25 @@ async def demographic_depth_node(state: AgentState) -> dict:
                 await _redis.aclose()
             except Exception:
                 pass
+        empty_demo_attr = build_attribution(
+            agent_id="demographic_depth",
+            display_name="소비자 심층",
+            kind="LLM",
+            sources=[
+                "district_sales",
+                "seoul_realtime_hotspots",
+                "kosis_regional_income",
+                "elderly_ratio_region",
+            ],
+            verdict="매출 데이터 없음 · 분석 제한",
+            reasoning=f"{dong_code} 매출 레코드 부재로 데모그래픽 심층 분석 제한.",
+            confidence=0.3,
+        )
+        analysis["demographic_depth_result"] = {"agent_attribution": empty_demo_attr}
         return {
             "analysis_results": analysis,
             "current_agent": "demographic_depth",
+            "agent_attribution": empty_demo_attr,
         }
 
     # 정량 계산
@@ -322,7 +365,31 @@ async def demographic_depth_node(state: AgentState) -> dict:
 
     analysis_results = dict(state.get("analysis_results", {}) or {})
     analysis_results["demographic_report"] = report
+
+    try:
+        _share_pct_main = round(float(core.share) * 100, 1)
+    except Exception:
+        _share_pct_main = 0
+    demo_attr = build_attribution(
+        agent_id="demographic_depth",
+        display_name="소비자 심층",
+        kind="LLM",
+        sources=[
+            "district_sales",
+            "seoul_realtime_hotspots",
+            "kosis_regional_income",
+            "elderly_ratio_region",
+        ],
+        verdict=f"주 소비층 {core.age} {core.gender} ({_share_pct_main}%)",
+        reasoning=str(analysis_out.narrative)[:300]
+        if analysis_out and analysis_out.narrative
+        else "소비자 심층 분석 데이터 기반",
+        confidence=0.8,
+    )
+    analysis_results["demographic_depth_result"] = {"agent_attribution": demo_attr}
+
     return {
         "analysis_results": analysis_results,
         "current_agent": "demographic_depth",
+        "agent_attribution": demo_attr,
     }

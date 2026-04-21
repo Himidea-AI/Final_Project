@@ -5,9 +5,43 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from src.schemas.state import AgentState
 from src.schemas.structured_output import FinalStrategyResult
 from src.agents.llms import get_smart_llm
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.config.settings import settings
 
 _CACHE_TTL = 86400  # 24시간
+
+
+# 에이전트 결과 수집 순서 (id, analysis_results 내 result blob 키 또는 state 키)
+_AGENT_KEYS_ORDERED: list[tuple[str, str]] = [
+    ("market_analyst", "market_analyst_result"),
+    ("population_analyst", "population_analyst_result"),
+    ("legal", "legal_result"),
+    ("district_ranking", "district_ranking_result"),
+    ("demographic_depth", "demographic_depth_result"),
+    ("trend_forecaster", "trend_forecaster_result"),
+    ("competitor_intel", "competitor_intel_result"),
+]
+
+
+def _collect_upstream_attributions(state: dict, analysis_results: dict) -> list[dict]:
+    """다른 에이전트 결과에서 agent_attribution 수집.
+
+    각 에이전트가 analysis_results[<agent>_result]["agent_attribution"]으로 넣음.
+    competitor_intel은 state["competitor_intel_result"]에 직접 저장되는 경우가 있어 fallback 포함.
+    """
+    attributions: list[dict] = []
+    for _agent_id, state_key in _AGENT_KEYS_ORDERED:
+        # 1차: analysis_results 안의 result blob
+        result_blob = analysis_results.get(state_key) if isinstance(analysis_results, dict) else None
+        # 2차: state top-level (competitor_intel_result 같은 경우)
+        if not isinstance(result_blob, dict) or not result_blob.get("agent_attribution"):
+            alt = state.get(state_key)
+            if isinstance(alt, dict) and alt.get("agent_attribution"):
+                result_blob = alt
+        attr = result_blob.get("agent_attribution") if isinstance(result_blob, dict) else None
+        if attr:
+            attributions.append(attr)
+    return attributions
 
 
 async def synthesis_node(state: AgentState) -> dict:
@@ -45,10 +79,32 @@ async def synthesis_node(state: AgentState) -> dict:
             if "legal_risks" in cached_data:
                 analysis["legal_risks"] = cached_data["legal_risks"]
             await _redis.aclose()
+
+            # 캐시 히트 시에도 agent_attributions 집계 — 다른 에이전트의 attribution은 state/analysis에서 수집
+            cached_attributions: list[dict] = _collect_upstream_attributions(state, analysis)
+            cached_overall = cached_data.get("overall_legal_risk", "caution")
+            cached_summary_text = ""
+            try:
+                cached_summary_text = (cached_data.get("final_report") or {}).get("summary", "")
+            except Exception:
+                cached_summary_text = ""
+            cached_synth_attr = build_attribution(
+                agent_id="synthesis",
+                display_name="전략 종합",
+                kind="LLM",
+                sources=[f"{len(cached_attributions)}개 에이전트 결과"],
+                verdict=f"종합 판단 · 법률 {cached_overall}",
+                reasoning=str(cached_summary_text)[:300] if cached_summary_text else "전략 종합 (캐시)",
+                confidence=0.85,
+            )
+            cached_attributions.append(cached_synth_attr)
+            analysis["agent_attributions"] = cached_attributions
+
             return {
                 "analysis_results": analysis,
-                "overall_legal_risk": cached_data["overall_legal_risk"],
+                "overall_legal_risk": cached_overall,
                 "current_agent": "synthesis",
+                "agent_attributions": cached_attributions,
             }
     except Exception as e:
         print(f"[synthesis] Redis 캐시 조회 실패 (무시하고 계속): {e}")
@@ -245,9 +301,24 @@ async def synthesis_node(state: AgentState) -> dict:
             except Exception:
                 pass
 
+    # [ATTRIBUTION] 7개 에이전트 attribution 수집 + synthesis 자신 1개 = 최대 8개
+    agent_attributions: list[dict] = _collect_upstream_attributions(state, new_analysis_results)
+    synthesis_attr = build_attribution(
+        agent_id="synthesis",
+        display_name="전략 종합",
+        kind="LLM",
+        sources=[f"{len(agent_attributions)}개 에이전트 결과"],
+        verdict=f"종합 판단 · 법률 {overall_legal_risk}",
+        reasoning=str(final_strategy.summary if final_strategy else "")[:300],
+        confidence=0.85,
+    )
+    agent_attributions.append(synthesis_attr)
+    new_analysis_results["agent_attributions"] = agent_attributions
+
     return {
         "analysis_results": new_analysis_results,
         "overall_legal_risk": overall_legal_risk,
         "competitor_intel_result": competitor_intel,  # state 에서 파이프라인 끝까지 유지
         "current_agent": "synthesis",
+        "agent_attributions": agent_attributions,
     }

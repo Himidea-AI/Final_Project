@@ -20,6 +20,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 logger = logging.getLogger(__name__)
 
 from src.agents.llms import get_fast_llm
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, ZONING_RULES
@@ -396,11 +397,23 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     await _redis.aclose()
                 except Exception:
                     pass
+                _cached_high = sum(1 for r in (legal_risks or []) if isinstance(r, dict) and r.get("level") == "danger")
+                cached_legal_attr = build_attribution(
+                    agent_id="legal",
+                    display_name="법률 리스크",
+                    kind="RAG",
+                    sources=["legal_rag_chunks (3775)"],
+                    verdict=f"14 법률 위험도 · overall {overall_cached}",
+                    reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_cached_high}건 HIGH 위험.",
+                    confidence=0.85,
+                )
+                analysis["legal_result"] = {"agent_attribution": cached_legal_attr}
                 return {
                     **state,
                     "analysis_results": analysis,
                     "legal_info": legal_info,
                     "overall_legal_risk": overall_cached,
+                    "agent_attribution": cached_legal_attr,
                 }
     except Exception as e:
         logger.warning(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
@@ -859,7 +872,25 @@ async def _run_legal_pipeline(state: dict) -> dict:
             except Exception:
                 pass
 
-    return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
+    _high_count = sum(1 for r in risks if isinstance(r, dict) and r.get("level") == "danger")
+    legal_attr = build_attribution(
+        agent_id="legal",
+        display_name="법률 리스크",
+        kind="RAG",
+        sources=["legal_rag_chunks (3775)"],
+        verdict=f"14 법률 위험도 · overall {overall_level}",
+        reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_high_count}건 HIGH 위험.",
+        confidence=0.85,
+    )
+    analysis["legal_result"] = {"agent_attribution": legal_attr}
+
+    return {
+        **state,
+        "analysis_results": analysis,
+        "legal_info": legal_info,
+        "overall_legal_risk": overall_level,
+        "agent_attribution": legal_attr,
+    }
 
 
 async def legal_node(state) -> dict:
