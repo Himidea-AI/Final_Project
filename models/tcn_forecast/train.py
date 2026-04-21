@@ -46,7 +46,7 @@ DEFAULT_PRETRAIN_CONFIG: dict = {
     "batch_size": 64,
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
-    "feature_cols": None,  # None = ALL_FEATURES (33개)
+    "feature_cols": None,  # None = ALL_FEATURES (34개, DB 연결 시 rent_1f 포함 실제 34개)
     # 모델 하이퍼파라미터
     "n_channels": 128,  # GRU의 hidden_size=128과 동일 조건
     "kernel_size": 2,  # receptive field 최적 커널 크기
@@ -69,7 +69,7 @@ DEFAULT_FINETUNE_CONFIG: dict = {
     "batch_size": 32,  # 파인튜닝은 배치 작게 (데이터 적음)
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
-    "feature_cols": None,
+    "feature_cols": None,  # None = ALL_FEATURES (34개, DB 연결 시 rent_1f 포함 실제 34개)
     # 모델 하이퍼파라미터
     "n_channels": 128,
     "kernel_size": 2,

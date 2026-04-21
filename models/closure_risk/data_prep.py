@@ -48,7 +48,7 @@ LGBM_FEATURES = [
     # rent_1f, vacancy_rate 제외 — DB/CSV에 데이터 없어 항상 0 (상수 피처)
 ]
 
-# TCN 브랜치는 data_prep.ALL_FEATURES 33개 시계열 그대로 사용
+# TCN 브랜치는 data_prep.ALL_FEATURES 34개 시계열 그대로 사용
 
 
 # ---------------------------------------------------------------------------

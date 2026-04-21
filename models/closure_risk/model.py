@@ -34,7 +34,7 @@ class TCNClassifier(nn.Module):
     Parameters
     ----------
     input_size : int
-        입력 피처 수 (기본 33 — data_prep.ALL_FEATURES).
+        입력 피처 수 (기본 34 — data_prep.ALL_FEATURES).
     n_channels : int
         TCN 내부 채널 수 (pretrain과 동일하게 128 유지).
     kernel_size : int
@@ -47,7 +47,7 @@ class TCNClassifier(nn.Module):
 
     def __init__(
         self,
-        input_size: int = 33,
+        input_size: int = 34,
         n_channels: int = 128,
         kernel_size: int = 2,
         dilations: list[int] | None = None,
@@ -102,9 +102,14 @@ class TCNClassifier(nn.Module):
             return
 
         state = torch.load(pretrained_path, map_location="cpu", weights_only=True)
+        current_state = self._backbone.state_dict()
 
-        # fc_head 관련 키 제외 — 컨볼루션 블록만 로드
-        tcn_keys = {k: v for k, v in state.items() if not k.startswith("fc_head")}
+        # fc_head 제외 + shape 불일치 키 제외 (input_size 변경 시 input_proj 등 호환 불가)
+        tcn_keys = {
+            k: v
+            for k, v in state.items()
+            if not k.startswith("fc_head") and k in current_state and current_state[k].shape == v.shape
+        }
         missing, unexpected = self._backbone.load_state_dict(tcn_keys, strict=False)
 
         logger.info(
