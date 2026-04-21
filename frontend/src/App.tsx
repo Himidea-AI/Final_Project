@@ -2622,6 +2622,15 @@ function SimulatorDashboard({
   }, [selectedGu, selectedDongs]);
 
   const runSim = useCallback(async () => {
+    // [C-2] 입력 검증 — 명확한 에러 메시지
+    if (!selectedDongs || selectedDongs.length === 0) {
+      showToast('error', '분석할 행정동을 먼저 선택해주세요.');
+      return;
+    }
+    if (!user?.company_name) {
+      showToast('error', '로그인된 브랜드 정보가 없습니다. 다시 로그인해주세요.');
+      return;
+    }
     setReportState('loading');
     try {
       // [C1 연동] 백엔드 SimulationInput 9개 필드 전부 전송
@@ -2747,6 +2756,7 @@ function SimulatorDashboard({
     initialCapital,
     radius,
     weighted,
+    showToast,
   ]);
 
   // [IM3-205] 로딩 진행률을 simulationStore에서 미러 — store가 500ms 타이머 보유
@@ -3163,6 +3173,37 @@ function SimulatorDashboard({
                   <span className="w-1 h-1 bg-border rounded-full" />
                   <span>PRESS RUN</span>
                 </div>
+
+                {/* [I-2] 3-step 시작 가이드 — 처음 방문자의 진입장벽 낮춤 */}
+                <div className="mt-6 grid gap-3 max-w-sm mx-auto text-left">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
+                      1
+                    </div>
+                    <p className="text-xs text-[#9ca3af] leading-relaxed">
+                      좌측 <span className="text-[#818cf8] font-semibold">SIMULATION CONTROLS</span>
+                      에서 행정동·업종·조건 선택
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
+                      2
+                    </div>
+                    <p className="text-xs text-[#9ca3af] leading-relaxed">
+                      좌측 하단 <span className="text-[#818cf8] font-semibold">RUN SIMULATION</span>{' '}
+                      클릭
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
+                      3
+                    </div>
+                    <p className="text-xs text-[#9ca3af] leading-relaxed">
+                      AI 분석 결과 약 <span className="text-[#e2e8f0] font-semibold">20초</span> 후
+                      표시
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -3211,6 +3252,12 @@ function SimulatorDashboard({
                     [ {loadingText} ]
                   </p>
                 </div>
+
+                {/* [C-3] 페이지 이동 허용 힌트 — simulationStore 덕분에 탭 이동해도 진행됨 */}
+                <p className="mt-2 text-[10px] text-[#9ca3af] leading-relaxed text-center max-w-xs">
+                  페이지를 이동하셔도 시뮬레이션은 계속 실행됩니다. 우측 하단 위젯에서 진행 상태를
+                  확인할 수 있어요.
+                </p>
               </div>
             </div>
           )}
@@ -3409,21 +3456,24 @@ function SimulatorDashboard({
                       > = {
                         green: {
                           icon: <CheckCircle2 className="h-6 w-6 text-emerald-400" />,
-                          label: 'GREEN',
+                          // [I-7] colorblind 대응 — 영문 GREEN → 한글 '안전'
+                          label: '안전',
                           border: 'border-emerald-500/30',
                           badge: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40',
                           iconBg: 'bg-emerald-500/10 ring-1 ring-emerald-500/30',
                         },
                         yellow: {
                           icon: <AlertTriangle className="h-6 w-6 text-amber-400" />,
-                          label: 'YELLOW',
+                          // [I-7] colorblind 대응 — 영문 YELLOW → 한글 '주의'
+                          label: '주의',
                           border: 'border-amber-500/30',
                           badge: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
                           iconBg: 'bg-amber-500/10 ring-1 ring-amber-500/30',
                         },
                         red: {
                           icon: <ShieldAlert className="h-6 w-6 text-rose-400" />,
-                          label: 'RED',
+                          // [I-7] colorblind 대응 — 영문 RED → 한글 '위험'
+                          label: '위험',
                           border: 'border-rose-500/30',
                           badge: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
                           iconBg: 'bg-rose-500/10 ring-1 ring-rose-500/30',

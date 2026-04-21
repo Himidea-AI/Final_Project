@@ -4,7 +4,7 @@
  * _verify_password(bcrypt) 준비됨 → 찬영 API 추가 시 즉시 연결
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Loader2, ChevronRight } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
@@ -21,6 +21,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const canSubmit = emailValid && password.length >= 8;
@@ -55,6 +56,8 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
         // 서버가 "이메일이 틀렸다" 같은 구체 메시지를 줘도 통합 문구로 덮음.
         setError('아이디 또는 비밀번호가 잘못되었습니다.');
       }
+      // [C-1] 첫 invalid 필드로 자동 포커스 이동 (접근성)
+      setTimeout(() => emailRef.current?.focus(), 0);
     }
 
     setIsLoading(false);
@@ -115,6 +118,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
           <div className="mb-5">
             <label className="block text-xs text-[#9ca3af] font-medium mb-1.5">업무용 이메일</label>
             <input
+              ref={emailRef}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -149,6 +153,8 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
           {/* Error */}
           {error && (
             <motion.div
+              role="alert"
+              aria-live="assertive"
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
               className="mb-5 px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 text-center"
