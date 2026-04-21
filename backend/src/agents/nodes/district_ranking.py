@@ -498,8 +498,12 @@ async def district_ranking_node(state: AgentState) -> dict:
         business_type=business_type,
     )
 
-    winner = ranked[0]["district"] if ranked else state.get("target_district", "서교동")
-    top_3 = [r["district"] for r in ranked[1:4]]
+    target_districts = state.get("target_districts") or [state.get("target_district", "서교동")]
+    filtered = [r for r in ranked if r["district"] in target_districts]
+    if not filtered:
+        filtered = ranked  # fallback: 선택 동 데이터 없으면 전체 중 추천
+    winner = filtered[0]["district"] if filtered else state.get("target_district", "서교동")
+    top_3 = [r["district"] for r in filtered[1:4]]
 
     # winner + top_3 + 사용자 선택 동의 실제 공실 좌표 조회
     target_district = state.get("target_district", winner)

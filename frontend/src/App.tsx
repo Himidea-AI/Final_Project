@@ -970,18 +970,17 @@ const mockDetailData: Record<string, DetailDataEntry> = {
     warning: '환산보증금 한도 초과 위기 — 갱신 청구 시 임대인 거절 사유 발생 가능',
   },
   insight_traffic: {
-    title: '저녁 시간대 매출 집중 분석',
+    title: '피크 시간대 매출 집중 분석',
     aiReasoning:
-      '18시 이후 유동인구가 평균 대비 240% 증가. 인근 직장인 퇴근 동선 + 2030 여성 데이트 수요가 결합된 권역. 점심 매출이 약한 만큼, 저녁 메뉴 강화가 핵심 KPI.',
-    peakTime: '18:00 - 21:00',
-    mainTarget: '직장인 + 2030 여성',
+      '유동인구 분석이 완료되면 피크 시간대 트래픽과 주요 소비층 데이터를 확인할 수 있습니다.',
+    peakTime: '분석 결과 대기 중',
+    mainTarget: '분석 결과 대기 중',
   },
   insight_target: {
-    title: '2030 여성 타겟 권역 분석',
+    title: '주요 타겟 고객층 분석',
     aiReasoning:
-      '체류 인구 분석 결과 25-34세 여성 비중 68%. SNS 인스타그래머블 인테리어 + 디저트 메뉴 강화 시 객단가 +18%, 재방문율 +24% 예상.',
-    confidence: '82%',
-    mainTarget: '25-34세 여성 (68%)',
+      '유동인구 분석이 완료되면 해당 지역의 주 소비층(연령·성별)과 피크타임 데이터를 확인할 수 있습니다.',
+    mainTarget: '분석 결과 대기 중',
   },
 };
 
@@ -2605,6 +2604,7 @@ function SimulatorDashboard({
         business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
         brand_name: user?.company_name || '',
         target_district: selectedDongs[0] || '서교동',
+        target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
         existing_stores: [],
         initial_investment: initialCapital * 10000, // 만원 → 원
         monthly_rent: budget * 10000, // 만원 → 원
@@ -5740,7 +5740,21 @@ function DetailDrawer({
           mainTarget: analysisMetrics.main_target_age,
           peakTime: analysisMetrics.peak_time,
         }
-      : baseData;
+      : drawerKey === 'traffic' && popData
+        ? {
+            title: '일일 유동인구 상세',
+            aiReasoning: `${popData.dong_name ?? ''} 실측 유동인구 데이터 기반. 일평균 ${(popData.daily_average ?? 0).toLocaleString()}명, 피크 ${analysisMetrics?.peak_time ?? '미정'}.`,
+            peakTime: analysisMetrics?.peak_time ?? '18:00 - 21:00',
+            mainTarget: analysisMetrics?.main_target_age ?? '분석 결과 대기 중',
+          }
+        : drawerKey === 'insight_traffic' && analysisMetrics?.peak_time
+          ? {
+              title: `${analysisMetrics.peak_time} 피크 시간대 분석`,
+              aiReasoning: `${analysisMetrics.peak_time} 피크 집중 상권. 주 소비층: ${analysisMetrics.main_target_age ?? '분석 결과 참조'}.`,
+              peakTime: analysisMetrics.peak_time,
+              mainTarget: analysisMetrics.main_target_age ?? '분석 결과 대기 중',
+            }
+          : baseData;
 
   return (
     <>

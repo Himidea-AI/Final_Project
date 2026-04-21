@@ -25,8 +25,19 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
+
+# LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
+# (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
+from dotenv import load_dotenv
+load_dotenv()
+_lc_api_key = os.environ.get("LANGCHAIN_API_KEY", "")
+if _lc_api_key:
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", os.environ.get("LANGCHAIN_TRACING_V2", "true"))
+    os.environ.setdefault("LANGCHAIN_ENDPOINT", os.environ.get("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com/"))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGCHAIN_PROJECT", "mapo-franchise-simulator"))
+
+from langchain_core.messages import HumanMessage
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.config.settings import settings
@@ -167,6 +178,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "business_type": normalized_biz,
         "brand_name": normalized_brand,
         "target_district": input_data.target_district,
+        "target_districts": getattr(input_data, "target_districts", None) or [input_data.target_district],
         "industry_filter": getattr(input_data, "industry_filter", None),
         "commercial_radius": getattr(input_data, "commercial_radius", 500),
         "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
@@ -388,7 +400,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             {
                 "district": target_dist,
                 "score": district_score,
-                "revenue": md.get("avg_revenue", 30000000),
+                # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
+                "revenue": (md.get("avg_revenue") or 30000000) // 10000,
                 "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
                 "survival": float(market_report["survival_rate"]),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),
