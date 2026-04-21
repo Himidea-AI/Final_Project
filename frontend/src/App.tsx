@@ -65,6 +65,7 @@ import type {
   ClosureRisk,
   TrendForecast,
   DemographicReport,
+  LegalRisk,
 } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
@@ -2264,6 +2265,7 @@ function SimulatorDashboard({
 
   // [v8.0/v8.1] Drill-down Drawer + 테이블 행 확장 + 정렬 상태
   const [activeDrawer, setActiveDrawer] = useState<DrawerKey>(null);
+  const [selectedLegalType, setSelectedLegalType] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -4665,9 +4667,16 @@ function SimulatorDashboard({
                                     ? 'critical'
                                     : 'advisory';
 
+                                  const openLegalDrawer = (type: string | null) => {
+                                    // 개별 법률이 지정되지 않으면 가장 위험한 첫 번째 항목을 기본 선택
+                                    const fallbackType = dangerRisks[0]?.type ?? null;
+                                    setSelectedLegalType(type ?? fallbackType);
+                                    setActiveDrawer('insight_legal');
+                                  };
+
                                   return (
                                     <div
-                                      onClick={() => setActiveDrawer('insight_legal')}
+                                      onClick={() => openLegalDrawer(null)}
                                       className="flex flex-col gap-2 p-3 rounded-lg bg-[#1e1b18] border border-[#3a3633] cursor-pointer hover:border-[#818cf8] hover:bg-[#818cf8]/[0.05] transition-all group"
                                     >
                                       <div className="flex items-center gap-3">
@@ -4695,9 +4704,13 @@ function SimulatorDashboard({
                                           return (
                                             <div
                                               key={i}
-                                              className={`flex gap-2.5 pl-2.5 border-l-2 ${isCritical ? 'border-rose-500' : 'border-amber-400'}`}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openLegalDrawer(risk.type);
+                                              }}
+                                              className={`flex gap-2.5 pl-2.5 border-l-2 cursor-pointer rounded-r hover:bg-[#818cf8]/[0.08] transition-colors ${isCritical ? 'border-rose-500' : 'border-amber-400'}`}
                                             >
-                                              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                              <div className="flex flex-col gap-0.5 flex-1 min-w-0 py-0.5">
                                                 <div className="flex items-center gap-1.5">
                                                   <span className="text-[#e2e8f0] text-[11px] font-semibold">
                                                     {TYPE_LABEL[risk.type] || risk.type}
@@ -4712,31 +4725,6 @@ function SimulatorDashboard({
                                                   <p className="text-[#9ca3af] text-[10px] leading-relaxed">
                                                     {risk.detail}
                                                   </p>
-                                                )}
-                                                {risk.articles && risk.articles.length > 0 && (
-                                                  <details
-                                                    className="mt-1"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                  >
-                                                    <summary className="cursor-pointer text-[10px] text-cyan-300 hover:text-cyan-200 font-mono">
-                                                      근거 조항 {risk.articles.length}건 보기
-                                                    </summary>
-                                                    <ul className="mt-1.5 space-y-1.5 text-[10px]">
-                                                      {risk.articles.map((a, ai) => (
-                                                        <li
-                                                          key={ai}
-                                                          className="rounded border border-[#3a3633] bg-[#171717]/60 p-2"
-                                                        >
-                                                          <div className="font-semibold text-[#e2e8f0]">
-                                                            {a.article_ref}
-                                                          </div>
-                                                          <div className="mt-1 text-[#9ca3af] leading-relaxed whitespace-pre-wrap">
-                                                            {a.content}
-                                                          </div>
-                                                        </li>
-                                                      ))}
-                                                    </ul>
-                                                  </details>
                                                 )}
                                               </div>
                                             </div>
@@ -4910,10 +4898,15 @@ function SimulatorDashboard({
       {/* [v8.0] Drill-down Drawer — KPI/차트 클릭 시 우측에서 슬라이드 인 */}
       <DetailDrawer
         isOpen={!!activeDrawer}
-        onClose={() => setActiveDrawer(null)}
+        onClose={() => {
+          setActiveDrawer(null);
+          setSelectedLegalType(null);
+        }}
         drawerKey={activeDrawer}
         popData={popData}
         analysisMetrics={simResult?.analysis_metrics}
+        legalRisks={simResult?.legalRisks}
+        selectedLegalType={selectedLegalType}
       />
 
       {/* [v12.0] Hidden A4 PDF Template — html2canvas 캡처용 (화면 밖) */}
@@ -5718,20 +5711,45 @@ HiddenPDFTemplate.displayName = 'HiddenPDFTemplate';
 /* ═══════════════════════════════════════════════════════
    DetailDrawer (v8.0) — KPI/차트 클릭 시 우측에서 슬라이드 인
    ═══════════════════════════════════════════════════════ */
+const LEGAL_TYPE_LABEL: Record<string, string> = {
+  franchise_law: '가맹사업법',
+  commercial_lease_law: '상가임대차보호법',
+  zoning_regulation: '용도지역 규제',
+  food_hygiene: '식품위생법',
+  safety_regulation: '안전규정',
+  building_law: '건축법',
+  fire_safety_law: '소방안전법',
+  labor_law: '노동법',
+  vat_law: '부가가치세법',
+  privacy_law: '개인정보보호법',
+  accessibility_law: '장애인편의법',
+  sewage_law: '하수도법',
+  fair_trade_law: '공정거래법',
+  ftc_franchise: '공정위 정보공개서',
+};
+
 function DetailDrawer({
   isOpen,
   onClose,
   drawerKey,
   popData,
   analysisMetrics,
+  legalRisks,
+  selectedLegalType,
 }: {
   isOpen: boolean;
   onClose: () => void;
   drawerKey: DrawerKey;
   popData?: any;
   analysisMetrics?: { main_target_age?: string; peak_time?: string };
+  legalRisks?: LegalRisk[];
+  selectedLegalType?: string | null;
 }) {
   const baseData = drawerKey ? mockDetailData[drawerKey] : null;
+  const selectedRisk =
+    drawerKey === 'insight_legal' && selectedLegalType
+      ? (legalRisks ?? []).find((r) => r.type === selectedLegalType)
+      : undefined;
   const data: DetailDataEntry | null =
     drawerKey === 'insight_target' && analysisMetrics?.main_target_age
       ? {
@@ -5754,7 +5772,12 @@ function DetailDrawer({
               peakTime: analysisMetrics.peak_time,
               mainTarget: analysisMetrics.main_target_age ?? '분석 결과 대기 중',
             }
-          : baseData;
+          : drawerKey === 'insight_legal' && selectedRisk
+            ? {
+                title: `${LEGAL_TYPE_LABEL[selectedRisk.type] || selectedRisk.type} 상세 분석`,
+                aiReasoning: selectedRisk.detail || baseData?.aiReasoning,
+              }
+            : baseData;
 
   return (
     <>
@@ -5853,6 +5876,73 @@ function DetailDrawer({
                 </div>
               )}
 
+              {/* 근거 조항 — 법률 리스크 drawer 전용 (선택된 법률 1건만) */}
+              {drawerKey === 'insight_legal' &&
+                (() => {
+                  const risk = (legalRisks ?? []).find((r) => r.type === selectedLegalType);
+                  if (!risk) return null;
+                  const lv = (risk.risk_level || '').toLowerCase();
+                  const isCritical = lv === 'danger' || lv === 'high';
+                  // 문자열/객체 방어 렌더 — 백엔드 구버전 응답(list[str]) 시에도 조문 번호는 표시
+                  const normalizedArticles = (risk.articles ?? []).map((a) =>
+                    typeof a === 'string'
+                      ? { article_ref: a, content: '' }
+                      : { article_ref: a.article_ref ?? '', content: a.content ?? '' },
+                  );
+                  return (
+                    <div className="bg-[#1e1b18] p-5 rounded-xl border border-[#3a3633] mb-4 space-y-4">
+                      {/* 창업 체크리스트 — 상단 배치 */}
+                      {risk.recommendation && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <h3 className="text-xs font-bold text-[#818cf8] tracking-widest uppercase">
+                              창업 체크리스트
+                            </h3>
+                            <span
+                              className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                                isCritical
+                                  ? 'bg-rose-500/20 text-rose-400'
+                                  : 'bg-amber-400/20 text-amber-400'
+                              }`}
+                            >
+                              {isCritical ? '위험' : '주의'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#cbd5e1] leading-relaxed whitespace-pre-wrap">
+                            {risk.recommendation}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* 핵심 조항 — 하단 배치 */}
+                      {normalizedArticles.length > 0 && (
+                        <div className="pt-3 border-t border-[#3a3633]">
+                          <h3 className="text-xs font-bold text-[#818cf8] tracking-widest uppercase mb-3">
+                            핵심 조항
+                          </h3>
+                          <ul className="space-y-2">
+                            {normalizedArticles.map((a, ai) => (
+                              <li
+                                key={ai}
+                                className="rounded border border-[#3a3633] bg-[#171717]/60 p-3"
+                              >
+                                <div className="text-xs font-bold text-cyan-300 mb-1 font-mono">
+                                  {a.article_ref || '조문 번호 없음'}
+                                </div>
+                                <div className="text-xs text-[#cbd5e1] leading-relaxed">
+                                  {a.content || (
+                                    <span className="text-[#6b7280] italic">데이터 없음</span>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
               {/* Detailed Chart — 유동인구 동별 상세 (traffic drawer) */}
               {drawerKey === 'traffic' && popData?.dong_details ? (
                 <div className="bg-[#1e1b18] p-5 rounded-xl border border-[#3a3633]">
@@ -5888,13 +5978,13 @@ function DetailDrawer({
                     ※ 서울시 생활인구 데이터 (KT 통신 기반) | {popData.data_delay_note}
                   </p>
                 </div>
-              ) : (
+              ) : drawerKey !== 'insight_legal' ? (
                 <div className="w-full h-48 bg-[#1e1b18] border border-[#3a3633] rounded-xl flex items-center justify-center">
                   <span className="text-[#3a3633] font-mono text-xs tracking-[0.3em]">
                     DETAILED CHART AREA
                   </span>
                 </div>
-              )}
+              ) : null}
             </div>
           </>
         )}
