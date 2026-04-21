@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 
 class CandidateAnalysis(BaseModel):
@@ -96,3 +96,37 @@ class CompetitorIntelOutput(BaseModel):
     key_risks: List[str] = Field(default_factory=list, description="주의해야 할 리스크 요소 2~4개")
     recommended_actions: List[str] = Field(default_factory=list, description="본사 영업팀 추천 액션 2~4개")
     narrative: str = Field(..., description="3~5줄 본사 보고용 경쟁 상황·카니발·권고 종합 서술")
+
+
+# ──────────────────────────────────────────────────────────
+# Dashboard 15 섹션 통합 리포트 — AgentAttribution (2026-04-21 스펙)
+# ──────────────────────────────────────────────────────────
+
+AgentIdLiteral = Literal[
+    "market_analyst",
+    "population_analyst",
+    "legal",
+    "district_ranking",
+    "synthesis",
+    "demographic_depth",
+    "trend_forecaster",
+    "competitor_intel",
+]
+
+AgentKindLiteral = Literal["LLM", "Python", "Hybrid", "RAG"]
+
+
+class AgentAttribution(BaseModel):
+    """각 에이전트의 판단 근거 — §11 UI 카드 + 섹션별 compact 카드 공통 데이터.
+
+    각 노드가 반환 시 agent_attribution 필드에 dict로 넣고,
+    synthesis가 agent_attributions[] 배열로 집계하여 API response에 포함.
+    """
+
+    id: AgentIdLiteral
+    display_name: str = Field(description="사람이 읽는 에이전트 이름 (예: '경쟁 인텔')")
+    kind: AgentKindLiteral
+    sources: list[str] = Field(description="사용한 DB 테이블·모델명 (chip으로 표시)")
+    verdict: str = Field(description="한 줄 판단 (80자 내)")
+    reasoning: str = Field(description="2-3 문장 설명")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
