@@ -60,8 +60,11 @@ class LegalRiskItem(BaseModel):
 
     type: str = Field(..., description="법률 항목 식별자 (예: franchise_law, food_hygiene)")
     level: Literal["safe", "caution", "danger"] = Field(..., description="리스크 레벨")
-    summary: str = Field(..., description="검토 요약 (1~2문장)")
-    recommendation: str = Field(default="", description="구체적 행동 권고")
+    summary: str = Field(..., description="법률 개요 — 해당 법률의 목적과 핵심 의무 (1~2문장)")
+    recommendation: str = Field(
+        default="",
+        description="업종·지역 맞춤 창업 체크리스트 (bullet point '•' 사용, 위반 시 제재 포함)",
+    )
 
 
 class LegalBatchOutput(BaseModel):

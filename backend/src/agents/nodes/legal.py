@@ -29,6 +29,90 @@ from src.schemas.structured_output import LegalBatchOutput
 from src.services.ftc_franchise import FtcFranchiseClient
 from src.services.law_api import LawApiClient
 
+# 전체 조문 원본 인덱스 — chunks.json에서 (source, article) → 전체 본문 조립
+# RAG는 "어떤 조문이 관련 있는지" 식별용으로만 사용하고, 실제 표시 본문은 여기서 가져옴
+_ARTICLE_FULL_TEXT: dict[tuple[str, str], str] = {}
+
+
+def _load_article_index() -> None:
+    """chunks.json을 읽어 조문별 전체 본문 인덱스를 구축합니다."""
+    global _ARTICLE_FULL_TEXT
+    if _ARTICLE_FULL_TEXT:
+        return  # 이미 로드됨
+    from pathlib import Path
+
+    chunks_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "legal" / "processed" / "chunks.json"
+    if not chunks_path.exists():
+        logger.warning(f"[legal_node] chunks.json 없음: {chunks_path}")
+        return
+    with open(chunks_path, encoding="utf-8") as f:
+        chunks = json.load(f)
+    import re
+
+    # (source, article) → [(chunk_id, text)] 그룹핑
+    grouped: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    for c in chunks:
+        meta = c.get("metadata", {})
+        source = meta.get("source", "")
+        article = meta.get("article", "")
+        chunk_id = meta.get("chunk_id", "")
+        text = c.get("text", "")
+        if article and article not in ("전문", "미분류", "N/A") and text:
+            key = (source, article)
+            grouped.setdefault(key, []).append((chunk_id, text))
+
+    # 조문 본문 조립:
+    # 1) 모든 청크를 합친 뒤 "제N조(제목)" 위치를 찾아 거기부터 추출
+    # 2) 다음 조문 "제M조(" 이 나오면 거기서 자름
+    # → 목차, 연락처, 장 제목 등 쓰레기가 자동으로 제거됨
+    _next_art_pattern = re.compile(r"(?=제\d+조(?:의\d+)?\s*[\(（])")
+    _chapter_pattern = re.compile(r"\n제\d+장\s")
+
+    for key, pairs in grouped.items():
+        _, article = key
+        pairs.sort(key=lambda x: x[0])
+        raw = "\n".join(t for _, t in pairs)
+
+        # "제N조(..." 또는 "제N조의M(..." 실제 조문 시작 위치 찾기
+        art_start_re = re.compile(rf"(?={re.escape(article)}\s*[\(（])")
+        match = art_start_re.search(raw)
+        if match:
+            text_from_article = raw[match.start() :]
+            # 본문에서 다음 조문 시작 위치 찾기 (자기 자신 제외)
+            all_matches = list(_next_art_pattern.finditer(text_from_article))
+            if len(all_matches) > 1:
+                # 두 번째 매치가 다음 조문의 시작
+                text_from_article = text_from_article[: all_matches[1].start()].strip()
+            # 조문 뒤에 나오는 노이즈 구분자에서 자르기
+            _noise_patterns = (
+                _chapter_pattern,  # 제N장
+                re.compile(r"\n제\d+편\s"),  # 제N편
+                re.compile(r"\n부칙[\s<]"),  # 부칙
+                re.compile(r"\n\[별표"),  # [별표
+                re.compile(r"\n[가-힣\s]+(?:법|령|규칙|법률)\s*$", re.MULTILINE),  # 법률 제목
+            )
+            for noise_pat in _noise_patterns:
+                noise_match = noise_pat.search(text_from_article)
+                if noise_match:
+                    text_from_article = text_from_article[: noise_match.start()].strip()
+            # 끝이 쉼표면 마지막 완전한 문장까지 자르기
+            if text_from_article.rstrip().endswith(","):
+                last_period = max(
+                    text_from_article.rfind("다."),
+                    text_from_article.rfind(")"),
+                    text_from_article.rfind("한다"),
+                    text_from_article.rfind("]"),
+                )
+                if last_period > len(text_from_article) * 0.5:
+                    text_from_article = text_from_article[: last_period + 1]
+            _ARTICLE_FULL_TEXT[key] = text_from_article
+        else:
+            # "제N조(" 패턴을 못 찾으면 가장 긴 청크 사용
+            longest = max(pairs, key=lambda x: len(x[1]))
+            _ARTICLE_FULL_TEXT[key] = longest[1]
+
+    logger.info(f"[legal_node] 조문 인덱스 로드 완료: {len(_ARTICLE_FULL_TEXT)}개 조문")
+
 
 async def _search_ftc_from_db(brand_name: str) -> dict | None:
     """
@@ -121,7 +205,16 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             "type": "ftc_franchise",
             "level": "caution",
             "summary": f"'{brand}' 브랜드의 공정위 정보공개서를 찾을 수 없습니다.",
-            "articles": [],
+            "articles": [
+                {
+                    "article_ref": "[정보공개서 미등록]",
+                    "content": (
+                        f"'{brand}' 브랜드의 정보공개서가 공정위 가맹사업정보제공시스템에 "
+                        f"등록되어 있지 않거나, 브랜드명이 다르게 등록되어 있을 수 있습니다.\n"
+                        f"직접 확인: https://franchise.ftc.go.kr"
+                    ),
+                }
+            ],
             "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
         }
 
@@ -160,11 +253,25 @@ async def check_ftc_franchise(state: AgentState) -> dict:
         elif level == "caution":
             recommendation = "가맹 계약 전 정보공개서 원문 직접 검토 권장"
 
+        # FTC API 결과를 articles로 변환 (RAG 대신 정보공개서 데이터)
+        ftc_articles = [
+            {
+                "article_ref": "[정보공개서]",
+                "content": (
+                    f"브랜드: {detail.get('brand_name', brand)} ({detail.get('corp_name', '')})\n"
+                    f"전체 가맹점 수: {store_count}개\n"
+                    f"폐점률: {churn_rate:.1%}\n"
+                    f"평균 매출액: {avg_sales:,}원\n"
+                    f"가입비: {franchise_fee:,}원"
+                ),
+            }
+        ]
+
         return {
             "type": "ftc_franchise",
             "level": level,
             "summary": summary,
-            "articles": [],
+            "articles": ftc_articles,
             "recommendation": recommendation,
         }
 
@@ -206,6 +313,20 @@ async def check_zoning_regulation(state: AgentState) -> dict:
         level = "caution"
         summary = f"'{district}'의 용도지역({zone}) 규제를 현장 확인 후 영업 가능 여부를 판단하세요."
 
+    zoning_articles = [
+        {
+            "article_ref": "[용도지역 판정]",
+            "content": (
+                f"행정동: {district}\n"
+                f"용도지역: {zone}\n"
+                f"업종: {type_label}\n"
+                f"영업 가능 여부: {'가능' if level != 'danger' else '제한'}\n"
+                f"허용 업종: {', '.join(rules['허용']) if rules['허용'] else '별도 확인 필요'}\n"
+                f"제한 업종: {', '.join(rules['제한']) if rules['제한'] else '없음'}"
+            ),
+        }
+    ]
+
     return {
         "type": "zoning_regulation",
         "level": level,
@@ -213,7 +334,7 @@ async def check_zoning_regulation(state: AgentState) -> dict:
         "business_type": type_label,
         "allowed": level != "danger",
         "summary": summary,
-        "articles": [],
+        "articles": zoning_articles,
         "recommendation": "토지이음(eum.go.kr)에서 실제 용도지역을 확인하세요." if level != "safe" else "",
     }
 
@@ -243,7 +364,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
-    cache_key = f"v3:legal:{brand}:{district}:{_normalized_biz}"
+    # v4: articles 필드가 list[str] → list[{article_ref, content}]로 변경되어 캐시 무효화
+    cache_key = f"v4:legal:{brand}:{district}:{_normalized_biz}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -256,6 +378,16 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 logger.warning(f"[legal_node] 캐시 데이터 손상 - 재계산: {cache_key}")
             else:
                 logger.info(f"[legal_node] 캐시 히트: {cache_key}")
+                # DEBUG: 캐시된 articles가 새 dict 포맷인지 확인
+                try:
+                    first_risk = legal_risks[0] if legal_risks else {}
+                    first_arts = first_risk.get("articles", []) if isinstance(first_risk, dict) else []
+                    logger.info(
+                        f"[legal_node] 캐시 articles 샘플 타입={type(first_arts[0]).__name__ if first_arts else 'empty'} "
+                        f"값={first_arts[0] if first_arts else None}"
+                    )
+                except Exception as _e:
+                    logger.warning(f"[legal_node] 캐시 articles 샘플 확인 실패: {_e}")
                 analysis = dict(state.get("analysis_results") or {})
                 analysis["legal_risks"] = legal_risks
                 overall_cached = cached_data.get("overall_legal_risk", "caution")
@@ -306,41 +438,101 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # zoning: I/O 없는 규칙 기반 — 즉시 실행 후 Phase 1 병렬 대기
     zoning_result = await check_zoning_regulation(state)
 
-    # Phase 1: RAG×13 + 판례×6 + FTC API 병렬 실행 (총 20개)
-    # return_exceptions=True — 한 개 실패해도 나머지 결과 유지
-    _phase1_results = await asyncio.gather(
-        # RAG 검색 (13개)
-        retriever.search(franchise_q, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),
-        retriever.search(lease_q, top_k=5, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES),
-        retriever.search(food_q, top_k=5, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES),
-        retriever.search(safety_q, top_k=5, source_filter=LegalDocumentRetriever.SAFETY_SOURCES),
+    # Phase 1: RAG + 판례 + FTC — 커넥션 풀(8) 고갈 방지를 위해 2배치로 분할
+    # Batch A: RAG 7개 + FTC (DB 커넥션 최대 7개 동시 사용)
+    _batch_a = await asyncio.gather(
+        retriever.search(franchise_q, top_k=10, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),
+        retriever.search(lease_q, top_k=10, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES),
+        retriever.search(food_q, top_k=10, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES),
+        retriever.search(safety_q, top_k=10, source_filter=LegalDocumentRetriever.SAFETY_SOURCES),
         retriever.search(summary_q, top_k=10),
-        retriever.search(building_q, top_k=5, source_filter=LegalDocumentRetriever.BUILDING_LAW_SOURCES),
-        retriever.search(fire_q, top_k=5, source_filter=LegalDocumentRetriever.FIRE_SAFETY_SOURCES),
-        retriever.search(labor_q, top_k=5, source_filter=LegalDocumentRetriever.LABOR_LAW_SOURCES),
-        retriever.search(vat_q, top_k=5, source_filter=LegalDocumentRetriever.VAT_LAW_SOURCES),
-        retriever.search(privacy_q, top_k=5, source_filter=LegalDocumentRetriever.PRIVACY_LAW_SOURCES),
-        retriever.search(accessibility_q, top_k=5, source_filter=LegalDocumentRetriever.ACCESSIBILITY_LAW_SOURCES),
-        retriever.search(sewage_q, top_k=5, source_filter=LegalDocumentRetriever.SEWAGE_LAW_SOURCES),
-        retriever.search(fair_trade_q, top_k=5, source_filter=LegalDocumentRetriever.FAIR_TRADE_SOURCES),
-        # 판례 검색 (6개) — 키워드를 구체화하여 판례 품질 향상
+        retriever.search(building_q, top_k=10, source_filter=LegalDocumentRetriever.BUILDING_LAW_SOURCES),
+        retriever.search(fire_q, top_k=10, source_filter=LegalDocumentRetriever.FIRE_SAFETY_SOURCES),
+        check_ftc_franchise(state),
+        return_exceptions=True,
+    )
+    # Batch B: RAG 6개 + 판례 6개 (판례는 외부 API라 DB 커넥션 무관)
+    _batch_b = await asyncio.gather(
+        retriever.search(labor_q, top_k=10, source_filter=LegalDocumentRetriever.LABOR_LAW_SOURCES),
+        retriever.search(vat_q, top_k=10, source_filter=LegalDocumentRetriever.VAT_LAW_SOURCES),
+        retriever.search(privacy_q, top_k=10, source_filter=LegalDocumentRetriever.PRIVACY_LAW_SOURCES),
+        retriever.search(accessibility_q, top_k=10, source_filter=LegalDocumentRetriever.ACCESSIBILITY_LAW_SOURCES),
+        retriever.search(sewage_q, top_k=10, source_filter=LegalDocumentRetriever.SEWAGE_LAW_SOURCES),
+        retriever.search(fair_trade_q, top_k=10, source_filter=LegalDocumentRetriever.FAIR_TRADE_SOURCES),
         law_client.search_precedents("가맹사업 영업지역", display=3),
         law_client.search_precedents("권리금 회수", display=3),
         law_client.search_precedents("식품위생 영업허가", display=3),
         law_client.search_precedents("다중이용업소 소방", display=3),
         law_client.search_precedents("건축물 용도변경 근린생활시설", display=2),
         law_client.search_precedents("근로계약 최저임금", display=2),
-        # FTC API — RAG docs 불필요, Phase 1에서 선행 실행
-        check_ftc_franchise(state),
         return_exceptions=True,
     )
+    # 결과 합치기 (기존 인덱스 순서 유지)
+    _phase1_results = (
+        list(_batch_a[:7])
+        + [_batch_a[7]]
+        + [  # RAG 0-6 + FTC placeholder
+            *_batch_b[:6],  # RAG 7-12
+            *_batch_b[6:12],  # 판례 6개
+        ]
+    )
+    # 재배치: [RAG 0..6, summary(4), RAG 7..12, 판례 0..5, FTC]
+    _phase1_results = [
+        _batch_a[0],  # franchise
+        _batch_a[1],  # lease
+        _batch_a[2],  # food
+        _batch_a[3],  # safety
+        _batch_a[4],  # summary
+        _batch_a[5],  # building
+        _batch_a[6],  # fire
+        _batch_b[0],  # labor
+        _batch_b[1],  # vat
+        _batch_b[2],  # privacy
+        _batch_b[3],  # accessibility
+        _batch_b[4],  # sewage
+        _batch_b[5],  # fair_trade
+        _batch_b[6],  # precedent: 가맹
+        _batch_b[7],  # precedent: 권리금
+        _batch_b[8],  # precedent: 식품위생
+        _batch_b[9],  # precedent: 다중이용
+        _batch_b[10],  # precedent: 건축물
+        _batch_b[11],  # precedent: 근로계약
+        _batch_a[7],  # FTC
+    ]
 
     # 예외 결과를 빈 리스트/caution dict로 대체
-    def _safe_list(r: object) -> list:
+    _rag_labels = [
+        "franchise",
+        "lease",
+        "food",
+        "safety",
+        "summary",
+        "building",
+        "fire",
+        "labor",
+        "vat",
+        "privacy",
+        "accessibility",
+        "sewage",
+        "fair_trade",
+        "prec_가맹",
+        "prec_권리금",
+        "prec_식품",
+        "prec_다중",
+        "prec_건축",
+        "prec_근로",
+        "ftc",
+    ]
+    _rag_debug: list[str] = []
+
+    def _safe_list(r: object, idx: int = -1) -> list:
+        label = _rag_labels[idx] if 0 <= idx < len(_rag_labels) else f"idx{idx}"
         if isinstance(r, Exception):
-            logger.warning(f"[legal_node] Phase 1 검색 실패 (무시하고 계속): {r}")
+            _rag_debug.append(f"{label}: EXCEPTION {type(r).__name__}: {r}")
             return []
-        return r  # type: ignore[return-value]
+        result = r if isinstance(r, list) else []
+        _rag_debug.append(f"{label}: {len(result)} docs")
+        return result
 
     def _safe_ftc(r: object) -> dict:
         if isinstance(r, Exception):
@@ -376,7 +568,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         labor_prec,
         ftc_result,
     ) = (
-        *[_safe_list(_phase1_results[i]) for i in range(19)],
+        *[_safe_list(_phase1_results[i], i) for i in range(19)],
         _safe_ftc(_phase1_results[19]),
     )
 
@@ -410,17 +602,68 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "fair_trade_law": "공정거래법 — 가맹본부 불공정 거래 금지, 부당 거래 강제(필수 물품 고가 공급), 공정위 신고",
     }
 
-    # 법률별 RAG 조문 번호 추출 (articles 필드 채우기용)
-    def _extract_articles(docs: list[dict]) -> list[str]:
-        """RAG 문서 메타데이터에서 조문 번호(article) 추출, 중복 제거."""
-        seen = set()
-        articles = []
+    # 조문 인덱스 로드 (최초 1회만)
+    _load_article_index()
+
+    # 법률별 RAG 조문 추출 — 조문 제목 + 핵심 한 줄 요약
+    import re as _re
+
+    _valid_art_re = _re.compile(r"^제\d+조(?:의\d+)?\s*[\(（]")
+    _art_title_re = _re.compile(r"^(제\d+조(?:의\d+)?)\s*[\(（]([^)）]+)[\)）]")
+
+    def _summarize_article(art: str, full_text: str) -> str:
+        """조문 전문에서 '제목 — 핵심 의무/규정' 한 줄 요약을 추출합니다."""
+        m = _art_title_re.match(full_text.strip())
+        title = m.group(2) if m else ""
+        rest = full_text[m.end() :].strip() if m else full_text.strip()
+        # 첫 번째 완전한 문장 추출 (다. / 한다. 등으로 끝나는)
+        sent_match = _re.search(
+            r"(.+?(?:한다|된다|있다|이다|않다|둔다|같다|아니한다|수 있다|하여야 한다|받아야 한다)\.)",
+            rest.replace("\n", " "),
+        )
+        if sent_match:
+            key_point = sent_match.group(1).strip()
+            # 너무 길면 잘라서
+            if len(key_point) > 120:
+                key_point = key_point[:117] + "…"
+        else:
+            key_point = rest[:100].replace("\n", " ").strip()
+            if len(rest) > 100:
+                key_point += "…"
+        return f"{title} — {key_point}" if title else key_point
+
+    def _extract_articles(docs: list[dict]) -> list[dict]:
+        """RAG 검색 결과에서 관련 조문을 식별하고, 조문 제목 + 핵심 한 줄 요약을 반환합니다."""
+        _SKIP = ("전문", "미분류", "N/A")
+        seen: set[str] = set()
+        articles: list[dict] = []
         for d in docs:
             art = d.get("metadata", {}).get("article", "")
-            if art and art != "전문" and art not in seen:
-                seen.add(art)
-                articles.append(art)
-        return articles[:5]  # 최대 5개
+            source = d.get("metadata", {}).get("source", "")
+            if not art or art in _SKIP or art in seen:
+                continue
+            seen.add(art)
+            full_text = _ARTICLE_FULL_TEXT.get((source, art), "")
+            if not full_text:
+                for (s, a), txt in _ARTICLE_FULL_TEXT.items():
+                    if a == art:
+                        full_text = txt
+                        break
+            if not full_text:
+                full_text = d.get("content", "")
+            if len(full_text) < 30 or not _valid_art_re.match(full_text.strip()):
+                continue
+            articles.append({"article_ref": art, "content": _summarize_article(art, full_text)})
+            if len(articles) >= 5:
+                break
+        # 조문이 없는 문서(지침, 계획서 등)
+        if not articles and docs:
+            for d in docs[:2]:
+                content = d.get("content", "")
+                source = d.get("metadata", {}).get("source", "참고 문서")
+                if content:
+                    articles.append({"article_ref": f"[{source[:30]}]", "content": content[:150]})
+        return articles
 
     # 모든 RAG 문서를 법률별로 정리하여 컨텍스트 구성
     docs_context = ""
@@ -456,13 +699,18 @@ async def _run_legal_pipeline(state: dict) -> dict:
         f"- caution: 사전 확인·준비 필요, 미이행 시 과태료·행정처분 가능\n"
         f"- danger: 법률 위반 가능성 높음, 영업정지·허가취소·형사처벌 위험\n\n"
         f"[평가 항목]\n{items_desc}\n\n"
-        "12개 항목을 빠짐없이 items 리스트에 포함하세요. summary는 1~2문장, recommendation은 구체적 행동 권고."
+        "12개 항목을 빠짐없이 items 리스트에 포함하세요.\n"
+        "summary: 이 법률의 목적과 핵심 의무를 1~2문장으로 설명하세요.\n"
+        "recommendation: 아래 형식의 체크리스트로 작성하세요:\n"
+        "• [구체적 행동 항목] (관할 기관, 필요 서류 포함)\n"
+        "• ❌ 위반 시: [과태료/벌금/영업정지 등 구체적 제재]\n"
+        "반드시 해당 업종과 지역에 맞춰 구체적으로 작성하세요."
     )
 
     user_content = (
         f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
         f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
-        "위 자료를 바탕으로 12개 법률 항목의 창업 리스크를 평가하세요. "
+        f"위 자료를 바탕으로 12개 법률 항목의 '{business_type}' 업종 '{district}' 지역 창업 리스크를 평가하세요. "
         "각 항목의 '—' 뒤에 적힌 검토 포인트를 반드시 확인하세요."
     )
 
@@ -586,10 +834,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
     analysis["legal_risks"] = risks
     analysis["overall_legal_risk"] = overall_level
 
-    # Redis 캐시 저장 — overall_legal_risk 포함
-    # finally 블록으로 파이프라인 중간 exception 시에도 반드시 연결 종료
+    # Redis 캐시 저장 — RAG 실패 시 빈 articles가 캐시되는 것을 방지
+    # articles가 있는 리스크가 3개 미만이면 캐시하지 않음 (재실행 시 정상 결과 기대)
+    _risks_with_articles = sum(1 for r in risks if r.get("articles"))
     try:
-        if _redis is not None:
+        if _redis is not None and _risks_with_articles >= 3:
             await _redis.set(
                 cache_key,
                 json.dumps(
@@ -599,6 +848,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 ex=_CACHE_TTL,
             )
             logger.info(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+        elif _redis is not None:
+            logger.warning(f"[legal_node] articles 부족({_risks_with_articles}/14) - 캐시 저장 건너뜀 (RAG 실패 의심)")
     except Exception as e:
         logger.warning(f"[legal_node] Redis 캐시 저장 실패 (무시하고 계속): {e}")
     finally:

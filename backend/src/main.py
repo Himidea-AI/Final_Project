@@ -222,6 +222,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
 
     # 법률 리스크 리스트 변환 (articles 포함 — 프론트 근거 조항 drawer용)
     legal_risks_raw = analysis.get("legal_risks") or []
+
     legal_risks = [
         {
             "type": r.get("type", "General"),
