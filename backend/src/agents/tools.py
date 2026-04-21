@@ -360,11 +360,28 @@ class MarketDataTool:
             }
             top_demo = max(demographics, key=demographics.get)
 
+            # 피크 시간대 (실측 매출 건수 기반)
+            time_slots = {
+                "00:00~06:00": latest.time_00_06_count or 0,
+                "06:00~11:00": latest.time_06_11_count or 0,
+                "11:00~14:00": latest.time_11_14_count or 0,
+                "14:00~17:00": latest.time_14_17_count or 0,
+                "17:00~21:00": latest.time_17_21_count or 0,
+                "21:00~24:00": latest.time_21_24_count or 0,
+            }
+            peak_time = max(time_slots, key=time_slots.get)
+
             return {
                 "avg_monthly_revenue": round(avg_revenue, 0),
                 "qoq_growth": round(qoq_sales, 2),
                 "yoy_growth": round(yoy_sales, 2),
                 "dominant_customer": top_demo,
+                "male": latest.male_count or 0,
+                "female": latest.female_count or 0,
+                "age_20s": latest.age_20_count or 0,
+                "age_30s": latest.age_30_count or 0,
+                "age_40s": latest.age_40_count or 0,
+                "peak_time": peak_time,
                 "trend": "성장" if qoq_sales > 0 else "정체",
                 "statistical_summary": f"건당 평균 결제액은 {round(avg_revenue, 0):,}원이며, {top_demo} 고객층이 주도하고 있습니다. 최근 1년 매출은 {round(yoy_sales, 2)}% 변화했습니다.",
             }
