@@ -104,6 +104,32 @@ DISTRICT_ZONE_MAP: dict[str, str] = {
     "중암동": "일반상업지역",
 }
 
+# ── 업종 코드 → 한글 매핑 (단일 소스) ──
+# legal.py, district_ranking.py 양쪽에서 import하여 사용
+BIZ_TYPE_LABEL: dict[str, str] = {
+    "cafe": "카페",
+    "coffee": "카페",
+    "카페": "카페",
+    "restaurant": "음식점",
+    "음식점": "음식점",
+    "convenience": "편의점",
+    "편의점": "편의점",
+    "bakery": "카페",
+    "제과": "카페",
+    "chicken": "음식점",
+    "치킨": "음식점",
+    "fastfood": "음식점",
+    "패스트푸드": "음식점",
+}
+
+# ── 캐시 키 정규화 매핑 (단일 소스) ──
+# 영문/한글 업종명 혼용 시 동일 캐시 키 생성 보장
+BIZ_NORMALIZE: dict[str, str] = {
+    "cafe": "카페",
+    "restaurant": "음식점",
+    "convenience": "편의점",
+}
+
 # ── LLM 설정 ──
 LLM_MODEL = "claude-sonnet-4-20250514"
 LLM_TIMEOUT = 60

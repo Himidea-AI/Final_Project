@@ -16,15 +16,39 @@ market / population / legal 에이전트와 asyncio.gather로 병렬 실행됩�
 
 import asyncio
 import json
+import logging
 import redis.asyncio as aioredis
 from sqlalchemy import select, func
+
+logger = logging.getLogger(__name__)
 from src.schemas.state import AgentState
-from src.config.constants import DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
+from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
 from src.config.settings import settings
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.database.models import NaverVacancy, StoreQuarterly
+from src.services.population_api import MAPO_DONG_CODES
 
 _CACHE_TTL = 86400  # 24시간
+
+# ── SEMAS / NAVER 클라이언트 (싱글톤, API 키 없으면 None) ──
+_semas_client = None
+_naver_client = None
+
+
+def _init_optional_clients():
+    """API 키가 있을 때만 클라이언트 생성 (서버 시작 시 1회)"""
+    global _semas_client, _naver_client
+    if _semas_client is None and settings.semas_api_key:
+        from src.services.semas_api import SemasAPIClient
+
+        _semas_client = SemasAPIClient(api_key=settings.semas_api_key)
+    if _naver_client is None and settings.naver_client_id and settings.naver_client_secret:
+        from src.services.sns_trend import NaverTrendClient
+
+        _naver_client = NaverTrendClient(
+            client_id=settings.naver_client_id,
+            client_secret=settings.naver_client_secret,
+        )
 
 
 async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
@@ -35,20 +59,17 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
     """
     try:
         async with db_client.get_session() as session:
-            stmt = (
-                select(
-                    NaverVacancy.id,
-                    NaverVacancy.lat,
-                    NaverVacancy.lon,
-                    NaverVacancy.dong_name,
-                    NaverVacancy.listing_count,
-                )
-                .where(
-                    NaverVacancy.trade_type == "월세",
-                    NaverVacancy.dong_name.in_(dong_names),
-                    NaverVacancy.lat.isnot(None),
-                    NaverVacancy.lon.isnot(None),
-                )
+            stmt = select(
+                NaverVacancy.id,
+                NaverVacancy.lat,
+                NaverVacancy.lon,
+                NaverVacancy.dong_name,
+                NaverVacancy.listing_count,
+            ).where(
+                NaverVacancy.trade_type == "월세",
+                NaverVacancy.dong_name.in_(dong_names),
+                NaverVacancy.lat.isnot(None),
+                NaverVacancy.lon.isnot(None),
             )
             rows = (await session.execute(stmt)).fetchall()
         spots = [
@@ -61,11 +82,12 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
             }
             for r in rows
         ]
-        print(f"[district_ranking] 공실 스팟 {len(spots)}개 로드 (동: {dong_names})")
+        logger.info(f"[district_ranking] 공실 스팟 {len(spots)}개 로드 (동: {dong_names})")
         return spots
     except Exception as e:
-        print(f"[district_ranking] 공실 스팟 로드 실패: {e}")
+        logger.warning(f"[district_ranking] 공실 스팟 로드 실패: {e}")
         return []
+
 
 # 동일 invocation 내 중복 DB 쿼리 방지용 비동기 Task 공유 dict.
 # district_ranking_node와 population_analyst_node가 asyncio.gather로 병렬 실행되어
@@ -74,14 +96,24 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
 _pop_trends_tasks: dict[str, asyncio.Task] = {}
 
 
+async def _safe_population_trends(dong: str) -> dict:
+    """get_population_trends를 호출하되 exception 시 빈 dict 반환 (다른 awaiter 보호)."""
+    try:
+        return await market_tool.get_population_trends(dong)
+    except Exception as e:
+        logger.warning(f"[shared_population_trends] {dong} 인구 데이터 조회 실패: {e}")
+        return {"error": str(e)}
+
+
 def shared_population_trends(dong: str) -> asyncio.Task:
     """동일 dong에 대한 get_population_trends 호출을 단일 Task로 dedupe.
 
     첫 호출자가 Task를 생성하고, 같은 dong에 대한 후속 호출자는 같은 Task를 await한다.
     asyncio는 cooperative multitasking이므로 if-check와 dict 할당 사이에 race condition은 없다.
+    _safe_population_trends로 감싸서 exception이 다른 awaiter에 전파되지 않음.
     """
     if dong not in _pop_trends_tasks:
-        _pop_trends_tasks[dong] = asyncio.create_task(market_tool.get_population_trends(dong))
+        _pop_trends_tasks[dong] = asyncio.create_task(_safe_population_trends(dong))
     return _pop_trends_tasks[dong]
 
 
@@ -125,39 +157,76 @@ async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
             store_rows = (await session.execute(store_stmt)).fetchall()
             store_map = {r.dong_name: int(r.store_count) for r in store_rows if r.store_count}
 
-        # 3) 공실률 계산
+        # 3) 공실률 계산 — 점포 데이터 없는 동은 0.0이 아닌 미반영 처리
         vacancy_rate_map: dict[str, float] = {}
         for dong in MAPO_DISTRICTS:
             wolse = wolse_map.get(dong, 0)
             store_count = store_map.get(dong, 0)
             if store_count > 0:
                 vacancy_rate_map[dong] = round(wolse / store_count * 100, 2)
-            else:
-                vacancy_rate_map[dong] = 0.0
+            # store_count=0이면 vacancy_rate_map에 미포함 → 패널티 0 (데이터 부재와 0% 구분)
 
-        print(
+        logger.info(
             f"[district_ranking] 공실률 로드 완료 - 상위 3개: "
             f"{sorted(vacancy_rate_map.items(), key=lambda x: -x[1])[:3]}"
         )
         return vacancy_rate_map, True
 
     except Exception as e:
-        print(f"[district_ranking] 공실률 로드 실패 (패널티 비활성화): {e}")
+        logger.warning(f"[district_ranking] 공실률 로드 실패 (패널티 비활성화): {e}")
         return {}, False
+
+
+async def _fetch_semas_density(dong_name: str, business_type: str) -> int | None:
+    """SEMAS API — 행정동 업종 밀집도 (점포 수). API 키 없거나 실패 시 None."""
+    if _semas_client is None:
+        return None
+    try:
+        dong_code = MAPO_DONG_CODES.get(dong_name)
+        if not dong_code:
+            return None
+        biz_code = {"카페": "Q01A01", "음식점": "Q01A02", "편의점": "Q02A01"}.get(
+            BIZ_TYPE_LABEL.get(business_type.lower(), business_type), "Q01"
+        )
+        result = await _semas_client.get_business_density(dong_code, biz_code)
+        items = result.get("items", [])
+        return sum(item.get("store_count", 0) for item in items) if items else None
+    except Exception as e:
+        logger.debug(f"[district_ranking] SEMAS 밀집도 조회 실패 ({dong_name}): {e}")
+        return None
+
+
+async def _fetch_naver_trend(dong_name: str, business_type: str) -> float | None:
+    """NAVER DataLab — 동+업종 검색 트렌드 성장률(%). API 키 없거나 실패 시 None."""
+    if _naver_client is None:
+        return None
+    try:
+        biz_label = BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
+        result = await _naver_client.get_district_trend(dong_name, biz_label)
+        growth = result.get("growth_rate")
+        return float(growth) if growth is not None else None
+    except Exception as e:
+        logger.debug(f"[district_ranking] NAVER 트렌드 조회 실패 ({dong_name}): {e}")
+        return None
 
 
 async def _score_single_district(dong_name: str, business_type: str) -> dict:
     """
     단일 행정동 원시 지표 수집.
     DB 데이터 없는 항목은 None으로 반환 — 0.0과 구분하여 정규화 왜곡 방지.
+    SEMAS 밀집도, NAVER 트렌드는 API 키 있을 때만 조회 (없으면 None).
     """
     try:
-        sales_data, pop_data, rent_data = await asyncio.gather(
+        # 기본 3축 + 선택 2축 병렬 조회
+        results = await asyncio.gather(
             market_tool.get_commercial_insights(dong_name, business_type),
             shared_population_trends(dong_name),
             market_tool.get_rent_insight(dong_name),
+            _fetch_semas_density(dong_name, business_type),
+            _fetch_naver_trend(dong_name, business_type),
             return_exceptions=True,
         )
+        sales_data, pop_data, rent_data, semas_density, naver_trend = results
 
         # None = DB 데이터 없음, 0.0 = 실제 성장률 0
         sales_growth = None
@@ -174,16 +243,34 @@ async def _score_single_district(dong_name: str, business_type: str) -> dict:
             if val:
                 avg_rent = float(val)
 
-        print(f"[district_ranking] {dong_name}: sales={sales_growth}, pop={pop_growth}, rent={avg_rent}")
+        # SEMAS/NAVER는 Exception이면 None 처리
+        if isinstance(semas_density, Exception):
+            semas_density = None
+        if isinstance(naver_trend, Exception):
+            naver_trend = None
+
+        logger.debug(
+            f"[district_ranking] {dong_name}: sales={sales_growth}, pop={pop_growth}, "
+            f"rent={avg_rent}, density={semas_density}, trend={naver_trend}"
+        )
         return {
             "district": dong_name,
             "sales_growth": sales_growth,
             "pop_growth": pop_growth,
             "avg_rent": avg_rent,
+            "semas_density": semas_density,
+            "naver_trend": naver_trend,
         }
     except Exception as e:
-        print(f"[district_ranking] {dong_name} 점수 산출 실패 (무시): {e}")
-        return {"district": dong_name, "sales_growth": None, "pop_growth": None, "avg_rent": None}
+        logger.warning(f"[district_ranking] {dong_name} 점수 산출 실패 (무시): {e}")
+        return {
+            "district": dong_name,
+            "sales_growth": None,
+            "pop_growth": None,
+            "avg_rent": None,
+            "semas_density": None,
+            "naver_trend": None,
+        }
 
 
 def _normalize_and_rank(
@@ -241,15 +328,40 @@ def _normalize_and_rank(
     pop_norm = _minmax([r["pop_growth"] for r in raw])
     rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True)  # 낮은 임대료 = 높은 점수
 
+    # SEMAS 밀집도 (역방향 — 적을수록 좋음: 경쟁 낮음)
+    density_vals = [r.get("semas_density") for r in raw]
+    has_density = any(v is not None for v in density_vals)
+    density_norm = _minmax(density_vals, reverse=True) if has_density else None
+
+    # NAVER 트렌드 (정방향 — 높을수록 좋음: 상승 상권)
+    trend_vals = [r.get("naver_trend") for r in raw]
+    has_trend = any(v is not None for v in trend_vals)
+    trend_norm = _minmax(trend_vals) if has_trend else None
+
     # 데이터 커버리지 로그
     sales_hit = sum(1 for r in raw if r["sales_growth"] is not None)
     pop_hit = sum(1 for r in raw if r["pop_growth"] is not None)
     rent_hit = sum(1 for r in raw if r["avg_rent"] is not None)
-    print(f"[district_ranking] 데이터 커버리지 — 매출:{sales_hit}/16, 인구:{pop_hit}/16, 임대료:{rent_hit}/16")
+    density_hit = sum(1 for v in density_vals if v is not None)
+    trend_hit = sum(1 for v in trend_vals if v is not None)
+    logger.info(
+        f"[district_ranking] 데이터 커버리지 — 매출:{sales_hit}/16, 인구:{pop_hit}/16, "
+        f"임대료:{rent_hit}/16, 밀집도:{density_hit}/16, 트렌드:{trend_hit}/16"
+    )
+
+    # 가중치 재분배: 추가 축이 있으면 기존 축에서 일부 할당
+    # 밀집도 5%, 트렌드 5% → 기존 매출에서 차감
+    w_density = 0.05 if has_density else 0.0
+    w_trend = 0.05 if has_trend else 0.0
+    w_sales_adj = w_sales - w_density - w_trend  # 추가 축 없으면 원래 가중치 유지
 
     ranked = []
     for i, r in enumerate(raw):
-        score = sales_norm[i] * w_sales + pop_norm[i] * w_pop + rent_norm[i] * w_rent
+        score = sales_norm[i] * w_sales_adj + pop_norm[i] * w_pop + rent_norm[i] * w_rent
+        if density_norm is not None:
+            score += density_norm[i] * w_density
+        if trend_norm is not None:
+            score += trend_norm[i] * w_trend
 
         # 예산 초과 페널티
         if budget_per_3_3m2 > 0 and r["avg_rent"] is not None and r["avg_rent"] > 0:
@@ -269,9 +381,7 @@ def _normalize_and_rank(
         # 용도지역 규제 패널티: legal_node와 동일한 DISTRICT_ZONE_MAP/ZONING_RULES 사용
         zoning_risk = "safe"
         if business_type:
-            type_label = {"cafe": "카페", "restaurant": "음식점", "convenience": "편의점"}.get(
-                business_type, business_type
-            )
+            type_label = BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
             zone = DISTRICT_ZONE_MAP.get(r["district"], "근린상업지역")
             rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
             if type_label in rules["제한"]:
@@ -292,6 +402,10 @@ def _normalize_and_rank(
                 "sales_score": round(sales_norm[i], 1),
                 "pop_score": round(pop_norm[i], 1),
                 "rent_score": round(rent_norm[i], 1),
+                "density_score": round(density_norm[i], 1) if density_norm else None,
+                "trend_score": round(trend_norm[i], 1) if trend_norm else None,
+                "semas_density": r.get("semas_density"),
+                "naver_trend": r.get("naver_trend"),
                 "vacancy_rate": vacancy_rate,
                 "zoning_risk": zoning_risk,
             }
@@ -320,16 +434,22 @@ async def district_ranking_node(state: AgentState) -> dict:
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
 
+    # 캐시 키 정규화 (constants.py 단일 소스)
+    _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
+
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
-    cache_key = f"v3:ranking:{business_type}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    cache_key = f"v3:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
-            print(f"[district_ranking] 캐시 히트: {cache_key}")
-            await _redis.aclose()
+            logger.info(f"[district_ranking] 캐시 히트: {cache_key}")
+            try:
+                await _redis.aclose()
+            except Exception:
+                pass
             return {
                 "scouting_results": cached_data["scouting_results"],
                 "winner_district": cached_data["winner_district"],
@@ -339,7 +459,7 @@ async def district_ranking_node(state: AgentState) -> dict:
                 "current_agent": "district_ranking",
             }
     except Exception as e:
-        print(f"[district_ranking] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        logger.warning(f"[district_ranking] Redis 캐시 조회 실패 (무시하고 계속): {e}")
         if _redis is not None:
             try:
                 await _redis.aclose()
@@ -347,10 +467,16 @@ async def district_ranking_node(state: AgentState) -> dict:
                 pass
         _redis = None
 
-    print(
+    # 직접 호출 시(예: /analyze/quick) parallel_analysis_node를 거치지 않으므로
+    # stale Task 방지를 위해 자체 초기화
+    _clear_shared_population_cache()
+
+    logger.info(
         f"--- [DISTRICT RANKING] 마포구 {len(MAPO_DISTRICTS)}개 행정동 스코어링 시작 "
         f"(인구가중치={population_weight}, 예산={monthly_rent_budget:,}원, 면적={store_area}평) ---"
     )
+
+    _init_optional_clients()
 
     if db_client.engine is None:
         await db_client.connect()
@@ -380,7 +506,9 @@ async def district_ranking_node(state: AgentState) -> dict:
     dong_names = list(dict.fromkeys([winner, target_district] + top_3))
     vacancy_spots = await _load_vacancy_spots(dong_names)
 
-    print(f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied}, 스팟={len(vacancy_spots)}개 ---")
+    logger.info(
+        f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied}, 스팟={len(vacancy_spots)}개 ---"
+    )
 
     # Redis 캐시 저장
     if _redis is not None:
@@ -393,14 +521,15 @@ async def district_ranking_node(state: AgentState) -> dict:
                         "winner_district": winner,
                         "top_3_candidates": top_3,
                         "vacancy_applied": vacancy_applied,
+                        "vacancy_spots": vacancy_spots,
                     },
                     ensure_ascii=False,
                 ),
                 ex=_CACHE_TTL,
             )
-            print(f"[district_ranking] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+            logger.info(f"[district_ranking] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
         except Exception as e:
-            print(f"[district_ranking] Redis 캐시 저장 실패 (무시): {e}")
+            logger.warning(f"[district_ranking] Redis 캐시 저장 실패 (무시): {e}")
         finally:
             try:
                 await _redis.aclose()

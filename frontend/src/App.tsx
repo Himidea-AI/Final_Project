@@ -58,9 +58,14 @@ import HQCommandCenter from './pages/HQCommandCenter';
 import LoginPage from './pages/LoginPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
-import AIVerdictBanner from './components/AIVerdictBanner';
 import { ToastProvider, useToast } from './components/Toast';
-import type { QuarterlyProjection, ShapResult } from './types';
+import type {
+  QuarterlyProjection,
+  ShapResult,
+  ClosureRisk,
+  TrendForecast,
+  DemographicReport,
+} from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
@@ -96,7 +101,13 @@ interface SimResult {
   districtRankings?: { district: string; score: number; [k: string]: any }[];
   winnerDistrict?: string;
   topCandidates?: string[];
-  legalRisks?: { type: string; risk_level: string; detail: string }[];
+  legalRisks?: {
+    type: string;
+    risk_level: string;
+    detail: string;
+    recommendation?: string;
+    articles?: { article_ref: string; content: string }[];
+  }[];
   overallLegalRisk?: string;
   vacancyApplied?: boolean;
   vacancySpots?: {
@@ -117,6 +128,35 @@ interface SimResult {
     base: { quarter: number; revenue: number }[];
     pessimistic: { quarter: number; revenue: number }[];
   } | null;
+  // [B2 수지니] 폐업 위험도
+  closureRisk?: ClosureRisk | null;
+  // [PR #72] 경쟁 매장 인텔리전스 (500m 반경)
+  competitorIntel?: {
+    competition_500m?: {
+      total_competitors: number;
+      franchise_count?: number;
+      independent_count?: number;
+      saturation_level: string;
+      saturation_score?: number;
+      brand_distribution?: Record<string, number>;
+      samples: Array<{
+        place_name: string;
+        distance_m: number;
+        category?: string;
+      }>;
+    };
+    cannibalization?: { estimated_revenue_impact_pct: number };
+    market_entry_signal?: 'green' | 'yellow' | 'red';
+    differentiation_position?: string;
+    key_opportunities?: string[];
+    key_risks?: string[];
+    recommended_actions?: string[];
+    narrative?: string;
+  } | null;
+  // [PR #71] 트렌드 전망 (trend_forecaster 에이전트)
+  trendForecast?: TrendForecast | null;
+  // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)
+  demographicReport?: DemographicReport | null;
 }
 
 import {
@@ -171,6 +211,8 @@ import {
   BarChartBig,
   Map as MapIcon,
   LogIn,
+  Lightbulb,
+  ClipboardList,
 } from 'lucide-react';
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
@@ -819,7 +861,7 @@ interface NeighborhoodRow {
   [key: string]: string;
   name: string;
   score: string;
-  survival: string;
+  closureRate: string;
   bep: string;
 }
 
@@ -831,10 +873,10 @@ const CANNIBALIZATION_ROWS: CannRow[] = [
 ];
 
 const NEIGHBORHOOD_ROWS: NeighborhoodRow[] = [
-  { name: '연남동', score: '87 / 100', survival: '18%', bep: '3.5 개월' },
-  { name: '서교동', score: '84 / 100', survival: '21%', bep: '4.1 개월' },
-  { name: '망원동', score: '76 / 100', survival: '35%', bep: '5.2 개월' },
-  { name: '합정동', score: '71 / 100', survival: '40%', bep: '6.0 개월' },
+  { name: '연남동', score: '87 / 100', closureRate: '18%', bep: '3.5 개월' },
+  { name: '서교동', score: '84 / 100', closureRate: '21%', bep: '4.1 개월' },
+  { name: '망원동', score: '76 / 100', closureRate: '35%', bep: '5.2 개월' },
+  { name: '합정동', score: '71 / 100', closureRate: '40%', bep: '6.0 개월' },
 ];
 
 // 정렬용 값 추출 (문자열 컬럼은 그대로, 숫자 컬럼은 파싱)
@@ -847,7 +889,7 @@ function extractSortValue(row: Record<string, string>, key: string): number | st
     return v.endsWith('km') ? num * 1000 : num;
   }
   // "-2.1%", "82%", "87 / 100", "3.5 개월" 모두 parseFloat로 첫 숫자 추출
-  if (['impact', 'score', 'survival', 'bep'].includes(key)) {
+  if (['impact', 'score', 'closureRate', 'bep'].includes(key)) {
     return parseFloat(v);
   }
   return v; // name, status는 문자열 정렬
@@ -2241,21 +2283,56 @@ function SimulatorDashboard({
     setExpandedRow(null);
   }, []);
 
-  // 정렬된 행 데이터 — 행정동은 district_rankings 실응답 우선, 없으면 Mock fallback
-  const sortedCannRows = sortRows(CANNIBALIZATION_ROWS, sortKey, sortDir);
-  const dynamicNeighborhoodRows: NeighborhoodRow[] | null = simResult?.districtRankings?.length
+  // 정렬된 행 데이터 — 가맹점 간섭도는 competitor_intel.samples 실데이터 우선
+  // Pancras 2013 거리 감쇠: (1 - 0.281)^(1/1.609) ≈ 0.813 per km
+  // base_rate는 업종별 차등 (backend commercial_intelligence.py와 동기화).
+  const dynamicCannRows: CannRow[] = simResult?.competitorIntel?.competition_500m?.samples
+    ? simResult.competitorIntel.competition_500m.samples.slice(0, 8).map((s) => {
+        const dist = s.distance_m;
+        // Industry base rates mirror backend commercial_intelligence.py:estimate_cannibalization
+        const INDUSTRY_BASE: Record<string, number> = {
+          cafe: 0.25,
+          coffee: 0.25,
+          chicken: 0.1,
+          burger: 0.2,
+          korean: 0.15,
+        };
+        const btKey = (BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType || '').toLowerCase();
+        // 한국어 업종명을 영어 키로 매핑 (커피/카페→coffee, 치킨→chicken, 햄버거→burger, 한식→korean)
+        const industryKey =
+          btKey.includes('커피') || btKey.includes('카페') || btKey === 'coffee' || btKey === 'cafe'
+            ? 'coffee'
+            : btKey.includes('치킨') || btKey === 'chicken'
+              ? 'chicken'
+              : btKey.includes('햄버거') || btKey.includes('패스트푸드') || btKey === 'burger'
+                ? 'burger'
+                : btKey.includes('한식') || btKey === 'korean'
+                  ? 'korean'
+                  : '';
+        const baseRate = INDUSTRY_BASE[industryKey] ?? 0.2;
+        const impactPct = -baseRate * Math.pow(0.813, dist / 1000) * 100;
+        const status = dist < 300 ? 'Danger' : dist < 800 ? 'Caution' : 'Safe';
+        return {
+          name: s.place_name,
+          distance: dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`,
+          impact: `${impactPct.toFixed(1)}%`,
+          status,
+        };
+      })
+    : [];
+  const sortedCannRows = sortRows(dynamicCannRows, sortKey, sortDir);
+
+  // 행정동은 district_rankings 실응답 우선, 없으면 빈 배열 (mock 제거)
+  const dynamicNeighborhoodRows: NeighborhoodRow[] = simResult?.districtRankings?.length
     ? simResult.districtRankings.slice(0, 16).map((r) => ({
         name: r.district || '-',
         score: typeof r.score === 'number' ? String(Math.round(r.score)) : '—',
-        survival: typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
+        closureRate:
+          typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
         bep: typeof r.bep_months === 'number' ? `${r.bep_months}개월` : '—',
       }))
-    : null;
-  const sortedNeighborhoodRows = sortRows(
-    dynamicNeighborhoodRows ?? NEIGHBORHOOD_ROWS,
-    sortKey,
-    sortDir,
-  );
+    : [];
+  const sortedNeighborhoodRows = sortRows(dynamicNeighborhoodRows, sortKey, sortDir);
 
   // 분기 매출 예측 차트 데이터 — /simulate 응답의 quarterly_projection을 Recharts time축 형식으로 변환
   const monthlyChartData = simResult?.quarterlyProjection?.length
@@ -2400,19 +2477,22 @@ function SimulatorDashboard({
       ws1['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }];
       XLSX.utils.book_append_sheet(wb, ws1, '요약');
 
-      // Sheet 2: 가맹점 간섭도
+      // Sheet 2: 가맹점 간섭도 (실데이터 없으면 Mock fallback)
+      const cannRowsForExport = sortedCannRows.length > 0 ? sortedCannRows : CANNIBALIZATION_ROWS;
       const cann: (string | number)[][] = [
         ['가맹점명', '거리', '예상 매출 하락', '상태'],
-        ...CANNIBALIZATION_ROWS.map((r) => [r.name, r.distance, r.impact, r.status]),
+        ...cannRowsForExport.map((r) => [r.name, r.distance, r.impact, r.status]),
       ];
       const ws2 = XLSX.utils.aoa_to_sheet(cann);
       ws2['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 12 }];
       XLSX.utils.book_append_sheet(wb, ws2, '가맹점 간섭도');
 
-      // Sheet 3: 행정동 비교
+      // Sheet 3: 행정동 비교 (실데이터 없으면 Mock fallback)
+      const neighborhoodRowsForExport =
+        sortedNeighborhoodRows.length > 0 ? sortedNeighborhoodRows : NEIGHBORHOOD_ROWS;
       const neighborhoods: (string | number)[][] = [
         ['행정동', 'AI 점수', '폐업률', '예상 BEP'],
-        ...NEIGHBORHOOD_ROWS.map((r) => [r.name, r.score, r.survival, r.bep]),
+        ...neighborhoodRowsForExport.map((r) => [r.name, r.score, r.closureRate, r.bep]),
       ];
       const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
       ws3['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
@@ -2453,7 +2533,15 @@ function SimulatorDashboard({
     } finally {
       setIsGeneratingExcel(false);
     }
-  }, [reportFullDate, selectedDongs, simResult, showToast]);
+  }, [
+    reportFullDate,
+    selectedDongs,
+    simResult,
+    showToast,
+    popData,
+    sortedCannRows,
+    sortedNeighborhoodRows,
+  ]);
 
   const toggleOperatingHour = useCallback((hour: string) => {
     setOperatingHours((prev) =>
@@ -2584,6 +2672,17 @@ function SimulatorDashboard({
         analysis_metrics: (simRes as any).analysis_metrics,
         // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
         scenarios: simRes.scenarios ?? null,
+        // [B2 수지니] 폐업 위험도
+        closureRisk: simRes.closure_risk ?? null,
+        // [PR #72] 경쟁 매장 인텔리전스
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        competitorIntel: (simRes as any).competitor_intel ?? null,
+        // [PR #71] 트렌드 전망
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        trendForecast: (simRes as any).trend_forecast ?? null,
+        // [PR #75] 인구통계 심층 분석
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        demographicReport: (simRes as any).demographic_report ?? null,
       });
       setReportState('result');
     } catch (err) {
@@ -3245,15 +3344,116 @@ function SimulatorDashboard({
                 {/* Single Mode: 기존 대시보드 */}
                 {!isSplitMode && (
                   <>
-                    <AIVerdictBanner
-                      headline={
-                        simResult?.recommendation ||
-                        '강력한 입지 독점력과 2030 타겟팅을 통한 고수익 확보 가능 상권'
+                    {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단 */}
+                    {(() => {
+                      const rec = simResult?.recommendation;
+                      const legalRisk = simResult?.overallLegalRisk;
+                      const ciSignal = simResult?.competitorIntel?.market_entry_signal;
+                      // signal 없고 recommendation도 없으면 렌더 안 함
+                      if (!rec && !legalRisk && !ciSignal) return null;
+
+                      // signal: competitor_intel 우선, 없으면 overall_legal_risk 매핑.
+                      // 신호가 어느 쪽에서도 없으면 null → 중립 렌더.
+                      let signal: 'green' | 'yellow' | 'red' | null = null;
+                      if (ciSignal === 'green' || ciSignal === 'yellow' || ciSignal === 'red') {
+                        signal = ciSignal;
+                      } else if (legalRisk === 'safe') signal = 'green';
+                      else if (legalRisk === 'danger') signal = 'red';
+                      else if (legalRisk === 'caution') signal = 'yellow';
+
+                      const sigCfg: Record<
+                        'green' | 'yellow' | 'red',
+                        {
+                          icon: JSX.Element;
+                          label: string;
+                          border: string;
+                          badge: string;
+                          iconBg: string;
+                        }
+                      > = {
+                        green: {
+                          icon: <CheckCircle2 className="h-6 w-6 text-emerald-400" />,
+                          label: 'GREEN',
+                          border: 'border-emerald-500/30',
+                          badge: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40',
+                          iconBg: 'bg-emerald-500/10 ring-1 ring-emerald-500/30',
+                        },
+                        yellow: {
+                          icon: <AlertTriangle className="h-6 w-6 text-amber-400" />,
+                          label: 'YELLOW',
+                          border: 'border-amber-500/30',
+                          badge: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
+                          iconBg: 'bg-amber-500/10 ring-1 ring-amber-500/30',
+                        },
+                        red: {
+                          icon: <ShieldAlert className="h-6 w-6 text-rose-400" />,
+                          label: 'RED',
+                          border: 'border-rose-500/30',
+                          badge: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
+                          iconBg: 'bg-rose-500/10 ring-1 ring-rose-500/30',
+                        },
+                      };
+                      const cfg = signal ? sigCfg[signal] : null;
+
+                      // headline: rec의 첫 문장 or 첫 60자 + '…'
+                      let oneLiner = '';
+                      if (rec) {
+                        // 한글/영문 문장 끝 문자 매칭 (trailing whitespace 없이도 OK)
+                        const firstSentence = rec.match(/^(.+?[.!?。])(?:\s|$)/);
+                        if (firstSentence && firstSentence[1].length <= 80) {
+                          oneLiner = firstSentence[1].trim();
+                        } else {
+                          oneLiner = rec.length > 60 ? rec.slice(0, 60).trim() + '…' : rec;
+                        }
                       }
-                      severity="positive"
-                      reason="AI 멀티에이전트(market·population·legal) 종합 분석 결과. 유동인구 밀집도 상위 12%, 인근 동종업계 평균 매출 대비 15% 초과 달성 예측."
-                      isDirect={false}
-                    />
+                      // rec이 oneLiner로 시작하면 꼬리만 표시 (중복 렌더 방지)
+                      const tailOfRec =
+                        rec && oneLiner && rec.startsWith(oneLiner)
+                          ? rec.slice(oneLiner.length).trim()
+                          : rec;
+
+                      const borderCls = cfg ? cfg.border : 'border-[#3a3633]';
+
+                      return (
+                        <div
+                          className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-[#2c2825] p-5 shadow-xl`}
+                        >
+                          <div className="flex items-start gap-4">
+                            {cfg && (
+                              <div
+                                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${cfg.iconBg}`}
+                              >
+                                {cfg.icon}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                  AI VERDICT
+                                </h3>
+                                {cfg && (
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-xs font-bold ${cfg.badge}`}
+                                  >
+                                    {cfg.label}
+                                  </span>
+                                )}
+                              </div>
+                              {oneLiner && (
+                                <p className="mt-2 text-base font-semibold leading-snug text-[#e2e8f0]">
+                                  {oneLiner}
+                                </p>
+                              )}
+                              {tailOfRec && tailOfRec !== oneLiner && (
+                                <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
+                                  {tailOfRec}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Main Dashboard Body — dashboardMode 토글 (data | map) */}
                     {dashboardMode === 'data' ? (
@@ -3468,6 +3668,281 @@ function SimulatorDashboard({
                               </div>
                             )}
 
+                            {/* [C1 신규] 향후 12개월 전망 카드 (trend_forecaster) */}
+                            {(() => {
+                              const tf = simResult?.trendForecast;
+                              if (!tf) return null;
+                              const score = tf.forecast?.score;
+                              const direction = tf.forecast?.direction;
+                              const confidence = tf.forecast?.confidence;
+                              const narrative = tf.forecast?.narrative;
+                              const industryDir = tf.industry_trend?.direction;
+                              const changeIxLabel = tf.change_ix?.change_ix_label;
+                              // 최소 데이터도 없으면 렌더 안 함
+                              if (
+                                score == null &&
+                                !direction &&
+                                !narrative &&
+                                !industryDir &&
+                                !changeIxLabel
+                              ) {
+                                return null;
+                              }
+                              const directionCfg: Record<string, { label: string; cls: string }> = {
+                                strong_growth: {
+                                  label: '↑↑ STRONG GROWTH',
+                                  cls: 'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-400/60',
+                                },
+                                growth: {
+                                  label: '↑ GROWTH',
+                                  cls: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/40',
+                                },
+                                stable: {
+                                  label: '→ STABLE',
+                                  cls: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
+                                },
+                                decline: {
+                                  label: '↓ DECLINE',
+                                  cls: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40',
+                                },
+                                strong_decline: {
+                                  label: '↓↓ STRONG DECLINE',
+                                  cls: 'bg-rose-500/30 text-rose-200 ring-1 ring-rose-400/60',
+                                },
+                              };
+                              const dirBadge = direction
+                                ? (directionCfg[direction] ?? {
+                                    label: direction,
+                                    cls: 'bg-slate-500/20 text-slate-300 ring-1 ring-slate-500/40',
+                                  })
+                                : null;
+                              const industryDirLabel =
+                                industryDir === 'up'
+                                  ? '↑ 상승'
+                                  : industryDir === 'down'
+                                    ? '↓ 하락'
+                                    : industryDir === 'flat'
+                                      ? '→ 보합'
+                                      : 'N/A';
+                              return (
+                                <div className="mt-6 rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <TrendingUp className="h-4 w-4 text-[#818cf8]" />
+                                      <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        향후 12개월 전망
+                                      </h3>
+                                    </div>
+                                    {confidence && (
+                                      <span className="text-xs text-[#9ca3af]">
+                                        신뢰도: {confidence}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {(score != null || dirBadge) && (
+                                    <div className="mt-3 flex items-baseline gap-3 flex-wrap">
+                                      {score != null && (
+                                        <>
+                                          <span className="text-4xl font-bold text-[#e2e8f0]">
+                                            {Math.round(score)}
+                                          </span>
+                                          <span className="text-sm text-[#9ca3af]">/100</span>
+                                        </>
+                                      )}
+                                      {dirBadge && (
+                                        <span
+                                          className={`rounded-full px-2 py-0.5 text-xs font-bold ${dirBadge.cls}`}
+                                        >
+                                          {dirBadge.label}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-[#9ca3af]">업종 트렌드</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                        {industryDirLabel}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-[#9ca3af]">상권 분류</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                        {changeIxLabel ?? 'N/A'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {narrative && (
+                                    <p className="mt-4 text-sm leading-relaxed text-[#e2e8f0]">
+                                      {narrative}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* [C1 신규] 경쟁 + 잠식 분석 풀 카드 (competitor_intel) */}
+                            {(() => {
+                              const ci = simResult?.competitorIntel;
+                              if (!ci) return null;
+                              const comp = ci.competition_500m;
+                              const cann = ci.cannibalization;
+                              const signal = ci.market_entry_signal;
+                              const diff = ci.differentiation_position;
+                              const opps = ci.key_opportunities ?? [];
+                              const risks = ci.key_risks ?? [];
+                              const actions = ci.recommended_actions ?? [];
+                              const narrative = ci.narrative;
+                              // 최소 콘텐츠 없으면 렌더 안 함
+                              if (
+                                !comp &&
+                                !cann &&
+                                !signal &&
+                                !diff &&
+                                opps.length === 0 &&
+                                risks.length === 0 &&
+                                actions.length === 0 &&
+                                !narrative
+                              ) {
+                                return null;
+                              }
+                              const sigBadgeCfg: Record<string, { cls: string; label: string }> = {
+                                green: {
+                                  cls: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/50',
+                                  label: '진입 권장',
+                                },
+                                yellow: {
+                                  cls: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/50',
+                                  label: '조건부',
+                                },
+                                red: {
+                                  cls: 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/50',
+                                  label: '비권장',
+                                },
+                              };
+                              const sigBadge = signal ? sigBadgeCfg[signal] : null;
+                              const cannImpactPct =
+                                typeof cann?.estimated_revenue_impact_pct === 'number'
+                                  ? (cann.estimated_revenue_impact_pct * 100).toFixed(1)
+                                  : null;
+                              return (
+                                <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Crosshair className="h-4 w-4 text-[#818cf8]" />
+                                      <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        경쟁 + 잠식 분석
+                                      </h3>
+                                    </div>
+                                    {sigBadge && (
+                                      <span
+                                        className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${sigBadge.cls}`}
+                                      >
+                                        {sigBadge.label}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-xs text-[#9ca3af]">500m 포화도</div>
+                                      <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
+                                        {comp?.saturation_level ?? 'N/A'}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        {comp?.total_competitors ?? 0}개 매장
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-xs text-[#9ca3af]">카니발 영향</div>
+                                      <div className="mt-1 text-lg font-semibold text-rose-300">
+                                        {cannImpactPct != null ? `${cannImpactPct}%` : 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-3">
+                                      <div className="text-xs text-[#9ca3af]">프랜차이즈/독립</div>
+                                      <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
+                                        {comp?.franchise_count ?? 0} /{' '}
+                                        {comp?.independent_count ?? 0}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {diff && (
+                                    <div className="mt-4 rounded-lg bg-[#818cf8]/10 p-3 ring-1 ring-[#818cf8]/30">
+                                      <div className="text-xs uppercase tracking-wider text-[#a5b4fc]">
+                                        차별화 포지션
+                                      </div>
+                                      <p className="mt-1 text-sm text-[#e2e8f0]">{diff}</p>
+                                    </div>
+                                  )}
+
+                                  {(opps.length > 0 || risks.length > 0) && (
+                                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {opps.length > 0 && (
+                                        <div>
+                                          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                                            <Lightbulb className="h-4 w-4 text-emerald-400" />
+                                            <span>기회</span>
+                                          </div>
+                                          <ul className="mt-2 space-y-1">
+                                            {opps.map((o, i) => (
+                                              <li key={i} className="text-xs text-[#e2e8f0]">
+                                                • {o}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                      {risks.length > 0 && (
+                                        <div>
+                                          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-400">
+                                            <AlertTriangle className="h-4 w-4 text-rose-400" />
+                                            <span>리스크</span>
+                                          </div>
+                                          <ul className="mt-2 space-y-1">
+                                            {risks.map((r, i) => (
+                                              <li key={i} className="text-xs text-[#e2e8f0]">
+                                                • {r}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {actions.length > 0 && (
+                                    <div className="mt-4 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
+                                      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400">
+                                        <ClipboardList className="h-4 w-4 text-amber-400" />
+                                        <span>추천 액션</span>
+                                      </div>
+                                      <ul className="mt-2 space-y-1">
+                                        {actions.map((a, i) => (
+                                          <li key={i} className="text-xs text-[#e2e8f0]">
+                                            <span className="font-bold text-amber-300">
+                                              {i + 1}.
+                                            </span>{' '}
+                                            {a}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {narrative && (
+                                    <p className="mt-4 text-xs leading-relaxed text-[#9ca3af]">
+                                      {narrative}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* Table */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
                               <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
@@ -3585,7 +4060,7 @@ function SimulatorDashboard({
                                           <th className="p-3 font-medium">
                                             <SortHeader
                                               label="폐업률"
-                                              sortField="survival"
+                                              sortField="closureRate"
                                               sortKey={sortKey}
                                               sortDir={sortDir}
                                               onSort={handleSort}
@@ -3605,8 +4080,19 @@ function SimulatorDashboard({
                                     </tr>
                                   </thead>
                                   <tbody className="text-xs divide-y divide-[#3a3633]">
-                                    {tableView === 'cannibalization'
-                                      ? sortedCannRows.map((row, i) => (
+                                    {tableView === 'cannibalization' ? (
+                                      sortedCannRows.length === 0 ? (
+                                        <tr>
+                                          <td
+                                            colSpan={4}
+                                            className="py-8 text-center text-xs text-[#9ca3af]"
+                                          >
+                                            카니발리제이션 데이터 없음 — 500m 반경 내 경쟁 매장이
+                                            없거나 분석 대상 지역 밖입니다.
+                                          </td>
+                                        </tr>
+                                      ) : (
+                                        sortedCannRows.map((row, i) => (
                                           <TableRow
                                             key={row.name}
                                             index={i}
@@ -3622,29 +4108,45 @@ function SimulatorDashboard({
                                             density={tableDensity}
                                           />
                                         ))
-                                      : sortedNeighborhoodRows.map((row, i) => (
-                                          <TableRow
-                                            key={row.name}
-                                            index={i}
-                                            expanded={expandedRow === i}
-                                            onToggle={() =>
-                                              setExpandedRow(expandedRow === i ? null : i)
-                                            }
-                                            icon={<MapPin className="w-3.5 h-3.5" />}
-                                            col1={row.name}
-                                            col2={row.score}
-                                            col3={row.survival}
-                                            status={row.bep}
-                                            density={tableDensity}
-                                          />
-                                        ))}
+                                      )
+                                    ) : sortedNeighborhoodRows.length === 0 ? (
+                                      <tr>
+                                        <td
+                                          colSpan={4}
+                                          className="py-8 text-center text-xs text-[#9ca3af]"
+                                        >
+                                          행정동 비교 데이터 없음 — 시뮬레이션을 실행해 주세요.
+                                        </td>
+                                      </tr>
+                                    ) : (
+                                      sortedNeighborhoodRows.map((row, i) => (
+                                        <TableRow
+                                          key={row.name}
+                                          index={i}
+                                          expanded={expandedRow === i}
+                                          onToggle={() =>
+                                            setExpandedRow(expandedRow === i ? null : i)
+                                          }
+                                          icon={<MapPin className="w-3.5 h-3.5" />}
+                                          col1={row.name}
+                                          col2={row.score}
+                                          col3={row.closureRate}
+                                          status={row.bep}
+                                          density={tableDensity}
+                                        />
+                                      ))
+                                    )}
                                   </tbody>
                                 </table>
                               </div>
                               {/* Footer — 빈 공간을 채우는 메타 정보 */}
                               <div className="px-5 py-3 border-t border-[#3a3633] flex justify-between items-center text-[10px] font-mono text-[#9ca3af]">
                                 <span>
-                                  총 4건 ·{' '}
+                                  총{' '}
+                                  {tableView === 'cannibalization'
+                                    ? sortedCannRows.length
+                                    : sortedNeighborhoodRows.length}
+                                  건 ·{' '}
                                   {tableView === 'cannibalization'
                                     ? '가맹점 간섭도 분석'
                                     : '행정동 비교 분석'}
@@ -3798,6 +4300,272 @@ function SimulatorDashboard({
                               </div>
                             </div>
 
+                            {/* 폐업 위험도 카드 (B2 수지니) */}
+                            {simResult?.closureRisk ? (
+                              (() => {
+                                const cr = simResult.closureRisk;
+                                const pct = Math.round((cr.risk_score ?? 0) * 100);
+                                const levelConfig = {
+                                  safe: {
+                                    badge:
+                                      'bg-emerald-400/20 text-emerald-300 border-emerald-400/40',
+                                    bar: 'bg-emerald-400',
+                                    label: '안전',
+                                  },
+                                  caution: {
+                                    badge: 'bg-amber-400/20 text-amber-300 border-amber-400/40',
+                                    bar: 'bg-amber-400',
+                                    label: '주의',
+                                  },
+                                  danger: {
+                                    badge: 'bg-rose-400/20 text-rose-300 border-rose-400/40',
+                                    bar: 'bg-rose-400',
+                                    label: '위험',
+                                  },
+                                }[cr.risk_level] ?? {
+                                  badge: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
+                                  bar: 'bg-slate-500',
+                                  label: '—',
+                                };
+                                const topSignals = (cr.top_signals ?? []).slice(0, 3);
+                                const maxAbs = Math.max(
+                                  ...topSignals.map((s) => Math.abs(s.contribution)),
+                                  0.0001,
+                                );
+                                return (
+                                  <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col gap-3">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <h2 className="text-sm font-bold text-white">
+                                          폐업 위험도
+                                        </h2>
+                                        {cr.is_mock && (
+                                          <span className="text-[8px] font-mono px-1.5 py-0.5 rounded border border-slate-500/40 bg-slate-500/20 text-slate-300 uppercase tracking-wider">
+                                            MOCK
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span
+                                        className={`inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full border ${levelConfig.badge}`}
+                                      >
+                                        <span
+                                          className={`w-1.5 h-1.5 rounded-full ${levelConfig.bar}`}
+                                        />
+                                        {levelConfig.label}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <div className="flex items-baseline justify-between mb-1.5">
+                                        <span className="text-[10px] text-[#9ca3af]">
+                                          위험 점수
+                                        </span>
+                                        <span className="text-lg font-bold text-white font-mono">
+                                          {pct}
+                                          <span className="text-[11px] text-[#9ca3af] ml-0.5">
+                                            /100
+                                          </span>
+                                        </span>
+                                      </div>
+                                      <div className="w-full h-2 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                        <div
+                                          className={`h-full ${levelConfig.bar} transition-all duration-700`}
+                                          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                    {topSignals.length > 0 && (
+                                      <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]">
+                                        <div className="text-[10px] text-[#9ca3af] mb-1">
+                                          주요 기여 피처 Top {topSignals.length}
+                                        </div>
+                                        {topSignals.map((s, i) => {
+                                          const abs = Math.abs(s.contribution);
+                                          const w = Math.round((abs / maxAbs) * 100);
+                                          const positive = s.contribution >= 0;
+                                          return (
+                                            <div
+                                              key={i}
+                                              className="flex items-center gap-2 text-[10px]"
+                                            >
+                                              <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
+                                                {s.feature}
+                                              </span>
+                                              <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                                <div
+                                                  className={`h-full ${positive ? 'bg-rose-400' : 'bg-emerald-400'}`}
+                                                  style={{ width: `${w}%` }}
+                                                />
+                                              </div>
+                                              <span
+                                                className={`w-12 text-right font-mono ${positive ? 'text-rose-300' : 'text-emerald-300'}`}
+                                              >
+                                                {positive ? '+' : ''}
+                                                {s.contribution.toFixed(2)}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center min-h-[120px]">
+                                <span className="text-xs text-[#9ca3af]">
+                                  폐업 위험도 데이터 없음
+                                </span>
+                              </div>
+                            )}
+
+                            {/* [C1 신규] 핵심 소비층 분석 카드 (demographic_depth) */}
+                            {(() => {
+                              const d = simResult?.demographicReport;
+                              if (!d) return null;
+                              const genderKo = (g: string) =>
+                                (
+                                  ({
+                                    male: '남성',
+                                    female: '여성',
+                                    mixed: '혼합',
+                                  }) as Record<string, string>
+                                )[g] ?? g;
+                              const incomeLevelKo = (l: string) =>
+                                (
+                                  ({
+                                    high: '상',
+                                    mid: '중',
+                                    low: '하',
+                                    unknown: 'N/A',
+                                  }) as Record<string, string>
+                                )[l] ?? l;
+                              const core = d.core_demographic;
+                              const top3 = d.top_3_age_groups ?? [];
+                              const peakHours = d.peak_consumption_hours ?? [];
+                              return (
+                                <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Users className="h-4 w-4 text-[#818cf8]" />
+                                      <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        핵심 소비층 분석
+                                      </h3>
+                                    </div>
+                                    {d.elderly_ratio != null && (
+                                      <span className="text-xs text-[#9ca3af]">
+                                        고령: {d.elderly_ratio.toFixed(1)}%
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {core && (core.age || core.gender) && (
+                                    <div className="mt-3 rounded-lg bg-[#818cf8]/10 p-3 ring-1 ring-[#818cf8]/30">
+                                      <div className="text-xs uppercase tracking-wider text-[#a5b4fc]">
+                                        주 소비층
+                                      </div>
+                                      <div className="mt-1 flex items-baseline gap-2 flex-wrap">
+                                        <span className="text-2xl font-bold text-[#e2e8f0]">
+                                          {core.age ? `${core.age}대` : ''}{' '}
+                                          {genderKo(core.gender ?? '')}
+                                        </span>
+                                        {typeof core.share === 'number' && (
+                                          <span className="text-sm text-[#9ca3af]">
+                                            {(core.share * 100).toFixed(1)}% 매출 기여
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {top3.length > 0 && (
+                                    <div className="mt-4 space-y-2">
+                                      <div className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af]">
+                                        연령대 TOP 3
+                                      </div>
+                                      {top3.map((a) => (
+                                        <div
+                                          key={a.age_group}
+                                          className="flex items-center gap-2 text-xs"
+                                        >
+                                          <span className="w-12 text-[#e2e8f0]">
+                                            {a.age_group}대
+                                          </span>
+                                          <div className="flex-1 rounded-full bg-[#1e1b18]/50">
+                                            <div
+                                              className="h-2 rounded-full bg-[#818cf8]"
+                                              style={{
+                                                width: `${Math.min(100, Math.max(0, a.share * 100))}%`,
+                                              }}
+                                            />
+                                          </div>
+                                          <span className="w-12 text-right text-[#9ca3af]">
+                                            {(a.share * 100).toFixed(1)}%
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-2">
+                                      <div className="text-[#9ca3af]">피크</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                        {peakHours.slice(0, 2).join(' · ') || 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-2">
+                                      <div className="text-[#9ca3af]">평/주말</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                        {typeof d.weekday_weekend_ratio === 'number'
+                                          ? d.weekday_weekend_ratio.toFixed(2)
+                                          : 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg bg-[#1e1b18]/50 p-2">
+                                      <div className="text-[#9ca3af]">소득</div>
+                                      <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                        {incomeLevelKo(d.area_income_level ?? 'unknown')}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {d.resident_visitor_ratio != null && (
+                                    <div className="mt-3 flex items-center gap-1.5 text-xs text-[#9ca3af]">
+                                      <MapPin className="h-3 w-3 text-slate-400" />
+                                      <span>
+                                        외부 방문객 비율:{' '}
+                                        {(d.resident_visitor_ratio * 100).toFixed(1)}%
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {d.brand_target_match_score != null && (
+                                    <div className="mt-3 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
+                                      <div className="flex items-baseline gap-2 flex-wrap">
+                                        <span className="text-xs uppercase tracking-wider text-amber-300">
+                                          브랜드 타겟 매칭
+                                        </span>
+                                        <span className="text-lg font-bold text-amber-200">
+                                          {d.brand_target_match_score.toFixed(0)}/100
+                                        </span>
+                                      </div>
+                                      {d.match_rationale && (
+                                        <p className="mt-1 text-xs text-[#e2e8f0]">
+                                          {d.match_rationale}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {d.narrative && (
+                                    <p className="mt-4 text-xs leading-relaxed text-[#9ca3af]">
+                                      {d.narrative}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {/* Insights */}
                             <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col flex-1">
                               {/* Header with dynamic counter */}
@@ -3919,6 +4687,31 @@ function SimulatorDashboard({
                                                   <p className="text-[#9ca3af] text-[10px] leading-relaxed">
                                                     {risk.detail}
                                                   </p>
+                                                )}
+                                                {risk.articles && risk.articles.length > 0 && (
+                                                  <details
+                                                    className="mt-1"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                  >
+                                                    <summary className="cursor-pointer text-[10px] text-cyan-300 hover:text-cyan-200 font-mono">
+                                                      근거 조항 {risk.articles.length}건 보기
+                                                    </summary>
+                                                    <ul className="mt-1.5 space-y-1.5 text-[10px]">
+                                                      {risk.articles.map((a, ai) => (
+                                                        <li
+                                                          key={ai}
+                                                          className="rounded border border-[#3a3633] bg-[#171717]/60 p-2"
+                                                        >
+                                                          <div className="font-semibold text-[#e2e8f0]">
+                                                            {a.article_ref}
+                                                          </div>
+                                                          <div className="mt-1 text-[#9ca3af] leading-relaxed whitespace-pre-wrap">
+                                                            {a.content}
+                                                          </div>
+                                                        </li>
+                                                      ))}
+                                                    </ul>
+                                                  </details>
                                                 )}
                                               </div>
                                             </div>
@@ -4083,8 +4876,10 @@ function SimulatorDashboard({
             trend: '안전 권역',
           },
         ]}
-        cannibalizationRows={CANNIBALIZATION_ROWS}
-        neighborhoodRows={NEIGHBORHOOD_ROWS}
+        cannibalizationRows={sortedCannRows.length > 0 ? sortedCannRows : CANNIBALIZATION_ROWS}
+        neighborhoodRows={
+          sortedNeighborhoodRows.length > 0 ? sortedNeighborhoodRows : NEIGHBORHOOD_ROWS
+        }
         insights={[
           {
             severity: 'advisory',
@@ -4783,7 +5578,7 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
                     <tr key={i} className="border-b border-slate-200">
                       <td className="py-3 font-medium text-slate-900">{r.name}</td>
                       <td className="py-3 font-mono text-slate-900">{r.score}</td>
-                      <td className="py-3 font-mono text-slate-900">{r.survival}</td>
+                      <td className="py-3 font-mono text-slate-900">{r.closureRate}</td>
                       <td className="py-3 font-mono text-[#6366f1] font-bold">{r.bep}</td>
                     </tr>
                   ))}

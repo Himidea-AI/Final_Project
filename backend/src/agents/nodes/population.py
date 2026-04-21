@@ -1,5 +1,6 @@
 import json
 import asyncio
+import logging
 import redis.asyncio as aioredis
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.schemas.state import AgentState
@@ -8,6 +9,25 @@ from src.agents.nodes.market_analyst import db_client, market_tool
 from src.agents.nodes.district_ranking import shared_population_trends
 from src.agents.llms import get_fast_llm
 from src.config.settings import settings
+from src.services.population_api import MAPO_DONG_CODES
+
+logger = logging.getLogger(__name__)
+
+# SGIS 클라이언트 (싱글톤, API 키 없으면 None)
+_sgis_client = None
+
+
+def _init_sgis_client():
+    """SGIS API 키가 있을 때만 클라이언트 생성"""
+    global _sgis_client
+    if _sgis_client is None and settings.sgis_api_key and settings.sgis_secret_key:
+        from src.services.sgis_api import SgisAPIClient
+
+        _sgis_client = SgisAPIClient(
+            consumer_key=settings.sgis_api_key,
+            consumer_secret=settings.sgis_secret_key,
+        )
+
 
 _CACHE_TTL = 86400  # 24시간
 
@@ -20,7 +40,7 @@ async def population_analyst_node(state: AgentState) -> dict:
     """
     target_district = state.get("target_district", "서교동")
     business_type = state.get("business_type", "카페")
-    print(f"--- [POPULATION ANALYST] {target_district} 입동인구 분석 시작 ---")
+    logger.info(f"--- [POPULATION ANALYST] {target_district} 입동인구 분석 시작 ---")
 
     # Redis 캐시 조회
     cache_key = f"population:{target_district}:{business_type}"
@@ -30,7 +50,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         cached = None if settings.debug else await _redis.get(cache_key)
         if cached:
             cached_data = json.loads(cached)
-            print(f"[population_analyst] 캐시 히트: {cache_key}")
+            logger.info(f"[population_analyst] 캐시 히트: {cache_key}")
             analysis = dict(state.get("analysis_results", {}))
             analysis["population_report"] = cached_data["population_report"]
             await _redis.aclose()
@@ -40,7 +60,7 @@ async def population_analyst_node(state: AgentState) -> dict:
                 "current_agent": "population_analyst",
             }
     except Exception as e:
-        print(f"[population_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
+        logger.warning(f"[population_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
         if _redis is not None:  # 조회 실패 시 연결 누수 방지
             try:
                 await _redis.aclose()
@@ -51,14 +71,33 @@ async def population_analyst_node(state: AgentState) -> dict:
     # 1. 실데이터 수집 (DB 연결 확인)
     if db_client.engine is None:
         await db_client.connect()
+
+    # SGIS 상주인구 조회 (API 키 있을 때만)
+    _init_sgis_client()
+
+    async def _fetch_sgis_data() -> dict | None:
+        if _sgis_client is None:
+            return None
+        try:
+            dong_code = MAPO_DONG_CODES.get(target_district)
+            if not dong_code:
+                return None
+            resident_pop = await _sgis_client.get_resident_population(dong_code)
+            age_dist = await _sgis_client.get_age_distribution(dong_code)
+            return {"resident_population": resident_pop, "age_distribution": age_dist}
+        except Exception as e:
+            logger.debug(f"[population_analyst] SGIS 조회 실패 ({target_district}): {e}")
+            return None
+
     # district_ranking_node와 동일 dong에 대한 호출은 shared_population_trends가 dedupe
-    pop_data, demo_data = await asyncio.gather(
+    pop_data, demo_data, sgis_data = await asyncio.gather(
         shared_population_trends(target_district),
         market_tool.get_commercial_insights(target_district, business_type),
+        _fetch_sgis_data(),
     )
 
     if "error" in pop_data:
-        print(f"!!! [POPULATION ANALYST DATA ERROR] !!! {pop_data['error']}")
+        logger.warning(f"[POPULATION ANALYST DATA ERROR] !!! {pop_data['error']}")
         analysis_results = state.get("analysis_results", {})
         analysis_results["population_report"] = f"{target_district} 인구 데이터 조회 실패: {pop_data['error']}"
         return {"analysis_results": analysis_results, "current_agent": "population_analyst"}
@@ -86,7 +125,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         )
 
     # 2. API 할당량 관리 (2초 대기)
-    print("[WAIT] API 할당량 관리를 위해 2초 대기 중...")
+    logger.debug("[WAIT] API 할당량 관리를 위해 2초 대기 중...")
     await asyncio.sleep(2)
 
     # 3. LLM 분석 (Structured Output)
@@ -99,6 +138,11 @@ async def population_analyst_node(state: AgentState) -> dict:
         f"- 전년 대비 성장률(YoY): {pop_data.get('yoy_growth', 0)}%\n"
         f"- 종합 요약: {pop_data.get('summary', '')}\n"
         + (f"\n### 인구통계학적 특성 (실측 데이터):\n{demo_summary}\n" if demo_summary else "")
+        + (
+            f"\n### 상주인구 데이터 (SGIS 통계청):\n{json.dumps(sgis_data, ensure_ascii=False, default=str)[:800]}\n"
+            if sgis_data
+            else ""
+        )
         + "\nreport 필드: 유동인구의 양적/질적 변화를 분석하고 창업 시 고려할 인구학적 통계치를 포함하세요.\n"
         "main_target_age 필드: 위 실측 인구통계 데이터를 반드시 반영하여 '20대 여성', '30대 남성', '20~30대 여성' 등 구체적인 성별+연령 조합으로 작성하세요.\n"
         + (f"peak_time 필드: 반드시 '{real_peak_time}'로 작성하세요 (실측 매출 건수 기준 피크 시간대).\n" if real_peak_time else "peak_time 필드: 업종과 지역 특성을 고려한 피크 시간대를 '18:00~21:00' 형식으로 작성하세요.\n")
@@ -122,7 +166,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         }
 
     except Exception as e:
-        print(f"!!! [POPULATION ANALYST ERROR] !!! {str(e)}")
+        logger.error(f"[POPULATION ANALYST ERROR] !!! {str(e)}")
         population_report = f"{target_district} 인구 분석 중 오류가 발생했습니다."
         new_metrics = {}
 
@@ -137,9 +181,9 @@ async def population_analyst_node(state: AgentState) -> dict:
                 json.dumps({"population_report": population_report, "metrics": new_metrics}, ensure_ascii=False),
                 ex=_CACHE_TTL,
             )
-            print(f"[population_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
+            logger.info(f"[population_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
         except Exception as e:
-            print(f"[population_analyst] Redis 캐시 저장 실패 (무시): {e}")
+            logger.warning(f"[population_analyst] Redis 캐시 저장 실패 (무시): {e}")
         finally:
             try:
                 await _redis.aclose()
