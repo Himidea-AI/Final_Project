@@ -29,8 +29,8 @@ async def synthesis_node(state: AgentState) -> dict:
     store_area = state.get("store_area", 15.0)
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
-    # v3: trend_forecast 섹션 추가 — 기존 v2 캐시는 자동 미스 (재계산 1회)
-    cache_key = f"v3:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    # v4: articles 필드가 list[str] → list[{article_ref, content}]로 변경 — 기존 v3 캐시 무효화
+    cache_key = f"v4:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
