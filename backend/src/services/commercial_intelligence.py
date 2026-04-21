@@ -141,7 +141,10 @@ def analyze_competition(
     for r in rows:
         d = haversine_m(lat0, lon0, r["lat"], r["lon"])
         if d <= radius_m:
-            within.append({**dict(r), "distance_m": round(d, 1)})
+            # 프론트 관례에 맞춰 lon → lng 로 노출 (§05 지도 마커용)
+            row_dict = {**dict(r), "distance_m": round(d, 1)}
+            row_dict["lng"] = row_dict.pop("lon", None)
+            within.append(row_dict)
 
     within.sort(key=lambda x: x["distance_m"])
 
