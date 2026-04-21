@@ -77,6 +77,7 @@ EXTRA_FEATURES = [
     "trend_score",  # 네이버 검색 트렌드 (서울 전체)
     "holiday_count",  # 분기 내 공휴일 수 (holiday_calendar)
     "bus_flpop",  # 동별 분기 버스 승하차 집계 (bus_boarding_daily)
+    "adstrd_flpop",  # 행정동 분기 유동인구 (seoul_adstrd_flpop.total_flpop — 서울 전체 동 커버)
 ]
 
 GOLMOK_FEATURES = [
@@ -239,6 +240,50 @@ def load_store_data(
     return df
 
 
+def load_adstrd_flpop(
+    db_url: str = DB_URL,
+    dong_prefix: str | None = None,
+) -> pd.DataFrame:
+    """seoul_adstrd_flpop에서 행정동 분기 유동인구를 로드한다.
+
+    CSV 캐시 우선(scripts/cache_adstrd_flpop.py 실행 후 생성), 없으면 DB fallback.
+
+    Parameters
+    ----------
+    db_url : str
+        PostgreSQL 접속 URL.
+    dong_prefix : str, optional
+        행정동 코드 접두사 필터 (예: '11440' = 마포구). None이면 서울 전체.
+
+    Returns
+    -------
+    pd.DataFrame
+        컬럼: quarter, dong_code, adstrd_flpop
+    """
+    _csv = DATA_DIR / "adstrd_flpop_quarterly.csv"
+    if _csv.exists():
+        df = pd.read_csv(_csv, dtype={"dong_code": str})
+        df["quarter"] = df["quarter"].astype(int)
+        if dong_prefix:
+            df = df[df["dong_code"].str.startswith(dong_prefix)]
+        logger.info("adstrd_flpop CSV 로드: %s (%d rows)", _csv, len(df))
+        return df[["quarter", "dong_code", "adstrd_flpop"]]
+
+    try:
+        where = f" WHERE dong_code LIKE '{dong_prefix}%'" if dong_prefix else ""
+        query = (
+            f"SELECT quarter, dong_code, total_flpop AS adstrd_flpop "  # noqa: S608
+            f"FROM seoul_adstrd_flpop{where} ORDER BY quarter, dong_code"
+        )
+        df = _load_from_db(query, db_url)
+        df["dong_code"] = df["dong_code"].astype(str)
+        logger.info("DB에서 adstrd_flpop 로드 완료: %d rows", len(df))
+        return df[["quarter", "dong_code", "adstrd_flpop"]]
+    except Exception as exc:
+        logger.warning("adstrd_flpop 로드 실패, 0으로 대체: %s", exc)
+        return pd.DataFrame(columns=["quarter", "dong_code", "adstrd_flpop"])
+
+
 # ---------------------------------------------------------------------------
 # 결측치 처리 (guide-density Hot Deck 보간)
 # ---------------------------------------------------------------------------
@@ -366,6 +411,13 @@ def _impute_missing(
             lambda x: x.interpolate(method="linear", limit_direction="both")
         )
         df["bus_flpop"] = df["bus_flpop"].fillna(0)
+
+    # 행정동 유동인구: 동별 선형 보간 후 0 대체
+    if "adstrd_flpop" in df.columns:
+        df["adstrd_flpop"] = df.groupby("dong_code")["adstrd_flpop"].transform(
+            lambda x: x.interpolate(method="linear", limit_direction="both")
+        )
+        df["adstrd_flpop"] = df["adstrd_flpop"].fillna(0)
 
     # 나머지 피처: fillna(0)
     if feature_cols is None:
@@ -580,6 +632,15 @@ def build_timeseries(
                 df["bus_flpop"] = 0.0
     except Exception:
         df["bus_flpop"] = 0.0
+
+    # 행정동 유동인구 피처 (seoul_adstrd_flpop.total_flpop — 서울 전체 동 커버)
+    flpop_df = load_adstrd_flpop(db_url=DB_URL)
+    if not flpop_df.empty and "quarter" in df.columns and "dong_code" in df.columns:
+        flpop_df["quarter"] = flpop_df["quarter"].astype(int)
+        df = df.merge(flpop_df, on=["quarter", "dong_code"], how="left")
+        df["adstrd_flpop"] = df["adstrd_flpop"].fillna(0).astype(float)
+    else:
+        df["adstrd_flpop"] = 0.0
 
     # 코로나 시기 가중치 (2020~2021 → 0.5, 나머지 → 1.0)
     if "quarter" in df.columns:

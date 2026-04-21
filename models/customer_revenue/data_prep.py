@@ -17,6 +17,10 @@ import os
 import pickle
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import numpy as np
 import pandas as pd
 
