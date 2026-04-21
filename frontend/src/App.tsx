@@ -840,6 +840,20 @@ const BUSINESS_TYPE_BACKEND_KEY: Record<string, string> = {
   '커피-음료': '커피',
 };
 
+// UI 업종 라벨 → CS 업종 코드 (demographic 연령/성별 분석 업종 필터링용)
+const BUSINESS_TYPE_CS_CODE: Record<string, string> = {
+  한식음식점: 'CS100001',
+  중식음식점: 'CS100002',
+  일식음식점: 'CS100003',
+  양식음식점: 'CS100004',
+  제과점: 'CS100005',
+  패스트푸드점: 'CS100006',
+  치킨전문점: 'CS100007',
+  분식전문점: 'CS100008',
+  '호프-간이주점': 'CS100009',
+  '커피-음료': 'CS100010',
+};
+
 const PRICE_RANGES = [
   { label: '5천원 이하', value: 'under5k' },
   { label: '5천-1만', value: '5to10k' },
@@ -2619,6 +2633,7 @@ function SimulatorDashboard({
         initial_capital: initialCapital * 10000,
         commercial_radius: radius,
         population_weight: weighted,
+        industry_filter: BUSINESS_TYPE_CS_CODE[businessType] ?? null,
       };
 
       // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
