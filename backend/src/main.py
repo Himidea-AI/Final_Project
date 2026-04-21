@@ -38,6 +38,7 @@ from src.services.auth import AuthService
 from models.interface import ModelOutput
 from models.explainability.simulation import (
     build_quarterly_projection,
+    build_scenarios,
 )
 from models.explainability.shap_analysis import explain_tcn_prediction
 
