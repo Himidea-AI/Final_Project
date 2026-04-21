@@ -99,6 +99,15 @@ interface SimResult {
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   districtRankings?: { district: string; score: number; [k: string]: any }[];
+  // [C1] DistrictComparison — DashboardPanelView 실데이터 렌더용 (backend SimulationOutput.comparison)
+  comparison?: {
+    district: string;
+    score: number;
+    revenue: number;
+    bep: number;
+    survival: number;
+    cannibalization: number;
+  }[];
   winnerDistrict?: string;
   topCandidates?: string[];
   legalRisks?: {
@@ -2699,6 +2708,8 @@ function SimulatorDashboard({
         marketReport: mr,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         districtRankings: (simRes as any).district_rankings,
+        // [C1] 동별 비교 배열 — DashboardPanelView 실데이터 매핑에 사용
+        comparison: simRes.comparison,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         winnerDistrict: (simRes as any).winner_district,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3415,6 +3426,7 @@ function SimulatorDashboard({
                             dongName={dong}
                             accentOverride={panelColors[idx]}
                             panelIndex={idx}
+                            simResult={simResult}
                           />
                         ))}
                       </div>
@@ -6291,7 +6303,8 @@ function InsightCard({
 
 /* ═══════════════════════════════════════════════════════
    DashboardPanelView — VS 비교 모드용 압축 대시보드 패널
-   isVariantB=true면 망원동 데이터, false면 연남동 데이터 출력
+   simResult.districtRankings / simResult.comparison에서 dongName 매칭으로 실데이터 렌더.
+   매칭 없으면 '—' 또는 '데이터 없음' 폴백 표시. isVariantB는 색상 구분용만 유지.
    ═══════════════════════════════════════════════════════ */
 function DashboardPanelView({
   districtName,
@@ -6300,6 +6313,7 @@ function DashboardPanelView({
   dongName,
   accentOverride,
   panelIndex = 0,
+  simResult,
 }: {
   districtName: string;
   isVariantB: boolean;
@@ -6307,19 +6321,76 @@ function DashboardPanelView({
   dongName?: string;
   accentOverride?: string;
   panelIndex?: number;
+  simResult?: SimResult | null;
 }) {
-  const revenue = isVariantB ? '₩ 28,100,000' : '₩ 32,400,000';
-  const score = isVariantB ? '76 / 100' : '87 / 100';
+  // 실데이터 조회 — districtRankings / comparison에서 dongName 매칭
+  const dongRanking = simResult?.districtRankings?.find((r) => r.district === dongName);
+  const dongComparison = simResult?.comparison?.find((c) => c.district === dongName);
+  const hasRealData = !!dongRanking || !!dongComparison;
+
+  // Revenue — comparison.revenue (만원 단위) 우선, 없으면 '—'
+  const revenueNum = dongComparison?.revenue;
+  const revenue =
+    typeof revenueNum === 'number'
+      ? `₩ ${(revenueNum * 10000).toLocaleString()}`
+      : hasRealData
+        ? '—'
+        : isVariantB
+          ? '₩ 28,100,000'
+          : '₩ 32,400,000';
+
+  // Score — districtRankings.score 우선
+  const scoreNum =
+    typeof dongRanking?.score === 'number' ? Math.round(dongRanking.score as number) : null;
+  const score =
+    scoreNum != null
+      ? `${scoreNum} / 100`
+      : hasRealData
+        ? '—'
+        : isVariantB
+          ? '76 / 100'
+          : '87 / 100';
+
   const dongPop = popData?.dong_details?.find((d: any) => d.dong_name === dongName);
   const traffic = dongPop
     ? `${dongPop.daily_total.toLocaleString()} 명`
     : isVariantB
       ? '38,205 명'
       : '42,105 명';
-  const risk = isVariantB ? 'MEDIUM (28%)' : 'Low (12%)';
-  const scoreTrend = isVariantB ? '-2.1 Pts' : '+5.2 Pts';
-  const revenueTrend = isVariantB ? '+6.3%' : '+12.5%';
-  const radarValues = isVariantB ? [62, 81, 55, 68, 71, 58, 73] : [78, 65, 72, 87, 74, 82, 80];
+
+  // Closure rate (폐업률) — districtRankings.closure_rate 우선
+  const closureRateNum =
+    typeof dongRanking?.closure_rate === 'number' ? (dongRanking.closure_rate as number) : null;
+  const risk =
+    closureRateNum != null
+      ? `${(closureRateNum * 100).toFixed(1)}%`
+      : hasRealData
+        ? '—'
+        : isVariantB
+          ? 'MEDIUM (28%)'
+          : 'Low (12%)';
+
+  // DistrictComparison 타입엔 명시적 growth/score-trend 필드 없음 → 실데이터 있을 땐 '—'
+  const revenueTrend = hasRealData ? '—' : isVariantB ? '+6.3%' : '+12.5%';
+  const scoreTrend = hasRealData ? '—' : isVariantB ? '-2.1 Pts' : '+5.2 Pts';
+
+  // Radar — winner_district와 일치할 때만 marketReport 7지표 사용, 그 외엔 기존 mock 폴백
+  const isWinner = !!dongName && dongName === simResult?.winnerDistrict;
+  const realRadar =
+    isWinner && simResult?.marketReport
+      ? [
+          simResult.marketReport.floating_population,
+          simResult.marketReport.rent_index,
+          simResult.marketReport.competition_intensity,
+          simResult.marketReport.estimated_revenue,
+          // survival_rate → 폐업률(=100 - survival_rate)
+          100 - (simResult.marketReport.survival_rate ?? 0),
+          simResult.marketReport.growth_potential,
+          simResult.marketReport.accessibility,
+        ]
+      : null;
+  const radarValues =
+    realRadar ?? (isVariantB ? [62, 81, 55, 68, 71, 58, 73] : [78, 65, 72, 87, 74, 82, 80]);
   const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
   const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
   const badgeColorMap = [
@@ -6340,6 +6411,57 @@ function DashboardPanelView({
       return `${100 + r * Math.cos(angle)},${100 + r * Math.sin(angle)}`;
     })
     .join(' ');
+
+  // AI 인사이트 — 실데이터 있으면 dongName + 실수치 기반 동적 문장, 없으면 empty state
+  const bepMonths =
+    typeof dongRanking?.bep_months === 'number' ? (dongRanking.bep_months as number) : null;
+  const insights: { icon: JSX.Element; text: string }[] =
+    hasRealData && dongRanking
+      ? [
+          {
+            icon: <TrendingUp className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />,
+            text:
+              scoreNum != null
+                ? `${dongName}의 종합 점수는 ${scoreNum}점으로 마포 평균 대비 ${
+                    scoreNum >= 75 ? '상위권' : scoreNum >= 55 ? '중위권' : '하위권'
+                  }입니다.`
+                : `${dongName}의 분석 점수가 집계되지 않았습니다.`,
+          },
+          {
+            icon: <Scale className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />,
+            text:
+              closureRateNum != null
+                ? `폐업률 ${(closureRateNum * 100).toFixed(1)}% — ${
+                    closureRateNum > 0.3
+                      ? '높은 리스크'
+                      : closureRateNum > 0.15
+                        ? '중간 리스크'
+                        : '낮은 리스크'
+                  } 권역입니다.`
+                : `폐업률 데이터가 부족합니다.`,
+          },
+          {
+            icon: <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />,
+            text:
+              bepMonths != null
+                ? `손익분기까지 약 ${bepMonths}개월 소요 예상.`
+                : `손익분기 예측 데이터가 부족합니다.`,
+          },
+        ]
+      : [
+          {
+            icon: <TrendingUp className="w-3.5 h-3.5 text-[#9ca3af] shrink-0 mt-0.5" />,
+            text: `${dongName ?? '선택한 동'}에 대한 분석 데이터가 아직 없습니다.`,
+          },
+          {
+            icon: <Scale className="w-3.5 h-3.5 text-[#9ca3af] shrink-0 mt-0.5" />,
+            text: '시뮬레이션 실행 후 다시 확인해주세요.',
+          },
+          {
+            icon: <Users className="w-3.5 h-3.5 text-[#9ca3af] shrink-0 mt-0.5" />,
+            text: '각 동은 districtRankings에서 매칭됩니다.',
+          },
+        ];
 
   return (
     <div className="flex flex-col gap-4 w-full animate-in fade-in zoom-in-95 duration-500">
@@ -6444,34 +6566,16 @@ function DashboardPanelView({
         </div>
       </div>
 
-      {/* AI 인사이트 요약 */}
+      {/* AI 인사이트 요약 — 실데이터 기반 동적 문장 (동 고정 mock 제거) */}
       <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5">
         <h3 className="text-xs font-bold text-white mb-3">AI 인사이트</h3>
         <div className="space-y-2">
-          <div className="flex items-start gap-2 text-xs text-[#d1d5db]">
-            <TrendingUp className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
-            <span>
-              {isVariantB
-                ? '망원동은 주거 밀집형 상권으로 점심 시간대 매출 비중이 높습니다.'
-                : '저녁 시간대 유동인구 급증. 야간 메뉴 강화를 권장합니다.'}
-            </span>
-          </div>
-          <div className="flex items-start gap-2 text-xs text-[#d1d5db]">
-            <Scale className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-            <span>
-              {isVariantB
-                ? '반경 300m 내 동종 프랜차이즈 7개. 카니발리제이션 주의 필요.'
-                : '상가임대차보호법 위반 사례 존재 권역. 법적 분쟁 리스크 감지.'}
-            </span>
-          </div>
-          <div className="flex items-start gap-2 text-xs text-[#d1d5db]">
-            <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
-            <span>
-              {isVariantB
-                ? '3040 직장인 비율 38%. 오피스 근접성이 강점입니다.'
-                : '2030 여성 타겟 구역. SNS 친화적 인테리어 도입 시 수익 +34%.'}
-            </span>
-          </div>
+          {insights.map((ins, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs text-[#d1d5db]">
+              {ins.icon}
+              <span>{ins.text}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
