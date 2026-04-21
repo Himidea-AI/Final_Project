@@ -1186,17 +1186,48 @@ function IntroScene({
   onSimulatorClick: () => void;
   onContactClick: () => void;
 }) {
+  const { isLoggedIn, user, brand } = useAuth();
+  const nav = useNavigate();
+  // 환영 메시지: "(회사명) 담당자명 직급님 환영합니다"
+  // 직급은 사용자 입력(position) 우선, 없으면 role 기반 기본값(master→팀장, manager→매니저)
+  const brandName = brand?.brand_name || user?.company_name || '';
+  const personName = user?.contact_name || '';
+  const roleTitle = user?.position || (user?.role === 'master' ? '팀장' : '매니저');
+  const showWelcome = isLoggedIn && (brandName || personName);
+  const handleWelcomeClick = () => {
+    nav(user?.role === 'master' ? '/hq' : '/simulator');
+  };
+
   return (
     <div className="relative z-10 h-full w-full overflow-hidden">
-      {/* 🔐 Top-right 로그인 버튼 — 항상 간소하게 "로그인" 표시, 클릭 시 /login */}
-      <button
-        onClick={onLoginClick}
-        className="absolute top-6 right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#9ca3af] hover:text-[#818cf8]"
-        title="Login"
-      >
-        <LogIn className="w-3 h-3" />
-        <span className="text-[11px] font-bold tracking-wider uppercase">Login</span>
-      </button>
+      {/* 🔐 Top-right — 비로그인 시 Login 버튼, 로그인 시 환영 메시지 (클릭 시 역할별 홈) */}
+      {showWelcome ? (
+        <button
+          onClick={handleWelcomeClick}
+          className="absolute top-6 right-6 z-40 flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#e2e8f0] hover:text-[#818cf8]"
+          title={`${user?.role === 'master' ? 'HQ 지휘소' : '시뮬레이터'}로 이동`}
+        >
+          <span className="text-[11px] font-medium tracking-wide">
+            {brandName && <span className="text-[#818cf8]">{brandName}</span>}
+            {brandName && personName && <span className="text-[#9ca3af]"> · </span>}
+            {personName && (
+              <span>
+                {personName} {roleTitle}
+              </span>
+            )}
+            <span className="text-[#9ca3af]">님 환영합니다</span>
+          </span>
+        </button>
+      ) : (
+        <button
+          onClick={onLoginClick}
+          className="absolute top-6 right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#9ca3af] hover:text-[#818cf8]"
+          title="Login"
+        >
+          <LogIn className="w-3 h-3" />
+          <span className="text-[11px] font-bold tracking-wider uppercase">Login</span>
+        </button>
+      )}
 
       {/* Background Watermark Logo (idea 5) — 화면을 가로지르는 거대한 반투명 로고 */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
