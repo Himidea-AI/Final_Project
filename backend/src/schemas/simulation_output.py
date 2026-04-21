@@ -31,12 +31,19 @@ class DistrictComparison(BaseModel):
     cannibalization: float = 0.0
 
 
+class LegalRiskArticle(BaseModel):
+    article_ref: str
+    content: str
+
+
 class LegalRisk(BaseModel):
     """법률 리스크 항목"""
 
     type: str
     risk_level: str
     detail: str
+    recommendation: str = ""
+    articles: list[LegalRiskArticle] = Field(default_factory=list)
 
 
 class MapCenter(BaseModel):
