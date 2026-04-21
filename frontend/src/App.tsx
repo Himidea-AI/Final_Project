@@ -2213,6 +2213,8 @@ function SimulatorDashboard({
     'cannibalization',
   );
   const [dashboardMode, setDashboardMode] = useState<'data' | 'map'>('data');
+  // AI Verdict 배너: data 뷰에서 기본 접힘 → 클릭 시 펼침 (tailOfRec 표시)
+  const [verdictExpanded, setVerdictExpanded] = useState(false);
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [selectedGu] = useState('마포구');
   const [selectedDongs, setSelectedDongs] = useState<string[]>(() => [...DONG_DATA['마포구']]);
@@ -3344,8 +3346,11 @@ function SimulatorDashboard({
                 {/* Single Mode: 기존 대시보드 */}
                 {!isSplitMode && (
                   <>
-                    {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단 */}
+                    {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단
+                        · map 뷰에서는 숨김 (AI 에이전트 맵 화면 간결성)
+                        · data 뷰에서는 기본 접힘 → 한 줄평만, 클릭 시 전체 설명 펼침 */}
                     {(() => {
+                      if (dashboardMode !== 'data') return null;
                       const rec = simResult?.recommendation;
                       const legalRisk = simResult?.overallLegalRisk;
                       const ciSignal = simResult?.competitorIntel?.market_entry_signal;
@@ -3413,10 +3418,29 @@ function SimulatorDashboard({
                           : rec;
 
                       const borderCls = cfg ? cfg.border : 'border-[#3a3633]';
+                      const hasDetail = !!(tailOfRec && tailOfRec !== oneLiner);
 
                       return (
                         <div
-                          className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-[#2c2825] p-5 shadow-xl`}
+                          role={hasDetail ? 'button' : undefined}
+                          tabIndex={hasDetail ? 0 : undefined}
+                          onClick={hasDetail ? () => setVerdictExpanded((v) => !v) : undefined}
+                          onKeyDown={
+                            hasDetail
+                              ? (e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    setVerdictExpanded((v) => !v);
+                                  }
+                                }
+                              : undefined
+                          }
+                          className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-[#2c2825] p-5 shadow-xl ${
+                            hasDetail
+                              ? 'cursor-pointer transition-colors hover:bg-[#332e2b] focus:outline-none focus:ring-2 focus:ring-[#818cf8]/40'
+                              : ''
+                          }`}
+                          aria-expanded={hasDetail ? verdictExpanded : undefined}
                         >
                           <div className="flex items-start gap-4">
                             {cfg && (
@@ -3438,13 +3462,18 @@ function SimulatorDashboard({
                                     {cfg.label}
                                   </span>
                                 )}
+                                {hasDetail && (
+                                  <span className="ml-auto text-[10px] font-medium uppercase tracking-widest text-[#9ca3af]">
+                                    {verdictExpanded ? '접기 ▲' : '자세히 ▼'}
+                                  </span>
+                                )}
                               </div>
                               {oneLiner && (
                                 <p className="mt-2 text-base font-semibold leading-snug text-[#e2e8f0]">
                                   {oneLiner}
                                 </p>
                               )}
-                              {tailOfRec && tailOfRec !== oneLiner && (
+                              {hasDetail && verdictExpanded && (
                                 <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
                                   {tailOfRec}
                                 </p>
