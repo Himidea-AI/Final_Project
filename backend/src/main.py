@@ -401,8 +401,12 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             {
                 "district": target_dist,
                 "score": district_score,
-                # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
-                "revenue": (md.get("avg_revenue") or 30000000) // 10000,
+                # monthly_revenue: synthesis profit_simulation 실계산값 사용, 없으면 null
+                # 단위: 만원 (프론트가 ×10000 해서 원으로 표시). 0이나 None이면 null 반환.
+                "revenue": (
+                    int((final_report.get("profit_simulation") or {}).get("monthly_revenue") or 0) // 10000
+                    or None
+                ),
                 "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
                 "survival": float(market_report["survival_rate"]),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),

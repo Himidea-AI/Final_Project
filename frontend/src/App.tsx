@@ -79,7 +79,7 @@ import { useSimulationStore } from './stores/simulationStore';
 
 interface SimResult {
   score: number;
-  revenue: number;
+  revenue: number | null;
   riskLevel: string;
   recommendation: string;
   chartData: { label: string; value: number }[];
@@ -2479,7 +2479,9 @@ function SimulatorDashboard({
         ['지표', '값', '트렌드'],
         [
           '예상 월 매출 (추정)',
-          `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
+          simResult?.revenue != null
+            ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
+            : '분석 중',
           '+12.5%',
         ],
         ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
@@ -2652,7 +2654,7 @@ function SimulatorDashboard({
 
       setSimResult({
         score: topComp?.score ?? 87,
-        revenue: topComp?.revenue ?? 3240,
+        revenue: topComp?.revenue ?? null,
         riskLevel: topRisk?.risk_level ?? 'LOW',
         recommendation: simRes.ai_recommendation || '',
         chartData: mr
@@ -3505,7 +3507,11 @@ function SimulatorDashboard({
                           <StatCard
                             onClick={() => setActiveDrawer('revenue')}
                             title="예상 월 매출 (추정)"
-                            value={`₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`}
+                            value={
+                              simResult?.revenue != null
+                                ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
+                                : '분석 중'
+                            }
                             trend="+12.5%"
                             trendUp={true}
                             icon={<BarChart3 />}
@@ -4931,7 +4937,10 @@ function SimulatorDashboard({
         stats={[
           {
             title: '예상 월 매출 (추정)',
-            value: `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
+            value:
+              simResult?.revenue != null
+                ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
+                : '분석 중',
             trend: '+12.5%',
           },
           {
