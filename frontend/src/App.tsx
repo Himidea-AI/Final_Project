@@ -216,6 +216,7 @@ import {
 } from 'lucide-react';
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
+import AbmPersonaMap from './components/AbmPersonaMap';
 import HybridSliderInput from './components/ui/HybridSliderInput';
 import { useManagerList, formatRelativeTime, ManagerListProvider } from './hooks/useManagerList';
 import {
@@ -2212,7 +2213,7 @@ function SimulatorDashboard({
   const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
     'cannibalization',
   );
-  const [dashboardMode, setDashboardMode] = useState<'data' | 'map'>('data');
+  const [dashboardMode, setDashboardMode] = useState<'data' | 'map' | 'abm'>('data');
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [selectedGu] = useState('마포구');
   const [selectedDongs, setSelectedDongs] = useState<string[]>(() => [...DONG_DATA['마포구']]);
@@ -2235,6 +2236,11 @@ function SimulatorDashboard({
   // [A1] 유동인구 실시간 데이터
   const [popData, setPopData] = useState<any>(null);
   const [popLoading, setPopLoading] = useState(false);
+
+  // [ABM] 행동 시뮬레이션 — 분석 에이전트와 독립, 결과에 영향 없음
+  const [abmResult, setAbmResult] = useState<any>(null);
+  const [abmLoading, setAbmLoading] = useState(false);
+  const [abmError, setAbmError] = useState<string | null>(null);
 
   useEffect(() => {
     if (reportState !== 'result' || selectedDongs.length === 0) return;
@@ -3241,6 +3247,20 @@ function SimulatorDashboard({
                           <MapIcon className="w-3.5 h-3.5" />
                           AI 에이전트 맵
                         </button>
+                        <button
+                          onClick={() => setDashboardMode('abm')}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            dashboardMode === 'abm'
+                              ? 'bg-[#3a3633] text-emerald-400 shadow-sm'
+                              : 'text-[#9ca3af] hover:text-emerald-300'
+                          }`}
+                        >
+                          <Activity className="w-3.5 h-3.5" />
+                          ABM 시뮬 맵
+                          {abmResult && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          )}
+                        </button>
                       </div>
                     )}
                     <button
@@ -3445,9 +3465,14 @@ function SimulatorDashboard({
                                 </p>
                               )}
                               {tailOfRec && tailOfRec !== oneLiner && (
-                                <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
-                                  {tailOfRec}
-                                </p>
+                                <details className="mt-2 group">
+                                  <summary className="cursor-pointer text-xs text-cyan-400 hover:text-cyan-300 font-mono select-none">
+                                    상세보기
+                                  </summary>
+                                  <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
+                                    {tailOfRec}
+                                  </p>
+                                </details>
                               )}
                             </div>
                           </div>
@@ -3455,7 +3480,7 @@ function SimulatorDashboard({
                       );
                     })()}
 
-                    {/* Main Dashboard Body — dashboardMode 토글 (data | map) */}
+                    {/* Main Dashboard Body — dashboardMode 토글 (data | map | abm) */}
                     {dashboardMode === 'data' ? (
                       <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
                         {/* 4 Stats Cards — data 뷰에서만 표시 */}
@@ -4761,7 +4786,7 @@ function SimulatorDashboard({
                           </div>
                         </div>
                       </div>
-                    ) : (
+                    ) : dashboardMode === 'map' ? (
                       /* 🗺️ AI 에이전트 맵 뷰 — KPI 없이 화면 꽉 채움 */
                       <div className="flex-1 w-full h-full min-h-[700px] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
                         <div className="flex-1 bg-[#1e1b18] border border-[#3a3633] rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
@@ -4794,6 +4819,49 @@ function SimulatorDashboard({
                           </div>
                         </div>
                       </div>
+                    ) : (
+                      /* 🤖 ABM 페르소나 행동 시뮬 뷰 */
+                      <AbmPersonaMap
+                        abmResult={abmResult}
+                        abmLoading={abmLoading}
+                        abmError={abmError}
+                        targetDistrict={selectedDongs[0] || '서교동'}
+                        onRunSimulation={async (scenario) => {
+                          if (!simResult) return;
+                          setAbmLoading(true);
+                          setAbmError(null);
+                          try {
+                            const res = await fetch('/api/simulate-abm', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                target_district: selectedDongs[0] || '서교동',
+                                business_type: businessType,
+                                brand_name: simResult.recommendation || '신규 매장',
+                                langgraph_result: (simResult as any)._raw ?? simResult,
+                                n_agents: 100,
+                                days: 1,
+                                scenario: {
+                                  weather_override: scenario.weather_override,
+                                  date_override: scenario.date_override,
+                                  weekend_force: scenario.weekend_force,
+                                  rent_shock_pct: scenario.rent_shock_pct,
+                                },
+                              }),
+                            });
+                            const data = await res.json();
+                            if (data.status === 'unavailable') {
+                              setAbmError('ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)');
+                            } else {
+                              setAbmResult(data);
+                            }
+                          } catch {
+                            setAbmError('ABM 시뮬레이션 요청 실패');
+                          } finally {
+                            setAbmLoading(false);
+                          }
+                        }}
+                      />
                     )}
                   </>
                 )}
