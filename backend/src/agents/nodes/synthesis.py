@@ -174,6 +174,14 @@ async def synthesis_node(state: AgentState) -> dict:
         "4. 창업 가부 결정 및 전략 제안\n"
         "5. FinalStrategyResult 스키마로 응답\n"
         f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
+        "7. profit_simulation 계산 기준 (아래 공식을 반드시 사용):\n"
+        "   - monthly_revenue  = 일평균 유동인구 × 방문 전환율 3% × 객단가(원)\n"
+        "   - 방문 전환율 보정: 경쟁 포화 high → 2%, medium → 3%, low/sparse → 4%\n"
+        "   - monthly_cost     = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
+        "   - net_profit       = monthly_revenue - monthly_cost\n"
+        "   - margin_rate      = net_profit / monthly_revenue (소수점 2자리)\n"
+        "   - bep_months       = 초기자본금 / max(net_profit, 1) (소수점 반올림)\n"
+        "   ※ 추측값 사용 금지 — 위 공식과 제공된 실데이터 수치만 사용\n"
     )
 
     try:
