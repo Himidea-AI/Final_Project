@@ -31,6 +31,7 @@ export interface AgentMapVisualizerProps {
   locations?: LocationData[];
   competitors?: CompetitorPin[];
   height?: string | number;
+  onSpotClick?: (loc: LocationData) => void;
 }
 
 interface PixelCoord {
@@ -59,6 +60,7 @@ export default function AgentMapVisualizer({
   locations = DEFAULT_LOCATIONS,
   competitors = [],
   height = '600px',
+  onSpotClick,
 }: AgentMapVisualizerProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -257,17 +259,40 @@ export default function AgentMapVisualizer({
         </div>
       )}
 
-      {/* 출점 후보지 핀 */}
+      {/* 출점 후보지 핀 (candidate) + 공실 스팟 번호 마커 (vacancy — 클릭 가능) */}
       {mapLoaded &&
-        locations.map((loc) => {
+        locations.map((loc, idx) => {
           const pixel = targetPixels[loc.id];
           if (!pixel) return null;
           const isVacancy = loc.type === 'vacancy';
-          const pinColor = isVacancy ? '#10b981' : '#818cf8';
-          const borderClass = isVacancy
-            ? 'border-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.5)]'
-            : 'border-[#818cf8] shadow-[0_0_10px_rgba(129,140,248,0.5)]';
-          const pingClass = isVacancy ? 'bg-[#10b981]' : 'bg-[#818cf8]';
+
+          if (isVacancy) {
+            // 번호 달린 시안 원형 마커 — 클릭 시 onSpotClick 콜백
+            const vacancyNumber = locations
+              .slice(0, idx + 1)
+              .filter((l) => l.type === 'vacancy').length;
+            return (
+              <button
+                type="button"
+                key={`pin-${loc.id}`}
+                onClick={() => onSpotClick?.(loc)}
+                disabled={!onSpotClick}
+                title={`${loc.name}${loc.listingCount ? ` — 공실 ×${loc.listingCount}` : ''} 클릭해서 ABM 시뮬`}
+                className="absolute z-30 flex items-center justify-center w-8 h-8 rounded-full bg-[#06b6d4] border-2 border-[#22d3ee] text-[#0f172a] text-xs font-black shadow-[0_0_14px_rgba(6,182,212,0.8)] transition-all duration-200 pointer-events-auto cursor-pointer hover:scale-125 hover:bg-[#22d3ee] disabled:cursor-default disabled:opacity-60"
+                style={{
+                  left: pixel.x,
+                  top: pixel.y,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              >
+                {vacancyNumber}
+                <span className="absolute inline-flex h-full w-full rounded-full bg-[#22d3ee] opacity-40 animate-ping" />
+              </button>
+            );
+          }
+
+          // candidate 기존 핀
+          const pinColor = '#818cf8';
           return (
             <div
               key={`pin-${loc.id}`}
@@ -278,13 +303,11 @@ export default function AgentMapVisualizer({
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div
-                className={`bg-[#1e1b18] border text-[#e2e8f0] px-2 py-0.5 rounded text-[9px] font-bold mb-1 ${borderClass}`}
-              >
-                {isVacancy ? `공실${loc.listingCount ? ` ×${loc.listingCount}` : ''}` : loc.name}
+              <div className="bg-[#1e1b18] border text-[#e2e8f0] px-2 py-0.5 rounded text-[9px] font-bold mb-1 border-[#818cf8] shadow-[0_0_10px_rgba(129,140,248,0.5)]">
+                {loc.name}
               </div>
               <MapPin className="w-6 h-6" style={{ color: pinColor, fill: `${pinColor}33` }} />
-              <div className={`w-2 h-2 rounded-full animate-ping absolute bottom-1 ${pingClass}`} />
+              <div className="w-2 h-2 rounded-full animate-ping absolute bottom-1 bg-[#818cf8]" />
             </div>
           );
         })}

@@ -2206,7 +2206,7 @@ function SimulatorDashboard({
   const [loadingText, setLoadingText] = useState('INITIALIZING AI ENGINE...');
   const [loadingProgress, setLoadingProgress] = useState(0);
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, brand } = useAuth();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
@@ -2259,6 +2259,12 @@ function SimulatorDashboard({
   const [abmResult, setAbmResult] = useState<any>(null);
   const [abmLoading, setAbmLoading] = useState(false);
   const [abmError, setAbmError] = useState<string | null>(null);
+  // 대시보드에서 선택해 ABM 탭으로 진입한 공실 스팟 — 지도에 이 스팟만 하이라이트
+  const [abmFocusSpot, setAbmFocusSpot] = useState<{
+    lat: number;
+    lon: number;
+    label?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (reportState !== 'result' || selectedDongs.length === 0) return;
@@ -2702,11 +2708,12 @@ function SimulatorDashboard({
     try {
       // [C1 연동] 백엔드 SimulationInput 9개 필드 전부 전송
       // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환
-      // brand_name: 로그인 유저의 company_name 사용
+      // brand_name: 브랜드 자동매핑(auth 로그인 시 ftc_brand_franchise 조회) 결과 우선,
+      //            없으면 company_name 폴백 (경쟁 분석 _resolve_industry 매핑률 향상)
       // TODO(existing_stores): 매장 관리 UI 추가 시 실제 데이터 연동 (현재는 빈 배열)
       const payload = {
         business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
-        brand_name: user?.company_name || '',
+        brand_name: brand?.brand_name || user?.company_name || '',
         target_district: selectedDongs[0] || '서교동',
         target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
         existing_stores: [],
@@ -5192,6 +5199,58 @@ function SimulatorDashboard({
                                   is_franchise: s.is_franchise ?? false,
                                   category: s.category,
                                 }))}
+                              onSpotClick={async (loc) => {
+                                // 공실 번호 마커 클릭 → ABM 탭 전환 + 해당 스팟만 1000 에이전트 시뮬
+                                if (!simResult || abmLoading) return;
+                                setDashboardMode('abm');
+                                setAbmFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
+                                setAbmLoading(true);
+                                setAbmError(null);
+                                setAbmResult(null);
+                                try {
+                                  const res = await fetch('/api/simulate-abm', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      target_district: loc.name,
+                                      business_type: businessType,
+                                      brand_name:
+                                        brand?.brand_name || user?.company_name || '신규 매장',
+                                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                      langgraph_result: (simResult as any)._raw ?? simResult,
+                                      n_agents: 1000,
+                                      days: 1,
+                                      spot_lat: loc.lat,
+                                      spot_lon: loc.lng,
+                                      scenario: {
+                                        weather_override: null,
+                                        date_override: null,
+                                        weekend_force: false,
+                                        rent_shock_pct: 0.0,
+                                      },
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (!res.ok) {
+                                    setAbmError(
+                                      data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`,
+                                    );
+                                  } else if (data.status === 'error') {
+                                    setAbmError(
+                                      data?.message ||
+                                        'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
+                                    );
+                                  } else {
+                                    setAbmResult(data);
+                                  }
+                                } catch (err) {
+                                  setAbmError(
+                                    `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
+                                  );
+                                } finally {
+                                  setAbmLoading(false);
+                                }
+                              }}
                             />
                           </div>
                         </div>
@@ -5204,12 +5263,16 @@ function SimulatorDashboard({
                         abmError={abmError}
                         targetDistrict={selectedDongs[0] || '서교동'}
                         vacancySpots={simResult?.vacancySpots}
+                        focusSpot={abmFocusSpot}
                         onClearResult={() => {
                           setAbmResult(null);
                           setAbmError(null);
+                          setAbmFocusSpot(null);
+                          setDashboardMode('map');
                         }}
                         onSpotClick={async (spot) => {
                           if (!simResult || abmLoading) return;
+                          setAbmFocusSpot({ lat: spot.lat, lon: spot.lon, label: spot.dong_name });
                           setAbmLoading(true);
                           setAbmError(null);
                           try {
@@ -5220,9 +5283,9 @@ function SimulatorDashboard({
                                 // 클릭한 스팟의 동을 target 으로 강제 (선택된 동과 다를 수 있음)
                                 target_district: spot.dong_name,
                                 business_type: businessType,
-                                brand_name: simResult.recommendation || '신규 스팟 시뮬',
+                                brand_name: brand?.brand_name || user?.company_name || '신규 매장',
                                 langgraph_result: (simResult as any)._raw ?? simResult,
-                                n_agents: 100,
+                                n_agents: 1000,
                                 days: 1,
                                 spot_lat: spot.lat,
                                 spot_lon: spot.lon,
@@ -5263,9 +5326,9 @@ function SimulatorDashboard({
                               body: JSON.stringify({
                                 target_district: selectedDongs[0] || '서교동',
                                 business_type: businessType,
-                                brand_name: simResult.recommendation || '신규 매장',
+                                brand_name: brand?.brand_name || user?.company_name || '신규 매장',
                                 langgraph_result: (simResult as any)._raw ?? simResult,
-                                n_agents: 100,
+                                n_agents: 1000,
                                 days: 1,
                                 scenario: {
                                   weather_override: scenario.weather_override,
@@ -5388,7 +5451,7 @@ function SimulatorDashboard({
           const res = await saveSim.save({
             client_name: clientName,
             district: selectedDongs[0] || '연남동',
-            brand_name: user?.company_name || '브랜드 미지정',
+            brand_name: brand?.brand_name || user?.company_name || '브랜드 미지정',
             business_type: businessType,
             scenario: null, // Phase 1: scenario 입력 UI 아직 없음
             simulation_result: rawSimResult,
