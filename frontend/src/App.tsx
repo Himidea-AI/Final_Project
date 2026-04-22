@@ -2317,7 +2317,10 @@ function SimulatorDashboard({
   const [dashboardMode, setDashboardMode] = useState<'data' | 'map' | 'abm'>('data');
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [selectedGu] = useState('마포구');
-  const [selectedDongs, setSelectedDongs] = useState<string[]>(() => [...DONG_DATA['마포구']]);
+  // [UX] 동 선택 1~4개 제한 — 파이프라인 성능 + 레이더 차트 가독성 한계
+  const [selectedDongs, setSelectedDongs] = useState<string[]>(() =>
+    DONG_DATA['마포구'].slice(0, 4),
+  );
   const [dongDropdownOpen, setDongDropdownOpen] = useState(false);
 
   // [Frontend Mockup] 백엔드 연동 보류 — SimulationInput 확장 후 페이로드 매핑 필요
@@ -2749,22 +2752,33 @@ function SimulatorDashboard({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [reportState, setReportState]);
 
-  const toggleDong = useCallback((dong: string) => {
-    setSelectedDongs((prev) => {
-      if (prev.includes(dong)) {
-        if (prev.length <= 1) return prev; // 최소 1개
-        return prev.filter((d) => d !== dong);
-      }
-      return [...prev, dong];
-    });
-  }, []);
+  const MAX_DONGS = 4;
 
+  const toggleDong = useCallback(
+    (dong: string) => {
+      setSelectedDongs((prev) => {
+        if (prev.includes(dong)) {
+          if (prev.length <= 1) return prev; // 최소 1개
+          return prev.filter((d) => d !== dong);
+        }
+        if (prev.length >= MAX_DONGS) {
+          showToast('info', `동은 최대 ${MAX_DONGS}개까지 선택할 수 있습니다.`);
+          return prev;
+        }
+        return [...prev, dong];
+      });
+    },
+    [showToast],
+  );
+
+  // [UX] "전체" 버튼 → "최대 4개 채우기" 토글로 의미 변경.
+  // 4개 이미 선택 상태면 첫 1개만 남기고 해제 (all selected 의미 유지).
   const toggleAllDongs = useCallback(() => {
     const all = DONG_DATA[selectedGu];
-    if (selectedDongs.length === all.length) {
-      setSelectedDongs([all[0]]); // 전체 해제 시 첫 번째만 유지
+    if (selectedDongs.length >= MAX_DONGS) {
+      setSelectedDongs([all[0]]);
     } else {
-      setSelectedDongs([...all]);
+      setSelectedDongs(all.slice(0, MAX_DONGS));
     }
   }, [selectedGu, selectedDongs]);
 
@@ -2924,9 +2938,7 @@ function SimulatorDashboard({
                 className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
               >
                 <span className="truncate">
-                  {selectedDongs.length === DONG_DATA[selectedGu].length
-                    ? `전체 ${selectedDongs.length}개 동`
-                    : `${selectedDongs.length}개 동 선택됨`}
+                  {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
                 </span>
                 <ChevronRight
                   size={14}
@@ -2941,9 +2953,9 @@ function SimulatorDashboard({
                     onClick={toggleAllDongs}
                     className="w-full text-left px-3 py-2 text-xs font-medium border-b border-[#3a3633] transition-colors text-[#818cf8] hover:bg-[#818cf8]/10"
                   >
-                    {selectedDongs.length === DONG_DATA[selectedGu].length
-                      ? '전체 해제'
-                      : '전체 선택'}
+                    {selectedDongs.length >= MAX_DONGS
+                      ? `전체 해제 (1개만 유지)`
+                      : `최대 ${MAX_DONGS}개 채우기`}
                   </button>
                   {DONG_DATA[selectedGu].map((dong) => {
                     const checked = selectedDongs.includes(dong);
