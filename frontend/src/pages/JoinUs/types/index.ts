@@ -1,5 +1,5 @@
 export interface Plan {
-  id: "starter" | "growth" | "enterprise";
+  id: 'starter' | 'growth' | 'enterprise';
   name: string;
   target: string;
   price: string;
