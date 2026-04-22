@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from dotenv import load_dotenv
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
@@ -26,13 +27,12 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
-_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
-_host = os.environ.get("POSTGRES_HOST", "192.168.0.28")
-_port = os.environ.get("POSTGRES_PORT", "5432")
-_db = os.environ.get("POSTGRES_DB", "mapo_simulator")
+# backend/.env 로드 (POSTGRES_URL 등) — 환경변수 미설정 시 RDS URL 사용
+load_dotenv(PROJECT_ROOT / "backend" / ".env")
+
 DB_URL = os.environ.get(
     "POSTGRES_URL",
-    f"postgresql://postgres:{_pw}@{_host}:{_port}/{_db}",
+    "postgresql://postgres:MapoSpotter1!%23@mapo-simulator.cx8eakyuk1jf.ap-northeast-2.rds.amazonaws.com:5432/mapo_simulator",
 )
 
 # 피처 컬럼 (district_sales 테이블 기준)
@@ -157,32 +157,10 @@ def load_sales_data(
             df = pd.read_csv(csv_path, dtype={"dong_code": str})
             logger.info("CSV에서 로드 완료: %s (%d rows)", csv_path, len(df))
         else:
-            # 개별 파일 시도 (dong_prefix 없으면 서울 전체 우선)
             sales_csv = DATA_DIR / ("seoul_district_sales.csv" if dong_prefix is None else "district_sales.csv")
             if sales_csv.exists():
-                df = pd.read_csv(sales_csv, dtype={"dong_code": str, "행정동코드": str})
-                # rename if needed (원본 한글 컬럼명 → 영문)
-                csv_rename = {
-                    "STDR_YYQU_CD": "quarter",
-                    "행정동코드": "dong_code",
-                    "행정동명": "dong_name",
-                    "SVC_INDUTY_CD": "industry_code",
-                    "SVC_INDUTY_CD_NM": "industry_name",
-                    "THSMON_SELNG_AMT": "monthly_sales",
-                    "THSMON_SELNG_CO": "monthly_count",
-                    "MDWK_SELNG_AMT": "weekday_sales",
-                    "WKEND_SELNG_AMT": "weekend_sales",
-                    "ML_SELNG_AMT": "male_sales",
-                    "FML_SELNG_AMT": "female_sales",
-                    "AGRDE_10_SELNG_AMT": "age_10_sales",
-                    "AGRDE_20_SELNG_AMT": "age_20_sales",
-                    "AGRDE_30_SELNG_AMT": "age_30_sales",
-                    "AGRDE_40_SELNG_AMT": "age_40_sales",
-                    "AGRDE_50_SELNG_AMT": "age_50_sales",
-                    "AGRDE_60_ABOVE_SELNG_AMT": "age_60_above_sales",
-                }
-                df = df.rename(columns={k: v for k, v in csv_rename.items() if k in df.columns})
-                logger.info("개별 CSV에서 로드: %s (%d rows)", sales_csv, len(df))
+                df = pd.read_csv(sales_csv, dtype={"dong_code": str})
+                logger.info("CSV에서 로드: %s (%d rows)", sales_csv, len(df))
             else:
                 raise FileNotFoundError(f"데이터를 찾을 수 없습니다. DB 접속 실패 & CSV 없음: {sales_csv}")
 
@@ -200,6 +178,7 @@ def load_store_data(
     """store_quarterly 데이터를 로드한다."""
     df = None
 
+    # 1) DB에서 로드 시도
     try:
         table = "seoul_district_stores" if dong_prefix is None else "store_quarterly"
         where = f" WHERE dong_code LIKE '{dong_prefix}%'" if dong_prefix else ""
@@ -209,27 +188,15 @@ def load_store_data(
     except Exception as exc:
         logger.warning("DB 접속 실패, CSV fallback 시도: %s", exc)
 
+    # 2) CSV fallback
     if df is None or df.empty:
         if csv_path and Path(csv_path).exists():
             df = pd.read_csv(csv_path, dtype={"dong_code": str})
         else:
             stores_csv = DATA_DIR / ("seoul_district_stores.csv" if dong_prefix is None else "district_stores.csv")
             if stores_csv.exists():
-                df = pd.read_csv(stores_csv, dtype={"dong_code": str, "행정동코드": str})
-                store_rename = {
-                    "STDR_YYQU_CD": "quarter",
-                    "행정동코드": "dong_code",
-                    "행정동명": "dong_name",
-                    "SVC_INDUTY_CD": "industry_code",
-                    "SVC_INDUTY_CD_NM": "industry_name",
-                    "STOR_CO": "store_count",
-                    "OPBIZ_STOR_CO": "open_count",
-                    "CLSBIZ_STOR_CO": "close_count",
-                    "FRC_STOR_CO": "franchise_count",
-                    "CLSBIZ_RT": "closure_rate",
-                }
-                df = df.rename(columns={k: v for k, v in store_rename.items() if k in df.columns})
-                logger.info("개별 CSV에서 로드: %s (%d rows)", stores_csv, len(df))
+                df = pd.read_csv(stores_csv, dtype={"dong_code": str})
+                logger.info("CSV에서 로드: %s (%d rows)", stores_csv, len(df))
             else:
                 logger.warning("store_quarterly 데이터 없음, 빈 DataFrame 반환")
                 return pd.DataFrame()

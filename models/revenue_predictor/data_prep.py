@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sklearn.preprocessing import MinMaxScaler
 
 logger = logging.getLogger(__name__)
@@ -50,8 +51,13 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _MAPO_CSV = _PROJECT_ROOT / "data" / "processed" / "district_stores.csv"
 _SEOUL_CSV = _PROJECT_ROOT / "data" / "processed" / "seoul_district_stores.csv"
 
+load_dotenv(_PROJECT_ROOT / "backend" / ".env")
+
 # DB 접속 정보 (환경변수 우선)
-_DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@192.168.0.28:5432/mapo_simulator")
+_DB_URL = os.environ.get(
+    "POSTGRES_URL",
+    "postgresql://postgres:MapoSpotter1!%23@mapo-simulator.cx8eakyuk1jf.ap-northeast-2.rds.amazonaws.com:5432/mapo_simulator",
+)
 
 
 # ---------------------------------------------------------------------------

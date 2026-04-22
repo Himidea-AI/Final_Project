@@ -76,7 +76,7 @@ DEFAULT_FINETUNE_CONFIG: dict = {
     "dilations": [1, 2],  # receptive field = 4 (pretrain과 동일)
     "dropout": 0.2,
     # 파인튜닝 하이퍼파라미터
-    "pretrained_path": str(WEIGHTS_DIR / "pretrained_tcn.pt"),
+    "pretrained_path": str(WEIGHTS_DIR / "pretrained_tcn_seed2026.pt"),
     "freeze_epochs": 10,  # 1단계: TCN 고정, FC만 학습
     "freeze_lr": 5e-4,
     "unfreeze_epochs": 50,  # 2단계: 전체 파라미터 낮은 학습률로 학습
