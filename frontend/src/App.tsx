@@ -4526,6 +4526,26 @@ function SimulatorDashboard({
                                         })}
                                       </div>
                                     )}
+                                    {cr.summary && cr.summary.length > 0 && (
+                                      <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]">
+                                        <div className="text-[10px] text-[#9ca3af] mb-1">
+                                          AI 분석 요약
+                                        </div>
+                                        {cr.summary.map((sentence, idx) => (
+                                          <div
+                                            key={idx}
+                                            className="flex items-start gap-1.5 px-2.5 py-1.5 bg-[#1e1b18] rounded-lg border border-[#3a3633]"
+                                          >
+                                            <span className="mt-0.5 text-[#f97316] text-[10px] flex-shrink-0">
+                                              •
+                                            </span>
+                                            <span className="text-[10px] text-[#d1d5db] leading-relaxed">
+                                              {sentence}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })()

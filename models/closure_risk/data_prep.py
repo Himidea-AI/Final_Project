@@ -7,6 +7,8 @@ build_closure_risk_dataset():
                        OR store_count 2분기 연속 감소
                        OR monthly_sales 전년동기 -25% 이상
     - lag 피처: closure_rate_lag1/2, store_change, sales_yoy 등
+    - 추가 피처: rent_1f_lag1/rent_change(임대료), vacancy_rate(공실률),
+                 trend_score(네이버 트렌드), adstrd_flpop(행정동 유동인구)
 
 담당: B2 — 수지니
 """
@@ -18,19 +20,18 @@ import os
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
-_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
-_host = os.environ.get("POSTGRES_HOST", "192.168.0.28")
-_port = os.environ.get("POSTGRES_PORT", "5432")
-_db = os.environ.get("POSTGRES_DB", "mapo_simulator")
+load_dotenv(PROJECT_ROOT / "backend" / ".env")
+
 DB_URL = os.environ.get(
     "POSTGRES_URL",
-    f"postgresql://postgres:{_pw}@{_host}:{_port}/{_db}",
+    "postgresql://postgres:MapoSpotter1!%23@mapo-simulator.cx8eakyuk1jf.ap-northeast-2.rds.amazonaws.com:5432/mapo_simulator",
 )
 
 # LightGBM 브랜치용 lag/정적 피처
@@ -45,7 +46,14 @@ LGBM_FEATURES = [
     "monthly_sales_lag1",  # 직전 분기 매출 (log1p)
     "bus_flpop",  # 버스 유동인구 (CSV 캐시)
     "quarter_num",  # 계절성 (1~4)
-    # rent_1f, vacancy_rate 제외 — DB/CSV에 데이터 없어 항상 0 (상수 피처)
+    # 임대료/공실 — build_timeseries()가 RDS(seoul_golmok_rent)에서 실제 로드
+    "rent_1f_lag1",  # 직전 분기 1층 환산임대료 (고정비용 지표)
+    "rent_change",   # 임대료 변화율 (임대료 상승 → 폐업 위험 ↑)
+    "vacancy_rate",  # 공실률 (상권 경기 침체 신호)
+    # 상권 수요 — 실제 데이터 존재 확인 (null 0%, zero 9.3%)
+    "trend_score",   # 네이버 검색 트렌드 (업종 관심도 감소 → 수요 감소 신호)
+    # 유동인구 — adstrd_flpop(null 0%, zero 0%)이 bus_flpop(zero 49%)보다 완전
+    "adstrd_flpop",  # 행정동 전체 유동인구
 ]
 
 # TCN 브랜치는 data_prep.ALL_FEATURES 34개 시계열 그대로 사용
@@ -159,6 +167,14 @@ def _engineer_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     df["monthly_sales_lag1"] = df.groupby(gk)["monthly_sales"].shift(1)
     sales_4q = df.groupby(gk)["monthly_sales"].shift(4)
     df["sales_yoy_change"] = (df["monthly_sales"] - sales_4q) / (sales_4q.abs() + 1e-6)
+
+    # 임대료 lag (build_timeseries에서 RDS seoul_golmok_rent로 실제 로드됨)
+    if "rent_1f" in df.columns:
+        df["rent_1f_lag1"] = df.groupby(gk)["rent_1f"].shift(1)
+        df["rent_change"] = (df["rent_1f"] - df["rent_1f_lag1"]) / (df["rent_1f_lag1"].abs() + 1)
+    else:
+        df["rent_1f_lag1"] = 0.0
+        df["rent_change"] = 0.0
 
     return df
 
