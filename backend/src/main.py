@@ -163,10 +163,18 @@ _BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 업종 → kakao 검색 키워드 매핑 (competitor_intel.BRAND_PROFILE과 동일 계열)
 _BIZ_TO_KAKAO_KW: Dict[str, str] = {
-    "치킨전문점": "치킨", "커피-음료": "카페", "한식음식점": "한식",
+    # 정식 업종명
+    "치킨전문점": "치킨", "커피-음료": "커피", "한식음식점": "한식",
     "중식음식점": "중식", "일식음식점": "일식", "양식음식점": "양식",
     "제과점": "베이커리", "패스트푸드점": "버거", "분식전문점": "분식",
     "호프-간이주점": "주점",
+    # 프론트엔드 단축 업종명
+    "치킨": "치킨", "커피": "커피", "카페": "커피", "한식": "한식",
+    "중식": "중식", "일식": "일식", "양식": "양식", "베이커리": "베이커리",
+    "버거": "버거", "분식": "분식", "주점": "주점",
+    # 영문 업종명 (BIZ_TYPE_NORMALIZE에서 한국어로 변환되기 전 fallback)
+    "chicken": "치킨", "cafe": "커피", "coffee": "커피", "burger": "버거",
+    "bakery": "베이커리", "korean": "한식",
 }
 
 
@@ -178,6 +186,7 @@ async def _collect_all_competitor_locations(
     """winner + top3 추천 동 각각의 500m 반경 경쟁업체 좌표를 수집해 통합 반환."""
     keyword = _BIZ_TO_KAKAO_KW.get(business_type, business_type)
     districts = list({winner} | set(top3 or []))  # 중복 제거
+    print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
     results: list[dict] = []
     seen_ids: set = set()
 
@@ -185,11 +194,12 @@ async def _collect_all_competitor_locations(
         try:
             dong_code = _resolve_dong_code(dong_name)
             if not dong_code:
+                print(f"[all_competitors] dong_code 없음: {dong_name}")
                 return
-            data = await asyncio.get_event_loop().run_in_executor(
-                None, _analyze_competition, dong_code, keyword, 500
-            )
-            for s in (data.get("samples") or []):
+            data = await asyncio.to_thread(_analyze_competition, dong_code, keyword, 500)
+            samples = data.get("samples") or []
+            print(f"[all_competitors] {dong_name}({dong_code}) → {len(samples)}개 샘플")
+            for s in samples:
                 cid = s.get("kakao_id") or f"{s.get('place_name')}_{s.get('lat')}_{s.get('lon')}"
                 if cid in seen_ids:
                     continue
@@ -207,9 +217,11 @@ async def _collect_all_competitor_locations(
                         "source_dong": dong_name,
                     })
         except Exception as e:
-            logging.warning(f"[all_competitors] {dong_name} 수집 실패: {e}")
+            import traceback
+            print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
 
     await asyncio.gather(*[_fetch_one(d) for d in districts])
+    print(f"[all_competitors] 최종 결과: {len(results)}개")
     return results
 
 
@@ -313,10 +325,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             return {k: _sanitize(v) for k, v in val.items()}
         return val
 
-    # 랭킹 데이터
-    district_rankings = _sanitize(analysis.get("district_rankings", []))
-    winner_district = _sanitize(analysis.get("winner_district", target_dist))
-    top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
+    # 랭킹 데이터 — state 최상위 키 우선, fallback: analysis_results
+    district_rankings = _sanitize(state.get("scouting_results") or analysis.get("district_rankings", []))
+    winner_district = _sanitize(state.get("winner_district") or analysis.get("winner_district", target_dist))
+    top_3_candidates = _sanitize(state.get("top_3_candidates") or analysis.get("top_3_candidates", []))
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
@@ -551,6 +563,7 @@ async def analyze_location(input_data: SimulationInput):
         # 추천 동 전체(winner + top3)의 경쟁업체 좌표 수집 — 지도 멀티핀용
         winner = result.get("winner_district") or input_data.target_district
         top3 = result.get("top_3_candidates") or []
+        print(f"[all_competitors] winner={winner}, top3={top3}")
         result["all_competitor_locations"] = await _collect_all_competitor_locations(
             winner, top3, input_data.business_type
         )
