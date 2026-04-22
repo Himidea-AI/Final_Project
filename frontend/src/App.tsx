@@ -2293,7 +2293,6 @@ function SimulatorDashboard({
   reportState: string;
   setReportState: (s: 'idle' | 'loading' | 'result') => void;
 }) {
-  const navigate = useNavigate();
   const [radius, setRadius] = useState(500);
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
@@ -2880,20 +2879,11 @@ function SimulatorDashboard({
       ref={dashboardRef}
       className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar"
     >
-      {/* Top bar */}
+      {/* Top bar — 타이틀만. "내 이력" 버튼은 상단 4아이콘 바의 User 아이콘으로 이관 */}
       <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-14 bg-[#1e1b18]/80 backdrop-blur-xl">
         <span className={`text-xs font-medium tracking-wider ${textSecondary}`}>
           마포구 시뮬레이터
         </span>
-        {user?.id && (
-          <button
-            type="button"
-            onClick={() => navigate(`/hq/managers/${user.id}`)}
-            className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"
-          >
-            내 이력
-          </button>
-        )}
       </div>
 
       {/* Dashboard body */}
@@ -5617,7 +5607,7 @@ function GlobalLimelightNav() {
     hasNoti?: boolean;
   }[] = [
     { type: 'folder', icon: <Folder />, label: '출점 파이프라인' },
-    { type: 'user', icon: <User />, label: '내 프로필' },
+    { type: 'user', icon: <User />, label: '내 시뮬 이력' },
     { type: 'settings', icon: <Settings />, label: '내 정보 관리' },
     { type: 'bell', icon: <Bell />, label: '알림', hasNoti: totalUnread > 0 },
   ];
@@ -5651,7 +5641,9 @@ function GlobalLimelightNav() {
     } else if (type === 'bell') {
       setOpenDropdown(openDropdown === 'bell' ? null : 'bell');
     } else if (type === 'user') {
-      setOpenDropdown(openDropdown === 'user' ? null : 'user');
+      // [UX] 드롭다운 대신 /hq 내 이력 탭으로 직행 — /simulator 헤더 "내 이력" 버튼 대체
+      setOpenDropdown(null);
+      nav('/hq?tab=history');
     }
   };
 
