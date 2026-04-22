@@ -58,7 +58,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
             _cached_narr = _cached_forecast.get("narrative", "") if isinstance(_cached_forecast, dict) else ""
             cached_trend_attr = build_attribution(
                 agent_id="trend_forecaster",
-                display_name="추세 예측",
+                display_name="트렌드 전망",
                 kind="LLM",
                 sources=[
                     "naver_trend_industry",
@@ -109,7 +109,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
         print(f"!!! [TREND FORECASTER ERROR] !!! DB 수집 실패: {e}")
         error_trend_attr = build_attribution(
             agent_id="trend_forecaster",
-            display_name="추세 예측",
+            display_name="트렌드 전망",
             kind="LLM",
             sources=[
                 "naver_trend_industry",
@@ -262,7 +262,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
 
     trend_attr = build_attribution(
         agent_id="trend_forecaster",
-        display_name="추세 예측",
+        display_name="트렌드 전망",
         kind="LLM",
         sources=[
             "naver_trend_industry",

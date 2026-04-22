@@ -209,7 +209,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
                 _share_pct = 0
             cached_demo_attr = build_attribution(
                 agent_id="demographic_depth",
-                display_name="소비자 심층",
+                display_name="인구 심층분석",
                 kind="LLM",
                 sources=[
                     "district_sales",
@@ -287,7 +287,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
                 pass
         empty_demo_attr = build_attribution(
             agent_id="demographic_depth",
-            display_name="소비자 심층",
+            display_name="인구 심층분석",
             kind="LLM",
             sources=[
                 "district_sales",
@@ -410,7 +410,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
         _share_pct_main = 0
     demo_attr = build_attribution(
         agent_id="demographic_depth",
-        display_name="소비자 심층",
+        display_name="인구 심층분석",
         kind="LLM",
         sources=[
             "district_sales",

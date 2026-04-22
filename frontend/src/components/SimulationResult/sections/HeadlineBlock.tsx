@@ -17,6 +17,15 @@ const RISK_LABEL: Record<string, string> = {
   danger: '위험',
 };
 
+function localizeTerms(text: string): string {
+  return text
+    .replace(/'caution'/gi, "'주의'").replace(/'safe'/gi, "'안전'").replace(/'danger'/gi, "'위험'")
+    .replace(/\bcaution\b/gi, '주의').replace(/\bsafe\b/gi, '안전').replace(/\bdanger\b/gi, '위험')
+    .replace(/\bsparse\b/gi, '희박').replace(/\bmedium\b/gi, '보통').replace(/\bhigh\b/gi, '높음')
+    .replace(/\bsaturated\b/gi, '포화').replace(/\byellow\b/gi, '주의').replace(/\bgreen\b/gi, '양호')
+    .replace(/\bred\b/gi, '위험').replace(/\bwarning\b/gi, '경고');
+}
+
 export function HeadlineBlock({ simResult }: Props) {
   const sim = simResult as SimulationOutput & Record<string, any>;
 

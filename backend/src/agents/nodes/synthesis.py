@@ -63,8 +63,11 @@ async def synthesis_node(state: AgentState) -> dict:
     store_area = state.get("store_area", 15.0)
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
-    # v4: articles 필드가 list[str] → list[{article_ref, content}]로 변경 — 기존 v3 캐시 무효화
-    cache_key = f"v4:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    # v6: target_districts 포함 — 선택 동 세트가 달라지면 synthesis 재실행 (v5 무효화)
+    _winner_for_cache = state.get("winner_district", target_district)
+    _raw_td = state.get("target_districts") or [target_district]
+    _td_key = ",".join(sorted(set(d for d in _raw_td if d)))
+    cache_key = f"v6:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -209,12 +212,14 @@ async def synthesis_node(state: AgentState) -> dict:
     else:
         competitor_block = ""
 
+    # Phase 2 (llm_analysis_phase)에서 이미 winner 동 기준으로 분석이 실행됐음
+    # target_district == winner_district (graph.py Phase 2에서 교체)
     prompt = (
         "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
-        f"브랜드:{brand_name}({business_type}) | 선택지역:{target_district} | 법률리스크:{overall_legal_risk}\n"
+        f"브랜드:{brand_name}({business_type}) | 추천입지:{winner_district} | 법률리스크:{overall_legal_risk}\n"
         f"입지랭킹: {ranking_summary}\n"
-        f"상권({target_district}):\n{market_report[:1500]}\n"
-        f"인구({target_district}):\n{population_report[:1500]}\n"
+        f"상권({winner_district}):\n{market_report[:1500]}\n"
+        f"인구({winner_district}):\n{population_report[:1500]}\n"
         + (f"{vacancy_summary}\n" if vacancy_summary else "")
         + (f"향후 12개월 시장 전망:\n{trend_summary_for_llm}\n" if trend_summary_for_llm else "")
         + (f"{competitor_block}\n" if competitor_block else "")
@@ -224,7 +229,7 @@ async def synthesis_node(state: AgentState) -> dict:
         f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
         f"자본금={initial_capital:,}원 | 임대예산={monthly_rent_budget:,}원({store_area}평)\n\n"
         "요구사항:\n"
-        "1. 1순위 추천 지역과 이유, 2~4순위 후보 간략 설명\n"
+        f"1. 1순위 추천 지역은 반드시 [{winner_district}]로 시작하고 이유를 설명, 2~4순위 후보 간략 설명\n"
         "2. 창업자 조건(객단가·시간대·자본금·임대예산) 적합성 판단\n"
         "3. 경쟁인텔(market_entry_signal·카니발)을 final_recommendation 에 반영\n"
         "4. 창업 가부 결정 및 전략 제안\n"
@@ -250,7 +255,7 @@ async def synthesis_node(state: AgentState) -> dict:
         final_strategy: FinalStrategyResult = await llm.ainvoke(
             [
                 SystemMessage(content=prompt),
-                HumanMessage(content=f"{brand_name}의 {target_district} 출점 최종 전략 보고서를 완성해줘."),
+                HumanMessage(content=f"{brand_name}의 {winner_district} 출점 최종 전략 보고서를 완성해줘."),
             ]
         )
 
