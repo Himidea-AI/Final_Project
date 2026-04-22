@@ -18,13 +18,12 @@ import numpy as np
 import torch
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / "backend" / ".env")
 
-_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
-_host = os.environ.get("POSTGRES_HOST", "192.168.0.28")
-_port = os.environ.get("POSTGRES_PORT", "5432")
-_db = os.environ.get("POSTGRES_DB", "mapo_simulator")
-DB_URL = os.environ.get("POSTGRES_URL", f"postgresql://postgres:{_pw}@{_host}:{_port}/{_db}")
+DB_URL = os.environ.get(
+    "POSTGRES_URL",
+    "postgresql://postgres:MapoSpotter1!%23@mapo-simulator.cx8eakyuk1jf.ap-northeast-2.rds.amazonaws.com:5432/mapo_simulator",
+)
 
 from models.customer_revenue.data_prep import DONG_TO_IDX, INDUSTRY_TO_IDX, load_mappings  # noqa: E402
 from models.customer_revenue.model import WEIGHTS_DIR, MLPPredictor, build_model  # noqa: E402

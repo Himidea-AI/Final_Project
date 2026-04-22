@@ -39,7 +39,7 @@ DEFAULT_CONFIG: dict = {
     "val_ratio": 0.2,
     "random_state": 42,
     # TCN fine-tune
-    "tcn_epochs": 30,
+    "tcn_epochs": 50,
     "tcn_lr": 5e-4,
     "tcn_batch_size": 32,
     "tcn_patience": 7,
@@ -54,6 +54,7 @@ DEFAULT_CONFIG: dict = {
     "lgbm_learning_rate": 0.05,
     # 저장 경로
     "tcn_weights_path": str(WEIGHTS_DIR / "closure_risk_tcn.pt"),
+    "tcn_scaler_path": str(WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"),
     "lgbm_model_path": str(WEIGHTS_DIR / "closure_risk_lgbm.pkl"),
     "ensemble_weights_path": str(WEIGHTS_DIR / "ensemble_weights.pkl"),
 }
@@ -143,15 +144,15 @@ def train_tcn(
     y: pd.Series,
     config: dict,
     pretrained_path: Path,
-) -> tuple[TCNClassifier, float]:
-    """TCNClassifier fine-tune. 검증 AUC 반환."""
+) -> tuple[TCNClassifier, float, object]:
+    """TCNClassifier fine-tune. 검증 AUC 및 feat_scaler 반환."""
 
     # pretrained 모델과 input_size 일치를 위해 ALL_FEATURES 전체 사용
     # 누락 피처는 _build_tcn_sequences 내부에서 0으로 패딩
     feature_cols = list(ALL_FEATURES)
     input_size = len(feature_cols)
 
-    X_tr, X_val, y_tr, y_val, _ = _build_tcn_sequences(
+    X_tr, X_val, y_tr, y_val, feat_scaler = _build_tcn_sequences(
         df_full, y, config["window_size"], feature_cols, config["val_ratio"]
     )
 
@@ -214,7 +215,7 @@ def train_tcn(
         model.load_state_dict(best_state)
 
     logger.info("TCNClassifier 학습 완료 (best_val_AUC=%.4f)", best_auc)
-    return model, best_auc
+    return model, best_auc, feat_scaler
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +246,8 @@ def train(config: dict | None = None) -> None:
     logger.info("LightGBM val_AUC=%.4f", lgbm_auc)
 
     # 3. TCN 학습 (전이학습)
-    pretrained_path = TCN_WEIGHTS_DIR / "finetuned_mapo_tcn_seed2026.pt"
-    tcn_model, tcn_auc = train_tcn(df_full, y, cfg, pretrained_path)
+    pretrained_path = TCN_WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"
+    tcn_model, tcn_auc, tcn_scaler = train_tcn(df_full, y, cfg, pretrained_path)
 
     # 4. 앙상블 가중치 결정 (AUC 비례)
     total = lgbm_auc + tcn_auc
@@ -263,6 +264,10 @@ def train(config: dict | None = None) -> None:
     logger.info("LightGBM 저장: %s", cfg["lgbm_model_path"])
 
     tcn_model.save_weights(cfg["tcn_weights_path"])
+
+    with open(cfg["tcn_scaler_path"], "wb") as f:
+        pickle.dump(tcn_scaler, f)
+    logger.info("TCN 스케일러 저장: %s", cfg["tcn_scaler_path"])
 
     ensemble_weights = {
         "w_lgbm": w_lgbm,

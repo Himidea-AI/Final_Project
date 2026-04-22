@@ -57,6 +57,7 @@ export interface ShapResult {
   base_value: number; // SHAP 기준 예측값
   predicted_value: number; // 모델 예측 매출액
   predicted_value_unit: string; // 단위 (예: "원")
+  summary?: string[]; // 자연어 요약 문장 목록
   is_mock: boolean; // mock 데이터 여부
 }
 
@@ -97,6 +98,7 @@ export interface ClosureRisk {
   risk_score: number;
   risk_level: 'safe' | 'caution' | 'danger';
   top_signals: ClosureRiskSignal[];
+  summary?: string[]; // 자연어 요약 문장 목록
   is_mock: boolean;
 }
 

@@ -123,6 +123,22 @@ export function ShapChart({ data }: Props) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+
+      {/* 자연어 요약 문장 */}
+      {data.summary && data.summary.length > 0 && (
+        <div className="mt-4 space-y-2">
+          <p className="text-xs text-[#9ca3af] font-medium">AI 분석 요약</p>
+          {data.summary.map((sentence, idx) => (
+            <div
+              key={idx}
+              className="flex items-start gap-2 px-3 py-2 bg-[#1e1b18] rounded-lg border border-[#3a3633]"
+            >
+              <span className="mt-0.5 text-[#f97316] text-xs flex-shrink-0">•</span>
+              <span className="text-xs text-[#d1d5db] leading-relaxed">{sentence}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
