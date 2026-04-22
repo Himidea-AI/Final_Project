@@ -1,8 +1,8 @@
 /**
  * Auth Context — 로그인 상태 관리
  *
- * 현재: localStorage 기반 (JWT 미구현)
- * TODO: 백엔드 JWT 발급 후 토큰 기반으로 교체
+ * 저장 위치: localStorage 'spotter_auth' = { user, brand, token }.
+ * token은 백엔드가 발급한 JWT (HS256). axios interceptor가 Bearer로 자동 주입.
  */
 
 import { createContext, useContext, useState, useCallback } from 'react';
@@ -30,7 +30,8 @@ interface AuthState {
   isLoggedIn: boolean;
   user: User | null;
   brand: Brand | null;
-  login: (user: User, brand: Brand | null) => void;
+  token: string | null;
+  login: (user: User, brand: Brand | null, token?: string | null) => void;
   logout: () => void;
 }
 
@@ -38,26 +39,31 @@ const AuthContext = createContext<AuthState>({
   isLoggedIn: false,
   user: null,
   brand: null,
+  token: null,
   login: () => {},
   logout: () => {},
 });
 
 // localStorage에서 인증 상태를 동기적으로 읽음 (SSR safe).
 // 첫 렌더부터 올바른 isLoggedIn 반영 → ProtectedRoute의 잘못된 /login 리다이렉트 방지.
-function _readStoredAuth(): { user: User | null; brand: Brand | null } {
-  if (typeof window === 'undefined') return { user: null, brand: null };
+function _readStoredAuth(): { user: User | null; brand: Brand | null; token: string | null } {
+  if (typeof window === 'undefined') return { user: null, brand: null, token: null };
   try {
     const stored = window.localStorage.getItem('spotter_auth');
-    if (!stored) return { user: null, brand: null };
+    if (!stored) return { user: null, brand: null, token: null };
     const parsed = JSON.parse(stored);
-    return { user: parsed.user ?? null, brand: parsed.brand ?? null };
+    return {
+      user: parsed.user ?? null,
+      brand: parsed.brand ?? null,
+      token: typeof parsed.token === 'string' ? parsed.token : null,
+    };
   } catch {
     try {
       window.localStorage.removeItem('spotter_auth');
     } catch {
       /* noop */
     }
-    return { user: null, brand: null };
+    return { user: null, brand: null, token: null };
   }
 }
 
@@ -65,16 +71,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // lazy initial state — 첫 렌더부터 localStorage 반영
   const [user, setUser] = useState<User | null>(() => _readStoredAuth().user);
   const [brand, setBrand] = useState<Brand | null>(() => _readStoredAuth().brand);
+  const [token, setToken] = useState<string | null>(() => _readStoredAuth().token);
 
-  const login = useCallback((u: User, b: Brand | null) => {
+  const login = useCallback((u: User, b: Brand | null, t?: string | null) => {
     setUser(u);
     setBrand(b);
-    localStorage.setItem('spotter_auth', JSON.stringify({ user: u, brand: b }));
+    setToken(t ?? null);
+    localStorage.setItem('spotter_auth', JSON.stringify({ user: u, brand: b, token: t ?? null }));
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
     setBrand(null);
+    setToken(null);
     localStorage.removeItem('spotter_auth');
   }, []);
 
@@ -84,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoggedIn: !!user,
         user,
         brand,
+        token,
         login,
         logout,
       }}
@@ -106,8 +116,8 @@ export function useAuth() {
 */
 
 export type LoginResult =
-  | { success: true; role: 'master'; user: User; brand: Brand | null }
-  | { success: true; role: 'manager'; user: User }
+  | { success: true; role: 'master'; user: User; brand: Brand | null; token: string | null }
+  | { success: true; role: 'manager'; user: User; token: string | null }
   | {
       success: false;
       reason: 'pending_approval' | 'invalid_credentials' | 'network_error';
@@ -129,6 +139,7 @@ export async function loginWithFallback(email: string, password: string): Promis
         role: 'master',
         user: { ...masterData.user, role: 'master' },
         brand: masterData.brand ?? null,
+        token: typeof masterData.access_token === 'string' ? masterData.access_token : null,
       };
     }
 
@@ -148,6 +159,7 @@ export async function loginWithFallback(email: string, password: string): Promis
           role: 'manager',
           plan: managerData.user.plan ?? '',
         },
+        token: typeof managerData.access_token === 'string' ? managerData.access_token : null,
       };
     }
 
