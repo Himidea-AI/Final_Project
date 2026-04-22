@@ -159,6 +159,18 @@ interface SimResult {
   trendForecast?: TrendForecast | null;
   // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)
   demographicReport?: DemographicReport | null;
+  // 추천 동 전체 경쟁업체 좌표 (winner + top3 합산)
+  allCompetitorLocations?: Array<{
+    id: string;
+    place_name: string;
+    brand_name?: string;
+    lat: number;
+    lng: number;
+    distance_m?: number;
+    is_franchise?: boolean;
+    category?: string;
+    source_dong?: string;
+  }>;
 }
 
 import {
@@ -2710,6 +2722,9 @@ function SimulatorDashboard({
         // [PR #75] 인구통계 심층 분석
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         demographicReport: (simRes as any).demographic_report ?? null,
+        // 추천 동 전체(winner+top3) 경쟁업체 좌표 — AI 맵 멀티핀용
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        allCompetitorLocations: (simRes as any).all_competitor_locations ?? [],
       });
       setReportState('result');
     } catch (err) {
@@ -4870,15 +4885,16 @@ function SimulatorDashboard({
                                     }))
                                   : undefined
                               }
-                              competitors={(
-                                simResult?.competitorIntel?.competition_500m?.samples ?? []
+                              competitors={(simResult?.allCompetitorLocations?.length
+                                ? simResult.allCompetitorLocations
+                                : (simResult?.competitorIntel?.competition_500m?.samples ?? [])
                               )
-                                .filter((s: any) => s.lat && s.lon)
-                                .map((s: any, i: number) => ({
-                                  id: `comp_${i}_${s.place_name}`,
+                                .filter((s: any) => s.lat && (s.lng ?? s.lon))
+                                .map((s: any) => ({
+                                  id: s.id ?? `comp_${s.place_name}_${s.lat}`,
                                   name: s.place_name || s.brand_name || '경쟁업체',
                                   lat: s.lat,
-                                  lng: s.lon,
+                                  lng: s.lng ?? s.lon,
                                   distance_m: s.distance_m,
                                   is_franchise: s.is_franchise ?? false,
                                   category: s.category,

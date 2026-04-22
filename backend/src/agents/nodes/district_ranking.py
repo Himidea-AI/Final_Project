@@ -349,11 +349,11 @@ def _normalize_and_rank(
         f"임대료:{rent_hit}/16, 밀집도:{density_hit}/16, 트렌드:{trend_hit}/16"
     )
 
-    # 가중치 재분배: 추가 축이 있으면 기존 축에서 일부 할당
-    # 밀집도 5%, 트렌드 5% → 기존 매출에서 차감
-    w_density = 0.05 if has_density else 0.0
+    # 가중치 재분배: 경쟁밀도 15% (5% → 15%: 포화 업종 진입 페널티 강화), 트렌드 5%
+    # 경쟁밀도는 매출에서 차감 — 인구/임대료 가중치는 유지
+    w_density = 0.15 if has_density else 0.0
     w_trend = 0.05 if has_trend else 0.0
-    w_sales_adj = w_sales - w_density - w_trend  # 추가 축 없으면 원래 가중치 유지
+    w_sales_adj = max(w_sales - w_density - w_trend, 0.05)  # 매출 가중치 최소 5% 보장
 
     ranked = []
     for i, r in enumerate(raw):

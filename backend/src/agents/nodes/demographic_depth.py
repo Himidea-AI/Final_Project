@@ -233,12 +233,20 @@ async def demographic_depth_node(state: AgentState) -> dict:
         {"income_level": "unknown", "population_trend": "unknown", "elderly_ratio": None},
     )
 
-    # 매출 데이터 없으면 기본 리포트
+    # 업종 필터 데이터 없으면 전체 업종으로 재시도 (fallback)
+    industry_used = industry_filter
+    if industry_filter and (sales.get("error") or (sales.get("monthly_sales", 0) or 0) == 0):
+        print(f"[demographic] {dong_code} 업종 {industry_filter} 데이터 없음 → 전체 업종 fallback")
+        fallback_r = await market_tool.get_demographic_sales_breakdown(dong_code, None)
+        if not isinstance(fallback_r, Exception) and not fallback_r.get("error") and (fallback_r.get("monthly_sales", 0) or 0) > 0:
+            sales = fallback_r
+            industry_used = None  # fallback 사용 표시
+
+    # 그래도 데이터 없으면 기본 리포트
     if sales.get("error") or (sales.get("monthly_sales", 0) or 0) == 0:
         report = _make_empty_report(dong_code, brand_name)
         analysis = dict(state.get("analysis_results", {}) or {})
         analysis["demographic_report"] = report
-        # 캐시 핸들 정리
         if _redis is not None:
             try:
                 await _redis.aclose()
@@ -256,8 +264,9 @@ async def demographic_depth_node(state: AgentState) -> dict:
     wd_we = _calc_weekday_weekend_ratio(sales)
 
     # LLM 호출
+    fallback_note = f"\n※ 해당 업종({industry_filter}) 특화 데이터 부족으로 전체 업종 기준 분석." if (industry_filter and industry_used is None) else ""
     try:
-        prompt = _build_prompt(sales, resvis, context, brand_name, core, top3, peak, wd_we)
+        prompt = _build_prompt(sales, resvis, context, brand_name, core, top3, peak, wd_we) + fallback_note
         llm = get_fast_llm().with_structured_output(DemographicAnalysis)
         analysis_out: DemographicAnalysis = await llm.ainvoke(
             [
