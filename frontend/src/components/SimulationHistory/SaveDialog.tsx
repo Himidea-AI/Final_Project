@@ -82,14 +82,14 @@ export function SaveDialog({
             role="dialog"
             aria-modal="true"
             aria-labelledby="save-dialog-title"
-            className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl"
+            className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-stone-700 bg-stone-900 p-6 shadow-2xl"
           >
             <div className="flex items-start justify-between">
               <div>
-                <h2 id="save-dialog-title" className="text-lg font-semibold text-zinc-100">
+                <h2 id="save-dialog-title" className="text-lg font-semibold text-stone-100">
                   시뮬레이션 결과 저장
                 </h2>
-                <p className="mt-1 text-sm text-zinc-400">
+                <p className="mt-1 text-sm text-stone-400">
                   이 시뮬레이션을 상담한 고객님의 성함을 입력해주세요.
                 </p>
               </div>
@@ -98,7 +98,7 @@ export function SaveDialog({
                 onClick={onClose}
                 disabled={isSaving}
                 aria-label="닫기"
-                className="text-zinc-400 transition-colors hover:text-zinc-100 disabled:opacity-40"
+                className="text-stone-400 transition-colors hover:text-stone-100 disabled:opacity-40"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -108,7 +108,7 @@ export function SaveDialog({
               <div>
                 <label
                   htmlFor="client-name-input"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-zinc-400"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-stone-400"
                 >
                   고객님 성함
                 </label>
@@ -122,24 +122,24 @@ export function SaveDialog({
                   disabled={isSaving}
                   placeholder="예: 김철수"
                   maxLength={100}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/60 disabled:opacity-50"
+                  className="w-full rounded-md border border-stone-700 bg-stone-800 px-3 py-2 text-sm text-stone-100 placeholder:text-stone-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/60 disabled:opacity-50"
                 />
               </div>
 
-              <div className="rounded-md border border-zinc-700 bg-zinc-800/50 p-3 text-xs text-zinc-400">
+              <div className="rounded-md border border-stone-700 bg-stone-800/50 p-3 text-xs text-stone-400">
                 <div className="flex items-center gap-2">
                   <span>📅 저장 날짜</span>
-                  <span className="text-zinc-300">{nowLabel}</span>
+                  <span className="text-stone-300">{nowLabel}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span>🏪 브랜드</span>
-                  <span className="text-zinc-300">
+                  <span className="text-stone-300">
                     {meta.brandName} — {meta.district}
                   </span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span>👤 매니저</span>
-                  <span className="text-zinc-300">{meta.managerName}</span>
+                  <span className="text-stone-300">{meta.managerName}</span>
                 </div>
               </div>
 
@@ -155,7 +155,7 @@ export function SaveDialog({
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+                className="rounded-md border border-stone-700 bg-stone-800 px-4 py-2 text-sm font-medium text-stone-300 hover:bg-stone-700 disabled:opacity-40"
               >
                 취소
               </button>
@@ -163,7 +163,7 @@ export function SaveDialog({
                 type="button"
                 onClick={handleSubmit}
                 disabled={!canSubmit}
-                className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-stone-900 hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {isSaving ? '저장 중…' : '저장'}
               </button>

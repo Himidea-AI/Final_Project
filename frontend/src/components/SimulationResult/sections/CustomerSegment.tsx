@@ -53,10 +53,10 @@ export function CustomerSegment({ simResult }: Props) {
     return (
       <section>
         <SectionLabel label="TARGET CUSTOMER" subtitle="타겟 고객 매출 분석" />
-        <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center">
-          <div className="mx-auto mb-2 h-8 w-8 animate-pulse rounded-full bg-zinc-700" />
-          <div className="text-sm text-zinc-400">타겟 프로필 데이터 없음</div>
-          <div className="mt-1 text-xs text-zinc-500">
+        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center">
+          <div className="mx-auto mb-2 h-8 w-8 animate-pulse rounded-full bg-stone-700" />
+          <div className="text-sm text-stone-400">타겟 프로필 데이터 없음</div>
+          <div className="mt-1 text-xs text-stone-500">
             시뮬레이션 입력에 타겟 고객 프로필을 지정하면 세그먼트별 예상매출이 표시됩니다
           </div>
         </div>
@@ -70,13 +70,13 @@ export function CustomerSegment({ simResult }: Props) {
   return (
     <section>
       <SectionLabel label="TARGET CUSTOMER" subtitle="타겟 고객 매출 분석" />
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6">
+      <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
         {seg.profile_summary && (
           <div className="mb-5 flex items-start gap-3">
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1 text-xs font-semibold text-amber-400">
+            <div className="rounded-md border border-indigo-500/30 bg-indigo-500/5 px-3 py-1 text-xs font-semibold text-indigo-400">
               프로필
             </div>
-            <p className="text-sm leading-relaxed text-zinc-200">{seg.profile_summary}</p>
+            <p className="text-sm leading-relaxed text-stone-200">{seg.profile_summary}</p>
           </div>
         )}
 
@@ -85,7 +85,7 @@ export function CustomerSegment({ simResult }: Props) {
             label="세그먼트 비율"
             value={formatPct(seg.segment_ratio)}
             hint="월매출 중 타겟 고객 비율"
-            accent="text-amber-400"
+            accent="text-indigo-400"
           />
           {hasMonthly ? (
             <>
@@ -108,11 +108,11 @@ export function CustomerSegment({ simResult }: Props) {
                 value={formatKrw(seg.total_sales_ref)}
                 unit="원"
                 hint="시뮬레이션 입력값"
-                accent="text-zinc-200"
+                accent="text-stone-200"
               />
             </>
           ) : (
-            <div className="md:col-span-3 rounded-md border border-dashed border-zinc-700 bg-zinc-900/40 p-4 text-center text-xs text-zinc-500">
+            <div className="md:col-span-3 rounded-md border border-dashed border-stone-700 bg-stone-900/40 p-4 text-center text-xs text-stone-500">
               월매출 입력 시 금액 예측이 표시됩니다 (현재: 비율만 제공)
             </div>
           )}
@@ -139,13 +139,13 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, unit, hint, accent }: KpiCardProps) {
   return (
-    <div className="rounded-md border border-zinc-700 bg-zinc-900/60 p-4">
-      <div className="text-xs text-zinc-400">{label}</div>
+    <div className="rounded-md border border-stone-700 bg-stone-900/60 p-4">
+      <div className="text-xs text-stone-400">{label}</div>
       <div className="mt-2 flex items-baseline gap-1">
         <span className={`text-xl font-bold ${accent}`}>{value}</span>
-        {unit && <span className="text-xs text-zinc-500">{unit}</span>}
+        {unit && <span className="text-xs text-stone-500">{unit}</span>}
       </div>
-      {hint && <div className="mt-1 text-[10px] text-zinc-500">{hint}</div>}
+      {hint && <div className="mt-1 text-[10px] text-stone-500">{hint}</div>}
     </div>
   );
 }
@@ -166,8 +166,8 @@ function RatioBarChart({ title, items, ratios }: RatioBarChartProps) {
   );
 
   return (
-    <div className="rounded-md border border-zinc-700 bg-zinc-900/60 p-4">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">
+    <div className="rounded-md border border-stone-700 bg-stone-900/60 p-4">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-stone-400">
         {title}
       </div>
       <div className="space-y-2">
@@ -177,14 +177,14 @@ function RatioBarChart({ title, items, ratios }: RatioBarChartProps) {
           const width = Math.min(100, Math.round((v / maxRatio) * 100));
           return (
             <div key={it.key} className="flex items-center gap-2">
-              <div className="w-20 shrink-0 text-xs text-zinc-300">{it.label}</div>
-              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-zinc-800">
+              <div className="w-20 shrink-0 text-xs text-stone-300">{it.label}</div>
+              <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-stone-800">
                 <div
-                  className="h-full rounded-full bg-amber-500/80"
+                  className="h-full rounded-full bg-indigo-500/80"
                   style={{ width: `${width}%` }}
                 />
               </div>
-              <div className="w-14 shrink-0 text-right text-xs font-mono text-zinc-400">
+              <div className="w-14 shrink-0 text-right text-xs font-mono text-stone-400">
                 {(v * 100).toFixed(1)}%
               </div>
             </div>

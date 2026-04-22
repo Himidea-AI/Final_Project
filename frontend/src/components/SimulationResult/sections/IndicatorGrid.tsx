@@ -8,7 +8,7 @@ interface Props {
 
 const INDICATORS: Array<{ key: string; label: string; color: string }> = [
   { key: 'floating_population', label: '유동인구', color: 'bg-sky-500' },
-  { key: 'rent_index', label: '임대료 지수', color: 'bg-amber-500' },
+  { key: 'rent_index', label: '임대료 지수', color: 'bg-indigo-500' },
   { key: 'competition_intensity', label: '경쟁강도', color: 'bg-rose-500' },
   { key: 'estimated_revenue', label: '예상 매출', color: 'bg-emerald-500' },
   { key: 'survival_rate', label: '생존율', color: 'bg-violet-500' },
@@ -28,11 +28,11 @@ export function IndicatorGrid({ simResult }: Props) {
       <SectionLabel label="INDICATOR GRID" subtitle="7 핵심 상권 지표" />
 
       {!report ? (
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6 text-center text-sm text-zinc-400">
+        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 text-center text-sm text-stone-400">
           상권 지표 데이터 없음
         </div>
       ) : (
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6">
+        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {INDICATORS.map(({ key, label, color }) => {
               const rawVal = (report as Record<string, unknown>)[key];
@@ -40,14 +40,14 @@ export function IndicatorGrid({ simResult }: Props) {
               const clamped = Math.max(0, Math.min(100, val));
               return (
                 <div key={key} className="flex items-center gap-3">
-                  <div className="w-24 shrink-0 text-xs text-zinc-400">{label}</div>
-                  <div className="relative flex-1 overflow-hidden rounded-full bg-zinc-900 h-2">
+                  <div className="w-24 shrink-0 text-xs text-stone-400">{label}</div>
+                  <div className="relative flex-1 overflow-hidden rounded-full bg-stone-900 h-2">
                     <div
                       className={`absolute left-0 top-0 h-full rounded-full ${color}`}
                       style={{ width: `${clamped}%` }}
                     />
                   </div>
-                  <div className="w-10 shrink-0 text-right font-mono text-xs text-zinc-100">
+                  <div className="w-10 shrink-0 text-right font-mono text-xs text-stone-100">
                     {Math.round(clamped)}
                   </div>
                 </div>

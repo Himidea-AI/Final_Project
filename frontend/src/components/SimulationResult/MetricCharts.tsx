@@ -75,7 +75,7 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
           {metrics.district_grade === 'EXCELLENT' || metrics.district_grade === 'GOOD' ? (
             <CheckCircle size={18} className="text-emerald-500" />
           ) : (
-            <AlertTriangle size={18} className="text-amber-500" />
+            <AlertTriangle size={18} className="text-indigo-500" />
           )}
           {GRADE_LABELS[metrics.district_grade]}
         </div>
