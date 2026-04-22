@@ -63,7 +63,7 @@ export function HeadlineBlock({ simResult }: Props) {
 
         {recommendation && (
           <p className="text-sm leading-relaxed text-stone-200 whitespace-pre-line">
-            {recommendation}
+            {localizeTerms(recommendation)}
           </p>
         )}
 
