@@ -4870,6 +4870,19 @@ function SimulatorDashboard({
                                     }))
                                   : undefined
                               }
+                              competitors={(
+                                simResult?.competitorIntel?.competition_500m?.samples ?? []
+                              )
+                                .filter((s: any) => s.lat && s.lon)
+                                .map((s: any, i: number) => ({
+                                  id: `comp_${i}_${s.place_name}`,
+                                  name: s.place_name || s.brand_name || '경쟁업체',
+                                  lat: s.lat,
+                                  lng: s.lon,
+                                  distance_m: s.distance_m,
+                                  is_franchise: s.is_franchise ?? false,
+                                  category: s.category,
+                                }))}
                             />
                           </div>
                         </div>

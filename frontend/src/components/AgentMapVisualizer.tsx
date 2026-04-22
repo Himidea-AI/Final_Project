@@ -17,8 +17,19 @@ export interface LocationData {
   listingCount?: number;
 }
 
+export interface CompetitorPin {
+  id: string | number;
+  name: string;
+  lat: number;
+  lng: number;
+  distance_m?: number;
+  is_franchise?: boolean;
+  category?: string;
+}
+
 export interface AgentMapVisualizerProps {
   locations?: LocationData[];
+  competitors?: CompetitorPin[];
   height?: string | number;
 }
 
@@ -46,6 +57,7 @@ const AGENTS = [
 
 export default function AgentMapVisualizer({
   locations = DEFAULT_LOCATIONS,
+  competitors = [],
   height = '600px',
 }: AgentMapVisualizerProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -55,6 +67,7 @@ export default function AgentMapVisualizer({
 
   const [mapLoaded, setMapLoaded] = useState(false);
   const [targetPixels, setTargetPixels] = useState<Record<string | number, PixelCoord>>({});
+  const [competitorPixels, setCompetitorPixels] = useState<Record<string | number, PixelCoord>>({});
   const [agentPixels, setAgentPixels] = useState<Record<string, PixelCoord>>({});
   const [showLasers, setShowLasers] = useState(false);
 
@@ -65,6 +78,7 @@ export default function AgentMapVisualizer({
     if (!mapContainerRef.current) return;
     const containerRect = mapContainerRef.current.getBoundingClientRect();
     const newTargetPixels: Record<string | number, PixelCoord> = {};
+    const newCompetitorPixels: Record<string | number, PixelCoord> = {};
 
     if (IS_MOCK_MODE) {
       const w = containerRect.width;
@@ -79,6 +93,23 @@ export default function AgentMapVisualizer({
       locations.forEach((loc, idx) => {
         newTargetPixels[loc.id] = mockPositions[idx % mockPositions.length];
       });
+      // mock 경쟁업체: candidate 핀들 주변에 분산 배치
+      const compMockBase = [
+        { x: w * 0.32, y: h * 0.28 },
+        { x: w * 0.62, y: h * 0.42 },
+        { x: w * 0.48, y: h * 0.58 },
+        { x: w * 0.75, y: h * 0.38 },
+        { x: w * 0.25, y: h * 0.65 },
+        { x: w * 0.58, y: h * 0.22 },
+        { x: w * 0.35, y: h * 0.72 },
+      ];
+      competitors.forEach((comp, idx) => {
+        const base = compMockBase[idx % compMockBase.length];
+        newCompetitorPixels[comp.id] = {
+          x: base.x + (idx > compMockBase.length ? 15 : 0),
+          y: base.y + (idx > compMockBase.length ? 10 : 0),
+        };
+      });
     } else {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = mapInstanceRef.current as any;
@@ -91,8 +122,14 @@ export default function AgentMapVisualizer({
         const pixel = proj.containerPointFromCoords(position);
         newTargetPixels[loc.id] = { x: pixel.x, y: pixel.y };
       });
+      competitors.forEach((comp) => {
+        const position = new kakao.maps.LatLng(comp.lat, comp.lng);
+        const pixel = proj.containerPointFromCoords(position);
+        newCompetitorPixels[comp.id] = { x: pixel.x, y: pixel.y };
+      });
     }
     setTargetPixels(newTargetPixels);
+    setCompetitorPixels(newCompetitorPixels);
 
     const newAgentPixels: Record<string, PixelCoord> = {};
     AGENTS.forEach((agent) => {
@@ -106,7 +143,7 @@ export default function AgentMapVisualizer({
       }
     });
     setAgentPixels(newAgentPixels);
-  }, [IS_MOCK_MODE, locations]);
+  }, [IS_MOCK_MODE, locations, competitors]);
 
   useEffect(() => {
     let cleanupFn = () => {};
@@ -220,6 +257,7 @@ export default function AgentMapVisualizer({
         </div>
       )}
 
+      {/* 출점 후보지 핀 */}
       {mapLoaded &&
         locations.map((loc) => {
           const pixel = targetPixels[loc.id];
@@ -247,6 +285,55 @@ export default function AgentMapVisualizer({
               </div>
               <MapPin className="w-6 h-6" style={{ color: pinColor, fill: `${pinColor}33` }} />
               <div className={`w-2 h-2 rounded-full animate-ping absolute bottom-1 ${pingClass}`} />
+            </div>
+          );
+        })}
+
+      {/* 경쟁업체 핀 */}
+      {mapLoaded &&
+        competitors.map((comp) => {
+          const pixel = competitorPixels[comp.id];
+          if (!pixel) return null;
+          const isFranchise = comp.is_franchise;
+          const pinColor = isFranchise ? '#f43f5e' : '#f97316';
+          const borderClass = isFranchise
+            ? 'border-[#f43f5e] shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+            : 'border-[#f97316] shadow-[0_0_8px_rgba(249,115,22,0.4)]';
+          const distLabel = comp.distance_m != null ? ` ${Math.round(comp.distance_m)}m` : '';
+          return (
+            <div
+              key={`comp-${comp.id}`}
+              className="absolute z-20 flex flex-col items-center pointer-events-none transition-all duration-300"
+              style={{
+                left: pixel.x,
+                top: pixel.y,
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              <div
+                className={`bg-[#1e1b18] border text-[10px] font-bold mb-0.5 px-2 py-0.5 rounded max-w-[120px] truncate ${borderClass}`}
+                style={{ color: pinColor }}
+                title={comp.name}
+              >
+                {comp.name}
+                {distLabel && (
+                  <span className="ml-1 text-[8px] text-[#9ca3af] font-normal">{distLabel}</span>
+                )}
+              </div>
+              <svg width="18" height="18" viewBox="0 0 18 18">
+                <polygon
+                  points="9,2 16,16 2,16"
+                  fill={`${pinColor}33`}
+                  stroke={pinColor}
+                  strokeWidth="1.5"
+                />
+              </svg>
+              <span
+                className="text-[7px] font-mono mt-0.5 px-1 rounded"
+                style={{ color: pinColor, background: `${pinColor}22` }}
+              >
+                {isFranchise ? '프랜차이즈' : '개인점'}
+              </span>
             </div>
           );
         })}
@@ -329,6 +416,52 @@ export default function AgentMapVisualizer({
             </span>
           </div>
         ))}
+      </div>
+
+      {/* 범례 */}
+      <div className="absolute top-3 left-3 z-40 bg-[#0d1117]/80 backdrop-blur-sm border border-[#3a3633] rounded-lg p-2.5 flex flex-col gap-1.5">
+        <p className="text-[8px] font-mono text-[#6b7280] uppercase tracking-wider mb-0.5">
+          Legend
+        </p>
+        <div className="flex items-center gap-1.5">
+          <MapPin className="w-3 h-3" style={{ color: '#818cf8' }} />
+          <span className="text-[9px] text-[#9ca3af]">출점 후보지</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <MapPin className="w-3 h-3" style={{ color: '#10b981' }} />
+          <span className="text-[9px] text-[#9ca3af]">공실 매물</span>
+        </div>
+        {competitors.length > 0 && (
+          <>
+            <div className="flex items-center gap-1.5">
+              <svg width="10" height="10" viewBox="0 0 18 18">
+                <polygon
+                  points="9,2 16,16 2,16"
+                  fill="#f43f5e33"
+                  stroke="#f43f5e"
+                  strokeWidth="2"
+                />
+              </svg>
+              <span className="text-[9px] text-[#9ca3af]">경쟁 프랜차이즈</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <svg width="10" height="10" viewBox="0 0 18 18">
+                <polygon
+                  points="9,2 16,16 2,16"
+                  fill="#f9731633"
+                  stroke="#f97316"
+                  strokeWidth="2"
+                />
+              </svg>
+              <span className="text-[9px] text-[#9ca3af]">경쟁 개인점</span>
+            </div>
+            <div className="mt-0.5 pt-1 border-t border-[#3a3633]">
+              <span className="text-[8px] font-mono text-[#6b7280]">
+                경쟁 {competitors.length}개 · 500m 반경
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       <style>{`@keyframes dash { to { stroke-dashoffset: -1000; } }`}</style>
