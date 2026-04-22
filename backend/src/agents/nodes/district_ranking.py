@@ -96,6 +96,9 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
 # parallel_analysis_node 진입 시 _clear_shared_population_cache()로 초기화.
 _pop_trends_tasks: dict[str, asyncio.Task] = {}
 
+# DB 커넥션 풀 고갈 방지 — 16개 동 동시 조회 시 pool_size(3)+overflow(5)=8 초과 방지
+_db_semaphore = asyncio.Semaphore(4)
+
 
 async def _safe_population_trends(dong: str) -> dict:
     """get_population_trends를 호출하되 exception 시 빈 dict 반환 (다른 awaiter 보호)."""
@@ -501,8 +504,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     if db_client.engine is None:
         await db_client.connect()
 
-    # 16개 동 점수 + 공실률 병렬 로드
-    tasks = [_score_single_district(dong, business_type) for dong in MAPO_DISTRICTS]
+    # 16개 동 점수 + 공실률 병렬 로드 (세마포어로 동시 DB 접근 제한)
+    async def _guarded_score(dong: str) -> dict:
+        async with _db_semaphore:
+            return await _score_single_district(dong, business_type)
+
+    tasks = [_guarded_score(dong) for dong in MAPO_DISTRICTS]
     raw_scores, vacancy_result = await asyncio.gather(
         asyncio.gather(*tasks),
         _load_vacancy_map(),

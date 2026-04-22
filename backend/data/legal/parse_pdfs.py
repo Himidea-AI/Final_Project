@@ -170,7 +170,11 @@ def split_by_article(text: str, category: str, source_name: str) -> list[dict]:
     pattern = re.compile(r"(?=제\d+조(?:의\d+)?[\s(])")
     parts = pattern.split(text)
 
+    # 타법 참조 필터 — 분리된 chunk 앞에 "법 ", "법률 " 등이 붙어있으면 타법 참조
+    _OTHER_LAW_PREFIX = re.compile(r"(?:법|법률|시행령|시행규칙)\s*$")
+
     chunks = []
+    prev_part = ""
     for part in parts:
         part = part.strip()
         if not part:
@@ -179,6 +183,13 @@ def split_by_article(text: str, category: str, source_name: str) -> list[dict]:
         # 조문 번호 추출
         article_match = re.match(r"(제\d+조(?:의\d+)?)", part)
         article_num = article_match.group(1) if article_match else "미분류"
+
+        # 타법 참조 감지: 이전 chunk 끝이 "법 ", "법률 " 등이면 타법 조문 참조 → 버림
+        if article_num != "미분류" and prev_part and _OTHER_LAW_PREFIX.search(prev_part):
+            prev_part = part
+            continue
+
+        prev_part = part
         chunk_id_base = f"{category}_{article_num}"
 
         if len(part) <= MAX_ARTICLE_CHUNK:
