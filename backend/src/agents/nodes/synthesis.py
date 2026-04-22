@@ -63,8 +63,8 @@ async def synthesis_node(state: AgentState) -> dict:
     store_area = state.get("store_area", 15.0)
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
-    # v5: narrative 기준동을 winner_district 로 변경 — 구 v4 캐시(target_district 기준 narrative) 무효화
-    cache_key = f"v5:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    # v4: articles 필드가 list[str] → list[{article_ref, content}]로 변경 — 기존 v3 캐시 무효화
+    cache_key = f"v4:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -128,10 +128,6 @@ async def synthesis_node(state: AgentState) -> dict:
     winner_district = state.get("winner_district", target_district)
     top_3_candidates = state.get("top_3_candidates", [])
     scouting_results = state.get("scouting_results", [])
-
-    # [FIX] narrative 기준동 — winner_district 우선. target_district 와 다르면 LLM 에
-    # 명시적으로 winner 기준 작성을 지시해 "추천은 망원2동인데 설명은 용강동..." 미스매치 방지.
-    narrative_district = winner_district or target_district
 
     # 랭킹 요약 (상위 4개 동, 핵심 수치만)
     ranking_summary = ""
@@ -215,7 +211,7 @@ async def synthesis_node(state: AgentState) -> dict:
 
     prompt = (
         "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
-        f"브랜드:{brand_name}({business_type}) | 사용자 선택 후보:{target_district} | **1순위 추천:{narrative_district}** | 법률리스크:{overall_legal_risk}\n"
+        f"브랜드:{brand_name}({business_type}) | 선택지역:{target_district} | 법률리스크:{overall_legal_risk}\n"
         f"입지랭킹: {ranking_summary}\n"
         f"상권({target_district}):\n{market_report[:1500]}\n"
         f"인구({target_district}):\n{population_report[:1500]}\n"
@@ -228,9 +224,6 @@ async def synthesis_node(state: AgentState) -> dict:
         f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
         f"자본금={initial_capital:,}원 | 임대예산={monthly_rent_budget:,}원({store_area}평)\n\n"
         "요구사항:\n"
-        f"0. **summary 와 final_recommendation 은 반드시 1순위 추천({narrative_district}) 기준으로 작성**. "
-        f"{target_district}는 사용자 후보일뿐 실제 분석 결과 {narrative_district}이 최적입니다. "
-        f"narrative 에서 '{target_district}는 유동인구가...'처럼 후보지를 기준으로 시작하지 마세요.\n"
         "1. 1순위 추천 지역과 이유, 2~4순위 후보 간략 설명\n"
         "2. 창업자 조건(객단가·시간대·자본금·임대예산) 적합성 판단\n"
         "3. 경쟁인텔(market_entry_signal·카니발)을 final_recommendation 에 반영\n"
@@ -257,10 +250,7 @@ async def synthesis_node(state: AgentState) -> dict:
         final_strategy: FinalStrategyResult = await llm.ainvoke(
             [
                 SystemMessage(content=prompt),
-                HumanMessage(
-                    content=f"{brand_name}의 **{narrative_district}** 출점 최종 전략 보고서를 완성해줘. "
-                    f"(사용자 후보 {target_district} 가 아닌 랭킹 1위 {narrative_district} 기준)"
-                ),
+                HumanMessage(content=f"{brand_name}의 {target_district} 출점 최종 전략 보고서를 완성해줘."),
             ]
         )
 
