@@ -108,7 +108,16 @@ export async function runSimulation(
     signal,
     timeout: 600_000,
   });
-  return response.data;
+  // 백엔드 응답 포맷 변화 대응:
+  //   신규 (dev): {status: 'success', data: {...실제 결과...}}
+  //   구형:       {...실제 결과...}
+  // 양쪽 모두 호환되도록 언래핑. status=error이면 throw.
+  const body = response.data;
+  if (body && typeof body === 'object' && 'status' in body) {
+    if (body.status === 'success' && body.data) return body.data as SimulationOutput;
+    if (body.status === 'error') throw new Error(body.message || 'Simulation failed');
+  }
+  return body as SimulationOutput;
 }
 
 /** 상권 분석 및 지도 데이터 요청 */
