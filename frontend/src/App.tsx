@@ -87,7 +87,8 @@ import { useSimulationStore } from './stores/simulationStore';
 
 interface SimResult {
   score: number;
-  revenue: number;
+  revenue: number | null;
+  netProfit?: number | null;
   riskLevel: string;
   recommendation: string;
   chartData: { label: string; value: number }[];
@@ -175,6 +176,18 @@ interface SimResult {
   trendForecast?: TrendForecast | null;
   // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)
   demographicReport?: DemographicReport | null;
+  // 추천 동 전체 경쟁업체 좌표 (winner + top3 합산)
+  allCompetitorLocations?: Array<{
+    id: string;
+    place_name: string;
+    brand_name?: string;
+    lat: number;
+    lng: number;
+    distance_m?: number;
+    is_franchise?: boolean;
+    category?: string;
+    source_dong?: string;
+  }>;
 }
 
 import {
@@ -855,6 +868,20 @@ const BUSINESS_TYPE_BACKEND_KEY: Record<string, string> = {
   분식전문점: '분식',
   '호프-간이주점': '호프',
   '커피-음료': '커피',
+};
+
+// UI 업종 라벨 → CS 업종 코드 (demographic 연령/성별 분석 업종 필터링용)
+const BUSINESS_TYPE_CS_CODE: Record<string, string> = {
+  한식음식점: 'CS100001',
+  중식음식점: 'CS100002',
+  일식음식점: 'CS100003',
+  양식음식점: 'CS100004',
+  제과점: 'CS100005',
+  패스트푸드점: 'CS100006',
+  치킨전문점: 'CS100007',
+  분식전문점: 'CS100008',
+  '호프-간이주점': 'CS100009',
+  '커피-음료': 'CS100010',
 };
 
 const PRICE_RANGES = [
@@ -2351,8 +2378,18 @@ function SimulatorDashboard({
   // 정렬된 행 데이터 — 가맹점 간섭도는 competitor_intel.samples 실데이터 우선
   // Pancras 2013 거리 감쇠: (1 - 0.281)^(1/1.609) ≈ 0.813 per km
   // base_rate는 업종별 차등 (backend commercial_intelligence.py와 동기화).
-  const dynamicCannRows: CannRow[] = simResult?.competitorIntel?.competition_500m?.samples
-    ? simResult.competitorIntel.competition_500m.samples.slice(0, 8).map((s) => {
+  // allCompetitorLocations 우선 사용 (winner+top3 전체 동), fallback은 winner 단일 동
+  const _competitorSamples: any[] = simResult?.allCompetitorLocations?.length
+    ? simResult.allCompetitorLocations.map((s) => ({
+        place_name: s.place_name || s.brand_name,
+        distance_m: s.distance_m ?? 0,
+        is_franchise: s.is_franchise,
+        source_dong: s.source_dong,
+      }))
+    : (simResult?.competitorIntel?.competition_500m?.samples ?? []);
+
+  const dynamicCannRows: CannRow[] = _competitorSamples.length
+    ? _competitorSamples.slice(0, 12).map((s) => {
         const dist = s.distance_m;
         // Industry base rates mirror backend commercial_intelligence.py:estimate_cannibalization
         const INDUSTRY_BASE: Record<string, number> = {
@@ -2378,7 +2415,7 @@ function SimulatorDashboard({
         const impactPct = -baseRate * Math.pow(0.813, dist / 1000) * 100;
         const status = dist < 300 ? 'Danger' : dist < 800 ? 'Caution' : 'Safe';
         return {
-          name: s.place_name,
+          name: s.place_name || '경쟁업체',
           distance: dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`,
           impact: `${impactPct.toFixed(1)}%`,
           status,
@@ -2412,17 +2449,22 @@ function SimulatorDashboard({
   // 레이더 차트 7축 꼭지점 — market_report 기반 동적 계산
   // 순서: 유동인구(12시) → 매출(2시) → 성장성(4시) → 폐업률(6시) → 임대료(8시) → 경쟁강도(10시) → 접근성(11시)
   const RADAR_FALLBACK_VALUES = [82, 74, 56, 9, 45, 68, 78]; // mock fallback
+  // NaN 방지: undefined/null/NaN 은 0 으로 치환 (SVG polygon cx/cy NaN 에러 방지)
+  const _safeNum = (v: unknown, fallback = 0): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
   const radarValues = simResult?.marketReport
     ? [
-        simResult.marketReport.floating_population,
-        simResult.marketReport.estimated_revenue,
-        simResult.marketReport.growth_potential,
+        _safeNum(simResult.marketReport.floating_population, 50),
+        _safeNum(simResult.marketReport.estimated_revenue, 50),
+        _safeNum(simResult.marketReport.growth_potential, 50),
         simResult.marketReport.closure_rate != null
-          ? Math.round(simResult.marketReport.closure_rate * 100)
-          : 100 - simResult.marketReport.survival_rate,
-        simResult.marketReport.rent_index,
-        simResult.marketReport.competition_intensity,
-        simResult.marketReport.accessibility,
+          ? _safeNum(Math.round(simResult.marketReport.closure_rate * 100), 50)
+          : _safeNum(100 - _safeNum(simResult.marketReport.survival_rate, 50), 50),
+        _safeNum(simResult.marketReport.rent_index, 50),
+        _safeNum(simResult.marketReport.competition_intensity, 50),
+        _safeNum(simResult.marketReport.accessibility, 50),
       ]
     : RADAR_FALLBACK_VALUES;
   const RADAR_LABELS = [
@@ -2436,15 +2478,22 @@ function SimulatorDashboard({
   ] as const;
   const radarVertices = radarValues.map((v, k) => {
     const angle = -Math.PI / 2 + (2 * Math.PI * k) / 7;
-    const r = Math.max(0, Math.min(100, v)) * 0.6; // max radius 60px
+    // NaN 방지 — v 가 Infinity/NaN 이면 0
+    const safeV = Number.isFinite(v) ? v : 0;
+    const r = Math.max(0, Math.min(100, safeV)) * 0.6; // max radius 60px
     return {
       x: 100 + Math.cos(angle) * r,
       y: 100 + Math.sin(angle) * r,
-      value: v,
+      value: safeV,
       label: RADAR_LABELS[k],
     };
   });
-  const radarPointsStr = radarVertices.map((v) => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(' ');
+  const radarPointsStr = radarVertices
+    .map(
+      (v) =>
+        `${(Number.isFinite(v.x) ? v.x : 100).toFixed(1)},${(Number.isFinite(v.y) ? v.y : 100).toFixed(1)}`,
+    )
+    .join(' ');
 
   // 오늘 날짜 (리포트 생성 시점)
   const today = new Date();
@@ -2523,7 +2572,9 @@ function SimulatorDashboard({
         ['지표', '값', '트렌드'],
         [
           '예상 월 매출 (추정)',
-          `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
+          simResult?.revenue != null
+            ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
+            : '분석 중',
           '+12.5%',
         ],
         ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
@@ -2686,6 +2737,7 @@ function SimulatorDashboard({
         initial_capital: initialCapital * 10000,
         commercial_radius: radius,
         population_weight: weighted,
+        industry_filter: BUSINESS_TYPE_CS_CODE[businessType] ?? null,
       };
 
       // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
@@ -2709,7 +2761,8 @@ function SimulatorDashboard({
 
       setSimResult({
         score: topComp?.score ?? 87,
-        revenue: topComp?.revenue ?? 3240,
+        revenue: topComp?.revenue ?? null,
+        netProfit: (topComp as any)?.net_profit ?? null,
         riskLevel: topRisk?.risk_level ?? 'LOW',
         recommendation: simRes.ai_recommendation || '',
         chartData: mr
@@ -2765,6 +2818,9 @@ function SimulatorDashboard({
         // [PR #75] 인구통계 심층 분석
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         demographicReport: (simRes as any).demographic_report ?? null,
+        // 추천 동 전체(winner+top3) 경쟁업체 좌표 — AI 맵 멀티핀용
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        allCompetitorLocations: (simRes as any).all_competitor_locations ?? [],
       });
       setReportState('result');
     } catch (err) {
@@ -3543,7 +3599,27 @@ function SimulatorDashboard({
                         · data 뷰에서는 기본 접힘 → 한 줄평만, 클릭 시 전체 설명 펼침 */}
                     {(() => {
                       if (dashboardMode !== 'data') return null;
-                      const rec = simResult?.recommendation;
+
+                      // LLM이 출력한 영어 리스크 용어를 한국어로 치환
+                      const localizeRiskTerms = (text: string) =>
+                        text
+                          .replace(/'caution'/g, "'주의'")
+                          .replace(/'safe'/g, "'안전'")
+                          .replace(/'danger'/g, "'위험'")
+                          .replace(/'green'/g, "'진입 권장'")
+                          .replace(/'yellow'/g, "'조건부 진입'")
+                          .replace(/'red'/g, "'진입 비권장'")
+                          .replace(/\bcaution\b/g, '주의 단계')
+                          .replace(/\bdanger\b/g, '위험 단계')
+                          .replace(/\bsparse\b/g, '희박')
+                          .replace(/\bsaturated\b/g, '포화')
+                          .replace(/\bEXCELLENT\b/g, '탁월')
+                          .replace(/\bGOOD\b/g, '우수')
+                          .replace(/\bNORMAL\b/g, '보통')
+                          .replace(/\bRISKY\b/g, '주의');
+
+                      const rawRec = simResult?.recommendation;
+                      const rec = rawRec ? localizeRiskTerms(rawRec) : rawRec;
                       const legalRisk = simResult?.overallLegalRisk;
                       const ciSignal = simResult?.competitorIntel?.market_entry_signal;
                       // signal 없고 recommendation도 없으면 렌더 안 함
@@ -3667,12 +3743,21 @@ function SimulatorDashboard({
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
                           <StatCard
                             onClick={() => setActiveDrawer('revenue')}
-                            title="예상 월 매출 (추정)"
-                            value={`₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`}
+                            title="예상 월 총매출"
+                            value={
+                              simResult?.revenue != null
+                                ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
+                                : '분석 중'
+                            }
                             trend="+12.5%"
                             trendUp={true}
                             icon={<BarChart3 />}
                             sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0"
+                            subtitle={
+                              simResult?.netProfit != null
+                                ? `순이익 ${simResult.netProfit}만원`
+                                : undefined
+                            }
                           />
                           <StatCard
                             onClick={() => setActiveDrawer('attractiveness')}
@@ -4033,6 +4118,16 @@ function SimulatorDashboard({
                                 typeof cann?.estimated_revenue_impact_pct === 'number'
                                   ? (cann.estimated_revenue_impact_pct * 100).toFixed(1)
                                   : null;
+                              const SATURATION_KO: Record<string, string> = {
+                                sparse: '희박 (0~2개)',
+                                low: '낮음 (3~5개)',
+                                medium: '보통 (6~10개)',
+                                high: '높음 (11~20개)',
+                                saturated: '포화 (21개+)',
+                              };
+                              const satKo = comp?.saturation_level
+                                ? (SATURATION_KO[comp.saturation_level] ?? comp.saturation_level)
+                                : 'N/A';
                               return (
                                 <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
                                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -4053,25 +4148,35 @@ function SimulatorDashboard({
 
                                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                      <div className="text-xs text-[#9ca3af]">500m 포화도</div>
-                                      <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
-                                        {comp?.saturation_level ?? 'N/A'}
+                                      <div className="text-xs text-[#9ca3af]">500m 경쟁 밀도</div>
+                                      <div className="mt-1 text-base font-semibold text-[#e2e8f0]">
+                                        {satKo}
                                       </div>
                                       <div className="text-xs text-slate-500">
-                                        {comp?.total_competitors ?? 0}개 매장
+                                        총 {comp?.total_competitors ?? 0}개 매장
                                       </div>
                                     </div>
                                     <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                      <div className="text-xs text-[#9ca3af]">카니발 영향</div>
+                                      <div className="text-xs text-[#9ca3af]">자기잠식 영향</div>
                                       <div className="mt-1 text-lg font-semibold text-rose-300">
-                                        {cannImpactPct != null ? `${cannImpactPct}%` : 'N/A'}
+                                        {cannImpactPct != null
+                                          ? `매출 ${cannImpactPct}% 감소`
+                                          : 'N/A'}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        500m 내 동일 브랜드 기준
                                       </div>
                                     </div>
                                     <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                      <div className="text-xs text-[#9ca3af]">프랜차이즈/독립</div>
+                                      <div className="text-xs text-[#9ca3af]">
+                                        프랜차이즈 / 개인점
+                                      </div>
                                       <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
-                                        {comp?.franchise_count ?? 0} /{' '}
-                                        {comp?.independent_count ?? 0}
+                                        {comp?.franchise_count ?? 0}개 /{' '}
+                                        {comp?.independent_count ?? 0}개
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        체인 브랜드 / 로컬 매장
                                       </div>
                                     </div>
                                   </div>
@@ -4612,26 +4717,6 @@ function SimulatorDashboard({
                                         })}
                                       </div>
                                     )}
-                                    {cr.summary && cr.summary.length > 0 && (
-                                      <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]">
-                                        <div className="text-[10px] text-[#9ca3af] mb-1">
-                                          AI 분석 요약
-                                        </div>
-                                        {cr.summary.map((sentence, idx) => (
-                                          <div
-                                            key={idx}
-                                            className="flex items-start gap-1.5 px-2.5 py-1.5 bg-[#1e1b18] rounded-lg border border-[#3a3633]"
-                                          >
-                                            <span className="mt-0.5 text-[#f97316] text-[10px] flex-shrink-0">
-                                              •
-                                            </span>
-                                            <span className="text-[10px] text-[#d1d5db] leading-relaxed">
-                                              {sentence}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               })()
@@ -5001,6 +5086,20 @@ function SimulatorDashboard({
                                     }))
                                   : undefined
                               }
+                              competitors={(simResult?.allCompetitorLocations?.length
+                                ? simResult.allCompetitorLocations
+                                : (simResult?.competitorIntel?.competition_500m?.samples ?? [])
+                              )
+                                .filter((s: any) => s.lat && (s.lng ?? s.lon))
+                                .map((s: any) => ({
+                                  id: s.id ?? `comp_${s.place_name}_${s.lat}`,
+                                  name: s.place_name || s.brand_name || '경쟁업체',
+                                  lat: s.lat,
+                                  lng: s.lng ?? s.lon,
+                                  distance_m: s.distance_m,
+                                  is_franchise: s.is_franchise ?? false,
+                                  category: s.category,
+                                }))}
                             />
                           </div>
                         </div>
@@ -5012,6 +5111,55 @@ function SimulatorDashboard({
                         abmLoading={abmLoading}
                         abmError={abmError}
                         targetDistrict={selectedDongs[0] || '서교동'}
+                        vacancySpots={simResult?.vacancySpots}
+                        onClearResult={() => {
+                          setAbmResult(null);
+                          setAbmError(null);
+                        }}
+                        onSpotClick={async (spot) => {
+                          if (!simResult || abmLoading) return;
+                          setAbmLoading(true);
+                          setAbmError(null);
+                          try {
+                            const res = await fetch('/api/simulate-abm', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                // 클릭한 스팟의 동을 target 으로 강제 (선택된 동과 다를 수 있음)
+                                target_district: spot.dong_name,
+                                business_type: businessType,
+                                brand_name: simResult.recommendation || '신규 스팟 시뮬',
+                                langgraph_result: (simResult as any)._raw ?? simResult,
+                                n_agents: 100,
+                                days: 1,
+                                spot_lat: spot.lat,
+                                spot_lon: spot.lon,
+                                scenario: {
+                                  weather_override: null,
+                                  date_override: null,
+                                  weekend_force: false,
+                                  rent_shock_pct: 0.0,
+                                },
+                              }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) {
+                              setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
+                            } else if (data.status === 'error') {
+                              setAbmError(
+                                data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
+                              );
+                            } else {
+                              setAbmResult(data);
+                            }
+                          } catch (err) {
+                            setAbmError(
+                              `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
+                            );
+                          } finally {
+                            setAbmLoading(false);
+                          }
+                        }}
                         onRunSimulation={async (scenario) => {
                           if (!simResult) return;
                           setAbmLoading(true);
@@ -5036,13 +5184,21 @@ function SimulatorDashboard({
                               }),
                             });
                             const data = await res.json();
-                            if (data.status === 'unavailable') {
+                            if (!res.ok) {
+                              setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
+                            } else if (data.status === 'unavailable') {
                               setAbmError('ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)');
+                            } else if (data.status === 'error') {
+                              setAbmError(
+                                data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
+                              );
                             } else {
                               setAbmResult(data);
                             }
-                          } catch {
-                            setAbmError('ABM 시뮬레이션 요청 실패');
+                          } catch (err) {
+                            setAbmError(
+                              `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
+                            );
                           } finally {
                             setAbmLoading(false);
                           }
@@ -5165,7 +5321,10 @@ function SimulatorDashboard({
         stats={[
           {
             title: '예상 월 매출 (추정)',
-            value: `₩ ${((simResult?.revenue ?? 3240) * 10000).toLocaleString()}`,
+            value:
+              simResult?.revenue != null
+                ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
+                : '분석 중',
             trend: '+12.5%',
           },
           {
