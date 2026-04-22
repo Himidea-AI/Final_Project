@@ -1554,3 +1554,37 @@ class WeatherDaily(Base):
     rain_60m_max = Column(Float)
     snow_new = Column(Float)
     snow_max = Column(Float)
+
+
+# ---------------------------------------------------------------------------
+# 시뮬레이션 이력 (매니저 수동 저장)
+# ---------------------------------------------------------------------------
+
+
+class SimulationHistory(Base):
+    """매니저가 [저장] 액션을 누를 때만 기록되는 시뮬 이력.
+
+    자동 로깅용 ``simulation_result``(request_id PK)와 별개:
+    - client_name (예비 가맹점주 성함) 필수
+    - manager_id 기준 조회
+    - scenario/simulation_result JSONB 전체 보존
+    """
+
+    __tablename__ = "simulation_history"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    manager_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    client_name = Column(String(100), nullable=False)
+
+    district = Column(String(50), nullable=False)
+    brand_name = Column(String(100), nullable=False)
+    business_type = Column(String(50))
+
+    scenario = Column(JSONB)
+    simulation_result = Column(JSONB, nullable=False)
+
+    ai_verdict_summary = Column(Text)
+    market_entry_signal = Column(String(10))
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())

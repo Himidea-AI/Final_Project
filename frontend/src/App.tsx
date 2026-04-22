@@ -55,6 +55,8 @@ import {
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
+import ManagerDetail from './pages/ManagerDetail';
+import SimulationHistoryDetail from './pages/SimulationHistoryDetail';
 import LoginPage from './pages/LoginPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -66,9 +68,15 @@ import type {
   TrendForecast,
   DemographicReport,
   LegalRisk,
+  SimulationOutput,
 } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
+import { IntegratedReport } from './components/SimulationResult/IntegratedReport';
+import { SaveButton } from './components/SimulationHistory/SaveButton';
+import { SaveDialog } from './components/SimulationHistory/SaveDialog';
+import { useSaveSimulation } from './hooks/useSaveSimulation';
+import { formatDocumentId } from './types/simulationHistory';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import React from 'react';
 import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
@@ -2241,6 +2249,7 @@ function SimulatorDashboard({
   reportState: string;
   setReportState: (s: 'idle' | 'loading' | 'result') => void;
 }) {
+  const navigate = useNavigate();
   const [radius, setRadius] = useState(500);
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
@@ -2249,6 +2258,15 @@ function SimulatorDashboard({
   const { showToast } = useToast();
   const { user } = useAuth();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
+  // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
+  const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
+  const [viewMode, setViewMode] = useState<'integrated' | 'legacy'>('integrated');
+
+  // 이력 저장 — 저장 성공 시 savedHistoryId가 세팅되고, 이 값이 PDF/Excel Document ID로 격상됨.
+  // 새 시뮬 실행 시 runSim 내부에서 null로 리셋.
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [savedHistoryId, setSavedHistoryId] = useState<number | null>(null);
+  const saveSim = useSaveSimulation();
   const [chartView, setChartView] = useState<'daily' | 'monthly'>('daily');
   const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
     'cannibalization',
@@ -2496,7 +2514,7 @@ function SimulatorDashboard({
         [],
         ['분석 대상', `마포구 ${districtName}`],
         ['생성 일시', reportFullDate],
-        ['Document ID', `SPTR-${Date.now().toString().slice(-8)}`],
+        ['Document ID', formatDocumentId(savedHistoryId)],
         [],
         ['KPI 요약'],
         ['지표', '값', '트렌드'],
@@ -2675,6 +2693,11 @@ function SimulatorDashboard({
         throw new Error(storeState.error ?? 'Simulation failed');
       }
       const simRes = storeState.result;
+      // IntegratedReport는 snake_case SimulationOutput을 직접 소비 — camelCase 변환 전 원본 보존
+      setRawSimResult(simRes);
+      // 새 시뮬 성공 시 이전 저장 이력 ID 초기화 — Document ID가 DRAFT로 복귀
+      setSavedHistoryId(null);
+      saveSim.reset();
 
       const mr = simRes.market_report;
       const topComp = simRes.comparison?.[0];
@@ -2742,6 +2765,8 @@ function SimulatorDashboard({
       setReportState('result');
     } catch (err) {
       console.error('Simulation failed:', err);
+      // mock fallback 결과는 SimulationOutput 스키마를 만족하지 않아 IntegratedReport에 넘기면 크래시
+      setRawSimResult(null);
       // Fallback — Smart Mock (동/업종 기반 동적 데이터)
       const mock = generateSmartMock(selectedDongs[0] || '연남동', businessType);
       setSimResult({
@@ -2794,10 +2819,19 @@ function SimulatorDashboard({
       className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar"
     >
       {/* Top bar */}
-      <div className="sticky top-0 z-30 flex items-center px-8 py-4 mt-14 bg-[#1e1b18]/80 backdrop-blur-xl">
+      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-14 bg-[#1e1b18]/80 backdrop-blur-xl">
         <span className={`text-xs font-medium tracking-wider ${textSecondary}`}>
           마포구 시뮬레이터
         </span>
+        {user?.id && (
+          <button
+            type="button"
+            onClick={() => navigate(`/hq/managers/${user.id}`)}
+            className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"
+          >
+            내 이력
+          </button>
+        )}
       </div>
 
       {/* Dashboard body */}
@@ -3310,7 +3344,33 @@ function SimulatorDashboard({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    {!isSplitMode && (
+                    {!isSplitMode && rawSimResult && (
+                      <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
+                        <button
+                          onClick={() => setViewMode('integrated')}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            viewMode === 'integrated'
+                              ? 'bg-[#3a3633] text-amber-400 shadow-sm'
+                              : 'text-[#9ca3af] hover:text-white'
+                          }`}
+                          title="15 섹션 통합 리포트"
+                        >
+                          통합 리포트
+                        </button>
+                        <button
+                          onClick={() => setViewMode('legacy')}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            viewMode === 'legacy'
+                              ? 'bg-[#3a3633] text-[#818cf8] shadow-sm'
+                              : 'text-[#9ca3af] hover:text-white'
+                          }`}
+                          title="기존 상세 대시보드"
+                        >
+                          상세 뷰
+                        </button>
+                      </div>
+                    )}
+                    {!isSplitMode && viewMode === 'legacy' && (
                       <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
                         <button
                           onClick={() => setDashboardMode('data')}
@@ -3357,6 +3417,18 @@ function SimulatorDashboard({
                     >
                       <Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> {reportMonthLabel}
                     </button>
+                    {/* [시뮬 이력 저장] — 저장 성공 시 Document ID가 정식 번호로 격상됨 */}
+                    {rawSimResult && (
+                      <SaveButton
+                        onClick={() => setSaveDialogOpen(true)}
+                        saved={savedHistoryId != null}
+                        label={
+                          savedHistoryId != null
+                            ? `저장됨 · ${formatDocumentId(savedHistoryId)}`
+                            : undefined
+                        }
+                      />
+                    )}
                     <div className="relative">
                       <button
                         onClick={() => setIsDownloadOpen(!isDownloadOpen)}
@@ -3435,8 +3507,18 @@ function SimulatorDashboard({
                     );
                   })()}
 
+                {!isSplitMode && viewMode === 'integrated' && rawSimResult && (
+                  <IntegratedReport
+                    simResult={rawSimResult}
+                    onExportPdf={handleDownloadPDF}
+                    onExportXlsx={handleDownloadExcel}
+                    compareMode={isSplitMode}
+                    onToggleCompare={() => setIsSplitMode(!isSplitMode)}
+                  />
+                )}
+
                 {/* Single Mode: 기존 대시보드 */}
-                {!isSplitMode && (
+                {!isSplitMode && (viewMode === 'legacy' || !rawSimResult) && (
                   <>
                     {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단
                         · map 뷰에서는 숨김 (AI 에이전트 맵 화면 간결성)
@@ -4963,6 +5045,57 @@ function SimulatorDashboard({
         selectedLegalType={selectedLegalType}
       />
 
+      {/* 시뮬 이력 저장 다이얼로그 */}
+      <SaveDialog
+        open={saveDialogOpen}
+        onClose={() => {
+          setSaveDialogOpen(false);
+          saveSim.reset();
+        }}
+        meta={{
+          brandName: user?.company_name || simResult?.recommendation?.slice(0, 20) || '브랜드',
+          district: selectedDongs[0] || '연남동',
+          managerName: user?.contact_name || user?.email || '매니저',
+        }}
+        isSaving={saveSim.isSaving}
+        errorMessage={saveSim.error}
+        onConfirm={async (clientName) => {
+          if (!rawSimResult) return;
+          const compIntel = rawSimResult.competitor_intel as
+            | Record<string, unknown>
+            | null
+            | undefined;
+          const signalRaw = compIntel?.['market_entry_signal'];
+          const signal =
+            signalRaw === 'green' || signalRaw === 'yellow' || signalRaw === 'red'
+              ? signalRaw
+              : null;
+          const verdictSummary =
+            rawSimResult.ai_recommendation?.split(/[.!?。]/)[0]?.slice(0, 200) ??
+            rawSimResult.analysis_report?.slice(0, 200) ??
+            null;
+
+          const res = await saveSim.save({
+            client_name: clientName,
+            district: selectedDongs[0] || '연남동',
+            brand_name: user?.company_name || '브랜드 미지정',
+            business_type: businessType,
+            scenario: null, // Phase 1: scenario 입력 UI 아직 없음
+            simulation_result: rawSimResult,
+            ai_verdict_summary: verdictSummary,
+            market_entry_signal: signal,
+          });
+          if (res) {
+            setSavedHistoryId(res.id);
+            setSaveDialogOpen(false);
+            showToast(
+              'success',
+              `${clientName} 고객님 시뮬 이력이 저장되었습니다. (${formatDocumentId(res.id)})`,
+            );
+          }
+        }}
+      />
+
       {/* [v12.0] Hidden A4 PDF Template — html2canvas 캡처용 (화면 밖) */}
       <HiddenPDFTemplate
         ref={pdfTemplateRef}
@@ -5015,6 +5148,7 @@ function SimulatorDashboard({
           },
         ]}
         reportDate={reportFullDate}
+        savedHistoryId={savedHistoryId}
       />
     </div>
   );
@@ -5391,6 +5525,8 @@ interface HiddenPDFTemplateProps {
   neighborhoodRows: NeighborhoodRow[];
   insights: { severity: 'critical' | 'advisory' | 'opportunity'; title: string; desc: string }[];
   reportDate: string;
+  /** 저장된 이력 ID(BIGINT) — null이면 "SPTR-DRAFT-…" 표시. Saved면 "SPTR-000142" 같은 정식 번호. */
+  savedHistoryId?: number | null;
 }
 
 // 인디고 SPOTTER 로고 SVG 경로 (Light 테마 버전 — #6366f1)
@@ -5442,10 +5578,21 @@ function PDFPageFooter({ reportDate }: { reportDate: string }) {
 }
 
 const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
-  ({ districtFull, stats, cannibalizationRows, neighborhoodRows, insights, reportDate }, ref) => {
+  (
+    {
+      districtFull,
+      stats,
+      cannibalizationRows,
+      neighborhoodRows,
+      insights,
+      reportDate,
+      savedHistoryId = null,
+    },
+    ref,
+  ) => {
     const TOTAL_PAGES = 4;
     const pageClass = 'w-[794px] h-[1123px] p-12 bg-white text-slate-900 relative flex flex-col';
-    const docId = `SPTR-${Date.now().toString().slice(-8)}`;
+    const docId = formatDocumentId(savedHistoryId);
 
     const severityStyle = {
       critical: { dot: 'bg-rose-500', bg: 'bg-rose-50 border-rose-200' },
@@ -7392,6 +7539,24 @@ export default function App() {
                   element={
                     <ProtectedRoute requireRole="master">
                       <HQCommandCenter />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* ManagerDetail — 본인 또는 master 접근 가능 (내부 분기). Phase 1: self-view 중심 */}
+                <Route
+                  path="/hq/managers/:id"
+                  element={
+                    <ProtectedRoute>
+                      <ManagerDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* 저장된 시뮬 이력 재현 — 본인 이력만 조회 가능 (백엔드 권한 검증) */}
+                <Route
+                  path="/dashboard/history/:id"
+                  element={
+                    <ProtectedRoute>
+                      <SimulationHistoryDetail />
                     </ProtectedRoute>
                   }
                 />

@@ -35,14 +35,14 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
 
     if (result.success) {
       if (result.role === 'master') {
-        auth.login(result.user, result.brand);
+        auth.login(result.user, result.brand, result.token);
         showToast(
           'success',
           `환영합니다! ${result.user.company_name || 'SPOTTER'} 엔진에 연결되었습니다.`,
         );
         nav('/hq');
       } else {
-        auth.login(result.user, null);
+        auth.login(result.user, null, result.token);
         showToast('success', `${result.user.contact_name || '매니저'}님, 환영합니다.`);
         nav('/simulator');
       }

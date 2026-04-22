@@ -90,6 +90,11 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Tenant-ID"],
 )
 
+# --- simulation_history REST (JWT Bearer 요구) ---
+from src.api.simulation_history import router as _sim_history_router  # noqa: E402
+
+app.include_router(_sim_history_router)
+
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
@@ -582,10 +587,22 @@ class LoginRequest(BaseModel):
 
 @app.post("/auth/login")
 async def login(req: LoginRequest):
-    """로그인 — 이메일/비밀번호 검증 + 브랜드 정보 반환"""
+    """로그인 — 이메일/비밀번호 검증 + 브랜드 정보 + JWT access_token 반환.
+
+    기존 응답 구조(`user`/`brand`)는 그대로 유지하고 `access_token`만 추가.
+    """
+    from src.services.jwt_auth import create_access_token  # 지역 import — 기존 상단 import 그룹 미영향
+
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await run_in_threadpool(auth.login, req.email, req.password)
+        if result.get("status") == "success" and result.get("user"):
+            u = result["user"]
+            result["access_token"] = create_access_token(
+                user_id=str(u["id"]),
+                role="master",
+                email=u.get("email", req.email),
+            )
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -654,10 +671,20 @@ async def manager_signup(req: ManagerSignupRequest):
 
 @app.post("/auth/manager/login")
 async def manager_login(req: LoginRequest):
-    """매니저 로그인"""
+    """매니저 로그인 — JWT access_token 포함."""
+    from src.services.jwt_auth import create_access_token
+
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await run_in_threadpool(auth.manager_login, req.email, req.password)
+        if result.get("status") == "success" and result.get("user"):
+            u = result["user"]
+            result["access_token"] = create_access_token(
+                user_id=str(u["id"]),
+                role="manager",
+                email=u.get("email", req.email),
+                owner_id=str(u.get("owner_id")) if u.get("owner_id") else None,
+            )
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
