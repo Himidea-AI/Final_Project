@@ -9,7 +9,7 @@ import {
   Crosshair,
   type LucideIcon,
 } from 'lucide-react';
-import type { AgentAttribution, AgentId, AgentKind } from '@/types';
+import type { AgentAttribution, AgentId, AgentKind } from '../../../types';
 
 const AGENT_ICONS: Record<AgentId, LucideIcon> = {
   market_analyst: TrendingUp,

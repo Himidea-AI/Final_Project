@@ -34,14 +34,35 @@ const ReportViewer: React.FC<ReportViewerProps> = ({ report }) => {
         <div className="max-w-none prose prose-blue prose-headings:font-black prose-p:text-gray-600 prose-li:text-gray-600">
           <ReactMarkdown
             components={{
-              h1: ({ node, ...props }) => <h1 className="text-3xl font-black text-gray-900 mb-6 border-b-2 border-gray-100 pb-2" {...props} />,
-              h2: ({ node, ...props }) => <h2 className="text-xl font-bold text-gray-800 mt-8 mb-4 flex items-center gap-2 before:content-[''] before:w-1 before:h-6 before:bg-blue-500 before:rounded-full" {...props} />,
-              h3: ({ node, ...props }) => <h3 className="text-lg font-semibold text-gray-700 mt-6 mb-2" {...props} />,
-              p: ({ node, ...props }) => <p className="leading-relaxed mb-4 text-gray-600" {...props} />,
-              li: ({ node, ...props }) => <li className="mb-1 text-gray-600 list-disc ml-4" {...props} />,
-              strong: ({ node, ...props }) => <strong className="font-bold text-gray-900" {...props} />,
+              h1: ({ node, ...props }) => (
+                <h1
+                  className="text-3xl font-black text-gray-900 mb-6 border-b-2 border-gray-100 pb-2"
+                  {...props}
+                />
+              ),
+              h2: ({ node, ...props }) => (
+                <h2
+                  className="text-xl font-bold text-gray-800 mt-8 mb-4 flex items-center gap-2 before:content-[''] before:w-1 before:h-6 before:bg-blue-500 before:rounded-full"
+                  {...props}
+                />
+              ),
+              h3: ({ node, ...props }) => (
+                <h3 className="text-lg font-semibold text-gray-700 mt-6 mb-2" {...props} />
+              ),
+              p: ({ node, ...props }) => (
+                <p className="leading-relaxed mb-4 text-gray-600" {...props} />
+              ),
+              li: ({ node, ...props }) => (
+                <li className="mb-1 text-gray-600 list-disc ml-4" {...props} />
+              ),
+              strong: ({ node, ...props }) => (
+                <strong className="font-bold text-gray-900" {...props} />
+              ),
               blockquote: ({ node, ...props }) => (
-                <blockquote className="border-l-4 border-blue-200 bg-blue-50/50 p-4 my-6 italic text-gray-700 rounded-r-lg" {...props} />
+                <blockquote
+                  className="border-l-4 border-blue-200 bg-blue-50/50 p-4 my-6 italic text-gray-700 rounded-r-lg"
+                  {...props}
+                />
               ),
             }}
           >

@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useEffect } from 'react';
-import type { LegalChecklistItem } from '@/types';
+import type { LegalChecklistItem } from '../../../types';
 
 interface LegalRiskDetail {
   type: string;

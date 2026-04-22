@@ -83,6 +83,7 @@ export interface LegalRisk {
   detail: string;
   recommendation?: string;
   articles?: LegalRiskArticle[];
+  checklist?: LegalChecklistItem[];
 }
 
 /** 폐업 위험도 기여 피처 */

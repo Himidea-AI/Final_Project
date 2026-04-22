@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { AgentCard } from './AgentCard';
-import type { AgentAttribution } from '@/types';
+import type { AgentAttribution } from '../../../types';
 
 const mockAttr: AgentAttribution = {
   id: 'competitor_intel',
