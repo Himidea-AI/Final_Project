@@ -5641,12 +5641,12 @@ const NOTIFICATION_MOCK_ITEMS = [
 
 function GlobalLimelightNav() {
   const nav = useTransition();
-  const { isLoggedIn, user, logout } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const { showToast } = useToast();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
-  const [openDropdown, setOpenDropdown] = useState<'bell' | 'user' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'bell' | null>(null);
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
@@ -5891,50 +5891,11 @@ function GlobalLimelightNav() {
         </>
       )}
 
-      {/* 유저/워크스페이스 드롭다운 (User) */}
-      {openDropdown === 'user' && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
-          <div className="absolute top-12 right-0 w-56 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
-            <div className="px-4 py-3 border-b border-[#3a3633]">
-              <p className="text-xs font-black text-[#e2e8f0]">SPOTTER-HQ</p>
-              <p className="text-[10px] text-[#9ca3af] mt-0.5">마스터 계정 (팀장)</p>
-            </div>
-            <div className="py-1">
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  nav('/hq?tab=team');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
-              >
-                팀 및 권역 관리
-              </button>
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  nav('/hq?tab=billing');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
-              >
-                결제 및 토큰 사용량
-              </button>
-            </div>
-            <div className="border-t border-[#3a3633] py-1 mt-1">
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  logout();
-                  nav('/login');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-rose-400 hover:bg-rose-500/10 transition-colors"
-              >
-                로그아웃
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      {/*
+        User 드롭다운 제거됨 — User 아이콘이 `/hq?tab=history` 로 직행으로 바뀌면서
+        openDropdown==='user' 조건이 트리거되지 않음.
+        팀/결제 관리는 /hq 사이드바 메뉴에서, 로그아웃은 글로벌 헤더 LogoutButton 에서 접근.
+      */}
     </div>
   );
 }

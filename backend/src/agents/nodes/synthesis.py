@@ -150,12 +150,7 @@ async def synthesis_node(state: AgentState) -> dict:
 
     # 2. LLM 합성용 컨텍스트 구성
     # [토큰 절감] 중간 에이전트 리포트 전문 대신 핵심 수치만 전달
-    # market_report: 앞 150자 (등급·성장률 수치가 앞부분에 집중됨)
-    # population_report: 앞 120자 (인구 수치 요약)
     # legal: summary 60자 이내로 축약 (level이 핵심)
-    market_summary_short = market_report[:150].replace("\n", " ")
-    pop_summary_short = population_report[:120].replace("\n", " ")
-
     legal_summary_for_llm = "\n".join(
         [f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}" for r in legal_risks]
     )
