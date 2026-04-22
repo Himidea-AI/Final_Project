@@ -286,6 +286,10 @@ def load_world_from_rds(
             continue
 
         cat = _map_category(r.category)
+        # 편의점·기타 카테고리는 시뮬 대상에서 제외 (분석 대상: 음식점/카페/주점 3종)
+        if cat not in ("음식점", "카페", "주점"):
+            skipped += 1
+            continue
         menu = menu_map.get(r.kakao_id, [])
         # price_level 자동 산출 (메뉴 가격 중간값 기반)
         if menu:

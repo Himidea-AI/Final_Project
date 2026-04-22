@@ -2391,17 +2391,22 @@ function SimulatorDashboard({
   // 레이더 차트 7축 꼭지점 — market_report 기반 동적 계산
   // 순서: 유동인구(12시) → 매출(2시) → 성장성(4시) → 폐업률(6시) → 임대료(8시) → 경쟁강도(10시) → 접근성(11시)
   const RADAR_FALLBACK_VALUES = [82, 74, 56, 9, 45, 68, 78]; // mock fallback
+  // NaN 방지: undefined/null/NaN 은 0 으로 치환 (SVG polygon cx/cy NaN 에러 방지)
+  const _safeNum = (v: unknown, fallback = 0): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
   const radarValues = simResult?.marketReport
     ? [
-        simResult.marketReport.floating_population,
-        simResult.marketReport.estimated_revenue,
-        simResult.marketReport.growth_potential,
+        _safeNum(simResult.marketReport.floating_population, 50),
+        _safeNum(simResult.marketReport.estimated_revenue, 50),
+        _safeNum(simResult.marketReport.growth_potential, 50),
         simResult.marketReport.closure_rate != null
-          ? Math.round(simResult.marketReport.closure_rate * 100)
-          : 100 - simResult.marketReport.survival_rate,
-        simResult.marketReport.rent_index,
-        simResult.marketReport.competition_intensity,
-        simResult.marketReport.accessibility,
+          ? _safeNum(Math.round(simResult.marketReport.closure_rate * 100), 50)
+          : _safeNum(100 - _safeNum(simResult.marketReport.survival_rate, 50), 50),
+        _safeNum(simResult.marketReport.rent_index, 50),
+        _safeNum(simResult.marketReport.competition_intensity, 50),
+        _safeNum(simResult.marketReport.accessibility, 50),
       ]
     : RADAR_FALLBACK_VALUES;
   const RADAR_LABELS = [
@@ -2415,15 +2420,22 @@ function SimulatorDashboard({
   ] as const;
   const radarVertices = radarValues.map((v, k) => {
     const angle = -Math.PI / 2 + (2 * Math.PI * k) / 7;
-    const r = Math.max(0, Math.min(100, v)) * 0.6; // max radius 60px
+    // NaN 방지 — v 가 Infinity/NaN 이면 0
+    const safeV = Number.isFinite(v) ? v : 0;
+    const r = Math.max(0, Math.min(100, safeV)) * 0.6; // max radius 60px
     return {
       x: 100 + Math.cos(angle) * r,
       y: 100 + Math.sin(angle) * r,
-      value: v,
+      value: safeV,
       label: RADAR_LABELS[k],
     };
   });
-  const radarPointsStr = radarVertices.map((v) => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(' ');
+  const radarPointsStr = radarVertices
+    .map(
+      (v) =>
+        `${(Number.isFinite(v.x) ? v.x : 100).toFixed(1)},${(Number.isFinite(v.y) ? v.y : 100).toFixed(1)}`,
+    )
+    .join(' ');
 
   // 오늘 날짜 (리포트 생성 시점)
   const today = new Date();
@@ -4526,26 +4538,6 @@ function SimulatorDashboard({
                                         })}
                                       </div>
                                     )}
-                                    {cr.summary && cr.summary.length > 0 && (
-                                      <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]">
-                                        <div className="text-[10px] text-[#9ca3af] mb-1">
-                                          AI 분석 요약
-                                        </div>
-                                        {cr.summary.map((sentence, idx) => (
-                                          <div
-                                            key={idx}
-                                            className="flex items-start gap-1.5 px-2.5 py-1.5 bg-[#1e1b18] rounded-lg border border-[#3a3633]"
-                                          >
-                                            <span className="mt-0.5 text-[#f97316] text-[10px] flex-shrink-0">
-                                              •
-                                            </span>
-                                            <span className="text-[10px] text-[#d1d5db] leading-relaxed">
-                                              {sentence}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               })()
@@ -4940,6 +4932,55 @@ function SimulatorDashboard({
                         abmLoading={abmLoading}
                         abmError={abmError}
                         targetDistrict={selectedDongs[0] || '서교동'}
+                        vacancySpots={simResult?.vacancySpots}
+                        onClearResult={() => {
+                          setAbmResult(null);
+                          setAbmError(null);
+                        }}
+                        onSpotClick={async (spot) => {
+                          if (!simResult || abmLoading) return;
+                          setAbmLoading(true);
+                          setAbmError(null);
+                          try {
+                            const res = await fetch('/api/simulate-abm', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                // 클릭한 스팟의 동을 target 으로 강제 (선택된 동과 다를 수 있음)
+                                target_district: spot.dong_name,
+                                business_type: businessType,
+                                brand_name: simResult.recommendation || '신규 스팟 시뮬',
+                                langgraph_result: (simResult as any)._raw ?? simResult,
+                                n_agents: 100,
+                                days: 1,
+                                spot_lat: spot.lat,
+                                spot_lon: spot.lon,
+                                scenario: {
+                                  weather_override: null,
+                                  date_override: null,
+                                  weekend_force: false,
+                                  rent_shock_pct: 0.0,
+                                },
+                              }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) {
+                              setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
+                            } else if (data.status === 'error') {
+                              setAbmError(
+                                data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
+                              );
+                            } else {
+                              setAbmResult(data);
+                            }
+                          } catch (err) {
+                            setAbmError(
+                              `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
+                            );
+                          } finally {
+                            setAbmLoading(false);
+                          }
+                        }}
                         onRunSimulation={async (scenario) => {
                           if (!simResult) return;
                           setAbmLoading(true);
@@ -4964,13 +5005,21 @@ function SimulatorDashboard({
                               }),
                             });
                             const data = await res.json();
-                            if (data.status === 'unavailable' || data.status === 'error') {
-                              setAbmError(data.message || 'ABM 시뮬레이션 실패');
+                            if (!res.ok) {
+                              setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
+                            } else if (data.status === 'unavailable') {
+                              setAbmError('ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)');
+                            } else if (data.status === 'error') {
+                              setAbmError(
+                                data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
+                              );
                             } else {
                               setAbmResult(data);
                             }
-                          } catch {
-                            setAbmError('ABM 시뮬레이션 요청 실패');
+                          } catch (err) {
+                            setAbmError(
+                              `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
+                            );
                           } finally {
                             setAbmLoading(false);
                           }

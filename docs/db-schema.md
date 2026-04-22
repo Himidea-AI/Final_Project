@@ -1,8 +1,8 @@
 # PostgreSQL 테이블·컬럼 정의서
 
-> DB: `mapo_simulator` | 29개 테이블
-> 출처: `backend/src/database/models.py` + `backend/alembic/versions/*` (revision b2d4e8f1c7a3 기준)
-> 최종 갱신: 2026-04-17
+> DB: `mapo_simulator` | 31개 테이블
+> 출처: `backend/src/database/models.py` + `backend/alembic/versions/*` (revision a2f3b6d84e9c 기준)
+> 최종 갱신: 2026-04-22
 
 ---
 
@@ -15,8 +15,9 @@
 | 점포 | store_info, store_quarterly |
 | 임대료 | rent_cost, golmok_rent, small_store_rent_q |
 | 마스터 | dong_mapping |
-| 시뮬레이션 | simulation_result |
+| 시뮬레이션 | simulation_result, simulation_history |
 | 회원/인증 | users, manager_users, invite_codes |
+| 고객 (매장 방문) | customers |
 | 브랜드 | ftc_brand_franchise, biz_brand_mapping, brand_logo |
 | 외부 수집 | naver_vacancy, kakao_store |
 | 서울 전체 (LSTM 사전학습) | seoul_district_sales, seoul_district_stores, seoul_population_quarterly, seoul_golmok_rent, seoul_training_dataset |
@@ -610,6 +611,59 @@
 | `store_count`, `open_count`, `close_count` | bigint | 점포/개업/폐업 수 |
 | `total_pop` | float | 인구 |
 | `cpi_index` | float | 외식 CPI |
+
+---
+
+## 30. customers — 고객 방문 기록
+
+> 매장 방문 고객 기본 정보 (2026-04-22 신규)
+> PK: customer_id
+
+| 컬럼명 | 타입 | 설명 | 예시 |
+|--------|------|------|------|
+| `customer_id` | varchar(20) | 고객 아이디 (PK) | C00001 |
+| `customer_name` | text | 고객 이름 (NOT NULL) | 홍길동 |
+| `visit_date` | date | 방문 날짜 (nullable) | 2026-04-22 |
+
+**주의**: `customer_id` 단일 PK이므로 고객당 최신 방문 1건만 저장됨. 여러 방문 이력 관리가 필요하면 PK를 `(customer_id, visit_date)` 복합으로 변경하거나 별도 `customer_visits` 테이블 분리 필요.
+
+---
+
+## 31. simulation_history — 매니저 시뮬레이션 이력 (2026-04-22 신규)
+
+> 매니저가 시뮬 실행 후 [저장] 버튼으로 남긴 **영구 이력**. `simulation_result`와 달리 사용자 메타(manager_id, client_name)를 포함하고, 고객명 한글 부분일치 검색이 가능하도록 `pg_trgm` GIN 인덱스 사용.
+> 출처: alembic revision `a2f3b6d84e9c` + `7ea1945766a2` (FK 추가 + 중복 인덱스 제거)
+> PK: id (BIGSERIAL) | 인덱스: 3종 (client_trgm, created_at, manager×created_at)
+> FK: `manager_id → manager_users(id)` ON DELETE CASCADE
+
+| 컬럼명 | 타입 | 설명 | 예시 |
+|--------|------|------|------|
+| `id` | bigint (PK, auto) | 자동증가 PK | 1 |
+| `manager_id` | uuid (NOT NULL, FK) | `manager_users(id)` ON DELETE CASCADE | 8f2e25fa-... |
+| `client_name` | varchar(100) (NOT NULL) | 예비 가맹점주 이름 | 홍길동 |
+| `district` | varchar(50) (NOT NULL) | 출점 후보 행정동 | 공덕동 |
+| `brand_name` | varchar(100) (NOT NULL) | 브랜드명 | 스타벅스 |
+| `business_type` | varchar(50) | 업종 (cafe/restaurant/convenience) | cafe |
+| `scenario` | jsonb | 시뮬 시나리오 파라미터 | {"weather":"sunny","weekend_force":true} |
+| `simulation_result` | jsonb (NOT NULL) | 시뮬 결과 전체 (8 agent + ABM + B2 ML 9개) | {...} |
+| `ai_verdict_summary` | text | 리스트 표시용 AI 판정 요약 | "공덕 커피 고위험..." |
+| `market_entry_signal` | varchar(10) | 진입 신호 | green / yellow / red |
+| `created_at` | timestamptz (NOT NULL) | 생성 일시 (default now()) | 2026-04-22 12:00:00+09 |
+| `updated_at` | timestamptz | 갱신 일시 (default now(), 자동 트리거 없음) | — |
+
+**인덱스** (revision `7ea1945766a2` 에서 중복 2종 제거 후 확정):
+- `idx_simhist_manager_created` — (manager_id, created_at DESC) 복합. 매니저별 최신순 조회 + manager_id 단일 쿼리도 leftmost prefix 로 커버
+- `idx_simhist_client_trgm` — client_name GIN + gin_trgm_ops (한글 부분일치 + 정확 일치 모두 커버)
+- `idx_simhist_created` — created_at DESC (전체 최신순 필요 시)
+
+**제거된 중복 인덱스** (참고):
+- ~~`idx_simhist_client` (btree)~~ — trigram 인덱스가 정확 일치까지 커버
+- ~~`ix_simulation_history_manager_id` (btree)~~ — 복합 인덱스 leftmost prefix 로 커버
+
+**주의**:
+- `pg_trgm` extension 필요 (`CREATE EXTENSION IF NOT EXISTS pg_trgm` — RDS `rds_superuser` 권한 필요)
+- `updated_at` 자동 갱신 트리거 없음 (Phase 1 범위 외) — Phase 2 수정 기능 추가 시 트리거 설치
+- `simulation_result` (단수, 0행)와 구분: 전자는 1회성 실행 결과 캐시, 후자는 저장 이력
 
 ---
 

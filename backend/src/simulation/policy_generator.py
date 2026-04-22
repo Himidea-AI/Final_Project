@@ -425,6 +425,12 @@ def generate_policies(
         print(f"[policy_gen] 캐시 재사용: {cache_path.name}")
         return _load_cache(cache_path)
 
+    # 환경변수 POLICY_PROVIDER 가 설정되면 우선 적용 (테스트 토큰 절약용)
+    # e.g., POLICY_PROVIDER=ollama → OpenAI 건너뛰고 Ollama만
+    env_override = os.getenv("POLICY_PROVIDER", "").strip().lower()
+    if env_override in ("openai", "ollama", "auto"):
+        provider = env_override
+
     # Provider 결정
     client = None
     call_fn = None

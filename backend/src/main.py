@@ -6,6 +6,14 @@ import uuid
 import asyncio
 from typing import Any, Dict
 
+# Windows cp949 콘솔 인코딩 이슈 방지 — ABM simulation 이모지/em-dash 출력 crash 회피
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except AttributeError:
+        pass
+
 logger = logging.getLogger(__name__)
 
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
@@ -30,11 +38,14 @@ from pydantic import BaseModel
 # LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
 # (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
 from dotenv import load_dotenv
+
 load_dotenv()
 _lc_api_key = os.environ.get("LANGCHAIN_API_KEY", "")
 if _lc_api_key:
     os.environ.setdefault("LANGCHAIN_TRACING_V2", os.environ.get("LANGCHAIN_TRACING_V2", "true"))
-    os.environ.setdefault("LANGCHAIN_ENDPOINT", os.environ.get("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com/"))
+    os.environ.setdefault(
+        "LANGCHAIN_ENDPOINT", os.environ.get("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com/")
+    )
     os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGCHAIN_PROJECT", "mapo-franchise-simulator"))
 
 from langchain_core.messages import HumanMessage
@@ -49,6 +60,7 @@ from src.services.auth import AuthService
 from models.interface import ModelOutput
 from models.explainability.simulation import (
     build_quarterly_projection,
+    build_scenarios,
 )
 from models.explainability.shap_analysis import explain_tcn_prediction
 
@@ -161,18 +173,15 @@ from src.agents.tools import MarketDataTool as _MarketDataTool
 
 _BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
-# 업종 → kakao 검색 키워드 매핑 (competitor_intel.BRAND_PROFILE과 동일 계열)
+# 업종 → kakao 검색 키워드 매핑
 _BIZ_TO_KAKAO_KW: Dict[str, str] = {
-    # 정식 업종명
     "치킨전문점": "치킨", "커피-음료": "커피", "한식음식점": "한식",
     "중식음식점": "중식", "일식음식점": "일식", "양식음식점": "양식",
     "제과점": "베이커리", "패스트푸드점": "버거", "분식전문점": "분식",
     "호프-간이주점": "주점",
-    # 프론트엔드 단축 업종명
     "치킨": "치킨", "커피": "커피", "카페": "커피", "한식": "한식",
     "중식": "중식", "일식": "일식", "양식": "양식", "베이커리": "베이커리",
     "버거": "버거", "분식": "분식", "주점": "주점",
-    # 영문 업종명 (BIZ_TYPE_NORMALIZE에서 한국어로 변환되기 전 fallback)
     "chicken": "치킨", "cafe": "커피", "coffee": "커피", "burger": "버거",
     "bakery": "베이커리", "korean": "한식",
 }
@@ -185,7 +194,7 @@ async def _collect_all_competitor_locations(
 ) -> list[dict]:
     """winner + top3 추천 동 각각의 500m 반경 경쟁업체 좌표를 수집해 통합 반환."""
     keyword = _BIZ_TO_KAKAO_KW.get(business_type, business_type)
-    districts = list({winner} | set(top3 or []))  # 중복 제거
+    districts = list({winner} | set(top3 or []))
     print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
     results: list[dict] = []
     seen_ids: set = set()
@@ -307,10 +316,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             ),
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
-            "articles": [
-                {"article_ref": a, "content": ""} if isinstance(a, str) else a
-                for a in r.get("articles", [])
-            ],
+            "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
         }
         for r in legal_risks_raw
     ]
@@ -325,10 +331,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             return {k: _sanitize(v) for k, v in val.items()}
         return val
 
-    # 랭킹 데이터 — state 최상위 키 우선, fallback: analysis_results
-    district_rankings = _sanitize(state.get("scouting_results") or analysis.get("district_rankings", []))
-    winner_district = _sanitize(state.get("winner_district") or analysis.get("winner_district", target_dist))
-    top_3_candidates = _sanitize(state.get("top_3_candidates") or analysis.get("top_3_candidates", []))
+    # 랭킹 데이터
+    district_rankings = _sanitize(analysis.get("district_rankings", []))
+    winner_district = _sanitize(analysis.get("winner_district", target_dist))
+    top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
@@ -370,7 +376,11 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         _growth_r = min(int(abs(growth_rate) * 5), 100)
 
     competition_intensity = _competition_r
-    district_score = float(_target_row.get("score") if _target_row else {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60))
+    district_score = float(
+        _target_row.get("score")
+        if _target_row
+        else {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
+    )
 
     market_report = {
         "floating_population": _floating_pop_r,
@@ -465,16 +475,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             {
                 "district": target_dist,
                 "score": district_score,
-                # monthly_revenue / net_profit: synthesis profit_simulation 실계산값 사용, 없으면 null
-                # 단위: 만원 (프론트가 ×10000 해서 원으로 표시). 0이나 None이면 null 반환.
-                "revenue": (
-                    int((final_report.get("profit_simulation") or {}).get("monthly_revenue") or 0) // 10000
-                    or None
-                ),
-                "net_profit": (
-                    int((final_report.get("profit_simulation") or {}).get("net_profit") or 0) // 10000
-                    or None
-                ),
+                # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
+                "revenue": (md.get("avg_revenue") or 30000000) // 10000,
                 "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
                 "survival": float(market_report["survival_rate"]),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),
@@ -556,6 +558,14 @@ async def analyze_location(input_data: SimulationInput):
 
     request_id = str(uuid.uuid4())
     print(f"--- [API] /analyze 요청 수신: {input_data.target_district} ({input_data.business_type}) ---")
+
+    # 테스트 모드 — LLM 5 에이전트 분석 건너뛰기 (토큰 절약)
+    if os.getenv("LLM_AGENTS_DISABLED", "").strip() == "1":
+        print(f"[ANALYZE] LLM_AGENTS_DISABLED=1 — mock 반환 (target={input_data.target_district})")
+        return {
+            "status": "success",
+            "data": _mock_simulation_response(input_data.target_district, request_id),
+        }
 
     try:
         final_state = await _run_pipeline(input_data)
@@ -891,6 +901,19 @@ async def get_organization(owner_id: str):
 # ---------------------------------------------------------------------------
 
 
+@app.get("/mapo/spots/{dong_name}")
+async def get_mapo_spots(dong_name: str, limit: int = 4):
+    """마포 행정동의 대표 스팟 4개 (지하철역 + 상점 3개) 좌표 조회.
+
+    ABM 프론트엔드 시각화용 — 하드코딩된 DONG_STORE_NODES 대체.
+    데이터 소스: data/processed/dong_subway_access.csv + store_info_mapo.csv.
+    """
+    from src.services.mapo_spots import get_dong_spots
+
+    spots = get_dong_spots(dong_name, limit=limit)
+    return {"dong_name": dong_name, "spots": spots}
+
+
 @app.get("/population/live")
 async def get_live_population(dongs: str | None = None):
     """
@@ -915,6 +938,33 @@ async def get_live_population(dongs: str | None = None):
 # ---------------------------------------------------------------------------
 
 
+def _mock_simulation_response(target_district: str, request_id: str) -> dict:
+    """LLM_AGENTS_DISABLED=1 테스트 모드 — LangGraph 5 에이전트 건너뛰고 mock 반환.
+
+    ABM 시뮬 (/simulate-abm) 만 테스트할 때 토큰 비용 절약.
+    """
+    return {
+        "request_id": request_id,
+        "target_district": target_district,
+        "ai_recommendation": f"[테스트 모드] {target_district} — LLM 분석 비활성, ABM만 사용하세요.",
+        "market_report": {
+            "estimated_revenue": 30000000,
+            "competition_intensity": "mid",
+            "target_age": "30대",
+        },
+        "comparison": [],
+        "legal_risks": [],
+        "overall_legal_risk": "safe",
+        "simulation_months": 12,
+        "quarterly_projection": [],
+        "analysis_metrics": {"main_target_age": "30대", "peak_time": "점심"},
+        "grade": "CAUTION",
+        "score": 60,
+        "status": "ok",
+        "test_mode": True,
+    }
+
+
 @app.post("/simulate")
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
@@ -927,6 +977,12 @@ async def run_simulation(input_data: SimulationInput):
         }
 
     request_id = str(uuid.uuid4())
+
+    # 테스트 모드 — LLM 5 에이전트 분석 건너뛰기 (토큰 절약)
+    if os.getenv("LLM_AGENTS_DISABLED", "").strip() == "1":
+        print(f"[SIMULATE] LLM_AGENTS_DISABLED=1 — mock 반환 (target={input_data.target_district})")
+        return _mock_simulation_response(input_data.target_district, request_id)
+
     try:
         final_state = await _run_pipeline(input_data)
         return map_state_to_simulation_output(final_state, request_id)
@@ -961,10 +1017,11 @@ async def run_simulation(input_data: SimulationInput):
 # ---------------------------------------------------------------------------
 class AbmScenarioParams(BaseModel):
     """GameMaster에 전달되는 시나리오 파라미터 (A1 Scenario dataclass와 1:1 대응)"""
-    weather_override: str | None = None   # "맑음"|"비"|"눈"|None(RDS 최신 날씨)
-    date_override: str | None = None      # "2026-04-25" ISO 날짜, None=오늘
-    weekend_force: bool = False           # True=주말 강제, date_override 무시
-    rent_shock_pct: float = 0.0           # 0.0~0.5 (0.3 = +30%)
+
+    weather_override: str | None = None  # "맑음"|"비"|"눈"|None(RDS 최신 날씨)
+    date_override: str | None = None  # "2026-04-25" ISO 날짜, None=오늘
+    weekend_force: bool = False  # True=주말 강제, date_override 무시
+    rent_shock_pct: float = 0.0  # 0.0~0.5 (0.3 = +30%)
 
 
 class AbmSimulationRequest(BaseModel):
@@ -974,10 +1031,13 @@ class AbmSimulationRequest(BaseModel):
     brand_name: str
     langgraph_result: Dict[str, Any]
     # 시뮬 규모
-    n_agents: int = 100                   # 100 | 1000
+    n_agents: int = 100  # 100 | 1000
     days: int = 1
     # GameMaster 시나리오
     scenario: AbmScenarioParams = AbmScenarioParams()
+    # 공실 스팟 클릭 시 그 좌표 (optional) — 지도에 매장 정확히 찍기 위해
+    spot_lat: float | None = None
+    spot_lon: float | None = None
 
 
 @app.post("/simulate-abm")
@@ -1018,13 +1078,17 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "competition_intensity": market_report.get("competition_intensity"),
         "main_target_age": analysis_metrics.get("main_target_age"),
         "peak_time": analysis_metrics.get("peak_time"),
+        # 공실 스팟 클릭 시 좌표 (Optional) — 지도에 정확한 위치 표시
+        "lat": req.spot_lat,
+        "lon": req.spot_lon,
     }
 
     pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
     tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
-    cfg = ModelConfig(
-        n_personas=req.n_agents,
-    )
+    # ModelConfig 기본값(tier_s=anthropic/haiku, tier_a=gemini) 사용.
+    # brain.py::_auto_downgrade 가 ANTHROPIC 키 없으면 OpenAI gpt-4o-mini 로 자동 전환.
+    # 이전에는 테스트 용도로 Ollama/qwen2.5 로 하드코딩했으나, 실제 API 호출로 복귀.
+    cfg = ModelConfig(n_personas=req.n_agents)
     # A1 Scenario dataclass — weather_override / date_override / weekend_force / rent_shock_pct
     scenario = Scenario(
         new_store=new_store_spec,
@@ -1034,6 +1098,43 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         weekend_force=req.scenario.weekend_force,
         rent_shock_pct=req.scenario.rent_shock_pct,
     )
+
+    # --- Redis 캐시 키 구성 (스팟·시나리오·규모 조합) ---
+    import hashlib
+    import json as _json
+
+    cache_payload = {
+        "district": req.target_district,
+        "category": req.business_type,
+        "brand": req.brand_name,
+        "n_agents": req.n_agents,
+        "days": req.days,
+        "spot_lat": req.spot_lat,
+        "spot_lon": req.spot_lon,
+        "weather": req.scenario.weather_override,
+        "date": req.scenario.date_override,
+        "weekend": req.scenario.weekend_force,
+        "rent_shock": req.scenario.rent_shock_pct,
+    }
+    cache_key = (
+        "abm_sim:"
+        + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
+    )
+
+    cached_result: dict | None = None
+    try:
+        async with aioredis.from_url(settings.redis_url, decode_responses=True) as r:
+            raw = await r.get(cache_key)
+            if raw:
+                cached_result = _json.loads(raw)
+                logger.info(f"[ABM] cache HIT key={cache_key[:16]}...")
+    except Exception as e:
+        logger.warning(f"[ABM] Redis 캐시 조회 실패(무시): {e}")
+
+    if cached_result is not None:
+        # 캐시 히트 — 저장된 응답 그대로 반환 (request_id 만 새로)
+        cached_result["cached"] = True
+        return cached_result
 
     try:
         result = await run_in_threadpool(
@@ -1053,7 +1154,30 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             content={"status": "error", "message": f"ABM 시뮬레이션 실패: {e}"},
         )
 
-    return {
+    # 동별 집계에서 target_district만 추출 (동마다 지표 달라지도록)
+    dong_totals = result.get("dong_totals") or {}
+    target_dong_stats = dong_totals.get(req.target_district, {})
+    target_visits = int(target_dong_stats.get("visits", 0))
+    target_revenue = float(target_dong_stats.get("revenue", 0))
+
+    # fallback — target_district 매장이 없으면 전체 평균으로 대체 (비교 가능하게)
+    if target_visits == 0 and dong_totals:
+        # 마포 전체 평균값 × 1동 비율 (16개 동 기준)
+        all_visits = sum(d.get("visits", 0) for d in dong_totals.values())
+        all_revenue = sum(d.get("revenue", 0) for d in dong_totals.values())
+        target_visits = int(all_visits / max(len(dong_totals), 1))
+        target_revenue = all_revenue / max(len(dong_totals), 1)
+
+    # narrator를 target_district 맞춤으로 재작성
+    target_narrator = (
+        f"{req.target_district} 상권 기준 일 방문 {target_visits:,}회, "
+        f"일 매출 약 {int(target_revenue):,}원. "
+        f"시나리오: {req.scenario.weather_override or '현재날씨'} · "
+        f"{'주말' if req.scenario.weekend_force else '평일'} · "
+        f"임대료 +{int(req.scenario.rent_shock_pct * 100)}%."
+    )
+
+    response = {
         "status": "ok",
         "target_district": req.target_district,
         "n_personas": req.n_agents,
@@ -1063,16 +1187,39 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             "rent_shock_pct": req.scenario.rent_shock_pct,
             "date": req.scenario.date_override or "오늘",
         },
-        "daily_visits_mean": result.get("daily_visits", 0),
+        # target_district 중심 지표 (동별로 다름)
+        "daily_visits_mean": target_visits,
         "daily_visits_std": result.get("daily_visits_std", 0),
-        "daily_revenue_mean": result.get("daily_revenue", 0),
+        "daily_revenue_mean": target_revenue,
         "daily_revenue_std": result.get("daily_revenue_std", 0),
-        "monthly_revenue_estimate": round(result.get("daily_revenue", 0) * 25),
+        "monthly_revenue_estimate": round(target_revenue * 25),
+        # 전체 지표 (참고용)
+        "total_daily_visits": result.get("daily_visits", 0),
+        "total_daily_revenue": result.get("daily_revenue", 0),
         "peak_hours": result.get("peak_hours", []),
         "customer_profile_dist": result.get("customer_profile_dist", {}),
+        "dong_totals": dong_totals,  # 프론트에서 동별 비교 차트용
         "cannibalization": result.get("cannibalization", {}),
-        "narrator_summary": result.get("narrator_summary", ""),
+        "narrator_summary": target_narrator,
         "trajectory": result.get("trajectory"),  # 미로피쉬 재생용
+        # 신규 매장(공실 스팟 클릭) 지표 — 프론트 결과 카드용
+        "new_store_visits": result.get("new_store_visits", 0),
+        "new_store_revenue": result.get("new_store_revenue", 0.0),
+        "new_store_visit_share_pct": result.get("new_store_visit_share_pct", 0.0),
+        # 캐시 여부 (cache miss 라 False)
+        "cached": False,
         # 원본 LangGraph 분석 결과 — 수정 없음
         "langgraph_result": lr,
     }
+
+    # 응답 Redis 캐시 저장 (TTL 1시간) — 같은 스팟·시나리오 재요청 시 즉시 반환
+    # trajectory 는 무거우니 캐시 본문에서 제거 후 저장 (핵심 지표만 보존)
+    try:
+        async with aioredis.from_url(settings.redis_url, decode_responses=True) as r:
+            cache_body = {k: v for k, v in response.items() if k != "trajectory"}
+            await r.setex(cache_key, 3600, _json.dumps(cache_body, ensure_ascii=False))
+            logger.info(f"[ABM] cache SET key={cache_key[:16]}... ttl=3600s")
+    except Exception as e:
+        logger.warning(f"[ABM] Redis 캐시 저장 실패(무시): {e}")
+
+    return response
