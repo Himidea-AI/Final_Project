@@ -47,12 +47,14 @@ import {
   UserCog,
   Shield,
   Loader2,
+  History,
 } from 'lucide-react';
+import { HistoryList } from '../components/SimulationHistory/HistoryList';
 
 /* ═══════════════════════════════════════════════════════
    Types
    ═══════════════════════════════════════════════════════ */
-type MenuId = 'team' | 'pipeline' | 'tuning' | 'billing' | 'mypage';
+type MenuId = 'team' | 'pipeline' | 'tuning' | 'history' | 'billing' | 'mypage';
 
 /* ═══════════════════════════════════════════════════════
    Main Component
@@ -82,7 +84,10 @@ function MasterCommandCenter() {
 
   // URL ?tab= 파라미터 변경 시 탭 동기화
   useEffect(() => {
-    if (tabFromUrl && ['team', 'pipeline', 'tuning', 'billing', 'mypage'].includes(tabFromUrl)) {
+    if (
+      tabFromUrl &&
+      ['team', 'pipeline', 'tuning', 'history', 'billing', 'mypage'].includes(tabFromUrl)
+    ) {
       setActiveMenu(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -126,16 +131,16 @@ function MasterCommandCenter() {
         {/* 워크스페이스 로고 영역 — auth.user 기반 동적 */}
         <div className="h-20 flex items-center px-6 border-b border-[#3a3633] gap-3 cursor-pointer group mt-24">
           <BrandLogo
-            name={user?.company_name || "SPOTTER"}
+            name={user?.company_name || 'SPOTTER'}
             isUser={false}
             className="w-8 h-8 text-xs rounded-lg shrink-0"
           />
           <div className="flex flex-col min-w-0">
             <span
               className="font-black text-sm text-[#e2e8f0] group-hover:text-[#818cf8] transition-colors truncate"
-              title={user?.company_name || "SPOTTER Workspace"}
+              title={user?.company_name || 'SPOTTER Workspace'}
             >
-              {user?.company_name || "SPOTTER Workspace"}
+              {user?.company_name || 'SPOTTER Workspace'}
             </span>
             <span className="text-[9px] text-[#9ca3af] font-mono tracking-widest uppercase">
               SPOTTER-HQ
@@ -168,6 +173,12 @@ function MasterCommandCenter() {
             icon={<SlidersHorizontal className="w-4 h-4" />}
             label="브랜드 AI 튜닝"
           />
+          <MenuButton
+            active={activeMenu === 'history'}
+            onClick={() => setActiveMenu('history')}
+            icon={<History className="w-4 h-4" />}
+            label="내 시뮬 이력"
+          />
 
           <p className="px-2 text-[10px] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
             SETTINGS
@@ -190,22 +201,20 @@ function MasterCommandCenter() {
         <div className="p-4 border-t border-[#3a3633]">
           <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#1e1b18] cursor-pointer transition-colors">
             <BrandLogo
-              name={user?.contact_name || "사용자"}
+              name={user?.contact_name || '사용자'}
               isUser={true}
               tone="accent"
               className="w-8 h-8 text-xs rounded-full shrink-0"
             />
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-xs font-bold text-[#e2e8f0] flex items-center gap-1.5">
-                <span className="truncate">{user?.contact_name || "사용자"}</span>
+                <span className="truncate">{user?.contact_name || '사용자'}</span>
                 <span className="text-[9px] font-mono text-[#9ca3af] uppercase shrink-0">
-                  · {user?.role === "manager" ? "매니저" : "팀장"}
+                  · {user?.role === 'manager' ? '매니저' : '팀장'}
                 </span>
               </span>
               <span className="text-[10px] text-[#818cf8] truncate">
-                {user?.role === "manager"
-                  ? "Regional Access"
-                  : `${user?.plan || "Pro"} Plan`}
+                {user?.role === 'manager' ? 'Regional Access' : `${user?.plan || 'Pro'} Plan`}
               </span>
             </div>
           </div>
@@ -222,12 +231,13 @@ function MasterCommandCenter() {
             {activeMenu === 'team' && '팀 및 권역 관리'}
             {activeMenu === 'pipeline' && '출점 파이프라인 보드'}
             {activeMenu === 'tuning' && '자사 브랜드 AI 튜닝 (Master Data)'}
+            {activeMenu === 'history' && '내 시뮬 이력'}
             {activeMenu === 'billing' && '결제 및 API 토큰 관리'}
             {activeMenu === 'mypage' && '내 정보 관리'}
           </h2>
 
           <div className="flex items-center gap-4">
-            {activeMenu !== 'mypage' && (
+            {activeMenu !== 'mypage' && activeMenu !== 'history' && (
               <button
                 onClick={() => {
                   if (activeMenu === 'team') {
@@ -273,6 +283,7 @@ function MasterCommandCenter() {
             )}
             {activeMenu === 'pipeline' && <PipelineKanbanView />}
             {activeMenu === 'tuning' && <BrandTuningView />}
+            {activeMenu === 'history' && <HistoryList />}
             {activeMenu === 'billing' && <BillingManagementView />}
             {activeMenu === 'mypage' && <MyPageView />}
           </div>
@@ -468,19 +479,19 @@ function ManagerActionsMenu({
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === 'Escape') setOpen(false);
     };
     const onScrollOrResize = () => setOpen(false);
 
-    document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
     return () => {
-      document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
     };
   }, [open]);
 
@@ -506,7 +517,7 @@ function ManagerActionsMenu({
               exit={{ opacity: 0, y: -4, scale: 0.98 }}
               transition={{ duration: 0.15, ease: [0.19, 1, 0.22, 1] }}
               style={{
-                position: "fixed",
+                position: 'fixed',
                 top: position.top,
                 left: position.left,
                 width: MENU_WIDTH,
@@ -562,16 +573,16 @@ function ReassignRegionModal({
   onSave: (id: string, gu: string | null, dongs: string[] | null) => void;
   isBusy: boolean;
 }) {
-  const [gu, setGu] = useState<string>("");
+  const [gu, setGu] = useState<string>('');
   const [dongs, setDongs] = useState<string[]>([]);
 
   // 모달이 새 매니저로 열릴 때마다 기존 권역 값으로 초기화
   useEffect(() => {
     if (manager) {
-      setGu(manager.assigned_gu ?? "");
+      setGu(manager.assigned_gu ?? '');
       setDongs(manager.assigned_dongs ?? []);
     } else {
-      setGu("");
+      setGu('');
       setDongs([]);
     }
   }, [manager]);
@@ -579,9 +590,7 @@ function ReassignRegionModal({
   if (!manager) return null;
 
   const toggleDong = (dong: string) => {
-    setDongs((prev) =>
-      prev.includes(dong) ? prev.filter((d) => d !== dong) : [...prev, dong],
-    );
+    setDongs((prev) => (prev.includes(dong) ? prev.filter((d) => d !== dong) : [...prev, dong]));
   };
 
   return (
@@ -629,9 +638,7 @@ function ReassignRegionModal({
 
             {gu && (
               <div>
-                <p className="text-[10px] text-[#9ca3af] mb-2">
-                  {gu} 행정동 선택 (복수 가능)
-                </p>
+                <p className="text-[10px] text-[#9ca3af] mb-2">{gu} 행정동 선택 (복수 가능)</p>
                 <div className="flex flex-wrap gap-1.5">
                   {REGION_DATA[gu]?.map((dong) => {
                     const selected = dongs.includes(dong);
@@ -642,8 +649,8 @@ function ReassignRegionModal({
                         onClick={() => toggleDong(dong)}
                         className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
                           selected
-                            ? "bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]"
-                            : "bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]"
+                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
                         }`}
                       >
                         {dong}
@@ -671,9 +678,7 @@ function ReassignRegionModal({
             </button>
             <button
               type="button"
-              onClick={() =>
-                onSave(manager.id, gu || null, dongs.length ? dongs : null)
-              }
+              onClick={() => onSave(manager.id, gu || null, dongs.length ? dongs : null)}
               disabled={isBusy}
               className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
@@ -683,7 +688,7 @@ function ReassignRegionModal({
                   저장 중...
                 </>
               ) : (
-                "변경 저장"
+                '변경 저장'
               )}
             </button>
           </div>
@@ -739,8 +744,8 @@ function DeleteConfirmModal({
             </p>
             <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-lg">
               <p className="text-[11px] text-rose-400 leading-relaxed">
-                해당 매니저는 즉시 비활성화되며 더 이상 로그인할 수 없습니다.
-                담당 권역 할당 정보는 보존되지만 복구하려면 재승인이 필요합니다.
+                해당 매니저는 즉시 비활성화되며 더 이상 로그인할 수 없습니다. 담당 권역 할당 정보는
+                보존되지만 복구하려면 재승인이 필요합니다.
               </p>
             </div>
           </div>
@@ -811,9 +816,7 @@ function PendingManagerCard({
           />
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-base font-bold text-[#e2e8f0]">
-                {manager.contact_name}
-              </span>
+              <span className="text-base font-bold text-[#e2e8f0]">{manager.contact_name}</span>
               <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded text-[9px] font-bold uppercase tracking-wider border border-rose-500/20">
                 Pending
               </span>
@@ -928,28 +931,25 @@ function TeamManagementView({
   const [reassignTarget, setReassignTarget] = useState<HookManager | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HookManager | null>(null);
   // 활성 멤버 정렬
-  const [sortBy, setSortBy] = useState<string>("이름순 (가나다)");
+  const [sortBy, setSortBy] = useState<string>('이름순 (가나다)');
   const sortedActive = useMemo(() => {
     const arr = [...active];
-    if (sortBy === "이름순 (가나다)") {
-      return arr.sort((a, b) =>
-        a.contact_name.localeCompare(b.contact_name, "ko"),
-      );
+    if (sortBy === '이름순 (가나다)') {
+      return arr.sort((a, b) => a.contact_name.localeCompare(b.contact_name, 'ko'));
     }
-    if (sortBy === "담당 권역순") {
+    if (sortBy === '담당 권역순') {
       return arr.sort((a, b) => {
         // 미배정은 끝으로 밀기 (한글 "ㅎ" 이후로 정렬)
-        const guA = a.assigned_gu || "힣";
-        const guB = b.assigned_gu || "힣";
-        const byGu = guA.localeCompare(guB, "ko");
+        const guA = a.assigned_gu || '힣';
+        const guB = b.assigned_gu || '힣';
+        const byGu = guA.localeCompare(guB, 'ko');
         if (byGu !== 0) return byGu;
-        return a.contact_name.localeCompare(b.contact_name, "ko");
+        return a.contact_name.localeCompare(b.contact_name, 'ko');
       });
     }
-    if (sortBy === "최근 가입순") {
+    if (sortBy === '최근 가입순') {
       return arr.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       );
     }
     return arr;
@@ -1020,8 +1020,8 @@ function TeamManagementView({
       setBusyId(managerId);
       try {
         const res = await fetch(`/api/auth/manager/${managerId}/approve`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             owner_id: user.id,
             assigned_gu: gu,
@@ -1029,15 +1029,15 @@ function TeamManagementView({
           }),
         });
         const data = await res.json();
-        if (data.status === "success") {
-          showToast("success", "담당 권역이 업데이트되었습니다.");
+        if (data.status === 'success') {
+          showToast('success', '담당 권역이 업데이트되었습니다.');
           refetch();
           setReassignTarget(null);
         } else {
-          showToast("error", data.message || "권역 변경에 실패했습니다.");
+          showToast('error', data.message || '권역 변경에 실패했습니다.');
         }
       } catch {
-        showToast("error", "서버 연결에 실패했습니다.");
+        showToast('error', '서버 연결에 실패했습니다.');
       } finally {
         setBusyId(null);
       }
@@ -1078,11 +1078,10 @@ function TeamManagementView({
             <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
               <ShieldAlert className="w-5 h-5 text-[#6b7280]" />
             </div>
-            <p className="text-sm font-bold text-[#a3a3a3] mb-1">
-              대기 중인 요청이 없습니다.
-            </p>
+            <p className="text-sm font-bold text-[#a3a3a3] mb-1">대기 중인 요청이 없습니다.</p>
             <p className="text-xs text-[#6b7280]">
-              우측 상단의 <span className="text-[#818cf8] font-bold">초대코드 발급</span> 버튼을 눌러 팀원을 초대하세요.
+              우측 상단의 <span className="text-[#818cf8] font-bold">초대코드 발급</span> 버튼을
+              눌러 팀원을 초대하세요.
             </p>
           </div>
         ) : (
@@ -1111,7 +1110,7 @@ function TeamManagementView({
               <RegionSelect
                 value={sortBy}
                 onChange={setSortBy}
-                options={["이름순 (가나다)", "담당 권역순", "최근 가입순"]}
+                options={['이름순 (가나다)', '담당 권역순', '최근 가입순']}
                 placeholder="정렬..."
               />
             </div>
@@ -1121,9 +1120,7 @@ function TeamManagementView({
         {active.length === 0 ? (
           <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-10 flex flex-col items-center justify-center text-center">
             <Users className="w-8 h-8 text-[#404040] mb-3" />
-            <p className="text-sm font-bold text-[#a3a3a3] mb-1">
-              활성 멤버가 없습니다.
-            </p>
+            <p className="text-sm font-bold text-[#a3a3a3] mb-1">활성 멤버가 없습니다.</p>
             <p className="text-xs text-[#6b7280]">
               위에서 승인 대기 중인 매니저를 승인하여 팀을 구성하세요.
             </p>
@@ -1133,10 +1130,10 @@ function TeamManagementView({
             {sortedActive.map((m) => {
               const hasDongs = m.assigned_dongs && m.assigned_dongs.length > 0;
               const dongSummary = hasDongs
-                ? (m.assigned_dongs!.length > 3
-                    ? `${m.assigned_dongs!.slice(0, 2).join(", ")} 외 ${m.assigned_dongs!.length - 2}곳`
-                    : m.assigned_dongs!.join(", "))
-                : "동 미지정";
+                ? m.assigned_dongs!.length > 3
+                  ? `${m.assigned_dongs!.slice(0, 2).join(', ')} 외 ${m.assigned_dongs!.length - 2}곳`
+                  : m.assigned_dongs!.join(', ')
+                : '동 미지정';
               return (
                 <div
                   key={m.id}
@@ -1156,7 +1153,7 @@ function TeamManagementView({
                           {m.contact_name}
                         </span>
                         <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
-                          {m.position || "Regional Mgr"}
+                          {m.position || 'Regional Mgr'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-[#6b7280]">
@@ -1179,9 +1176,7 @@ function TeamManagementView({
                           <MapPin className="w-3 h-3" /> 미배정
                         </span>
                       )}
-                      <span className="text-[10px] text-[#6b7280]">
-                        {dongSummary}
-                      </span>
+                      <span className="text-[10px] text-[#6b7280]">{dongSummary}</span>
                     </div>
 
                     {/* Activity Status (고정 Active) */}
@@ -1497,40 +1492,40 @@ function BillingManagementView() {
             }}
           />
           <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-6 shadow-lg flex flex-col justify-between overflow-hidden border border-[#3a3633] group-hover:border-transparent transition-colors duration-500">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-[#818cf8]/10 blur-[40px] rounded-full pointer-events-none" />
-          <div>
-            <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">
-              Current Plan
-            </h3>
-            <div className="flex items-end gap-3 mb-4">
-              <h2 className="text-3xl font-black text-white">{currentPlan}</h2>
-              <span className="px-2 py-1 bg-[#818cf8]/20 text-[#818cf8] border border-[#818cf8]/30 rounded-md text-[10px] font-bold mb-1">
-                Active
-              </span>
-            </div>
-            <div className="flex flex-col gap-2 mt-6">
-              <div className="flex justify-between items-center border-b border-[#3a3633] pb-2">
-                <span className="text-xs text-[#9ca3af]">결제 주기 (1개월)</span>
-                <span className="text-xs font-mono text-[#e2e8f0]">{billingCycle}</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-[#3a3633] pb-2">
-                <span className="text-xs text-[#9ca3af]">다음 결제 예정일</span>
-                <span className="text-xs font-mono text-[#e2e8f0]">2026. 05. 10</span>
-              </div>
-              <div className="flex justify-between items-center pb-1">
-                <span className="text-xs text-[#9ca3af]">결제 수단</span>
-                <span className="text-xs font-mono text-[#e2e8f0] flex items-center gap-2">
-                  <CreditCard className="w-3 h-3 text-[#818cf8]" /> 비자카드 **** 1234
+            <div className="absolute top-0 right-0 w-32 h-32 bg-[#818cf8]/10 blur-[40px] rounded-full pointer-events-none" />
+            <div>
+              <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">
+                Current Plan
+              </h3>
+              <div className="flex items-end gap-3 mb-4">
+                <h2 className="text-3xl font-black text-white">{currentPlan}</h2>
+                <span className="px-2 py-1 bg-[#818cf8]/20 text-[#818cf8] border border-[#818cf8]/30 rounded-md text-[10px] font-bold mb-1">
+                  Active
                 </span>
               </div>
+              <div className="flex flex-col gap-2 mt-6">
+                <div className="flex justify-between items-center border-b border-[#3a3633] pb-2">
+                  <span className="text-xs text-[#9ca3af]">결제 주기 (1개월)</span>
+                  <span className="text-xs font-mono text-[#e2e8f0]">{billingCycle}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-[#3a3633] pb-2">
+                  <span className="text-xs text-[#9ca3af]">다음 결제 예정일</span>
+                  <span className="text-xs font-mono text-[#e2e8f0]">2026. 05. 10</span>
+                </div>
+                <div className="flex justify-between items-center pb-1">
+                  <span className="text-xs text-[#9ca3af]">결제 수단</span>
+                  <span className="text-xs font-mono text-[#e2e8f0] flex items-center gap-2">
+                    <CreditCard className="w-3 h-3 text-[#818cf8]" /> 비자카드 **** 1234
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-          <button
-            onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
-            className="w-full mt-6 py-2.5 bg-[#1e1b18] text-[#e2e8f0] border border-[#3a3633] text-xs font-bold rounded-lg transition-all duration-300 hover:bg-[#818cf8] hover:text-[#1e1b18] hover:border-transparent hover:shadow-[0_0_20px_rgba(129,140,248,0.4)] active:scale-[0.98]"
-          >
-            결제 수단 관리 / 영수증
-          </button>
+            <button
+              onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
+              className="w-full mt-6 py-2.5 bg-[#1e1b18] text-[#e2e8f0] border border-[#3a3633] text-xs font-bold rounded-lg transition-all duration-300 hover:bg-[#818cf8] hover:text-[#1e1b18] hover:border-transparent hover:shadow-[0_0_20px_rgba(129,140,248,0.4)] active:scale-[0.98]"
+            >
+              결제 수단 관리 / 영수증
+            </button>
           </div>
         </div>
 
@@ -1544,63 +1539,63 @@ function BillingManagementView() {
             }}
           />
           <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-6 shadow-lg flex flex-col justify-between border border-[#3a3633] group-hover:border-transparent transition-colors duration-500">
-          <div>
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">
-                  API Tokens Usage
-                </h3>
-                <h2 className="text-2xl font-black text-white">
-                  {usedTokens.toLocaleString()}{' '}
-                  <span className="text-lg text-[#9ca3af] font-medium">
-                    / {totalTokens.toLocaleString()}
-                  </span>
-                </h2>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-[#9ca3af] mb-1">잔여 예상 시뮬레이션</p>
-                <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                  <Zap className="w-4 h-4" /> 약 {estimatedSims}회 가능
+            <div>
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="text-[#9ca3af] text-xs font-bold uppercase tracking-widest mb-1">
+                    API Tokens Usage
+                  </h3>
+                  <h2 className="text-2xl font-black text-white">
+                    {usedTokens.toLocaleString()}{' '}
+                    <span className="text-lg text-[#9ca3af] font-medium">
+                      / {totalTokens.toLocaleString()}
+                    </span>
+                  </h2>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-[#9ca3af] mb-1">잔여 예상 시뮬레이션</p>
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                    <Zap className="w-4 h-4" /> 약 {estimatedSims}회 가능
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Progress Bar */}
-            <div className="relative w-full h-4 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
-              <div
-                className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#6366f1] to-[#818cf8] rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <div className="flex justify-between items-center mt-2 px-1">
-              <span className="text-[10px] text-[#818cf8] font-bold">
-                {progressPercent.toFixed(1)}% Used
-              </span>
-              <span className="text-[10px] text-[#9ca3af]">
-                {remainTokens.toLocaleString()} Tokens Left
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-8 p-4 bg-[#1e1b18] border border-[#3a3633] rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#818cf8]/10 flex items-center justify-center">
-                <TrendingUp className="w-4 h-4 text-[#818cf8]" />
+              {/* Progress Bar */}
+              <div className="relative w-full h-4 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                <div
+                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#6366f1] to-[#818cf8] rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
-              <div>
-                <p className="text-xs font-bold text-white">토큰이 부족하신가요?</p>
-                <p className="text-[10px] text-[#9ca3af]">
-                  플랜을 업그레이드하거나 일회성 토큰을 충전하세요.
-                </p>
+              <div className="flex justify-between items-center mt-2 px-1">
+                <span className="text-[10px] text-[#818cf8] font-bold">
+                  {progressPercent.toFixed(1)}% Used
+                </span>
+                <span className="text-[10px] text-[#9ca3af]">
+                  {remainTokens.toLocaleString()} Tokens Left
+                </span>
               </div>
             </div>
-            <button
-              onClick={() => showToast('info', '토큰 충전은 정식 오픈 후 지원됩니다.')}
-              className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98]"
-            >
-              즉시 충전하기
-            </button>
-          </div>
+
+            <div className="mt-8 p-4 bg-[#1e1b18] border border-[#3a3633] rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[#818cf8]/10 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-[#818cf8]" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-white">토큰이 부족하신가요?</p>
+                  <p className="text-[10px] text-[#9ca3af]">
+                    플랜을 업그레이드하거나 일회성 토큰을 충전하세요.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => showToast('info', '토큰 충전은 정식 오픈 후 지원됩니다.')}
+                className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98]"
+              >
+                즉시 충전하기
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -1826,16 +1821,12 @@ function MyPageView() {
                 : '팀장(마스터) 권한 이양 및 담당자 변경을 위해 가입 정보를 수정할 수 있습니다.'}
             </p>
           </div>
-          {isLoadingProfile && (
-            <Loader2 className="w-4 h-4 text-[#818cf8] animate-spin shrink-0" />
-          )}
+          {isLoadingProfile && <Loader2 className="w-4 h-4 text-[#818cf8] animate-spin shrink-0" />}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
-              이름
-            </label>
+            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">이름</label>
             <input
               type="text"
               value={contactName}
@@ -1847,9 +1838,7 @@ function MyPageView() {
           <div>
             <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
               이메일 (ID)
-              <span className="ml-2 text-[9px] font-mono text-[#6b7280] uppercase">
-                Read-only
-              </span>
+              <span className="ml-2 text-[9px] font-mono text-[#6b7280] uppercase">Read-only</span>
             </label>
             <input
               type="email"
@@ -1860,9 +1849,7 @@ function MyPageView() {
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
-              직책
-            </label>
+            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">직책</label>
             <input
               type="text"
               value={position}
@@ -1872,9 +1859,7 @@ function MyPageView() {
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
-              연락처
-            </label>
+            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">연락처</label>
             <input
               type="tel"
               value={phone}
@@ -1885,9 +1870,7 @@ function MyPageView() {
           </div>
           {!isManager && (
             <div className="md:col-span-2">
-              <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
-                가맹점 수
-              </label>
+              <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">가맹점 수</label>
               <input
                 type="number"
                 min={0}
@@ -1924,8 +1907,8 @@ function MyPageView() {
             <h3 className="text-lg font-bold text-rose-500">Danger Zone</h3>
           </div>
           <p className="text-xs text-[#9ca3af] mb-6">
-            워크스페이스를 탈퇴하고 모든 데이터를 DB에서 영구적으로 파기합니다. 이
-            작업은 되돌릴 수 없습니다.
+            워크스페이스를 탈퇴하고 모든 데이터를 DB에서 영구적으로 파기합니다. 이 작업은 되돌릴 수
+            없습니다.
           </p>
           <button
             onClick={() => handleActionRequest('delete')}
@@ -1949,8 +1932,8 @@ function MyPageView() {
               계정 해지는 팀장을 통해 진행됩니다
             </p>
             <p className="text-xs text-[#9ca3af] leading-relaxed">
-              매니저 계정은 개별 탈퇴가 불가합니다. 퇴사 등으로 계정 해지가 필요하면
-              소속 팀장에게 '팀 및 권역 관리 → 매니저 제거'를 요청해주세요.
+              매니저 계정은 개별 탈퇴가 불가합니다. 퇴사 등으로 계정 해지가 필요하면 소속 팀장에게
+              '팀 및 권역 관리 → 매니저 제거'를 요청해주세요.
             </p>
           </div>
         </motion.div>
@@ -1979,18 +1962,15 @@ function MyPageView() {
               <div className="w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center mb-4 border border-rose-500/20">
                 <AlertTriangle className="w-6 h-6 text-rose-500" />
               </div>
-              <h3 className="text-xl font-black text-white mb-2">
-                정말로 탈퇴하시겠습니까?
-              </h3>
+              <h3 className="text-xl font-black text-white mb-2">정말로 탈퇴하시겠습니까?</h3>
               <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-lg mb-6">
                 <p className="text-sm text-rose-400 font-bold leading-relaxed">
-                  구독 후 1회 이상 시뮬레이션을 실행한 경우, 중간에 탈퇴하더라도 남은
-                  기간에 대한 환불이 불가합니다.
+                  구독 후 1회 이상 시뮬레이션을 실행한 경우, 중간에 탈퇴하더라도 남은 기간에 대한
+                  환불이 불가합니다.
                 </p>
               </div>
               <p className="text-xs text-[#9ca3af] mb-8">
-                탈퇴 시 귀하의 계정과 시뮬레이션 히스토리 등 모든 데이터가 영구적으로
-                삭제됩니다.
+                탈퇴 시 귀하의 계정과 시뮬레이션 히스토리 등 모든 데이터가 영구적으로 삭제됩니다.
               </p>
 
               <div className="flex gap-3 justify-end">
@@ -2037,10 +2017,8 @@ function MyPageView() {
             >
               <h3 className="text-lg font-bold text-white mb-2">본인 인증</h3>
               <p className="text-xs text-[#9ca3af] mb-6">
-                {actionType === 'delete'
-                  ? '안전한 탈퇴 처리를 위해'
-                  : '정보 수정을 위해'}{' '}
-                현재 비밀번호를 입력해주세요.
+                {actionType === 'delete' ? '안전한 탈퇴 처리를 위해' : '정보 수정을 위해'} 현재
+                비밀번호를 입력해주세요.
               </p>
               <input
                 type="password"
@@ -2056,9 +2034,7 @@ function MyPageView() {
                 placeholder="비밀번호 입력"
                 className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#818cf8] mb-2 transition-colors"
               />
-              {passwordError && (
-                <p className="text-[11px] text-rose-400 mb-4">{passwordError}</p>
-              )}
+              {passwordError && <p className="text-[11px] text-rose-400 mb-4">{passwordError}</p>}
               {!passwordError && <div className="mb-4" />}
               <div className="flex gap-3 justify-end">
                 <button
@@ -2097,18 +2073,20 @@ function MyPageView() {
    2. 내 정보 관리 — MyPageView 재사용
    TODO(backend): GET /simulations?manager_id=... + 의뢰 관계 테이블 (IM3 Jira 전달 예정)
    ═══════════════════════════════════════════════════════ */
-type ManagerMenuId = 'workspace' | 'mypage';
+type ManagerMenuId = 'workspace' | 'history' | 'mypage';
 
 function ManagerWorkspace() {
   const [searchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') as ManagerMenuId | null;
   const [activeMenu, setActiveMenu] = useState<ManagerMenuId>(
-    tabFromUrl === 'mypage' ? 'mypage' : 'workspace',
+    tabFromUrl && ['workspace', 'history', 'mypage'].includes(tabFromUrl)
+      ? tabFromUrl
+      : 'workspace',
   );
   const { user } = useAuth();
 
   useEffect(() => {
-    if (tabFromUrl && ['workspace', 'mypage'].includes(tabFromUrl)) {
+    if (tabFromUrl && ['workspace', 'history', 'mypage'].includes(tabFromUrl)) {
       setActiveMenu(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -2144,6 +2122,12 @@ function ManagerWorkspace() {
             icon={<LayoutTemplate className="w-4 h-4" />}
             label="내 워크스페이스"
           />
+          <MenuButton
+            active={activeMenu === 'history'}
+            onClick={() => setActiveMenu('history')}
+            icon={<History className="w-4 h-4" />}
+            label="내 시뮬 이력"
+          />
 
           <p className="px-2 text-[10px] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
             SETTINGS
@@ -2168,9 +2152,7 @@ function ManagerWorkspace() {
               <span className="text-xs font-bold text-[#e2e8f0] truncate">
                 {user?.contact_name || '매니저'}
               </span>
-              <span className="text-[10px] text-[#818cf8] truncate">
-                Regional Access
-              </span>
+              <span className="text-[10px] text-[#818cf8] truncate">Regional Access</span>
             </div>
           </div>
         </div>
@@ -2181,6 +2163,7 @@ function ManagerWorkspace() {
         <header className="h-20 border-b border-[#3a3633] flex items-center justify-between px-8 bg-[#1e1b18]/80 backdrop-blur-md z-10 shrink-0 mt-24">
           <h2 className="text-lg font-bold flex items-center gap-2">
             {activeMenu === 'workspace' && '내 워크스페이스'}
+            {activeMenu === 'history' && '내 시뮬 이력'}
             {activeMenu === 'mypage' && '내 정보 관리'}
           </h2>
         </header>
@@ -2188,6 +2171,7 @@ function ManagerWorkspace() {
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           <div className="max-w-[1920px] w-full mx-auto xl:px-10 2xl:px-16">
             {activeMenu === 'workspace' && <ManagerWorkspaceView />}
+            {activeMenu === 'history' && <HistoryList />}
             {activeMenu === 'mypage' && <MyPageView />}
           </div>
         </div>
@@ -2205,8 +2189,7 @@ function ManagerWorkspaceView() {
       <section>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-[#818cf8]" />
-            내 시뮬레이션 기록
+            <BarChart3 className="w-4 h-4 text-[#818cf8]" />내 시뮬레이션 기록
           </h3>
           <span className="text-[10px] font-mono text-[#6b7280] uppercase tracking-widest">
             Recent Runs
@@ -2243,9 +2226,7 @@ function ManagerWorkspaceView() {
           <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
             <Users className="w-5 h-5 text-[#6b7280]" />
           </div>
-          <p className="text-sm font-bold text-[#a3a3a3] mb-1">
-            들어온 의뢰가 없습니다.
-          </p>
+          <p className="text-sm font-bold text-[#a3a3a3] mb-1">들어온 의뢰가 없습니다.</p>
           <p className="text-xs text-[#6b7280] mb-4">
             팀장이 의뢰 요청을 배정하면 이 목록에 표시됩니다.
           </p>

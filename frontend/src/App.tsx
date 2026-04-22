@@ -190,6 +190,69 @@ interface SimResult {
   }>;
 }
 
+// 기본 차트 데이터 (Backend market_report 없을 때 fallback, 하위에 선언된 CHART_DATA 참조)
+// — toSimResultViewModel 에서 참조하므로 forward declaration 방지 위해 함수 내부에서 lazy 접근.
+
+/**
+ * SimulationOutput (snake_case, 백엔드 직접 반환) → SimResult (camelCase, 레거시 대시보드 뷰모델) 변환.
+ *
+ * [규칙 R1] Zustand store.result 가 Single Source of Truth.
+ * 이 함수는 순수 함수 — 마운트 시 rehydrate 에도 재사용, runSim 성공 시에도 재사용.
+ *
+ * mock fallback 시에는 호출하지 말 것 (mock은 SimulationOutput 스키마 불일치로 일부 필드 undefined).
+ */
+function toSimResultViewModel(simRes: SimulationOutput): SimResult {
+  const mr = simRes.market_report;
+  const topComp = simRes.comparison?.[0];
+  const topRisk = simRes.legal_risks?.[0];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = simRes as SimulationOutput & Record<string, any>;
+
+  return {
+    score: topComp?.score ?? 87,
+    revenue: topComp?.revenue ?? null,
+    netProfit: (topComp as unknown as Record<string, unknown> | undefined)?.net_profit as
+      | number
+      | null
+      | undefined,
+    riskLevel: topRisk?.risk_level ?? 'LOW',
+    recommendation: simRes.ai_recommendation || '',
+    chartData: mr
+      ? [
+          { label: '유동인구', value: mr.floating_population },
+          { label: '임대료', value: mr.rent_index },
+          { label: '경쟁강도', value: mr.competition_intensity },
+          { label: '매출추정', value: mr.estimated_revenue },
+          {
+            label: '폐업률',
+            value:
+              mr.closure_rate != null ? Math.round(mr.closure_rate * 100) : 100 - mr.survival_rate,
+          },
+          { label: '성장성', value: mr.growth_potential },
+          { label: '접근성', value: mr.accessibility },
+        ]
+      : CHART_DATA,
+    quarterlyProjection: simRes.quarterly_projection ?? [],
+    shapResult: simRes.shap_result ?? null,
+    marketReport: mr,
+    districtRankings: raw.district_rankings,
+    comparison: simRes.comparison,
+    winnerDistrict: raw.winner_district,
+    topCandidates: raw.top_3_candidates,
+    legalRisks: simRes.legal_risks,
+    overallLegalRisk: raw.overall_legal_risk,
+    vacancyApplied: raw.vacancy_applied,
+    vacancySpots: raw.vacancy_spots ?? [],
+    analysis_metrics: raw.analysis_metrics as unknown as SimResult['analysis_metrics'],
+    scenarios: simRes.scenarios ?? null,
+    closureRisk: simRes.closure_risk ?? null,
+    competitorIntel: raw.competitor_intel ?? null,
+    trendForecast: raw.trend_forecast ?? null,
+    demographicReport: raw.demographic_report ?? null,
+    allCompetitorLocations: raw.all_competitor_locations ?? [],
+  };
+}
+
 import {
   ChevronRight,
   ChevronLeft,
@@ -784,52 +847,6 @@ const CHART_DATA = [
    Smart Mock — 동/업종 이름 기반 해시로 동적 결과 생성
    발표 시 다른 동을 선택하면 다른 결과가 나오도록 함
    ═══════════════════════════════════════════════════════ */
-function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function generateSmartMock(dongName: string, businessType: string) {
-  const seed = hashString(dongName + businessType);
-
-  // 매출: 2500만 ~ 5500만 (만원 단위)
-  const revenue = 2500 + (seed % 3001);
-  // 매력도: 62 ~ 96
-  const score = 62 + (seed % 35);
-  // 리스크: seed 기반 분기
-  const riskLevels = ['LOW', 'LOW', 'MEDIUM', 'LOW', 'HIGH'] as const;
-  const riskLevel = riskLevels[seed % riskLevels.length];
-
-  // 7대 지표: 각각 다른 seed offset으로 40~95 사이
-  const metricSeeds = [0, 17, 31, 47, 61, 79, 89];
-  const chartData = [
-    '유동인구',
-    '임대료',
-    '경쟁강도',
-    '매출추정',
-    '폐업률',
-    '성장성',
-    '접근성',
-  ].map((label, i) => ({
-    label,
-    value: 40 + ((seed + metricSeeds[i]) % 56),
-  }));
-
-  // AI 한 줄 평 (동 이름 포함)
-  const verdicts = [
-    `${dongName}은(는) ${businessType} 업종에 유리한 입지로, 유동인구 밀집도가 높은 상권입니다.`,
-    `${dongName} 상권은 ${businessType} 창업 시 평균 이상의 매출이 예상되는 권역입니다.`,
-    `${dongName}의 ${businessType} 시장은 경쟁이 치열하나, 타겟층 밀도가 높아 수익성이 기대됩니다.`,
-    `${dongName}은(는) ${businessType} 업종의 성장 잠재력이 높은 지역으로 분석됩니다.`,
-  ];
-  const recommendation = verdicts[seed % verdicts.length];
-
-  return { revenue, score, riskLevel, recommendation, chartData };
-}
-
 /* ═══════════════════════════════════════════════════════
    BUSINESS TYPE DATA — 시뮬레이터 입력 옵션 (Frontend Mockup)
    ⚠️ 백엔드 연동 전 디자인 전용. SimulationInput 페이로드 확장 합의 필요.
@@ -2276,7 +2293,6 @@ function SimulatorDashboard({
   reportState: string;
   setReportState: (s: 'idle' | 'loading' | 'result') => void;
 }) {
-  const navigate = useNavigate();
   const [radius, setRadius] = useState(500);
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
@@ -2289,10 +2305,10 @@ function SimulatorDashboard({
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
   const [viewMode, setViewMode] = useState<'integrated' | 'legacy'>('integrated');
 
-  // 이력 저장 — 저장 성공 시 savedHistoryId가 세팅되고, 이 값이 PDF/Excel Document ID로 격상됨.
-  // 새 시뮬 실행 시 runSim 내부에서 null로 리셋.
+  // [R4] saveDialogOpen 은 UI-only 로컬. savedHistoryId 는 [R1] store 에서 파생.
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [savedHistoryId, setSavedHistoryId] = useState<number | null>(null);
+  const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const setSavedHistoryId = useSimulationStore((s) => s.setSavedHistoryId);
   const saveSim = useSaveSimulation();
   const [chartView, setChartView] = useState<'daily' | 'monthly'>('daily');
   const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
@@ -2317,6 +2333,13 @@ function SimulatorDashboard({
     'standard',
   );
   const [initialCapital, setInitialCapital] = useState(5000); // 만원
+
+  // [customer_revenue] 타겟 고객 프로필 — A1 찬영 P1-C 연동. 빈 선택 = 전체 고객
+  const [targetAgeGroups, setTargetAgeGroups] = useState<string[]>([]);
+  const [targetGender, setTargetGender] = useState<'male' | 'female' | null>(null);
+  const [targetTimeSlots, setTargetTimeSlots] = useState<string[]>([]);
+  const [targetDayType, setTargetDayType] = useState<'weekday' | 'weekend' | null>(null);
+  const [targetMonthlySales, setTargetMonthlySales] = useState<number | null>(null);
 
   // [A1] 유동인구 실시간 데이터
   const [popData, setPopData] = useState<any>(null);
@@ -2665,6 +2688,31 @@ function SimulatorDashboard({
     );
   }, []);
 
+  // [customer_revenue] Set 기반 토글 — 중복 방지. 빈 배열 = 전체 선택 (predict 스펙).
+  const toggleTargetAge = useCallback((age: string) => {
+    setTargetAgeGroups((prev) =>
+      prev.includes(age) ? prev.filter((a) => a !== age) : [...prev, age],
+    );
+  }, []);
+  const toggleTargetTime = useCallback((slot: string) => {
+    setTargetTimeSlots((prev) =>
+      prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot],
+    );
+  }, []);
+  // monthly_sales 입력 clamp: 음수/NaN 방어 — 빈 문자열은 null 유지 (전체 비율만 반환)
+  const handleMonthlySalesChange = useCallback((raw: string) => {
+    if (raw.trim() === '') {
+      setTargetMonthlySales(null);
+      return;
+    }
+    const n = Number(raw.replace(/[^0-9]/g, ''));
+    if (!Number.isFinite(n) || n < 0) {
+      setTargetMonthlySales(null);
+      return;
+    }
+    setTargetMonthlySales(n);
+  }, []);
+
   // 결과 화면 진입 시 스크롤을 맨 위로 리셋 (리포트 최상단부터 보이도록)
   const dashboardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -2673,13 +2721,29 @@ function SimulatorDashboard({
     }
   }, [reportState]);
 
-  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀
+  // [R2] 마운트 시 store 에서 복원 — 다른 페이지로 나갔다가 /simulator 복귀 시 결과 유지.
+  // store.result 가 있고 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
+  useEffect(() => {
+    const s = useSimulationStore.getState();
+    if (reportState === 'idle' && s.status === 'done' && s.result) {
+      setRawSimResult(s.result);
+      setSimResult(toSimResultViewModel(s.result));
+      setReportState('result');
+    }
+    // mount 1회만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀.
+  // [R5] store 도 dismissResult 로 초기화 — 나갔다 다시 와도 복원되지 않도록 (명시적 종료).
   useEffect(() => {
     if (reportState !== 'result') return;
-    // 가짜 history 엔트리 추가 → 뒤로가기 시 popstate 발생
     window.history.pushState({ simResult: true }, '');
     const handlePopState = () => {
       setReportState('idle');
+      setSimResult(null);
+      setRawSimResult(null);
+      useSimulationStore.getState().dismissResult();
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -2738,6 +2802,12 @@ function SimulatorDashboard({
         commercial_radius: radius,
         population_weight: weighted,
         industry_filter: BUSINESS_TYPE_CS_CODE[businessType] ?? null,
+        // [customer_revenue] A1 찬영 P1-C — target_* 5필드. 선택 안 한 경우 null/빈배열 = 전체 고객.
+        target_age_groups: targetAgeGroups,
+        target_gender: targetGender,
+        target_time_slots: targetTimeSlots,
+        target_day_type: targetDayType,
+        target_monthly_sales: targetMonthlySales,
       };
 
       // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
@@ -2749,98 +2819,24 @@ function SimulatorDashboard({
         throw new Error(storeState.error ?? 'Simulation failed');
       }
       const simRes = storeState.result;
-      // IntegratedReport는 snake_case SimulationOutput을 직접 소비 — camelCase 변환 전 원본 보존
+      // [R1] Zustand store.result 가 Single Source of Truth.
+      // 아래 setRawSimResult/setSimResult 는 마운트 복원 로직과 동일 함수 사용.
       setRawSimResult(simRes);
-      // 새 시뮬 성공 시 이전 저장 이력 ID 초기화 — Document ID가 DRAFT로 복귀
-      setSavedHistoryId(null);
-      saveSim.reset();
-
-      const mr = simRes.market_report;
-      const topComp = simRes.comparison?.[0];
-      const topRisk = simRes.legal_risks?.[0];
-
-      setSimResult({
-        score: topComp?.score ?? 87,
-        revenue: topComp?.revenue ?? null,
-        netProfit: (topComp as any)?.net_profit ?? null,
-        riskLevel: topRisk?.risk_level ?? 'LOW',
-        recommendation: simRes.ai_recommendation || '',
-        chartData: mr
-          ? [
-              { label: '유동인구', value: mr.floating_population },
-              { label: '임대료', value: mr.rent_index },
-              { label: '경쟁강도', value: mr.competition_intensity },
-              { label: '매출추정', value: mr.estimated_revenue },
-              {
-                label: '폐업률',
-                value:
-                  mr.closure_rate != null
-                    ? Math.round(mr.closure_rate * 100)
-                    : 100 - mr.survival_rate,
-              },
-              { label: '성장성', value: mr.growth_potential },
-              { label: '접근성', value: mr.accessibility },
-            ]
-          : CHART_DATA,
-        // 분기별 매출 예측 (TCN 모델 출력, 없으면 빈 배열) — B2
-        quarterlyProjection: simRes.quarterly_projection ?? [],
-        // TCN SHAP 분석 결과 (없으면 null) — B2
-        shapResult: simRes.shap_result ?? null,
-        // [C1 응답 필드 반영] v12.6 — 백엔드가 주는데 UI가 안 쓰던 5 영역 저장
-        marketReport: mr,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        districtRankings: (simRes as any).district_rankings,
-        // [C1] 동별 비교 배열 — DashboardPanelView 실데이터 매핑에 사용
-        comparison: simRes.comparison,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        winnerDistrict: (simRes as any).winner_district,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        topCandidates: (simRes as any).top_3_candidates,
-        legalRisks: simRes.legal_risks,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        overallLegalRisk: (simRes as any).overall_legal_risk,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vacancyApplied: (simRes as any).vacancy_applied,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vacancySpots: (simRes as any).vacancy_spots ?? [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        analysis_metrics: (simRes as any).analysis_metrics,
-        // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
-        scenarios: simRes.scenarios ?? null,
-        // [B2 수지니] 폐업 위험도
-        closureRisk: simRes.closure_risk ?? null,
-        // [PR #72] 경쟁 매장 인텔리전스
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        competitorIntel: (simRes as any).competitor_intel ?? null,
-        // [PR #71] 트렌드 전망
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        trendForecast: (simRes as any).trend_forecast ?? null,
-        // [PR #75] 인구통계 심층 분석
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        demographicReport: (simRes as any).demographic_report ?? null,
-        // 추천 동 전체(winner+top3) 경쟁업체 좌표 — AI 맵 멀티핀용
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        allCompetitorLocations: (simRes as any).all_competitor_locations ?? [],
-      });
+      setSimResult(toSimResultViewModel(simRes));
+      saveSim.reset(); // SaveDialog 에러 메시지 초기화 (store.savedHistoryId 는 startSimulation 에서 이미 null 리셋됨)
       setReportState('result');
     } catch (err) {
       console.error('Simulation failed:', err);
-      // mock fallback 결과는 SimulationOutput 스키마를 만족하지 않아 IntegratedReport에 넘기면 크래시
+      // [B2 수지니 요청] smart mock fallback 제거 — 성공/실패 구분 명확화.
+      // 타임아웃(600s) 또는 LangGraph 실패 시 입력 패널로 복귀 + 재시도 유도 토스트.
       setRawSimResult(null);
-      // Fallback — Smart Mock (동/업종 기반 동적 데이터)
-      const mock = generateSmartMock(selectedDongs[0] || '연남동', businessType);
-      setSimResult({
-        score: mock.score,
-        revenue: mock.revenue,
-        riskLevel: mock.riskLevel,
-        recommendation: mock.recommendation,
-        chartData: mock.chartData,
-        // mock fallback 시 분기 데이터 없음
-        quarterlyProjection: [],
-        // mock fallback 시 SHAP 데이터 없음
-        shapResult: null,
-      });
-      setReportState('result');
+      setSimResult(null);
+      setReportState('idle');
+      const msg =
+        err instanceof Error && err.message
+          ? `시뮬레이션 실패: ${err.message.slice(0, 80)} — RUN SIMULATION 을 다시 눌러 재시도해주세요.`
+          : '시뮬레이션 실패 — RUN SIMULATION 을 다시 눌러 재시도해주세요.';
+      showToast('error', msg);
     }
   }, [
     setReportState,
@@ -2855,6 +2851,11 @@ function SimulatorDashboard({
     radius,
     weighted,
     showToast,
+    targetAgeGroups,
+    targetGender,
+    targetTimeSlots,
+    targetDayType,
+    targetMonthlySales,
   ]);
 
   // [IM3-205] 로딩 진행률을 simulationStore에서 미러 — store가 500ms 타이머 보유
@@ -2878,20 +2879,11 @@ function SimulatorDashboard({
       ref={dashboardRef}
       className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar"
     >
-      {/* Top bar */}
+      {/* Top bar — 타이틀만. "내 이력" 버튼은 상단 4아이콘 바의 User 아이콘으로 이관 */}
       <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-14 bg-[#1e1b18]/80 backdrop-blur-xl">
         <span className={`text-xs font-medium tracking-wider ${textSecondary}`}>
           마포구 시뮬레이터
         </span>
-        {user?.id && (
-          <button
-            type="button"
-            onClick={() => navigate(`/hq/managers/${user.id}`)}
-            className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"
-          >
-            내 이력
-          </button>
-        )}
       </div>
 
       {/* Dashboard body */}
@@ -3203,6 +3195,160 @@ function SimulatorDashboard({
                 minLabel="1천만"
                 className="mb-0"
               />
+
+              {/* 5. 타겟 고객 프로필 (customer_revenue P1-C) — 미선택 = 전체 고객 */}
+              <div className="pt-4 border-t border-[#3a3633]/50">
+                <div className="flex items-baseline justify-between mb-3">
+                  <label className={`text-xs font-medium ${textSecondary}`}>타겟 고객 프로필</label>
+                  <span className="text-[10px] text-[#9ca3af] opacity-60">
+                    미선택 시 전체 고객 기준
+                  </span>
+                </div>
+
+                {/* 연령대 — 복수 선택 */}
+                <div className="mb-3">
+                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { v: '10대', l: '10대' },
+                      { v: '20대', l: '20대' },
+                      { v: '30대', l: '30대' },
+                      { v: '40대', l: '40대' },
+                      { v: '50대', l: '50대' },
+                      { v: '60대이상', l: '60대+' },
+                    ].map((opt) => {
+                      const active = targetAgeGroups.includes(opt.v);
+                      return (
+                        <button
+                          key={opt.v}
+                          type="button"
+                          onClick={() => toggleTargetAge(opt.v)}
+                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            active
+                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                          }`}
+                        >
+                          {opt.l}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 성별 — 단일 선택 (null = 전체) */}
+                <div className="mb-3">
+                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(
+                      [
+                        { v: null, l: '전체' },
+                        { v: 'male', l: '남성' },
+                        { v: 'female', l: '여성' },
+                      ] as const
+                    ).map((opt) => {
+                      const active = targetGender === opt.v;
+                      return (
+                        <button
+                          key={opt.l}
+                          type="button"
+                          onClick={() => setTargetGender(opt.v)}
+                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            active
+                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                          }`}
+                        >
+                          {opt.l}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 방문 시간대 — 복수 선택 */}
+                <div className="mb-3">
+                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
+                    방문 시간대
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { v: 'time_00_06', l: '심야' },
+                      { v: 'time_06_11', l: '오전' },
+                      { v: 'time_11_14', l: '점심' },
+                      { v: 'time_14_17', l: '오후' },
+                      { v: 'time_17_21', l: '저녁' },
+                      { v: 'time_21_24', l: '야간' },
+                    ].map((opt) => {
+                      const active = targetTimeSlots.includes(opt.v);
+                      return (
+                        <button
+                          key={opt.v}
+                          type="button"
+                          onClick={() => toggleTargetTime(opt.v)}
+                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            active
+                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                          }`}
+                        >
+                          {opt.l}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 요일 — 단일 선택 */}
+                <div className="mb-3">
+                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(
+                      [
+                        { v: null, l: '전체' },
+                        { v: 'weekday', l: '평일' },
+                        { v: 'weekend', l: '주말' },
+                      ] as const
+                    ).map((opt) => {
+                      const active = targetDayType === opt.v;
+                      return (
+                        <button
+                          key={opt.l}
+                          type="button"
+                          onClick={() => setTargetDayType(opt.v)}
+                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            active
+                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                          }`}
+                        >
+                          {opt.l}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 예상 월매출 — 빈 값 = null (비율만 반환) */}
+                <div>
+                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
+                    예상 월매출 (선택)
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="예: 23150000 (원)"
+                    value={
+                      targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
+                    }
+                    onChange={(e) => handleMonthlySalesChange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg text-xs bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
+                  />
+                  <p className="mt-1 text-[10px] text-[#9ca3af]/50">
+                    입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
+                  </p>
+                </div>
+              </div>
 
               <p
                 className={`text-[10px] ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}
@@ -5461,7 +5607,7 @@ function GlobalLimelightNav() {
     hasNoti?: boolean;
   }[] = [
     { type: 'folder', icon: <Folder />, label: '출점 파이프라인' },
-    { type: 'user', icon: <User />, label: '내 프로필' },
+    { type: 'user', icon: <User />, label: '내 시뮬 이력' },
     { type: 'settings', icon: <Settings />, label: '내 정보 관리' },
     { type: 'bell', icon: <Bell />, label: '알림', hasNoti: totalUnread > 0 },
   ];
@@ -5495,7 +5641,9 @@ function GlobalLimelightNav() {
     } else if (type === 'bell') {
       setOpenDropdown(openDropdown === 'bell' ? null : 'bell');
     } else if (type === 'user') {
-      setOpenDropdown(openDropdown === 'user' ? null : 'user');
+      // [UX] 드롭다운 대신 /hq 내 이력 탭으로 직행 — /simulator 헤더 "내 이력" 버튼 대체
+      setOpenDropdown(null);
+      nav('/hq?tab=history');
     }
   };
 

@@ -51,6 +51,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("09", "shap"),
     ("10", "timeline"),
     ("11", "agent-attribution"),
+    ("11-5", "customer-segment"),
     ("12", "district-rankings"),
     ("13", "insights-grid"),
     ("14", "decision-memo"),
