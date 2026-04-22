@@ -435,7 +435,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
             : '구독 및 가입';
         const activeClass = isFree
           ? 'bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]'
-          : 'bg-gradient-to-r from-indigo-500 to-indigo-400 text-[#1e1b18] shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-[0.98]';
+          : 'bg-gradient-to-r from-amber-500 to-amber-400 text-[#1e1b18] shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-[0.98]';
         return (
           <>
             <motion.button
@@ -462,9 +462,9 @@ export default function SignupForm({ planName, onSuccess }: Props) {
                 className="text-[10px] text-[#9ca3af] text-center mt-2 leading-relaxed"
               >
                 결제는 가입 후 HQ의{' '}
-                <span className="text-indigo-400 font-mono">결제 및 API 토큰</span> 메뉴에서
+                <span className="text-amber-400 font-mono">결제 및 API 토큰</span> 메뉴에서
                 진행됩니다 · 플랜:{' '}
-                <span className="text-indigo-400 font-bold">
+                <span className="text-amber-400 font-bold">
                   {planObj?.name} {planObj?.price}
                   {planObj?.priceNote}
                 </span>

@@ -115,7 +115,7 @@ function DetailHeader({
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
       <div>
         <div className="flex items-center gap-2">
-          <span className="rounded bg-indigo-500/15 px-2 py-0.5 text-xs font-mono font-bold text-indigo-400">
+          <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-mono font-bold text-amber-400">
             {formatDocumentId(id)}
           </span>
           <span className="text-[10px] uppercase tracking-widest text-stone-500">읽기 전용</span>
@@ -128,7 +128,7 @@ function DetailHeader({
       <button
         type="button"
         onClick={onRerun}
-        className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-indigo-400"
+        className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-amber-400"
       >
         <RotateCw className="h-4 w-4" />
         시뮬레이터로 이동

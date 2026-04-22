@@ -79,7 +79,7 @@ export default function ManagerDetail() {
                 onClick={() => setTab(t.key)}
                 className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
                   active
-                    ? 'border-indigo-500 text-indigo-500'
+                    ? 'border-amber-500 text-amber-500'
                     : 'border-transparent text-stone-400 hover:text-stone-100'
                 } ${disabled ? 'cursor-not-allowed opacity-40 hover:text-stone-400' : ''}`}
                 title={disabled ? '하위 매니저 이력 조회는 Phase 2에서 제공됩니다' : undefined}
@@ -109,14 +109,14 @@ function Header({ routeId, isSelf }: { routeId: string; isSelf: boolean }) {
 
   return (
     <div className="flex items-center gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
-      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-2xl">
-        <UserIcon className="h-7 w-7 text-indigo-400" />
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-2xl">
+        <UserIcon className="h-7 w-7 text-amber-400" />
       </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold text-stone-100">{displayName}</h1>
           {isSelf && (
-            <span className="rounded bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold text-indigo-400">
+            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">
               본인
             </span>
           )}
@@ -186,7 +186,7 @@ function AssignedDistricts({ isSelf }: { isSelf: boolean }) {
             {assignedDongs.map((d) => (
               <span
                 key={d}
-                className="inline-flex items-center gap-1 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-2 py-1 text-xs text-indigo-300"
+                className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-300"
               >
                 <MapPin className="h-3 w-3" />
                 {d}
