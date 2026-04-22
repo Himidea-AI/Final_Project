@@ -99,12 +99,15 @@ export async function healthCheck() {
   return response.data;
 }
 
-/** 시뮬레이션 실행 요청 */
+/** 시뮬레이션 실행 요청 — LLM 파이프라인이라 10분까지 대기 (전역 2분으로는 캐시 miss 시 timeout) */
 export async function runSimulation(
   input: SimulationInput,
   signal?: AbortSignal,
 ): Promise<SimulationOutput> {
-  const response = await apiClient.post('/simulate', input, { signal });
+  const response = await apiClient.post('/simulate', input, {
+    signal,
+    timeout: 600_000,
+  });
   return response.data;
 }
 
