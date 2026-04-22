@@ -190,6 +190,71 @@ interface SimResult {
   }>;
 }
 
+// 기본 차트 데이터 (Backend market_report 없을 때 fallback, 하위에 선언된 CHART_DATA 참조)
+// — toSimResultViewModel 에서 참조하므로 forward declaration 방지 위해 함수 내부에서 lazy 접근.
+
+/**
+ * SimulationOutput (snake_case, 백엔드 직접 반환) → SimResult (camelCase, 레거시 대시보드 뷰모델) 변환.
+ *
+ * [규칙 R1] Zustand store.result 가 Single Source of Truth.
+ * 이 함수는 순수 함수 — 마운트 시 rehydrate 에도 재사용, runSim 성공 시에도 재사용.
+ *
+ * mock fallback 시에는 호출하지 말 것 (mock은 SimulationOutput 스키마 불일치로 일부 필드 undefined).
+ */
+function toSimResultViewModel(simRes: SimulationOutput): SimResult {
+  const mr = simRes.market_report;
+  const topComp = simRes.comparison?.[0];
+  const topRisk = simRes.legal_risks?.[0];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = simRes as SimulationOutput & Record<string, any>;
+
+  return {
+    score: topComp?.score ?? 87,
+    revenue: topComp?.revenue ?? null,
+    netProfit: (topComp as unknown as Record<string, unknown> | undefined)?.net_profit as
+      | number
+      | null
+      | undefined,
+    riskLevel: topRisk?.risk_level ?? 'LOW',
+    recommendation: simRes.ai_recommendation || '',
+    chartData: mr
+      ? [
+          { label: '유동인구', value: mr.floating_population },
+          { label: '임대료', value: mr.rent_index },
+          { label: '경쟁강도', value: mr.competition_intensity },
+          { label: '매출추정', value: mr.estimated_revenue },
+          {
+            label: '폐업률',
+            value:
+              mr.closure_rate != null
+                ? Math.round(mr.closure_rate * 100)
+                : 100 - mr.survival_rate,
+          },
+          { label: '성장성', value: mr.growth_potential },
+          { label: '접근성', value: mr.accessibility },
+        ]
+      : CHART_DATA,
+    quarterlyProjection: simRes.quarterly_projection ?? [],
+    shapResult: simRes.shap_result ?? null,
+    marketReport: mr,
+    districtRankings: raw.district_rankings,
+    comparison: simRes.comparison,
+    winnerDistrict: raw.winner_district,
+    topCandidates: raw.top_3_candidates,
+    legalRisks: simRes.legal_risks,
+    overallLegalRisk: raw.overall_legal_risk,
+    vacancyApplied: raw.vacancy_applied,
+    vacancySpots: raw.vacancy_spots ?? [],
+    analysis_metrics: raw.analysis_metrics as unknown as SimResult['analysis_metrics'],
+    scenarios: simRes.scenarios ?? null,
+    closureRisk: simRes.closure_risk ?? null,
+    competitorIntel: raw.competitor_intel ?? null,
+    trendForecast: raw.trend_forecast ?? null,
+    demographicReport: raw.demographic_report ?? null,
+    allCompetitorLocations: raw.all_competitor_locations ?? [],
+  };
+}
+
 import {
   ChevronRight,
   ChevronLeft,
@@ -2289,10 +2354,10 @@ function SimulatorDashboard({
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
   const [viewMode, setViewMode] = useState<'integrated' | 'legacy'>('integrated');
 
-  // 이력 저장 — 저장 성공 시 savedHistoryId가 세팅되고, 이 값이 PDF/Excel Document ID로 격상됨.
-  // 새 시뮬 실행 시 runSim 내부에서 null로 리셋.
+  // [R4] saveDialogOpen 은 UI-only 로컬. savedHistoryId 는 [R1] store 에서 파생.
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [savedHistoryId, setSavedHistoryId] = useState<number | null>(null);
+  const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const setSavedHistoryId = useSimulationStore((s) => s.setSavedHistoryId);
   const saveSim = useSaveSimulation();
   const [chartView, setChartView] = useState<'daily' | 'monthly'>('daily');
   const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
@@ -2673,13 +2738,29 @@ function SimulatorDashboard({
     }
   }, [reportState]);
 
-  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀
+  // [R2] 마운트 시 store 에서 복원 — 다른 페이지로 나갔다가 /simulator 복귀 시 결과 유지.
+  // store.result 가 있고 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
+  useEffect(() => {
+    const s = useSimulationStore.getState();
+    if (reportState === 'idle' && s.status === 'done' && s.result) {
+      setRawSimResult(s.result);
+      setSimResult(toSimResultViewModel(s.result));
+      setReportState('result');
+    }
+    // mount 1회만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀.
+  // [R5] store 도 dismissResult 로 초기화 — 나갔다 다시 와도 복원되지 않도록 (명시적 종료).
   useEffect(() => {
     if (reportState !== 'result') return;
-    // 가짜 history 엔트리 추가 → 뒤로가기 시 popstate 발생
     window.history.pushState({ simResult: true }, '');
     const handlePopState = () => {
       setReportState('idle');
+      setSimResult(null);
+      setRawSimResult(null);
+      useSimulationStore.getState().dismissResult();
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -2749,79 +2830,11 @@ function SimulatorDashboard({
         throw new Error(storeState.error ?? 'Simulation failed');
       }
       const simRes = storeState.result;
-      // IntegratedReport는 snake_case SimulationOutput을 직접 소비 — camelCase 변환 전 원본 보존
+      // [R1] Zustand store.result 가 Single Source of Truth.
+      // 아래 setRawSimResult/setSimResult 는 마운트 복원 로직과 동일 함수 사용.
       setRawSimResult(simRes);
-      // 새 시뮬 성공 시 이전 저장 이력 ID 초기화 — Document ID가 DRAFT로 복귀
-      setSavedHistoryId(null);
-      saveSim.reset();
-
-      const mr = simRes.market_report;
-      const topComp = simRes.comparison?.[0];
-      const topRisk = simRes.legal_risks?.[0];
-
-      setSimResult({
-        score: topComp?.score ?? 87,
-        revenue: topComp?.revenue ?? null,
-        netProfit: (topComp as any)?.net_profit ?? null,
-        riskLevel: topRisk?.risk_level ?? 'LOW',
-        recommendation: simRes.ai_recommendation || '',
-        chartData: mr
-          ? [
-              { label: '유동인구', value: mr.floating_population },
-              { label: '임대료', value: mr.rent_index },
-              { label: '경쟁강도', value: mr.competition_intensity },
-              { label: '매출추정', value: mr.estimated_revenue },
-              {
-                label: '폐업률',
-                value:
-                  mr.closure_rate != null
-                    ? Math.round(mr.closure_rate * 100)
-                    : 100 - mr.survival_rate,
-              },
-              { label: '성장성', value: mr.growth_potential },
-              { label: '접근성', value: mr.accessibility },
-            ]
-          : CHART_DATA,
-        // 분기별 매출 예측 (TCN 모델 출력, 없으면 빈 배열) — B2
-        quarterlyProjection: simRes.quarterly_projection ?? [],
-        // TCN SHAP 분석 결과 (없으면 null) — B2
-        shapResult: simRes.shap_result ?? null,
-        // [C1 응답 필드 반영] v12.6 — 백엔드가 주는데 UI가 안 쓰던 5 영역 저장
-        marketReport: mr,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        districtRankings: (simRes as any).district_rankings,
-        // [C1] 동별 비교 배열 — DashboardPanelView 실데이터 매핑에 사용
-        comparison: simRes.comparison,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        winnerDistrict: (simRes as any).winner_district,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        topCandidates: (simRes as any).top_3_candidates,
-        legalRisks: simRes.legal_risks,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        overallLegalRisk: (simRes as any).overall_legal_risk,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vacancyApplied: (simRes as any).vacancy_applied,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vacancySpots: (simRes as any).vacancy_spots ?? [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        analysis_metrics: (simRes as any).analysis_metrics,
-        // [B2 시나리오] 낙관/기본/비관 분기 매출 시나리오 — C1 UI 연동용
-        scenarios: simRes.scenarios ?? null,
-        // [B2 수지니] 폐업 위험도
-        closureRisk: simRes.closure_risk ?? null,
-        // [PR #72] 경쟁 매장 인텔리전스
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        competitorIntel: (simRes as any).competitor_intel ?? null,
-        // [PR #71] 트렌드 전망
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        trendForecast: (simRes as any).trend_forecast ?? null,
-        // [PR #75] 인구통계 심층 분석
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        demographicReport: (simRes as any).demographic_report ?? null,
-        // 추천 동 전체(winner+top3) 경쟁업체 좌표 — AI 맵 멀티핀용
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        allCompetitorLocations: (simRes as any).all_competitor_locations ?? [],
-      });
+      setSimResult(toSimResultViewModel(simRes));
+      saveSim.reset(); // SaveDialog 에러 메시지 초기화 (store.savedHistoryId 는 startSimulation 에서 이미 null 리셋됨)
       setReportState('result');
     } catch (err) {
       console.error('Simulation failed:', err);
