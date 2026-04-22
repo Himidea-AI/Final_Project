@@ -4859,8 +4859,8 @@ function SimulatorDashboard({
                               }),
                             });
                             const data = await res.json();
-                            if (data.status === 'unavailable') {
-                              setAbmError('ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)');
+                            if (data.status === 'unavailable' || data.status === 'error') {
+                              setAbmError(data.message || 'ABM 시뮬레이션 실패');
                             } else {
                               setAbmResult(data);
                             }

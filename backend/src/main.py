@@ -905,7 +905,7 @@ class AbmSimulationRequest(BaseModel):
     scenario: AbmScenarioParams = AbmScenarioParams()
 
 
-@app.post("/api/simulate-abm")
+@app.post("/simulate-abm")
 async def run_abm_simulation(req: AbmSimulationRequest):
     """
     ABM 행동 시뮬레이션 — 의사결정 에이전트와 완전 분리된 독립 기능.
@@ -948,8 +948,6 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
     tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
     cfg = ModelConfig(
-        tier_s_provider="ollama",
-        tier_s_model="qwen2.5:3b",
         n_personas=req.n_agents,
     )
     # A1 Scenario dataclass — weather_override / date_override / weekend_force / rent_shock_pct

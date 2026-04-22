@@ -162,7 +162,15 @@ function randomBetween(a: number, b: number) {
   return a + Math.random() * (b - a);
 }
 
-function pickType(): Persona['type'] {
+function pickType(dist?: Record<string, number>): Persona['type'] {
+  if (dist && Object.keys(dist).length > 0) {
+    const r = Math.random();
+    let cum = 0;
+    for (const [role, prob] of Object.entries(dist)) {
+      cum += prob;
+      if (r < cum) return role as Persona['type'];
+    }
+  }
   const r = Math.random();
   if (r < 0.6) return 'resident';
   if (r < 0.85) return 'commuter';
@@ -204,6 +212,9 @@ export default function AbmPersonaMap({
   // targetDistrict에 맞는 노드 세트 (동별 차별화)
   const storeNodes = DONG_STORE_NODES[targetDistrict] ?? DEFAULT_STORE_NODES;
 
+  // abmResult에서 받은 customer_profile_dist를 ref로 유지
+  const customerProfileDistRef = useRef<Record<string, number> | undefined>(undefined);
+
   // KakaoMap 좌표 → 캔버스 픽셀 변환
   const updateNodePixels = useCallback(() => {
     const canvas = canvasRef.current;
@@ -236,7 +247,8 @@ export default function AbmPersonaMap({
       });
     }
 
-    // 페르소나 위치를 새 픽셀 기준으로 초기화
+    // 페르소나 위치를 새 픽셀 기준으로 초기화 (customer_profile_dist 반영)
+    const dist = customerProfileDistRef.current;
     personasRef.current = Array.from({ length: N_PERSONAS }, (_, i) => {
       const nodeIdx = i % nodePixelsRef.current.length;
       const np = nodePixelsRef.current[nodeIdx];
@@ -247,7 +259,7 @@ export default function AbmPersonaMap({
         tx: np.x,
         ty: np.y,
         speed: randomBetween(1.2, 3.0),
-        type: pickType(),
+        type: pickType(dist),
         targetIdx: nodeIdx,
         waitTicks: Math.floor(randomBetween(0, 120)),
       };
