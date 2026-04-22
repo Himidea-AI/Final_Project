@@ -14,14 +14,16 @@ interface Props {
   simResult: SimulationOutput;
 }
 
-const INDICATORS: Array<{ key: string; label: string; shortLabel: string }> = [
-  { key: 'floating_population', label: '유동인구', shortLabel: '유동' },
-  { key: 'rent_index', label: '임대료 지수', shortLabel: '임대' },
-  { key: 'competition_intensity', label: '경쟁강도', shortLabel: '경쟁' },
-  { key: 'estimated_revenue', label: '예상 매출', shortLabel: '매출' },
-  { key: 'survival_rate', label: '생존율', shortLabel: '생존' },
-  { key: 'growth_potential', label: '성장 잠재력', shortLabel: '성장' },
-  { key: 'accessibility', label: '접근성', shortLabel: '접근' },
+// scale: 백엔드 원본 단위 → 0~100 렌더 단위 변환 배수. closure_rate 만 0~1 fraction.
+const INDICATORS: Array<{ key: string; label: string; shortLabel: string; color: string; scale?: number }> = [
+  { key: 'floating_population', label: '유동인구', shortLabel: '유동', color: 'bg-sky-500' },
+  { key: 'rent_index', label: '임대료 지수', shortLabel: '임대', color: 'bg-indigo-500' },
+  { key: 'competition_intensity', label: '경쟁강도', shortLabel: '경쟁', color: 'bg-rose-500' },
+  { key: 'estimated_revenue', label: '예상 매출', shortLabel: '매출', color: 'bg-emerald-500' },
+  { key: 'survival_rate', label: '생존율', shortLabel: '생존', color: 'bg-violet-500' },
+  { key: 'closure_rate', label: '폐업률', shortLabel: '폐업', color: 'bg-pink-500', scale: 100 },
+  { key: 'growth_potential', label: '성장 잠재력', shortLabel: '성장', color: 'bg-cyan-500' },
+  { key: 'accessibility', label: '접근성', shortLabel: '접근', color: 'bg-blue-500' },
 ];
 
 function scoreColor(v: number): string {

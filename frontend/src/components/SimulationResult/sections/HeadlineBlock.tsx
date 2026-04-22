@@ -30,8 +30,16 @@ export function HeadlineBlock({ simResult }: Props) {
   const sim = simResult as SimulationOutput & Record<string, any>;
 
   const district = sim.winner_district ?? sim.target_district ?? '—';
-  const rawRec: string = sim.ai_recommendation ?? sim.analysis_report ?? '';
-  const recommendation = rawRec ? localizeTerms(rawRec) : '';
+
+  // narrative 소스 2종 중 winner 이름을 포함한 것을 우선 선택.
+  // 둘 다 다른 동을 얘기하면 narrative 숨기고 mismatch 경고 (백엔드 synthesis 노드 버그 방패).
+  const narrativeCandidates = [sim.ai_recommendation, sim.analysis_report].filter(
+    (v): v is string => typeof v === 'string' && v.length > 0,
+  );
+  const matched = narrativeCandidates.find((text) => district !== '—' && text.includes(district));
+  const recommendation: string = matched ?? '';
+  const narrativeMismatch = narrativeCandidates.length > 0 && !matched;
+
   const riskKey = (sim.overall_legal_risk ?? 'safe') as string;
   const riskCls = RISK_BADGE[riskKey] ?? RISK_BADGE.safe;
   const riskLabel = RISK_LABEL[riskKey] ?? riskKey;
@@ -57,6 +65,14 @@ export function HeadlineBlock({ simResult }: Props) {
           <p className="text-sm leading-relaxed text-stone-200 whitespace-pre-line">
             {recommendation}
           </p>
+        )}
+
+        {narrativeMismatch && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 leading-relaxed">
+            ⚠ AI 설명이 추천 입지({district})와 불일치하여 표시를 생략했습니다. 상세 근거는 §11
+            에이전트 Attribution과 §12 입지 랭킹을 참고하세요. (synthesis 노드 narrative 기준동 개선
+            필요)
+          </div>
         )}
 
         {compWithinRadius !== null && (

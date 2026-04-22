@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 import os
 import uuid
+from datetime import datetime
 import asyncio
 from typing import Any, Dict
 
@@ -70,6 +71,7 @@ from models.explainability.simulation import (
     build_scenarios,
 )
 from models.explainability.shap_analysis import explain_tcn_prediction
+from models.customer_revenue.predict import predict as customer_predict, SegmentProfile
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -1027,7 +1029,37 @@ async def run_simulation(input_data: SimulationInput):
 
     try:
         final_state = await _run_pipeline(input_data)
-        return map_state_to_simulation_output(final_state, request_id)
+        result = map_state_to_simulation_output(final_state, request_id)
+        # [customer_revenue P1-C] 타겟 고객 매출 분석 주입 — 실패해도 None 으로 조용히 fallback
+        try:
+            from src.services.dong_resolver import resolve_dong_code
+
+            _seg_dong = resolve_dong_code(input_data.target_district)
+            _seg_industry = _BIZ_TO_INDUSTRY_CODE.get(input_data.business_type, "CS100010")
+            _seg_profile = SegmentProfile(
+                age_groups=list(input_data.target_age_groups or []),
+                gender=input_data.target_gender or "all",
+                time_slots=list(input_data.target_time_slots or []),
+                day_type=input_data.target_day_type or "all",
+            )
+            _qp = result.get("quarterly_projection") or []
+            _q_num = (
+                int(_qp[0]["quarter"])
+                if _qp and isinstance(_qp[0], dict) and _qp[0].get("quarter")
+                else ((datetime.now().month - 1) // 3 + 1)
+            )
+            _year = datetime.now().year
+            if _seg_dong:
+                result["customer_segment"] = customer_predict(
+                    _seg_dong, _seg_industry, _seg_profile,
+                    input_data.target_monthly_sales, _q_num, _year,
+                )
+            else:
+                result["customer_segment"] = None
+        except Exception as _seg_err:
+            print(f"[customer_revenue] predict 실패: {type(_seg_err).__name__}: {_seg_err}")
+            result["customer_segment"] = None
+        return result
     except Exception as e:
         import traceback
 
@@ -1049,6 +1081,18 @@ async def run_simulation(input_data: SimulationInput):
             "trend_forecast": None,
             "map_data": None,
             "financial_report": {},
+            # [스키마 일관성] SimulationOutput optional 필드 명시적 null
+            "winner_district": None,
+            "top_3_candidates": [],
+            "district_rankings": [],
+            "vacancy_applied": False,
+            "vacancy_spots": [],
+            "shap_result": None,
+            "scenarios": None,
+            "closure_risk": None,
+            "competitor_intel": None,
+            "agent_attributions": [],
+            "customer_segment": None,
         }
 
 
