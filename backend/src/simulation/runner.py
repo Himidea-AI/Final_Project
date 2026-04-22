@@ -245,6 +245,8 @@ def run_simulation(
     trajectory_path: str | Path | None = None,
     use_dsl: bool = False,
     use_policy: bool = False,
+    collect_trajectory: bool = False,
+    trajectory_sample_size: int = 300,
 ) -> SimulationResult:
     pop = pop or PopulationMix()
     tier = tier or TierDistribution()
@@ -428,11 +430,20 @@ def run_simulation(
     sample_stories: list[str] = []
     pending_memory: list[dict] = []  # 일별 배치 저장용
 
-    # 에이전트 궤적 수집 (시각화용)
+    # 에이전트 궤적 수집 (시각화용) — trajectory_path 파일 덤프 또는 collect_trajectory 인메모리 수집
     trajectory: list[dict] = []
     visits_log: list[dict] = []
     chats_log: list[dict] = []
-    dong_coords = _load_dong_coords() if trajectory_path else {}
+    _need_trajectory = bool(trajectory_path) or collect_trajectory
+    dong_coords = _load_dong_coords() if _need_trajectory else {}
+    # 인메모리 샘플링 — 1000 agents 전부 보내면 payload 과대, sample_size 만큼만 수집
+    _trajectory_sample_ids: set[int] = set()
+    if collect_trajectory and agents:
+        import random as _sample_rng
+
+        _r = _sample_rng.Random(seed)
+        sample_n = min(trajectory_sample_size, len(agents))
+        _trajectory_sample_ids = {a.agent_id for a in _r.sample(agents, sample_n)}
 
     # 에이전트 홈 좌표 (동 center)
     def _home_coord(a) -> tuple[float, float] | None:
@@ -529,7 +540,7 @@ def run_simulation(
                 print(f"    {res.hour:02d}시: 활성 {res.activated} / 스킵 {res.skipped}", flush=True)
 
             # 매 시간 에이전트 위치 스냅샷 — visit는 매장 좌표, 그 외는 동 중심 + jitter
-            if trajectory_path and dong_coords:
+            if _need_trajectory and dong_coords:
                 import random as _rng
 
                 rng_jit = _rng.Random(res.hour * 1000 + day)
@@ -541,13 +552,22 @@ def run_simulation(
                         if st and st.lat and st.lon:
                             visited_now[aid] = (st.lat, st.lon)
 
-                for a in agents:
+                _iter_agents = (
+                    [a for a in agents if a.agent_id in _trajectory_sample_ids]
+                    if collect_trajectory and _trajectory_sample_ids
+                    else agents
+                )
+                for a in _iter_agents:
                     if a.agent_id in visited_now:
                         # 매장 좌표 사용 (사람들이 매장에 모임)
                         lat, lon = visited_now[a.agent_id]
                         lat += rng_jit.uniform(-0.0003, 0.0003)
                         lon += rng_jit.uniform(-0.0003, 0.0003)
                     else:
+                        # 외부 에이전트가 마포 밖 대기 상태면 trajectory 엔트리 생략
+                        # (지도 시각화 시 "목동쪽 허위 클러스터" 방지)
+                        if a.current_dong == "외부":
+                            continue
                         coord = dong_coords.get(a.current_dong)
                         if not coord:
                             continue
