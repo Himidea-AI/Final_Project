@@ -17,11 +17,11 @@ export function CommandBar({ simResult, compareMode, onToggleCompare, onExportPd
   const shortReqId = typeof reqId === 'string' ? reqId.slice(0, 8) : '—';
 
   return (
-    <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-700 bg-zinc-900/60 px-5 py-4 backdrop-blur">
+    <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-700 bg-stone-900/60 px-5 py-4 backdrop-blur">
       <div className="flex items-center gap-4">
         <div>
-          <div className="text-sm font-semibold text-zinc-100">{brand}</div>
-          <div className="text-xs text-zinc-400">
+          <div className="text-sm font-semibold text-stone-100">{brand}</div>
+          <div className="text-xs text-stone-400">
             {district} · <span className="font-mono">{shortReqId}</span>
           </div>
         </div>
@@ -34,8 +34,8 @@ export function CommandBar({ simResult, compareMode, onToggleCompare, onExportPd
           aria-pressed={compareMode}
           className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
             compareMode
-              ? 'border-amber-500 bg-amber-500/10 text-amber-400'
-              : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400'
+              : 'border-stone-700 bg-stone-800 text-stone-300 hover:bg-stone-700'
           }`}
         >
           <GitCompare className="h-4 w-4" />
@@ -44,7 +44,7 @@ export function CommandBar({ simResult, compareMode, onToggleCompare, onExportPd
         <button
           type="button"
           onClick={onExportPdf}
-          className="flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-700"
+          className="flex items-center gap-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-2 text-xs font-medium text-stone-300 hover:bg-stone-700"
         >
           <FileText className="h-4 w-4" />
           <span>PDF 저장</span>

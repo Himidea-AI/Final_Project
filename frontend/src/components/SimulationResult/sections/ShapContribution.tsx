@@ -15,10 +15,10 @@ function hasMeaningfulShap(shap: ShapResult | null | undefined): boolean {
 
 function EmptyShapCard() {
   return (
-    <div className="flex h-48 flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 text-center">
-      <div className="mb-2 h-8 w-8 rounded-full bg-zinc-700/60" />
-      <div className="text-sm text-zinc-400">SHAP 분석 데이터 없음</div>
-      <div className="mt-1 text-xs text-zinc-500">
+    <div className="flex h-48 flex-col items-center justify-center rounded-lg border border-dashed border-stone-700 bg-stone-900/40 text-center">
+      <div className="mb-2 h-8 w-8 rounded-full bg-stone-700/60" />
+      <div className="text-sm text-stone-400">SHAP 분석 데이터 없음</div>
+      <div className="mt-1 text-xs text-stone-500">
         매출 데이터 부족으로 피처 기여도를 계산하지 못했습니다
       </div>
     </div>
@@ -34,7 +34,7 @@ export function ShapContribution({ simResult }: Props) {
   return (
     <section>
       <SectionLabel label="FEATURE CONTRIBUTION" subtitle="SHAP 피처 중요도 (상위 10)" />
-      <div className="mb-3 rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+      <div className="mb-3 rounded-lg border border-stone-700 bg-stone-800 p-4">
         {meaningful && simResult.shap_result ? (
           <ShapChart data={simResult.shap_result} />
         ) : (

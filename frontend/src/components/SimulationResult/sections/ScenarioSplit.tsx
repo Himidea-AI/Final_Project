@@ -24,7 +24,7 @@ export function ScenarioSplit({ simResult }: Props) {
     return (
       <section>
         <SectionLabel label="SCENARIOS" subtitle="낙관 / 기본 / 비관 분기 매출 시나리오" />
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6 text-center text-sm text-zinc-400">
+        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 text-center text-sm text-stone-400">
           시나리오 분석 데이터가 없습니다
         </div>
       </section>
@@ -42,7 +42,7 @@ export function ScenarioSplit({ simResult }: Props) {
   return (
     <section>
       <SectionLabel label="SCENARIOS" subtitle="낙관 / 기본 / 비관 분기 매출 시나리오" />
-      <div className="mb-3 rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+      <div className="mb-3 rounded-lg border border-stone-700 bg-stone-800 p-4">
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />

@@ -54,11 +54,11 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="legal-drawer-title"
-            className="fixed right-0 top-0 z-50 h-full w-full max-w-[480px] overflow-y-auto bg-zinc-900 border-l border-zinc-700"
+            className="fixed right-0 top-0 z-50 h-full w-full max-w-[480px] overflow-y-auto bg-stone-900 border-l border-stone-700"
           >
-            <div className="flex items-start justify-between border-b border-zinc-700 p-6">
+            <div className="flex items-start justify-between border-b border-stone-700 p-6">
               <div>
-                <h2 id="legal-drawer-title" className="text-xl font-semibold text-zinc-100">
+                <h2 id="legal-drawer-title" className="text-xl font-semibold text-stone-100">
                   {risk.type}
                 </h2>
                 <span
@@ -70,7 +70,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
               <button
                 onClick={onClose}
                 aria-label="닫기"
-                className="text-zinc-400 hover:text-zinc-100"
+                className="text-stone-400 hover:text-stone-100"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -79,16 +79,16 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             <div className="p-6 space-y-6">
               {risk.recommendation && (
                 <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-400 mb-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-stone-400 mb-3">
                     AI 권고
                   </h3>
-                  <p className="text-sm text-zinc-300 leading-relaxed">{risk.recommendation}</p>
+                  <p className="text-sm text-stone-300 leading-relaxed">{risk.recommendation}</p>
                 </section>
               )}
 
               {risk.checklist && risk.checklist.length > 0 && (
                 <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-400 mb-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-stone-400 mb-3">
                     창업 체크리스트
                   </h3>
                   <ul className="space-y-2">
@@ -100,7 +100,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
                           className="mt-1 shrink-0 cursor-not-allowed"
                           aria-label={item.text}
                         />
-                        <span className="text-zinc-300">
+                        <span className="text-stone-300">
                           {item.text}
                           {item.isRequired && <span className="ml-1 text-rose-400">*</span>}
                         </span>
@@ -112,14 +112,14 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
 
               {risk.articles && risk.articles.length > 0 && (
                 <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-400 mb-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-stone-400 mb-3">
                     조항 본문
                   </h3>
                   <div className="space-y-3">
                     {risk.articles.map((a, i) => (
-                      <div key={i} className="border-l-2 border-amber-500 pl-4 py-2">
-                        <div className="text-sm font-semibold text-amber-500">{a.article_ref}</div>
-                        <div className="mt-1 text-sm text-zinc-300 whitespace-pre-line leading-relaxed">
+                      <div key={i} className="border-l-2 border-indigo-500 pl-4 py-2">
+                        <div className="text-sm font-semibold text-indigo-500">{a.article_ref}</div>
+                        <div className="mt-1 text-sm text-stone-300 whitespace-pre-line leading-relaxed">
                           {a.content}
                         </div>
                       </div>
