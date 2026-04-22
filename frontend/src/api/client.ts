@@ -15,6 +15,13 @@
  */
 import axios from 'axios';
 import type { SimulationInput, SimulationOutput, JobStatus, AnalysisResult } from '../types';
+import type {
+  HistoryFilterParams,
+  HistoryListResponse,
+  SaveSimulationPayload,
+  SaveSimulationResponse,
+  SimulationHistoryDetail,
+} from '../types/simulationHistory';
 
 /**
  * [v11.5 멀티테넌시 사전 준비]
@@ -37,14 +44,54 @@ const apiClient = axios.create({
 });
 
 /**
- * 요청 인터셉터: 모든 API 호출에 X-Tenant-ID 헤더 자동 주입
+ * 요청 인터셉터: 모든 API 호출에 X-Tenant-ID 헤더 + JWT Bearer 자동 주입
  * Nginx → FastAPI 미들웨어가 이 헤더를 받아 workspace 컨텍스트 결정
  */
 apiClient.interceptors.request.use((config) => {
-  // TODO: 실제 인증 구현 시 JWT에서 workspace_id 추출하여 교체
+  // 현재 JWT에는 workspace_id claim이 없어 mock 워크스페이스 사용. 멀티테넌트 본격 도입 시
+  // 토큰 payload에 workspace_id 추가 후 여기서 jwt_decode로 추출.
   config.headers['X-Tenant-ID'] = MOCK_WORKSPACE_ID;
+
+  // JWT: AuthContext가 localStorage.spotter_auth에 저장한 token이 있으면 Bearer로 주입
+  try {
+    const raw = window.localStorage.getItem('spotter_auth');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const token = parsed?.token;
+      if (typeof token === 'string' && token.length > 0) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+  } catch {
+    // localStorage 접근 실패는 무시 — 기존 엔드포인트는 Bearer 미요구
+  }
+
   return config;
 });
+
+/**
+ * 응답 인터셉터: 401 시 토큰 제거 → 다음 렌더에서 AuthContext가 로그아웃 상태로 복구.
+ * 강제 리다이렉트는 ProtectedRoute가 담당 (중복 방지).
+ */
+apiClient.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401) {
+      try {
+        const raw = window.localStorage.getItem('spotter_auth');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          // 토큰만 드롭 — user/brand는 유지해서 재로그인 화면 UX 부드럽게
+          delete parsed.token;
+          window.localStorage.setItem('spotter_auth', JSON.stringify(parsed));
+        }
+      } catch {
+        /* noop */
+      }
+    }
+    return Promise.reject(err);
+  },
+);
 
 /** 서버 상태 확인 */
 export async function healthCheck() {
@@ -52,12 +99,15 @@ export async function healthCheck() {
   return response.data;
 }
 
-/** 시뮬레이션 실행 요청 */
+/** 시뮬레이션 실행 요청 — LLM 파이프라인이라 10분까지 대기 (전역 2분으로는 캐시 miss 시 timeout) */
 export async function runSimulation(
   input: SimulationInput,
   signal?: AbortSignal,
 ): Promise<SimulationOutput> {
-  const response = await apiClient.post('/simulate', input, { signal });
+  const response = await apiClient.post('/simulate', input, {
+    signal,
+    timeout: 600_000,
+  });
   return response.data;
 }
 
@@ -84,6 +134,33 @@ export async function getLivePopulation(dongs?: string[]): Promise<any> {
   const params = dongs ? `?dongs=${encodeURIComponent(dongs.join(','))}` : '';
   const response = await apiClient.get(`/population/live${params}`);
   return response.data;
+}
+
+// ─────────────────────────────────────────────────────────
+// simulation_history (JWT Bearer 필수 — interceptor가 자동 주입)
+// ─────────────────────────────────────────────────────────
+
+export async function saveSimulationHistory(
+  payload: SaveSimulationPayload,
+): Promise<SaveSimulationResponse> {
+  const response = await apiClient.post('/simulation-history', payload);
+  return response.data;
+}
+
+export async function listSimulationHistory(
+  filter: HistoryFilterParams = {},
+): Promise<HistoryListResponse> {
+  const response = await apiClient.get('/simulation-history', { params: filter });
+  return response.data;
+}
+
+export async function getSimulationHistoryDetail(id: number): Promise<SimulationHistoryDetail> {
+  const response = await apiClient.get(`/simulation-history/${id}`);
+  return response.data;
+}
+
+export async function deleteSimulationHistory(id: number): Promise<void> {
+  await apiClient.delete(`/simulation-history/${id}`);
 }
 
 export default apiClient;

@@ -14,6 +14,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.llms import get_fast_llm
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.config.settings import settings
 from src.schemas.demographic import (
@@ -185,7 +186,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
     brand_name = state.get("brand_name")
     industry_filter = state.get("industry_filter")
 
-    cache_key = f"v2:demographic:{brand_name or 'nobrand'}:{dong_code}:{industry_filter or 'all'}"
+    cache_key = f"v3:demographic:{brand_name or 'nobrand'}:{dong_code}:{industry_filter or 'all'}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -193,11 +194,37 @@ async def demographic_depth_node(state: AgentState) -> dict:
         if cached:
             print(f"[demographic] 캐시 히트: {cache_key}")
             analysis = dict(state.get("analysis_results", {}) or {})
-            analysis["demographic_report"] = json.loads(cached)
+            _cached_report = json.loads(cached)
+            analysis["demographic_report"] = _cached_report
             await _redis.aclose()
+            _core = _cached_report.get("core_demographic") if isinstance(_cached_report, dict) else None
+            _age = (_core or {}).get("age", "N/A") if isinstance(_core, dict) else "N/A"
+            _gender = (_core or {}).get("gender", "") if isinstance(_core, dict) else ""
+            _share_raw = (_core or {}).get("share", 0) if isinstance(_core, dict) else 0
+            try:
+                _share_pct = round(float(_share_raw) * 100, 1)
+            except Exception:
+                _share_pct = 0
+            cached_demo_attr = build_attribution(
+                agent_id="demographic_depth",
+                display_name="소비자 심층",
+                kind="LLM",
+                sources=[
+                    "district_sales",
+                    "seoul_realtime_hotspots",
+                    "kosis_regional_income",
+                    "elderly_ratio_region",
+                ],
+                verdict=f"주 소비층 {_age} {_gender} ({_share_pct}%)",
+                reasoning=(_cached_report.get("narrative", "") if isinstance(_cached_report, dict) else "")[:300]
+                or "소비자 심층 분석 (캐시)",
+                confidence=0.8,
+            )
+            analysis["demographic_depth_result"] = {"agent_attribution": cached_demo_attr}
             return {
                 "analysis_results": analysis,
                 "current_agent": "demographic_depth",
+                "agent_attribution": cached_demo_attr,
             }
     except Exception as e:
         print(f"[demographic] Redis 캐시 조회 실패 (무시): {e}")
@@ -233,20 +260,44 @@ async def demographic_depth_node(state: AgentState) -> dict:
         {"income_level": "unknown", "population_trend": "unknown", "elderly_ratio": None},
     )
 
-    # 매출 데이터 없으면 기본 리포트
+    # 업종 필터 데이터 없으면 전체 업종으로 재시도 (fallback)
+    industry_used = industry_filter
+    if industry_filter and (sales.get("error") or (sales.get("monthly_sales", 0) or 0) == 0):
+        print(f"[demographic] {dong_code} 업종 {industry_filter} 데이터 없음 → 전체 업종 fallback")
+        fallback_r = await market_tool.get_demographic_sales_breakdown(dong_code, None)
+        if not isinstance(fallback_r, Exception) and not fallback_r.get("error") and (fallback_r.get("monthly_sales", 0) or 0) > 0:
+            sales = fallback_r
+            industry_used = None  # fallback 사용 표시
+
+    # 그래도 데이터 없으면 기본 리포트
     if sales.get("error") or (sales.get("monthly_sales", 0) or 0) == 0:
         report = _make_empty_report(dong_code, brand_name)
         analysis = dict(state.get("analysis_results", {}) or {})
         analysis["demographic_report"] = report
-        # 캐시 핸들 정리
         if _redis is not None:
             try:
                 await _redis.aclose()
             except Exception:
                 pass
+        empty_demo_attr = build_attribution(
+            agent_id="demographic_depth",
+            display_name="소비자 심층",
+            kind="LLM",
+            sources=[
+                "district_sales",
+                "seoul_realtime_hotspots",
+                "kosis_regional_income",
+                "elderly_ratio_region",
+            ],
+            verdict="매출 데이터 없음 · 분석 제한",
+            reasoning=f"{dong_code} 매출 레코드 부재로 데모그래픽 심층 분석 제한.",
+            confidence=0.3,
+        )
+        analysis["demographic_depth_result"] = {"agent_attribution": empty_demo_attr}
         return {
             "analysis_results": analysis,
             "current_agent": "demographic_depth",
+            "agent_attribution": empty_demo_attr,
         }
 
     # 정량 계산
@@ -256,8 +307,9 @@ async def demographic_depth_node(state: AgentState) -> dict:
     wd_we = _calc_weekday_weekend_ratio(sales)
 
     # LLM 호출
+    fallback_note = f"\n※ 해당 업종({industry_filter}) 특화 데이터 부족으로 전체 업종 기준 분석." if (industry_filter and industry_used is None) else ""
     try:
-        prompt = _build_prompt(sales, resvis, context, brand_name, core, top3, peak, wd_we)
+        prompt = _build_prompt(sales, resvis, context, brand_name, core, top3, peak, wd_we) + fallback_note
         llm = get_fast_llm().with_structured_output(DemographicAnalysis)
         analysis_out: DemographicAnalysis = await llm.ainvoke(
             [
@@ -339,7 +391,31 @@ async def demographic_depth_node(state: AgentState) -> dict:
 
     analysis_results = dict(state.get("analysis_results", {}) or {})
     analysis_results["demographic_report"] = report
+
+    try:
+        _share_pct_main = round(float(core.share) * 100, 1)
+    except Exception:
+        _share_pct_main = 0
+    demo_attr = build_attribution(
+        agent_id="demographic_depth",
+        display_name="소비자 심층",
+        kind="LLM",
+        sources=[
+            "district_sales",
+            "seoul_realtime_hotspots",
+            "kosis_regional_income",
+            "elderly_ratio_region",
+        ],
+        verdict=f"주 소비층 {core.age} {core.gender} ({_share_pct_main}%)",
+        reasoning=str(analysis_out.narrative)[:300]
+        if analysis_out and analysis_out.narrative
+        else "소비자 심층 분석 데이터 기반",
+        confidence=0.8,
+    )
+    analysis_results["demographic_depth_result"] = {"agent_attribution": demo_attr}
+
     return {
         "analysis_results": analysis_results,
         "current_agent": "demographic_depth",
+        "agent_attribution": demo_attr,
     }

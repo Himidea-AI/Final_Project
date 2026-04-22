@@ -25,10 +25,16 @@ interface Props {
   data: QuarterlyProjection[];
 }
 
-/** 억원 단위 포맷 — Tooltip 및 YAxis에서 사용 */
-const format억원 = (value: number) => {
-  const 억 = value / 100_000_000;
-  return `${억.toFixed(1)}억원`;
+// 값 크기에 따라 억원/만원 단위 자동 스위칭 — 0.1억원 같은 라벨 중복·정보 손실 방지
+const formatKRW = (value: number): string => {
+  const abs = Math.abs(value);
+  if (abs >= 100_000_000) {
+    return `${(value / 100_000_000).toFixed(1)}억원`;
+  }
+  if (abs >= 10_000) {
+    return `${Math.round(value / 10_000).toLocaleString()}만원`;
+  }
+  return `${Math.round(value).toLocaleString()}원`;
 };
 
 export function QuarterlyProjectionChart({ data }: Props) {
@@ -56,7 +62,7 @@ export function QuarterlyProjectionChart({ data }: Props) {
         />
 
         {/* Y축 — 억원 단위 */}
-        <YAxis tickFormatter={format억원} tick={{ fill: '#9ca3af', fontSize: 11 }} width={70} />
+        <YAxis tickFormatter={formatKRW} tick={{ fill: '#9ca3af', fontSize: 11 }} width={70} />
 
         {/* Tooltip — 분기/매출/신뢰구간/누적손익 표시 */}
         <Tooltip
@@ -66,7 +72,7 @@ export function QuarterlyProjectionChart({ data }: Props) {
               confidence_lower: '신뢰구간 하한',
               confidence_upper: '신뢰구간 상한',
             };
-            return [format억원(value), labels[name] ?? name];
+            return [formatKRW(value), labels[name] ?? name];
           }}
           labelFormatter={(q: number) => `${q}분기`}
           contentStyle={{

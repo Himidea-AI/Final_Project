@@ -75,11 +75,13 @@ async def parallel_analysis_node(state: AgentState) -> dict:
     )
 
     # analysis_results 병합 (demographic_depth / trend_forecast / competitor_intel 포함; legal_risks·market_report 등 기존 키 보존)
+    # ranking_result도 병합하여 district_ranking_result → agent_attribution 경로 보존
     merged_analysis = dict(state.get("analysis_results", {}))
     for result in (
         market_result,
         population_result,
         legal_result,
+        ranking_result,
         demographic_result,
         trend_result,
         competitor_result,

@@ -1554,3 +1554,55 @@ class WeatherDaily(Base):
     rain_60m_max = Column(Float)
     snow_new = Column(Float)
     snow_max = Column(Float)
+
+
+# ---------------------------------------------------------------------------
+# 고객 (매장 방문 기록)
+# ---------------------------------------------------------------------------
+
+
+class Customer(Base):
+    """고객 — 매장 방문 고객 기본 정보 (고객당 방문 날짜 1건)"""
+
+    __tablename__ = "customers"
+
+    customer_id = Column(String(20), primary_key=True, comment="고객 아이디")
+    customer_name = Column(Text, nullable=False, comment="고객 이름")
+    visit_date = Column(Date, comment="방문 날짜")
+
+
+# ---------------------------------------------------------------------------
+# 시뮬레이션 이력 (매니저 저장 이력)
+# ---------------------------------------------------------------------------
+
+
+class SimulationHistory(Base):
+    """시뮬레이션 이력 — 매니저가 시뮬 실행 후 [저장] 버튼으로 남긴 영구 이력"""
+
+    __tablename__ = "simulation_history"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # index=True 는 복합 idx_simhist_manager_created 의 leftmost prefix 와 중복되므로 제거
+    manager_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("manager_users.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="매니저 ID",
+    )
+    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
+
+    # 시뮬 입력
+    district = Column(String(50), nullable=False, comment="출점 후보 행정동")
+    brand_name = Column(String(100), nullable=False, comment="브랜드명")
+    business_type = Column(String(50), comment="업종 (cafe/restaurant/convenience)")
+    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터")
+
+    # 시뮬 결과 전체 (8 agent + ABM + B2 ML 9개)
+    simulation_result = Column(JSONB, nullable=False, comment="시뮬 결과 전체")
+
+    # 리스트 표시용 요약 (빠른 조회)
+    ai_verdict_summary = Column(Text, comment="AI 판정 요약")
+    market_entry_signal = Column(String(10), comment="green|yellow|red")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())

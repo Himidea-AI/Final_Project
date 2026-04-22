@@ -22,9 +22,9 @@ interface MetricChartsProps {
 
 const GRADE_COLORS = {
   EXCELLENT: '#10B981', // Emerald-500
-  GOOD: '#3B82F6',      // Blue-500
-  NORMAL: '#EAB308',    // Yellow-500
-  RISKY: '#EF4444',     // Red-500
+  GOOD: '#3B82F6', // Blue-500
+  NORMAL: '#EAB308', // Yellow-500
+  RISKY: '#EF4444', // Red-500
 };
 
 const GRADE_LABELS = {
@@ -47,13 +47,10 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
   ];
 
   // 성장률 바 차트 데이터
-  const growthData = [
-    { name: '전년 대비 성장률', value: metrics.growth_rate || 0 },
-  ];
+  const growthData = [{ name: '전년 대비 성장률', value: metrics.growth_rate || 0 }];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white/50 backdrop-blur-md rounded-2xl border border-gray-100 shadow-xl">
-
       {/* 1. 등급 요약 카드 */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -62,7 +59,9 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
         className="flex flex-col items-center justify-center p-6 rounded-2xl bg-white shadow-lg border-t-8 h-full"
         style={{ borderTopColor: themeColor }}
       >
-        <span className="text-xs font-black text-gray-300 uppercase tracking-widest mb-2">Total Grade</span>
+        <span className="text-xs font-black text-gray-300 uppercase tracking-widest mb-2">
+          Total Grade
+        </span>
         <motion.div
           initial={{ y: 10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -106,8 +105,12 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
                   if (active && payload && payload.length) {
                     return (
                       <div className="bg-white/90 backdrop-blur-md p-3 shadow-2xl rounded-xl border border-blue-50">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">매출 성장률</p>
-                        <span className="text-xl font-black text-blue-600">+{payload[0].value}%</span>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
+                          매출 성장률
+                        </p>
+                        <span className="text-xl font-black text-blue-600">
+                          +{payload[0].value}%
+                        </span>
                       </div>
                     );
                   }
@@ -127,7 +130,11 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
           </ResponsiveContainer>
         </div>
         <p className="text-[11px] text-center text-gray-400 font-medium mt-2 leading-relaxed">
-          과거 12개월 대비 평균 매출이 <span className="font-bold underline" style={{ color: themeColor }}>{metrics.growth_rate}% 쾌속 성장</span> 중입니다.
+          과거 12개월 대비 평균 매출이{' '}
+          <span className="font-bold underline" style={{ color: themeColor }}>
+            {metrics.growth_rate}% 쾌속 성장
+          </span>{' '}
+          중입니다.
         </p>
       </motion.div>
 
@@ -145,13 +152,18 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
             </div>
             <h3 className="font-black text-gray-800 tracking-tight">5차원 입지 정밀 진단</h3>
           </div>
-          <span className="text-[10px] font-black bg-gray-100 px-2 py-1 rounded text-gray-500">AI AGENT ENGINE v1.2</span>
+          <span className="text-[10px] font-black bg-gray-100 px-2 py-1 rounded text-gray-500">
+            AI AGENT ENGINE v1.2
+          </span>
         </div>
         <div className="h-[280px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
               <PolarGrid stroke="#f1f5f9" />
-              <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 700 }} />
+              <PolarAngleAxis
+                dataKey="subject"
+                tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 700 }}
+              />
               <Radar
                 name="Score"
                 dataKey="A"
@@ -167,7 +179,9 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
         <div className="grid grid-cols-3 gap-2 mt-4">
           <div className="p-3 bg-gray-50 rounded-xl text-center">
             <p className="text-[9px] font-bold text-gray-400 uppercase">경쟁 지수</p>
-            <p className="text-sm font-black text-gray-700">{(metrics.competition_score * 10).toFixed(1)}/10</p>
+            <p className="text-sm font-black text-gray-700">
+              {(metrics.competition_score * 10).toFixed(1)}/10
+            </p>
           </div>
           <div className="p-3 bg-gray-50 rounded-xl text-center">
             <p className="text-[9px] font-bold text-gray-400 uppercase">임대료</p>

@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulationStore } from '../../stores/simulationStore';
 import { X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+
+const DONE_AUTO_DISMISS_MS = 3000;
 
 export function SimulationFloatingWidget() {
   const status = useSimulationStore((s) => s.status);
@@ -12,6 +15,13 @@ export function SimulationFloatingWidget() {
   const dismiss = useSimulationStore((s) => s.dismissResult);
   const start = useSimulationStore((s) => s.startSimulation);
   const navigate = useNavigate();
+
+  // 결과 토스트는 3초 후 자동 사라짐 — 하단 섹션 가리는 문제 해결
+  useEffect(() => {
+    if (status !== 'done') return;
+    const timer = setTimeout(() => dismiss(), DONE_AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [status, dismiss]);
 
   if (status === 'idle') return null;
 

@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     app_mode: str = os.getenv("APP_MODE", "PROD")  # "DEV" | "PROD"
     demo_mode: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
 
+    # JWT — dev fallback 제공, 운영에선 반드시 .env의 강력한 secret으로 덮어쓰기
+    jwt_secret_key: str = os.getenv(
+        "JWT_SECRET_KEY", "dev-only-not-secret-replace-in-prod"
+    )
+    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
+    jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

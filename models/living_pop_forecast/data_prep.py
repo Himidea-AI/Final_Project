@@ -18,13 +18,10 @@ import logging
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import numpy as np
 import pandas as pd
 import torch
+from dotenv import load_dotenv
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -37,13 +34,11 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
-_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
-_host = os.environ.get("POSTGRES_HOST", "192.168.0.28")
-_port = os.environ.get("POSTGRES_PORT", "5432")
-_db = os.environ.get("POSTGRES_DB", "mapo_simulator")
+load_dotenv(PROJECT_ROOT / "backend" / ".env")
+
 DB_URL = os.environ.get(
     "POSTGRES_URL",
-    f"postgresql://postgres:{_pw}@{_host}:{_port}/{_db}",
+    "postgresql://postgres:MapoSpotter1!%23@mapo-simulator.cx8eakyuk1jf.ap-northeast-2.rds.amazonaws.com:5432/mapo_simulator",
 )
 
 # ---------------------------------------------------------------------------

@@ -57,6 +57,7 @@ export interface ShapResult {
   base_value: number; // SHAP 기준 예측값
   predicted_value: number; // 모델 예측 매출액
   predicted_value_unit: string; // 단위 (예: "원")
+  summary?: string[]; // 자연어 요약 문장 목록
   is_mock: boolean; // mock 데이터 여부
 }
 
@@ -83,6 +84,7 @@ export interface LegalRisk {
   detail: string;
   recommendation?: string;
   articles?: LegalRiskArticle[];
+  checklist?: LegalChecklistItem[];
 }
 
 /** 폐업 위험도 기여 피처 */
@@ -96,6 +98,7 @@ export interface ClosureRisk {
   risk_score: number;
   risk_level: 'safe' | 'caution' | 'danger';
   top_signals: ClosureRiskSignal[];
+  summary?: string[]; // 자연어 요약 문장 목록
   is_mock: boolean;
 }
 
@@ -175,6 +178,8 @@ export interface SimulationOutput {
   trend_forecast?: TrendForecast | null;
   // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)
   demographic_report?: DemographicReport | null;
+  // [Dashboard 15-section] 에이전트별 판단 근거 집계 (§11 UI 카드용)
+  agent_attributions?: AgentAttribution[];
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
@@ -230,4 +235,47 @@ export interface AnalysisResult {
     legal_report: any[];
     full_analysis: any;
   };
+}
+
+// ──────────────────────────────────────────────────────────
+// Dashboard 15 섹션 통합 리포트 타입 (2026-04-21 스펙)
+// ──────────────────────────────────────────────────────────
+
+export type AgentId =
+  | 'market_analyst'
+  | 'population_analyst'
+  | 'legal'
+  | 'district_ranking'
+  | 'synthesis'
+  | 'demographic_depth'
+  | 'trend_forecaster'
+  | 'competitor_intel';
+
+export type AgentKind = 'LLM' | 'Python' | 'Hybrid' | 'RAG';
+
+export interface AgentAttribution {
+  id: AgentId;
+  display_name: string;
+  kind: AgentKind;
+  sources: string[];
+  verdict: string;
+  reasoning: string;
+  confidence?: number;
+}
+
+export interface ReportSection {
+  id: string;
+  label: string;
+  number: string;
+}
+
+export interface TimelineEvent {
+  monthOffset: number;
+  label: string;
+  type: 'milestone' | 'risk' | 'opportunity';
+}
+
+export interface LegalChecklistItem {
+  text: string;
+  isRequired?: boolean;
 }

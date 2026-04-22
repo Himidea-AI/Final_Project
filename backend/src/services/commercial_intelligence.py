@@ -141,7 +141,10 @@ def analyze_competition(
     for r in rows:
         d = haversine_m(lat0, lon0, r["lat"], r["lon"])
         if d <= radius_m:
-            within.append({**dict(r), "distance_m": round(d, 1)})
+            # 프론트 관례에 맞춰 lon → lng 로 노출 (§05 지도 마커용)
+            row_dict = {**dict(r), "distance_m": round(d, 1)}
+            row_dict["lng"] = row_dict.pop("lon", None)
+            within.append(row_dict)
 
     within.sort(key=lambda x: x["distance_m"])
 
@@ -175,17 +178,20 @@ def analyze_competition(
 
 
 def _saturation_bucket(count: int, radius_m: int) -> tuple[str, int]:
-    """반경 대비 매장 수로 포화도 판정. 500m 기준 임계값; 반경이 다르면 면적비율로 보정."""
+    """반경 500m 기준 경쟁 밀집도 판정.
+    임계값: sparse 0~2 / low 3~5 / medium 6~10 / high 11~20 / saturated 21+
+    반경이 500m가 아닌 경우 면적비율로 보정.
+    """
     area_ratio = (radius_m / 500) ** 2
     scaled = count / area_ratio if area_ratio else count
 
-    if scaled >= 50:
+    if scaled >= 21:
         return ("saturated", 90)
-    if scaled >= 30:
+    if scaled >= 11:
         return ("high", 72)
-    if scaled >= 15:
+    if scaled >= 6:
         return ("medium", 50)
-    if scaled >= 5:
+    if scaled >= 3:
         return ("low", 30)
     return ("sparse", 10)
 

@@ -52,7 +52,8 @@ def age_dong_time_boost(
 
     # 3) 아키타입 — 실데이터에 없는 세분 행동만 유지
     if archetype == "bcst" and dong == "상암동":  # 방송사 새벽 야식
-        if hour in (23, 0, 1, 2) and category in ("편의점", "음식점"):
+        # 편의점은 시뮬 제외 — 음식점만 야식 부스트
+        if hour in (23, 0, 1, 2) and category == "음식점":
             w *= 1.6
     if archetype == "prnt" and weekday >= 5:  # 유아 부모 주말
         if dong in ("상암동", "성산2동", "망원2동"):
@@ -260,13 +261,13 @@ class Agent:
             return Decision(action="rest")
 
         # 개인 취향 가중치 (profile 없으면 기본값)
+        # 편의점은 시뮬 대상에서 제외 (분석 3종: 음식점/카페/주점)
         if self.profile is not None:
             p_meal = 0.5 + 0.4 * self.profile.pref_restaurant
             p_cafe = 0.2 + 0.4 * self.profile.pref_cafe
             p_pub = 0.1 + 0.3 * self.profile.pref_pub
-            p_cvs = 0.05 + 0.15 * self.profile.pref_convenience
         else:
-            p_meal, p_cafe, p_pub, p_cvs = 0.7, 0.4, 0.3, 0.1
+            p_meal, p_cafe, p_pub = 0.7, 0.4, 0.3
 
         # 식사/카페/유흥 결정
         if meal_hour and rng.random() < p_meal:
@@ -275,8 +276,6 @@ class Agent:
             return self._pick_store(world, rng, "카페")
         if leisure_hour and rng.random() < p_pub:
             return self._pick_store(world, rng, "주점")
-        if rng.random() < p_cvs:
-            return self._pick_store(world, rng, "편의점")
 
         return Decision(action="rest", target_dong=self.current_dong)
 

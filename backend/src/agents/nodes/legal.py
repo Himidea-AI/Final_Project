@@ -20,6 +20,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 logger = logging.getLogger(__name__)
 
 from src.agents.llms import get_fast_llm
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
 from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, ZONING_RULES
@@ -32,6 +33,45 @@ from src.services.law_api import LawApiClient
 # 전체 조문 원본 인덱스 — chunks.json에서 (source, article) → 전체 본문 조립
 # RAG는 "어떤 조문이 관련 있는지" 식별용으로만 사용하고, 실제 표시 본문은 여기서 가져옴
 _ARTICLE_FULL_TEXT: dict[tuple[str, str], str] = {}
+
+
+def _derive_checklist_from_articles(articles: list, risk_type: str) -> list[dict]:
+    """조문 본문에서 창업 체크리스트 항목 파생 (간단 휴리스틱).
+
+    §13 법률 리스크 드로어의 체크리스트 UI 에 사용.
+    articles 가 비어있거나 휴리스틱 매치가 없으면 fallback 1건 반환 (타입 안전).
+    """
+    items: list[dict] = []
+    seen: set[str] = set()
+    for a in (articles or [])[:5]:
+        content = (a.get("content") if isinstance(a, dict) else "") or ""
+        if "정보공개서" in content and "정보공개서 수령" not in seen:
+            items.append({"text": "가맹본부로부터 정보공개서 수령", "isRequired": True})
+            seen.add("정보공개서 수령")
+        if ("14일" in content or "숙고기간" in content) and "숙고기간" not in seen:
+            items.append({"text": "14일 숙고기간 확보 후 계약 체결", "isRequired": True})
+            seen.add("숙고기간")
+        if "가맹금" in content and "가맹금" not in seen:
+            items.append({"text": "가맹금 예치 여부 확인", "isRequired": True})
+            seen.add("가맹금")
+        if ("영업지역" in content or "지역" in content) and "영업지역" not in seen:
+            items.append({"text": "영업지역 독점 보호 조항 확인", "isRequired": False})
+            seen.add("영업지역")
+        if ("권리금" in content) and "권리금" not in seen:
+            items.append({"text": "권리금 회수 기회 보호 조항 확인", "isRequired": True})
+            seen.add("권리금")
+        if ("위생" in content or "영업신고" in content) and "위생" not in seen:
+            items.append({"text": "영업신고·위생교육 이수 증빙 준비", "isRequired": True})
+            seen.add("위생")
+        if ("소방" in content or "스프링클러" in content) and "소방" not in seen:
+            items.append({"text": "소방시설 설치 및 안전시설 완비증명 확보", "isRequired": True})
+            seen.add("소방")
+        if ("근로계약" in content or "최저임금" in content) and "근로" not in seen:
+            items.append({"text": "근로계약서 작성·교부 및 최저임금 준수 확인", "isRequired": True})
+            seen.add("근로")
+    if not items:
+        items.append({"text": f"{risk_type} 관련 조문 상세 검토", "isRequired": False})
+    return items
 
 
 def _load_article_index() -> None:
@@ -378,6 +418,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 logger.warning(f"[legal_node] 캐시 데이터 손상 - 재계산: {cache_key}")
             else:
                 logger.info(f"[legal_node] 캐시 히트: {cache_key}")
+                # 캐시 데이터에도 checklist 필드 보강 (구 캐시 호환)
+                for _r in legal_risks or []:
+                    if isinstance(_r, dict) and "checklist" not in _r:
+                        _r["checklist"] = _derive_checklist_from_articles(
+                            _r.get("articles") or [],
+                            _r.get("type", "unknown"),
+                        )
                 # DEBUG: 캐시된 articles가 새 dict 포맷인지 확인
                 try:
                     first_risk = legal_risks[0] if legal_risks else {}
@@ -396,11 +443,23 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     await _redis.aclose()
                 except Exception:
                     pass
+                _cached_high = sum(1 for r in (legal_risks or []) if isinstance(r, dict) and r.get("level") == "danger")
+                cached_legal_attr = build_attribution(
+                    agent_id="legal",
+                    display_name="법률 리스크",
+                    kind="RAG",
+                    sources=["legal_rag_chunks (3775)"],
+                    verdict=f"14 법률 위험도 · overall {overall_cached}",
+                    reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_cached_high}건 HIGH 위험.",
+                    confidence=0.85,
+                )
+                analysis["legal_result"] = {"agent_attribution": cached_legal_attr}
                 return {
                     **state,
                     "analysis_results": analysis,
                     "legal_info": legal_info,
                     "overall_legal_risk": overall_cached,
+                    "agent_attribution": cached_legal_attr,
                 }
     except Exception as e:
         logger.warning(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
@@ -855,6 +914,15 @@ async def _run_legal_pipeline(state: dict) -> dict:
         ),
     ]
 
+    # §13 드로어 체크리스트 필드 — 각 risk 의 articles 에서 휴리스틱으로 파생
+    # 14개 risks 개수 invariant 유지; checklist 는 항상 1개 이상 반환
+    for _r in risks:
+        if isinstance(_r, dict) and "checklist" not in _r:
+            _r["checklist"] = _derive_checklist_from_articles(
+                _r.get("articles") or [],
+                _r.get("type", "unknown"),
+            )
+
     # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe
     levels = [r.get("level", "caution") for r in risks if isinstance(r, dict)]
     if "danger" in levels:
@@ -898,7 +966,25 @@ async def _run_legal_pipeline(state: dict) -> dict:
             except Exception:
                 pass
 
-    return {**state, "analysis_results": analysis, "legal_info": legal_info, "overall_legal_risk": overall_level}
+    _high_count = sum(1 for r in risks if isinstance(r, dict) and r.get("level") == "danger")
+    legal_attr = build_attribution(
+        agent_id="legal",
+        display_name="법률 리스크",
+        kind="RAG",
+        sources=["legal_rag_chunks (3775)"],
+        verdict=f"14 법률 위험도 · overall {overall_level}",
+        reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_high_count}건 HIGH 위험.",
+        confidence=0.85,
+    )
+    analysis["legal_result"] = {"agent_attribution": legal_attr}
+
+    return {
+        **state,
+        "analysis_results": analysis,
+        "legal_info": legal_info,
+        "overall_legal_risk": overall_level,
+        "agent_attribution": legal_attr,
+    }
 
 
 async def legal_node(state) -> dict:

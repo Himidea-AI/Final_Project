@@ -5,6 +5,7 @@ import redis.asyncio as aioredis
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.schemas.state import AgentState
 from src.schemas.structured_output import PopulationAnalysisOutput
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.agents.nodes.district_ranking import shared_population_trends
 from src.agents.llms import get_fast_llm
@@ -54,10 +55,23 @@ async def population_analyst_node(state: AgentState) -> dict:
             analysis = dict(state.get("analysis_results", {}))
             analysis["population_report"] = cached_data["population_report"]
             await _redis.aclose()
+            _cached_metrics = cached_data.get("metrics", {}) or {}
+            _cached_report = cached_data.get("population_report", "") or ""
+            cached_attribution = build_attribution(
+                agent_id="population_analyst",
+                display_name="유동인구 분석",
+                kind="LLM",
+                sources=["seoul_adstrd_flpop", "sgis"],
+                verdict=f"주 타겟 {_cached_metrics.get('main_target_age', 'N/A')} · 피크 {_cached_metrics.get('peak_time', '미확인')}",
+                reasoning=str(_cached_report)[:300] if _cached_report else "유동인구 분석 (캐시)",
+                confidence=0.8,
+            )
+            analysis["population_analyst_result"] = {"agent_attribution": cached_attribution}
             return {
                 "analysis_results": analysis,
-                "analysis_metrics": {**state.get("analysis_metrics", {}), **cached_data["metrics"]},
+                "analysis_metrics": {**state.get("analysis_metrics", {}), **_cached_metrics},
                 "current_agent": "population_analyst",
+                "agent_attribution": cached_attribution,
             }
     except Exception as e:
         logger.warning(f"[population_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
@@ -120,8 +134,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         demo_summary = (
             f"- 주요 성별: {top_gender} (남성 {demographics['남성']:,} / 여성 {demographics['여성']:,})\n"
             f"- 연령대별: 20대 {demographics['20대']:,} / 30대 {demographics['30대']:,} / 40대 {demographics['40대']:,}\n"
-            f"- 최다 고객층: {top_age} {top_gender}\n"
-            + (f"- 피크 시간대: {real_peak_time}" if real_peak_time else "")
+            f"- 최다 고객층: {top_age} {top_gender}\n" + (f"- 피크 시간대: {real_peak_time}" if real_peak_time else "")
         )
 
     # 2. API 할당량 관리 (2초 대기)
@@ -145,7 +158,11 @@ async def population_analyst_node(state: AgentState) -> dict:
         )
         + "\nreport 필드: 유동인구의 양적/질적 변화를 분석하고 창업 시 고려할 인구학적 통계치를 포함하세요.\n"
         "main_target_age 필드: 위 실측 인구통계 데이터를 반드시 반영하여 '20대 여성', '30대 남성', '20~30대 여성' 등 구체적인 성별+연령 조합으로 작성하세요.\n"
-        + (f"peak_time 필드: 반드시 '{real_peak_time}'로 작성하세요 (실측 매출 건수 기준 피크 시간대).\n" if real_peak_time else "peak_time 필드: 업종과 지역 특성을 고려한 피크 시간대를 '18:00~21:00' 형식으로 작성하세요.\n")
+        + (
+            f"peak_time 필드: 반드시 '{real_peak_time}'로 작성하세요 (실측 매출 건수 기준 피크 시간대).\n"
+            if real_peak_time
+            else "peak_time 필드: 업종과 지역 특성을 고려한 피크 시간대를 '18:00~21:00' 형식으로 작성하세요.\n"
+        )
         + "어조: 정교하고 분석적인 톤을 유지하세요."
     )
 
@@ -190,8 +207,20 @@ async def population_analyst_node(state: AgentState) -> dict:
             except Exception:
                 pass
 
+    attribution = build_attribution(
+        agent_id="population_analyst",
+        display_name="유동인구 분석",
+        kind="LLM",
+        sources=["seoul_adstrd_flpop", "sgis"],
+        verdict=f"주 타겟 {new_metrics.get('main_target_age', 'N/A')} · 피크 {new_metrics.get('peak_time', '미확인')}",
+        reasoning=str(population_report)[:300] if population_report else "유동인구 분석 데이터 기반",
+        confidence=0.8,
+    )
+    analysis_results["population_analyst_result"] = {"agent_attribution": attribution}
+
     return {
         "analysis_results": analysis_results,
         "analysis_metrics": {**state.get("analysis_metrics", {}), **new_metrics},
         "current_agent": "population_analyst",
+        "agent_attribution": attribution,
     }

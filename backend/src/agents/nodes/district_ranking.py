@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 from src.schemas.state import AgentState
 from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
 from src.config.settings import settings
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.agents.nodes.market_analyst import db_client, market_tool
 from src.database.models import NaverVacancy, StoreQuarterly
 from src.services.population_api import MAPO_DONG_CODES
@@ -352,11 +353,11 @@ def _normalize_and_rank(
         f"임대료:{rent_hit}/16, 밀집도:{density_hit}/16, 트렌드:{trend_hit}/16"
     )
 
-    # 가중치 재분배: 추가 축이 있으면 기존 축에서 일부 할당
-    # 밀집도 5%, 트렌드 5% → 기존 매출에서 차감
-    w_density = 0.05 if has_density else 0.0
+    # 가중치 재분배: 경쟁밀도 15% (5% → 15%: 포화 업종 진입 페널티 강화), 트렌드 5%
+    # 경쟁밀도는 매출에서 차감 — 인구/임대료 가중치는 유지
+    w_density = 0.15 if has_density else 0.0
     w_trend = 0.05 if has_trend else 0.0
-    w_sales_adj = w_sales - w_density - w_trend  # 추가 축 없으면 원래 가중치 유지
+    w_sales_adj = max(w_sales - w_density - w_trend, 0.05)  # 매출 가중치 최소 5% 보장
 
     ranked = []
     for i, r in enumerate(raw):
@@ -453,6 +454,23 @@ async def district_ranking_node(state: AgentState) -> dict:
                 await _redis.aclose()
             except Exception:
                 pass
+            _cached_ranked = cached_data.get("scouting_results", []) or []
+            _cached_winner = cached_data.get("winner_district", "")
+            _cached_winner_score = 0
+            if _cached_ranked:
+                _first = _cached_ranked[0] if isinstance(_cached_ranked[0], dict) else {}
+                _cached_winner_score = _first.get("final_score") or _first.get("score") or 0
+            cached_ranking_attr = build_attribution(
+                agent_id="district_ranking",
+                display_name="행정동 랭킹",
+                kind="Python",
+                sources=["district_sales", "golmok_rent", "seoul_adstrd_flpop"],
+                verdict=f"1위 {_cached_winner} ({_cached_winner_score}점)",
+                reasoning="마포 16동 정량 스코어링 — 매출/인구/임대료 가중합 (캐시)",
+                confidence=0.9,
+            )
+            _cached_analysis = dict(state.get("analysis_results", {}))
+            _cached_analysis["district_ranking_result"] = {"agent_attribution": cached_ranking_attr}
             return {
                 "scouting_results": cached_data["scouting_results"],
                 "winner_district": cached_data["winner_district"],
@@ -460,6 +478,8 @@ async def district_ranking_node(state: AgentState) -> dict:
                 "vacancy_applied": cached_data.get("vacancy_applied", False),
                 "vacancy_spots": cached_data.get("vacancy_spots", []),
                 "current_agent": "district_ranking",
+                "analysis_results": _cached_analysis,
+                "agent_attribution": cached_ranking_attr,
             }
     except Exception as e:
         logger.warning(f"[district_ranking] Redis 캐시 조회 실패 (무시하고 계속): {e}")
@@ -547,6 +567,22 @@ async def district_ranking_node(state: AgentState) -> dict:
             except Exception:
                 pass
 
+    _winner_score = 0
+    if ranked:
+        _first_ranked = ranked[0] if isinstance(ranked[0], dict) else {}
+        _winner_score = _first_ranked.get("final_score") or _first_ranked.get("score") or 0
+    ranking_attr = build_attribution(
+        agent_id="district_ranking",
+        display_name="행정동 랭킹",
+        kind="Python",
+        sources=["district_sales", "golmok_rent", "seoul_adstrd_flpop"],
+        verdict=f"1위 {winner} ({_winner_score}점)",
+        reasoning="마포 16동 정량 스코어링 — 매출/인구/임대료 가중합",
+        confidence=0.9,
+    )
+    _analysis = dict(state.get("analysis_results", {}))
+    _analysis["district_ranking_result"] = {"agent_attribution": ranking_attr}
+
     return {
         "scouting_results": ranked,
         "winner_district": winner,
@@ -554,4 +590,6 @@ async def district_ranking_node(state: AgentState) -> dict:
         "vacancy_applied": vacancy_applied,
         "vacancy_spots": vacancy_spots,
         "current_agent": "district_ranking",
+        "analysis_results": _analysis,
+        "agent_attribution": ranking_attr,
     }
