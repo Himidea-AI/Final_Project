@@ -308,15 +308,19 @@ def _normalize_and_rank(
     # 예산 기반 평당 허용 임대료 계산 (0이면 필터 비활성화)
     budget_per_3_3m2 = (monthly_rent_budget / max(store_area, 1)) if monthly_rent_budget > 0 else 0
 
-    def _minmax(vals: list[float | None], reverse: bool = False) -> list[float]:
+    def _minmax(vals: list[float | None], reverse: bool = False, floor: float = 0.0) -> list[float]:
         """
         None = DB 데이터 없음 → 중간값(50) 부여, 실데이터만 min-max 정규화.
         전체가 None이거나 실데이터 편차 없으면 50 반환.
+
+        floor: 최저 score 하한 (UX 가독성용). 기본 0, 예: 10 이면 최저 10, 최고 100.
+            - 정규화 결과가 0으로 떨어지면 프론트에서 "데이터 없음"처럼 보여 혼란 → 소폭 floor 부여.
         """
         real = [v for v in vals if v is not None]
         if not real:
             return [50.0] * len(vals)
         lo, hi = min(real), max(real)
+        scale = 100.0 - floor
         results = []
         for v in vals:
             if v is None:
@@ -324,13 +328,17 @@ def _normalize_and_rank(
             elif hi == lo:
                 results.append(50.0)
             else:
-                norm = (v - lo) / (hi - lo) * 100
-                results.append(100 - norm if reverse else norm)
+                raw_norm = (v - lo) / (hi - lo)  # 0.0 ~ 1.0
+                if reverse:
+                    raw_norm = 1.0 - raw_norm
+                results.append(raw_norm * scale + floor)
         return results
 
-    sales_norm = _minmax([r["sales_growth"] for r in raw])
-    pop_norm = _minmax([r["pop_growth"] for r in raw])
-    rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True)  # 낮은 임대료 = 높은 점수
+    # [FIX] pop/sales/rent 모두 floor 10 적용 — min-max 최저값이 0 으로 떨어져
+    # IndicatorGrid 에 "유동인구 0" 같은 결측처럼 보이는 문제 방지 (UX 가독성).
+    sales_norm = _minmax([r["sales_growth"] for r in raw], floor=10.0)
+    pop_norm = _minmax([r["pop_growth"] for r in raw], floor=10.0)
+    rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True, floor=10.0)  # 낮은 임대료 = 높은 점수
 
     # SEMAS 밀집도 (역방향 — 적을수록 좋음: 경쟁 낮음)
     density_vals = [r.get("semas_density") for r in raw]
@@ -442,7 +450,7 @@ async def district_ranking_node(state: AgentState) -> dict:
     _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
 
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
-    cache_key = f"v3:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    cache_key = f"v4:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)

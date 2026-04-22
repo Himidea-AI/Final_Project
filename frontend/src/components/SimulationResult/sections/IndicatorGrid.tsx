@@ -36,19 +36,36 @@ export function IndicatorGrid({ simResult }: Props) {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {INDICATORS.map(({ key, label, color }) => {
               const rawVal = (report as Record<string, unknown>)[key];
+              const isMissing = typeof rawVal !== 'number' || rawVal === 0;
               const val = typeof rawVal === 'number' ? rawVal : 0;
               const clamped = Math.max(0, Math.min(100, val));
               return (
                 <div key={key} className="flex items-center gap-3">
-                  <div className="w-24 shrink-0 text-xs text-stone-400">{label}</div>
-                  <div className="relative flex-1 overflow-hidden rounded-full bg-stone-900 h-2">
-                    <div
-                      className={`absolute left-0 top-0 h-full rounded-full ${color}`}
-                      style={{ width: `${clamped}%` }}
-                    />
+                  <div className="w-24 shrink-0 text-xs text-stone-400 flex items-center gap-1">
+                    {label}
+                    {isMissing && (
+                      <span
+                        title="데이터 수집 중 — 백엔드 pipeline에서 해당 지표가 0/누락"
+                        className="text-amber-500 text-[10px] font-mono"
+                      >
+                        ⚠
+                      </span>
+                    )}
                   </div>
-                  <div className="w-10 shrink-0 text-right font-mono text-xs text-stone-100">
-                    {Math.round(clamped)}
+                  <div className="relative flex-1 overflow-hidden rounded-full bg-stone-900 h-2">
+                    {isMissing ? (
+                      <div className="absolute left-0 top-0 h-full w-full border border-dashed border-stone-700 rounded-full" />
+                    ) : (
+                      <div
+                        className={`absolute left-0 top-0 h-full rounded-full ${color}`}
+                        style={{ width: `${clamped}%` }}
+                      />
+                    )}
+                  </div>
+                  <div
+                    className={`w-10 shrink-0 text-right font-mono text-xs ${isMissing ? 'text-stone-500' : 'text-stone-100'}`}
+                  >
+                    {isMissing ? '—' : Math.round(clamped)}
                   </div>
                 </div>
               );
