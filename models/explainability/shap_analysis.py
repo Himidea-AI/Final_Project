@@ -1,8 +1,8 @@
 """
-SHAP 기반 예측 근거 시각화 — 생존률 예측 결과의 설명 가능성 제공
+SHAP 기반 예측 근거 시각화 — TCN 매출 예측 결과의 설명 가능성 제공
 
-SurvivalPredictor (LSTM) 모델에 대해 DeepExplainer / GradientExplainer를 사용하여
-피처별 기여도를 계산하고, 프론트엔드에서 바로 사용할 수 있는 dict 형태로 반환한다.
+TCNForecaster 모델에 대해 GradientExplainer / DeepExplainer를 사용하여
+피처별 매출 기여도를 계산하고, 프론트엔드에서 바로 사용할 수 있는 dict 형태로 반환한다.
 가중치 파일이 없는 개발 환경에서는 mock SHAP 값을 반환한다.
 """
 
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
 
 import numpy as np
 
@@ -88,158 +87,6 @@ def _mock_shap_values(feature_cols: list[str]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 메인 함수
-# ---------------------------------------------------------------------------
-
-
-def explain_prediction(
-    dong_code: str,
-    industry_code: str,
-    model: Any | None = None,
-) -> dict:
-    """
-    SHAP 분석으로 생존률 예측 근거를 설명한다.
-
-    predict.py 의 _load_model / _prepare_input 을 재사용하므로
-    scaler.pkl 로드 및 데이터 전처리는 별도 구현하지 않는다.
-
-    Args:
-        dong_code:     행정동 코드 (예: "11440530")
-        industry_code: 업종 코드   (예: "CS100001")
-        model:         학습된 ClosurePredictor 인스턴스.
-                       None 이면 내부에서 weights/closure_model.pt 를 로드한다.
-
-    Returns:
-        dict:
-            feature_importance : 피처별 SHAP 기여도 리스트 (중요도 내림차순)
-            base_value         : SHAP expected_value (기준 예측값)
-            predicted_value    : 모델 실제 출력 (폐업률 0~1)
-            is_mock            : mock 데이터 여부
-    """
-    # closure_model.pt(LSTM 폐업률 모델) deprecated — 과거 실측값 기반으로 전환됨
-    # _load_model / _prepare_input 함수가 제거되어 mock 반환
-    try:
-        from models.revenue_predictor.data_prep import FEATURE_COLS
-        from models.revenue_predictor.predict import _load_model, _prepare_input  # noqa: F401
-    except ImportError:
-        from models.revenue_predictor.data_prep import FEATURE_COLS
-
-        _log("WARNING", "closure_model.pt deprecated — mock 반환")
-        return _mock_shap_values(FEATURE_COLS)
-
-    import torch
-
-    # ---- 1) 모델 로드 ----
-    if model is None:
-        try:
-            model = _load_model()
-            _log("INFO", "SurvivalPredictor 가중치 로드 완료")
-        except (FileNotFoundError, NameError) as exc:
-            _log("WARNING", f"가중치 파일 없음: {exc}")
-            return _mock_shap_values(FEATURE_COLS)
-
-    # ---- 2) 입력 데이터 준비 (scaler 적용 포함) ----
-    try:
-        input_data = _prepare_input(dong_code, industry_code)
-    except Exception as prep_exc:
-        # DB/CSV 로드 실패 등 내부 예외를 catch 하여 mock 으로 전환
-        _log("WARNING", f"입력 데이터 준비 중 예외 발생 - mock 반환: {prep_exc}")
-        return _mock_shap_values(FEATURE_COLS)
-    if input_data is None:
-        _log("WARNING", f"입력 데이터 준비 실패 (dong={dong_code}, industry={industry_code}) - mock 반환")
-        return _mock_shap_values(FEATURE_COLS)
-
-    # input_data: shape (1, WINDOW_SIZE, 8) np.ndarray
-    input_tensor = torch.tensor(input_data, dtype=torch.float32)
-
-    # ---- 3) 모델 순전파 — 기준 예측값 확보 ----
-    model.eval()
-    with torch.no_grad():
-        predicted_value = float(model(input_tensor).item())
-        predicted_value = max(0.0, min(1.0, predicted_value))
-
-    # ---- 4) SHAP — DeepExplainer 우선, 실패 시 GradientExplainer ----
-    # 배경 데이터: 영벡터 10개 (DeepExplainer 요구사항)
-    background = torch.zeros(10, input_tensor.shape[1], input_tensor.shape[2])
-
-    try:
-        import shap
-
-        _log("INFO", "DeepExplainer 실행 시작")
-        explainer = shap.DeepExplainer(model, background)
-        shap_values_raw = explainer.shap_values(input_tensor)
-        # expected_value 가 np.ndarray 로 반환되는 shap 버전 대응
-        _ev = explainer.expected_value
-        base_value = float(_ev.item() if isinstance(_ev, np.ndarray) else _ev)
-        _log("INFO", "DeepExplainer 완료")
-
-    except Exception as deep_exc:
-        # DeepExplainer 실패 → GradientExplainer 로 전환
-        _log("WARNING", f"DeepExplainer 실패 - GradientExplainer 로 전환: {deep_exc}")
-        try:
-            import shap
-
-            explainer = shap.GradientExplainer(model, background)
-            shap_values_raw = explainer.shap_values(input_tensor)
-            # expected_value 가 np.ndarray 로 반환되는 shap 버전 대응
-            if hasattr(explainer, "expected_value"):
-                _ev = explainer.expected_value
-                base_value = float(_ev.item() if isinstance(_ev, np.ndarray) else _ev)
-            else:
-                base_value = 0.5
-            _log("INFO", "GradientExplainer 완료")
-
-        except Exception as grad_exc:
-            # 두 explainer 모두 실패 → mock 반환
-            _log("WARNING", f"GradientExplainer 도 실패 - mock 반환: {grad_exc}")
-            return _mock_shap_values(FEATURE_COLS)
-
-    # ---- 5) SHAP 값 후처리: (..., WINDOW_SIZE, 8) → 시간축 평균 → (8,) ----
-    shap_array = np.array(shap_values_raw)
-
-    # ndim >= 4: 일부 shap 버전에서 list of arrays 형태로 반환 → 앞 차원 순서대로 제거
-    while shap_array.ndim >= 4:
-        shap_array = shap_array[0]
-
-    # 배치 차원 제거 (있는 경우)
-    if shap_array.ndim == 3:
-        shap_array = shap_array[0]  # (WINDOW_SIZE, n_features)
-
-    # 시간축(분기) 평균 → 피처별 대표 기여도
-    if shap_array.ndim == 2:
-        shap_array = shap_array.mean(axis=0)  # (n_features,)
-
-    # 처리 후에도 1차원이 아니면 복구 불가 → mock 반환
-    if shap_array.ndim != 1:
-        _log("WARNING", f"SHAP 값 차원 처리 실패 (ndim={shap_array.ndim}) - mock 반환")
-        return _mock_shap_values(FEATURE_COLS)
-
-    # ---- 6) 피처별 기여도 정렬 (절댓값 내림차순) ----
-    sorted_indices = np.argsort(-np.abs(shap_array))
-    feature_importance = [
-        {
-            "rank": rank + 1,
-            "feature": FEATURE_COLS[i],
-            "feature_ko": _FEATURE_KO.get(FEATURE_COLS[i], FEATURE_COLS[i]),
-            "shap_value": round(float(shap_array[i]), 6),
-            "abs_shap": round(float(abs(shap_array[i])), 6),
-            # 기여 방향: 생존률을 높이면 positive, 낮추면 negative
-            "direction": "positive" if shap_array[i] > 0 else ("negative" if shap_array[i] < 0 else "neutral"),
-        }
-        for rank, i in enumerate(sorted_indices)
-    ]
-
-    _log("INFO", f"SHAP 분석 완료 - 최고 기여 피처: {feature_importance[0]['feature_ko']}")
-
-    return {
-        "feature_importance": feature_importance,
-        "base_value": round(base_value, 6),
-        "predicted_value": round(predicted_value, 6),
-        "is_mock": False,
-    }
-
-
-# ---------------------------------------------------------------------------
 # TCN 피처 한국어 매핑 — ALL_FEATURES 34개 기준 (_FEATURE_KO 기반 확장)
 # ---------------------------------------------------------------------------
 
@@ -288,6 +135,122 @@ _TCN_FEATURE_KO: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
+# TCN SHAP 자연어 요약 템플릿
+# ---------------------------------------------------------------------------
+
+_TCN_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
+    "monthly_sales": {
+        "positive": "최근 매출액이 높아 향후 매출 예측에 긍정적으로 작용하고 있습니다.",
+        "negative": "최근 매출액이 낮아 향후 매출 예측에 부정적으로 작용하고 있습니다.",
+    },
+    "monthly_count": {
+        "positive": "방문 건수 증가가 향후 매출 상승에 기여하고 있습니다.",
+        "negative": "방문 건수 감소가 향후 매출에 부정적 영향을 주고 있습니다.",
+    },
+    "weekday_sales": {
+        "positive": "평일 매출이 안정적으로 높아 매출 예측에 긍정적입니다.",
+        "negative": "평일 매출 부진이 전체 매출 예측을 낮추고 있습니다.",
+    },
+    "weekend_sales": {
+        "positive": "주말 매출 호조가 매출 예측 상승에 기여하고 있습니다.",
+        "negative": "주말 매출 부진이 매출 예측에 부정적 영향을 줍니다.",
+    },
+    "male_sales": {
+        "positive": "남성 고객 매출이 증가해 전체 매출에 기여하고 있습니다.",
+        "negative": "남성 고객 매출 감소가 전체 매출에 영향을 줍니다.",
+    },
+    "female_sales": {
+        "positive": "여성 고객 매출이 증가해 전체 매출에 기여하고 있습니다.",
+        "negative": "여성 고객 매출 감소가 전체 매출에 영향을 줍니다.",
+    },
+    "age_20_sales": {
+        "positive": "20대 고객 매출 증가로 젊은 소비층 유입이 활발합니다.",
+        "negative": "20대 고객 매출 감소가 신규 소비층 유입 약화를 나타냅니다.",
+    },
+    "age_30_sales": {
+        "positive": "30대 주력 소비층 매출이 증가해 매출에 긍정적입니다.",
+        "negative": "30대 주력 소비층 매출 감소가 전체 매출에 영향을 줍니다.",
+    },
+    "age_40_sales": {
+        "positive": "40대 고객 매출 증가가 안정적 수익 기반에 기여합니다.",
+        "negative": "40대 고객 매출 감소가 수익 기반 약화로 이어집니다.",
+    },
+    "age_50_sales": {
+        "positive": "50대 고객 매출이 증가해 매출에 기여하고 있습니다.",
+        "negative": "50대 고객 매출 감소가 전체 매출에 영향을 줍니다.",
+    },
+    "age_60_above_sales": {
+        "positive": "60대 이상 고객 매출이 증가해 매출에 기여하고 있습니다.",
+        "negative": "60대 이상 고객 매출 감소가 전체 매출에 영향을 줍니다.",
+    },
+    "store_count": {
+        "positive": "점포 수 증가로 상권이 활성화되어 매출에 긍정적입니다.",
+        "negative": "점포 수 감소로 상권이 위축되어 매출에 부정적입니다.",
+    },
+    "closure_rate": {
+        "positive": "경쟁 업소 감소가 매출에 긍정적으로 작용하고 있습니다.",
+        "negative": "경쟁 심화가 매출 예측에 부정적으로 작용하고 있습니다.",
+    },
+    "total_pop": {
+        "positive": "주변 인구 증가가 잠재 고객 확대로 이어지고 있습니다.",
+        "negative": "주변 인구 감소가 잠재 고객 축소로 이어지고 있습니다.",
+    },
+    "rent_1f": {
+        "positive": "임대료 여건이 매출 예측에 긍정적으로 반영되고 있습니다.",
+        "negative": "높은 임대료 부담이 순익을 압박할 수 있습니다.",
+    },
+    "vacancy_rate": {
+        "positive": "공실이 적어 상권 활력이 매출에 긍정적으로 반영됩니다.",
+        "negative": "공실률 상승이 상권 침체 신호로 매출에 영향을 줍니다.",
+    },
+    "trend_score": {
+        "positive": "업종 검색 트렌드 호조가 수요 증가에 기여하고 있습니다.",
+        "negative": "업종 검색 트렌드 감소가 수요 위축 신호로 작용합니다.",
+    },
+    "bus_flpop": {
+        "positive": "대중교통 이용 유동인구 증가가 매출에 긍정적입니다.",
+        "negative": "대중교통 이용 유동인구 감소가 매출에 부정적입니다.",
+    },
+    "floating_pop": {
+        "positive": "골목상권 유동인구 증가가 매출 상승에 기여하고 있습니다.",
+        "negative": "골목상권 유동인구 감소가 매출에 부정적 영향을 줍니다.",
+    },
+    "cpi_index": {
+        "positive": "물가 지수 변화가 소비 심리에 긍정적으로 작용합니다.",
+        "negative": "물가 상승이 소비 심리를 위축시켜 매출에 부정적입니다.",
+    },
+    "quarter_num": {
+        "positive": "현재 분기 계절성이 매출에 유리하게 작용하고 있습니다.",
+        "negative": "현재 분기 계절성이 매출에 비우호적으로 작용하고 있습니다.",
+    },
+}
+
+
+def _generate_tcn_summary(feature_importance: list[dict], top_n: int = 3, threshold: float = 0.005) -> list[str]:
+    """TCN SHAP 결과를 자연어 문장으로 요약한다.
+
+    feature_importance는 abs_shap 내림차순으로 정렬된 상태여야 한다.
+    abs_shap >= threshold인 상위 top_n개 피처에 대해서만 문장을 생성한다.
+    """
+    sentences = []
+    for item in feature_importance[:top_n]:
+        if item["abs_shap"] < threshold:
+            break
+        feat = item["feature"]
+        direction = item["direction"]
+        if direction == "neutral":
+            continue
+        template = _TCN_SUMMARY_TEMPLATES.get(feat)
+        if template:
+            sentences.append(template[direction])
+        else:
+            feat_ko = item.get("feature_ko", feat)
+            direction_ko = "높이는" if direction == "positive" else "낮추는"
+            sentences.append(f"{feat_ko}이(가) 매출 예측을 {direction_ko} 방향으로 작용하고 있습니다.")
+    return sentences
+
+
+# ---------------------------------------------------------------------------
 # TCN SHAP 분석
 # ---------------------------------------------------------------------------
 
@@ -329,9 +292,9 @@ def explain_tcn_prediction(
     from models.tcn_forecast.model import WEIGHTS_DIR, TCNForecaster
     from models.tcn_forecast.train import load_scalers
 
-    # seed2026 고정 실험 가중치 사용 (가장 안정적인 시드)
-    weights_path = WEIGHTS_DIR / "finetuned_mapo_tcn_seed2026.pt"
-    scalers_path = WEIGHTS_DIR / "finetune_tcn_scalers_seed2026.pkl"
+    # 34피처 기반 가중치 사용 (finetuned_mapo_tcn_34f.pt)
+    weights_path = WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"
+    scalers_path = WEIGHTS_DIR / "finetune_tcn_scalers_34f.pkl"
 
     # ---- 1) 가중치·스케일러 파일 존재 확인 → 없으면 mock ----
     if not weights_path.exists() or not scalers_path.exists():
@@ -512,6 +475,7 @@ def explain_tcn_prediction(
         "base_value": round(base_value, 6),
         "predicted_value": round(predicted_value, 2),
         "predicted_value_unit": "원",  # 매출 단위 명시 (생존률과 구별)
+        "summary": _generate_tcn_summary(feature_importance),
         "is_mock": False,
     }
 
