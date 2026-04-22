@@ -1235,8 +1235,8 @@ function PipelineKanbanView() {
     {
       title: '임원 보고 대기',
       count: 1,
-      borderColor: 'border-amber-500/50',
-      titleColor: 'text-amber-500',
+      borderColor: 'border-indigo-500/50',
+      titleColor: 'text-indigo-500',
     },
     {
       title: '가맹점주 제안',
@@ -1362,7 +1362,7 @@ function KanbanCard({
         <div className="bg-[#2c2825] rounded-lg p-2 border border-[#3a3633] flex flex-col items-center justify-center text-center">
           <span className="text-[9px] text-[#9ca3af] block mb-0.5">AI 매력도</span>
           <span className="text-xs font-black text-white flex items-center gap-1">
-            <Crosshair className="w-3 h-3 text-amber-500" /> {score} Pts
+            <Crosshair className="w-3 h-3 text-indigo-500" /> {score} Pts
           </span>
         </div>
       </div>

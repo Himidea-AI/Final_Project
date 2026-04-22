@@ -1547,7 +1547,7 @@ export default function AbmPersonaMap({
             </span>
             {spotsLoading && (
               <span
-                className="text-[10px] font-mono px-2 py-0.5 rounded border text-amber-400 border-amber-500/40 animate-pulse"
+                className="text-[10px] font-mono px-2 py-0.5 rounded border text-indigo-400 border-indigo-500/40 animate-pulse"
                 title="행정동 스팟 좌표 로딩 중"
               >
                 스팟 로딩...
@@ -1558,7 +1558,7 @@ export default function AbmPersonaMap({
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                   routesLoaded
                     ? 'text-emerald-400 border-emerald-500/40'
-                    : 'text-amber-400 border-amber-500/40 animate-pulse'
+                    : 'text-indigo-400 border-indigo-500/40 animate-pulse'
                 }`}
                 title="OSRM 도보 경로 프리로드 상태"
               >
@@ -1578,7 +1578,7 @@ export default function AbmPersonaMap({
           {/* S-2: API 키 없으면 mock 대신 안내 UI로 명시 */}
           {KAKAO_KEY_MISSING && (
             <div className="absolute inset-0 bg-[#1a2535]/95 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center">
-              <p className="text-sm font-bold text-amber-300">카카오맵 API 키가 필요합니다</p>
+              <p className="text-sm font-bold text-indigo-300">카카오맵 API 키가 필요합니다</p>
               <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
                 .env 에{' '}
                 <code className="text-emerald-300">VITE_KAKAO_MAP_API_KEY=&lt;your_key&gt;</code>{' '}
@@ -1590,7 +1590,7 @@ export default function AbmPersonaMap({
           {/* C-3: 스팟 로딩 실패 (1개 이하) — 에이전트 시뮬 비활성 안내 */}
           {!KAKAO_KEY_MISSING && !spotsLoading && storeNodes.length < 2 && (
             <div className="absolute inset-0 bg-[#1a2535]/60 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center pointer-events-none">
-              <p className="text-sm font-bold text-amber-300">지도 스팟 로딩 실패</p>
+              <p className="text-sm font-bold text-indigo-300">지도 스팟 로딩 실패</p>
               <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
                 {targetDistrict}의 스팟 정보를 불러오지 못했습니다. 에이전트 시뮬레이션이
                 비활성화됩니다.
@@ -1750,8 +1750,8 @@ export default function AbmPersonaMap({
                 </span>
               </div>
             ) : abmError ? (
-              <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-amber-500/30 rounded-xl px-6 py-3">
-                <p className="text-sm text-amber-400">{abmError}</p>
+              <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-indigo-500/30 rounded-xl px-6 py-3">
+                <p className="text-sm text-indigo-400">{abmError}</p>
               </div>
             ) : (
               /* 시나리오 선택 UI + 실행 버튼 */
@@ -1987,9 +1987,9 @@ export default function AbmPersonaMap({
                     </p>
                     <p className="text-[8px] text-[#6b7280] mt-0.5">마포 전체 방문 중</p>
                   </div>
-                  <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2">
-                    <p className="text-[9px] text-amber-300 mb-1">일 매출</p>
-                    <p className="text-lg font-bold text-amber-200">
+                  <div className="bg-indigo-500/10 border border-indigo-500/30 rounded p-2">
+                    <p className="text-[9px] text-indigo-300 mb-1">일 매출</p>
+                    <p className="text-lg font-bold text-indigo-200">
                       {Math.round(abmResult.new_store_revenue ?? 0).toLocaleString()}원
                     </p>
                     <p className="text-[8px] text-[#6b7280] mt-0.5">
