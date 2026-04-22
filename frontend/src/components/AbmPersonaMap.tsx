@@ -104,8 +104,17 @@ function randomBetween(a: number, b: number) {
   return a + Math.random() * (b - a);
 }
 
-function pickType(): Persona['type'] {
-  // 실 시뮬 분포 반영: 거주40 / 통근10 / 방문5 / 점주5 / 외부통근30 / 외부방문10
+function pickType(dist?: Record<string, number>): Persona['type'] {
+  // 실 customer_profile_dist 있으면 우선 사용, 없으면 기본 분포 폴백
+  if (dist && Object.keys(dist).length > 0) {
+    const r = Math.random();
+    let cum = 0;
+    for (const [role, prob] of Object.entries(dist)) {
+      cum += prob;
+      if (r < cum) return role as Persona['type'];
+    }
+  }
+  // 기본 분포: 거주40 / 통근10 / 방문5 / 점주5 / 외부통근30 / 외부방문10
   const r = Math.random();
   if (r < 0.4) return 'resident';
   if (r < 0.5) return 'commuter';
@@ -459,10 +468,12 @@ export default function AbmPersonaMap({
   const [storeNodes, setStoreNodes] = useState<StoreNode[]>([FALLBACK_CENTER]);
   const [spotsLoading, setSpotsLoading] = useState(false);
 
+  // abmResult에서 받은 customer_profile_dist를 ref로 유지 (pickType에 전달)
+  const customerProfileDistRef = useRef<Record<string, number> | undefined>(undefined);
+
   useEffect(() => {
     // 1) 에이전트 추천 공실 스팟이 있으면 정적 CSV fetch 생략 — 이게 단일 진실 공급원
     if (Array.isArray(vacancySpots) && vacancySpots.length > 0) {
-      // targetDistrict 와 일치하는 것 우선, 없으면 전체에서 상위 (listing_count 내림차순)
       const ranked = [...vacancySpots].sort(
         (a, b) => (b.listing_count ?? 0) - (a.listing_count ?? 0),
       );
@@ -473,7 +484,6 @@ export default function AbmPersonaMap({
         label: `공실${idx + 1} ${s.dong_name}`,
         lat: s.lat,
         lng: s.lon,
-        // Top 1 = S (앵커), 2 = A, 나머지 B
         tier: idx === 0 ? 'S' : idx === 1 ? 'A' : 'B',
       }));
       setStoreNodes(nodes.length > 0 ? nodes : [FALLBACK_CENTER]);
@@ -530,7 +540,6 @@ export default function AbmPersonaMap({
     }
 
     // C-3: 노드가 2개 미만이면 에이전트 시뮬레이션 자체를 시작하지 않음
-    // (1 노드 데드락: source===target → 같은 점 결제 무한)
     if (storeNodes.length < 2) {
       personasRef.current = [];
       spotStatsRef.current = storeNodes.map(() => ({
@@ -547,16 +556,16 @@ export default function AbmPersonaMap({
     const W = canvas.width;
     const H = canvas.height;
 
+    // customer_profile_dist 반영 (pickType에 전달)
+    const dist = customerProfileDistRef.current;
+
     // 페르소나 위치 초기화 — 개인화된 경로/속도/체류/선호
-    // S-5: 지하철역·주요 교통 허브 판별은 백엔드의 id/tier 기반
-    // (subway- 접두사 id 또는 tier S). label 정규식 의존 제거.
     const transitHubIdxs = storeNodes
       .map((n, idx) => ({ idx, id: n.id, tier: n.tier }))
       .filter(({ id, tier }) => id.startsWith('subway-') || tier === 'S')
       .map(({ idx }) => idx);
-
     personasRef.current = Array.from({ length: N_PERSONAS }, (_, i) => {
-      const type = pickType();
+      const type = pickType(dist);
       const traits = roleTraits(type);
       const isExternal = type === 'ext_commuter' || type === 'ext_visitor';
       const preferred = shuffleSpots(nodePixelsRef.current.length);

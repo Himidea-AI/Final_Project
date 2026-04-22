@@ -166,11 +166,72 @@ _BIZ_TYPE_NORMALIZE: Dict[str, str] = {
 # 마포구 행정동명 → 행정동 코드 매핑은 dong_resolver 단일 소스 사용
 # (기존 main.py 내 하드코딩 매핑은 dong_resolver와 15/16개 불일치로 TCN에 잘못된 코드 전달 버그 유발)
 from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
+from src.services.commercial_intelligence import analyze_competition as _analyze_competition
 
 # 업종명(한국어) → 골목상권 업종코드: tools.py MarketDataTool._SALES_CODE_MAP 재사용
 from src.agents.tools import MarketDataTool as _MarketDataTool
 
 _BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
+
+# 업종 → kakao 검색 키워드 매핑
+_BIZ_TO_KAKAO_KW: Dict[str, str] = {
+    "치킨전문점": "치킨", "커피-음료": "커피", "한식음식점": "한식",
+    "중식음식점": "중식", "일식음식점": "일식", "양식음식점": "양식",
+    "제과점": "베이커리", "패스트푸드점": "버거", "분식전문점": "분식",
+    "호프-간이주점": "주점",
+    "치킨": "치킨", "커피": "커피", "카페": "커피", "한식": "한식",
+    "중식": "중식", "일식": "일식", "양식": "양식", "베이커리": "베이커리",
+    "버거": "버거", "분식": "분식", "주점": "주점",
+    "chicken": "치킨", "cafe": "커피", "coffee": "커피", "burger": "버거",
+    "bakery": "베이커리", "korean": "한식",
+}
+
+
+async def _collect_all_competitor_locations(
+    winner: str,
+    top3: list,
+    business_type: str,
+) -> list[dict]:
+    """winner + top3 추천 동 각각의 500m 반경 경쟁업체 좌표를 수집해 통합 반환."""
+    keyword = _BIZ_TO_KAKAO_KW.get(business_type, business_type)
+    districts = list({winner} | set(top3 or []))
+    print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
+    results: list[dict] = []
+    seen_ids: set = set()
+
+    async def _fetch_one(dong_name: str):
+        try:
+            dong_code = _resolve_dong_code(dong_name)
+            if not dong_code:
+                print(f"[all_competitors] dong_code 없음: {dong_name}")
+                return
+            data = await asyncio.to_thread(_analyze_competition, dong_code, keyword, 500)
+            samples = data.get("samples") or []
+            print(f"[all_competitors] {dong_name}({dong_code}) → {len(samples)}개 샘플")
+            for s in samples:
+                cid = s.get("kakao_id") or f"{s.get('place_name')}_{s.get('lat')}_{s.get('lon')}"
+                if cid in seen_ids:
+                    continue
+                seen_ids.add(cid)
+                if s.get("lat") and s.get("lon"):
+                    results.append({
+                        "id": cid,
+                        "place_name": s.get("place_name", ""),
+                        "brand_name": s.get("brand_name", ""),
+                        "lat": s["lat"],
+                        "lng": s["lon"],
+                        "distance_m": s.get("distance_m"),
+                        "is_franchise": s.get("is_franchise", False),
+                        "category": s.get("category", ""),
+                        "source_dong": dong_name,
+                    })
+        except Exception as e:
+            import traceback
+            print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
+
+    await asyncio.gather(*[_fetch_one(d) for d in districts])
+    print(f"[all_competitors] 최종 결과: {len(results)}개")
+    return results
 
 
 async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
@@ -509,6 +570,13 @@ async def analyze_location(input_data: SimulationInput):
     try:
         final_state = await _run_pipeline(input_data)
         result = map_state_to_simulation_output(final_state, request_id)
+        # 추천 동 전체(winner + top3)의 경쟁업체 좌표 수집 — 지도 멀티핀용
+        winner = result.get("winner_district") or input_data.target_district
+        top3 = result.get("top_3_candidates") or []
+        print(f"[all_competitors] winner={winner}, top3={top3}")
+        result["all_competitor_locations"] = await _collect_all_competitor_locations(
+            winner, top3, input_data.business_type
+        )
         return {"status": "success", "data": result}
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
