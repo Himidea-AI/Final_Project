@@ -401,10 +401,14 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             {
                 "district": target_dist,
                 "score": district_score,
-                # monthly_revenue: synthesis profit_simulation 실계산값 사용, 없으면 null
+                # monthly_revenue / net_profit: synthesis profit_simulation 실계산값 사용, 없으면 null
                 # 단위: 만원 (프론트가 ×10000 해서 원으로 표시). 0이나 None이면 null 반환.
                 "revenue": (
                     int((final_report.get("profit_simulation") or {}).get("monthly_revenue") or 0) // 10000
+                    or None
+                ),
+                "net_profit": (
+                    int((final_report.get("profit_simulation") or {}).get("net_profit") or 0) // 10000
                     or None
                 ),
                 "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),

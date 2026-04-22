@@ -80,6 +80,7 @@ import { useSimulationStore } from './stores/simulationStore';
 interface SimResult {
   score: number;
   revenue: number | null;
+  netProfit?: number | null;
   riskLevel: string;
   recommendation: string;
   chartData: { label: string; value: number }[];
@@ -2655,6 +2656,7 @@ function SimulatorDashboard({
       setSimResult({
         score: topComp?.score ?? 87,
         revenue: topComp?.revenue ?? null,
+        netProfit: (topComp as any)?.net_profit ?? null,
         riskLevel: topRisk?.risk_level ?? 'LOW',
         recommendation: simRes.ai_recommendation || '',
         chartData: mr
@@ -3385,7 +3387,26 @@ function SimulatorDashboard({
                   <>
                     {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단 */}
                     {(() => {
-                      const rec = simResult?.recommendation;
+                      // LLM이 출력한 영어 리스크 용어를 한국어로 치환
+                      const localizeRiskTerms = (text: string) =>
+                        text
+                          .replace(/'caution'/g, "'주의'")
+                          .replace(/'safe'/g, "'안전'")
+                          .replace(/'danger'/g, "'위험'")
+                          .replace(/'green'/g, "'진입 권장'")
+                          .replace(/'yellow'/g, "'조건부 진입'")
+                          .replace(/'red'/g, "'진입 비권장'")
+                          .replace(/\bcaution\b/g, '주의 단계')
+                          .replace(/\bdanger\b/g, '위험 단계')
+                          .replace(/\bsparse\b/g, '희박')
+                          .replace(/\bsaturated\b/g, '포화')
+                          .replace(/\bEXCELLENT\b/g, '탁월')
+                          .replace(/\bGOOD\b/g, '우수')
+                          .replace(/\bNORMAL\b/g, '보통')
+                          .replace(/\bRISKY\b/g, '주의');
+
+                      const rawRec = simResult?.recommendation;
+                      const rec = rawRec ? localizeRiskTerms(rawRec) : rawRec;
                       const legalRisk = simResult?.overallLegalRisk;
                       const ciSignal = simResult?.competitorIntel?.market_entry_signal;
                       // signal 없고 recommendation도 없으면 렌더 안 함
@@ -3506,7 +3527,7 @@ function SimulatorDashboard({
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
                           <StatCard
                             onClick={() => setActiveDrawer('revenue')}
-                            title="예상 월 매출 (추정)"
+                            title="예상 월 총매출"
                             value={
                               simResult?.revenue != null
                                 ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
@@ -3516,6 +3537,11 @@ function SimulatorDashboard({
                             trendUp={true}
                             icon={<BarChart3 />}
                             sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0"
+                            subtitle={
+                              simResult?.netProfit != null
+                                ? `순이익 ${simResult.netProfit}만원`
+                                : undefined
+                            }
                           />
                           <StatCard
                             onClick={() => setActiveDrawer('attractiveness')}
@@ -3876,6 +3902,16 @@ function SimulatorDashboard({
                                 typeof cann?.estimated_revenue_impact_pct === 'number'
                                   ? (cann.estimated_revenue_impact_pct * 100).toFixed(1)
                                   : null;
+                              const SATURATION_KO: Record<string, string> = {
+                                sparse: '희박 (0~2개)',
+                                low: '낮음 (3~5개)',
+                                medium: '보통 (6~10개)',
+                                high: '높음 (11~20개)',
+                                saturated: '포화 (21개+)',
+                              };
+                              const satKo = comp?.saturation_level
+                                ? (SATURATION_KO[comp.saturation_level] ?? comp.saturation_level)
+                                : 'N/A';
                               return (
                                 <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
                                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -3896,25 +3932,35 @@ function SimulatorDashboard({
 
                                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                      <div className="text-xs text-[#9ca3af]">500m 포화도</div>
-                                      <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
-                                        {comp?.saturation_level ?? 'N/A'}
+                                      <div className="text-xs text-[#9ca3af]">500m 경쟁 밀도</div>
+                                      <div className="mt-1 text-base font-semibold text-[#e2e8f0]">
+                                        {satKo}
                                       </div>
                                       <div className="text-xs text-slate-500">
-                                        {comp?.total_competitors ?? 0}개 매장
+                                        총 {comp?.total_competitors ?? 0}개 매장
                                       </div>
                                     </div>
                                     <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                      <div className="text-xs text-[#9ca3af]">카니발 영향</div>
+                                      <div className="text-xs text-[#9ca3af]">자기잠식 영향</div>
                                       <div className="mt-1 text-lg font-semibold text-rose-300">
-                                        {cannImpactPct != null ? `${cannImpactPct}%` : 'N/A'}
+                                        {cannImpactPct != null
+                                          ? `매출 ${cannImpactPct}% 감소`
+                                          : 'N/A'}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        500m 내 동일 브랜드 기준
                                       </div>
                                     </div>
                                     <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                      <div className="text-xs text-[#9ca3af]">프랜차이즈/독립</div>
+                                      <div className="text-xs text-[#9ca3af]">
+                                        프랜차이즈 / 개인점
+                                      </div>
                                       <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
-                                        {comp?.franchise_count ?? 0} /{' '}
-                                        {comp?.independent_count ?? 0}
+                                        {comp?.franchise_count ?? 0}개 /{' '}
+                                        {comp?.independent_count ?? 0}개
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        체인 브랜드 / 로컬 매장
                                       </div>
                                     </div>
                                   </div>
