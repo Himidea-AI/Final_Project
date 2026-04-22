@@ -69,6 +69,7 @@ import type {
   DemographicReport,
   LegalRisk,
   SimulationOutput,
+  CustomerSegment,
 } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
@@ -5523,6 +5524,7 @@ function SimulatorDashboard({
         ]}
         reportDate={reportFullDate}
         savedHistoryId={savedHistoryId}
+        customerSegment={rawSimResult?.customer_segment ?? null}
       />
     </div>
   );
@@ -5903,6 +5905,8 @@ interface HiddenPDFTemplateProps {
   reportDate: string;
   /** 저장된 이력 ID(BIGINT) — null이면 "SPTR-DRAFT-…" 표시. Saved면 "SPTR-000142" 같은 정식 번호. */
   savedHistoryId?: number | null;
+  /** customer_revenue P1-C 타겟 고객 매출 분석 — null 이면 PDF 페이지 자체 생략 */
+  customerSegment?: CustomerSegment | null;
 }
 
 // 인디고 SPOTTER 로고 SVG 경로 (Light 테마 버전 — #6366f1)
@@ -5963,10 +5967,12 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
       insights,
       reportDate,
       savedHistoryId = null,
+      customerSegment = null,
     },
     ref,
   ) => {
-    const TOTAL_PAGES = 4;
+    // customer_segment 없으면 4페이지, 있으면 5페이지
+    const TOTAL_PAGES = customerSegment ? 5 : 4;
     const pageClass = 'w-[794px] h-[1123px] p-12 bg-white text-slate-900 relative flex flex-col';
     const docId = formatDocumentId(savedHistoryId);
 
@@ -6279,11 +6285,175 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
 
           <PDFPageFooter reportDate={reportDate} />
         </div>
+
+        {/* ─────────── Page 5: 타겟 고객 매출 분석 (customer_segment 있을 때만) ─────────── */}
+        {customerSegment && (
+          <div className={pageClass}>
+            <PDFPageHeader pageNumber={5} totalPages={TOTAL_PAGES} districtFull={districtFull} />
+
+            <div className="flex-1 pt-8">
+              <h2 className="text-[22px] font-black text-slate-900 mb-1">
+                05. 타겟 고객 매출 분석
+              </h2>
+              <p className="text-xs text-slate-500 mb-6">
+                Target Customer Segmentation · 연령·성별·시간대·요일 프로필별 매출 기여
+              </p>
+
+              {customerSegment.profile_summary && (
+                <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    프로필 요약
+                  </div>
+                  <p className="text-[12px] text-slate-800 leading-relaxed">
+                    {customerSegment.profile_summary}
+                  </p>
+                </div>
+              )}
+
+              {/* KPI 4종 — 금액 없으면 비율만 표시 */}
+              <div className="grid grid-cols-4 gap-3 mb-6">
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    세그먼트 비율
+                  </div>
+                  <div className="mt-1 text-[18px] font-black text-[#6366f1]">
+                    {typeof customerSegment.segment_ratio === 'number'
+                      ? `${(customerSegment.segment_ratio * 100).toFixed(2)}%`
+                      : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    타겟 매출
+                  </div>
+                  <div className="mt-1 text-[14px] font-bold text-emerald-600 font-mono">
+                    {customerSegment.segment_sales != null
+                      ? `₩${customerSegment.segment_sales.toLocaleString('ko-KR')}`
+                      : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    식별 매출
+                  </div>
+                  <div className="mt-1 text-[14px] font-bold text-sky-600 font-mono">
+                    {customerSegment.identified_sales != null
+                      ? `₩${customerSegment.identified_sales.toLocaleString('ko-KR')}`
+                      : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    참조 월매출
+                  </div>
+                  <div className="mt-1 text-[14px] font-bold text-slate-900 font-mono">
+                    {customerSegment.total_sales_ref != null
+                      ? `₩${customerSegment.total_sales_ref.toLocaleString('ko-KR')}`
+                      : '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4개 분포 차트 — 2×2 그리드 */}
+              <div className="grid grid-cols-2 gap-4">
+                <PDFRatioChart
+                  title="연령대 분포"
+                  items={[
+                    { key: 'age_10_ratio', label: '10대' },
+                    { key: 'age_20_ratio', label: '20대' },
+                    { key: 'age_30_ratio', label: '30대' },
+                    { key: 'age_40_ratio', label: '40대' },
+                    { key: 'age_50_ratio', label: '50대' },
+                    { key: 'age_60_above_ratio', label: '60대+' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+                <PDFRatioChart
+                  title="성별 분포"
+                  items={[
+                    { key: 'male_ratio', label: '남성' },
+                    { key: 'female_ratio', label: '여성' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+                <PDFRatioChart
+                  title="시간대 분포"
+                  items={[
+                    { key: 'time_00_06_ratio', label: '심야' },
+                    { key: 'time_06_11_ratio', label: '오전' },
+                    { key: 'time_11_14_ratio', label: '점심' },
+                    { key: 'time_14_17_ratio', label: '오후' },
+                    { key: 'time_17_21_ratio', label: '저녁' },
+                    { key: 'time_21_24_ratio', label: '야간' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+                <PDFRatioChart
+                  title="요일 분포"
+                  items={[
+                    { key: 'weekday_ratio', label: '평일' },
+                    { key: 'weekend_ratio', label: '주말' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+              </div>
+
+              <div className="mt-6 text-[9px] text-slate-400 font-mono">
+                Analysis · customer_revenue MLP + living_population 실측 데이터 기반
+              </div>
+            </div>
+
+            <PDFPageFooter reportDate={reportDate} />
+          </div>
+        )}
       </div>
     );
   },
 );
 HiddenPDFTemplate.displayName = 'HiddenPDFTemplate';
+
+function PDFRatioChart({
+  title,
+  items,
+  ratios,
+}: {
+  title: string;
+  items: { key: string; label: string }[];
+  ratios: Record<string, number>;
+}) {
+  const maxRatio = Math.max(
+    0.01,
+    ...items.map((it) => {
+      const v = ratios[it.key];
+      return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+    }),
+  );
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">
+        {title}
+      </div>
+      <div className="space-y-1.5">
+        {items.map((it) => {
+          const raw = ratios[it.key];
+          const v = typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
+          const width = Math.min(100, Math.round((v / maxRatio) * 100));
+          return (
+            <div key={it.key} className="flex items-center gap-2">
+              <div className="w-14 shrink-0 text-[10px] text-slate-700">{it.label}</div>
+              <div className="relative flex-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-[#6366f1]" style={{ width: `${width}%` }} />
+              </div>
+              <div className="w-12 shrink-0 text-right text-[10px] font-mono text-slate-700">
+                {(v * 100).toFixed(1)}%
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════
    DetailDrawer (v8.0) — KPI/차트 클릭 시 우측에서 슬라이드 인

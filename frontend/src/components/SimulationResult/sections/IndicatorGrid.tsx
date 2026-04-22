@@ -6,12 +6,14 @@ interface Props {
   simResult: SimulationOutput;
 }
 
-const INDICATORS: Array<{ key: string; label: string; color: string }> = [
+// scale: 백엔드 원본 단위 → 0~100 렌더 단위 변환 배수. closure_rate 만 0~1 fraction.
+const INDICATORS: Array<{ key: string; label: string; color: string; scale?: number }> = [
   { key: 'floating_population', label: '유동인구', color: 'bg-sky-500' },
   { key: 'rent_index', label: '임대료 지수', color: 'bg-indigo-500' },
   { key: 'competition_intensity', label: '경쟁강도', color: 'bg-rose-500' },
   { key: 'estimated_revenue', label: '예상 매출', color: 'bg-emerald-500' },
   { key: 'survival_rate', label: '생존율', color: 'bg-violet-500' },
+  { key: 'closure_rate', label: '폐업률', color: 'bg-pink-500', scale: 100 },
   { key: 'growth_potential', label: '성장 잠재력', color: 'bg-cyan-500' },
   { key: 'accessibility', label: '접근성', color: 'bg-blue-500' },
 ];
@@ -34,11 +36,15 @@ export function IndicatorGrid({ simResult }: Props) {
       ) : (
         <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {INDICATORS.map(({ key, label, color }) => {
+            {INDICATORS.map(({ key, label, color, scale }) => {
               const rawVal = (report as Record<string, unknown>)[key];
-              const isMissing = typeof rawVal !== 'number' || rawVal === 0;
-              const val = typeof rawVal === 'number' ? rawVal : 0;
-              const clamped = Math.max(0, Math.min(100, val));
+              const scaled = typeof rawVal === 'number' ? rawVal * (scale ?? 1) : 0;
+              // closure_rate 는 0 이 유의미한 값 ("폐업 없음") 이라 결측 판정에서 제외.
+              const isMissing =
+                key === 'closure_rate'
+                  ? typeof rawVal !== 'number'
+                  : typeof rawVal !== 'number' || rawVal === 0;
+              const clamped = Math.max(0, Math.min(100, scaled));
               return (
                 <div key={key} className="flex items-center gap-3">
                   <div className="w-24 shrink-0 text-xs text-stone-400 flex items-center gap-1">
