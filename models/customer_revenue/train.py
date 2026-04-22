@@ -57,7 +57,7 @@ def train(db_url: str = DB_URL) -> None:
     logger.info("학습 디바이스: %s", device)
 
     # 데이터 준비
-    dong_idx, industry_idx, quarter_enc, y = prepare_training_data(db_url=db_url)
+    dong_idx, industry_idx, quarter_enc, y, identified_ratios, year_max = prepare_training_data(db_url=db_url)
 
     # 시간순 train/val 분리 (셔플 없이 앞→뒤)
     n = len(dong_idx)
@@ -142,8 +142,8 @@ def train(db_url: str = DB_URL) -> None:
     model.save_weights(weights_path)
     logger.info("가중치 저장 완료: %s", weights_path)
 
-    # 매핑 저장
-    save_mappings()
+    # 매핑 저장 (identified_ratios 딕셔너리 + year_max 함께)
+    save_mappings(identified_ratios=identified_ratios, year_max=year_max)
     logger.info("학습 완료 — best val_loss: %.6f", best_val_loss)
 
 
