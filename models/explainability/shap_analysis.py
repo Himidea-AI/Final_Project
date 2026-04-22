@@ -116,18 +116,25 @@ def explain_prediction(
             predicted_value    : 모델 실제 출력 (폐업률 0~1)
             is_mock            : mock 데이터 여부
     """
-    import torch
+    # closure_model.pt(LSTM 폐업률 모델) deprecated — 과거 실측값 기반으로 전환됨
+    # _load_model / _prepare_input 함수가 제거되어 mock 반환
+    try:
+        from models.revenue_predictor.data_prep import FEATURE_COLS
+        from models.revenue_predictor.predict import _load_model, _prepare_input  # noqa: F401
+    except ImportError:
+        from models.revenue_predictor.data_prep import FEATURE_COLS
 
-    # predict.py 의 내부 헬퍼 재사용 (복사 금지)
-    from models.revenue_predictor.data_prep import FEATURE_COLS
-    from models.revenue_predictor.predict import _load_model, _prepare_input
+        _log("WARNING", "closure_model.pt deprecated — mock 반환")
+        return _mock_shap_values(FEATURE_COLS)
+
+    import torch
 
     # ---- 1) 모델 로드 ----
     if model is None:
         try:
             model = _load_model()
             _log("INFO", "SurvivalPredictor 가중치 로드 완료")
-        except FileNotFoundError as exc:
+        except (FileNotFoundError, NameError) as exc:
             _log("WARNING", f"가중치 파일 없음: {exc}")
             return _mock_shap_values(FEATURE_COLS)
 
@@ -233,7 +240,7 @@ def explain_prediction(
 
 
 # ---------------------------------------------------------------------------
-# TCN 피처 한국어 매핑 — ALL_FEATURES 31개 기준 (_FEATURE_KO 기반 확장)
+# TCN 피처 한국어 매핑 — ALL_FEATURES 34개 기준 (_FEATURE_KO 기반 확장)
 # ---------------------------------------------------------------------------
 
 _TCN_FEATURE_KO: dict[str, str] = {

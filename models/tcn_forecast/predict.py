@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_PREDICT_CONFIG: dict = {
     "db_url": DB_URL,
     # TCN 파인튜닝 가중치 경로
-    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_seed2026.pt"),
-    "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers.pkl"),
+    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"),
+    "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers_34f.pkl"),
     # train config와 일치: window_size=4, n_channels=128, dilations=[1,2]
     "window_size": 4,
     "n_channels": 128,
