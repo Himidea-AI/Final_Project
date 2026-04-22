@@ -25,8 +25,19 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
+
+# LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
+# (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
+from dotenv import load_dotenv
+load_dotenv()
+_lc_api_key = os.environ.get("LANGCHAIN_API_KEY", "")
+if _lc_api_key:
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", os.environ.get("LANGCHAIN_TRACING_V2", "true"))
+    os.environ.setdefault("LANGCHAIN_ENDPOINT", os.environ.get("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com/"))
+    os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGCHAIN_PROJECT", "mapo-franchise-simulator"))
+
+from langchain_core.messages import HumanMessage
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.config.settings import settings
@@ -173,6 +184,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "business_type": normalized_biz,
         "brand_name": normalized_brand,
         "target_district": input_data.target_district,
+        "target_districts": getattr(input_data, "target_districts", None) or [input_data.target_district],
         "industry_filter": getattr(input_data, "industry_filter", None),
         "commercial_radius": getattr(input_data, "commercial_radius", 500),
         "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
@@ -237,7 +249,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             ),
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
-            "articles": r.get("articles", []),
+            "articles": [
+                {"article_ref": a, "content": ""} if isinstance(a, str) else a
+                for a in r.get("articles", [])
+            ],
         }
         for r in legal_risks_raw
     ]
@@ -269,31 +284,43 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     pop_score = float(metrics.get("population_score") or 7)
     grade = str(metrics.get("district_grade") or "NORMAL").upper()
 
-    # 임대료: SAFE=저렴(높은 점수), DANGER=비쌈(낮은 점수)
-    rent_index = {
-        "SAFE": 80,
-        "CAUTION": 50,
-        "DANGER": 25,
-        "상": 25,
-        "중": 50,
-        "하": 80,
-    }.get(rent_raw, 50)
-    estimated_revenue = {
-        "EXCELLENT": 90,
-        "GOOD": 75,
-        "NORMAL": 60,
-        "RISKY": 40,
-    }.get(grade, 60)
-    competition_intensity = min(int(competition_score * 100), 100)
-    district_score = float({"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60))
+    # district_ranking scouting_results에서 타겟 동의 실점수 추출 (동별 차별화)
+    # scouting_results는 16개 동을 실DB 데이터로 개별 점수화한 결과 — LLM 버케팅보다 정밀
+    _scouting = state.get("scouting_results") or analysis.get("district_rankings") or []
+    _target_row = next((r for r in _scouting if r.get("district") == target_dist), None)
+
+    if _target_row:
+        # 실데이터 기반 정밀 점수 사용 (0~100 정규화)
+        _sales_sc = float(_target_row.get("sales_score") or 0)
+        _pop_sc = float(_target_row.get("pop_score") or 0)
+        _rent_sc = float(_target_row.get("rent_score") or 0)
+        _overall_sc = float(_target_row.get("score") or 0)
+        # rent_score가 높을수록 임대료 저렴 → rent_index 높게
+        _rent_index_r = min(int(_rent_sc), 100)
+        _estimated_rev_r = min(int(_sales_sc), 100)
+        _floating_pop_r = min(int(_pop_sc), 100)
+        _competition_r = max(0, min(int(competition_score * 100), 100))
+        _survival_r = max(int(_overall_sc * 0.9), 30)
+        _growth_r = min(int(abs(growth_rate) * 5) + int(_sales_sc * 0.2), 100)
+    else:
+        # fallback: LLM 등급 기반 이산 버케팅
+        _rent_index_r = {"SAFE": 80, "CAUTION": 50, "DANGER": 25, "상": 25, "중": 50, "하": 80}.get(rent_raw, 50)
+        _estimated_rev_r = {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
+        _floating_pop_r = min(int(pop_score * 10), 100)
+        _competition_r = min(int(competition_score * 100), 100)
+        _survival_r = max(100 - _competition_r, 30)
+        _growth_r = min(int(abs(growth_rate) * 5), 100)
+
+    competition_intensity = _competition_r
+    district_score = float(_target_row.get("score") if _target_row else {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60))
 
     market_report = {
-        "floating_population": min(int(pop_score * 10), 100),
-        "rent_index": rent_index,
+        "floating_population": _floating_pop_r,
+        "rent_index": _rent_index_r,
         "competition_intensity": competition_intensity,
-        "estimated_revenue": estimated_revenue,
-        "survival_rate": max(100 - competition_intensity, 30),
-        "growth_potential": min(int(abs(growth_rate) * 5), 100),
+        "estimated_revenue": _estimated_rev_r,
+        "survival_rate": _survival_r,
+        "growth_potential": _growth_r,
         "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
     }
 
@@ -380,7 +407,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             {
                 "district": target_dist,
                 "score": district_score,
-                "revenue": md.get("avg_revenue", 30000000),
+                # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
+                "revenue": (md.get("avg_revenue") or 30000000) // 10000,
                 "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
                 "survival": float(market_report["survival_rate"]),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),
@@ -875,3 +903,129 @@ async def run_simulation(input_data: SimulationInput):
             "map_data": None,
             "financial_report": {},
         }
+
+
+# ---------------------------------------------------------------------------
+# ABM 시뮬레이션 엔드포인트 — 기존 5 에이전트와 완전 독립
+# /simulate 결과를 입력받아 행동 시뮬만 실행, 분석 결과에 영향 없음
+# A1 인터페이스 계약 (policy-generator-design.md) 준수
+# ---------------------------------------------------------------------------
+class AbmScenarioParams(BaseModel):
+    """GameMaster에 전달되는 시나리오 파라미터 (A1 Scenario dataclass와 1:1 대응)"""
+    weather_override: str | None = None   # "맑음"|"비"|"눈"|None(RDS 최신 날씨)
+    date_override: str | None = None      # "2026-04-25" ISO 날짜, None=오늘
+    weekend_force: bool = False           # True=주말 강제, date_override 무시
+    rent_shock_pct: float = 0.0           # 0.0~0.5 (0.3 = +30%)
+
+
+class AbmSimulationRequest(BaseModel):
+    # LangGraph 분석 컨텍스트
+    target_district: str
+    business_type: str
+    brand_name: str
+    langgraph_result: Dict[str, Any]
+    # 시뮬 규모
+    n_agents: int = 100                   # 100 | 1000
+    days: int = 1
+    # GameMaster 시나리오
+    scenario: AbmScenarioParams = AbmScenarioParams()
+
+
+@app.post("/api/simulate-abm")
+async def run_abm_simulation(req: AbmSimulationRequest):
+    """
+    ABM 행동 시뮬레이션 — 의사결정 에이전트와 완전 분리된 독립 기능.
+    LangGraph 5 에이전트 분석 결과를 시나리오로 주입해 소비자 행동을 시뮬한다.
+    기존 분석 결과(analysis_report, analysis_metrics 등)는 절대 수정하지 않는다.
+    """
+    try:
+        from src.simulation.runner import run_simulation as abm_run
+        from src.simulation.config import (
+            Scenario,
+            ModelConfig,
+            PopulationMix,
+            TierDistribution,
+        )
+    except ImportError:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "message": "ABM 시뮬레이션 모듈이 아직 배포되지 않았습니다. (simulation/ 브랜치 머지 대기)",
+            },
+        )
+
+    # LangGraph 결과에서 new_store 스펙 구성
+    lr = req.langgraph_result
+    analysis_metrics = lr.get("analysis_metrics", {})
+    market_report = lr.get("market_report") or {}
+
+    new_store_spec = {
+        "district": req.target_district,
+        "brand": req.brand_name,
+        "category": req.business_type,
+        "score": lr.get("score"),
+        "estimated_revenue": market_report.get("estimated_revenue"),
+        "competition_intensity": market_report.get("competition_intensity"),
+        "main_target_age": analysis_metrics.get("main_target_age"),
+        "peak_time": analysis_metrics.get("peak_time"),
+    }
+
+    pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
+    tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
+    cfg = ModelConfig(
+        tier_s_provider="ollama",
+        tier_s_model="qwen2.5:3b",
+        n_personas=req.n_agents,
+    )
+    # A1 Scenario dataclass — weather_override / date_override / weekend_force / rent_shock_pct
+    scenario = Scenario(
+        new_store=new_store_spec,
+        cannibalize_radius_m=500,
+        weather_override=req.scenario.weather_override,
+        date_override=req.scenario.date_override,
+        weekend_force=req.scenario.weekend_force,
+        rent_shock_pct=req.scenario.rent_shock_pct,
+    )
+
+    try:
+        result = await run_in_threadpool(
+            abm_run,
+            pop=pop,
+            tier=tier,
+            cfg=cfg,
+            use_rds=True,
+            use_profiles=True,
+            scenario=scenario,
+            days=req.days,
+        )
+    except Exception as e:
+        logger.error(f"[ABM] 시뮬레이션 실패: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"ABM 시뮬레이션 실패: {e}"},
+        )
+
+    return {
+        "status": "ok",
+        "target_district": req.target_district,
+        "n_personas": req.n_agents,
+        "scenario_applied": {
+            "weather": req.scenario.weather_override or "현재날씨",
+            "weekend": req.scenario.weekend_force,
+            "rent_shock_pct": req.scenario.rent_shock_pct,
+            "date": req.scenario.date_override or "오늘",
+        },
+        "daily_visits_mean": result.get("daily_visits", 0),
+        "daily_visits_std": result.get("daily_visits_std", 0),
+        "daily_revenue_mean": result.get("daily_revenue", 0),
+        "daily_revenue_std": result.get("daily_revenue_std", 0),
+        "monthly_revenue_estimate": round(result.get("daily_revenue", 0) * 25),
+        "peak_hours": result.get("peak_hours", []),
+        "customer_profile_dist": result.get("customer_profile_dist", {}),
+        "cannibalization": result.get("cannibalization", {}),
+        "narrator_summary": result.get("narrator_summary", ""),
+        "trajectory": result.get("trajectory"),  # 미로피쉬 재생용
+        # 원본 LangGraph 분석 결과 — 수정 없음
+        "langgraph_result": lr,
+    }

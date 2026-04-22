@@ -135,9 +135,17 @@ async def market_analyst_node(state: AgentState) -> dict:
         f"- 매출 통계: {sales_data.get('statistical_summary')}\n"
         f"- 경쟁 및 밀집도: {comp_data.get('summary')}\n"
         f"- 임대료 및 적절성: {rent_data.get('summary')}\n\n"
-        "report 필드: 상세 분석과 [프랜차이즈 전략팀 총평] 섹션 포함. '가장 큰 기회'와 '리스크' 명시.\n"
-        "grade 필드: EXCELLENT / GOOD / NORMAL / RISKY 중 하나 (대문자).\n"
-        "어조: 수치·사실 중심, 예비 창업자가 바로 이해할 수 있는 직관적 표현."
+        "grade 판정 기준 (반드시 아래 기준으로 판단):\n"
+        "- EXCELLENT: 유동인구 QoQ 증가율 >3% AND 경쟁 포화도 낮음 AND 임대료 시장평균 이하\n"
+        "- GOOD:      위 3가지 중 2가지 충족, 또는 매출 성장 추세가 뚜렷한 경우\n"
+        "- NORMAL:    위 3가지 중 1가지만 충족, 또는 데이터가 부분적인 경우\n"
+        "- RISKY:     유동인구 감소 OR 경쟁 포화 OR 임대료 시장평균 150% 초과 중 하나라도 해당\n\n"
+        "report 필드 필수 구조:\n"
+        "1) 수치 요약 (유동인구·경쟁·임대료·매출 4개 지표)\n"
+        "2) 가장 큰 기회 (구체적 수치 포함)\n"
+        "3) 핵심 리스크 (구체적 수치 포함)\n"
+        "4) [프랜차이즈 전략팀 총평] — 3문장 이내, 예비 창업자 직관적 표현\n"
+        "어조: 수치·사실 중심, 추상적 표현 금지."
     )
 
     try:

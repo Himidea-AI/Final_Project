@@ -197,14 +197,15 @@ def predict(
     # --- TCN 브랜치 ---
     from sklearn.preprocessing import MinMaxScaler
 
-    # 누락 피처는 0으로 패딩 — 학습 시 input_size(len(ALL_FEATURES))와 일치 보장
+    # ALL_FEATURES 전체 사용 — 누락 피처는 0으로 패딩
+    tcn_features = list(ALL_FEATURES)
     group = group.copy()
-    for col in ALL_FEATURES:
+    for col in tcn_features:
         if col not in group.columns:
             group[col] = 0.0
 
     scaler = MinMaxScaler()
-    recent = group[ALL_FEATURES].values.astype(np.float32)
+    recent = group[tcn_features].values.astype(np.float32)
     seq = scaler.fit_transform(recent[-window_size:])
 
     tcn_model.eval()

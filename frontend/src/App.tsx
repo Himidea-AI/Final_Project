@@ -234,6 +234,7 @@ import {
 } from 'lucide-react';
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
+import AbmPersonaMap from './components/AbmPersonaMap';
 import HybridSliderInput from './components/ui/HybridSliderInput';
 import { useManagerList, formatRelativeTime, ManagerListProvider } from './hooks/useManagerList';
 import {
@@ -987,18 +988,17 @@ const mockDetailData: Record<string, DetailDataEntry> = {
     warning: '환산보증금 한도 초과 위기 — 갱신 청구 시 임대인 거절 사유 발생 가능',
   },
   insight_traffic: {
-    title: '저녁 시간대 매출 집중 분석',
+    title: '피크 시간대 매출 집중 분석',
     aiReasoning:
-      '18시 이후 유동인구가 평균 대비 240% 증가. 인근 직장인 퇴근 동선 + 2030 여성 데이트 수요가 결합된 권역. 점심 매출이 약한 만큼, 저녁 메뉴 강화가 핵심 KPI.',
-    peakTime: '18:00 - 21:00',
-    mainTarget: '직장인 + 2030 여성',
+      '유동인구 분석이 완료되면 피크 시간대 트래픽과 주요 소비층 데이터를 확인할 수 있습니다.',
+    peakTime: '분석 결과 대기 중',
+    mainTarget: '분석 결과 대기 중',
   },
   insight_target: {
-    title: '2030 여성 타겟 권역 분석',
+    title: '주요 타겟 고객층 분석',
     aiReasoning:
-      '체류 인구 분석 결과 25-34세 여성 비중 68%. SNS 인스타그래머블 인테리어 + 디저트 메뉴 강화 시 객단가 +18%, 재방문율 +24% 예상.',
-    confidence: '82%',
-    mainTarget: '25-34세 여성 (68%)',
+      '유동인구 분석이 완료되면 해당 지역의 주 소비층(연령·성별)과 피크타임 데이터를 확인할 수 있습니다.',
+    mainTarget: '분석 결과 대기 중',
   },
 };
 
@@ -2271,9 +2271,7 @@ function SimulatorDashboard({
   const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
     'cannibalization',
   );
-  const [dashboardMode, setDashboardMode] = useState<'data' | 'map'>('data');
-  // AI Verdict 배너: data 뷰에서 기본 접힘 → 클릭 시 펼침 (tailOfRec 표시)
-  const [verdictExpanded, setVerdictExpanded] = useState(false);
+  const [dashboardMode, setDashboardMode] = useState<'data' | 'map' | 'abm'>('data');
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [selectedGu] = useState('마포구');
   const [selectedDongs, setSelectedDongs] = useState<string[]>(() => [...DONG_DATA['마포구']]);
@@ -2296,6 +2294,11 @@ function SimulatorDashboard({
   // [A1] 유동인구 실시간 데이터
   const [popData, setPopData] = useState<any>(null);
   const [popLoading, setPopLoading] = useState(false);
+
+  // [ABM] 행동 시뮬레이션 — 분석 에이전트와 독립, 결과에 영향 없음
+  const [abmResult, setAbmResult] = useState<any>(null);
+  const [abmLoading, setAbmLoading] = useState(false);
+  const [abmError, setAbmError] = useState<string | null>(null);
 
   useEffect(() => {
     if (reportState !== 'result' || selectedDongs.length === 0) return;
@@ -2670,6 +2673,7 @@ function SimulatorDashboard({
         business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
         brand_name: user?.company_name || '',
         target_district: selectedDongs[0] || '서교동',
+        target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
         existing_stores: [],
         initial_investment: initialCapital * 10000, // 만원 → 원
         monthly_rent: budget * 10000, // 만원 → 원
@@ -3394,6 +3398,20 @@ function SimulatorDashboard({
                           <MapIcon className="w-3.5 h-3.5" />
                           AI 에이전트 맵
                         </button>
+                        <button
+                          onClick={() => setDashboardMode('abm')}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            dashboardMode === 'abm'
+                              ? 'bg-[#3a3633] text-emerald-400 shadow-sm'
+                              : 'text-[#9ca3af] hover:text-emerald-300'
+                          }`}
+                        >
+                          <Activity className="w-3.5 h-3.5" />
+                          ABM 시뮬 맵
+                          {abmResult && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          )}
+                        </button>
                       </div>
                     )}
                     <button
@@ -3595,29 +3613,10 @@ function SimulatorDashboard({
                           : rec;
 
                       const borderCls = cfg ? cfg.border : 'border-[#3a3633]';
-                      const hasDetail = !!(tailOfRec && tailOfRec !== oneLiner);
 
                       return (
                         <div
-                          role={hasDetail ? 'button' : undefined}
-                          tabIndex={hasDetail ? 0 : undefined}
-                          onClick={hasDetail ? () => setVerdictExpanded((v) => !v) : undefined}
-                          onKeyDown={
-                            hasDetail
-                              ? (e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    setVerdictExpanded((v) => !v);
-                                  }
-                                }
-                              : undefined
-                          }
-                          className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-[#2c2825] p-5 shadow-xl ${
-                            hasDetail
-                              ? 'cursor-pointer transition-colors hover:bg-[#332e2b] focus:outline-none focus:ring-2 focus:ring-[#818cf8]/40'
-                              : ''
-                          }`}
-                          aria-expanded={hasDetail ? verdictExpanded : undefined}
+                          className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-[#2c2825] p-5 shadow-xl`}
                         >
                           <div className="flex items-start gap-4">
                             {cfg && (
@@ -3639,21 +3638,21 @@ function SimulatorDashboard({
                                     {cfg.label}
                                   </span>
                                 )}
-                                {hasDetail && (
-                                  <span className="ml-auto text-[10px] font-medium uppercase tracking-widest text-[#9ca3af]">
-                                    {verdictExpanded ? '접기 ▲' : '자세히 ▼'}
-                                  </span>
-                                )}
                               </div>
                               {oneLiner && (
                                 <p className="mt-2 text-base font-semibold leading-snug text-[#e2e8f0]">
                                   {oneLiner}
                                 </p>
                               )}
-                              {hasDetail && verdictExpanded && (
-                                <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
-                                  {tailOfRec}
-                                </p>
+                              {tailOfRec && tailOfRec !== oneLiner && (
+                                <details className="mt-2 group">
+                                  <summary className="cursor-pointer text-xs text-cyan-400 hover:text-cyan-300 font-mono select-none">
+                                    상세보기
+                                  </summary>
+                                  <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
+                                    {tailOfRec}
+                                  </p>
+                                </details>
                               )}
                             </div>
                           </div>
@@ -3661,7 +3660,7 @@ function SimulatorDashboard({
                       );
                     })()}
 
-                    {/* Main Dashboard Body — dashboardMode 토글 (data | map) */}
+                    {/* Main Dashboard Body — dashboardMode 토글 (data | map | abm) */}
                     {dashboardMode === 'data' ? (
                       <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
                         {/* 4 Stats Cards — data 뷰에서만 표시 */}
@@ -4953,7 +4952,7 @@ function SimulatorDashboard({
                           </div>
                         </div>
                       </div>
-                    ) : (
+                    ) : dashboardMode === 'map' ? (
                       /* 🗺️ AI 에이전트 맵 뷰 — KPI 없이 화면 꽉 채움 */
                       <div className="flex-1 w-full h-full min-h-[700px] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
                         <div className="flex-1 bg-[#1e1b18] border border-[#3a3633] rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
@@ -4986,6 +4985,49 @@ function SimulatorDashboard({
                           </div>
                         </div>
                       </div>
+                    ) : (
+                      /* 🤖 ABM 페르소나 행동 시뮬 뷰 */
+                      <AbmPersonaMap
+                        abmResult={abmResult}
+                        abmLoading={abmLoading}
+                        abmError={abmError}
+                        targetDistrict={selectedDongs[0] || '서교동'}
+                        onRunSimulation={async (scenario) => {
+                          if (!simResult) return;
+                          setAbmLoading(true);
+                          setAbmError(null);
+                          try {
+                            const res = await fetch('/api/simulate-abm', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                target_district: selectedDongs[0] || '서교동',
+                                business_type: businessType,
+                                brand_name: simResult.recommendation || '신규 매장',
+                                langgraph_result: (simResult as any)._raw ?? simResult,
+                                n_agents: 100,
+                                days: 1,
+                                scenario: {
+                                  weather_override: scenario.weather_override,
+                                  date_override: scenario.date_override,
+                                  weekend_force: scenario.weekend_force,
+                                  rent_shock_pct: scenario.rent_shock_pct,
+                                },
+                              }),
+                            });
+                            const data = await res.json();
+                            if (data.status === 'unavailable') {
+                              setAbmError('ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)');
+                            } else {
+                              setAbmResult(data);
+                            }
+                          } catch {
+                            setAbmError('ABM 시뮬레이션 요청 실패');
+                          } finally {
+                            setAbmLoading(false);
+                          }
+                        }}
+                      />
                     )}
                   </>
                 )}
@@ -5959,12 +6001,26 @@ function DetailDrawer({
           mainTarget: analysisMetrics.main_target_age,
           peakTime: analysisMetrics.peak_time,
         }
-      : drawerKey === 'insight_legal' && selectedRisk
+      : drawerKey === 'traffic' && popData
         ? {
-            title: `${LEGAL_TYPE_LABEL[selectedRisk.type] || selectedRisk.type} 상세 분석`,
-            aiReasoning: selectedRisk.detail || baseData?.aiReasoning,
+            title: '일일 유동인구 상세',
+            aiReasoning: `${popData.dong_name ?? ''} 실측 유동인구 데이터 기반. 일평균 ${(popData.daily_average ?? 0).toLocaleString()}명, 피크 ${analysisMetrics?.peak_time ?? '미정'}.`,
+            peakTime: analysisMetrics?.peak_time ?? '18:00 - 21:00',
+            mainTarget: analysisMetrics?.main_target_age ?? '분석 결과 대기 중',
           }
-        : baseData;
+        : drawerKey === 'insight_traffic' && analysisMetrics?.peak_time
+          ? {
+              title: `${analysisMetrics.peak_time} 피크 시간대 분석`,
+              aiReasoning: `${analysisMetrics.peak_time} 피크 집중 상권. 주 소비층: ${analysisMetrics.main_target_age ?? '분석 결과 참조'}.`,
+              peakTime: analysisMetrics.peak_time,
+              mainTarget: analysisMetrics.main_target_age ?? '분석 결과 대기 중',
+            }
+          : drawerKey === 'insight_legal' && selectedRisk
+            ? {
+                title: `${LEGAL_TYPE_LABEL[selectedRisk.type] || selectedRisk.type} 상세 분석`,
+                aiReasoning: selectedRisk.detail || baseData?.aiReasoning,
+              }
+            : baseData;
 
   return (
     <>

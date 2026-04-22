@@ -304,7 +304,24 @@ async def demographic_depth_node(state: AgentState) -> dict:
         llm = get_fast_llm().with_structured_output(DemographicAnalysis)
         analysis_out: DemographicAnalysis = await llm.ainvoke(
             [
-                SystemMessage(content="당신은 상권 소비자 분석 전문가입니다. 한국어로 응답."),
+                SystemMessage(content=(
+                    "당신은 마포구 상권 소비자 분석 전문가입니다. 한국어로 응답하세요.\n\n"
+                    "역할: 연령·성별·시간대·요일 매출 데이터를 분해해 주 고객층을 식별하고,\n"
+                    "브랜드의 타겟 고객층과의 적합도를 0~100점으로 평가합니다.\n\n"
+                    "brand_target_match_score 채점 기준 (반드시 준수):\n"
+                    "- 85~100: 탁월한 적합 — 핵심 타겟 연령·성별이 매출 1위 세그먼트와 90% 이상 일치\n"
+                    "- 70~84:  좋은 적합   — 핵심 타겟이 매출 상위 2개 세그먼트 안에 포함\n"
+                    "- 50~69:  중간 적합   — 핵심 타겟이 보조 세그먼트에 위치, 피크 시간대 불일치 가능\n"
+                    "- 30~49:  낮은 적합   — 타겟 고객층과 실 소비층 간 연령·성별 괴리 뚜렷\n"
+                    "- 0~29:   부적합      — 주력 소비층이 브랜드 타겟과 정반대 (예: 고령층 밀집 vs 2030 카페)\n\n"
+                    "마포구 상권 특성 참고:\n"
+                    "- 서교동·합정동: 20~30대 여성 비중 높음, SNS 소비 활발, 저녁 피크\n"
+                    "- 공덕동·아현동: 30~40대 직장인 중심, 점심·퇴근 피크\n"
+                    "- 상암동: 20~40대 미디어·IT 종사자, 점심 집중\n"
+                    "- 망원동·연남동: 20~30대 로컬 탐방 수요, 주말 강세\n\n"
+                    "match_rationale: 점수 근거를 수치 중심으로 2~3문장 설명 (추상 표현 금지).\n"
+                    "narrative: 지역 소비 특성과 브랜드 적합성을 예비 창업자가 바로 이해할 수 있게 3~5문장으로 작성."
+                )),
                 HumanMessage(content=prompt),
             ]
         )

@@ -28,6 +28,7 @@ class AgentState(TypedDict):
     brand_name: str  # 브랜드명
     industry_filter: str | None  # CS 업종 코드 필터 (예: 'CS100010'). 미지정 시 None.
     target_district: str  # 분석 대상 행정동 (초기 입력 혹은 최종 승자)
+    target_districts: list[str]  # 사용자가 선택한 후보 행정동 전체 목록
     commercial_radius: int  # 상권 분석 반경 (m)
     monthly_rent_budget: int  # 월 임대료 예산 (원)
     store_area: float  # 점포 면적 (평)

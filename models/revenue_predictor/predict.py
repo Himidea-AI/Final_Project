@@ -1,117 +1,31 @@
 """
-폐업률 예측 추론 함수
+폐업률 추론 함수 — 과거 실측값 기반 (최근 4분기 단순 평균)
 
-predict(dong_code, industry_code) → 폐업률 예측 결과
+predict(dong_code, industry_code) → 폐업률 결과
 B2(수지니)의 12개월 시뮬레이션 입력으로 사용된다.
+
+변경 이력:
+- 기존: LSTM 모델(closure_model.pt) 미래 예측
+- 변경: store_quarterly 최근 4분기 실측 closure_rate 평균 사용
+  이유: 폐업률은 미래 예측보다 과거 실측 기반이 신뢰도 높음
+       closure_risk(폐업위험도)가 이미 AI 기반 미래 예측을 담당
+       계절성 자동 해소 (4분기 = 1년 포함)
+
+담당: B2 — 수지니
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import numpy as np
-import torch
 
-from models.revenue_predictor.data_prep import FEATURE_COLS, engineer_features, load_store_data
-from models.revenue_predictor.model import build_model
+from models.revenue_predictor.data_prep import engineer_features, load_store_data
 
 logger = logging.getLogger(__name__)
 
-WEIGHTS_DIR = Path(__file__).resolve().parent / "weights"
-WINDOW_SIZE = 6
-
-# 모듈 수준 캐시 — 모델/scaler를 한 번만 로드
-_cached_model: torch.nn.Module | None = None
-_cached_scaler = None
-
-
-# ---------------------------------------------------------------------------
-# 모델 로드
-# ---------------------------------------------------------------------------
-
-
-def _load_model() -> torch.nn.Module:
-    """학습된 모델을 로드한다 (캐시 지원)."""
-    global _cached_model  # noqa: PLW0603
-
-    if _cached_model is not None:
-        return _cached_model
-
-    model_path = WEIGHTS_DIR / "closure_model.pt"
-    if not model_path.exists():
-        raise FileNotFoundError(f"학습된 모델 가중치를 찾을 수 없습니다: {model_path}")
-
-    n_features = len(FEATURE_COLS)
-    model = build_model(input_size=n_features)
-    model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
-    model.eval()
-    _cached_model = model
-    logger.info("모델 로드 완료: %s", model_path)
-    return model
-
-
-def _load_scaler():
-    """학습 시 저장된 scaler를 로드한다."""
-    global _cached_scaler  # noqa: PLW0603
-
-    if _cached_scaler is not None:
-        return _cached_scaler
-
-    scaler_path = WEIGHTS_DIR / "scaler.pkl"
-    if not scaler_path.exists():
-        logger.warning("scaler 파일 없음 — 정규화 없이 추론합니다")
-        return None
-
-    import joblib
-
-    _cached_scaler = joblib.load(scaler_path)
-    logger.info("scaler 로드 완료")
-    return _cached_scaler
-
-
-# ---------------------------------------------------------------------------
-# 입력 데이터 준비
-# ---------------------------------------------------------------------------
-
-
-def _prepare_input(dong_code: str | int, industry_code: str) -> np.ndarray | None:
-    """
-    특정 동x업종의 최근 WINDOW_SIZE 분기 데이터를 추출하여 모델 입력 형태로 반환.
-
-    Returns:
-        np.ndarray shape (1, WINDOW_SIZE, n_features) 또는 데이터 부족 시 None
-    """
-    df = load_store_data(seoul=False)
-    df = engineer_features(df)
-
-    dong_code = str(dong_code)
-    mask = (df["dong_code"].astype(str) == dong_code) & (df["industry_code"].astype(str) == industry_code)
-    subset = df.loc[mask].sort_values("quarter").tail(WINDOW_SIZE)
-
-    if len(subset) < WINDOW_SIZE:
-        logger.warning(
-            "데이터 부족: dong=%s, industry=%s — %d/%d 분기",
-            dong_code,
-            industry_code,
-            len(subset),
-            WINDOW_SIZE,
-        )
-        # 부족한 경우 패딩 (첫 번째 행 반복)
-        if len(subset) == 0:
-            return None
-        while len(subset) < WINDOW_SIZE:
-            subset = subset._append(subset.iloc[0:1], ignore_index=True)  # noqa: SLF001
-        subset = subset.tail(WINDOW_SIZE)
-
-    features = subset[FEATURE_COLS].values.astype(np.float32)
-
-    # scaler 적용
-    scaler = _load_scaler()
-    if scaler is not None:
-        features = scaler.transform(features)
-
-    return features.reshape(1, WINDOW_SIZE, len(FEATURE_COLS)).astype(np.float32)
+# 최근 몇 분기 평균을 낼지
+_LOOKBACK_QUARTERS = 4
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +54,6 @@ def _interpolate_monthly(quarterly_closure: float, months: int = 12) -> list[flo
 
     분기 폐업률을 월별 증가율로 변환하여 누적 적용.
     """
-    # 분기 폐업률 → 월별 누적 (1 - (1-closure)^(1/3) 의 누적)
     quarterly_retain = 1.0 - quarterly_closure
     monthly_decay = quarterly_retain ** (1 / 3)
 
@@ -155,91 +68,89 @@ def _interpolate_monthly(quarterly_closure: float, months: int = 12) -> list[flo
 
 
 # ---------------------------------------------------------------------------
-# 자기회귀 예측 (4분기 선행)
-# ---------------------------------------------------------------------------
-
-
-def _autoregressive_predict(
-    model: torch.nn.Module,
-    initial_input: np.ndarray,
-    steps: int = 4,
-) -> list[float]:
-    """
-    자기회귀 방식으로 여러 분기의 폐업률을 예측한다.
-
-    Args:
-        model: 학습된 모델
-        initial_input: (1, WINDOW_SIZE, n_features)
-        steps: 예측 분기 수
-
-    Returns:
-        list of predicted closure rates (분기별)
-    """
-    predictions: list[float] = []
-    current_input = torch.tensor(initial_input, dtype=torch.float32)
-
-    with torch.no_grad():
-        for _ in range(steps):
-            pred = model(current_input).item()
-            pred = max(0.0, min(1.0, pred))
-            predictions.append(pred)
-
-            # 다음 입력: 시퀀스를 한 칸 밀고 예측값으로 마지막 행 업데이트
-            new_row = current_input[0, -1, :].clone()
-            # closure_rate_pred 인덱스는 FEATURE_COLS의 마지막
-            closure_idx = FEATURE_COLS.index("closure_rate_pred")
-            new_row[closure_idx] = pred
-
-            current_input = torch.cat([current_input[:, 1:, :], new_row.unsqueeze(0).unsqueeze(0)], dim=1)
-
-    return predictions
-
-
-# ---------------------------------------------------------------------------
 # 메인 예측 함수
 # ---------------------------------------------------------------------------
 
 
 def predict(dong_code: str | int, industry_code: str) -> dict:
     """
-    특정 동x업종의 폐업률을 예측한다.
+    특정 동x업종의 폐업률을 최근 4분기 실측값 평균으로 반환한다.
 
     Args:
-        dong_code:    행정동 코드 (예: "11440530")
+        dong_code:     행정동 코드 (예: "11440530")
         industry_code: 업종 코드 (예: "CS100001")
 
     Returns:
         dict:
-            closure_rate:         향후 1분기 폐업 확률 (0~1)
-            closure_risk_level:   위험도 ("safe" / "caution" / "danger")
+            closure_rate:          최근 4분기 평균 폐업률 (0~1)
+            closure_risk_level:    위험도 ("safe" / "caution" / "danger")
             monthly_closure_rates: 12개월 월별 누적 폐업률 리스트
-            quarterly_predictions:  4분기 폐업률 리스트
+            quarterly_predictions: 최근 4분기 실측값 리스트 (추세 참고용)
     """
-    model = _load_model()
-    input_data = _prepare_input(dong_code, industry_code)
+    dong_code = str(dong_code)
 
-    if input_data is None:
-        logger.warning("입력 데이터를 준비할 수 없습니다 — 기본값 반환")
-        return {
-            "closure_rate": 0.5,
-            "closure_risk_level": "caution",
-            "monthly_closure_rates": [0.5] * 12,
-            "quarterly_predictions": [0.5] * 4,
-        }
+    try:
+        df = load_store_data(seoul=False)
+        df = engineer_features(df)
 
-    # 자기회귀 4분기 예측
-    quarterly_preds = _autoregressive_predict(model, input_data, steps=4)
+        mask = (df["dong_code"].astype(str) == dong_code) & (
+            df["industry_code"].astype(str) == industry_code
+        )
+        subset = df.loc[mask].sort_values("quarter")
 
-    # 첫 분기 예측값을 기준 폐업률로 사용
-    closure_rate = quarterly_preds[0]
+        if subset.empty:
+            logger.warning("데이터 없음: dong=%s, industry=%s — 업종 평균 사용", dong_code, industry_code)
+            return _fallback_by_industry(df, industry_code)
+
+        # 최근 4분기 실측값 추출 (closure_rate_pred = closure_rate / 100)
+        recent = subset["closure_rate_pred"].tail(_LOOKBACK_QUARTERS).values
+        quarterly_predictions = [round(float(v), 4) for v in recent]
+
+        # 단순 평균 (최근 4분기 = 1년 → 계절성 자동 해소)
+        closure_rate = round(float(np.mean(recent)), 4)
+
+    except Exception as exc:
+        logger.warning("폐업률 계산 실패 — mock 반환: %s", exc)
+        return _mock_result()
+
     risk_level = _classify_risk(closure_rate)
-
-    # 12개월 월별 폐업률 보간
-    monthly_rates = _interpolate_monthly(closure_rate, months=12)
+    monthly_rates = _interpolate_monthly(closure_rate)
 
     return {
-        "closure_rate": round(closure_rate, 4),
+        "closure_rate": closure_rate,
         "closure_risk_level": risk_level,
         "monthly_closure_rates": monthly_rates,
-        "quarterly_predictions": [round(p, 4) for p in quarterly_preds],
+        "quarterly_predictions": quarterly_predictions,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Fallback 헬퍼
+# ---------------------------------------------------------------------------
+
+
+def _fallback_by_industry(df, industry_code: str) -> dict:
+    """해당 업종의 마포구 평균 폐업률로 fallback."""
+    industry_df = df[df["industry_code"].astype(str) == industry_code]
+    if not industry_df.empty:
+        avg = round(float(industry_df["closure_rate_pred"].mean()), 4)
+        logger.info("업종 평균 폐업률 사용: %s → %.4f", industry_code, avg)
+        risk_level = _classify_risk(avg)
+        return {
+            "closure_rate": avg,
+            "closure_risk_level": risk_level,
+            "monthly_closure_rates": _interpolate_monthly(avg),
+            "quarterly_predictions": [avg] * 4,
+        }
+    return _mock_result()
+
+
+def _mock_result() -> dict:
+    """최종 fallback — 하드코딩 기본값."""
+    closure_rate = 0.28
+    return {
+        "closure_rate": closure_rate,
+        "closure_risk_level": _classify_risk(closure_rate),
+        "monthly_closure_rates": _interpolate_monthly(closure_rate),
+        "quarterly_predictions": [closure_rate] * 4,
     }

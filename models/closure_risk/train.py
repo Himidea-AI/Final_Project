@@ -43,7 +43,7 @@ DEFAULT_CONFIG: dict = {
     "tcn_lr": 5e-4,
     "tcn_batch_size": 32,
     "tcn_patience": 7,
-    "input_size": 33,
+    "input_size": 34,
     "n_channels": 128,
     "kernel_size": 2,
     "dilations": [1, 2],
@@ -245,7 +245,7 @@ def train(config: dict | None = None) -> None:
     logger.info("LightGBM val_AUC=%.4f", lgbm_auc)
 
     # 3. TCN 학습 (전이학습)
-    pretrained_path = TCN_WEIGHTS_DIR / "finetuned_mapo_tcn.pt"
+    pretrained_path = TCN_WEIGHTS_DIR / "finetuned_mapo_tcn_seed2026.pt"
     tcn_model, tcn_auc = train_tcn(df_full, y, cfg, pretrained_path)
 
     # 4. 앙상블 가중치 결정 (AUC 비례)
@@ -254,7 +254,7 @@ def train(config: dict | None = None) -> None:
     w_tcn = tcn_auc / total if total > 0 else 0.5
     logger.info("앙상블 가중치 — LightGBM=%.3f, TCN=%.3f", w_lgbm, w_tcn)
 
-    # train_tcn은 ALL_FEATURES 전체(33개)로 학습 — predict.py와 일치 보장
+    # train_tcn은 ALL_FEATURES 전체(34개)로 학습 — predict.py와 일치 보장
     actual_input_size = len(ALL_FEATURES)
 
     # 5. 저장
