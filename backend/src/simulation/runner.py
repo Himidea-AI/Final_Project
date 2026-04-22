@@ -210,6 +210,10 @@ class SimulationResult:
     cannibalization: dict = field(default_factory=dict)
     narrator_summary: str = ""
     trajectory: list | None = None
+    # 신규 매장(공실 스팟 클릭) 의 시뮬 결과 — 프론트 결과 카드용
+    new_store_visits: int = 0
+    new_store_revenue: float = 0.0
+    new_store_visit_share_pct: float = 0.0  # 전체 방문 중 점유율 (%)
 
     def get(self, key: str, default=None):
         """dict-like access — B1 엔드포인트 result.get() 호환."""
@@ -274,10 +278,37 @@ def run_simulation(
     world.price_multiplier = scenario.price_multiplier
     world.use_dsl = use_dsl
     world.use_policy = use_policy
+
+    # 신규 매장 주입 (공실 스팟 클릭 시뮬용) — 편의점 제외
+    new_store_sim_id: str | None = None
+    if scenario.new_store:
+        from .world import Store as _Store
+
+        ns_cat_raw = (scenario.new_store.get("category") or "음식점").strip()
+        # 음식점/카페/주점만 허용, 외이면 음식점으로 기본
+        ns_cat = ns_cat_raw if ns_cat_raw in ("음식점", "카페", "주점") else "음식점"
+        ns_dong = scenario.new_store.get("district") or scenario.new_store.get("dong")
+        if ns_dong and ns_dong in world.dongs:
+            new_store_sim_id = f"new_spot_{scenario.new_store.get('brand') or 'candidate'}"
+            new_store = _Store(
+                store_id=new_store_sim_id,
+                name=str(scenario.new_store.get("brand") or "신규 스팟"),
+                dong=ns_dong,
+                category=ns_cat,
+                seats=30,
+                rating=4.0,
+                price_level=int(scenario.new_store.get("price_level") or 2),
+                lat=scenario.new_store.get("lat"),
+                lon=scenario.new_store.get("lon"),
+                popularity_boost=float(scenario.new_store.get("popularity_boost") or 1.0),
+            )
+            world.add_store(new_store)
+            if verbose:
+                print(f"  [NEW] 신규 매장 주입: {new_store_sim_id} ({ns_cat} @ {ns_dong})", flush=True)
     if verbose and use_dsl:
-        print("  ⚙ DSL 의사결정 모드 ON (전 Tier brain.dsl_decide)", flush=True)
+        print("  [CFG] DSL 의사결정 모드 ON (전 Tier brain.dsl_decide)", flush=True)
     if verbose and use_policy:
-        print("  ⚙ Policy Generator 모드 ON (LLM 호출 11회만, 군중은 Python)", flush=True)
+        print("  [CFG] Policy Generator 모드 ON (LLM 호출 11회만, 군중은 Python)", flush=True)
 
     # 시나리오 — 날씨 오버라이드
     if scenario.weather_override:
@@ -426,8 +457,8 @@ def run_simulation(
     world.is_payday = sim_start.day in (25, 26, 27)  # 월급일 +/- 1일
     if verbose:
         if world.is_payday:
-            print("  💰 월급일 주간 (budget × 1.15, spend_tendency × 1.3)", flush=True)
-        print(f"  🍁 현재 월: {world.month}월 (계절 보정 적용)", flush=True)
+            print("  [PAY] 월급일 주간 (budget × 1.15, spend_tendency × 1.3)", flush=True)
+        print(f"  [SEASON] 현재 월: {world.month}월 (계절 보정 적용)", flush=True)
 
     for day in range(1, days + 1):
         real_date = sim_start + _dt.timedelta(days=day - 1)
@@ -628,6 +659,17 @@ def run_simulation(
     total_revenue_all = sum(c["revenue"] for c in cat_totals.values())
     daily_visits_val = int(total_visits_all / max(days, 1))
     daily_revenue_val = total_revenue_all / max(days, 1)
+
+    # 신규 매장(공실 스팟) 시뮬 결과 — visit_share_pct 계산
+    new_store_visits_val = 0
+    new_store_revenue_val = 0.0
+    new_store_visit_share_pct_val = 0.0
+    if new_store_sim_id and new_store_sim_id in world.stores:
+        ns = world.stores[new_store_sim_id]
+        new_store_visits_val = int(ns.visits_today / max(days, 1))
+        new_store_revenue_val = ns.revenue_today / max(days, 1)
+        if total_visits_all > 0:
+            new_store_visit_share_pct_val = round(100.0 * ns.visits_today / total_visits_all, 3)
     # 일일 std — 1일 시뮬이면 0, 다일이면 분산 계산 가능 (단순화)
     daily_visits_std_val = 0.0
     daily_revenue_std_val = 0.0
@@ -719,6 +761,9 @@ def run_simulation(
         cannibalization=cannibalization_val,
         narrator_summary=narrator_summary_val,
         trajectory=trajectory if trajectory else None,
+        new_store_visits=new_store_visits_val,
+        new_store_revenue=new_store_revenue_val,
+        new_store_visit_share_pct=new_store_visit_share_pct_val,
     )
 
     # final partial 저장 (in_progress=False로 덮어쓰기)
