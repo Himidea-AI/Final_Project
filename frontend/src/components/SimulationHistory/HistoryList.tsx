@@ -42,14 +42,14 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
     <div className="space-y-4">
       <HistoryFilter value={filter} onChange={setFilter} />
 
-      <div className="flex items-center justify-between text-xs text-zinc-400">
+      <div className="flex items-center justify-between text-xs text-stone-400">
         <span>
-          총 <span className="font-mono text-zinc-100">{total}</span>건
+          총 <span className="font-mono text-stone-100">{total}</span>건
         </span>
         <button
           type="button"
           onClick={() => void refetch()}
-          className="text-zinc-400 hover:text-zinc-100"
+          className="text-stone-400 hover:text-stone-100"
           aria-label="새로고침"
         >
           새로고침
@@ -63,11 +63,11 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
       )}
 
       {isLoading ? (
-        <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-500">
+        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-500">
           불러오는 중…
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
+        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-400">
           조건에 맞는 시뮬 이력이 없습니다
         </div>
       ) : (

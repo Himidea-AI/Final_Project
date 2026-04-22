@@ -52,7 +52,7 @@ export function InsightsGrid({ simResult }: Props) {
     <section>
       <SectionLabel label="INSIGHTS & LEGAL" subtitle="법률 리스크 · AI 인사이트 · 경쟁 리스크" />
 
-      <div className="mb-4 flex gap-1 border-b border-zinc-700">
+      <div className="mb-4 flex gap-1 border-b border-stone-700">
         {(
           [
             { key: 'legal', label: `법률 ${risks.length}` },
@@ -66,8 +66,8 @@ export function InsightsGrid({ simResult }: Props) {
             onClick={() => setTab(t.key)}
             className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
               tab === t.key
-                ? 'border-amber-500 text-amber-500'
-                : 'border-transparent text-zinc-400 hover:text-zinc-100'
+                ? 'border-indigo-500 text-indigo-500'
+                : 'border-transparent text-stone-400 hover:text-stone-100'
             }`}
           >
             {t.label}
@@ -76,24 +76,26 @@ export function InsightsGrid({ simResult }: Props) {
       </div>
 
       {tab === 'legal' && (
-        <div className="overflow-x-auto rounded-lg border border-zinc-700 bg-zinc-800">
+        <div className="overflow-x-auto rounded-lg border border-stone-700 bg-stone-800">
           {risks.length === 0 ? (
-            <div className="p-6 text-center text-sm text-zinc-400">법률 리스크 데이터 없음</div>
+            <div className="p-6 text-center text-sm text-stone-400">법률 리스크 데이터 없음</div>
           ) : (
             <table className="w-full min-w-[560px]">
-              <thead className="border-b border-zinc-700 bg-zinc-900/60">
+              <thead className="border-b border-stone-700 bg-stone-900/60">
                 <tr>
-                  <th className="p-3 text-left text-xs font-semibold uppercase text-zinc-400">#</th>
-                  <th className="p-3 text-left text-xs font-semibold uppercase text-zinc-400">
+                  <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
+                    #
+                  </th>
+                  <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
                     법률
                   </th>
-                  <th className="p-3 text-left text-xs font-semibold uppercase text-zinc-400">
+                  <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
                     위험도
                   </th>
-                  <th className="p-3 text-right text-xs font-semibold uppercase text-zinc-400">
+                  <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
                     조문
                   </th>
-                  <th className="p-3 text-right text-xs font-semibold uppercase text-zinc-400">
+                  <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
                     체크리스트
                   </th>
                   <th />
@@ -107,20 +109,20 @@ export function InsightsGrid({ simResult }: Props) {
                     <tr
                       key={`${r.type}-${i}`}
                       onClick={() => setSelected(r)}
-                      className={`cursor-pointer border-b border-zinc-700/50 last:border-b-0 hover:bg-zinc-700/50 ${cls.border}`}
+                      className={`cursor-pointer border-b border-stone-700/50 last:border-b-0 hover:bg-stone-700/50 ${cls.border}`}
                     >
-                      <td className="p-3 font-mono text-xs text-zinc-400">{i + 1}</td>
-                      <td className="p-3 text-sm font-semibold text-zinc-100">
+                      <td className="p-3 font-mono text-xs text-stone-400">{i + 1}</td>
+                      <td className="p-3 text-sm font-semibold text-stone-100">
                         {LEGAL_TYPE_LABEL[r.type] || r.type}
                       </td>
                       <td className={`p-3 text-xs font-bold ${cls.text}`}>● {cls.label}</td>
-                      <td className="p-3 text-right text-sm text-zinc-300">
+                      <td className="p-3 text-right text-sm text-stone-300">
                         {r.articles?.length ?? 0}
                       </td>
-                      <td className="p-3 text-right text-sm text-zinc-300">
+                      <td className="p-3 text-right text-sm text-stone-300">
                         {r.checklist?.length ?? 0}
                       </td>
-                      <td className="p-3 text-right text-zinc-400">›</td>
+                      <td className="p-3 text-right text-stone-400">›</td>
                     </tr>
                   );
                 })}
@@ -131,41 +133,41 @@ export function InsightsGrid({ simResult }: Props) {
       )}
 
       {tab === 'ai_insights' && (
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6">
+        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
           {aiRecommendation ? (
-            <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-200">
+            <p className="whitespace-pre-line text-sm leading-relaxed text-stone-200">
               {aiRecommendation}
             </p>
           ) : (
-            <div className="text-center text-sm text-zinc-400">AI 인사이트 데이터 없음</div>
+            <div className="text-center text-sm text-stone-400">AI 인사이트 데이터 없음</div>
           )}
         </div>
       )}
 
       {tab === 'competitor_risks' && (
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+          <div className="rounded-lg border border-stone-700 bg-stone-800 p-4">
             <h4 className="mb-3 text-sm font-semibold text-emerald-400">기회</h4>
             {opportunities.length > 0 ? (
-              <ul className="space-y-1 text-sm text-zinc-300">
+              <ul className="space-y-1 text-sm text-stone-300">
                 {opportunities.map((o, i) => (
                   <li key={i}>• {o}</li>
                 ))}
               </ul>
             ) : (
-              <div className="text-sm text-zinc-500">데이터 없음</div>
+              <div className="text-sm text-stone-500">데이터 없음</div>
             )}
           </div>
-          <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+          <div className="rounded-lg border border-stone-700 bg-stone-800 p-4">
             <h4 className="mb-3 text-sm font-semibold text-rose-400">리스크</h4>
             {riskTexts.length > 0 ? (
-              <ul className="space-y-1 text-sm text-zinc-300">
+              <ul className="space-y-1 text-sm text-stone-300">
                 {riskTexts.map((r, i) => (
                   <li key={i}>• {r}</li>
                 ))}
               </ul>
             ) : (
-              <div className="text-sm text-zinc-500">데이터 없음</div>
+              <div className="text-sm text-stone-500">데이터 없음</div>
             )}
           </div>
         </div>
