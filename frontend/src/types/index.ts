@@ -20,6 +20,23 @@ export interface SimulationInput {
   initial_capital?: number;
   population_weight?: boolean;
   commercial_radius?: number;
+  // [customer_revenue] 타겟 고객 프로필 (A1 찬영 P1-C 연동)
+  // 값은 SegmentProfile 스펙 그대로 한글/내부키 혼용 (age: "30대", time: "time_11_14", day: "weekday|weekend")
+  target_age_groups?: string[];
+  target_gender?: 'male' | 'female' | null;
+  target_time_slots?: string[];
+  target_day_type?: 'weekday' | 'weekend' | null;
+  target_monthly_sales?: number | null;
+}
+
+/** [customer_revenue] 타겟 고객 매출 분석 결과 */
+export interface CustomerSegment {
+  segment_ratio: number;
+  segment_sales: number | null;
+  identified_sales: number | null;
+  total_sales_ref: number | null;
+  profile_summary: string;
+  dimension_ratios: Record<string, number>;
 }
 
 /** 기존 매장 정보 */
@@ -180,6 +197,8 @@ export interface SimulationOutput {
   demographic_report?: DemographicReport | null;
   // [Dashboard 15-section] 에이전트별 판단 근거 집계 (§11 UI 카드용)
   agent_attributions?: AgentAttribution[];
+  // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
+  customer_segment?: CustomerSegment | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
