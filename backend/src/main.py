@@ -39,7 +39,14 @@ from pydantic import BaseModel
 # (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
 from dotenv import load_dotenv
 
-load_dotenv()
+# cwd가 backend/든 repo root든 repo root의 .env를 찾도록 명시.
+# biz_mapper.DB_URL 등은 import 시점에 os.environ을 읽어 localhost fallback을 확정하므로
+# load_dotenv를 setting 모듈 import 전에 선행 실행해야 한다.
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
+if _REPO_ROOT_ENV.exists():
+    load_dotenv(_REPO_ROOT_ENV)
+else:
+    load_dotenv()
 _lc_api_key = os.environ.get("LANGCHAIN_API_KEY", "")
 if _lc_api_key:
     os.environ.setdefault("LANGCHAIN_TRACING_V2", os.environ.get("LANGCHAIN_TRACING_V2", "true"))

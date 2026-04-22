@@ -1,7 +1,7 @@
 """
 타겟 고객 매출 기여 예측 MLP 모델
 
-입력:  동코드 임베딩 + 업종코드 임베딩 + 분기 인코딩
+입력:  동코드 임베딩 + 업종코드 임베딩 + 분기 인코딩(sin/cos) + 연도 정규화(year_norm)
 출력:  연령(6) + 성별(2) + 시간대(6) + 요일타입(2) 세그먼트 비율 = 16차원
 
 담당: B2 — 수지니
@@ -47,10 +47,10 @@ class MLPPredictor(nn.Module):
     타겟 고객 세그먼트 비율 예측 MLP.
 
     Architecture:
-        dong_embed(16→4) + industry_embed(10→4) + quarter_sin/cos(2)
-        → FC(10→128) → BN → ReLU → Dropout
+        dong_embed(16→4) + industry_embed(10→4) + quarter_sin/cos/year_norm(3)
+        → FC(11→128) → BN → ReLU → Dropout
         → FC(128→64) → ReLU → Dropout
-        → FC(64→16) → Sigmoid (비율 0~1 출력)
+        → FC(64→16) → Softmax×4그룹 (비율 0~1, 그룹 합=1.0)
     """
 
     def __init__(
@@ -69,7 +69,7 @@ class MLPPredictor(nn.Module):
         self.dong_embed = nn.Embedding(n_dongs, dong_embed_dim)
         self.industry_embed = nn.Embedding(n_industries, industry_embed_dim)
 
-        input_dim = dong_embed_dim + industry_embed_dim + 2  # +2: sin/cos
+        input_dim = dong_embed_dim + industry_embed_dim + 3  # +3: sin/cos/year_norm
 
         self.fc = nn.Sequential(
             nn.Linear(input_dim, hidden1),
@@ -80,7 +80,7 @@ class MLPPredictor(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden2, n_outputs),
-            nn.Sigmoid(),  # 비율은 0~1
+            # Sigmoid 없음 — forward()에서 그룹별 Softmax 적용
         )
 
     def forward(self, dong_idx: torch.Tensor, industry_idx: torch.Tensor, quarter_enc: torch.Tensor) -> torch.Tensor:
@@ -88,15 +88,26 @@ class MLPPredictor(nn.Module):
         Args:
             dong_idx:      (batch,) — 동 인덱스 (0~15)
             industry_idx:  (batch,) — 업종 인덱스 (0~9)
-            quarter_enc:   (batch, 2) — [sin(2π·q/4), cos(2π·q/4)]
+            quarter_enc:   (batch, 3) — [sin(2π·q/4), cos(2π·q/4), year_norm]
 
         Returns:
-            (batch, 16) — 각 세그먼트 비율
+            (batch, 16) — 그룹별 Softmax 적용된 세그먼트 비율
+                [0:6]  연령 6개  — identified_sales 기준, 합=1.0
+                [6:8]  성별 2개  — identified_sales 기준, 합=1.0
+                [8:14] 시간대 6개 — monthly_sales 기준, 합=1.0
+                [14:16] 요일 2개  — monthly_sales 기준, 합=1.0
         """
         d = self.dong_embed(dong_idx)  # (batch, 4)
         i = self.industry_embed(industry_idx)  # (batch, 4)
-        x = torch.cat([d, i, quarter_enc], dim=-1)  # (batch, 10)
-        return self.fc(x)
+        x = torch.cat([d, i, quarter_enc], dim=-1)  # (batch, 11)
+        logits = self.fc(x)  # (batch, 16) raw logit
+
+        age = torch.softmax(logits[:, 0:6], dim=-1)  # 연령 6개 합=1
+        gender = torch.softmax(logits[:, 6:8], dim=-1)  # 성별 2개 합=1
+        time = torch.softmax(logits[:, 8:14], dim=-1)  # 시간대 6개 합=1
+        day = torch.softmax(logits[:, 14:16], dim=-1)  # 요일 2개 합=1
+
+        return torch.cat([age, gender, time, day], dim=-1)  # (batch, 16)
 
     def save_weights(self, path: str | Path) -> None:
         torch.save(self.state_dict(), path)

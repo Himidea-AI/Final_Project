@@ -42,10 +42,10 @@ export function HeadlineBlock({ simResult }: Props) {
   return (
     <section>
       <SectionLabel label="HEADLINE" subtitle="핵심 결론과 AI 권고" />
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6 space-y-4">
+      <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="text-xs uppercase tracking-widest text-zinc-500">추천 입지</div>
-          <div className="text-2xl font-bold text-amber-400">{district}</div>
+          <div className="text-xs uppercase tracking-widest text-stone-500">추천 입지</div>
+          <div className="text-2xl font-bold text-indigo-400">{district}</div>
           <span
             className={`ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold ${riskCls}`}
           >
@@ -54,15 +54,15 @@ export function HeadlineBlock({ simResult }: Props) {
         </div>
 
         {recommendation && (
-          <p className="text-sm leading-relaxed text-zinc-200 whitespace-pre-line">
+          <p className="text-sm leading-relaxed text-stone-200 whitespace-pre-line">
             {recommendation}
           </p>
         )}
 
         {compWithinRadius !== null && (
-          <div className="flex flex-wrap gap-4 border-t border-zinc-700 pt-3 text-xs text-zinc-400">
+          <div className="flex flex-wrap gap-4 border-t border-stone-700 pt-3 text-xs text-stone-400">
             <div>
-              500m 경쟁점 <span className="font-semibold text-zinc-200">{compWithinRadius}개</span>
+              500m 경쟁점 <span className="font-semibold text-stone-200">{compWithinRadius}개</span>
             </div>
           </div>
         )}

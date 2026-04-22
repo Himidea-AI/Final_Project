@@ -29,9 +29,19 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 86400  # 24h
 
-# 동명 → 코드 폴백 매핑 (legal.py의 _DISTRICT_ZONE_MAP과 일치)
+# 동명 → 코드 폴백 매핑 (dong_mapping 테이블 기준, 2026-04-22 AWS RDS 실측 검증)
+# TODO: 장기적으로 services/population_api.MAPO_DONG_CODES 또는 services/dong_resolver 로 통합해
+#       Single Source of Truth 유지 (현재는 방어적 fallback 용도)
 _MAPO_DONG_CODE_FALLBACK: dict[str, str] = {
     # ── 행정동 (16개) ──────────────────────────────────────────
+    "아현동": "11440555",
+    "공덕동": "11440565",
+    "도화동": "11440585",
+    "용강동": "11440590",
+    "대흥동": "11440600",
+    "염리동": "11440610",
+    "신수동": "11440630",
+    "서강동": "11440655",
     "서교동": "11440660",
     "합정동": "11440680",
     "망원1동": "11440690",
@@ -40,14 +50,6 @@ _MAPO_DONG_CODE_FALLBACK: dict[str, str] = {
     "성산1동": "11440720",
     "성산2동": "11440730",
     "상암동": "11440740",
-    "공덕동": "11440545",
-    "아현동": "11440555",
-    "도화동": "11440585",
-    "용강동": "11440590",
-    "신수동": "11440630",
-    "서강동": "11440655",
-    "염리동": "11440610",
-    "대흥동": "11440565",
     # ── 법정동 별칭 ────────────────────────────────────────────
     "망원동": "11440690",
     "성산동": "11440720",
@@ -265,7 +267,11 @@ async def demographic_depth_node(state: AgentState) -> dict:
     if industry_filter and (sales.get("error") or (sales.get("monthly_sales", 0) or 0) == 0):
         print(f"[demographic] {dong_code} 업종 {industry_filter} 데이터 없음 → 전체 업종 fallback")
         fallback_r = await market_tool.get_demographic_sales_breakdown(dong_code, None)
-        if not isinstance(fallback_r, Exception) and not fallback_r.get("error") and (fallback_r.get("monthly_sales", 0) or 0) > 0:
+        if (
+            not isinstance(fallback_r, Exception)
+            and not fallback_r.get("error")
+            and (fallback_r.get("monthly_sales", 0) or 0) > 0
+        ):
             sales = fallback_r
             industry_used = None  # fallback 사용 표시
 
@@ -307,30 +313,36 @@ async def demographic_depth_node(state: AgentState) -> dict:
     wd_we = _calc_weekday_weekend_ratio(sales)
 
     # LLM 호출
-    fallback_note = f"\n※ 해당 업종({industry_filter}) 특화 데이터 부족으로 전체 업종 기준 분석." if (industry_filter and industry_used is None) else ""
+    fallback_note = (
+        f"\n※ 해당 업종({industry_filter}) 특화 데이터 부족으로 전체 업종 기준 분석."
+        if (industry_filter and industry_used is None)
+        else ""
+    )
     try:
         prompt = _build_prompt(sales, resvis, context, brand_name, core, top3, peak, wd_we) + fallback_note
         llm = get_fast_llm().with_structured_output(DemographicAnalysis)
         analysis_out: DemographicAnalysis = await llm.ainvoke(
             [
-                SystemMessage(content=(
-                    "당신은 마포구 상권 소비자 분석 전문가입니다. 한국어로 응답하세요.\n\n"
-                    "역할: 연령·성별·시간대·요일 매출 데이터를 분해해 주 고객층을 식별하고,\n"
-                    "브랜드의 타겟 고객층과의 적합도를 0~100점으로 평가합니다.\n\n"
-                    "brand_target_match_score 채점 기준 (반드시 준수):\n"
-                    "- 85~100: 탁월한 적합 — 핵심 타겟 연령·성별이 매출 1위 세그먼트와 90% 이상 일치\n"
-                    "- 70~84:  좋은 적합   — 핵심 타겟이 매출 상위 2개 세그먼트 안에 포함\n"
-                    "- 50~69:  중간 적합   — 핵심 타겟이 보조 세그먼트에 위치, 피크 시간대 불일치 가능\n"
-                    "- 30~49:  낮은 적합   — 타겟 고객층과 실 소비층 간 연령·성별 괴리 뚜렷\n"
-                    "- 0~29:   부적합      — 주력 소비층이 브랜드 타겟과 정반대 (예: 고령층 밀집 vs 2030 카페)\n\n"
-                    "마포구 상권 특성 참고:\n"
-                    "- 서교동·합정동: 20~30대 여성 비중 높음, SNS 소비 활발, 저녁 피크\n"
-                    "- 공덕동·아현동: 30~40대 직장인 중심, 점심·퇴근 피크\n"
-                    "- 상암동: 20~40대 미디어·IT 종사자, 점심 집중\n"
-                    "- 망원동·연남동: 20~30대 로컬 탐방 수요, 주말 강세\n\n"
-                    "match_rationale: 점수 근거를 수치 중심으로 2~3문장 설명 (추상 표현 금지).\n"
-                    "narrative: 지역 소비 특성과 브랜드 적합성을 예비 창업자가 바로 이해할 수 있게 3~5문장으로 작성."
-                )),
+                SystemMessage(
+                    content=(
+                        "당신은 마포구 상권 소비자 분석 전문가입니다. 한국어로 응답하세요.\n\n"
+                        "역할: 연령·성별·시간대·요일 매출 데이터를 분해해 주 고객층을 식별하고,\n"
+                        "브랜드의 타겟 고객층과의 적합도를 0~100점으로 평가합니다.\n\n"
+                        "brand_target_match_score 채점 기준 (반드시 준수):\n"
+                        "- 85~100: 탁월한 적합 — 핵심 타겟 연령·성별이 매출 1위 세그먼트와 90% 이상 일치\n"
+                        "- 70~84:  좋은 적합   — 핵심 타겟이 매출 상위 2개 세그먼트 안에 포함\n"
+                        "- 50~69:  중간 적합   — 핵심 타겟이 보조 세그먼트에 위치, 피크 시간대 불일치 가능\n"
+                        "- 30~49:  낮은 적합   — 타겟 고객층과 실 소비층 간 연령·성별 괴리 뚜렷\n"
+                        "- 0~29:   부적합      — 주력 소비층이 브랜드 타겟과 정반대 (예: 고령층 밀집 vs 2030 카페)\n\n"
+                        "마포구 상권 특성 참고:\n"
+                        "- 서교동·합정동: 20~30대 여성 비중 높음, SNS 소비 활발, 저녁 피크\n"
+                        "- 공덕동·아현동: 30~40대 직장인 중심, 점심·퇴근 피크\n"
+                        "- 상암동: 20~40대 미디어·IT 종사자, 점심 집중\n"
+                        "- 망원동·연남동: 20~30대 로컬 탐방 수요, 주말 강세\n\n"
+                        "match_rationale: 점수 근거를 수치 중심으로 2~3문장 설명 (추상 표현 금지).\n"
+                        "narrative: 지역 소비 특성과 브랜드 적합성을 예비 창업자가 바로 이해할 수 있게 3~5문장으로 작성."
+                    )
+                ),
                 HumanMessage(content=prompt),
             ]
         )

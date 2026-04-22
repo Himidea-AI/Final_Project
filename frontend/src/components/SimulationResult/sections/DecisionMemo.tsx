@@ -43,7 +43,7 @@ export function DecisionMemo({ simResult }: Props) {
   return (
     <section>
       <SectionLabel label="DECISION MEMO" subtitle="본사 보고용 요약 (인쇄 가능)" />
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-8 text-zinc-100 print:border-zinc-300 print:bg-zinc-50 print:text-zinc-900 print:shadow-none">
+      <div className="rounded-lg border border-stone-700 bg-stone-800 p-8 text-stone-100 print:border-stone-300 print:bg-stone-50 print:text-stone-900 print:shadow-none">
         <div
           className={`mb-4 inline-flex items-center rounded-full border px-4 py-1 text-xl font-bold ${VERDICT_DARK[verdict]} ${VERDICT_PRINT[verdict]}`}
         >
@@ -51,31 +51,33 @@ export function DecisionMemo({ simResult }: Props) {
         </div>
         <h3 className="mb-6 text-2xl font-semibold">
           {district}{' '}
-          <span className="text-base font-normal text-zinc-400 print:text-zinc-500">
+          <span className="text-base font-normal text-stone-400 print:text-stone-500">
             입지 의사결정
           </span>
         </h3>
         <div className="grid gap-6 md:grid-cols-2">
           <div>
-            <h4 className="mb-2 text-sm font-semibold uppercase tracking-widest text-zinc-400 print:text-zinc-600">
+            <h4 className="mb-2 text-sm font-semibold uppercase tracking-widest text-stone-400 print:text-stone-600">
               근거
             </h4>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-300 print:text-zinc-700">
+            <p className="whitespace-pre-line text-sm leading-relaxed text-stone-300 print:text-stone-700">
               {rationale}
             </p>
           </div>
           <div>
-            <h4 className="mb-2 text-sm font-semibold uppercase tracking-widest text-zinc-400 print:text-zinc-600">
+            <h4 className="mb-2 text-sm font-semibold uppercase tracking-widest text-stone-400 print:text-stone-600">
               다음 액션
             </h4>
             {actions.length > 0 ? (
-              <ul className="space-y-1 text-sm text-zinc-300 print:text-zinc-700">
+              <ul className="space-y-1 text-sm text-stone-300 print:text-stone-700">
                 {actions.slice(0, 5).map((a, i) => (
                   <li key={i}>• {a}</li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-zinc-500">추가 액션 데이터 없음 (본사 영업팀 후속 협의)</p>
+              <p className="text-sm text-stone-500">
+                추가 액션 데이터 없음 (본사 영업팀 후속 협의)
+              </p>
             )}
           </div>
         </div>

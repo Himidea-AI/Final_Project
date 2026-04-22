@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
-import { Building2, Key, ChevronRight } from "lucide-react";
+import { motion } from 'framer-motion';
+import { Building2, Key, ChevronRight } from 'lucide-react';
 
 interface Props {
   onSelectMaster: () => void;
@@ -20,9 +20,7 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
         <span className="font-mono text-[#818cf8] tracking-widest text-xs uppercase">
           Get Started
         </span>
-        <h1 className="text-4xl md:text-5xl font-black mt-4 tracking-tight">
-          가입 유형 선택
-        </h1>
+        <h1 className="text-4xl md:text-5xl font-black mt-4 tracking-tight">가입 유형 선택</h1>
         <p className="text-[#9ca3af] mt-4 text-sm max-w-md mx-auto">
           SPOTTER를 시작할 방식을 선택해주세요.
         </p>
@@ -42,7 +40,9 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
           <div className="flex-1">
             <h3 className="text-base font-bold text-white mb-1.5">
               새 워크스페이스 개설
-              <span className="ml-2 text-[10px] text-[#818cf8] font-mono uppercase tracking-wider">팀장</span>
+              <span className="ml-2 text-[10px] text-[#818cf8] font-mono uppercase tracking-wider">
+                팀장
+              </span>
             </h3>
             <p className="text-xs text-[#9ca3af] leading-relaxed">
               프랜차이즈 본사 계정을 생성하고, 매니저들을 위한 초대 코드를 발급합니다.
@@ -64,7 +64,9 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
           <div className="flex-1">
             <h3 className="text-base font-bold text-white mb-1.5">
               초대 코드로 합류
-              <span className="ml-2 text-[10px] text-emerald-400 font-mono uppercase tracking-wider">팀원</span>
+              <span className="ml-2 text-[10px] text-emerald-400 font-mono uppercase tracking-wider">
+                팀원
+              </span>
             </h3>
             <p className="text-xs text-[#9ca3af] leading-relaxed">
               팀장에게 부여받은 초대 코드를 입력하여 해당 워크스페이스에 합류합니다.

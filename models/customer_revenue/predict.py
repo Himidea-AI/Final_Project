@@ -11,7 +11,9 @@ from __future__ import annotations
 import logging
 import math
 import os
+import warnings
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -25,7 +27,13 @@ DB_URL = os.environ.get(
     "postgresql://postgres:MapoSpotter1!%23@mapo-simulator.cx8eakyuk1jf.ap-northeast-2.rds.amazonaws.com:5432/mapo_simulator",
 )
 
-from models.customer_revenue.data_prep import DONG_TO_IDX, INDUSTRY_TO_IDX, load_mappings  # noqa: E402
+from models.customer_revenue.data_prep import (  # noqa: E402
+    DONG_TO_IDX,
+    INDUSTRY_TO_IDX,
+    YEAR_BASE,
+    YEAR_SCALE,
+    load_mappings,
+)
 from models.customer_revenue.model import WEIGHTS_DIR, MLPPredictor, build_model  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -278,11 +286,17 @@ def _load_living_pop_ratio(
 _cache: dict = {}
 
 
-def _load_model() -> tuple[MLPPredictor, dict, dict]:
+def _load_model() -> tuple[MLPPredictor, dict, dict, dict, int]:
     """모델 + 매핑을 로드한다 (캐시)."""
     global _cache  # noqa: PLW0603
     if _cache:
-        return _cache["model"], _cache["dong_to_idx"], _cache["industry_to_idx"]
+        return (
+            _cache["model"],
+            _cache["dong_to_idx"],
+            _cache["industry_to_idx"],
+            _cache["identified_ratios"],
+            _cache["year_max"],
+        )
 
     weights_path = WEIGHTS_DIR / "customer_mlp.pt"
     if not weights_path.exists():
@@ -295,13 +309,20 @@ def _load_model() -> tuple[MLPPredictor, dict, dict]:
     model.load_weights(weights_path)
 
     try:
-        dong_to_idx, industry_to_idx = load_mappings()
+        dong_to_idx, industry_to_idx, identified_ratios, year_max = load_mappings()
     except FileNotFoundError:
         dong_to_idx, industry_to_idx = DONG_TO_IDX, INDUSTRY_TO_IDX
+        identified_ratios, year_max = {}, 2024
 
-    _cache = {"model": model, "dong_to_idx": dong_to_idx, "industry_to_idx": industry_to_idx}
+    _cache = {
+        "model": model,
+        "dong_to_idx": dong_to_idx,
+        "industry_to_idx": industry_to_idx,
+        "identified_ratios": identified_ratios,
+        "year_max": year_max,
+    }
     logger.info("MLPPredictor 로드 완료")
-    return model, dong_to_idx, industry_to_idx
+    return model, dong_to_idx, industry_to_idx, identified_ratios, year_max
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +399,7 @@ def predict(
     profile: SegmentProfile,
     monthly_sales: float | None = None,
     quarter_num: int = 1,
+    year: int | None = None,
     config: dict | None = None,
 ) -> dict:
     """특정 동×업종에서 타겟 프로필 고객의 예상 매출 기여를 예측한다.
@@ -391,9 +413,11 @@ def predict(
     profile : SegmentProfile
         타겟 고객 프로필.
     monthly_sales : float, optional
-        기준 월 매출. None이면 세그먼트 비율만 반환.
+        기준 월 매출 (전체). None이면 세그먼트 비율만 반환.
     quarter_num : int
         예측 분기 (1~4). 계절성 반영에 사용.
+    year : int, optional
+        예측 연도. None이면 현재 연도 사용. 학습 범위(year_max)+2 초과 시 경고.
     config : dict, optional
         설정 오버라이드 (현재 미사용).
 
@@ -401,31 +425,50 @@ def predict(
     -------
     dict
         {
-            "segment_ratio": float,       # 전체 매출 대비 세그먼트 비율
-            "segment_sales": float | None,# 세그먼트 예상 매출 (monthly_sales 있을 때)
-            "total_sales_ref": float | None,
-            "profile_summary": str,       # "30대 여성 주말 오후" 형태
-            "dimension_ratios": dict,     # 차원별 개별 비율 (디버깅용)
+            "segment_ratio": float,        # 신원 파악 고객 매출 대비 세그먼트 비율
+            "segment_sales": float | None, # 세그먼트 예상 매출 (identified_sales 기준)
+            "identified_sales": float | None, # 신원 파악 고객 매출 (카드 결제)
+            "total_sales_ref": float | None,  # 전체 월 매출 참고값
+            "profile_summary": str,        # "30대 여성 주말 오후" 형태
+            "dimension_ratios": dict,      # 차원별 개별 비율 (디버깅용)
         }
     """
-    model, dong_to_idx, industry_to_idx = _load_model()
+    model, dong_to_idx, industry_to_idx, identified_ratios, year_max = _load_model()
 
     if dong_code not in dong_to_idx:
         raise ValueError(f"알 수 없는 dong_code: {dong_code}. 마포구 16개 동만 지원합니다.")
     if industry_code not in industry_to_idx:
         raise ValueError(f"알 수 없는 industry_code: {industry_code}")
 
+    # 연도 결정 + 범위 경고
+    if year is None:
+        year = datetime.now().year
+    if year > year_max + 2:
+        warnings.warn(
+            f"예측 연도 {year}가 학습 범위({year_max})를 크게 초과합니다. 예측 신뢰도가 낮을 수 있습니다.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     d_idx = torch.tensor([dong_to_idx[dong_code]], dtype=torch.long)
     i_idx = torch.tensor([industry_to_idx[industry_code]], dtype=torch.long)
 
+    year_norm = (year - YEAR_BASE) / YEAR_SCALE
     angle = 2 * math.pi * (quarter_num - 1) / 4
-    q_enc = torch.tensor([[math.sin(angle), math.cos(angle)]], dtype=torch.float32)
+    q_enc = torch.tensor(
+        [[math.sin(angle), math.cos(angle), year_norm]],
+        dtype=torch.float32,
+    )
 
     with torch.no_grad():
         ratios = model(d_idx, i_idx, q_enc).squeeze(0).numpy()  # (16,)
 
     seg_ratio = _combined_ratio(ratios, profile, dong_code=dong_code)
-    seg_sales = round(monthly_sales * seg_ratio) if monthly_sales is not None else None
+
+    # (동, 업종)별 identified_ratio 딕셔너리 조회 (없으면 전체 평균 0.8637 fallback)
+    id_ratio = identified_ratios.get((dong_code, industry_code), 0.8637)
+    identified_sales = round(monthly_sales * id_ratio) if monthly_sales is not None else None
+    seg_sales = round(identified_sales * seg_ratio) if identified_sales is not None else None
 
     # 차원별 비율 (디버깅/설명용)
     dimension_ratios = {col: round(float(ratios[idx]), 4) for col, idx in _SEG_IDX.items()}
@@ -433,6 +476,7 @@ def predict(
     return {
         "segment_ratio": round(seg_ratio, 4),
         "segment_sales": seg_sales,
+        "identified_sales": identified_sales,
         "total_sales_ref": monthly_sales,
         "profile_summary": profile.summary(),
         "dimension_ratios": dimension_ratios,
@@ -444,6 +488,7 @@ def predict_all_dongs(
     profile: SegmentProfile,
     monthly_sales_map: dict[str, float] | None = None,
     quarter_num: int = 1,
+    year: int | None = None,
 ) -> list[dict]:
     """마포 16개 동 전체에 대해 세그먼트 예측을 수행하여 비교 분석을 반환한다.
 
@@ -457,6 +502,8 @@ def predict_all_dongs(
         동코드 → 월 매출 매핑. None이면 비율만 계산.
     quarter_num : int
         예측 분기.
+    year : int, optional
+        예측 연도. None이면 현재 연도.
 
     Returns
     -------
@@ -470,7 +517,7 @@ def predict_all_dongs(
     for dong_code in DONG_CODES:
         try:
             monthly_sales = monthly_sales_map.get(dong_code) if monthly_sales_map else None
-            result = predict(dong_code, industry_code, profile, monthly_sales, quarter_num)
+            result = predict(dong_code, industry_code, profile, monthly_sales, quarter_num, year)
             result["dong_code"] = dong_code
             results.append(result)
         except Exception as exc:

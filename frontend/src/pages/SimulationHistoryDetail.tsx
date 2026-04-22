@@ -27,19 +27,19 @@ export default function SimulationHistoryDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1e1b18] pb-16 text-zinc-100">
+    <div className="min-h-screen bg-[#1e1b18] pb-16 text-stone-100">
       <div className="mx-auto max-w-7xl px-6 pt-20">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-100"
+          className="mb-4 inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-100"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           목록으로
         </button>
 
         {isLoading && (
-          <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-500">
+          <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-500">
             불러오는 중…
           </div>
         )}
@@ -48,7 +48,7 @@ export default function SimulationHistoryDetail() {
           <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-6 text-center text-sm text-rose-300">
             {error}
             {notFound && (
-              <div className="mt-2 text-xs text-zinc-500">
+              <div className="mt-2 text-xs text-stone-500">
                 다른 매니저의 이력은 조회할 수 없습니다.
               </div>
             )}
@@ -112,23 +112,23 @@ function DetailHeader({
   onRerun,
 }: DetailHeaderProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-700 bg-zinc-800 p-5">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
       <div>
         <div className="flex items-center gap-2">
           <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-mono font-bold text-amber-400">
             {formatDocumentId(id)}
           </span>
-          <span className="text-[10px] uppercase tracking-widest text-zinc-500">읽기 전용</span>
+          <span className="text-[10px] uppercase tracking-widest text-stone-500">읽기 전용</span>
         </div>
-        <h1 className="mt-2 text-xl font-semibold text-zinc-100">
+        <h1 className="mt-2 text-xl font-semibold text-stone-100">
           {clientName} 고객님 · {brandName} — {district}
         </h1>
-        <div className="mt-1 font-mono text-xs text-zinc-500">저장 {formatWhen(createdAt)}</div>
+        <div className="mt-1 font-mono text-xs text-stone-500">저장 {formatWhen(createdAt)}</div>
       </div>
       <button
         type="button"
         onClick={onRerun}
-        className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-amber-400"
+        className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-amber-400"
       >
         <RotateCw className="h-4 w-4" />
         시뮬레이터로 이동

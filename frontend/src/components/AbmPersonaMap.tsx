@@ -98,6 +98,8 @@ export interface AbmPersonaMapProps {
   onSpotClick?: (spot: AgentVacancySpot) => void;
   /** 결과 오버레이 "← 뒤로" 버튼 클릭 시 호출 — 부모가 abmResult 를 비워 스팟 선택 화면으로 복귀시킨다. */
   onClearResult?: () => void;
+  /** 대시보드에서 선택된 스팟 — 있으면 지도에는 이 스팟만 하이라이트, 다른 노드는 agent routine 용으로 숨김. */
+  focusSpot?: { lat: number; lon: number; label?: string } | null;
 }
 
 function randomBetween(a: number, b: number) {
@@ -421,6 +423,7 @@ export default function AbmPersonaMap({
   vacancySpots,
   onSpotClick,
   onClearResult,
+  focusSpot,
 }: AbmPersonaMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -441,6 +444,13 @@ export default function AbmPersonaMap({
   const spotStatsRef = useRef<{ visits: number; revenue: number; currentAgents: number }[]>([]);
   // External 스폰 이펙트 (역 출구 cyan pulse) — 지하철/버스 도착 연출
   const spawnEffectsRef = useRef<{ x: number; y: number; startTick: number }[]>([]);
+  // 실제 ABM trajectory — 에이전트별 시간순 경로 (백엔드 실시뮬 결과).
+  // agent_id → [{absHour, lat, lon, role}, ...] (시간 순 정렬). 보간해서 부드럽게 이동.
+  const trajectoryPathsRef = useRef<
+    Map<number, { absHour: number; lat: number; lon: number; role: string }[]>
+  >(new Map());
+  const trajectoryMinHourRef = useRef(0);
+  const trajectoryMaxHourRef = useRef(0);
 
   const [mapLoaded, setMapLoaded] = useState(false);
   // Kakao 맵 이벤트 리스너가 항상 최신 함수 참조하도록 (stale closure 방지)
@@ -458,7 +468,8 @@ export default function AbmPersonaMap({
     rent_shock_pct: 0.0,
   });
 
-  const N_PERSONAS = 1000;
+  // 시뮬에서 받은 실제 에이전트 수로 점박이 개수 맞춤 (기본 100)
+  const N_PERSONAS = abmResult?.n_personas ?? abmResult?.n_agents ?? 100;
 
   // targetDistrict에 맞는 노드 세트.
   // 우선순위:
@@ -471,31 +482,49 @@ export default function AbmPersonaMap({
   // abmResult에서 받은 customer_profile_dist를 ref로 유지 (pickType에 전달)
   const customerProfileDistRef = useRef<Record<string, number> | undefined>(undefined);
 
+  // abmResult.trajectory 파싱 — 시간별 위치 스냅샷 맵 구성 (실제 ABM 결과 오버레이용)
   useEffect(() => {
-    // 1) 에이전트 추천 공실 스팟이 있으면 정적 CSV fetch 생략 — 이게 단일 진실 공급원
-    if (Array.isArray(vacancySpots) && vacancySpots.length > 0) {
-      const ranked = [...vacancySpots].sort(
-        (a, b) => (b.listing_count ?? 0) - (a.listing_count ?? 0),
-      );
-      const sameDong = ranked.filter((s) => s.dong_name === targetDistrict);
-      const pick = (sameDong.length > 0 ? sameDong : ranked).slice(0, 4);
-      const nodes: StoreNode[] = pick.map((s, idx) => ({
-        id: `agent-vacancy-${s.id}`,
-        label: `공실${idx + 1} ${s.dong_name}`,
-        lat: s.lat,
-        lng: s.lon,
-        tier: idx === 0 ? 'S' : idx === 1 ? 'A' : 'B',
-      }));
-      setStoreNodes(nodes.length > 0 ? nodes : [FALLBACK_CENTER]);
-      setSpotsLoading(false);
-      return;
-    }
+    const tr = abmResult?.trajectory;
+    trajectoryPathsRef.current = new Map();
+    trajectoryMinHourRef.current = 0;
+    trajectoryMaxHourRef.current = 0;
+    if (!Array.isArray(tr) || tr.length === 0) return;
 
-    // 2) 에이전트 결과 없음 → 정적 CSV fallback
+    // agent 별로 시간순 경로 구성 → 보간 대상
+    const byAgent = new Map<
+      number,
+      { absHour: number; lat: number; lon: number; role: string }[]
+    >();
+    let minHour = Infinity;
+    let maxHour = -Infinity;
+    for (const e of tr) {
+      if (typeof e?.lat !== 'number' || typeof e?.lon !== 'number') continue;
+      const absHour = (Number(e.day) || 0) * 24 + (Number(e.hour) || 0);
+      minHour = Math.min(minHour, absHour);
+      maxHour = Math.max(maxHour, absHour);
+      const aid = Number(e.agent_id) || 0;
+      if (!byAgent.has(aid)) byAgent.set(aid, []);
+      byAgent.get(aid)!.push({
+        absHour,
+        lat: Number(e.lat),
+        lon: Number(e.lon),
+        role: String(e.role || 'resident'),
+      });
+    }
+    // 각 에이전트 경로를 absHour 기준 정렬
+    byAgent.forEach((path) => path.sort((a, b) => a.absHour - b.absHour));
+    trajectoryPathsRef.current = byAgent;
+    trajectoryMinHourRef.current = isFinite(minHour) ? minHour : 0;
+    trajectoryMaxHourRef.current = isFinite(maxHour) ? maxHour : 0;
+  }, [abmResult]);
+
+  useEffect(() => {
+    // 마포구 전체 유동인구 시각화 — 16개 동의 지하철역 + 대표 상점 POI 를 routine 노드로 사용.
+    // 공실(vacancySpots) 은 "비어있는 부동산" 이라 에이전트 목적지로 부적절 → focusSpot 으로 별도 표시만.
     let cancelled = false;
     setSpotsLoading(true);
-    fetch(`/api/mapo/spots/${encodeURIComponent(targetDistrict)}?limit=4`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`spots ${r.status}`))))
+    fetch(`/api/mapo/spots-all?per_dong=3`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`spots-all ${r.status}`))))
       .then((data: { spots?: StoreNode[] }) => {
         if (cancelled) return;
         const list = Array.isArray(data.spots) && data.spots.length > 0 ? data.spots : null;
@@ -504,13 +533,25 @@ export default function AbmPersonaMap({
       })
       .catch(() => {
         if (cancelled) return;
-        setStoreNodes([FALLBACK_CENTER]);
-        setSpotsLoading(false);
+        // fallback — 기존 단일 동 엔드포인트
+        fetch(`/api/mapo/spots/${encodeURIComponent(targetDistrict)}?limit=16`)
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`spots ${r.status}`))))
+          .then((d: { spots?: StoreNode[] }) => {
+            if (cancelled) return;
+            const list = Array.isArray(d.spots) && d.spots.length > 0 ? d.spots : null;
+            setStoreNodes(list ?? [FALLBACK_CENTER]);
+            setSpotsLoading(false);
+          })
+          .catch(() => {
+            if (cancelled) return;
+            setStoreNodes([FALLBACK_CENTER]);
+            setSpotsLoading(false);
+          });
       });
     return () => {
       cancelled = true;
     };
-  }, [targetDistrict, vacancySpots]);
+  }, [targetDistrict]);
 
   // 노드 픽셀만 재계산 — 맵 zoom/pan 시마다 호출 (에이전트 유지)
   const recomputeNodePixels = useCallback(() => {
@@ -671,7 +712,7 @@ export default function AbmPersonaMap({
     paymentBouncesRef.current = [];
 
     spawnEffectsRef.current = [];
-  }, [storeNodes]);
+  }, [storeNodes, N_PERSONAS]);
 
   // OSRM 도보 경로 prefetch — 노드 변경 시 pairwise 경로 로드
   // M-1: 빠른 동 전환 시 이전 fetch 취소 (AbortController)
@@ -895,10 +936,15 @@ export default function AbmPersonaMap({
         }
       });
 
+      // focusSpot 있으면 routine 노드(지하철·상점)는 전부 시각 숨김 → focusSpot 만 "신규 매장" 마커로 별도 렌더.
+      // 없으면 routine 노드 전부 렌더 (마포 전체 POI 맵).
+      const hideRoutineNodes = !!focusSpot;
+
       // 상권 노드 그리기 — 스팟 유형별 픽토그램 (지하철=T심볼 이중원 / 상점=집모양)
       nodes.forEach((np, idx) => {
         const node = storeNodes[idx];
         if (!node) return;
+        if (hideRoutineNodes) return;
 
         // 스팟 유형 분기 — 백엔드 id/tier 기반
         const isSubway = node.id.startsWith('subway-') || node.tier === 'S';
@@ -967,10 +1013,113 @@ export default function AbmPersonaMap({
         }
       });
 
+      // 실제 ABM trajectory — 에이전트별 시간순 경로를 tick 단위로 보간하여 부드럽게 이동 재생
+      if (trajectoryPathsRef.current.size > 0 && mapInstanceRef.current) {
+        const proj = mapInstanceRef.current.getProjection?.();
+        const kakao = (window as any).kakao;
+        if (proj && kakao?.maps?.LatLng) {
+          // 실시간 2초 = 가상 1시간 (60fps 기준 120 tick/hour)
+          const ticksPerHour = 120;
+          const minH = trajectoryMinHourRef.current;
+          const maxH = trajectoryMaxHourRef.current;
+          const totalHours = Math.max(1, maxH - minH + 1);
+          const cycleTicks = totalHours * ticksPerHour;
+          // 가상 시간(소수점 포함) — minH 기점 virtualHour ∈ [minH, maxH + 1)
+          const phase = (tickRef.current % cycleTicks) / ticksPerHour;
+          const virtualHour = minH + phase;
+          const displayHour = Math.floor(virtualHour);
+
+          const roleColor: Record<string, string> = {
+            resident: '#34D399',
+            commuter: '#60A5FA',
+            visitor: '#F472B6',
+            owner: '#FBBF24',
+            ext_commuter: '#22D3EE',
+            ext_visitor: '#A78BFA',
+          };
+
+          let drawn = 0;
+          trajectoryPathsRef.current.forEach((path) => {
+            if (path.length === 0) return;
+            // virtualHour 를 둘러싼 두 waypoint 찾기 (binary search 대신 경로가 짧으므로 linear)
+            let prev = path[0];
+            let next = path[path.length - 1];
+            for (let i = 0; i < path.length - 1; i++) {
+              if (path[i].absHour <= virtualHour && path[i + 1].absHour > virtualHour) {
+                prev = path[i];
+                next = path[i + 1];
+                break;
+              }
+            }
+            if (virtualHour <= path[0].absHour) {
+              prev = next = path[0];
+            } else if (virtualHour >= path[path.length - 1].absHour) {
+              prev = next = path[path.length - 1];
+            }
+            const span = next.absHour - prev.absHour;
+            const t = span > 0 ? Math.min(1, Math.max(0, (virtualHour - prev.absHour) / span)) : 0;
+            const lat = prev.lat + (next.lat - prev.lat) * t;
+            const lon = prev.lon + (next.lon - prev.lon) * t;
+            const latLng = new kakao.maps.LatLng(lat, lon);
+            const pix = proj.containerPointFromCoords(latLng);
+            if (pix.x < 0 || pix.y < 0 || pix.x > W || pix.y > H) return;
+            ctx.fillStyle = roleColor[prev.role] || '#E5E7EB';
+            ctx.beginPath();
+            ctx.arc(pix.x, pix.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+            drawn++;
+          });
+
+          // 좌상단 타임스탬프 배지
+          const hourLabel = `ABM ${String(displayHour % 24).padStart(2, '0')}:00 · 실데이터 ${drawn}명`;
+          ctx.font = 'bold 11px monospace';
+          ctx.textAlign = 'left';
+          ctx.fillStyle = 'rgba(15,23,42,0.85)';
+          const tw2 = ctx.measureText(hourLabel).width;
+          roundedRect(ctx, 8, 8, tw2 + 14, 20, 4);
+          ctx.fill();
+          ctx.fillStyle = '#86EFAC';
+          ctx.fillText(hourLabel, 15, 22);
+        }
+      }
+
+      // focusSpot 별도 렌더 — 선택된 스팟을 "신규 매장" 마커로 단 하나만 표시
+      if (focusSpot && mapInstanceRef.current) {
+        const proj = mapInstanceRef.current.getProjection?.();
+        const kakao = (window as any).kakao;
+        if (proj && kakao?.maps?.LatLng) {
+          const latLng = new kakao.maps.LatLng(focusSpot.lat, focusSpot.lon);
+          const pix = proj.containerPointFromCoords(latLng);
+          const fx = pix.x;
+          const fy = pix.y;
+          // 외곽 링 (cyan 펄스)
+          const pulse = 1 + 0.15 * Math.sin(tickRef.current * 0.1);
+          ctx.strokeStyle = 'rgba(34,211,238,0.85)';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 18 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          // 신규 매장 = green house
+          drawStoreHouse(ctx, fx, fy, 'S', '#10B981', 2.5);
+          // 라벨
+          const label = `NEW · ${focusSpot.label ?? '선택 스팟'}`;
+          ctx.font = 'bold 11px monospace';
+          ctx.textAlign = 'center';
+          const tw = ctx.measureText(label).width;
+          ctx.fillStyle = 'rgba(16,185,129,0.92)';
+          roundedRect(ctx, fx - tw / 2 - 4, fy + 18, tw + 8, 15, 4);
+          ctx.fill();
+          ctx.fillStyle = '#0f172a';
+          ctx.fillText(label, fx, fy + 29);
+        }
+      }
+
       // 결제 bounce 아이콘 (gold 원 + ₩) — 36 tick 선행 애니메이션
+      // focusSpot 있을 땐 routine 노드가 숨겨져 있으므로 ₩ 이펙트도 숨김 (허공 표시 방지)
       paymentBouncesRef.current = paymentBouncesRef.current.filter((e) => {
         const age = tickRef.current - e.startTick;
         if (age > 36) return false;
+        if (hideRoutineNodes) return true;
         const np = nodes[e.nodeIdx];
         if (!np) return true;
         drawPaymentBounce(ctx, np.x, np.y - 14, age);
@@ -981,6 +1130,7 @@ export default function AbmPersonaMap({
       paymentEffectsRef.current = paymentEffectsRef.current.filter((e) => {
         const age = tickRef.current - e.startTick;
         if (age > 130) return false;
+        if (hideRoutineNodes) return true;
         const np = nodes[e.nodeIdx];
         if (!np) return true;
 
@@ -1015,11 +1165,14 @@ export default function AbmPersonaMap({
       });
 
       // 페르소나 이동 — OSRM 실제 도로 waypoint 따라 걷기 (+ wobble / ease)
+      // trajectory 실데이터 있으면 합성 persona 렌더 skip (실데이터 점으로 대체)
+      const useRealTrajectory = trajectoryPathsRef.current.size > 0;
       const map = mapInstanceRef.current;
       const kakao = (window as any).kakao ?? null;
 
       personasRef.current.forEach((p) => {
         if (nodes.length < 2) return;
+        if (useRealTrajectory) return; // 합성 persona 숨김 — 실데이터만 표시
 
         // C-2: 인덱스 모듈러 클램프 — storeNodes가 줄었을 때 OOB 방지
         if (p.targetIdx >= nodes.length) p.targetIdx = p.targetIdx % nodes.length;

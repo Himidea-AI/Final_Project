@@ -3,11 +3,19 @@
 """
 
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
 # [B1 트랙 개선] 어떤 모듈에서 설정을 임포트하더라도 최우선으로 .env를 로드하도록 보강
-load_dotenv()
+# cwd가 backend/ 또는 repo root 어느 쪽이든 repo root의 .env를 찾도록 명시.
+# backend/src/config/settings.py → parents[3] = repo root
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
+if _REPO_ROOT_ENV.exists():
+    load_dotenv(_REPO_ROOT_ENV)
+else:
+    load_dotenv()  # fallback — cwd 기준
 
 
 class Settings(BaseSettings):

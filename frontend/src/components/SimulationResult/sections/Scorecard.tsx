@@ -7,7 +7,7 @@ interface Props {
 
 function scoreColor(score: number): string {
   if (score >= 70) return 'text-emerald-400';
-  if (score >= 40) return 'text-amber-400';
+  if (score >= 40) return 'text-indigo-400';
   return 'text-rose-400';
 }
 
@@ -29,16 +29,16 @@ export function Scorecard({ simResult }: Props) {
   const hasData = match != null || core != null || rationale.length > 0;
 
   const matchPct = match != null ? Math.round(match) : null;
-  const matchColor = matchPct != null ? scoreColor(matchPct) : 'text-zinc-400';
+  const matchColor = matchPct != null ? scoreColor(matchPct) : 'text-stone-400';
 
   if (!hasData) {
     return (
       <section>
         <SectionLabel label="SCORECARD" subtitle="브랜드 타겟 매칭 · 핵심 소비층" />
-        <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center">
-          <div className="mx-auto mb-2 h-8 w-8 animate-pulse rounded-full bg-zinc-700" />
-          <div className="text-sm text-zinc-400">데이터 수집 중</div>
-          <div className="mt-1 text-xs text-zinc-500">
+        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center">
+          <div className="mx-auto mb-2 h-8 w-8 animate-pulse rounded-full bg-stone-700" />
+          <div className="text-sm text-stone-400">데이터 수집 중</div>
+          <div className="mt-1 text-xs text-stone-500">
             타겟 매칭 분석에 필요한 인구 샘플이 부족합니다
           </div>
         </div>
@@ -49,29 +49,29 @@ export function Scorecard({ simResult }: Props) {
   return (
     <section>
       <SectionLabel label="SCORECARD" subtitle="브랜드 타겟 매칭 · 핵심 소비층" />
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6">
+      <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
-            <div className="text-xs uppercase tracking-widest text-zinc-400">브랜드 타겟 매칭</div>
+            <div className="text-xs uppercase tracking-widest text-stone-400">브랜드 타겟 매칭</div>
             <div className={`mt-2 text-4xl font-bold ${matchColor}`}>
               {matchPct != null ? `${matchPct}` : '—'}
-              <span className="ml-1 text-lg text-zinc-500">/100</span>
+              <span className="ml-1 text-lg text-stone-500">/100</span>
             </div>
             {rationale && (
-              <p className="mt-3 max-w-md text-sm leading-relaxed text-zinc-300">
+              <p className="mt-3 max-w-md text-sm leading-relaxed text-stone-300">
                 {rationale.length > 200 ? `${rationale.slice(0, 200)}…` : rationale}
               </p>
             )}
           </div>
 
           {core && (
-            <div className="min-w-[160px] rounded-md border border-zinc-700 bg-zinc-900/60 p-4">
-              <div className="text-xs uppercase tracking-widest text-zinc-400">핵심 소비층</div>
-              <div className="mt-2 text-lg font-semibold text-zinc-100">
+            <div className="min-w-[160px] rounded-md border border-stone-700 bg-stone-900/60 p-4">
+              <div className="text-xs uppercase tracking-widest text-stone-400">핵심 소비층</div>
+              <div className="mt-2 text-lg font-semibold text-stone-100">
                 {core.age} · {core.gender}
               </div>
               {typeof core.share === 'number' && (
-                <div className="mt-1 text-xs text-amber-400">
+                <div className="mt-1 text-xs text-indigo-400">
                   점유 {(core.share * 100).toFixed(1)}%
                 </div>
               )}
@@ -80,17 +80,18 @@ export function Scorecard({ simResult }: Props) {
         </div>
 
         {demo?.top_3_age_groups && demo.top_3_age_groups.length > 0 && (
-          <div className="mt-6 border-t border-zinc-700 pt-4">
-            <div className="mb-2 text-xs uppercase tracking-widest text-zinc-400">
+          <div className="mt-6 border-t border-stone-700 pt-4">
+            <div className="mb-2 text-xs uppercase tracking-widest text-stone-400">
               상위 3 연령대
             </div>
             <div className="flex flex-wrap gap-2">
               {demo.top_3_age_groups.map((g) => (
                 <span
                   key={g.age_group}
-                  className="rounded-md border border-zinc-700 bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-300"
+                  className="rounded-md border border-stone-700 bg-stone-900/60 px-2.5 py-1 text-xs text-stone-300"
                 >
-                  {g.age_group} <span className="text-zinc-500">{(g.share * 100).toFixed(1)}%</span>
+                  {g.age_group}{' '}
+                  <span className="text-stone-500">{(g.share * 100).toFixed(1)}%</span>
                 </span>
               ))}
             </div>

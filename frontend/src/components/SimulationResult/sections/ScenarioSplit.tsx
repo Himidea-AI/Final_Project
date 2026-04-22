@@ -29,7 +29,7 @@ export function ScenarioSplit({ simResult }: Props) {
     return (
       <section>
         <SectionLabel label="SCENARIOS" subtitle="낙관 / 기본 / 비관 분기 매출 시나리오" />
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6 text-center text-sm text-zinc-400">
+        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 text-center text-sm text-stone-400">
           시나리오 분석 데이터가 없습니다
         </div>
       </section>
@@ -80,17 +80,17 @@ export function ScenarioSplit({ simResult }: Props) {
       <div className="mb-4 grid grid-cols-3 gap-3">
         {CARDS.map(({ label, value, color, border, bg }) => (
           <div key={label} className={`rounded-lg border p-4 ${border} ${bg}`}>
-            <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+            <div className="text-[10px] uppercase tracking-widest text-stone-500">
               {label} 시나리오
             </div>
             <div className={`mt-1 text-xl font-bold font-mono ${color}`}>{fmtWan(value)}</div>
-            <div className="mt-0.5 text-[10px] text-zinc-600">최종 분기 기준</div>
+            <div className="mt-0.5 text-[10px] text-stone-600">최종 분기 기준</div>
           </div>
         ))}
       </div>
 
       {/* 분기별 범위 영역 차트 */}
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+      <div className="rounded-lg border border-stone-700 bg-stone-800 p-4">
         <ResponsiveContainer width="100%" height={260}>
           <AreaChart data={chartData} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
             <defs>

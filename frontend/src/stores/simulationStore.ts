@@ -13,6 +13,8 @@ interface SimulationState {
   error: string | null;
   params: SimulationInput | null;
   startedAt: number | null;
+  /** 매니저가 [저장] 버튼으로 저장한 이력 ID (SPTR-000142). null이면 DRAFT. R1: store = Single Source of Truth. */
+  savedHistoryId: number | null;
 
   _abortController: AbortController | null;
   _progressTimer: ReturnType<typeof setInterval> | null;
@@ -20,6 +22,7 @@ interface SimulationState {
   startSimulation: (params: SimulationInput) => Promise<void>;
   cancelSimulation: () => void;
   dismissResult: () => void;
+  setSavedHistoryId: (id: number | null) => void;
   reset: () => void;
 }
 
@@ -31,6 +34,7 @@ const INITIAL_STATE = {
   error: null,
   params: null,
   startedAt: null,
+  savedHistoryId: null,
   _abortController: null,
   _progressTimer: null,
 };
@@ -90,6 +94,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       error: null,
       params,
       startedAt,
+      savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
       _abortController: abortController,
       _progressTimer: null,
     });
@@ -161,6 +166,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       error: null,
       params: null,
       startedAt: null,
+      savedHistoryId: null,
       _abortController: null,
       _progressTimer: null,
     });
@@ -176,8 +182,10 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       error: null,
       params: null,
       startedAt: null,
+      savedHistoryId: null,
     });
   },
+  setSavedHistoryId: (id) => set({ savedHistoryId: id }),
   reset: () => {
     const { _abortController, _progressTimer } = get();
     _abortController?.abort();
