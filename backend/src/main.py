@@ -187,15 +187,33 @@ _BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 업종 → kakao 검색 키워드 매핑
 _BIZ_TO_KAKAO_KW: Dict[str, str] = {
-    "치킨전문점": "치킨", "커피-음료": "커피", "한식음식점": "한식",
-    "중식음식점": "중식", "일식음식점": "일식", "양식음식점": "양식",
-    "제과점": "베이커리", "패스트푸드점": "버거", "분식전문점": "분식",
+    "치킨전문점": "치킨",
+    "커피-음료": "커피",
+    "한식음식점": "한식",
+    "중식음식점": "중식",
+    "일식음식점": "일식",
+    "양식음식점": "양식",
+    "제과점": "베이커리",
+    "패스트푸드점": "버거",
+    "분식전문점": "분식",
     "호프-간이주점": "주점",
-    "치킨": "치킨", "커피": "커피", "카페": "커피", "한식": "한식",
-    "중식": "중식", "일식": "일식", "양식": "양식", "베이커리": "베이커리",
-    "버거": "버거", "분식": "분식", "주점": "주점",
-    "chicken": "치킨", "cafe": "커피", "coffee": "커피", "burger": "버거",
-    "bakery": "베이커리", "korean": "한식",
+    "치킨": "치킨",
+    "커피": "커피",
+    "카페": "커피",
+    "한식": "한식",
+    "중식": "중식",
+    "일식": "일식",
+    "양식": "양식",
+    "베이커리": "베이커리",
+    "버거": "버거",
+    "분식": "분식",
+    "주점": "주점",
+    "chicken": "치킨",
+    "cafe": "커피",
+    "coffee": "커피",
+    "burger": "버거",
+    "bakery": "베이커리",
+    "korean": "한식",
 }
 
 
@@ -226,19 +244,22 @@ async def _collect_all_competitor_locations(
                     continue
                 seen_ids.add(cid)
                 if s.get("lat") and s.get("lon"):
-                    results.append({
-                        "id": cid,
-                        "place_name": s.get("place_name", ""),
-                        "brand_name": s.get("brand_name", ""),
-                        "lat": s["lat"],
-                        "lng": s["lon"],
-                        "distance_m": s.get("distance_m"),
-                        "is_franchise": s.get("is_franchise", False),
-                        "category": s.get("category", ""),
-                        "source_dong": dong_name,
-                    })
+                    results.append(
+                        {
+                            "id": cid,
+                            "place_name": s.get("place_name", ""),
+                            "brand_name": s.get("brand_name", ""),
+                            "lat": s["lat"],
+                            "lng": s["lon"],
+                            "distance_m": s.get("distance_m"),
+                            "is_franchise": s.get("is_franchise", False),
+                            "category": s.get("category", ""),
+                            "source_dong": dong_name,
+                        }
+                    )
         except Exception as e:
             import traceback
+
             print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
 
     await asyncio.gather(*[_fetch_one(d) for d in districts])
@@ -945,6 +966,27 @@ async def get_mapo_spots(dong_name: str, limit: int = 4):
     return {"dong_name": dong_name, "spots": spots}
 
 
+@app.get("/mapo/spots-all")
+async def get_mapo_spots_all(per_dong: int = 3):
+    """마포구 16개 동 전체의 대표 스팟 합본 (ABM 시각화용).
+
+    지하철역 + 동별 주요 상점 per_dong 개씩 — 에이전트가 마포 전역을 routine 으로
+    순회하는 유동인구 시각화에 사용. `vacancySpots` (공실) 와는 별개.
+    """
+    from src.config.constants import MAPO_DISTRICTS
+    from src.services.mapo_spots import get_dong_spots
+
+    all_spots: list[dict] = []
+    seen_ids: set[str] = set()
+    for dong in MAPO_DISTRICTS:
+        for s in get_dong_spots(dong, limit=per_dong + 1):
+            if s["id"] in seen_ids:
+                continue
+            seen_ids.add(s["id"])
+            all_spots.append({**s, "dong_name": dong})
+    return {"count": len(all_spots), "spots": all_spots}
+
+
 @app.get("/population/live")
 async def get_live_population(dongs: str | None = None):
     """
@@ -1062,7 +1104,7 @@ class AbmSimulationRequest(BaseModel):
     brand_name: str
     langgraph_result: Dict[str, Any]
     # 시뮬 규모
-    n_agents: int = 100  # 100 | 1000
+    n_agents: int = 1000  # 100 | 1000 — 기본값 마포 전체 규모(1000)
     days: int = 1
     # GameMaster 시나리오
     scenario: AbmScenarioParams = AbmScenarioParams()
@@ -1177,6 +1219,8 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             use_profiles=True,
             scenario=scenario,
             days=req.days,
+            collect_trajectory=True,
+            trajectory_sample_size=1000,
         )
     except Exception as e:
         logger.error(f"[ABM] 시뮬레이션 실패: {e}")
