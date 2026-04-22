@@ -270,7 +270,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
         }
 
     # Redis 캐시 조회
-    cache_key = f"competitor_intel:{dong_code}:{brand_name}"
+    cache_key = f"v2:competitor_intel:{dong_code}:{brand_name}"
     cached = await _try_cache_get(cache_key)
     if cached:
         print(f"[competitor_intel] 캐시 히트: {cache_key}")

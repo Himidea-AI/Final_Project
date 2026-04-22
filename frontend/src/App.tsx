@@ -2320,8 +2320,18 @@ function SimulatorDashboard({
   // 정렬된 행 데이터 — 가맹점 간섭도는 competitor_intel.samples 실데이터 우선
   // Pancras 2013 거리 감쇠: (1 - 0.281)^(1/1.609) ≈ 0.813 per km
   // base_rate는 업종별 차등 (backend commercial_intelligence.py와 동기화).
-  const dynamicCannRows: CannRow[] = simResult?.competitorIntel?.competition_500m?.samples
-    ? simResult.competitorIntel.competition_500m.samples.slice(0, 8).map((s) => {
+  // allCompetitorLocations 우선 사용 (winner+top3 전체 동), fallback은 winner 단일 동
+  const _competitorSamples: any[] = simResult?.allCompetitorLocations?.length
+    ? simResult.allCompetitorLocations.map((s) => ({
+        place_name: s.place_name || s.brand_name,
+        distance_m: s.distance_m ?? 0,
+        is_franchise: s.is_franchise,
+        source_dong: s.source_dong,
+      }))
+    : (simResult?.competitorIntel?.competition_500m?.samples ?? []);
+
+  const dynamicCannRows: CannRow[] = _competitorSamples.length
+    ? _competitorSamples.slice(0, 12).map((s) => {
         const dist = s.distance_m;
         // Industry base rates mirror backend commercial_intelligence.py:estimate_cannibalization
         const INDUSTRY_BASE: Record<string, number> = {
@@ -2347,7 +2357,7 @@ function SimulatorDashboard({
         const impactPct = -baseRate * Math.pow(0.813, dist / 1000) * 100;
         const status = dist < 300 ? 'Danger' : dist < 800 ? 'Caution' : 'Safe';
         return {
-          name: s.place_name,
+          name: s.place_name || '경쟁업체',
           distance: dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`,
           impact: `${impactPct.toFixed(1)}%`,
           status,

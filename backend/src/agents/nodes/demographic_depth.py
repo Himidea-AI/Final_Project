@@ -185,7 +185,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
     brand_name = state.get("brand_name")
     industry_filter = state.get("industry_filter")
 
-    cache_key = f"v2:demographic:{brand_name or 'nobrand'}:{dong_code}:{industry_filter or 'all'}"
+    cache_key = f"v3:demographic:{brand_name or 'nobrand'}:{dong_code}:{industry_filter or 'all'}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
