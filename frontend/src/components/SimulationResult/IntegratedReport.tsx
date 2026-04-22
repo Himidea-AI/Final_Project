@@ -10,6 +10,7 @@ import { ScenarioSplit } from './sections/ScenarioSplit';
 import { ShapContribution } from './sections/ShapContribution';
 import { TimelineForecast } from './sections/TimelineForecast';
 import { AgentAttribution } from './sections/AgentAttribution';
+import { CustomerSegment } from './sections/CustomerSegment';
 import { DistrictRankings } from './sections/DistrictRankings';
 import { InsightsGrid } from './sections/InsightsGrid';
 import { DecisionMemo } from './sections/DecisionMemo';
@@ -71,6 +72,9 @@ export function IntegratedReport({
       </div>
       <div id="section-11" data-section="agent-attribution">
         <AgentAttribution simResult={simResult} />
+      </div>
+      <div id="section-11-5" data-section="customer-segment">
+        <CustomerSegment simResult={simResult} />
       </div>
       <div id="section-12" data-section="district-rankings">
         <DistrictRankings simResult={simResult} />
