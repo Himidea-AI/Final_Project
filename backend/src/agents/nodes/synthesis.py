@@ -63,8 +63,9 @@ async def synthesis_node(state: AgentState) -> dict:
     store_area = state.get("store_area", 15.0)
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
-    # v4: articles 필드가 list[str] → list[{article_ref, content}]로 변경 — 기존 v3 캐시 무효화
-    cache_key = f"v4:synthesis:{brand_name}:{target_district}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    # v5: winner_district 추가 — winner가 달라지면 synthesis 재실행 (v4는 target_district만 사용해 winner 불일치 캐시 히트 버그)
+    _winner_for_cache = state.get("winner_district", target_district)
+    cache_key = f"v5:synthesis:{brand_name}:{_winner_for_cache}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)

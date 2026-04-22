@@ -282,7 +282,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "competitor_intel_result": {},
     }
 
-    task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0))
+    task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=600.0))
     _pending_pipelines[key] = task
     try:
         return await task
@@ -339,6 +339,13 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     # 랭킹 데이터
     district_rankings = _sanitize(analysis.get("district_rankings", []))
     winner_district = _sanitize(analysis.get("winner_district", target_dist))
+    # district_rankings[0]과 winner_district 강제 동기화
+    # (target_districts 필터링 버그로 winner가 전체 1위와 다를 수 있음)
+    if district_rankings and isinstance(district_rankings, list):
+        _top = district_rankings[0] if isinstance(district_rankings[0], dict) else {}
+        _top_dong = _top.get("district")
+        if _top_dong:
+            winner_district = _top_dong
     top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
@@ -523,6 +530,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "closure_risk": sim_result.get("closure_risk") if "sim_result" in locals() else None,
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
         "competitor_intel": _sanitize(state.get("competitor_intel_result") or {}),
+        # 8 에이전트 판단 근거 (AgentAttribution)
+        "agent_attributions": _sanitize(
+            analysis.get("agent_attributions") or state.get("agent_attributions") or []
+        ),
     }
 
     print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")

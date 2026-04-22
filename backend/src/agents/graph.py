@@ -14,7 +14,7 @@ from src.agents.nodes.competitor_intel import competitor_intel_node
 
 # 전체 파이프라인 토큰 예산 (입력+출력 합산 추정치 기준)
 # gpt-4.1-mini: 입력 $0.15/1M, 출력 $0.60/1M
-_TOKEN_BUDGET_PER_RUN = 8000  # 토큰 초과 시 경고 로그
+_TOKEN_BUDGET_PER_RUN = 16000  # 토큰 초과 시 경고 로그 (legal 에이전트 평균 7k, 전체 평균 10k)
 
 
 def _estimate_tokens(text: str) -> int:

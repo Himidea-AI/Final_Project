@@ -458,7 +458,7 @@ export default function AbmPersonaMap({
     rent_shock_pct: 0.0,
   });
 
-  const N_PERSONAS = 100;
+  const N_PERSONAS = 1000;
 
   // targetDistrict에 맞는 노드 세트.
   // 우선순위:

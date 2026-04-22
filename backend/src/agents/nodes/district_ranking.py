@@ -439,7 +439,8 @@ async def district_ranking_node(state: AgentState) -> dict:
     _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
 
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
-    cache_key = f"v3:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    # v4: winner를 ranked[0]으로 변경 (target_districts 필터 제거) — 기존 v3 캐시 무효화
+    cache_key = f"v4:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -452,7 +453,13 @@ async def district_ranking_node(state: AgentState) -> dict:
             except Exception:
                 pass
             _cached_ranked = cached_data.get("scouting_results", []) or []
-            _cached_winner = cached_data.get("winner_district", "")
+            # 캐시 히트 시에도 winner = scouting_results[0] (ranked[0]) 재계산
+            _cached_winner = (
+                _cached_ranked[0]["district"]
+                if _cached_ranked and isinstance(_cached_ranked[0], dict)
+                else cached_data.get("winner_district", "")
+            )
+            _cached_top_3 = [r["district"] for r in _cached_ranked[1:4] if isinstance(r, dict)]
             _cached_winner_score = 0
             if _cached_ranked:
                 _first = _cached_ranked[0] if isinstance(_cached_ranked[0], dict) else {}
@@ -470,8 +477,8 @@ async def district_ranking_node(state: AgentState) -> dict:
             _cached_analysis["district_ranking_result"] = {"agent_attribution": cached_ranking_attr}
             return {
                 "scouting_results": cached_data["scouting_results"],
-                "winner_district": cached_data["winner_district"],
-                "top_3_candidates": cached_data["top_3_candidates"],
+                "winner_district": _cached_winner,   # ranked[0] 재계산값
+                "top_3_candidates": _cached_top_3,   # ranked[1:4] 재계산값
                 "vacancy_applied": cached_data.get("vacancy_applied", False),
                 "vacancy_spots": cached_data.get("vacancy_spots", []),
                 "current_agent": "district_ranking",
@@ -518,12 +525,10 @@ async def district_ranking_node(state: AgentState) -> dict:
         business_type=business_type,
     )
 
-    target_districts = state.get("target_districts") or [state.get("target_district", "서교동")]
-    filtered = [r for r in ranked if r["district"] in target_districts]
-    if not filtered:
-        filtered = ranked  # fallback: 선택 동 데이터 없으면 전체 중 추천
-    winner = filtered[0]["district"] if filtered else state.get("target_district", "서교동")
-    top_3 = [r["district"] for r in filtered[1:4]]
+    # winner는 항상 전체 채점 1위 — target_districts 필터 제거
+    # (필터 적용 시 target_district=공덕동이면 공덕동이 무조건 winner가 되는 버그 방지)
+    winner = ranked[0]["district"] if ranked else state.get("target_district", "서교동")
+    top_3 = [r["district"] for r in ranked[1:4]]
 
     # winner + top_3 + 사용자 선택 동의 실제 공실 좌표 조회
     target_district = state.get("target_district", winner)

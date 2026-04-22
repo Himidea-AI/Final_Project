@@ -7,6 +7,7 @@ type Tab = 'legal' | 'ai_insights' | 'competitor_risks';
 
 interface Props {
   simResult: SimulationOutput;
+  legalOnly?: boolean;
 }
 
 const LEVEL_CLS: Record<string, { border: string; text: string }> = {
@@ -21,7 +22,7 @@ function normalizeLevel(level: string): 'HIGH' | 'MEDIUM' | 'LOW' {
   return 'MEDIUM';
 }
 
-export function InsightsGrid({ simResult }: Props) {
+export function InsightsGrid({ simResult, legalOnly }: Props) {
   const [tab, setTab] = useState<Tab>('legal');
   const [selected, setSelected] = useState<LegalRisk | null>(null);
 
@@ -31,34 +32,41 @@ export function InsightsGrid({ simResult }: Props) {
   const riskTexts = (compIntel?.key_risks ?? []) as string[];
   const aiRecommendation = simResult.ai_recommendation ?? simResult.analysis_report ?? '';
 
+  const activeTab = legalOnly ? 'legal' : tab;
+
   return (
     <section>
-      <SectionLabel label="INSIGHTS & LEGAL" subtitle="법률 리스크 · AI 인사이트 · 경쟁 리스크" />
+      <SectionLabel
+        label="INSIGHTS & LEGAL"
+        subtitle={legalOnly ? '법률 리스크' : '법률 리스크 · AI 인사이트 · 경쟁 리스크'}
+      />
 
-      <div className="mb-4 flex gap-1 border-b border-zinc-700">
-        {(
-          [
-            { key: 'legal', label: `법률 ${risks.length}` },
-            { key: 'ai_insights', label: 'AI 인사이트' },
-            { key: 'competitor_risks', label: '경쟁 리스크' },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key
-                ? 'border-amber-500 text-amber-500'
-                : 'border-transparent text-zinc-400 hover:text-zinc-100'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {!legalOnly && (
+        <div className="mb-4 flex gap-1 border-b border-zinc-700">
+          {(
+            [
+              { key: 'legal', label: `법률 ${risks.length}` },
+              { key: 'ai_insights', label: 'AI 인사이트' },
+              { key: 'competitor_risks', label: '경쟁 리스크' },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
+                tab === t.key
+                  ? 'border-amber-500 text-amber-500'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {tab === 'legal' && (
+      {activeTab === 'legal' && (
         <div className="overflow-x-auto rounded-lg border border-zinc-700 bg-zinc-800">
           {risks.length === 0 ? (
             <div className="p-6 text-center text-sm text-zinc-400">법률 리스크 데이터 없음</div>
@@ -111,7 +119,7 @@ export function InsightsGrid({ simResult }: Props) {
         </div>
       )}
 
-      {tab === 'ai_insights' && (
+      {activeTab === 'ai_insights' && (
         <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6">
           {aiRecommendation ? (
             <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-200">
@@ -123,7 +131,7 @@ export function InsightsGrid({ simResult }: Props) {
         </div>
       )}
 
-      {tab === 'competitor_risks' && (
+      {activeTab === 'competitor_risks' && (
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
             <h4 className="mb-3 text-sm font-semibold text-emerald-400">기회</h4>

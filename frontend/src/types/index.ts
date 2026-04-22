@@ -180,6 +180,17 @@ export interface SimulationOutput {
   demographic_report?: DemographicReport | null;
   // [Dashboard 15-section] 에이전트별 판단 근거 집계 (§11 UI 카드용)
   agent_attributions?: AgentAttribution[];
+  // winner + top3 전체 동 경쟁업체 좌표 목록 (멀티동 핀용)
+  all_competitor_locations?: Array<{
+    id: string;
+    place_name: string;
+    brand_name?: string;
+    lat: number;
+    lng: number;
+    distance_m?: number;
+    is_franchise?: boolean;
+    source_dong?: string;
+  }>;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
