@@ -847,52 +847,6 @@ const CHART_DATA = [
    Smart Mock — 동/업종 이름 기반 해시로 동적 결과 생성
    발표 시 다른 동을 선택하면 다른 결과가 나오도록 함
    ═══════════════════════════════════════════════════════ */
-function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function generateSmartMock(dongName: string, businessType: string) {
-  const seed = hashString(dongName + businessType);
-
-  // 매출: 2500만 ~ 5500만 (만원 단위)
-  const revenue = 2500 + (seed % 3001);
-  // 매력도: 62 ~ 96
-  const score = 62 + (seed % 35);
-  // 리스크: seed 기반 분기
-  const riskLevels = ['LOW', 'LOW', 'MEDIUM', 'LOW', 'HIGH'] as const;
-  const riskLevel = riskLevels[seed % riskLevels.length];
-
-  // 7대 지표: 각각 다른 seed offset으로 40~95 사이
-  const metricSeeds = [0, 17, 31, 47, 61, 79, 89];
-  const chartData = [
-    '유동인구',
-    '임대료',
-    '경쟁강도',
-    '매출추정',
-    '폐업률',
-    '성장성',
-    '접근성',
-  ].map((label, i) => ({
-    label,
-    value: 40 + ((seed + metricSeeds[i]) % 56),
-  }));
-
-  // AI 한 줄 평 (동 이름 포함)
-  const verdicts = [
-    `${dongName}은(는) ${businessType} 업종에 유리한 입지로, 유동인구 밀집도가 높은 상권입니다.`,
-    `${dongName} 상권은 ${businessType} 창업 시 평균 이상의 매출이 예상되는 권역입니다.`,
-    `${dongName}의 ${businessType} 시장은 경쟁이 치열하나, 타겟층 밀도가 높아 수익성이 기대됩니다.`,
-    `${dongName}은(는) ${businessType} 업종의 성장 잠재력이 높은 지역으로 분석됩니다.`,
-  ];
-  const recommendation = verdicts[seed % verdicts.length];
-
-  return { revenue, score, riskLevel, recommendation, chartData };
-}
-
 /* ═══════════════════════════════════════════════════════
    BUSINESS TYPE DATA — 시뮬레이터 입력 옵션 (Frontend Mockup)
    ⚠️ 백엔드 연동 전 디자인 전용. SimulationInput 페이로드 확장 합의 필요.
@@ -2874,22 +2828,16 @@ function SimulatorDashboard({
       setReportState('result');
     } catch (err) {
       console.error('Simulation failed:', err);
-      // mock fallback 결과는 SimulationOutput 스키마를 만족하지 않아 IntegratedReport에 넘기면 크래시
+      // [B2 수지니 요청] smart mock fallback 제거 — 성공/실패 구분 명확화.
+      // 타임아웃(600s) 또는 LangGraph 실패 시 입력 패널로 복귀 + 재시도 유도 토스트.
       setRawSimResult(null);
-      // Fallback — Smart Mock (동/업종 기반 동적 데이터)
-      const mock = generateSmartMock(selectedDongs[0] || '연남동', businessType);
-      setSimResult({
-        score: mock.score,
-        revenue: mock.revenue,
-        riskLevel: mock.riskLevel,
-        recommendation: mock.recommendation,
-        chartData: mock.chartData,
-        // mock fallback 시 분기 데이터 없음
-        quarterlyProjection: [],
-        // mock fallback 시 SHAP 데이터 없음
-        shapResult: null,
-      });
-      setReportState('result');
+      setSimResult(null);
+      setReportState('idle');
+      const msg =
+        err instanceof Error && err.message
+          ? `시뮬레이션 실패: ${err.message.slice(0, 80)} — RUN SIMULATION 을 다시 눌러 재시도해주세요.`
+          : '시뮬레이션 실패 — RUN SIMULATION 을 다시 눌러 재시도해주세요.';
+      showToast('error', msg);
     }
   }, [
     setReportState,
