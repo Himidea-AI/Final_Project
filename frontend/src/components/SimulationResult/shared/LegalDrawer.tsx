@@ -17,10 +17,10 @@ interface LegalDrawerProps {
   onClose: () => void;
 }
 
-const RISK_BADGE = {
-  HIGH: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
-  MEDIUM: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-  LOW: 'bg-green-500/10 text-green-400 border-green-500/30',
+const RISK_BADGE: Record<string, { cls: string; label: string }> = {
+  HIGH: { cls: 'bg-rose-500/10 text-rose-400 border-rose-500/30', label: '위험' },
+  MEDIUM: { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30', label: '주의' },
+  LOW: { cls: 'bg-green-500/10 text-green-400 border-green-500/30', label: '안전' },
 };
 
 export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
@@ -62,9 +62,9 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
                   {risk.type}
                 </h2>
                 <span
-                  className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-xs font-bold ${RISK_BADGE[risk.risk_level]}`}
+                  className={`mt-2 inline-block rounded-full border px-2 py-0.5 text-xs font-bold ${RISK_BADGE[risk.risk_level]?.cls ?? ''}`}
                 >
-                  ● {risk.risk_level}
+                  ● {RISK_BADGE[risk.risk_level]?.label ?? risk.risk_level}
                 </span>
               </div>
               <button
@@ -77,21 +77,12 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             </div>
 
             <div className="p-6 space-y-6">
-              {risk.articles && risk.articles.length > 0 && (
+              {risk.recommendation && (
                 <section>
                   <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-400 mb-3">
-                    조항 본문
+                    AI 권고
                   </h3>
-                  <div className="space-y-3">
-                    {risk.articles.map((a, i) => (
-                      <div key={i} className="border-l-2 border-amber-500 pl-4 py-2">
-                        <div className="text-sm font-semibold text-amber-500">{a.article_ref}</div>
-                        <div className="mt-1 text-sm text-zinc-300 whitespace-pre-line leading-relaxed">
-                          {a.content}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-sm text-zinc-300 leading-relaxed">{risk.recommendation}</p>
                 </section>
               )}
 
@@ -119,12 +110,21 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
                 </section>
               )}
 
-              {risk.recommendation && (
+              {risk.articles && risk.articles.length > 0 && (
                 <section>
                   <h3 className="text-sm font-semibold uppercase tracking-widest text-zinc-400 mb-3">
-                    AI 권고
+                    조항 본문
                   </h3>
-                  <p className="text-sm text-zinc-300 leading-relaxed">{risk.recommendation}</p>
+                  <div className="space-y-3">
+                    {risk.articles.map((a, i) => (
+                      <div key={i} className="border-l-2 border-amber-500 pl-4 py-2">
+                        <div className="text-sm font-semibold text-amber-500">{a.article_ref}</div>
+                        <div className="mt-1 text-sm text-zinc-300 whitespace-pre-line leading-relaxed">
+                          {a.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </section>
               )}
             </div>

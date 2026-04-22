@@ -27,10 +27,9 @@ class PostgresClient:
         self.engine = create_async_engine(
             async_url,
             echo=False,
-            # Redis 캐시 없을 때도 parallel_analysis 7 agent × 16동 DB 호출을 감당하려면
-            # 약 10~15 동시 커넥션 필요. RDS max_connections=81 내에서 2~3명 동시 작업 가능한 수준으로 조정.
-            pool_size=5,
-            max_overflow=10,
+            # 7개 에이전트 병렬 실행 시 동시 DB 접근 대응 (RDS max_connections=81 제약)
+            pool_size=10,
+            max_overflow=15,
             pool_timeout=30,
             pool_recycle=3600,
             pool_pre_ping=True,

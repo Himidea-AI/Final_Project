@@ -9,10 +9,27 @@ interface Props {
   simResult: SimulationOutput;
 }
 
-const LEVEL_CLS: Record<string, { border: string; text: string }> = {
-  HIGH: { border: 'border-l-4 border-rose-500', text: 'text-rose-400' },
-  MEDIUM: { border: 'border-l-4 border-yellow-500', text: 'text-yellow-400' },
-  LOW: { border: 'border-l-4 border-emerald-500', text: 'text-emerald-400' },
+const LEGAL_TYPE_LABEL: Record<string, string> = {
+  franchise_law: '가맹사업법',
+  commercial_lease_law: '상가임대차보호법',
+  zoning_regulation: '용도지역 규제',
+  food_hygiene: '식품위생법',
+  safety_regulation: '안전규정',
+  building_law: '건축법',
+  fire_safety_law: '소방안전법',
+  labor_law: '근로기준법',
+  vat_law: '부가가치세법',
+  privacy_law: '개인정보보호법',
+  accessibility_law: '장애인편의법',
+  sewage_law: '하수도법',
+  fair_trade_law: '공정거래법',
+  ftc_franchise: '공정위 정보공개서',
+};
+
+const LEVEL_CLS: Record<string, { border: string; text: string; label: string }> = {
+  HIGH: { border: 'border-l-4 border-rose-500', text: 'text-rose-400', label: '위험' },
+  MEDIUM: { border: 'border-l-4 border-yellow-500', text: 'text-yellow-400', label: '주의' },
+  LOW: { border: 'border-l-4 border-emerald-500', text: 'text-emerald-400', label: '안전' },
 };
 
 function normalizeLevel(level: string): 'HIGH' | 'MEDIUM' | 'LOW' {
@@ -93,8 +110,10 @@ export function InsightsGrid({ simResult }: Props) {
                       className={`cursor-pointer border-b border-zinc-700/50 last:border-b-0 hover:bg-zinc-700/50 ${cls.border}`}
                     >
                       <td className="p-3 font-mono text-xs text-zinc-400">{i + 1}</td>
-                      <td className="p-3 text-sm font-semibold text-zinc-100">{r.type}</td>
-                      <td className={`p-3 text-xs font-bold ${cls.text}`}>● {lvl}</td>
+                      <td className="p-3 text-sm font-semibold text-zinc-100">
+                        {LEGAL_TYPE_LABEL[r.type] || r.type}
+                      </td>
+                      <td className={`p-3 text-xs font-bold ${cls.text}`}>● {cls.label}</td>
                       <td className="p-3 text-right text-sm text-zinc-300">
                         {r.articles?.length ?? 0}
                       </td>
@@ -156,7 +175,7 @@ export function InsightsGrid({ simResult }: Props) {
         risk={
           selected
             ? {
-                type: selected.type,
+                type: LEGAL_TYPE_LABEL[selected.type] || selected.type,
                 risk_level: normalizeLevel(selected.risk_level),
                 articles: selected.articles,
                 checklist: selected.checklist,

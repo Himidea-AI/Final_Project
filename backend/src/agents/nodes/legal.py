@@ -501,7 +501,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # Batch A: RAG 7개 + FTC (DB 커넥션 최대 7개 동시 사용)
     _batch_a = await asyncio.gather(
         retriever.search(franchise_q, top_k=10, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),
-        retriever.search(lease_q, top_k=10, source_filter=LegalDocumentRetriever.LEASE_LAW_SOURCES),
+        retriever.search(lease_q, top_k=10, source_filter=LegalDocumentRetriever.LEASE_LAW_STRICT_SOURCES),
         retriever.search(food_q, top_k=10, source_filter=LegalDocumentRetriever.FOOD_HYGIENE_SOURCES),
         retriever.search(safety_q, top_k=10, source_filter=LegalDocumentRetriever.SAFETY_SOURCES),
         retriever.search(summary_q, top_k=10),
@@ -670,24 +670,63 @@ async def _run_legal_pipeline(state: dict) -> dict:
     _valid_art_re = _re.compile(r"^제\d+조(?:의\d+)?\s*[\(（]")
     _art_title_re = _re.compile(r"^(제\d+조(?:의\d+)?)\s*[\(（]([^)）]+)[\)）]")
 
+    # "다음과 같다" 류 — 첫 문장만으로는 내용 파악 불가, 후속 항/호를 포함해야 함
+    _INCOMPLETE_ENDINGS = _re.compile(r"다음과 같다|다음 각 호와 같다|다음 각 호의|아래와 같다")
+    # ① ② 등 항 번호 패턴
+    _HANG_PATTERN = _re.compile(r"[①-⑳]\s*")
+
     def _summarize_article(art: str, full_text: str) -> str:
-        """조문 전문에서 '제목 — 핵심 의무/규정' 한 줄 요약을 추출합니다."""
+        """조문 전문에서 '제목 — 핵심 의무/규정' 요약을 추출합니다."""
         m = _art_title_re.match(full_text.strip())
         title = m.group(2) if m else ""
         rest = full_text[m.end() :].strip() if m else full_text.strip()
-        # 첫 번째 완전한 문장 추출 (다. / 한다. 등으로 끝나는)
+        flat = rest.replace("\n", " ")
+
+        # 본문이 너무 짧으면 (제목 + ① 만 있는 경우) 전문 그대로 반환
+        if len(flat) < 10:
+            return f"{title}" if title else full_text.strip()[:100]
+
+        # 첫 번째 완전한 문장 추출
         sent_match = _re.search(
             r"(.+?(?:한다|된다|있다|이다|않다|둔다|같다|아니한다|수 있다|하여야 한다|받아야 한다)\.)",
-            rest.replace("\n", " "),
+            flat,
         )
         if sent_match:
             key_point = sent_match.group(1).strip()
-            # 너무 길면 잘라서
-            if len(key_point) > 120:
-                key_point = key_point[:117] + "…"
+
+            # "다음과 같다"로 끝나면 → 후속 항/호 번호 목록 추가
+            if _INCOMPLETE_ENDINGS.search(key_point):
+                after = flat[sent_match.end() :].strip()
+                # 번호 항목(1. 2. 가. 나. 등) 추출 — 최대 5개
+                items = _re.findall(r"(\d+\.\s*[^\d]{5,60}?)(?=\d+\.|$)", after)
+                if not items:
+                    items = _re.findall(r"([가-힣]\.\s*[^\n]{5,60}?)(?=[가-힣]\.|$)", after)
+                if items:
+                    item_text = " ".join(f"[{it.strip()[:50]}]" for it in items[:5])
+                    key_point = f"{key_point} {item_text}"
+
+            # ① 에서 끊기는 경우 → 해당 항 내용까지 포함
+            elif key_point.rstrip().endswith("①") or len(key_point) < 20:
+                after = flat[sent_match.end() :].strip() if sent_match else flat[len(key_point) :].strip()
+                # ② 이전까지 또는 최대 200자 가져오기
+                next_hang = _re.search(r"[②-⑳]", after)
+                extend = after[: next_hang.start()].strip() if next_hang else after[:200].strip()
+                if extend:
+                    key_point = f"{key_point} {extend}"
+
+            if len(key_point) > 300:
+                key_point = key_point[:297] + "…"
         else:
-            key_point = rest[:100].replace("\n", " ").strip()
-            if len(rest) > 100:
+            # 완전한 문장을 못 찾은 경우 — ① 이후 내용까지 포함
+            hang_match = _HANG_PATTERN.search(flat)
+            if hang_match:
+                after_hang = flat[hang_match.end() :].strip()
+                # ② 이전까지 또는 최대 200자
+                next_hang = _re.search(r"[②-⑳]", after_hang)
+                key_point = after_hang[: next_hang.start()].strip() if next_hang else after_hang[:200].strip()
+            else:
+                key_point = flat[:200].strip()
+            if len(flat) > len(key_point):
                 key_point += "…"
         return f"{title} — {key_point}" if title else key_point
 
