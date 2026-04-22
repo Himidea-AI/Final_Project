@@ -18,9 +18,9 @@ interface LegalDrawerProps {
 }
 
 const RISK_BADGE: Record<string, { cls: string; label: string }> = {
-  HIGH: { cls: 'bg-rose-500/10 text-rose-400 border-rose-500/30', label: '위험' },
-  MEDIUM: { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30', label: '주의' },
-  LOW: { cls: 'bg-green-500/10 text-green-400 border-green-500/30', label: '안전' },
+  HIGH: { cls: 'bg-rose-500/10 text-rose-400 border-rose-500/30', label: '필수이행' },
+  MEDIUM: { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30', label: '확인필요' },
+  LOW: { cls: 'bg-green-500/10 text-green-400 border-green-500/30', label: '참고사항' },
 };
 
 export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {

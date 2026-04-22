@@ -792,10 +792,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     system_content = (
         f"{LEGAL_AGENT_SYSTEM_PROMPT}\n\n"
-        f"리스크 레벨 기준:\n"
-        f"- safe: 법률 위반 가능성 없음, 일반적 준수사항만 존재\n"
-        f"- caution: 사전 확인·준비 필요, 미이행 시 과태료·행정처분 가능\n"
-        f"- danger: 법률 위반 가능성 높음, 영업정지·허가취소·형사처벌 위험\n\n"
+        f"리스크 레벨 기준 (창업 전 관점 — 미이행 시 결과 기준으로 판정):\n"
+        f"- safe: 해당 업종/지역에 적용되지 않거나, 별도 조치 없이 준수 가능\n"
+        f"- caution: 사전 확인·서류 준비 필요, 미이행 시 과태료·시정명령 가능\n"
+        f"- danger: 미이행 시 영업신고 불가·영업정지·허가취소·형사처벌. 반드시 창업 전 완료 필수\n"
+        f"  (예: 식품위생법 영업신고, 건축법 용도변경, 소방 안전시설완비증명, 가맹사업법 정보공개서 등)\n\n"
         f"[평가 항목]\n{items_desc}\n\n"
         "12개 항목을 빠짐없이 items 리스트에 포함하세요.\n"
         "summary: 이 법률의 목적과 핵심 의무를 1~2문장으로 설명하세요.\n"
@@ -922,6 +923,19 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 _r.get("articles") or [],
                 _r.get("type", "unknown"),
             )
+
+    # 의무 법률 최소 위험도 보정 — 미이행 시 영업불가인 법률은 safe로 내려가지 않도록 강제
+    _MUST_CAUTION = {"franchise_law", "commercial_lease_law", "vat_law", "privacy_law", "fair_trade_law"}
+    _MUST_DANGER = {"food_hygiene", "building_law", "fire_safety_law", "labor_law", "safety_regulation"}
+    for _r in risks:
+        if not isinstance(_r, dict):
+            continue
+        rtype = _r.get("type", "")
+        level = _r.get("level", "")
+        if rtype in _MUST_DANGER and level != "danger":
+            _r["level"] = "danger"
+        elif rtype in _MUST_CAUTION and level == "safe":
+            _r["level"] = "caution"
 
     # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe
     levels = [r.get("level", "caution") for r in risks if isinstance(r, dict)]

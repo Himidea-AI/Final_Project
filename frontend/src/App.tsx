@@ -4906,7 +4906,7 @@ function SimulatorDashboard({
                                     safety_regulation: '안전규정',
                                     building_law: '건축법',
                                     fire_safety_law: '소방안전법',
-                                    labor_law: '노동법',
+                                    labor_law: '근로기준법',
                                     vat_law: '부가가치세법',
                                     privacy_law: '개인정보보호법',
                                     accessibility_law: '장애인편의법',
@@ -4975,7 +4975,7 @@ function SimulatorDashboard({
                                               className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`}
                                             />
                                             <span className="text-[8px] font-mono uppercase tracking-wider text-[#9ca3af]">
-                                              {topSev === 'critical' ? 'CRITICAL' : 'ADVISORY'}
+                                              {topSev === 'critical' ? '필수이행' : '확인필요'}
                                             </span>
                                           </span>
                                         </div>
@@ -5001,7 +5001,7 @@ function SimulatorDashboard({
                                                   <span
                                                     className={`text-[8px] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-400/20 text-amber-400'}`}
                                                   >
-                                                    {isCritical ? '위험' : '주의'}
+                                                    {isCritical ? '필수이행' : '확인필요'}
                                                   </span>
                                                 </div>
                                                 {risk.detail && (
@@ -6141,7 +6141,7 @@ const LEGAL_TYPE_LABEL: Record<string, string> = {
   safety_regulation: '안전규정',
   building_law: '건축법',
   fire_safety_law: '소방안전법',
-  labor_law: '노동법',
+  labor_law: '근로기준법',
   vat_law: '부가가치세법',
   privacy_law: '개인정보보호법',
   accessibility_law: '장애인편의법',
@@ -6327,7 +6327,7 @@ function DetailDrawer({
                                   : 'bg-amber-400/20 text-amber-400'
                               }`}
                             >
-                              {isCritical ? '위험' : '주의'}
+                              {isCritical ? '필수이행' : '확인필요'}
                             </span>
                           </div>
                           <p className="text-xs text-[#cbd5e1] leading-relaxed whitespace-pre-wrap">
