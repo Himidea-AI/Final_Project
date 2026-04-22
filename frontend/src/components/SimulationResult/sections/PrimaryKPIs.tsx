@@ -58,13 +58,13 @@ export function PrimaryKPIs({ simResult }: Props) {
           value={`${(monthlyRevenue / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 0 })}만`}
           unit="원"
           badge={GRADE_LABEL[grade] ?? grade}
-          badgeColor="text-amber-400"
+          badgeColor="text-indigo-400"
         />
         <KpiCard
           label="임대료 적정성"
           value={rent}
           badge={rent === '—' ? '' : rent}
-          badgeColor={RENT_COLOR[rent] ?? 'text-zinc-400'}
+          badgeColor={RENT_COLOR[rent] ?? 'text-stone-400'}
         />
         <KpiCard
           label="경쟁강도"
@@ -94,11 +94,11 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, unit, badge, badgeColor }: KpiCardProps) {
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
-      <div className="text-xs text-zinc-400">{label}</div>
+    <div className="rounded-lg border border-stone-700 bg-stone-800 p-4">
+      <div className="text-xs text-stone-400">{label}</div>
       <div className="mt-2 flex items-baseline gap-1">
-        <span className="text-2xl font-bold text-zinc-100">{value}</span>
-        {unit && <span className="text-xs text-zinc-400">{unit}</span>}
+        <span className="text-2xl font-bold text-stone-100">{value}</span>
+        {unit && <span className="text-xs text-stone-400">{unit}</span>}
       </div>
       {badge && <div className={`mt-2 text-xs font-semibold ${badgeColor}`}>{badge}</div>}
     </div>

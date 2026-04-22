@@ -27,7 +27,7 @@ export default function ManagerDetail() {
   const isMaster = user?.role === 'master';
 
   if (!isLoggedIn) {
-    return <div className="p-10 text-center text-sm text-zinc-400">로그인이 필요합니다.</div>;
+    return <div className="p-10 text-center text-sm text-stone-400">로그인이 필요합니다.</div>;
   }
 
   if (!routeId) {
@@ -38,11 +38,11 @@ export default function ManagerDetail() {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 p-10 text-center">
         <div className="text-lg font-semibold text-rose-400">접근 권한이 없습니다</div>
-        <div className="text-sm text-zinc-400">본인 프로필만 조회할 수 있습니다.</div>
+        <div className="text-sm text-stone-400">본인 프로필만 조회할 수 있습니다.</div>
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mt-2 rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-700"
+          className="mt-2 rounded-md border border-stone-700 bg-stone-800 px-4 py-2 text-sm text-stone-200 hover:bg-stone-700"
         >
           돌아가기
         </button>
@@ -54,12 +54,12 @@ export default function ManagerDetail() {
   const historyAvailable = isSelf;
 
   return (
-    <div className="min-h-screen bg-[#1e1b18] pb-16 text-zinc-100">
+    <div className="min-h-screen bg-[#1e1b18] pb-16 text-stone-100">
       <div className="mx-auto max-w-5xl px-6 pt-20">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-100"
+          className="mb-4 inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-100"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           돌아가기
@@ -67,7 +67,7 @@ export default function ManagerDetail() {
 
         <Header routeId={routeId} isSelf={isSelf} />
 
-        <div className="mt-6 flex gap-1 border-b border-zinc-700">
+        <div className="mt-6 flex gap-1 border-b border-stone-700">
           {TABS.map((t) => {
             const disabled = t.key === 'history' && !historyAvailable;
             const active = tab === t.key;
@@ -80,8 +80,8 @@ export default function ManagerDetail() {
                 className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
                   active
                     ? 'border-amber-500 text-amber-500'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-100'
-                } ${disabled ? 'cursor-not-allowed opacity-40 hover:text-zinc-400' : ''}`}
+                    : 'border-transparent text-stone-400 hover:text-stone-100'
+                } ${disabled ? 'cursor-not-allowed opacity-40 hover:text-stone-400' : ''}`}
                 title={disabled ? '하위 매니저 이력 조회는 Phase 2에서 제공됩니다' : undefined}
               >
                 {t.label}
@@ -108,26 +108,26 @@ function Header({ routeId, isSelf }: { routeId: string; isSelf: boolean }) {
   const displayName = viewing?.contact_name ?? (isSelf ? '나' : `매니저 ${routeId.slice(0, 8)}`);
 
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-zinc-700 bg-zinc-800 p-5">
+    <div className="flex items-center gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-2xl">
         <UserIcon className="h-7 w-7 text-amber-400" />
       </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-zinc-100">{displayName}</h1>
+          <h1 className="text-xl font-bold text-stone-100">{displayName}</h1>
           {isSelf && (
             <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">
               본인
             </span>
           )}
           {!isSelf && (
-            <span className="rounded bg-zinc-700 px-2 py-0.5 text-[10px] font-mono text-zinc-300">
+            <span className="rounded bg-stone-700 px-2 py-0.5 text-[10px] font-mono text-stone-300">
               {routeId.slice(0, 8)}
             </span>
           )}
         </div>
         {viewing && (
-          <div className="mt-1 flex items-center gap-3 text-xs text-zinc-400">
+          <div className="mt-1 flex items-center gap-3 text-xs text-stone-400">
             <span className="flex items-center gap-1">
               <Mail className="h-3 w-3" />
               {viewing.email}
@@ -151,7 +151,7 @@ function BasicInfo({ isSelf }: { isSelf: boolean }) {
     return <Phase2Notice label="매니저 기본 정보" />;
   }
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6">
+    <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
       <div className="grid grid-cols-2 gap-4 text-sm">
         <Field label="이름" value={user.contact_name ?? '—'} />
         <Field label="이메일" value={user.email ?? '—'} />
@@ -177,10 +177,10 @@ function AssignedDistricts({ isSelf }: { isSelf: boolean }) {
   if (!isSelf) return <Phase2Notice label="담당 권역" />;
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6">
+    <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
       <Field label="담당 구" value={assignedGu ?? '미배정'} />
       <div className="mt-4">
-        <div className="text-xs uppercase tracking-widest text-zinc-400">담당 행정동</div>
+        <div className="text-xs uppercase tracking-widest text-stone-400">담당 행정동</div>
         {assignedDongs.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {assignedDongs.map((d) => (
@@ -194,7 +194,7 @@ function AssignedDistricts({ isSelf }: { isSelf: boolean }) {
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-stone-500">
             배정된 동이 없습니다. 팀장에게 권역 할당을 요청하세요.
           </p>
         )}
@@ -206,17 +206,17 @@ function AssignedDistricts({ isSelf }: { isSelf: boolean }) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-widest text-zinc-500">{label}</div>
-      <div className="mt-0.5 text-zinc-100">{value}</div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-500">{label}</div>
+      <div className="mt-0.5 text-stone-100">{value}</div>
     </div>
   );
 }
 
 function Phase2Notice({ label }: { label: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center">
-      <div className="text-sm font-semibold text-zinc-300">{label}</div>
-      <div className="mt-1 text-xs text-zinc-500">Phase 2 제공 예정</div>
+    <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center">
+      <div className="text-sm font-semibold text-stone-300">{label}</div>
+      <div className="mt-1 text-xs text-stone-500">Phase 2 제공 예정</div>
     </div>
   );
 }

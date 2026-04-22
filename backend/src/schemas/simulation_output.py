@@ -15,7 +15,6 @@ class QuarterlyProjection(BaseModel):
     confidence_upper: int = 0
 
 
-
 # 하위 호환성 유지
 MonthlyProjection = QuarterlyProjection
 
@@ -95,21 +94,21 @@ class ShapFeatureItem(BaseModel):
     """SHAP 피처별 기여도 항목"""
 
     rank: int
-    feature: str                    # 피처 영문명
-    feature_ko: str                 # 피처 한국어명
-    shap_value: float               # SHAP 값 (음수: 매출 감소 기여)
-    abs_shap: float                 # SHAP 절댓값 (중요도 크기)
-    direction: str                  # "positive" | "negative" | "neutral"
+    feature: str  # 피처 영문명
+    feature_ko: str  # 피처 한국어명
+    shap_value: float  # SHAP 값 (음수: 매출 감소 기여)
+    abs_shap: float  # SHAP 절댓값 (중요도 크기)
+    direction: str  # "positive" | "negative" | "neutral"
 
 
 class ShapResult(BaseModel):
     """TCN 모델 SHAP 분석 결과 — explain_tcn_prediction() 반환값과 동일 구조"""
 
-    feature_importance: list[ShapFeatureItem]   # 중요도 내림차순 정렬
-    base_value: float                            # SHAP expected_value (기준 예측값)
-    predicted_value: float                       # 모델 예측 매출액
-    predicted_value_unit: str = "원"             # 단위 (생존률 모델과 구별)
-    is_mock: bool                                # mock 데이터 여부
+    feature_importance: list[ShapFeatureItem]  # 중요도 내림차순 정렬
+    base_value: float  # SHAP expected_value (기준 예측값)
+    predicted_value: float  # 모델 예측 매출액
+    predicted_value_unit: str = "원"  # 단위 (생존률 모델과 구별)
+    is_mock: bool  # mock 데이터 여부
 
 
 class SimulationOutput(BaseModel):
@@ -133,3 +132,6 @@ class SimulationOutput(BaseModel):
     district_rankings: list[DistrictRanking] = Field(default_factory=list)
     # TCN SHAP 분석 결과 (없으면 None)
     shap_result: ShapResult | None = None
+    # [customer_revenue P1-C] 타겟 고객 매출 분석 — dict | None (predict.py 반환값 그대로)
+    # 키: segment_ratio, segment_sales, identified_sales, total_sales_ref, profile_summary, dimension_ratios
+    customer_segment: dict | None = None

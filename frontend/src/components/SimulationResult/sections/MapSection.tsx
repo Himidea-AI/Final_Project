@@ -9,7 +9,41 @@ interface Props {
 
 const DEFAULT_MAPO_CENTER = { lat: 37.5558, lng: 126.9193 };
 
+const DONG_COORDS: Record<string, { lat: number; lng: number }> = {
+  아현동: { lat: 37.5502, lng: 126.9594 },
+  공덕동: { lat: 37.543, lng: 126.9519 },
+  도화동: { lat: 37.5393, lng: 126.9457 },
+  용강동: { lat: 37.5382, lng: 126.9383 },
+  대흥동: { lat: 37.548, lng: 126.9437 },
+  염리동: { lat: 37.5523, lng: 126.9474 },
+  신수동: { lat: 37.5453, lng: 126.9361 },
+  서강동: { lat: 37.5493, lng: 126.9347 },
+  서교동: { lat: 37.5565, lng: 126.9239 },
+  합정동: { lat: 37.5497, lng: 126.9143 },
+  망원1동: { lat: 37.5558, lng: 126.9059 },
+  망원2동: { lat: 37.5531, lng: 126.9021 },
+  연남동: { lat: 37.5617, lng: 126.9226 },
+  성산1동: { lat: 37.5663, lng: 126.9069 },
+  성산2동: { lat: 37.5706, lng: 126.9111 },
+  상암동: { lat: 37.5789, lng: 126.8899 },
+};
+
 function buildCompetitors(simResult: SimulationOutput): Competitor[] {
+  // all_competitor_locations (winner+top3 멀티동) 우선, fallback은 winner 단일 동
+  if (simResult.all_competitor_locations?.length) {
+    return simResult.all_competitor_locations
+      .filter((s) => typeof s.lat === 'number' && typeof s.lng === 'number')
+      .slice(0, 200)
+      .map((s) => ({
+        place_name: s.place_name ?? '경쟁점',
+        lat: s.lat,
+        lng: s.lng,
+        distance_m: s.distance_m,
+        is_franchise: s.is_franchise ?? false,
+        brand_name: s.brand_name ?? null,
+        daily_revenue: null,
+      }));
+  }
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
   const competition = compIntel?.['competition_500m'] as
     | { samples?: Array<Record<string, unknown>> }
@@ -45,6 +79,10 @@ function buildRankings(simResult: SimulationOutput): RankingEntry[] {
 }
 
 function buildCenter(simResult: SimulationOutput): { lat: number; lng: number } {
+  // winner_district 좌표 우선 → competitor_intel.target_coords → 기본 마포 중심
+  const sim = simResult as SimulationOutput & Record<string, unknown>;
+  const winner = (sim.winner_district ?? sim.target_district) as string | undefined;
+  if (winner && DONG_COORDS[winner]) return DONG_COORDS[winner];
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
   const target = compIntel?.['target_coords'] as { lat?: unknown; lng?: unknown } | undefined;
   if (target && typeof target.lat === 'number' && typeof target.lng === 'number') {
@@ -78,11 +116,8 @@ export function MapSection({ simResult }: Props) {
 
   return (
     <section>
-      <SectionLabel
-        label="MARKET MAP"
-        subtitle="마포 16동 choropleth · 500m 반경 경쟁점 · 에이전트 링"
-      />
-      <div className="relative overflow-hidden rounded-lg border border-zinc-700">
+      <SectionLabel label="MARKET MAP" subtitle="마포 16동 choropleth · 경쟁점 분포" />
+      <div className="relative overflow-hidden rounded-lg border border-stone-700">
         <MarketMap
           center={center}
           competitors={competitors}
@@ -93,41 +128,60 @@ export function MapSection({ simResult }: Props) {
         />
 
         {/* Layer 5 — 좌상단 타겟 요약 패널 */}
-        <div className="absolute left-4 top-4 z-10 max-w-xs rounded-lg border border-zinc-700 bg-zinc-900/75 p-4 backdrop-blur-xl">
-          <div className="text-[10px] uppercase tracking-widest text-zinc-400">Target</div>
-          <div className="mt-1 text-sm font-semibold text-zinc-100">{brand}</div>
-          <div className="mt-0.5 text-xs text-zinc-400">{businessType}</div>
-          <div className="mt-2 border-t border-zinc-700/60 pt-2">
-            <div className="text-xs text-amber-400">{district}</div>
-            {address !== '—' && <div className="mt-0.5 text-[11px] text-zinc-500">{address}</div>}
-            <div className="mt-1 font-mono text-[10px] text-zinc-500">
+        <div className="absolute left-4 top-4 z-10 max-w-xs rounded-lg border border-stone-700 bg-stone-900/75 p-4 backdrop-blur-xl">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Target</div>
+          <div className="mt-1 text-sm font-semibold text-stone-100">{brand}</div>
+          <div className="mt-0.5 text-xs text-stone-400">{businessType}</div>
+          <div className="mt-2 border-t border-stone-700/60 pt-2">
+            <div className="text-xs text-indigo-400">{district}</div>
+            {address !== '—' && <div className="mt-0.5 text-[11px] text-stone-500">{address}</div>}
+            <div className="mt-1 font-mono text-[10px] text-stone-500">
               {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
             </div>
           </div>
         </div>
 
         {/* Layer 6 — 좌하단 범례 패널 */}
-        <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-zinc-700 bg-zinc-900/75 p-3 backdrop-blur-xl">
-          <div className="mb-2 text-[10px] uppercase tracking-widest text-zinc-400">Legend</div>
-          <div className="space-y-1.5 text-xs text-zinc-300">
+        <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-stone-700 bg-stone-900/75 p-3 backdrop-blur-xl">
+          <div className="mb-2 text-[10px] uppercase tracking-widest text-stone-400">Legend</div>
+          <div className="space-y-1.5 text-xs text-stone-300">
             <div className="flex items-center gap-2">
-              <span className="inline-block h-3 w-3 rounded-full border border-amber-400/80 bg-amber-500/20" />
+              <span className="inline-block h-3 w-3 rounded-full border border-indigo-400/80 bg-indigo-500/20" />
               <span>
                 반경 500m · 내부{' '}
-                <span className="font-mono text-amber-400">{withinCompetitors}</span> / 총{' '}
-                <span className="font-mono text-zinc-100">{totalCompetitors}</span>
+                <span className="font-mono text-indigo-400">{withinCompetitors}</span> / 총{' '}
+                <span className="font-mono text-stone-100">{totalCompetitors}</span>
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-amber-500 shadow-[0_0_4px_rgba(245,158,11,0.6)]" />
-              <span>반경 내 경쟁점 (amber)</span>
+              <span
+                style={{
+                  width: 0,
+                  height: 0,
+                  borderLeft: '6px solid transparent',
+                  borderRight: '6px solid transparent',
+                  borderBottom: '11px solid #ef4444',
+                  display: 'inline-block',
+                }}
+              />
+              <span>반경 내 경쟁점</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full border border-white bg-zinc-500" />
-              <span>외부 경쟁점 (zinc)</span>
+              <span
+                style={{
+                  width: 0,
+                  height: 0,
+                  borderLeft: '5px solid transparent',
+                  borderRight: '5px solid transparent',
+                  borderBottom: '9px solid #ef4444',
+                  opacity: 0.45,
+                  display: 'inline-block',
+                }}
+              />
+              <span>외부 경쟁점</span>
             </div>
             {saturation && (
-              <div className="pt-1 text-[10px] text-zinc-500">포화도: {saturation}</div>
+              <div className="pt-1 text-[10px] text-stone-500">포화도: {saturation}</div>
             )}
           </div>
         </div>

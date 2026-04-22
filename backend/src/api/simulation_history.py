@@ -1,10 +1,10 @@
 """simulation_history REST API.
 
-4 엔드포인트:
-- POST   /api/simulation-history       — 신규 저장
-- GET    /api/simulation-history       — 목록 (필터)
-- GET    /api/simulation-history/{id}  — 상세
-- DELETE /api/simulation-history/{id}  — 삭제
+4 엔드포인트 (프론트는 `/api/*` 로 호출 → Vite proxy 가 `/api` 제거 후 백엔드 전달):
+- POST   /simulation-history       — 신규 저장
+- GET    /simulation-history       — 목록 (필터)
+- GET    /simulation-history/{id}  — 상세
+- DELETE /simulation-history/{id}  — 삭제
 
 권한: 본인(manager_id=토큰 sub) 이력만 R/W.
 role='manager' 또는 role='master' 모두 본인 user_id 범위로 적용.
@@ -29,7 +29,7 @@ from src.schemas.simulation_history import (
 from src.services import simulation_history_service as svc
 from src.services.jwt_auth import UserContext, get_current_user
 
-router = APIRouter(prefix="/api/simulation-history", tags=["simulation-history"])
+router = APIRouter(prefix="/simulation-history", tags=["simulation-history"])
 
 
 def _to_uuid(raw: str) -> UUID:

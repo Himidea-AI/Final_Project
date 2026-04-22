@@ -1,0 +1,393 @@
+{
+  "exact_match": {
+    "hit": 21,
+    "total": 33,
+    "accuracy_pct": 63.6
+  },
+  "llm_judge": {
+    "exact_hit": 21,
+    "llm_relevant": 22,
+    "llm_not_relevant": 14,
+    "total_returned": 52,
+    "relevance_pct": 82.7,
+    "details": [
+      {
+        "law": "가맹사업법",
+        "article": "제13조",
+        "relevant": true
+      },
+      {
+        "law": "가맹사업법",
+        "article": "제7조",
+        "relevant": true
+      },
+      {
+        "law": "상가임대차보호법",
+        "article": "제10조의3",
+        "relevant": true
+      },
+      {
+        "law": "상가임대차보호법",
+        "article": "제14조",
+        "relevant": true
+      },
+      {
+        "law": "상가임대차보호법",
+        "article": "제10조의9",
+        "relevant": false
+      },
+      {
+        "law": "상가임대차보호법",
+        "article": "제3조의2",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "article": "제83조",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "article": "제51조",
+        "relevant": false
+      },
+      {
+        "law": "건축법",
+        "article": "제70조",
+        "relevant": true
+      },
+      {
+        "law": "건축법",
+        "article": "제8조",
+        "relevant": false
+      },
+      {
+        "law": "소방시설법",
+        "article": "제12조",
+        "relevant": true
+      },
+      {
+        "law": "소방시설법",
+        "article": "제15조",
+        "relevant": true
+      },
+      {
+        "law": "소방시설법",
+        "article": "제4조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "article": "제9조",
+        "relevant": false
+      },
+      {
+        "law": "근로기준법",
+        "article": "제12조",
+        "relevant": false
+      },
+      {
+        "law": "근로기준법",
+        "article": "제6조",
+        "relevant": false
+      },
+      {
+        "law": "근로기준법",
+        "article": "제5조의2",
+        "relevant": false
+      },
+      {
+        "law": "근로기준법",
+        "article": "제10조",
+        "relevant": false
+      },
+      {
+        "law": "부가가치세법",
+        "article": "제32조",
+        "relevant": false
+      },
+      {
+        "law": "부가가치세법",
+        "article": "제39조",
+        "relevant": true
+      },
+      {
+        "law": "부가가치세법",
+        "article": "제35조",
+        "relevant": true
+      },
+      {
+        "law": "부가가치세법",
+        "article": "제33조",
+        "relevant": false
+      },
+      {
+        "law": "개인정보보호법",
+        "article": "제28조의4",
+        "relevant": true
+      },
+      {
+        "law": "개인정보보호법",
+        "article": "제35조의2",
+        "relevant": true
+      },
+      {
+        "law": "개인정보보호법",
+        "article": "제30조의2",
+        "relevant": true
+      },
+      {
+        "law": "개인정보보호법",
+        "article": "제32조의2",
+        "relevant": true
+      },
+      {
+        "law": "개인정보보호법",
+        "article": "제16조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "article": "제3조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "article": "제14조",
+        "relevant": true
+      },
+      {
+        "law": "하수도법",
+        "article": "제48조의3",
+        "relevant": false
+      },
+      {
+        "law": "하수도법",
+        "article": "제48조",
+        "relevant": false
+      },
+      {
+        "law": "하수도법",
+        "article": "제14조",
+        "relevant": false
+      },
+      {
+        "law": "하수도법",
+        "article": "제280조",
+        "relevant": false
+      },
+      {
+        "law": "공정거래법",
+        "article": "제47조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "article": "제72조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "article": "제55조",
+        "relevant": true
+      }
+    ]
+  },
+  "per_law": [
+    {
+      "law": "가맹사업법",
+      "expected": [
+        "제12조의4",
+        "제14조",
+        "제2조"
+      ],
+      "returned": [
+        "제12조의4",
+        "제2조",
+        "제14조",
+        "제13조",
+        "제7조"
+      ],
+      "hits": 3,
+      "total": 3,
+      "time_ms": 8961
+    },
+    {
+      "law": "상가임대차보호법",
+      "expected": [
+        "제10조의4",
+        "제10조",
+        "제10조의2"
+      ],
+      "returned": [
+        "제10조의3",
+        "제14조",
+        "제10조의9",
+        "제10조의4",
+        "제3조의2"
+      ],
+      "hits": 2,
+      "total": 3,
+      "time_ms": 143
+    },
+    {
+      "law": "식품위생법",
+      "expected": [
+        "제41조",
+        "제37조",
+        "제36조"
+      ],
+      "returned": [
+        "제83조",
+        "제51조"
+      ],
+      "hits": 0,
+      "total": 3,
+      "time_ms": 87
+    },
+    {
+      "law": "건축법",
+      "expected": [
+        "제2조",
+        "제19조",
+        "제11조"
+      ],
+      "returned": [
+        "제2조",
+        "제70조",
+        "제11조",
+        "제19조",
+        "제8조"
+      ],
+      "hits": 3,
+      "total": 3,
+      "time_ms": 135
+    },
+    {
+      "law": "소방시설법",
+      "expected": [
+        "제2조",
+        "제13조",
+        "제36조"
+      ],
+      "returned": [
+        "제13조",
+        "제2조",
+        "제12조",
+        "제15조",
+        "제4조"
+      ],
+      "hits": 2,
+      "total": 3,
+      "time_ms": 85
+    },
+    {
+      "law": "근로기준법",
+      "expected": [
+        "제2조",
+        "제17조",
+        "제63조"
+      ],
+      "returned": [
+        "제9조",
+        "제12조",
+        "제6조",
+        "제5조의2",
+        "제10조"
+      ],
+      "hits": 1,
+      "total": 3,
+      "time_ms": 138
+    },
+    {
+      "law": "부가가치세법",
+      "expected": [
+        "제8조",
+        "제60조",
+        "제34조"
+      ],
+      "returned": [
+        "제60조",
+        "제32조",
+        "제39조",
+        "제35조",
+        "제33조"
+      ],
+      "hits": 1,
+      "total": 3,
+      "time_ms": 143
+    },
+    {
+      "law": "개인정보보호법",
+      "expected": [
+        "제15조",
+        "제25조의2",
+        "제30조"
+      ],
+      "returned": [
+        "제28조의4",
+        "제35조의2",
+        "제30조의2",
+        "제32조의2",
+        "제16조"
+      ],
+      "hits": 2,
+      "total": 3,
+      "time_ms": 124
+    },
+    {
+      "law": "장애인편의법",
+      "expected": [
+        "제16조",
+        "제2조",
+        "제17조"
+      ],
+      "returned": [
+        "제17조",
+        "제2조",
+        "제3조",
+        "제16조",
+        "제14조"
+      ],
+      "hits": 3,
+      "total": 3,
+      "time_ms": 126
+    },
+    {
+      "law": "하수도법",
+      "expected": [
+        "제34조",
+        "제37조",
+        "제2조"
+      ],
+      "returned": [
+        "제48조의3",
+        "제48조",
+        "제37조",
+        "제14조",
+        "제280조"
+      ],
+      "hits": 2,
+      "total": 3,
+      "time_ms": 146
+    },
+    {
+      "law": "공정거래법",
+      "expected": [
+        "제45조",
+        "제40조",
+        "제2조"
+      ],
+      "returned": [
+        "제47조",
+        "제45조",
+        "제40조",
+        "제72조",
+        "제55조"
+      ],
+      "hits": 2,
+      "total": 3,
+      "time_ms": 90
+    }
+  ]
+}

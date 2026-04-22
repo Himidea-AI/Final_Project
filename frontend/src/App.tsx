@@ -69,6 +69,7 @@ import type {
   DemographicReport,
   LegalRisk,
   SimulationOutput,
+  CustomerSegment,
 } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
@@ -190,8 +191,7 @@ interface SimResult {
   }>;
 }
 
-// 기본 차트 데이터 (Backend market_report 없을 때 fallback, 하위에 선언된 CHART_DATA 참조)
-// — toSimResultViewModel 에서 참조하므로 forward declaration 방지 위해 함수 내부에서 lazy 접근.
+// toSimResultViewModel: market_report 없으면 chartData 빈 배열 → 렌더 시 empty state.
 
 /**
  * SimulationOutput (snake_case, 백엔드 직접 반환) → SimResult (camelCase, 레거시 대시보드 뷰모델) 변환.
@@ -231,7 +231,7 @@ function toSimResultViewModel(simRes: SimulationOutput): SimResult {
           { label: '성장성', value: mr.growth_potential },
           { label: '접근성', value: mr.accessibility },
         ]
-      : CHART_DATA,
+      : [],
     quarterlyProjection: simRes.quarterly_projection ?? [],
     shapResult: simRes.shap_result ?? null,
     marketReport: mr,
@@ -833,20 +833,6 @@ const DONG_DATA: Record<string, string[]> = {
   ],
 };
 
-const CHART_DATA = [
-  { label: '유동인구', value: 82 },
-  { label: '임대료', value: 45 },
-  { label: '경쟁강도', value: 68 },
-  { label: '매출추정', value: 74 },
-  { label: '폐업률', value: 9 },
-  { label: '성장성', value: 56 },
-  { label: '접근성', value: 78 },
-];
-
-/* ═══════════════════════════════════════════════════════
-   Smart Mock — 동/업종 이름 기반 해시로 동적 결과 생성
-   발표 시 다른 동을 선택하면 다른 결과가 나오도록 함
-   ═══════════════════════════════════════════════════════ */
 /* ═══════════════════════════════════════════════════════
    BUSINESS TYPE DATA — 시뮬레이터 입력 옵션 (Frontend Mockup)
    ⚠️ 백엔드 연동 전 디자인 전용. SimulationInput 페이로드 확장 합의 필요.
@@ -928,20 +914,6 @@ interface NeighborhoodRow {
   bep: string;
 }
 
-const CANNIBALIZATION_ROWS: CannRow[] = [
-  { name: '연남파크점', distance: '450m', impact: '-2.1%', status: 'Safe' },
-  { name: '홍대입구역점', distance: '820m', impact: '-0.8%', status: 'Safe' },
-  { name: '망원시장점', distance: '1.2km', impact: '0.0%', status: 'None' },
-  { name: '신촌로터리점', distance: '2.4km', impact: '0.0%', status: 'None' },
-];
-
-const NEIGHBORHOOD_ROWS: NeighborhoodRow[] = [
-  { name: '연남동', score: '87 / 100', closureRate: '18%', bep: '3.5 개월' },
-  { name: '서교동', score: '84 / 100', closureRate: '21%', bep: '4.1 개월' },
-  { name: '망원동', score: '76 / 100', closureRate: '35%', bep: '5.2 개월' },
-  { name: '합정동', score: '71 / 100', closureRate: '40%', bep: '6.0 개월' },
-];
-
 // 정렬용 값 추출 (문자열 컬럼은 그대로, 숫자 컬럼은 파싱)
 function extractSortValue(row: Record<string, string>, key: string): number | string {
   const v = row[key];
@@ -974,8 +946,9 @@ function sortRows<T extends Record<string, string>>(
 }
 
 /* ═══════════════════════════════════════════════════════
-   DRILL-DOWN DRAWER MOCK DATA (v8.0)
-   ⚠️ Frontend mockup. 백엔드 연동 시 SimulationOutput에서 직접 매핑.
+   DRILL-DOWN DRAWER — 지표별 상세 데이터 스키마
+   ⚠️ 백엔드 `/api/details/:category` 엔드포인트 대기 중.
+       실데이터 없으면 drawer 내부에 "구현 예정" empty state 노출.
    ═══════════════════════════════════════════════════════ */
 type DrawerKey =
   | 'revenue'
@@ -998,52 +971,15 @@ interface DetailDataEntry {
   warning?: string;
 }
 
-const mockDetailData: Record<string, DetailDataEntry> = {
-  revenue: {
-    title: '예상 월 매출 상세',
-    aiReasoning:
-      '유동인구 밀집도(상위 12%), 인근 동종업계 평균 매출액(2,800만) 대비 15% 초과 달성 예측. KT 통신 데이터 + 신용카드 매출 데이터 + LSTM 12개월 추세 모델 결합 분석.',
-    confidence: '95%',
-  },
-  attractiveness: {
-    title: '상권 종합 매력도 상세',
-    aiReasoning:
-      '7개 지표(유동인구·임대료·경쟁강도·매출추정·폐업률·성장성·접근성)를 가중 평균. 마포구 25개 동 중 상권 매력도 상위 8% 권역.',
-    rank: '마포구 내 상위 8%',
-    trend: '+5.2 Pts 지속 상승중',
-  },
-  traffic: {
-    title: '일일 유동인구 상세',
-    aiReasoning:
-      'KT 통신사 셀룰러 데이터 기반 시간대별 체류 인구 측정. 18-21시 피크, 점심시간(12-14시) 보조 피크. 2030 여성 비중이 평균 대비 23% 높음.',
-    peakTime: '18:00 - 21:00',
-    mainTarget: '2030 여성 (68%)',
-  },
-  cannibalization: {
-    title: '카니발리제이션 위험 상세',
-    aiReasoning:
-      '반경 500m 이내 동일 프랜차이즈 매장 진입 시 기존 매장 매출 감소율을 시뮬레이션. 거리 가중치 + 배후 세대 중첩률을 통합 산출.',
-    warning: '반경 500m 내 동일 프랜차이즈 1개점 존재 (영향도 12%)',
-  },
-  insight_legal: {
-    title: '상가임대차보호법 상세 분석',
-    aiReasoning:
-      '해당 권역 최근 3년 임대료 상승률 5.4%. 환산보증금 기준 초과 위기 매물 다수 감지. 계약 갱신 청구권 행사 시 법적 분쟁 가능성 높음. Legal Node가 14개 영역 3,775개 판례·법령 청크에서 유사 사례 검색.',
-    warning: '환산보증금 한도 초과 위기 — 갱신 청구 시 임대인 거절 사유 발생 가능',
-  },
-  insight_traffic: {
-    title: '피크 시간대 매출 집중 분석',
-    aiReasoning:
-      '유동인구 분석이 완료되면 피크 시간대 트래픽과 주요 소비층 데이터를 확인할 수 있습니다.',
-    peakTime: '분석 결과 대기 중',
-    mainTarget: '분석 결과 대기 중',
-  },
-  insight_target: {
-    title: '주요 타겟 고객층 분석',
-    aiReasoning:
-      '유동인구 분석이 완료되면 해당 지역의 주 소비층(연령·성별)과 피크타임 데이터를 확인할 수 있습니다.',
-    mainTarget: '분석 결과 대기 중',
-  },
+// 각 drawer key 의 타이틀만 유지 — 본문 내용은 실제 응답/진행중 메시지로 채움
+const DRAWER_TITLES: Record<Exclude<DrawerKey, null>, string> = {
+  revenue: '예상 월 매출 상세',
+  attractiveness: '상권 종합 매력도 상세',
+  traffic: '일일 유동인구 상세',
+  cannibalization: '카니발리제이션 위험 상세',
+  insight_legal: '법률 리스크 상세 분석',
+  insight_traffic: '피크 시간대 매출 집중 분석',
+  insight_target: '주요 타겟 고객층 분석',
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -2212,38 +2148,10 @@ function ContactPage({ onBack }: { onBack: () => void }) {
 */
 
 /* ═══════════════════════════════════════════════════════
-   Chart Mock Data + Custom Tooltip (Recharts 기반, Patch v13.0)
-   — simResult → 실 API 데이터로 교체될 임시 mock
+   Recharts Custom Tooltip — 실데이터 전용 (mock 제거)
+   일일 차트는 백엔드 시간대별 매출 API 대기 중 → empty state.
+   월간 차트는 `simResult.quarterlyProjection` 사용 (실데이터만).
    ═══════════════════════════════════════════════════════ */
-const CHART_BASE_DATE = (() => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-})();
-
-// 24H 시간대별 데이터 (today 06:00 → 익일 02:00)
-const DAILY_CHART_DATA = [
-  { time: CHART_BASE_DATE.getTime() + 6 * 3600000, revenue: 150, traffic: 120 },
-  { time: CHART_BASE_DATE.getTime() + 10 * 3600000, revenue: 480, traffic: 320 },
-  { time: CHART_BASE_DATE.getTime() + 14 * 3600000, revenue: 350, traffic: 250 },
-  { time: CHART_BASE_DATE.getTime() + 18 * 3600000, revenue: 850, traffic: 580 },
-  { time: CHART_BASE_DATE.getTime() + 22 * 3600000, revenue: 920, traffic: 450 },
-  { time: CHART_BASE_DATE.getTime() + 26 * 3600000, revenue: 200, traffic: 100 },
-];
-
-// 12M 매출 예측 (LSTM 출력 placeholder)
-const MONTHLY_CHART_DATA = Array.from({ length: 12 }).map((_, i) => {
-  const d = new Date();
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  d.setMonth(d.getMonth() + i);
-  return {
-    time: d.getTime(),
-    revenue: Math.floor(Math.random() * 500) + 500,
-    traffic: Math.floor(Math.random() * 300) + 300,
-  };
-});
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function RechartsDarkTooltip(props: any) {
   const { active, payload, label } = props;
@@ -2284,7 +2192,7 @@ function RechartsDarkTooltip(props: any) {
 /**
  * SimulatorDashboard — 시뮬레이션 분석 결과 대시보드
  * idle → loading(Progress Bar) → result(KPI + 차트 + 테이블)
- * API 실패 시 generateSmartMock() 폴백, businessType은 백엔드 연동 전 하드코딩
+ * API 실패 시 에러 토스트 + idle 복귀 (mock 폴백 제거됨 — B2 수지니 협의 결과)
  */
 function SimulatorDashboard({
   reportState,
@@ -2299,7 +2207,7 @@ function SimulatorDashboard({
   const [loadingText, setLoadingText] = useState('INITIALIZING AI ENGINE...');
   const [loadingProgress, setLoadingProgress] = useState(0);
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, brand } = useAuth();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
@@ -2317,7 +2225,10 @@ function SimulatorDashboard({
   const [dashboardMode, setDashboardMode] = useState<'data' | 'map' | 'abm'>('data');
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [selectedGu] = useState('마포구');
-  const [selectedDongs, setSelectedDongs] = useState<string[]>(() => [...DONG_DATA['마포구']]);
+  // [UX] 동 선택 1~4개 제한 — 파이프라인 성능 + 레이더 차트 가독성 한계
+  const [selectedDongs, setSelectedDongs] = useState<string[]>(() =>
+    DONG_DATA['마포구'].slice(0, 4),
+  );
   const [dongDropdownOpen, setDongDropdownOpen] = useState(false);
 
   // [Frontend Mockup] 백엔드 연동 보류 — SimulationInput 확장 후 페이로드 매핑 필요
@@ -2349,6 +2260,12 @@ function SimulatorDashboard({
   const [abmResult, setAbmResult] = useState<any>(null);
   const [abmLoading, setAbmLoading] = useState(false);
   const [abmError, setAbmError] = useState<string | null>(null);
+  // 대시보드에서 선택해 ABM 탭으로 진입한 공실 스팟 — 지도에 이 스팟만 하이라이트
+  const [abmFocusSpot, setAbmFocusSpot] = useState<{
+    lat: number;
+    lon: number;
+    label?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (reportState !== 'result' || selectedDongs.length === 0) return;
@@ -2467,29 +2384,29 @@ function SimulatorDashboard({
         traffic: Math.round(q.confidence_lower / 10000),
         confidence_upper: Math.round(q.confidence_upper / 10000),
       }))
-    : MONTHLY_CHART_DATA;
+    : [];
 
-  // 레이더 차트 7축 꼭지점 — market_report 기반 동적 계산
+  // 레이더 차트 7축 꼭지점 — market_report 기반. 없으면 null → 렌더 시 empty state.
   // 순서: 유동인구(12시) → 매출(2시) → 성장성(4시) → 폐업률(6시) → 임대료(8시) → 경쟁강도(10시) → 접근성(11시)
-  const RADAR_FALLBACK_VALUES = [82, 74, 56, 9, 45, 68, 78]; // mock fallback
   // NaN 방지: undefined/null/NaN 은 0 으로 치환 (SVG polygon cx/cy NaN 에러 방지)
   const _safeNum = (v: unknown, fallback = 0): number => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
-  const radarValues = simResult?.marketReport
+  const hasMarketReport = Boolean(simResult?.marketReport);
+  const radarValues: number[] = hasMarketReport
     ? [
-        _safeNum(simResult.marketReport.floating_population, 50),
-        _safeNum(simResult.marketReport.estimated_revenue, 50),
-        _safeNum(simResult.marketReport.growth_potential, 50),
-        simResult.marketReport.closure_rate != null
-          ? _safeNum(Math.round(simResult.marketReport.closure_rate * 100), 50)
-          : _safeNum(100 - _safeNum(simResult.marketReport.survival_rate, 50), 50),
-        _safeNum(simResult.marketReport.rent_index, 50),
-        _safeNum(simResult.marketReport.competition_intensity, 50),
-        _safeNum(simResult.marketReport.accessibility, 50),
+        _safeNum(simResult!.marketReport!.floating_population, 0),
+        _safeNum(simResult!.marketReport!.estimated_revenue, 0),
+        _safeNum(simResult!.marketReport!.growth_potential, 0),
+        simResult!.marketReport!.closure_rate != null
+          ? _safeNum(Math.round(simResult!.marketReport!.closure_rate * 100), 0)
+          : _safeNum(100 - _safeNum(simResult!.marketReport!.survival_rate, 0), 0),
+        _safeNum(simResult!.marketReport!.rent_index, 0),
+        _safeNum(simResult!.marketReport!.competition_intensity, 0),
+        _safeNum(simResult!.marketReport!.accessibility, 0),
       ]
-    : RADAR_FALLBACK_VALUES;
+    : [];
   const RADAR_LABELS = [
     '유동인구',
     '매출',
@@ -2610,14 +2527,14 @@ function SimulatorDashboard({
         [],
         ['7 Core Metrics (레이더 차트)'],
         ['항목', '점수'],
-        ...(simResult?.chartData ?? CHART_DATA).map((d) => [d.label, d.value]),
+        ...(simResult?.chartData ?? []).map((d) => [d.label, d.value]),
       ];
       const ws1 = XLSX.utils.aoa_to_sheet(summary);
       ws1['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }];
       XLSX.utils.book_append_sheet(wb, ws1, '요약');
 
-      // Sheet 2: 가맹점 간섭도 (실데이터 없으면 Mock fallback)
-      const cannRowsForExport = sortedCannRows.length > 0 ? sortedCannRows : CANNIBALIZATION_ROWS;
+      // Sheet 2: 가맹점 간섭도 (실데이터만. 없으면 헤더만 출력)
+      const cannRowsForExport = sortedCannRows;
       const cann: (string | number)[][] = [
         ['가맹점명', '거리', '예상 매출 하락', '상태'],
         ...cannRowsForExport.map((r) => [r.name, r.distance, r.impact, r.status]),
@@ -2626,9 +2543,8 @@ function SimulatorDashboard({
       ws2['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 12 }];
       XLSX.utils.book_append_sheet(wb, ws2, '가맹점 간섭도');
 
-      // Sheet 3: 행정동 비교 (실데이터 없으면 Mock fallback)
-      const neighborhoodRowsForExport =
-        sortedNeighborhoodRows.length > 0 ? sortedNeighborhoodRows : NEIGHBORHOOD_ROWS;
+      // Sheet 3: 행정동 비교 (실데이터만. 없으면 헤더만 출력)
+      const neighborhoodRowsForExport = sortedNeighborhoodRows;
       const neighborhoods: (string | number)[][] = [
         ['행정동', 'AI 점수', '폐업률', '예상 BEP'],
         ...neighborhoodRowsForExport.map((r) => [r.name, r.score, r.closureRate, r.bep]),
@@ -2749,22 +2665,33 @@ function SimulatorDashboard({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [reportState, setReportState]);
 
-  const toggleDong = useCallback((dong: string) => {
-    setSelectedDongs((prev) => {
-      if (prev.includes(dong)) {
-        if (prev.length <= 1) return prev; // 최소 1개
-        return prev.filter((d) => d !== dong);
-      }
-      return [...prev, dong];
-    });
-  }, []);
+  const MAX_DONGS = 4;
 
+  const toggleDong = useCallback(
+    (dong: string) => {
+      setSelectedDongs((prev) => {
+        if (prev.includes(dong)) {
+          if (prev.length <= 1) return prev; // 최소 1개
+          return prev.filter((d) => d !== dong);
+        }
+        if (prev.length >= MAX_DONGS) {
+          showToast('info', `동은 최대 ${MAX_DONGS}개까지 선택할 수 있습니다.`);
+          return prev;
+        }
+        return [...prev, dong];
+      });
+    },
+    [showToast],
+  );
+
+  // [UX] "전체" 버튼 → "최대 4개 채우기" 토글로 의미 변경.
+  // 4개 이미 선택 상태면 첫 1개만 남기고 해제 (all selected 의미 유지).
   const toggleAllDongs = useCallback(() => {
     const all = DONG_DATA[selectedGu];
-    if (selectedDongs.length === all.length) {
-      setSelectedDongs([all[0]]); // 전체 해제 시 첫 번째만 유지
+    if (selectedDongs.length >= MAX_DONGS) {
+      setSelectedDongs([all[0]]);
     } else {
-      setSelectedDongs([...all]);
+      setSelectedDongs(all.slice(0, MAX_DONGS));
     }
   }, [selectedGu, selectedDongs]);
 
@@ -2782,11 +2709,12 @@ function SimulatorDashboard({
     try {
       // [C1 연동] 백엔드 SimulationInput 9개 필드 전부 전송
       // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환
-      // brand_name: 로그인 유저의 company_name 사용
+      // brand_name: 브랜드 자동매핑(auth 로그인 시 ftc_brand_franchise 조회) 결과 우선,
+      //            없으면 company_name 폴백 (경쟁 분석 _resolve_industry 매핑률 향상)
       // TODO(existing_stores): 매장 관리 UI 추가 시 실제 데이터 연동 (현재는 빈 배열)
       const payload = {
         business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
-        brand_name: user?.company_name || '',
+        brand_name: brand?.brand_name || user?.company_name || '',
         target_district: selectedDongs[0] || '서교동',
         target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
         existing_stores: [],
@@ -2924,9 +2852,7 @@ function SimulatorDashboard({
                 className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
               >
                 <span className="truncate">
-                  {selectedDongs.length === DONG_DATA[selectedGu].length
-                    ? `전체 ${selectedDongs.length}개 동`
-                    : `${selectedDongs.length}개 동 선택됨`}
+                  {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
                 </span>
                 <ChevronRight
                   size={14}
@@ -2941,9 +2867,9 @@ function SimulatorDashboard({
                     onClick={toggleAllDongs}
                     className="w-full text-left px-3 py-2 text-xs font-medium border-b border-[#3a3633] transition-colors text-[#818cf8] hover:bg-[#818cf8]/10"
                   >
-                    {selectedDongs.length === DONG_DATA[selectedGu].length
-                      ? '전체 해제'
-                      : '전체 선택'}
+                    {selectedDongs.length >= MAX_DONGS
+                      ? `전체 해제 (1개만 유지)`
+                      : `최대 ${MAX_DONGS}개 채우기`}
                   </button>
                   {DONG_DATA[selectedGu].map((dong) => {
                     const checked = selectedDongs.includes(dong);
@@ -3983,6 +3909,23 @@ function SimulatorDashboard({
                                 onClick={() => setActiveDrawer('traffic')}
                                 className="flex-1 relative w-full cursor-pointer group/chart hover:bg-[#818cf8]/[0.03] rounded-lg transition-colors min-h-0"
                               >
+                                {/* empty state — 24H 시간대 분석은 백엔드 미구현, 12M 예측은 quarterly_projection 없을 때 */}
+                                {(chartView === 'daily' ||
+                                  (chartView === 'monthly' && monthlyChartData.length === 0)) && (
+                                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
+                                    <div className="text-center max-w-xs px-4">
+                                      <div className="mx-auto mb-2 h-6 w-6 animate-pulse rounded-full bg-[#3a3633]" />
+                                      <div className="text-xs font-semibold text-[#e2e8f0]">
+                                        구현 예정
+                                      </div>
+                                      <div className="mt-1 text-[10px] text-[#9ca3af] leading-relaxed">
+                                        {chartView === 'daily'
+                                          ? '시간대별 매출·유동인구 API 연동 대기 중'
+                                          : '분기 매출 예측 — 시뮬레이션 완료 후 표시됩니다'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                                 <motion.div
                                   key={`chart-reveal-${chartView}`}
                                   initial={{ clipPath: 'inset(0 100% 0 0)' }}
@@ -3992,9 +3935,7 @@ function SimulatorDashboard({
                                 >
                                   <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart
-                                      data={
-                                        chartView === 'daily' ? DAILY_CHART_DATA : monthlyChartData
-                                      }
+                                      data={chartView === 'daily' ? [] : monthlyChartData}
                                       margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
                                     >
                                       <defs>
@@ -4625,6 +4566,19 @@ function SimulatorDashboard({
                                 </p>
                               </div>
                               <div className="relative w-[180px] h-[180px] my-2">
+                                {!hasMarketReport && (
+                                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
+                                    <div className="text-center px-3">
+                                      <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-[#3a3633]" />
+                                      <div className="text-[11px] font-semibold text-[#e2e8f0]">
+                                        구현 예정
+                                      </div>
+                                      <div className="mt-0.5 text-[9px] text-[#9ca3af]">
+                                        market_report 대기
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                                 <svg
                                   viewBox="0 0 200 200"
                                   className="w-full h-full overflow-visible"
@@ -5075,16 +5029,16 @@ function SimulatorDashboard({
                                   );
 
                                   if (dangerRisks.length === 0) {
-                                    // 위험 항목 없으면 mock fallback 카드
+                                    // 위험 항목 없으면 "안전" 긍정 메시지 (mock 제거됨)
                                     return (
                                       <InsightCard
-                                        severity="critical"
+                                        severity="advisory"
                                         onClick={() => setActiveDrawer('insight_legal')}
-                                        icon={<Scale className="w-4 h-4 text-rose-500" />}
-                                        title="법률 리스크 경고 (Legal Node)"
+                                        icon={<Scale className="w-4 h-4 text-emerald-500" />}
+                                        title="법률 리스크 — 안전"
                                         desc={
                                           simResult?.recommendation ||
-                                          '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.'
+                                          '해당 권역에서 감지된 고위험 법률 이슈가 없습니다. 세부 14개 법령 체크리스트는 drawer에서 확인하세요.'
                                         }
                                       />
                                     );
@@ -5246,6 +5200,58 @@ function SimulatorDashboard({
                                   is_franchise: s.is_franchise ?? false,
                                   category: s.category,
                                 }))}
+                              onSpotClick={async (loc) => {
+                                // 공실 번호 마커 클릭 → ABM 탭 전환 + 해당 스팟만 1000 에이전트 시뮬
+                                if (!simResult || abmLoading) return;
+                                setDashboardMode('abm');
+                                setAbmFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
+                                setAbmLoading(true);
+                                setAbmError(null);
+                                setAbmResult(null);
+                                try {
+                                  const res = await fetch('/api/simulate-abm', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      target_district: loc.name,
+                                      business_type: businessType,
+                                      brand_name:
+                                        brand?.brand_name || user?.company_name || '신규 매장',
+                                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                      langgraph_result: (simResult as any)._raw ?? simResult,
+                                      n_agents: 1000,
+                                      days: 1,
+                                      spot_lat: loc.lat,
+                                      spot_lon: loc.lng,
+                                      scenario: {
+                                        weather_override: null,
+                                        date_override: null,
+                                        weekend_force: false,
+                                        rent_shock_pct: 0.0,
+                                      },
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (!res.ok) {
+                                    setAbmError(
+                                      data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`,
+                                    );
+                                  } else if (data.status === 'error') {
+                                    setAbmError(
+                                      data?.message ||
+                                        'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
+                                    );
+                                  } else {
+                                    setAbmResult(data);
+                                  }
+                                } catch (err) {
+                                  setAbmError(
+                                    `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
+                                  );
+                                } finally {
+                                  setAbmLoading(false);
+                                }
+                              }}
                             />
                           </div>
                         </div>
@@ -5258,12 +5264,16 @@ function SimulatorDashboard({
                         abmError={abmError}
                         targetDistrict={selectedDongs[0] || '서교동'}
                         vacancySpots={simResult?.vacancySpots}
+                        focusSpot={abmFocusSpot}
                         onClearResult={() => {
                           setAbmResult(null);
                           setAbmError(null);
+                          setAbmFocusSpot(null);
+                          setDashboardMode('map');
                         }}
                         onSpotClick={async (spot) => {
                           if (!simResult || abmLoading) return;
+                          setAbmFocusSpot({ lat: spot.lat, lon: spot.lon, label: spot.dong_name });
                           setAbmLoading(true);
                           setAbmError(null);
                           try {
@@ -5274,9 +5284,9 @@ function SimulatorDashboard({
                                 // 클릭한 스팟의 동을 target 으로 강제 (선택된 동과 다를 수 있음)
                                 target_district: spot.dong_name,
                                 business_type: businessType,
-                                brand_name: simResult.recommendation || '신규 스팟 시뮬',
+                                brand_name: brand?.brand_name || user?.company_name || '신규 매장',
                                 langgraph_result: (simResult as any)._raw ?? simResult,
-                                n_agents: 100,
+                                n_agents: 1000,
                                 days: 1,
                                 spot_lat: spot.lat,
                                 spot_lon: spot.lon,
@@ -5317,9 +5327,9 @@ function SimulatorDashboard({
                               body: JSON.stringify({
                                 target_district: selectedDongs[0] || '서교동',
                                 business_type: businessType,
-                                brand_name: simResult.recommendation || '신규 매장',
+                                brand_name: brand?.brand_name || user?.company_name || '신규 매장',
                                 langgraph_result: (simResult as any)._raw ?? simResult,
-                                n_agents: 100,
+                                n_agents: 1000,
                                 days: 1,
                                 scenario: {
                                   weather_override: scenario.weather_override,
@@ -5442,7 +5452,7 @@ function SimulatorDashboard({
           const res = await saveSim.save({
             client_name: clientName,
             district: selectedDongs[0] || '연남동',
-            brand_name: user?.company_name || '브랜드 미지정',
+            brand_name: brand?.brand_name || user?.company_name || '브랜드 미지정',
             business_type: businessType,
             scenario: null, // Phase 1: scenario 입력 UI 아직 없음
             simulation_result: rawSimResult,
@@ -5463,59 +5473,106 @@ function SimulatorDashboard({
       {/* [v12.0] Hidden A4 PDF Template — html2canvas 캡처용 (화면 밖) */}
       <HiddenPDFTemplate
         ref={pdfTemplateRef}
-        districtFull={`마포구 ${selectedDongs[0] || '연남동'}`}
-        stats={[
-          {
-            title: '예상 월 매출 (추정)',
-            value:
-              simResult?.revenue != null
-                ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-                : '분석 중',
-            trend: '+12.5%',
-          },
-          {
-            title: '상권 종합 매력도',
-            value: `${simResult?.score ?? 87} / 100`,
-            trend: '+5.2 Pts',
-          },
-          {
-            title: '일일 유동인구',
-            value: popData?.daily_average
-              ? `${popData.daily_average.toLocaleString()} 명`
-              : '42,105 명',
-            trend: popData?.date ?? '-2.4%',
-          },
-          {
-            title: '카니발리제이션 위험',
-            value: `${simResult?.riskLevel ?? 'Low'} (12%)`,
-            trend: '안전 권역',
-          },
-        ]}
-        cannibalizationRows={sortedCannRows.length > 0 ? sortedCannRows : CANNIBALIZATION_ROWS}
-        neighborhoodRows={
-          sortedNeighborhoodRows.length > 0 ? sortedNeighborhoodRows : NEIGHBORHOOD_ROWS
-        }
-        insights={[
-          {
-            severity: 'advisory',
-            title: '저녁 시간대 매출 집중형',
-            desc: '18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다.',
-          },
-          {
-            severity: 'critical',
-            title: '법률 리스크 경고 (Legal Node)',
-            desc:
-              simResult?.recommendation ||
-              '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.',
-          },
-          {
-            severity: 'opportunity',
-            title: '2030 여성 타겟 구역',
-            desc: 'SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가.',
-          },
-        ]}
+        districtFull={`마포구 ${rawSimResult?.winner_district || selectedDongs[0] || '연남동'}`}
+        stats={(() => {
+          const qp = rawSimResult?.quarterly_projection ?? [];
+          const q1Rev = qp[0]?.revenue;
+          const monthly = typeof q1Rev === 'number' ? Math.round(q1Rev / 3) : null;
+          const growthTrend = (() => {
+            if (qp.length < 2) return '';
+            const a = qp[0]?.revenue ?? 0;
+            const b = qp[1]?.revenue ?? 0;
+            if (!a) return '';
+            const g = ((b - a) / a) * 100;
+            return `${g >= 0 ? '+' : ''}${g.toFixed(1)}% (Q2/Q1)`;
+          })();
+          const ci = rawSimResult?.competitor_intel as Record<string, any> | null | undefined;
+          const cannImpact = ci?.cannibalization?.estimated_revenue_impact_pct;
+          const cannSig = ci?.market_entry_signal;
+          return [
+            {
+              title: '예상 월 매출 (추정)',
+              value: monthly != null ? `₩ ${monthly.toLocaleString('ko-KR')}` : '—',
+              trend: growthTrend,
+            },
+            {
+              title: '상권 종합 매력도',
+              value: simResult?.score != null ? `${Math.round(simResult.score)} / 100` : '—',
+              trend: '',
+            },
+            {
+              title: '일일 유동인구',
+              value: popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '—',
+              trend: popData?.date ? `기준 ${popData.date}` : '',
+            },
+            {
+              title: '카니발리제이션 영향',
+              value: typeof cannImpact === 'number' ? `${(cannImpact * 100).toFixed(1)}%` : '—',
+              trend: typeof cannSig === 'string' ? cannSig : '',
+            },
+          ];
+        })()}
+        cannibalizationRows={sortedCannRows}
+        neighborhoodRows={sortedNeighborhoodRows}
+        insights={(() => {
+          // 실데이터 기반 동적 조립 — 없으면 빈 배열 → PDF 페이지 4 empty state
+          const items: {
+            severity: 'critical' | 'advisory' | 'opportunity';
+            title: string;
+            desc: string;
+          }[] = [];
+          if (!rawSimResult) return items;
+
+          // critical: 고위험 법률 1건
+          const dangerRisk = (rawSimResult.legal_risks ?? []).find((r) => {
+            const lvl = String(r.risk_level).toLowerCase();
+            return lvl === 'high' || lvl === 'danger';
+          });
+          if (dangerRisk) {
+            items.push({
+              severity: 'critical',
+              title: `법률 리스크: ${dangerRisk.type || '미분류'}`,
+              desc:
+                dangerRisk.detail ||
+                dangerRisk.recommendation ||
+                '해당 법률 위반 가능성이 감지되었습니다. drawer 에서 조문·체크리스트를 확인하세요.',
+            });
+          }
+
+          // advisory: 피크 소비 시간대 (demographic_report.peak_consumption_hours)
+          const demo = rawSimResult.demographic_report;
+          const peak = demo?.peak_consumption_hours?.[0];
+          if (peak) {
+            items.push({
+              severity: 'advisory',
+              title: `피크 소비 시간대: ${peak}`,
+              desc: `유동인구가 ${peak}에 집중. 해당 시간대 메뉴 및 인력 운영 최적화 권장.`,
+            });
+          }
+
+          // opportunity: competitor_intel.key_opportunities 최상위 1건, 없으면 core_demographic 기반
+          const ci = rawSimResult.competitor_intel as Record<string, any> | null | undefined;
+          const firstOpp = ci?.key_opportunities?.[0];
+          if (typeof firstOpp === 'string' && firstOpp.length > 0) {
+            items.push({
+              severity: 'opportunity',
+              title: '경쟁 인텔 기회 요소',
+              desc: firstOpp,
+            });
+          } else if (demo?.core_demographic) {
+            const match = demo.brand_target_match_score;
+            items.push({
+              severity: 'opportunity',
+              title: `핵심 소비층: ${demo.core_demographic.age} ${demo.core_demographic.gender}`,
+              desc: `해당 타겟이 주 소비층입니다. 브랜드 매칭 점수 ${match != null ? Math.round(match) + '/100' : '—'}. ${demo.match_rationale ?? ''}`.trim(),
+            });
+          }
+
+          return items;
+        })()}
         reportDate={reportFullDate}
         savedHistoryId={savedHistoryId}
+        customerSegment={rawSimResult?.customer_segment ?? null}
       />
     </div>
   );
@@ -5584,12 +5641,12 @@ const NOTIFICATION_MOCK_ITEMS = [
 
 function GlobalLimelightNav() {
   const nav = useTransition();
-  const { isLoggedIn, user, logout } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const { showToast } = useToast();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
-  const [openDropdown, setOpenDropdown] = useState<'bell' | 'user' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'bell' | null>(null);
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
@@ -5834,50 +5891,11 @@ function GlobalLimelightNav() {
         </>
       )}
 
-      {/* 유저/워크스페이스 드롭다운 (User) */}
-      {openDropdown === 'user' && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
-          <div className="absolute top-12 right-0 w-56 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
-            <div className="px-4 py-3 border-b border-[#3a3633]">
-              <p className="text-xs font-black text-[#e2e8f0]">SPOTTER-HQ</p>
-              <p className="text-[10px] text-[#9ca3af] mt-0.5">마스터 계정 (팀장)</p>
-            </div>
-            <div className="py-1">
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  nav('/hq?tab=team');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
-              >
-                팀 및 권역 관리
-              </button>
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  nav('/hq?tab=billing');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
-              >
-                결제 및 토큰 사용량
-              </button>
-            </div>
-            <div className="border-t border-[#3a3633] py-1 mt-1">
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  logout();
-                  nav('/login');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-rose-400 hover:bg-rose-500/10 transition-colors"
-              >
-                로그아웃
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      {/*
+        User 드롭다운 제거됨 — User 아이콘이 `/hq?tab=history` 로 직행으로 바뀌면서
+        openDropdown==='user' 조건이 트리거되지 않음.
+        팀/결제 관리는 /hq 사이드바 메뉴에서, 로그아웃은 글로벌 헤더 LogoutButton 에서 접근.
+      */}
     </div>
   );
 }
@@ -5896,6 +5914,8 @@ interface HiddenPDFTemplateProps {
   reportDate: string;
   /** 저장된 이력 ID(BIGINT) — null이면 "SPTR-DRAFT-…" 표시. Saved면 "SPTR-000142" 같은 정식 번호. */
   savedHistoryId?: number | null;
+  /** customer_revenue P1-C 타겟 고객 매출 분석 — null 이면 PDF 페이지 자체 생략 */
+  customerSegment?: CustomerSegment | null;
 }
 
 // 인디고 SPOTTER 로고 SVG 경로 (Light 테마 버전 — #6366f1)
@@ -5956,10 +5976,12 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
       insights,
       reportDate,
       savedHistoryId = null,
+      customerSegment = null,
     },
     ref,
   ) => {
-    const TOTAL_PAGES = 4;
+    // customer_segment 없으면 4페이지, 있으면 5페이지
+    const TOTAL_PAGES = customerSegment ? 5 : 4;
     const pageClass = 'w-[794px] h-[1123px] p-12 bg-white text-slate-900 relative flex flex-col';
     const docId = formatDocumentId(savedHistoryId);
 
@@ -6231,27 +6253,36 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
               LangGraph Multi-Agent Analysis · 에이전트 노드별 인사이트
             </p>
 
-            <div className="space-y-4">
-              {insights.map((insight, i) => {
-                const style = severityStyle[insight.severity];
-                return (
-                  <div key={i} className={`border rounded-lg p-5 ${style.bg}`}>
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="text-[14px] font-bold text-slate-900 flex-1">
-                        {insight.title}
-                      </h3>
-                      <span className="inline-flex items-center gap-1.5 shrink-0 ml-3">
-                        <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                        <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500">
-                          {insight.severity.toUpperCase()}
+            {insights.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+                <p className="text-[12px] font-semibold text-slate-600">인사이트 데이터 없음</p>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  시뮬레이션 실행 후 법률/인구/경쟁 에이전트 결과가 준비되면 자동으로 채워집니다.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {insights.map((insight, i) => {
+                  const style = severityStyle[insight.severity];
+                  return (
+                    <div key={i} className={`border rounded-lg p-5 ${style.bg}`}>
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="text-[14px] font-bold text-slate-900 flex-1">
+                          {insight.title}
+                        </h3>
+                        <span className="inline-flex items-center gap-1.5 shrink-0 ml-3">
+                          <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                          <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500">
+                            {insight.severity.toUpperCase()}
+                          </span>
                         </span>
-                      </span>
+                      </div>
+                      <p className="text-[11px] text-slate-700 leading-relaxed">{insight.desc}</p>
                     </div>
-                    <p className="text-[11px] text-slate-700 leading-relaxed">{insight.desc}</p>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="mt-10 pt-6 border-t border-slate-200">
               <h4 className="text-[11px] font-bold text-slate-700 mb-2 uppercase tracking-wider">
@@ -6272,11 +6303,175 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
 
           <PDFPageFooter reportDate={reportDate} />
         </div>
+
+        {/* ─────────── Page 5: 타겟 고객 매출 분석 (customer_segment 있을 때만) ─────────── */}
+        {customerSegment && (
+          <div className={pageClass}>
+            <PDFPageHeader pageNumber={5} totalPages={TOTAL_PAGES} districtFull={districtFull} />
+
+            <div className="flex-1 pt-8">
+              <h2 className="text-[22px] font-black text-slate-900 mb-1">
+                05. 타겟 고객 매출 분석
+              </h2>
+              <p className="text-xs text-slate-500 mb-6">
+                Target Customer Segmentation · 연령·성별·시간대·요일 프로필별 매출 기여
+              </p>
+
+              {customerSegment.profile_summary && (
+                <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    프로필 요약
+                  </div>
+                  <p className="text-[12px] text-slate-800 leading-relaxed">
+                    {customerSegment.profile_summary}
+                  </p>
+                </div>
+              )}
+
+              {/* KPI 4종 — 금액 없으면 비율만 표시 */}
+              <div className="grid grid-cols-4 gap-3 mb-6">
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    세그먼트 비율
+                  </div>
+                  <div className="mt-1 text-[18px] font-black text-[#6366f1]">
+                    {typeof customerSegment.segment_ratio === 'number'
+                      ? `${(customerSegment.segment_ratio * 100).toFixed(2)}%`
+                      : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    타겟 매출
+                  </div>
+                  <div className="mt-1 text-[14px] font-bold text-emerald-600 font-mono">
+                    {customerSegment.segment_sales != null
+                      ? `₩${customerSegment.segment_sales.toLocaleString('ko-KR')}`
+                      : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    식별 매출
+                  </div>
+                  <div className="mt-1 text-[14px] font-bold text-sky-600 font-mono">
+                    {customerSegment.identified_sales != null
+                      ? `₩${customerSegment.identified_sales.toLocaleString('ko-KR')}`
+                      : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                    참조 월매출
+                  </div>
+                  <div className="mt-1 text-[14px] font-bold text-slate-900 font-mono">
+                    {customerSegment.total_sales_ref != null
+                      ? `₩${customerSegment.total_sales_ref.toLocaleString('ko-KR')}`
+                      : '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4개 분포 차트 — 2×2 그리드 */}
+              <div className="grid grid-cols-2 gap-4">
+                <PDFRatioChart
+                  title="연령대 분포"
+                  items={[
+                    { key: 'age_10_ratio', label: '10대' },
+                    { key: 'age_20_ratio', label: '20대' },
+                    { key: 'age_30_ratio', label: '30대' },
+                    { key: 'age_40_ratio', label: '40대' },
+                    { key: 'age_50_ratio', label: '50대' },
+                    { key: 'age_60_above_ratio', label: '60대+' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+                <PDFRatioChart
+                  title="성별 분포"
+                  items={[
+                    { key: 'male_ratio', label: '남성' },
+                    { key: 'female_ratio', label: '여성' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+                <PDFRatioChart
+                  title="시간대 분포"
+                  items={[
+                    { key: 'time_00_06_ratio', label: '심야' },
+                    { key: 'time_06_11_ratio', label: '오전' },
+                    { key: 'time_11_14_ratio', label: '점심' },
+                    { key: 'time_14_17_ratio', label: '오후' },
+                    { key: 'time_17_21_ratio', label: '저녁' },
+                    { key: 'time_21_24_ratio', label: '야간' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+                <PDFRatioChart
+                  title="요일 분포"
+                  items={[
+                    { key: 'weekday_ratio', label: '평일' },
+                    { key: 'weekend_ratio', label: '주말' },
+                  ]}
+                  ratios={customerSegment.dimension_ratios ?? {}}
+                />
+              </div>
+
+              <div className="mt-6 text-[9px] text-slate-400 font-mono">
+                Analysis · customer_revenue MLP + living_population 실측 데이터 기반
+              </div>
+            </div>
+
+            <PDFPageFooter reportDate={reportDate} />
+          </div>
+        )}
       </div>
     );
   },
 );
 HiddenPDFTemplate.displayName = 'HiddenPDFTemplate';
+
+function PDFRatioChart({
+  title,
+  items,
+  ratios,
+}: {
+  title: string;
+  items: { key: string; label: string }[];
+  ratios: Record<string, number>;
+}) {
+  const maxRatio = Math.max(
+    0.01,
+    ...items.map((it) => {
+      const v = ratios[it.key];
+      return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+    }),
+  );
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">
+        {title}
+      </div>
+      <div className="space-y-1.5">
+        {items.map((it) => {
+          const raw = ratios[it.key];
+          const v = typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
+          const width = Math.min(100, Math.round((v / maxRatio) * 100));
+          return (
+            <div key={it.key} className="flex items-center gap-2">
+              <div className="w-14 shrink-0 text-[10px] text-slate-700">{it.label}</div>
+              <div className="relative flex-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-[#6366f1]" style={{ width: `${width}%` }} />
+              </div>
+              <div className="w-12 shrink-0 text-right text-[10px] font-mono text-slate-700">
+                {(v * 100).toFixed(1)}%
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════
    DetailDrawer (v8.0) — KPI/차트 클릭 시 우측에서 슬라이드 인
@@ -6315,11 +6510,12 @@ function DetailDrawer({
   legalRisks?: LegalRisk[];
   selectedLegalType?: string | null;
 }) {
-  const baseData = drawerKey ? mockDetailData[drawerKey] : null;
+  const drawerTitle = drawerKey ? DRAWER_TITLES[drawerKey] : '';
   const selectedRisk =
     drawerKey === 'insight_legal' && selectedLegalType
       ? (legalRisks ?? []).find((r) => r.type === selectedLegalType)
       : undefined;
+  // 실 데이터만 사용. 없으면 null → drawer 내부에 "구현 예정" empty state 표시.
   const data: DetailDataEntry | null =
     drawerKey === 'insight_target' && analysisMetrics?.main_target_age
       ? {
@@ -6332,22 +6528,22 @@ function DetailDrawer({
         ? {
             title: '일일 유동인구 상세',
             aiReasoning: `${popData.dong_name ?? ''} 실측 유동인구 데이터 기반. 일평균 ${(popData.daily_average ?? 0).toLocaleString()}명, 피크 ${analysisMetrics?.peak_time ?? '미정'}.`,
-            peakTime: analysisMetrics?.peak_time ?? '18:00 - 21:00',
-            mainTarget: analysisMetrics?.main_target_age ?? '분석 결과 대기 중',
+            peakTime: analysisMetrics?.peak_time,
+            mainTarget: analysisMetrics?.main_target_age,
           }
         : drawerKey === 'insight_traffic' && analysisMetrics?.peak_time
           ? {
               title: `${analysisMetrics.peak_time} 피크 시간대 분석`,
               aiReasoning: `${analysisMetrics.peak_time} 피크 집중 상권. 주 소비층: ${analysisMetrics.main_target_age ?? '분석 결과 참조'}.`,
               peakTime: analysisMetrics.peak_time,
-              mainTarget: analysisMetrics.main_target_age ?? '분석 결과 대기 중',
+              mainTarget: analysisMetrics.main_target_age,
             }
           : drawerKey === 'insight_legal' && selectedRisk
             ? {
                 title: `${LEGAL_TYPE_LABEL[selectedRisk.type] || selectedRisk.type} 상세 분석`,
-                aiReasoning: selectedRisk.detail || baseData?.aiReasoning,
+                aiReasoning: selectedRisk.detail,
               }
-            : baseData;
+            : null;
 
   return (
     <>
@@ -6365,6 +6561,30 @@ function DetailDrawer({
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
+        {!data && drawerKey && (
+          <>
+            <div className="flex justify-between items-center p-6 border-b border-[#3a3633] shrink-0">
+              <h2 className="text-xl font-bold text-[#e2e8f0]">{drawerTitle}</h2>
+              <button
+                onClick={onClose}
+                className="p-2 text-[#9ca3af] hover:text-[#818cf8] hover:bg-[#818cf8]/10 rounded-lg transition-colors"
+                aria-label="Close drawer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 flex-1 flex items-center justify-center">
+              <div className="rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/50 p-10 text-center max-w-sm">
+                <div className="mx-auto mb-3 h-8 w-8 animate-pulse rounded-full bg-[#3a3633]" />
+                <div className="text-sm font-semibold text-[#e2e8f0]">구현 예정</div>
+                <div className="mt-2 text-xs text-[#9ca3af] leading-relaxed">
+                  지표별 drill-down 상세 분석은 백엔드 API (`/api/details`) 연동 후 제공됩니다.
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
         {data && (
           <>
             {/* Header */}
@@ -6994,7 +7214,7 @@ function DashboardPanelView({
   const revenueTrend = hasRealData ? '—' : isVariantB ? '+6.3%' : '+12.5%';
   const scoreTrend = hasRealData ? '—' : isVariantB ? '-2.1 Pts' : '+5.2 Pts';
 
-  // Radar — winner_district와 일치할 때만 marketReport 7지표 사용, 그 외엔 기존 mock 폴백
+  // Radar — winner_district와 일치할 때만 marketReport 7지표 사용 (mock 제거).
   const isWinner = !!dongName && dongName === simResult?.winnerDistrict;
   const realRadar =
     isWinner && simResult?.marketReport
@@ -7009,8 +7229,7 @@ function DashboardPanelView({
           simResult.marketReport.accessibility,
         ]
       : null;
-  const radarValues =
-    realRadar ?? (isVariantB ? [62, 81, 55, 68, 71, 58, 73] : [78, 65, 72, 87, 74, 82, 80]);
+  const radarValues: number[] = realRadar ?? [];
   const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
   const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
   const badgeColorMap = [
@@ -7132,6 +7351,17 @@ function DashboardPanelView({
       <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 flex flex-col items-center">
         <h3 className="text-xs font-bold text-white mb-3 self-start">7대 지표 분석</h3>
         <div className="relative w-[200px] h-[200px]">
+          {radarValues.length === 0 && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
+              <div className="text-center px-3">
+                <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-[#3a3633]" />
+                <div className="text-[11px] font-semibold text-[#e2e8f0]">구현 예정</div>
+                <div className="mt-0.5 text-[9px] text-[#9ca3af]">
+                  market_report · {dongName || '해당 동'} 대기
+                </div>
+              </div>
+            </div>
+          )}
           <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
             {[20, 40, 60, 80].map((r) => (
               <polygon

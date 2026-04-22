@@ -27,14 +27,14 @@ const AGENT_COLORS: Record<AgentId, string> = {
   population_analyst: 'text-emerald-400',
   legal: 'text-rose-400',
   district_ranking: 'text-sky-400',
-  synthesis: 'text-amber-400',
+  synthesis: 'text-indigo-400',
   demographic_depth: 'text-violet-400',
   trend_forecaster: 'text-cyan-400',
   competitor_intel: 'text-orange-400',
 };
 
 const KIND_BADGE: Record<AgentKind, string> = {
-  LLM: 'bg-amber-500/10 text-amber-500',
+  LLM: 'bg-indigo-500/10 text-indigo-500',
   Python: 'bg-emerald-500/10 text-emerald-500',
   Hybrid: 'bg-blue-500/10 text-blue-400',
   RAG: 'bg-rose-500/10 text-rose-400',
@@ -56,43 +56,43 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
       <button
         type="button"
         onClick={onExpand}
-        className="flex w-full items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-2 text-left hover:bg-zinc-800 transition-colors"
+        className="flex w-full items-center gap-2 rounded-md border border-stone-700 bg-stone-900/50 p-2 text-left hover:bg-stone-800 transition-colors"
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900/90 border border-white/5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-900/90 border border-white/5">
           <Icon className={`h-4 w-4 ${color}`} strokeWidth={2} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-zinc-100 truncate">
+            <span className="text-xs font-semibold text-stone-100 truncate">
               {attribution.display_name}
             </span>
             <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono ${kindCls}`}>
               {attribution.kind}
             </span>
           </div>
-          <p className="text-xs text-zinc-400 truncate">{attribution.verdict}</p>
+          <p className="text-xs text-stone-400 truncate">{attribution.verdict}</p>
         </div>
       </button>
     );
   }
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+    <div className="rounded-lg border border-stone-700 bg-stone-800 p-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-zinc-900/90 border border-white/5">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-stone-900/90 border border-white/5">
           <Icon className={`h-7 w-7 ${color}`} strokeWidth={2} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-zinc-100">{attribution.display_name}</h3>
+            <h3 className="text-sm font-semibold text-stone-100">{attribution.display_name}</h3>
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${kindCls}`}>
               {attribution.kind}
             </span>
           </div>
-          <p className="mt-2 text-sm font-semibold text-zinc-100 leading-snug">
+          <p className="mt-2 text-sm font-semibold text-stone-100 leading-snug">
             {attribution.verdict}
           </p>
-          <p className="mt-2 text-xs text-zinc-400 leading-relaxed">{attribution.reasoning}</p>
+          <p className="mt-2 text-xs text-stone-400 leading-relaxed">{attribution.reasoning}</p>
         </div>
       </div>
       {attribution.sources.length > 0 && (
@@ -100,7 +100,7 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
           {attribution.sources.map((s) => (
             <span
               key={s}
-              className="rounded bg-zinc-700 px-2 py-0.5 text-xs font-mono text-zinc-400"
+              className="rounded bg-stone-700 px-2 py-0.5 text-xs font-mono text-stone-400"
             >
               {s}
             </span>
@@ -109,13 +109,13 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
       )}
       {attribution.confidence != null && (
         <div className="mt-3">
-          <div className="flex items-center justify-between text-[10px] text-zinc-500">
+          <div className="flex items-center justify-between text-[10px] text-stone-500">
             <span>신뢰도</span>
             <span>{(attribution.confidence * 100).toFixed(0)}%</span>
           </div>
-          <div className="mt-1 h-1 rounded-full bg-zinc-700">
+          <div className="mt-1 h-1 rounded-full bg-stone-700">
             <div
-              className="h-full rounded-full bg-amber-500"
+              className="h-full rounded-full bg-indigo-500"
               style={{ width: `${attribution.confidence * 100}%` }}
             />
           </div>

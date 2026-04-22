@@ -10,8 +10,8 @@ interface SaveButtonProps {
 export function SaveButton({ onClick, disabled = false, saved = false, label }: SaveButtonProps) {
   const text = label ?? (saved ? '저장됨' : '저장');
   const cls = saved
-    ? 'bg-emerald-500 text-zinc-900 hover:bg-emerald-400'
-    : 'bg-amber-500 text-zinc-900 hover:bg-amber-400';
+    ? 'bg-emerald-500 text-stone-900 hover:bg-emerald-400'
+    : 'bg-indigo-500 text-stone-900 hover:bg-indigo-400';
   return (
     <button
       type="button"

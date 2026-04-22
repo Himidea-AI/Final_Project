@@ -308,15 +308,19 @@ def _normalize_and_rank(
     # 예산 기반 평당 허용 임대료 계산 (0이면 필터 비활성화)
     budget_per_3_3m2 = (monthly_rent_budget / max(store_area, 1)) if monthly_rent_budget > 0 else 0
 
-    def _minmax(vals: list[float | None], reverse: bool = False) -> list[float]:
+    def _minmax(vals: list[float | None], reverse: bool = False, floor: float = 0.0) -> list[float]:
         """
         None = DB 데이터 없음 → 중간값(50) 부여, 실데이터만 min-max 정규화.
         전체가 None이거나 실데이터 편차 없으면 50 반환.
+
+        floor: 최저 score 하한 (UX 가독성용). 기본 0, 예: 10 이면 최저 10, 최고 100.
+            - 정규화 결과가 0으로 떨어지면 프론트에서 "데이터 없음"처럼 보여 혼란 → 소폭 floor 부여.
         """
         real = [v for v in vals if v is not None]
         if not real:
             return [50.0] * len(vals)
         lo, hi = min(real), max(real)
+        scale = 100.0 - floor
         results = []
         for v in vals:
             if v is None:
@@ -324,13 +328,17 @@ def _normalize_and_rank(
             elif hi == lo:
                 results.append(50.0)
             else:
-                norm = (v - lo) / (hi - lo) * 100
-                results.append(100 - norm if reverse else norm)
+                raw_norm = (v - lo) / (hi - lo)  # 0.0 ~ 1.0
+                if reverse:
+                    raw_norm = 1.0 - raw_norm
+                results.append(raw_norm * scale + floor)
         return results
 
-    sales_norm = _minmax([r["sales_growth"] for r in raw])
-    pop_norm = _minmax([r["pop_growth"] for r in raw])
-    rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True)  # 낮은 임대료 = 높은 점수
+    # [FIX] pop/sales/rent 모두 floor 10 적용 — min-max 최저값이 0 으로 떨어져
+    # IndicatorGrid 에 "유동인구 0" 같은 결측처럼 보이는 문제 방지 (UX 가독성).
+    sales_norm = _minmax([r["sales_growth"] for r in raw], floor=10.0)
+    pop_norm = _minmax([r["pop_growth"] for r in raw], floor=10.0)
+    rent_norm = _minmax([r["avg_rent"] for r in raw], reverse=True, floor=10.0)  # 낮은 임대료 = 높은 점수
 
     # SEMAS 밀집도 (역방향 — 적을수록 좋음: 경쟁 낮음)
     density_vals = [r.get("semas_density") for r in raw]
@@ -438,11 +446,18 @@ async def district_ranking_node(state: AgentState) -> dict:
     monthly_rent_budget = state.get("monthly_rent_budget", 0)
     store_area = state.get("store_area", 15.0)
 
+    # 사용자 선택 동 목록 (winner 결정 범위)
+    _raw_target_dists = state.get("target_districts") or [state.get("target_district", "")]
+    _target_dists_set = set(d for d in _raw_target_dists if d)
+    # 캐시 키에 포함할 정렬된 선택 동 문자열
+    _sorted_dists_key = ",".join(sorted(_target_dists_set)) if _target_dists_set else "all"
+
     # 캐시 키 정규화 (constants.py 단일 소스)
     _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
 
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
-    cache_key = f"v3:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}"
+    # v5: target_districts를 캐시 키에 포함 — 선택 동이 다르면 별도 캐시 (v4 무효화)
+    cache_key = f"v5:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -455,7 +470,11 @@ async def district_ranking_node(state: AgentState) -> dict:
             except Exception:
                 pass
             _cached_ranked = cached_data.get("scouting_results", []) or []
-            _cached_winner = cached_data.get("winner_district", "")
+            # 캐시 히트 시 winner = 사용자 선택 동 중 점수 1위 (선택 동 없으면 전체 1위)
+            _user_ranked = [r for r in _cached_ranked if isinstance(r, dict) and r.get("district") in _target_dists_set]
+            _winner_pool = _user_ranked if _user_ranked else ([r for r in _cached_ranked if isinstance(r, dict)] or [])
+            _cached_winner = _winner_pool[0]["district"] if _winner_pool else cached_data.get("winner_district", "")
+            _cached_top_3 = [r["district"] for r in _cached_ranked if isinstance(r, dict) and r.get("district") != _cached_winner][:3]
             _cached_winner_score = 0
             if _cached_ranked:
                 _first = _cached_ranked[0] if isinstance(_cached_ranked[0], dict) else {}
@@ -473,8 +492,8 @@ async def district_ranking_node(state: AgentState) -> dict:
             _cached_analysis["district_ranking_result"] = {"agent_attribution": cached_ranking_attr}
             return {
                 "scouting_results": cached_data["scouting_results"],
-                "winner_district": cached_data["winner_district"],
-                "top_3_candidates": cached_data["top_3_candidates"],
+                "winner_district": _cached_winner,   # ranked[0] 재계산값
+                "top_3_candidates": _cached_top_3,   # ranked[1:4] 재계산값
                 "vacancy_applied": cached_data.get("vacancy_applied", False),
                 "vacancy_spots": cached_data.get("vacancy_spots", []),
                 "current_agent": "district_ranking",
@@ -525,12 +544,13 @@ async def district_ranking_node(state: AgentState) -> dict:
         business_type=business_type,
     )
 
-    target_districts = state.get("target_districts") or [state.get("target_district", "서교동")]
-    filtered = [r for r in ranked if r["district"] in target_districts]
-    if not filtered:
-        filtered = ranked  # fallback: 선택 동 데이터 없으면 전체 중 추천
-    winner = filtered[0]["district"] if filtered else state.get("target_district", "서교동")
-    top_3 = [r["district"] for r in filtered[1:4]]
+    # winner = 사용자 선택 동(_target_dists_set) 중 점수 1위
+    # 선택 동이 없거나 전체 16개 선택인 경우 전체 1위 반환
+    _user_ranked = [r for r in ranked if r.get("district") in _target_dists_set]
+    winner_row = _user_ranked[0] if _user_ranked else (ranked[0] if ranked else None)
+    winner = winner_row["district"] if winner_row else state.get("target_district", "서교동")
+    # top_3: winner 제외한 전체 랭킹 상위 3개 (추가 추천 후보)
+    top_3 = [r["district"] for r in ranked if r["district"] != winner][:3]
 
     # winner + top_3 + 사용자 선택 동의 실제 공실 좌표 조회
     target_district = state.get("target_district", winner)

@@ -13,7 +13,7 @@ export function AgentAttribution({ simResult }: Props) {
     return (
       <section>
         <SectionLabel label="AGENT ATTRIBUTION" subtitle="8 에이전트 판단 근거" />
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6 text-center text-sm text-zinc-400">
+        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 text-center text-sm text-stone-400">
           에이전트 판단 근거 데이터가 없습니다
         </div>
       </section>

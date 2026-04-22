@@ -241,7 +241,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
     def _make_competitor_attr(verdict: str, reasoning: str, confidence: float = 0.7) -> dict:
         return build_attribution(
             agent_id="competitor_intel",
-            display_name="경쟁 인텔",
+            display_name="경쟁 인텔리전스",
             kind="Hybrid",
             sources=["kakao_store", "ftc_brand_franchise", "store_quarterly"],
             verdict=verdict,
