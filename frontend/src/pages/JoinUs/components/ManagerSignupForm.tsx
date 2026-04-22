@@ -186,8 +186,8 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               workspace
                 ? 'border-emerald-500/40 text-emerald-400'
                 : verifyError
-                  ? 'border-red-500 text-indigo-400'
-                  : 'border-[#3a3633] text-indigo-400 focus:border-indigo-500'
+                  ? 'border-red-500 text-amber-400'
+                  : 'border-[#3a3633] text-amber-400 focus:border-amber-500'
             } disabled:opacity-60`}
           />
           {!workspace ? (

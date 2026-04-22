@@ -1607,7 +1607,7 @@ function AccordionGallery({
                         <span>클릭하여 시뮬레이션 시작</span>
                       </div>
                     ) : (
-                      <span className="px-2.5 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 text-[9px] font-bold tracking-wider">
+                      <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-bold tracking-wider">
                         서비스 준비 중
                       </span>
                     )}
@@ -3458,7 +3458,7 @@ function SimulatorDashboard({
                       )}
                       {simResult?.vacancyApplied === false && (
                         <span
-                          className="ml-2 px-2.5 py-0.5 bg-indigo-500/10 border border-indigo-500/40 rounded-full text-[10px] font-bold text-indigo-400 uppercase tracking-wider"
+                          className="ml-2 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/40 rounded-full text-[10px] font-bold text-amber-400 uppercase tracking-wider"
                           title="공실 DB 로드 실패 — 랭킹에 공실 페널티 미반영"
                         >
                           공실 미반영
@@ -3481,7 +3481,7 @@ function SimulatorDashboard({
                           onClick={() => setViewMode('integrated')}
                           className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
                             viewMode === 'integrated'
-                              ? 'bg-[#3a3633] text-indigo-400 shadow-sm'
+                              ? 'bg-[#3a3633] text-amber-400 shadow-sm'
                               : 'text-[#9ca3af] hover:text-white'
                           }`}
                           title="15 섹션 통합 리포트"
@@ -3545,7 +3545,7 @@ function SimulatorDashboard({
                       onClick={() => setIsSplitMode(!isSplitMode)}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold transition-all duration-300 border ${
                         isSplitMode
-                          ? 'bg-indigo-500 text-black border-indigo-500 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
+                          ? 'bg-amber-500 text-black border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
                           : 'bg-[#2c2825] text-[#9ca3af] border-[#3a3633] hover:text-white hover:bg-[#3a3633]'
                       }`}
                     >
@@ -3628,7 +3628,7 @@ function SimulatorDashboard({
                             ? 'grid-cols-1 xl:grid-cols-3'
                             : 'grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4';
                     const panelColors = [
-                      'text-indigo-500',
+                      'text-amber-500',
                       'text-emerald-500',
                       'text-sky-500',
                       'text-rose-500',
@@ -3724,12 +3724,12 @@ function SimulatorDashboard({
                           iconBg: 'bg-emerald-500/10 ring-1 ring-emerald-500/30',
                         },
                         yellow: {
-                          icon: <AlertTriangle className="h-6 w-6 text-indigo-400" />,
+                          icon: <AlertTriangle className="h-6 w-6 text-amber-400" />,
                           // [I-7] colorblind 대응 — 영문 YELLOW → 한글 '주의'
                           label: '주의',
-                          border: 'border-indigo-500/30',
-                          badge: 'bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/40',
-                          iconBg: 'bg-indigo-500/10 ring-1 ring-indigo-500/30',
+                          border: 'border-amber-500/30',
+                          badge: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
+                          iconBg: 'bg-amber-500/10 ring-1 ring-amber-500/30',
                         },
                         red: {
                           icon: <ShieldAlert className="h-6 w-6 text-rose-400" />,
@@ -4075,7 +4075,7 @@ function SimulatorDashboard({
                                 },
                                 stable: {
                                   label: '→ STABLE',
-                                  cls: 'bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/40',
+                                  cls: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40',
                                 },
                                 decline: {
                                   label: '↓ DECLINE',
@@ -4191,7 +4191,7 @@ function SimulatorDashboard({
                                   label: '진입 권장',
                                 },
                                 yellow: {
-                                  cls: 'bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/50',
+                                  cls: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/50',
                                   label: '조건부',
                                 },
                                 red: {
@@ -4312,15 +4312,15 @@ function SimulatorDashboard({
                                   )}
 
                                   {actions.length > 0 && (
-                                    <div className="mt-4 rounded-lg bg-indigo-500/10 p-3 ring-1 ring-indigo-500/30">
-                                      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-indigo-400">
-                                        <ClipboardList className="h-4 w-4 text-indigo-400" />
+                                    <div className="mt-4 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
+                                      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-400">
+                                        <ClipboardList className="h-4 w-4 text-amber-400" />
                                         <span>추천 액션</span>
                                       </div>
                                       <ul className="mt-2 space-y-1">
                                         {actions.map((a, i) => (
                                           <li key={i} className="text-xs text-[#e2e8f0]">
-                                            <span className="font-bold text-indigo-300">
+                                            <span className="font-bold text-amber-300">
                                               {i + 1}.
                                             </span>{' '}
                                             {a}
@@ -4722,8 +4722,8 @@ function SimulatorDashboard({
                                     label: '안전',
                                   },
                                   caution: {
-                                    badge: 'bg-indigo-400/20 text-indigo-300 border-indigo-400/40',
-                                    bar: 'bg-indigo-400',
+                                    badge: 'bg-amber-400/20 text-amber-300 border-amber-400/40',
+                                    bar: 'bg-amber-400',
                                     label: '주의',
                                   },
                                   danger: {
@@ -4949,12 +4949,12 @@ function SimulatorDashboard({
                                   )}
 
                                   {d.brand_target_match_score != null && (
-                                    <div className="mt-3 rounded-lg bg-indigo-500/10 p-3 ring-1 ring-indigo-500/30">
+                                    <div className="mt-3 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-500/30">
                                       <div className="flex items-baseline gap-2 flex-wrap">
-                                        <span className="text-xs uppercase tracking-wider text-indigo-300">
+                                        <span className="text-xs uppercase tracking-wider text-amber-300">
                                           브랜드 타겟 매칭
                                         </span>
-                                        <span className="text-lg font-bold text-indigo-200">
+                                        <span className="text-lg font-bold text-amber-200">
                                           {d.brand_target_match_score.toFixed(0)}/100
                                         </span>
                                       </div>
@@ -5063,7 +5063,7 @@ function SimulatorDashboard({
                                     >
                                       <div className="flex items-center gap-3">
                                         <Scale
-                                          className={`w-4 h-4 shrink-0 ${topSev === 'critical' ? 'text-rose-500' : 'text-indigo-400'}`}
+                                          className={`w-4 h-4 shrink-0 ${topSev === 'critical' ? 'text-rose-500' : 'text-amber-400'}`}
                                         />
                                         <div className="flex-1 flex items-center justify-between gap-2">
                                           <h4 className="text-[#e2e8f0] font-bold text-xs">
@@ -5071,7 +5071,7 @@ function SimulatorDashboard({
                                           </h4>
                                           <span className="inline-flex items-center gap-1 shrink-0">
                                             <span
-                                              className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-rose-500' : 'bg-indigo-400'}`}
+                                              className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`}
                                             />
                                             <span className="text-[8px] font-mono uppercase tracking-wider text-[#9ca3af]">
                                               {topSev === 'critical' ? 'CRITICAL' : 'ADVISORY'}
@@ -5090,7 +5090,7 @@ function SimulatorDashboard({
                                                 e.stopPropagation();
                                                 openLegalDrawer(risk.type);
                                               }}
-                                              className={`flex gap-2.5 pl-2.5 border-l-2 cursor-pointer rounded-r hover:bg-[#818cf8]/[0.08] transition-colors ${isCritical ? 'border-rose-500' : 'border-indigo-400'}`}
+                                              className={`flex gap-2.5 pl-2.5 border-l-2 cursor-pointer rounded-r hover:bg-[#818cf8]/[0.08] transition-colors ${isCritical ? 'border-rose-500' : 'border-amber-400'}`}
                                             >
                                               <div className="flex flex-col gap-0.5 flex-1 min-w-0 py-0.5">
                                                 <div className="flex items-center gap-1.5">
@@ -5098,7 +5098,7 @@ function SimulatorDashboard({
                                                     {TYPE_LABEL[risk.type] || risk.type}
                                                   </span>
                                                   <span
-                                                    className={`text-[8px] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-rose-500/20 text-rose-400' : 'bg-indigo-400/20 text-indigo-400'}`}
+                                                    className={`text-[8px] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-400/20 text-amber-400'}`}
                                                   >
                                                     {isCritical ? '위험' : '주의'}
                                                   </span>
@@ -5780,7 +5780,7 @@ function GlobalLimelightNav() {
                       item.type === 'critical'
                         ? 'bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40'
                         : item.type === 'warning'
-                          ? 'bg-indigo-500/10 border-indigo-500/20 group-hover:border-indigo-500/40'
+                          ? 'bg-amber-500/10 border-amber-500/20 group-hover:border-amber-500/40'
                           : 'bg-emerald-500/10 border-emerald-500/20 group-hover:border-emerald-500/40';
                     const Icon =
                       item.iconType === 'legal'
@@ -5792,7 +5792,7 @@ function GlobalLimelightNav() {
                       item.type === 'critical'
                         ? 'text-rose-500'
                         : item.type === 'warning'
-                          ? 'text-indigo-500'
+                          ? 'text-amber-500'
                           : 'text-emerald-500';
                     return (
                       <div
@@ -6504,7 +6504,7 @@ function DetailDrawer({
                               className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
                                 isCritical
                                   ? 'bg-rose-500/20 text-rose-400'
-                                  : 'bg-indigo-400/20 text-indigo-400'
+                                  : 'bg-amber-400/20 text-amber-400'
                               }`}
                             >
                               {isCritical ? '위험' : '주의'}
@@ -7043,15 +7043,15 @@ function DashboardPanelView({
       : null;
   const radarValues: number[] = realRadar ?? [];
   const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
-  const colorMap = ['text-indigo-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
+  const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
   const badgeColorMap = [
-    'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
+    'bg-amber-500/10 text-amber-500 border-amber-500/20',
     'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
     'bg-sky-500/10 text-sky-500 border-sky-500/20',
     'bg-rose-500/10 text-rose-500 border-rose-500/20',
   ];
   const panelLabels = ['기준', '비교 A', '비교 B', '비교 C'];
-  const accentColor = accentOverride || colorMap[panelIndex] || 'text-indigo-500';
+  const accentColor = accentOverride || colorMap[panelIndex] || 'text-amber-500';
   const badgeColor = badgeColorMap[panelIndex] || badgeColorMap[0];
 
   // 레이더 차트 좌표 계산
@@ -7153,7 +7153,7 @@ function DashboardPanelView({
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
           <p className="text-[10px] text-[#9ca3af] mb-1">카니발리제이션</p>
           <p className="text-lg font-black text-white">{risk}</p>
-          <p className={`text-[10px] mt-1 ${isVariantB ? 'text-indigo-400' : 'text-emerald-400'}`}>
+          <p className={`text-[10px] mt-1 ${isVariantB ? 'text-amber-400' : 'text-emerald-400'}`}>
             {isVariantB ? '주의 권역' : '안전 권역'}
           </p>
         </div>

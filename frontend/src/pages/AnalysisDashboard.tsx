@@ -36,7 +36,7 @@ const LOADING_STEPS = [
   {
     p: 65,
     m: '법률 전문가(Legal Advisor)가 상가임대차 법령 및 리스크를 검토 중입니다...',
-    icon: <ShieldCheck className="text-indigo-500" />,
+    icon: <ShieldCheck className="text-amber-500" />,
   },
   {
     p: 85,
@@ -287,7 +287,7 @@ const AnalysisDashboard: React.FC = () => {
                             risk.risk_level === 'HIGH'
                               ? 'bg-red-500 shadow-red-500/50'
                               : risk.risk_level === 'MEDIUM'
-                                ? 'bg-indigo-500 shadow-indigo-500/50'
+                                ? 'bg-amber-500 shadow-amber-500/50'
                                 : 'bg-green-500 shadow-green-500/50'
                           }`}
                         />
