@@ -474,6 +474,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     response_data = {
         "request_id": request_id,
         "target_district": target_dist,
+        "target_districts": state.get("target_districts") or [target_dist],
         "winner_district": winner_district,
         "top_3_candidates": top_3_candidates,
         "district_rankings": district_rankings,
