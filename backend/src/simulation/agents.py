@@ -129,9 +129,87 @@ class Agent:
     store_satisfaction: dict[int, float] = field(default_factory=dict)  # store_id → 0~1 만족도
     friend_visits: list[tuple[int, int]] = field(default_factory=list)  # 친구가 최근 간 (store_id, hour)
 
+    # v11 (2026-04) — 인간다움 Layer 2 (기억) / Layer 3 (내부상태) / Layer 5 (소셜)
+    # Layer 2: 장기 방문 이력 — 재방문 패턴·학습
+    visit_history: list[dict] = field(default_factory=list)
+    # [{"day": int, "hour": int, "store_id": int, "category": str, "satisfaction": float}]
+    learned_prefs: dict[str, float] = field(default_factory=dict)  # category → 0~1 학습 선호
+    blacklist: set[int] = field(default_factory=set)  # 만족도 <0.2 매장 ID
+    habit_store: dict[int, int] = field(default_factory=dict)  # hour → 자주 가는 store_id (hour 키)
+    # Layer 3: 내부 상태 — 매 tick 에 변화, decision 점수 가중
+    hunger: float = 0.0  # 0~1, 식사 후 0 리셋, 2~3시간마다 +0.3
+    fatigue: float = 0.0  # 0~1, 활동 누적, 수면(22-06)으로 리셋
+    mood: float = 0.5  # 0~1, 이벤트/날씨에 반응
+    budget_left_today: float = 0.0  # 당일 남은 예산 (post_init 에서 budget_today 복사)
+    # Layer 5: 친구 추천 receivables
+    pending_recommendations: list[dict] = field(default_factory=list)
+    # [{"store_id": int, "from_agent": int, "category": str, "strength": float}]
+
     def __post_init__(self):
         if not self.current_dong:
             self.current_dong = self.home_dong
+        # 예산 초기화
+        self.budget_left_today = self.budget_today
+
+    # -----------------------------------------------------------
+    # Layer 2: 기억 메서드
+    # -----------------------------------------------------------
+    def record_visit(self, day: int, hour: int, store_id: int, category: str, satisfaction: float) -> None:
+        """방문 기록 — visit_history append + learned_prefs 업데이트 + blacklist 체크."""
+        self.visit_history.append(
+            {
+                "day": day,
+                "hour": hour,
+                "store_id": store_id,
+                "category": category,
+                "satisfaction": round(satisfaction, 3),
+            }
+        )
+        # 카테고리 학습 (exponential moving average, α=0.3)
+        prev = self.learned_prefs.get(category, 0.5)
+        self.learned_prefs[category] = round(0.7 * prev + 0.3 * satisfaction, 3)
+        # 블랙리스트
+        if satisfaction < 0.2:
+            self.blacklist.add(store_id)
+        # 습관 (같은 hour 연속 3회 이상 동일 store)
+        recent_same = [v for v in self.visit_history[-20:] if v["hour"] == hour and v["store_id"] == store_id]
+        if len(recent_same) >= 3:
+            self.habit_store[hour] = store_id
+        # 히스토리 캡 (최근 100건만 유지)
+        if len(self.visit_history) > 100:
+            self.visit_history = self.visit_history[-100:]
+
+    def recall_satisfaction(self, store_id: int) -> float | None:
+        """해당 store 의 누적 만족도 평균 (없으면 None)."""
+        recs = [v["satisfaction"] for v in self.visit_history if v["store_id"] == store_id]
+        return sum(recs) / len(recs) if recs else None
+
+    # -----------------------------------------------------------
+    # Layer 3: 내부 상태 업데이트
+    # -----------------------------------------------------------
+    def tick_state(self, hour: int, action: str, world: "World") -> None:
+        """매 tick 끝에 호출 — hunger/fatigue/mood 진화."""
+        # Hunger: 시간당 +0.12, 식사 후 리셋 별도
+        self.hunger = min(1.0, self.hunger + 0.12)
+        # Fatigue: 활동 시 상승, 야간(22-06)에 감쇠
+        if action in ("visit", "move", "work"):
+            self.fatigue = min(1.0, self.fatigue + 0.07)
+        if hour >= 22 or hour <= 6:
+            self.fatigue = max(0.0, self.fatigue - 0.15)
+        # Mood: 날씨·최근 만족도
+        if world and world.weather == "비":
+            self.mood = max(0.0, self.mood - 0.02)
+        if self.visit_history:
+            recent = self.visit_history[-3:]
+            avg_sat = sum(v["satisfaction"] for v in recent) / len(recent)
+            self.mood = max(0.0, min(1.0, 0.9 * self.mood + 0.1 * avg_sat))
+
+    def reset_daily(self) -> None:
+        """자정 — 일일 리셋 (hunger 리셋, 예산, 방문 today 초기화)."""
+        self.hunger = 0.0
+        self.spent_today = 0.0
+        self.budget_left_today = self.budget_today
+        self.visited_today = []
 
     # -----------------------------------------------------------
     # 의사결정 라우터 - tier에 따라 다른 경로

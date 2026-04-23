@@ -6,10 +6,10 @@
 
 마포구 내 프랜차이즈 신규 출점 시뮬레이션 플랫폼. LangGraph 기반 멀티 에이전트가 상권, 인구, 경쟁, 법률 등을 분석합니다.
 
-- 아키텍처 & 디렉토리 구조: [`docs/architecture.md`](docs/architecture.md)
-- API 엔드포인트 & 스키마: [`docs/api-contract.md`](docs/api-contract.md)
-- 환경변수 & 설정 파일: [`docs/env-guide.md`](docs/env-guide.md)
-- 도메인 용어집: [`docs/glossary.md`](docs/glossary.md)
+- 아키텍처 & 디렉토리 구조: [`docs/architecture/architecture.md`](docs/architecture/architecture.md)
+- API 엔드포인트 & 스키마: [`docs/architecture/api-contract.md`](docs/architecture/api-contract.md)
+- 환경변수 & 설정 파일: [`docs/architecture/env-guide.md`](docs/architecture/env-guide.md)
+- 도메인 용어집: [`docs/architecture/glossary.md`](docs/architecture/glossary.md)
 
 ## 팀원별 담당 영역 (절대 준수)
 
