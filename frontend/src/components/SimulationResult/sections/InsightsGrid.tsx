@@ -185,7 +185,7 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
 
       {legalAgent && (
         <div className="mt-3">
-          <AgentCard attribution={legalAgent} size="compact" />
+          <AgentCard attribution={legalAgent} size="full" />
         </div>
       )}
 

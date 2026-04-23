@@ -101,7 +101,7 @@ export function TimelineForecast({ simResult }: Props) {
         </div>
       </div>
 
-      {trendAgent && <AgentCard attribution={trendAgent} size="compact" />}
+      {trendAgent && <AgentCard attribution={trendAgent} size="full" />}
     </section>
   );
 }
