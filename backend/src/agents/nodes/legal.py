@@ -119,6 +119,51 @@ def _derive_checklist_from_articles(articles: list, risk_type: str) -> list[dict
     return items
 
 
+_TYPE_TO_CATEGORY = {
+    "franchise_law": "가맹사업법",
+    "commercial_lease_law": "상가임대차보호법",
+    "food_hygiene": "식품위생법",
+    "building_law": "건축법",
+    "fire_safety_law": "소방시설법",
+    "labor_law": "근로기준법",
+    "vat_law": "부가가치세법",
+    "privacy_law": "개인정보보호법",
+    "accessibility_law": "장애인편의증진법",
+    "sewage_law": "하수도법",
+    "fair_trade_law": "공정거래법",
+}
+
+
+def _enrich_penalty_info(risks: list) -> None:
+    """법률 리스크 리스트의 recommendation에 벌칙 조문 본문을 자동 추가.
+
+    캐시/비캐시 모두에서 호출하여 벌칙 정보가 항상 포함되도록 보장.
+    이미 벌칙 정보가 붙어있으면 중복 추가하지 않음.
+    """
+    for _r in risks:
+        if not isinstance(_r, dict):
+            continue
+        rtype = _r.get("type", "")
+        cat = _TYPE_TO_CATEGORY.get(rtype, "")
+        if not cat:
+            continue
+        existing_rec = _r.get("recommendation", "")
+        if "⚖️" in existing_rec:
+            continue  # 이미 벌칙 정보가 붙어있음
+        penalty_parts = []
+        for art_item in _r.get("articles") or []:
+            art_ref = art_item.get("article_ref", "") if isinstance(art_item, dict) else ""
+            art_match = re.match(r"(제\d+조(?:의\d+)?)", art_ref)
+            if not art_match:
+                continue
+            penalty_text = _lookup_penalty(cat, art_match.group(1))
+            if penalty_text:
+                penalty_parts.append(penalty_text)
+        if penalty_parts:
+            penalty_info = "\n• ⚖️ 위반 시 제재 (법률 원문): " + " / ".join(penalty_parts)
+            _r["recommendation"] = existing_rec + penalty_info
+
+
 def _lookup_penalty(category: str, article: str) -> str | None:
     """의무 조문에 연결된 벌칙 조문 본문을 chunks.json 인덱스에서 조회.
 
@@ -507,13 +552,14 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 logger.warning(f"[legal_node] 캐시 데이터 손상 - 재계산: {cache_key}")
             else:
                 logger.info(f"[legal_node] 캐시 히트: {cache_key}")
-                # 캐시 데이터에도 checklist 필드 보강 (구 캐시 호환)
+                # 캐시 데이터에도 checklist + 벌칙 매핑 보강 (구 캐시 호환)
                 for _r in legal_risks or []:
                     if isinstance(_r, dict) and "checklist" not in _r:
                         _r["checklist"] = _derive_checklist_from_articles(
                             _r.get("articles") or [],
                             _r.get("type", "unknown"),
                         )
+                _enrich_penalty_info(legal_risks)
                 # DEBUG: 캐시된 articles가 새 dict 포맷인지 확인
                 try:
                     first_risk = legal_risks[0] if legal_risks else {}
@@ -1116,41 +1162,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
             _r["level"] = "caution"
 
     # 벌칙 조문 본문을 recommendation에 자동 추가
-    _TYPE_TO_CATEGORY = {
-        "franchise_law": "가맹사업법",
-        "commercial_lease_law": "상가임대차보호법",
-        "food_hygiene": "식품위생법",
-        "building_law": "건축법",
-        "fire_safety_law": "소방시설법",
-        "labor_law": "근로기준법",
-        "vat_law": "부가가치세법",
-        "privacy_law": "개인정보보호법",
-        "accessibility_law": "장애인편의증진법",
-        "sewage_law": "하수도법",
-        "fair_trade_law": "공정거래법",
-    }
-    for _r in risks:
-        if not isinstance(_r, dict):
-            continue
-        rtype = _r.get("type", "")
-        cat = _TYPE_TO_CATEGORY.get(rtype, "")
-        if not cat:
-            continue
-        # 이 risk의 articles에서 조문 번호 추출 → 벌칙 조회
-        penalty_parts = []
-        for art_item in _r.get("articles") or []:
-            art_ref = art_item.get("article_ref", "") if isinstance(art_item, dict) else ""
-            # "제37조" 형식 추출
-            art_match = re.match(r"(제\d+조(?:의\d+)?)", art_ref)
-            if not art_match:
-                continue
-            penalty_text = _lookup_penalty(cat, art_match.group(1))
-            if penalty_text:
-                penalty_parts.append(penalty_text)
-        if penalty_parts:
-            existing_rec = _r.get("recommendation", "")
-            penalty_info = "\n• ⚖️ 위반 시 제재 (법률 원문): " + " / ".join(penalty_parts)
-            _r["recommendation"] = existing_rec + penalty_info
+    _enrich_penalty_info(risks)
 
     # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe
     levels = [r.get("level", "caution") for r in risks if isinstance(r, dict)]
