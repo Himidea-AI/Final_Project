@@ -15,7 +15,13 @@ interface Props {
 }
 
 // scale: 백엔드 원본 단위 → 0~100 렌더 단위 변환 배수. closure_rate 만 0~1 fraction.
-const INDICATORS: Array<{ key: string; label: string; shortLabel: string; color: string; scale?: number }> = [
+const INDICATORS: Array<{
+  key: string;
+  label: string;
+  shortLabel: string;
+  color: string;
+  scale?: number;
+}> = [
   { key: 'floating_population', label: '유동인구', shortLabel: '유동', color: 'bg-sky-500' },
   { key: 'rent_index', label: '임대료 지수', shortLabel: '임대', color: 'bg-indigo-500' },
   { key: 'competition_intensity', label: '경쟁강도', shortLabel: '경쟁', color: 'bg-rose-500' },
@@ -131,9 +137,9 @@ export function IndicatorGrid({ simResult }: Props) {
 
       {(market || population || ranking) && (
         <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {market && <AgentCard attribution={market} size="compact" />}
-          {population && <AgentCard attribution={population} size="compact" />}
-          {ranking && <AgentCard attribution={ranking} size="compact" />}
+          {market && <AgentCard attribution={market} size="full" />}
+          {population && <AgentCard attribution={population} size="full" />}
+          {ranking && <AgentCard attribution={ranking} size="full" />}
         </div>
       )}
     </section>
