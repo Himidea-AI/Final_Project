@@ -43,19 +43,16 @@ SECTIONS: list[tuple[str, str]] = [
     ("01", "command-bar"),
     ("02", "headline"),
     ("03", "primary-kpis"),
-    ("04", "scorecard"),
-    ("05", "map"),
-    ("06", "indicator-grid"),
-    ("07", "quarterly-forecast"),
-    ("08", "scenarios"),
-    ("09", "shap"),
-    ("10", "timeline"),
-    ("11", "agent-attribution"),
-    ("11-5", "customer-segment"),
-    ("12", "district-rankings"),
-    ("13", "insights-grid"),
-    ("14", "decision-memo"),
-    ("15", "report-footer"),
+    ("04", "map"),
+    ("05", "indicator-grid"),
+    ("06", "quarterly-forecast"),
+    ("07", "scenarios"),
+    ("08", "shap"),
+    ("09", "timeline"),
+    ("10", "customer-segment"),
+    ("11", "district-rankings"),
+    ("12", "insights-grid"),
+    ("13", "report-footer"),
 ]
 
 FAKE_AUTH = {
@@ -146,9 +143,9 @@ def main() -> int:
             return 4
 
         try:
-            page.wait_for_selector("#section-15", state="visible", timeout=30_000)
+            page.wait_for_selector("#section-13", state="visible", timeout=30_000)
         except PwTimeout:
-            print("[WARN] #section-15 미등장 — 일부 섹션만 캡처될 수 있음")
+            print("[WARN] #section-13 미등장 — 일부 섹션만 캡처될 수 있음")
 
         # Recharts/kakao 같은 lazy 렌더를 위해 천천히 스크롤해서 viewport 통과
         print("[INFO] 페이지 하단까지 슬로우 스크롤 (lazy 렌더 트리거)")
