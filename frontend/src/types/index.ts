@@ -151,6 +151,7 @@ export interface DemographicReport {
 export interface SimulationOutput {
   request_id: string;
   target_district: string;
+  target_districts?: string[];
   analysis_report: string; // 줄글 리포트
   analysis_metrics: AnalysisMetrics; // 차트용 정량 데이터
   simulation_months: number;
