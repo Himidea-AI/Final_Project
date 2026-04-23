@@ -63,7 +63,7 @@ export function IntegratedReport({
       <div id="section-09" data-section="timeline">
         <TimelineForecast simResult={simResult} />
       </div>
-      <div id="section-12" data-section="district-rankings">
+      <div id="section-11" data-section="district-rankings">
         <DistrictRankings simResult={simResult} />
       </div>
       <div id="section-12" data-section="insights-grid">
