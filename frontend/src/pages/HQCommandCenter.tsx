@@ -2181,11 +2181,11 @@ function ManagerWorkspace() {
 }
 
 /* ───── Manager Workspace View ─────
-   내 시뮬레이션 기록 + 의뢰 목록 (백엔드 API 대기 중 — 빈 상태 + placeholder) */
+   내 시뮬레이션 기록 (HistoryList 실연동) + 의뢰 목록 (백엔드 API 대기) */
 function ManagerWorkspaceView() {
   return (
     <div className="flex flex-col gap-8">
-      {/* 내 시뮬레이션 기록 */}
+      {/* 내 시뮬레이션 기록 — simulation_history 실데이터 연동 */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
@@ -2195,20 +2195,7 @@ function ManagerWorkspaceView() {
             Recent Runs
           </span>
         </div>
-        <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-10 flex flex-col items-center justify-center text-center">
-          <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
-            <BarChart3 className="w-5 h-5 text-[#6b7280]" />
-          </div>
-          <p className="text-sm font-bold text-[#a3a3a3] mb-1">
-            아직 실행한 시뮬레이션이 없습니다.
-          </p>
-          <p className="text-xs text-[#6b7280] mb-4">
-            상단 메뉴의 SIMULATOR에서 첫 시뮬레이션을 실행해보세요.
-          </p>
-          <p className="text-[10px] font-mono text-[#818cf8]/60 uppercase tracking-wider">
-            [Backend 연동 대기 중 — IM3 Jira]
-          </p>
-        </div>
+        <HistoryList />
       </section>
 
       {/* 시뮬레이션 의뢰 목록 */}

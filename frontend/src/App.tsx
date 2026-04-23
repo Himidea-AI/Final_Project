@@ -5473,55 +5473,103 @@ function SimulatorDashboard({
       {/* [v12.0] Hidden A4 PDF Template — html2canvas 캡처용 (화면 밖) */}
       <HiddenPDFTemplate
         ref={pdfTemplateRef}
-        districtFull={`마포구 ${selectedDongs[0] || '연남동'}`}
-        stats={[
-          {
-            title: '예상 월 매출 (추정)',
-            value:
-              simResult?.revenue != null
-                ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-                : '분석 중',
-            trend: '+12.5%',
-          },
-          {
-            title: '상권 종합 매력도',
-            value: `${simResult?.score ?? 87} / 100`,
-            trend: '+5.2 Pts',
-          },
-          {
-            title: '일일 유동인구',
-            value: popData?.daily_average
-              ? `${popData.daily_average.toLocaleString()} 명`
-              : '42,105 명',
-            trend: popData?.date ?? '-2.4%',
-          },
-          {
-            title: '카니발리제이션 위험',
-            value: `${simResult?.riskLevel ?? 'Low'} (12%)`,
-            trend: '안전 권역',
-          },
-        ]}
+        districtFull={`마포구 ${rawSimResult?.winner_district || selectedDongs[0] || '연남동'}`}
+        stats={(() => {
+          const qp = rawSimResult?.quarterly_projection ?? [];
+          const q1Rev = qp[0]?.revenue;
+          const monthly = typeof q1Rev === 'number' ? Math.round(q1Rev / 3) : null;
+          const growthTrend = (() => {
+            if (qp.length < 2) return '';
+            const a = qp[0]?.revenue ?? 0;
+            const b = qp[1]?.revenue ?? 0;
+            if (!a) return '';
+            const g = ((b - a) / a) * 100;
+            return `${g >= 0 ? '+' : ''}${g.toFixed(1)}% (Q2/Q1)`;
+          })();
+          const ci = rawSimResult?.competitor_intel as Record<string, any> | null | undefined;
+          const cannImpact = ci?.cannibalization?.estimated_revenue_impact_pct;
+          const cannSig = ci?.market_entry_signal;
+          return [
+            {
+              title: '예상 월 매출 (추정)',
+              value: monthly != null ? `₩ ${monthly.toLocaleString('ko-KR')}` : '—',
+              trend: growthTrend,
+            },
+            {
+              title: '상권 종합 매력도',
+              value: simResult?.score != null ? `${Math.round(simResult.score)} / 100` : '—',
+              trend: '',
+            },
+            {
+              title: '일일 유동인구',
+              value: popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '—',
+              trend: popData?.date ? `기준 ${popData.date}` : '',
+            },
+            {
+              title: '카니발리제이션 영향',
+              value: typeof cannImpact === 'number' ? `${(cannImpact * 100).toFixed(1)}%` : '—',
+              trend: typeof cannSig === 'string' ? cannSig : '',
+            },
+          ];
+        })()}
         cannibalizationRows={sortedCannRows}
         neighborhoodRows={sortedNeighborhoodRows}
-        insights={[
-          {
-            severity: 'advisory',
-            title: '저녁 시간대 매출 집중형',
-            desc: '18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다.',
-          },
-          {
-            severity: 'critical',
-            title: '법률 리스크 경고 (Legal Node)',
-            desc:
-              simResult?.recommendation ||
-              '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.',
-          },
-          {
-            severity: 'opportunity',
-            title: '2030 여성 타겟 구역',
-            desc: 'SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가.',
-          },
-        ]}
+        insights={(() => {
+          // 실데이터 기반 동적 조립 — 없으면 빈 배열 → PDF 페이지 4 empty state
+          const items: {
+            severity: 'critical' | 'advisory' | 'opportunity';
+            title: string;
+            desc: string;
+          }[] = [];
+          if (!rawSimResult) return items;
+
+          // critical: 고위험 법률 1건
+          const dangerRisk = (rawSimResult.legal_risks ?? []).find((r) => {
+            const lvl = String(r.risk_level).toLowerCase();
+            return lvl === 'high' || lvl === 'danger';
+          });
+          if (dangerRisk) {
+            items.push({
+              severity: 'critical',
+              title: `법률 리스크: ${dangerRisk.type || '미분류'}`,
+              desc:
+                dangerRisk.detail ||
+                dangerRisk.recommendation ||
+                '해당 법률 위반 가능성이 감지되었습니다. drawer 에서 조문·체크리스트를 확인하세요.',
+            });
+          }
+
+          // advisory: 피크 소비 시간대 (demographic_report.peak_consumption_hours)
+          const demo = rawSimResult.demographic_report;
+          const peak = demo?.peak_consumption_hours?.[0];
+          if (peak) {
+            items.push({
+              severity: 'advisory',
+              title: `피크 소비 시간대: ${peak}`,
+              desc: `유동인구가 ${peak}에 집중. 해당 시간대 메뉴 및 인력 운영 최적화 권장.`,
+            });
+          }
+
+          // opportunity: competitor_intel.key_opportunities 최상위 1건, 없으면 core_demographic 기반
+          const ci = rawSimResult.competitor_intel as Record<string, any> | null | undefined;
+          const firstOpp = ci?.key_opportunities?.[0];
+          if (typeof firstOpp === 'string' && firstOpp.length > 0) {
+            items.push({
+              severity: 'opportunity',
+              title: '경쟁 인텔 기회 요소',
+              desc: firstOpp,
+            });
+          } else if (demo?.core_demographic) {
+            const match = demo.brand_target_match_score;
+            items.push({
+              severity: 'opportunity',
+              title: `핵심 소비층: ${demo.core_demographic.age} ${demo.core_demographic.gender}`,
+              desc: `해당 타겟이 주 소비층입니다. 브랜드 매칭 점수 ${match != null ? Math.round(match) + '/100' : '—'}. ${demo.match_rationale ?? ''}`.trim(),
+            });
+          }
+
+          return items;
+        })()}
         reportDate={reportFullDate}
         savedHistoryId={savedHistoryId}
         customerSegment={rawSimResult?.customer_segment ?? null}
@@ -5593,12 +5641,12 @@ const NOTIFICATION_MOCK_ITEMS = [
 
 function GlobalLimelightNav() {
   const nav = useTransition();
-  const { isLoggedIn, user, logout } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const { showToast } = useToast();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
-  const [openDropdown, setOpenDropdown] = useState<'bell' | 'user' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'bell' | null>(null);
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
@@ -5843,50 +5891,11 @@ function GlobalLimelightNav() {
         </>
       )}
 
-      {/* 유저/워크스페이스 드롭다운 (User) */}
-      {openDropdown === 'user' && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
-          <div className="absolute top-12 right-0 w-56 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40">
-            <div className="px-4 py-3 border-b border-[#3a3633]">
-              <p className="text-xs font-black text-[#e2e8f0]">SPOTTER-HQ</p>
-              <p className="text-[10px] text-[#9ca3af] mt-0.5">마스터 계정 (팀장)</p>
-            </div>
-            <div className="py-1">
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  nav('/hq?tab=team');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
-              >
-                팀 및 권역 관리
-              </button>
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  nav('/hq?tab=billing');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-[#d1d5db] hover:text-[#e2e8f0] hover:bg-[#2c2825] transition-colors"
-              >
-                결제 및 토큰 사용량
-              </button>
-            </div>
-            <div className="border-t border-[#3a3633] py-1 mt-1">
-              <button
-                onClick={() => {
-                  setOpenDropdown(null);
-                  logout();
-                  nav('/login');
-                }}
-                className="w-full text-left px-4 py-2 text-xs text-rose-400 hover:bg-rose-500/10 transition-colors"
-              >
-                로그아웃
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      {/*
+        User 드롭다운 제거됨 — User 아이콘이 `/hq?tab=history` 로 직행으로 바뀌면서
+        openDropdown==='user' 조건이 트리거되지 않음.
+        팀/결제 관리는 /hq 사이드바 메뉴에서, 로그아웃은 글로벌 헤더 LogoutButton 에서 접근.
+      */}
     </div>
   );
 }
@@ -6244,27 +6253,36 @@ const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
               LangGraph Multi-Agent Analysis · 에이전트 노드별 인사이트
             </p>
 
-            <div className="space-y-4">
-              {insights.map((insight, i) => {
-                const style = severityStyle[insight.severity];
-                return (
-                  <div key={i} className={`border rounded-lg p-5 ${style.bg}`}>
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="text-[14px] font-bold text-slate-900 flex-1">
-                        {insight.title}
-                      </h3>
-                      <span className="inline-flex items-center gap-1.5 shrink-0 ml-3">
-                        <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                        <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500">
-                          {insight.severity.toUpperCase()}
+            {insights.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+                <p className="text-[12px] font-semibold text-slate-600">인사이트 데이터 없음</p>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  시뮬레이션 실행 후 법률/인구/경쟁 에이전트 결과가 준비되면 자동으로 채워집니다.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {insights.map((insight, i) => {
+                  const style = severityStyle[insight.severity];
+                  return (
+                    <div key={i} className={`border rounded-lg p-5 ${style.bg}`}>
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="text-[14px] font-bold text-slate-900 flex-1">
+                          {insight.title}
+                        </h3>
+                        <span className="inline-flex items-center gap-1.5 shrink-0 ml-3">
+                          <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                          <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500">
+                            {insight.severity.toUpperCase()}
+                          </span>
                         </span>
-                      </span>
+                      </div>
+                      <p className="text-[11px] text-slate-700 leading-relaxed">{insight.desc}</p>
                     </div>
-                    <p className="text-[11px] text-slate-700 leading-relaxed">{insight.desc}</p>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="mt-10 pt-6 border-t border-slate-200">
               <h4 className="text-[11px] font-bold text-slate-700 mb-2 uppercase tracking-wider">
