@@ -348,13 +348,6 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     # 랭킹 데이터
     district_rankings = _sanitize(analysis.get("district_rankings", []))
     winner_district = _sanitize(analysis.get("winner_district", target_dist))
-    # district_rankings[0]과 winner_district 강제 동기화
-    # (target_districts 필터링 버그로 winner가 전체 1위와 다를 수 있음)
-    if district_rankings and isinstance(district_rankings, list):
-        _top = district_rankings[0] if isinstance(district_rankings[0], dict) else {}
-        _top_dong = _top.get("district")
-        if _top_dong:
-            winner_district = _top_dong
     top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
