@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { LegalRisk, SimulationOutput } from '../../../types';
 import { SectionLabel } from '../shared/SectionLabel';
 import { LegalDrawer } from '../shared/LegalDrawer';
+import { AgentCard } from '../shared/AgentCard';
 
 type Tab = 'legal' | 'ai_insights' | 'competitor_risks';
 
@@ -43,6 +44,7 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
   const [tab, setTab] = useState<Tab>('legal');
   const [selected, setSelected] = useState<LegalRisk | null>(null);
 
+  const legalAgent = simResult.agent_attributions?.find((a) => a.id === 'legal');
   const risks = simResult.legal_risks ?? [];
   const compIntel = simResult.competitor_intel as Record<string, any> | null | undefined;
   const opportunities = (compIntel?.key_opportunities ?? []) as string[];
@@ -178,6 +180,12 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
               <div className="text-sm text-stone-500">데이터 없음</div>
             )}
           </div>
+        </div>
+      )}
+
+      {legalAgent && (
+        <div className="mt-3">
+          <AgentCard attribution={legalAgent} size="compact" />
         </div>
       )}
 
