@@ -11,6 +11,9 @@ from src.agents.nodes.district_ranking import district_ranking_node, _clear_shar
 from src.agents.nodes.demographic_depth import demographic_depth_node
 from src.agents.nodes.trend_forecaster import trend_forecaster_node
 from src.agents.nodes.competitor_intel import competitor_intel_node
+from src.agents.tools import MarketDataTool as _MarketDataTool
+
+_BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 전체 파이프라인 토큰 예산 (입력+출력 합산 추정치 기준)
 # gpt-4.1-mini: 입력 $0.15/1M, 출력 $0.60/1M
@@ -161,6 +164,45 @@ async def llm_analysis_phase_node(state: AgentState) -> dict:
     }
 
 
+async def ml_prediction_phase_node(state: AgentState) -> dict:
+    """
+    Phase 2.5: TCN ML 모델 실행 (winner 동 기준)
+
+    LLM 에이전트 분석이 끝난 뒤 TCN으로 실제 수치(매출/BEP/폐업률)를 계산.
+    결과를 state에 저장해 synthesis 프롬프트에 주입 → LLM이 추측 대신 실측값 사용.
+    """
+    t_start = time.perf_counter()
+    winner = state.get("winner_district") or state.get("target_district", "")
+    print(f"--- [PHASE 2.5] TCN 실행 시작 (winner={winner}) ---")
+
+    try:
+        from src.services.dong_resolver import resolve_dong_code
+        from models.interface import ModelOutput
+
+        dong_code = resolve_dong_code(winner)
+        if not dong_code:
+            raise ValueError(f"동 코드 조회 실패: {winner}")
+
+        biz = state.get("business_type", "카페")
+        industry_code = _BIZ_TO_INDUSTRY_CODE.get(biz, "CS100010")
+
+        sim_result = ModelOutput.generate(dong_code, industry_code, biz, model="tcn")
+        elapsed = time.perf_counter() - t_start
+        monthly_rev = sim_result.get("revenue_forecast", {}).get("quarterly_avg", 0)
+        bep = sim_result.get("bep", {}).get("bep_months", "?")
+        closure = sim_result.get("closure_rate", {}).get("closure_rate", "?")
+        print(
+            f"--- [PHASE 2.5] TCN 완료 ({elapsed:.1f}s) | "
+            f"월매출={monthly_rev:,.0f}원 BEP={bep}개월 폐업률={closure} ---"
+        )
+        return {"tcn_sim_result": sim_result}
+
+    except Exception as e:
+        elapsed = time.perf_counter() - t_start
+        print(f"--- [PHASE 2.5] TCN 실패 ({elapsed:.1f}s): {e} ---")
+        return {"tcn_sim_result": {}}
+
+
 def build_graph() -> StateGraph:
     """
     상권분석 워크플로우 그래프 빌드 (2단계 실행)
@@ -177,11 +219,13 @@ def build_graph() -> StateGraph:
 
     workflow.add_node("ranking_phase", ranking_phase_node)
     workflow.add_node("llm_analysis_phase", llm_analysis_phase_node)
+    workflow.add_node("ml_prediction_phase", ml_prediction_phase_node)
     workflow.add_node("synthesis", synthesis_node)
 
     workflow.set_entry_point("ranking_phase")
     workflow.add_edge("ranking_phase", "llm_analysis_phase")
-    workflow.add_edge("llm_analysis_phase", "synthesis")
+    workflow.add_edge("llm_analysis_phase", "ml_prediction_phase")
+    workflow.add_edge("ml_prediction_phase", "synthesis")
     workflow.add_edge("synthesis", END)
 
     return workflow

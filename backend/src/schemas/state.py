@@ -59,3 +59,6 @@ class AgentState(TypedDict):
 
     # 6. competitor_intel 에이전트 결과 (하이브리드: Python 서비스 + LLM 해석)
     competitor_intel_result: dict[str, Any]  # CompetitorIntelResult 구조 (services 결과 + LLM output)
+
+    # 7. TCN ML 모델 결과 (Phase 2.5 — winner 동 기준 실행, synthesis 프롬프트에 주입)
+    tcn_sim_result: dict[str, Any]  # ModelOutput.generate() 전체 결과

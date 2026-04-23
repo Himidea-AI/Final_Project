@@ -194,6 +194,23 @@ async def synthesis_node(state: AgentState) -> dict:
             demographic_context += f"- 브랜드 타겟 매칭: {dc['brand_target_match_score']}/100\n"
             demographic_context += f"  → {dc.get('match_rationale', '')}\n"
 
+    # TCN ML 실측 수치 (Phase 2.5에서 계산된 값 — 없으면 빈 블록)
+    _tcn = state.get("tcn_sim_result") or {}
+    _tcn_rev = _tcn.get("revenue_forecast", {}).get("quarterly_avg")
+    _tcn_bep = _tcn.get("bep", {}).get("bep_months")
+    _tcn_closure = _tcn.get("closure_rate", {}).get("closure_rate")
+    _tcn_risk = (_tcn.get("closure_risk") or {}).get("risk_score")
+    if _tcn_rev or _tcn_bep or _tcn_closure:
+        tcn_block = (
+            "\n[ML 모델 실측 수치 — 추측 금지, 아래 수치를 profit_simulation에 그대로 사용]\n"
+            + (f"- 월 예상 매출: {_tcn_rev:,.0f}원\n" if _tcn_rev else "")
+            + (f"- BEP 도달: {_tcn_bep}개월\n" if _tcn_bep else "")
+            + (f"- 폐업률: {_tcn_closure * 100:.1f}%\n" if _tcn_closure is not None else "")
+            + (f"- 폐업 위험도: {_tcn_risk * 100:.1f}%\n" if _tcn_risk is not None else "")
+        )
+    else:
+        tcn_block = ""
+
     # competitor_intel 요약 (경쟁/카니발/차별화) — legal_risks 와 독립적으로 병합
     competitor_intel = state.get("competitor_intel_result", {}) or {}
     if competitor_intel and "error" not in competitor_intel:
@@ -217,6 +234,7 @@ async def synthesis_node(state: AgentState) -> dict:
         f"인구({winner_district}):\n{population_report[:1500]}\n"
         + (f"{vacancy_summary}\n" if vacancy_summary else "")
         + (f"향후 12개월 시장 전망:\n{trend_summary_for_llm}\n" if trend_summary_for_llm else "")
+        + (f"{tcn_block}\n" if tcn_block else "")
         + (f"{competitor_block}\n" if competitor_block else "")
         + f"법률(14개):\n{legal_summary_for_llm}\n"
         f"{legal_override}"
@@ -230,14 +248,22 @@ async def synthesis_node(state: AgentState) -> dict:
         "4. 창업 가부 결정 및 전략 제안\n"
         "5. FinalStrategyResult 스키마로 응답\n"
         f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
-        "7. profit_simulation 계산 기준 (아래 공식을 반드시 사용):\n"
-        "   - monthly_revenue  = 일평균 유동인구 × 방문 전환율 3% × 객단가(원)\n"
-        "   - 방문 전환율 보정: 경쟁 포화 high → 2%, medium → 3%, low/sparse → 4%\n"
-        "   - monthly_cost     = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
-        "   - net_profit       = monthly_revenue - monthly_cost\n"
-        "   - margin_rate      = net_profit / monthly_revenue (소수점 2자리)\n"
-        "   - bep_months       = 초기자본금 / max(net_profit, 1) (소수점 반올림)\n"
-        "   ※ 추측값 사용 금지 — 위 공식과 제공된 실데이터 수치만 사용\n"
+        + (
+            "7. profit_simulation에 ML 실측 수치를 반드시 사용:\n"
+            f"   - monthly_revenue = {_tcn_rev:,.0f}원 (TCN 예측값)\n"
+            f"   - bep_months = {_tcn_bep}개월 (TCN 예측값)\n"
+            "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
+            "   - net_profit = monthly_revenue - monthly_cost\n"
+            "   - margin_rate = net_profit / monthly_revenue (소수점 2자리)\n"
+            if tcn_block else
+            "7. profit_simulation 계산 기준:\n"
+            "   - monthly_revenue = 일평균 유동인구 × 방문 전환율 3% × 객단가(원)\n"
+            "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
+            "   - net_profit = monthly_revenue - monthly_cost\n"
+            "   - margin_rate = net_profit / monthly_revenue (소수점 2자리)\n"
+            "   - bep_months = 초기자본금 / max(net_profit, 1) (소수점 반올림)\n"
+        )
+        + "   ※ 추측값 사용 금지 — 제공된 실데이터 수치만 사용\n"
     )
 
     try:

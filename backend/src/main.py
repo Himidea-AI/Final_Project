@@ -407,19 +407,27 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
     }
 
-    # [Simulation 실제 연동] B2 ModelOutput + build_quarterly_projection 연결
-    _biz_name = state.get("business_type", "카페")
+    # [Phase 2.5] graph.py ml_prediction_phase_node에서 실행된 TCN 결과를 state에서 읽음
+    # (중복 실행 제거 — 이전에는 여기서 ModelOutput.generate를 별도 호출했음)
     _dong_code = _resolve_dong_code(target_dist)
     if _dong_code is None:
-        # silent 서교동 fallback 금지 — 잘못된 동명을 엉뚱한 동 분석으로 응답하는 버그 방지
         raise HTTPException(
             status_code=400,
             detail=f"지원하지 않는 행정동입니다: '{target_dist}'. 마포구 16개 동만 지원됩니다.",
         )
-    _industry_code = _BIZ_TO_INDUSTRY_CODE.get(_biz_name, "CS100010")  # 기본값: 카페
+    _industry_code = _BIZ_TO_INDUSTRY_CODE.get(state.get("business_type", "카페"), "CS100010")
+    sim_result = state.get("tcn_sim_result") or {}
+
+    # TCN 결과가 없으면(Phase 2.5 실패) 직접 실행 fallback
+    if not sim_result:
+        try:
+            sim_result = ModelOutput.generate(_dong_code, _industry_code, state.get("business_type", "카페"), model="tcn")
+        except Exception as _sim_err:
+            print(f"[SIM] ModelOutput fallback 실패: {_sim_err}")
+            sim_result = {}
+
     scenarios = None
     try:
-        sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
         quarterly = build_quarterly_projection(
             bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
@@ -429,7 +437,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
         )
     except Exception as _sim_err:
-        print(f"[SIM] ModelOutput 호출 실패 (mock 사용): {_sim_err}")
+        print(f"[SIM] quarterly 빌드 실패 (mock 사용): {_sim_err}")
         quarterly = [
             {
                 "quarter": q,
@@ -451,9 +459,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         logger.warning("SHAP 분석 실패: %s", e)
         shap_result = None
 
-    # sim_result에서 타겟 동 예측값 추출 (모델 호출 성공 시)
-    _sim_closure_rate = sim_result["closure_rate"]["closure_rate"] if "sim_result" in locals() else None
-    _sim_bep_months = sim_result["bep"]["bep_months"] if "sim_result" in locals() else None
+    _sim_closure_rate = (sim_result.get("closure_rate") or {}).get("closure_rate")
+    _sim_bep_months = (sim_result.get("bep") or {}).get("bep_months")
 
     # market_report에 모델 기반 폐업률 추가 (0~1 소수)
     market_report["closure_rate"] = _sim_closure_rate
