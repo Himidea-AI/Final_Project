@@ -470,6 +470,17 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         for r in district_rankings
     ]
 
+    # 사용자 선택 동이 상단에 오도록 정렬: winner → 나머지 선택 동 → 미선택 동
+    _selected = set(state.get("target_districts") or [target_dist])
+    district_rankings = sorted(
+        district_rankings,
+        key=lambda r: (
+            0 if r.get("district") == winner_district else
+            1 if r.get("district") in _selected else
+            2
+        ),
+    )
+
     # [B1 고도화] 응답 구조 재설계
     response_data = {
         "request_id": request_id,
