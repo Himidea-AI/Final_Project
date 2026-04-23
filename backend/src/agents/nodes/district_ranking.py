@@ -457,7 +457,8 @@ async def district_ranking_node(state: AgentState) -> dict:
 
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
     # v5: target_districts를 캐시 키에 포함 — 선택 동이 다르면 별도 캐시 (v4 무효화)
-    cache_key = f"v5:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+    # v6: top_3도 선택 동 내로 제한 (v5 잘못된 top_3 캐시 무효화)
+    cache_key = f"v6:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -474,7 +475,7 @@ async def district_ranking_node(state: AgentState) -> dict:
             _user_ranked = [r for r in _cached_ranked if isinstance(r, dict) and r.get("district") in _target_dists_set]
             _winner_pool = _user_ranked if _user_ranked else ([r for r in _cached_ranked if isinstance(r, dict)] or [])
             _cached_winner = _winner_pool[0]["district"] if _winner_pool else cached_data.get("winner_district", "")
-            _cached_top_3 = [r["district"] for r in _cached_ranked if isinstance(r, dict) and r.get("district") != _cached_winner][:3]
+            _cached_top_3 = [r["district"] for r in _cached_ranked if isinstance(r, dict) and r.get("district") != _cached_winner and r.get("district") in _target_dists_set][:3]
             _cached_winner_score = 0
             if _cached_ranked:
                 _first = _cached_ranked[0] if isinstance(_cached_ranked[0], dict) else {}
@@ -549,8 +550,8 @@ async def district_ranking_node(state: AgentState) -> dict:
     _user_ranked = [r for r in ranked if r.get("district") in _target_dists_set]
     winner_row = _user_ranked[0] if _user_ranked else (ranked[0] if ranked else None)
     winner = winner_row["district"] if winner_row else state.get("target_district", "서교동")
-    # top_3: winner 제외한 전체 랭킹 상위 3개 (추가 추천 후보)
-    top_3 = [r["district"] for r in ranked if r["district"] != winner][:3]
+    # top_3: 사용자 선택 동 중 winner 제외 상위 3개
+    top_3 = [r["district"] for r in ranked if r["district"] != winner and r["district"] in _target_dists_set][:3]
 
     # winner + top_3 + 사용자 선택 동의 실제 공실 좌표 조회
     target_district = state.get("target_district", winner)
