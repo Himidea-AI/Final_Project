@@ -322,6 +322,11 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     # 법률 리스크 리스트 변환 (articles 포함 — 프론트 근거 조항 drawer용)
     legal_risks_raw = analysis.get("legal_risks") or []
 
+    # 벌칙 조문 자동 매핑 — 캐시/비캐시 모두 대응 (legal_node 내부 캐시 경유 시에도 적용)
+    from src.agents.nodes.legal import _enrich_penalty_info
+
+    _enrich_penalty_info(legal_risks_raw)
+
     legal_risks = [
         {
             "type": r.get("type", "General"),
@@ -331,6 +336,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
             "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
+            "is_fallback": r.get("is_fallback", False),
         }
         for r in legal_risks_raw
     ]

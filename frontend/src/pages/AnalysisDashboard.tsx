@@ -280,25 +280,51 @@ const AnalysisDashboard: React.FC = () => {
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.1 }}
-                        className="flex items-start gap-4 p-5 rounded-2xl bg-[#1e1b18] border border-[#3a3633] hover:border-indigo-500/30 transition-colors"
+                        className="p-5 rounded-2xl bg-[#1e1b18] border border-[#3a3633] hover:border-indigo-500/30 transition-colors"
                       >
-                        <div
-                          className={`mt-1.5 w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px] ${
-                            risk.risk_level === 'HIGH'
-                              ? 'bg-red-500 shadow-red-500/50'
-                              : risk.risk_level === 'MEDIUM'
-                                ? 'bg-amber-500 shadow-amber-500/50'
-                                : 'bg-green-500 shadow-green-500/50'
-                          }`}
-                        />
-                        <div>
-                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
-                            {risk.type}
-                          </p>
-                          <p className="text-sm font-bold text-gray-300 leading-snug">
-                            {risk.detail}
-                          </p>
+                        <div className="flex items-start gap-4">
+                          <div
+                            className={`mt-1.5 w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px] ${
+                              risk.risk_level === 'HIGH'
+                                ? 'bg-red-500 shadow-red-500/50'
+                                : risk.risk_level === 'MEDIUM'
+                                  ? 'bg-amber-500 shadow-amber-500/50'
+                                  : 'bg-green-500 shadow-green-500/50'
+                            }`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">
+                              {risk.type}
+                            </p>
+                            <p className="text-sm font-bold text-gray-300 leading-snug">
+                              {risk.detail}
+                            </p>
+                          </div>
                         </div>
+
+                        {risk.articles && risk.articles.length > 0 && (
+                          <div className="mt-3 ml-6 space-y-2">
+                            {risk.articles.map((art, aidx) => (
+                              <div key={aidx} className="flex items-start gap-2 text-xs">
+                                <span className="shrink-0 px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 font-mono font-bold">
+                                  {art.article_ref}
+                                </span>
+                                <span className="text-gray-400 leading-relaxed">{art.content}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {risk.recommendation && (
+                          <div className="mt-3 ml-6 p-3 rounded-xl bg-[#252220] border border-[#3a3633]">
+                            <p className="text-[10px] font-black text-amber-500/70 uppercase tracking-widest mb-1">
+                              Checklist
+                            </p>
+                            <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-line">
+                              {risk.recommendation}
+                            </p>
+                          </div>
+                        )}
                       </motion.div>
                     ))}
                   </div>

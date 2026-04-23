@@ -14,6 +14,7 @@
 import asyncio
 import json
 import logging
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -33,6 +34,50 @@ from src.services.law_api import LawApiClient
 # 전체 조문 원본 인덱스 — chunks.json에서 (source, article) → 전체 본문 조립
 # RAG는 "어떤 조문이 관련 있는지" 식별용으로만 사용하고, 실제 표시 본문은 여기서 가져옴
 _ARTICLE_FULL_TEXT: dict[tuple[str, str], str] = {}
+_TOTAL_CHUNK_COUNT: int = 0  # chunks.json 로드 시 실제 청크 수 저장
+_CATEGORY_TO_SOURCES: dict[str, list[str]] = {}  # category → source 파일명 매핑
+
+# 의무 조문 → 벌칙/과태료 조문 번호 매핑
+# key: (카테고리, 의무조문), value: (카테고리, 벌칙조문) 리스트
+# 벌칙 본문은 _ARTICLE_FULL_TEXT에서 자동 조회
+_PENALTY_ARTICLE_MAP: dict[tuple[str, str], list[tuple[str, str]]] = {
+    # 식품위생법: 의무 → 벌칙
+    ("식품위생법", "제36조"): [("식품위생법", "제97조")],  # 시설기준 위반 → 과태료
+    ("식품위생법", "제37조"): [("식품위생법", "제97조")],  # 영업허가/신고 미이행 → 과태료
+    ("식품위생법", "제41조"): [("식품위생법", "제101조")],  # 위생교육 미이수 → 과태료
+    ("식품위생법", "제43조"): [("식품위생법", "제101조")],  # 영업자 준수사항 위반 → 과태료
+    ("식품위생법", "제44조"): [("식품위생법", "제75조")],  # 영업자 준수사항 위반 → 영업정지
+    # 가맹사업법: 의무 → 벌칙
+    ("가맹사업법", "제6조의2"): [("가맹사업법", "제42조")],  # 정보공개서 미등록 → 과태료
+    ("가맹사업법", "제7조"): [("가맹사업법", "제43조")],  # 정보 미제공 → 과태료
+    ("가맹사업법", "제9조"): [("가맹사업법", "제41조")],  # 허위과장 → 벌칙
+    ("가맹사업법", "제12조의4"): [("가맹사업법", "제44조")],  # 영업지역 침해 → 과태료
+    ("가맹사업법", "제14조"): [("가맹사업법", "제44조")],  # 부당한 계약 → 과태료
+    # 소방시설법: 의무 → 벌칙
+    ("소방시설법", "제12조"): [("소방시설법", "제57조")],  # 소방시설 미설치 → 벌칙
+    ("소방시설법", "제13조"): [("소방시설법", "제57조")],  # 설치기준 위반 → 벌칙
+    ("소방시설법", "제22조"): [("소방시설법", "제61조")],  # 자체점검 미실시 → 과태료
+    ("소방시설법", "제24조"): [("소방시설법", "제61조")],  # 안전관리자 미선임 → 과태료
+    # 근로기준법: 의무 → 벌칙
+    ("근로기준법", "제17조"): [("근로기준법", "제114조")],  # 근로계약서 미교부 → 과태료
+    ("근로기준법", "제43조"): [("근로기준법", "제109조")],  # 임금 미지급 → 벌칙
+    ("근로기준법", "제50조"): [("근로기준법", "제110조")],  # 근로시간 위반 → 벌칙
+    ("근로기준법", "제54조"): [("근로기준법", "제110조")],  # 휴게시간 미부여 → 벌칙
+    ("근로기준법", "제56조"): [("근로기준법", "제109조")],  # 가산임금 미지급 → 벌칙
+    # 개인정보보호법: 의무 → 벌칙
+    ("개인정보보호법", "제15조"): [("개인정보보호법", "제75조")],  # 동의 없이 수집 → 과태료
+    ("개인정보보호법", "제25조"): [("개인정보보호법", "제75조")],  # CCTV 규정 위반 → 과태료
+    ("개인정보보호법", "제30조"): [("개인정보보호법", "제75조")],  # 처리방침 미공개 → 과태료
+    # 하수도법: 의무 → 벌칙
+    ("하수도법", "제34조"): [("하수도법", "제80조")],  # 배수설비 미설치 → 과태료
+    ("하수도법", "제27조"): [("하수도법", "제78조")],  # 오수처리 위반 → 벌칙
+    # 공정거래법: 의무 → 벌칙
+    ("공정거래법", "제45조"): [("공정거래법", "제124조")],  # 불공정거래 → 벌칙
+    ("공정거래법", "제40조"): [("공정거래법", "제130조")],  # 거래강제 → 과태료
+    # 건축법: 의무 → 벌칙
+    ("건축법", "제19조"): [("건축법", "제80조")],  # 용도변경 미이행 → 이행강제금
+    ("건축법", "제11조"): [("건축법", "제80조")],  # 무허가 건축 → 이행강제금
+}
 
 
 def _derive_checklist_from_articles(articles: list, risk_type: str) -> list[dict]:
@@ -74,9 +119,86 @@ def _derive_checklist_from_articles(articles: list, risk_type: str) -> list[dict
     return items
 
 
+_TYPE_TO_CATEGORY = {
+    "franchise_law": "가맹사업법",
+    "commercial_lease_law": "상가임대차보호법",
+    "food_hygiene": "식품위생법",
+    "building_law": "건축법",
+    "fire_safety_law": "소방시설법",
+    "labor_law": "근로기준법",
+    "vat_law": "부가가치세법",
+    "privacy_law": "개인정보보호법",
+    "accessibility_law": "장애인편의증진법",
+    "sewage_law": "하수도법",
+    "fair_trade_law": "공정거래법",
+}
+
+
+def _enrich_penalty_info(risks: list) -> None:
+    """법률 리스크 리스트의 recommendation에 벌칙 조문 본문을 자동 추가.
+
+    캐시/비캐시 모두에서 호출하여 벌칙 정보가 항상 포함되도록 보장.
+    이미 벌칙 정보가 붙어있으면 중복 추가하지 않음.
+    """
+    for _r in risks:
+        if not isinstance(_r, dict):
+            continue
+        rtype = _r.get("type", "")
+        cat = _TYPE_TO_CATEGORY.get(rtype, "")
+        if not cat:
+            continue
+        existing_rec = _r.get("recommendation", "")
+        if "⚖️" in existing_rec:
+            continue  # 이미 벌칙 정보가 붙어있음
+        penalty_parts = []
+        for art_item in _r.get("articles") or []:
+            art_ref = art_item.get("article_ref", "") if isinstance(art_item, dict) else ""
+            art_match = re.match(r"(제\d+조(?:의\d+)?)", art_ref)
+            if not art_match:
+                continue
+            penalty_text = _lookup_penalty(cat, art_match.group(1))
+            if penalty_text:
+                penalty_parts.append(penalty_text)
+        if penalty_parts:
+            penalty_info = "\n• ⚖️ 위반 시 제재 (법률 원문): " + " / ".join(penalty_parts)
+            _r["recommendation"] = existing_rec + penalty_info
+
+
+def _lookup_penalty(category: str, article: str) -> str | None:
+    """의무 조문에 연결된 벌칙 조문 본문을 chunks.json 인덱스에서 조회.
+
+    반환: "위반 시: ... (제97조)" 형태의 요약 문자열, 매핑 없으면 None.
+    _ARTICLE_FULL_TEXT의 key는 (source_filename, article)이므로
+    category → source 변환 후 조회.
+    """
+    _load_article_index()
+    key = (category, article)
+    penalty_refs = _PENALTY_ARTICLE_MAP.get(key)
+    if not penalty_refs:
+        return None
+
+    parts = []
+    for p_cat, p_art in penalty_refs:
+        # category → source 변환 후 _ARTICLE_FULL_TEXT에서 조회
+        sources = _CATEGORY_TO_SOURCES.get(p_cat, [])
+        found_text = ""
+        for src in sources:
+            text = _ARTICLE_FULL_TEXT.get((src, p_art), "")
+            if text:
+                found_text = text
+                break
+        if not found_text:
+            continue
+        # 본문에서 핵심 제재 내용 추출 (첫 200자)
+        snippet = found_text[:200].replace("\n", " ").strip()
+        parts.append(f"({p_art}) {snippet}")
+
+    return " / ".join(parts) if parts else None
+
+
 def _load_article_index() -> None:
     """chunks.json을 읽어 조문별 전체 본문 인덱스를 구축합니다."""
-    global _ARTICLE_FULL_TEXT
+    global _ARTICLE_FULL_TEXT, _TOTAL_CHUNK_COUNT, _CATEGORY_TO_SOURCES
     if _ARTICLE_FULL_TEXT:
         return  # 이미 로드됨
     from pathlib import Path
@@ -87,7 +209,16 @@ def _load_article_index() -> None:
         return
     with open(chunks_path, encoding="utf-8") as f:
         chunks = json.load(f)
-    import re
+    _TOTAL_CHUNK_COUNT = len(chunks)
+
+    # category → source 파일명 매핑 구축
+    for c in chunks:
+        cat = c.get("metadata", {}).get("category", "")
+        src = c.get("metadata", {}).get("source", "")
+        if cat and src:
+            _CATEGORY_TO_SOURCES.setdefault(cat, [])
+            if src not in _CATEGORY_TO_SOURCES[cat]:
+                _CATEGORY_TO_SOURCES[cat].append(src)
 
     # (source, article) → [(chunk_id, text)] 그룹핑
     grouped: dict[tuple[str, str], list[tuple[str, str]]] = {}
@@ -198,7 +329,7 @@ async def _search_ftc_from_db(brand_name: str) -> dict | None:
                 "store_count_total": store_count,
                 "churn_rate": round(churn_rate, 4),
                 "avg_sales_amount": avg_sales,
-                "franchise_fee": 0,  # DB에 가맹금 컬럼 없음
+                "franchise_fee": None,  # DB에 가맹금 컬럼 없음 — 0은 무료와 혼동
             }
 
     except Exception as e:
@@ -227,6 +358,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             "summary": "브랜드명이 입력되지 않아 공정위 정보공개서 조회를 건너뜁니다.",
             "articles": [],
             "recommendation": "브랜드명 입력 후 재검토 권장",
+            "is_fallback": True,
         }
 
     # 1차: DB에서 검색 (ftc_brand_franchise 테이블 — 16,000+ 브랜드)
@@ -256,12 +388,13 @@ async def check_ftc_franchise(state: AgentState) -> dict:
                 }
             ],
             "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
+            "is_fallback": True,
         }
 
     try:
         churn_rate = detail.get("churn_rate", 0.0)
         avg_sales = detail.get("avg_sales_amount", 0)
-        franchise_fee = detail.get("franchise_fee", 0)
+        franchise_fee = detail.get("franchise_fee")  # None이면 "정보 없음" 표시
         store_count = detail.get("store_count_total", 0)
 
         # 리스크 레벨 판정
@@ -278,7 +411,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             f"전체 가맹점 수: {store_count}개, "
             f"폐점률: {churn_rate:.1%}, "
             f"평균 매출액: {avg_sales:,}원, "
-            f"가입비: {franchise_fee:,}원. "
+            f"가입비: {f'{franchise_fee:,}원' if franchise_fee is not None else '정보 없음'}. "
         )
         if level == "danger":
             summary += "폐점률이 10%를 초과하여 사업 안정성 리스크가 높습니다."
@@ -302,7 +435,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
                     f"전체 가맹점 수: {store_count}개\n"
                     f"폐점률: {churn_rate:.1%}\n"
                     f"평균 매출액: {avg_sales:,}원\n"
-                    f"가입비: {franchise_fee:,}원"
+                    f"가입비: {f'{franchise_fee:,}원' if franchise_fee is not None else '정보 없음'}"
                 ),
             }
         ]
@@ -322,6 +455,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
             "summary": f"공정위 정보공개서 조회 중 오류 발생: {e}",
             "articles": [],
             "recommendation": "공정위 가맹사업정보제공시스템 직접 확인 권장",
+            "is_fallback": True,
         }
 
 
@@ -418,13 +552,14 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 logger.warning(f"[legal_node] 캐시 데이터 손상 - 재계산: {cache_key}")
             else:
                 logger.info(f"[legal_node] 캐시 히트: {cache_key}")
-                # 캐시 데이터에도 checklist 필드 보강 (구 캐시 호환)
+                # 캐시 데이터에도 checklist + 벌칙 매핑 보강 (구 캐시 호환)
                 for _r in legal_risks or []:
                     if isinstance(_r, dict) and "checklist" not in _r:
                         _r["checklist"] = _derive_checklist_from_articles(
                             _r.get("articles") or [],
                             _r.get("type", "unknown"),
                         )
+                _enrich_penalty_info(legal_risks)
                 # DEBUG: 캐시된 articles가 새 dict 포맷인지 확인
                 try:
                     first_risk = legal_risks[0] if legal_risks else {}
@@ -448,7 +583,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     agent_id="legal",
                     display_name="법률 리스크",
                     kind="RAG",
-                    sources=["legal_rag_chunks (3775)"],
+                    sources=[f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})"],
                     verdict=f"14 법률 위험도 · overall {overall_cached}",
                     reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_cached_high}건 HIGH 위험.",
                     confidence=0.85,
@@ -485,8 +620,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
     labor_q = "근로계약서 최저임금 주휴수당 가산임금 4대보험 근로기준법"
     vat_q = "사업자등록 일반과세자 간이과세자 세금계산서 부가가치세"
     privacy_q = "개인정보 수집 동의 처리방침 CCTV 고객정보"
-    accessibility_q = f"{business_type} 편의시설 경사로 장애인 설치의무"
-    sewage_q = f"{business_type} 오수처리 유류분리기 그리스트랩 폐수 하수도"
+    accessibility_q = f"{business_type} 대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의증진법"
+    sewage_q = f"{business_type} 오수 배출 개인하수처리시설 설치 배수설비 공공하수도 하수도법"
     fair_trade_q = f"{brand} 가맹본부 불공정거래 거래강제 필수물품 공급"
 
     # LawApiClient — 모듈 레벨 싱글톤 (매 요청 인스턴스 생성 방지)
@@ -665,7 +800,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     _load_article_index()
 
     # 법률별 RAG 조문 추출 — 조문 제목 + 핵심 한 줄 요약
-    import re as _re
+    _re = re
 
     _valid_art_re = _re.compile(r"^제\d+조(?:의\d+)?\s*[\(（]")
     _art_title_re = _re.compile(r"^(제\d+조(?:의\d+)?)\s*[\(（]([^)）]+)[\)）]")
@@ -792,10 +927,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     system_content = (
         f"{LEGAL_AGENT_SYSTEM_PROMPT}\n\n"
-        f"리스크 레벨 기준:\n"
-        f"- safe: 법률 위반 가능성 없음, 일반적 준수사항만 존재\n"
-        f"- caution: 사전 확인·준비 필요, 미이행 시 과태료·행정처분 가능\n"
-        f"- danger: 법률 위반 가능성 높음, 영업정지·허가취소·형사처벌 위험\n\n"
+        f"리스크 레벨 기준 (창업 전 관점 — 미이행 시 결과 기준으로 판정):\n"
+        f"- safe: 해당 업종/지역에 적용되지 않거나, 별도 조치 없이 준수 가능\n"
+        f"- caution: 사전 확인·서류 준비 필요, 미이행 시 과태료·시정명령 가능\n"
+        f"- danger: 미이행 시 영업신고 불가·영업정지·허가취소·형사처벌. 반드시 창업 전 완료 필수\n"
+        f"  (예: 식품위생법 영업신고, 건축법 용도변경, 소방 안전시설완비증명, 가맹사업법 정보공개서 등)\n\n"
         f"[평가 항목]\n{items_desc}\n\n"
         "12개 항목을 빠짐없이 items 리스트에 포함하세요.\n"
         "summary: 이 법률의 목적과 핵심 의무를 1~2문장으로 설명하세요.\n"
@@ -831,6 +967,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         "summary": item.summary,
                         "articles": _extract_articles(docs_map.get(item.type, [])),
                         "recommendation": item.recommendation,
+                        "is_fallback": False,
                     }
                 )
                 seen.add(item.type)
@@ -844,6 +981,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         "summary": "LLM 응답 누락 — 수동 검토 필요",
                         "articles": [],
                         "recommendation": "전문가 상담 권장",
+                        "is_fallback": True,
                     }
                 )
         logger.info(f"[legal_node] 배치 LLM 완료 (Structured Output) - {len(batch_results)}개 항목 처리")
@@ -856,6 +994,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 "summary": f"LLM 분석 실패: {e}",
                 "articles": [],
                 "recommendation": "전문가 상담 권장",
+                "is_fallback": True,
             }
             for t in _BATCH_TYPES
         ]
@@ -866,51 +1005,137 @@ async def _run_legal_pipeline(state: dict) -> dict:
     risks = [
         _batch_map.get(
             "franchise_law",
-            {"type": "franchise_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "franchise_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
             "commercial_lease_law",
-            {"type": "commercial_lease_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "commercial_lease_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         zoning_result,
         _batch_map.get(
             "food_hygiene",
-            {"type": "food_hygiene", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "food_hygiene",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
             "safety_regulation",
-            {"type": "safety_regulation", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "safety_regulation",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         ftc_result,
         _batch_map.get(
             "building_law",
-            {"type": "building_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "building_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
             "fire_safety_law",
-            {"type": "fire_safety_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "fire_safety_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
-            "labor_law", {"type": "labor_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}
+            "labor_law",
+            {
+                "type": "labor_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
-            "vat_law", {"type": "vat_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""}
+            "vat_law",
+            {
+                "type": "vat_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
             "privacy_law",
-            {"type": "privacy_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "privacy_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
             "accessibility_law",
-            {"type": "accessibility_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "accessibility_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
             "sewage_law",
-            {"type": "sewage_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "sewage_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
         _batch_map.get(
             "fair_trade_law",
-            {"type": "fair_trade_law", "level": "caution", "summary": "", "articles": [], "recommendation": ""},
+            {
+                "type": "fair_trade_law",
+                "level": "caution",
+                "summary": "",
+                "articles": [],
+                "recommendation": "",
+                "is_fallback": True,
+            },
         ),
     ]
 
@@ -922,6 +1147,22 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 _r.get("articles") or [],
                 _r.get("type", "unknown"),
             )
+
+    # 의무 법률 최소 위험도 보정 — 미이행 시 영업불가인 법률은 safe로 내려가지 않도록 강제
+    _MUST_CAUTION = {"franchise_law", "commercial_lease_law", "vat_law", "privacy_law", "fair_trade_law"}
+    _MUST_DANGER = {"food_hygiene", "building_law", "fire_safety_law", "labor_law", "safety_regulation"}
+    for _r in risks:
+        if not isinstance(_r, dict):
+            continue
+        rtype = _r.get("type", "")
+        level = _r.get("level", "")
+        if rtype in _MUST_DANGER and level != "danger":
+            _r["level"] = "danger"
+        elif rtype in _MUST_CAUTION and level == "safe":
+            _r["level"] = "caution"
+
+    # 벌칙 조문 본문을 recommendation에 자동 추가
+    _enrich_penalty_info(risks)
 
     # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe
     levels = [r.get("level", "caution") for r in risks if isinstance(r, dict)]
@@ -971,7 +1212,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         agent_id="legal",
         display_name="법률 리스크",
         kind="RAG",
-        sources=["legal_rag_chunks (3775)"],
+        sources=[f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})"],
         verdict=f"14 법률 위험도 · overall {overall_level}",
         reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_high_count}건 HIGH 위험.",
         confidence=0.85,

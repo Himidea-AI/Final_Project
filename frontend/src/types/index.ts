@@ -102,6 +102,7 @@ export interface LegalRisk {
   recommendation?: string;
   articles?: LegalRiskArticle[];
   checklist?: LegalChecklistItem[];
+  is_fallback?: boolean;
 }
 
 /** 폐업 위험도 기여 피처 */
