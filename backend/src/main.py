@@ -71,7 +71,6 @@ from models.explainability.simulation import (
     build_scenarios,
 )
 from models.explainability.shap_analysis import explain_tcn_prediction
-from models.customer_revenue.predict import predict as customer_predict, SegmentProfile
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -407,19 +406,27 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
     }
 
-    # [Simulation 실제 연동] B2 ModelOutput + build_quarterly_projection 연결
-    _biz_name = state.get("business_type", "카페")
+    # [Phase 2.5] graph.py ml_prediction_phase_node에서 실행된 TCN 결과를 state에서 읽음
+    # (중복 실행 제거 — 이전에는 여기서 ModelOutput.generate를 별도 호출했음)
     _dong_code = _resolve_dong_code(target_dist)
     if _dong_code is None:
-        # silent 서교동 fallback 금지 — 잘못된 동명을 엉뚱한 동 분석으로 응답하는 버그 방지
         raise HTTPException(
             status_code=400,
             detail=f"지원하지 않는 행정동입니다: '{target_dist}'. 마포구 16개 동만 지원됩니다.",
         )
-    _industry_code = _BIZ_TO_INDUSTRY_CODE.get(_biz_name, "CS100010")  # 기본값: 카페
+    _industry_code = _BIZ_TO_INDUSTRY_CODE.get(state.get("business_type", "카페"), "CS100010")
+    sim_result = state.get("tcn_sim_result") or {}
+
+    # TCN 결과가 없으면(Phase 2.5 실패) 직접 실행 fallback
+    if not sim_result:
+        try:
+            sim_result = ModelOutput.generate(_dong_code, _industry_code, state.get("business_type", "카페"), model="tcn")
+        except Exception as _sim_err:
+            print(f"[SIM] ModelOutput fallback 실패: {_sim_err}")
+            sim_result = {}
+
     scenarios = None
     try:
-        sim_result = ModelOutput.generate(_dong_code, _industry_code, _biz_name, model="tcn")
         quarterly = build_quarterly_projection(
             bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
@@ -429,7 +436,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
         )
     except Exception as _sim_err:
-        print(f"[SIM] ModelOutput 호출 실패 (mock 사용): {_sim_err}")
+        print(f"[SIM] quarterly 빌드 실패 (mock 사용): {_sim_err}")
         quarterly = [
             {
                 "quarter": q,
@@ -441,19 +448,20 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             for q in range(1, 5)
         ]
 
-    # TCN SHAP 분석 실행 — 피처별 매출 기여도 계산
-    try:
-        shap_result = explain_tcn_prediction(
-            dong_code=_dong_code,
-            industry_code=_industry_code,
-        )
-    except Exception as e:
-        logger.warning("SHAP 분석 실패: %s", e)
-        shap_result = None
+    # SHAP 분석 — Phase 2.5에서 이미 계산된 값을 state에서 읽음 (중복 실행 방지)
+    shap_result = state.get("shap_result") or None
+    if not shap_result:
+        try:
+            shap_result = explain_tcn_prediction(
+                dong_code=_dong_code,
+                industry_code=_industry_code,
+            )
+        except Exception as e:
+            logger.warning("SHAP 분석 실패: %s", e)
+            shap_result = None
 
-    # sim_result에서 타겟 동 예측값 추출 (모델 호출 성공 시)
-    _sim_closure_rate = sim_result["closure_rate"]["closure_rate"] if "sim_result" in locals() else None
-    _sim_bep_months = sim_result["bep"]["bep_months"] if "sim_result" in locals() else None
+    _sim_closure_rate = (sim_result.get("closure_rate") or {}).get("closure_rate")
+    _sim_bep_months = (sim_result.get("bep") or {}).get("bep_months")
 
     # market_report에 모델 기반 폐업률 추가 (0~1 소수)
     market_report["closure_rate"] = _sim_closure_rate
@@ -504,7 +512,12 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 "score": district_score,
                 # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
                 "revenue": (md.get("avg_revenue") or 30000000) // 10000,
-                "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
+                "bep": int(
+                    metrics.get("bep_months")
+                    or (final_report.get("profit_simulation") or {}).get("bep_months")
+                    or _sim_bep_months
+                    or 14
+                ),
                 "survival": float(market_report["survival_rate"]),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),
             }
@@ -1036,35 +1049,6 @@ async def run_simulation(input_data: SimulationInput):
     try:
         final_state = await _run_pipeline(input_data)
         result = map_state_to_simulation_output(final_state, request_id)
-        # [customer_revenue P1-C] 타겟 고객 매출 분석 주입 — 실패해도 None 으로 조용히 fallback
-        try:
-            from src.services.dong_resolver import resolve_dong_code
-
-            _seg_dong = resolve_dong_code(result.get("winner_district") or input_data.target_district)
-            _seg_industry = _BIZ_TO_INDUSTRY_CODE.get(input_data.business_type, "CS100010")
-            _seg_profile = SegmentProfile(
-                age_groups=list(input_data.target_age_groups or []),
-                gender=input_data.target_gender or "all",
-                time_slots=list(input_data.target_time_slots or []),
-                day_type=input_data.target_day_type or "all",
-            )
-            _qp = result.get("quarterly_projection") or []
-            _q_num = (
-                int(_qp[0]["quarter"])
-                if _qp and isinstance(_qp[0], dict) and _qp[0].get("quarter")
-                else ((datetime.now().month - 1) // 3 + 1)
-            )
-            _year = datetime.now().year
-            if _seg_dong:
-                result["customer_segment"] = customer_predict(
-                    _seg_dong, _seg_industry, _seg_profile,
-                    input_data.target_monthly_sales, _q_num, _year,
-                )
-            else:
-                result["customer_segment"] = None
-        except Exception as _seg_err:
-            print(f"[customer_revenue] predict 실패: {type(_seg_err).__name__}: {_seg_err}")
-            result["customer_segment"] = None
         return result
     except Exception as e:
         import traceback

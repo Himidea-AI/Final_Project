@@ -27,6 +27,7 @@ class ProfitSimulation(BaseModel):
     monthly_revenue: int = Field(..., description="월 예상 매출액")
     net_profit: int = Field(..., description="월 예상 순이익")
     margin_rate: float = Field(..., description="수익률 (%)")
+    bep_months: Optional[int] = Field(default=None, description="손익분기점 도달 개월 수 (TCN 예측값)")
 
 
 class CompetitorAnalysis(BaseModel):
