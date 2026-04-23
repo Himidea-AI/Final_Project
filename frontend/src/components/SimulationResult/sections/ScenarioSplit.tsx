@@ -176,7 +176,7 @@ export function ScenarioSplit({ simResult }: Props) {
 
       {synthesis && (
         <div className="mt-3">
-          <AgentCard attribution={synthesis} size="compact" />
+          <AgentCard attribution={synthesis} size="full" />
         </div>
       )}
     </section>

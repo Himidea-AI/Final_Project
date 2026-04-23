@@ -20,8 +20,8 @@ export function QuarterlyForecast({ simResult }: Props) {
       </div>
       {(trend || demo) && (
         <div className="grid gap-2 md:grid-cols-2">
-          {trend && <AgentCard attribution={trend} size="compact" />}
-          {demo && <AgentCard attribution={demo} size="compact" />}
+          {trend && <AgentCard attribution={trend} size="full" />}
+          {demo && <AgentCard attribution={demo} size="full" />}
         </div>
       )}
     </section>
