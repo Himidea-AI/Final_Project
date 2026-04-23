@@ -197,8 +197,9 @@ def split_by_article(text: str, category: str, source_name: str) -> list[dict]:
             if chunk:
                 chunks.append(chunk)
         else:
-            # 길면 MAX_ARTICLE_CHUNK 단위로 추가 분할
-            sub_parts = _split_long_text(part, MAX_ARTICLE_CHUNK, overlap=50)
+            # 항(①②③) → 문장 → 고정길이 순으로 의미론적 분할
+            # article_header로 조문 제목을 넘겨 하위 청크에 "[제N조]" 접두사 부여
+            sub_parts = _split_article_semantic(part, MAX_ARTICLE_CHUNK, article_header=part)
             for idx, sub in enumerate(sub_parts):
                 chunk = _make_chunk(f"{chunk_id_base}_{idx}", sub, category, article_num, source_name)
                 if chunk:
@@ -218,7 +219,7 @@ def split_by_sliding_window(text: str, category: str, source_name: str) -> list[
 
 
 def _split_long_text(text: str, chunk_size: int, overlap: int) -> list[str]:
-    """텍스트를 chunk_size 단위로 분할, overlap만큼 겹침"""
+    """텍스트를 chunk_size 단위로 분할, overlap만큼 겹침 (슬라이딩 윈도우 전용)"""
     parts = []
     start = 0
     while start < len(text):
@@ -226,6 +227,82 @@ def _split_long_text(text: str, chunk_size: int, overlap: int) -> list[str]:
         parts.append(text[start:end].strip())
         start += chunk_size - overlap
     return [p for p in parts if p]
+
+
+# 항(①②③…⑳) 패턴 — 법률 조문의 의미 단위 구분자
+_HANG_PATTERN = re.compile(r"(?=\s*[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳])")
+# 문장 종결 패턴 — 한국어 법률 문서 기준
+_SENTENCE_END = re.compile(r"(?<=[다음란함임됨음것임]\.)\s+|(?<=한다\.)\s+|(?<=된다\.)\s+|(?<=있다\.)\s+|(?<=없다\.)\s+|(?<=않는다\.)\s+|(?<=아니다\.)\s+")
+
+
+def _split_by_hang(text: str) -> list[str]:
+    """조문을 항(①②③) 단위로 분할. 항 마커가 없으면 원문 그대로 반환."""
+    parts = _HANG_PATTERN.split(text)
+    parts = [p.strip() for p in parts if p.strip()]
+    return parts if len(parts) > 1 else [text]
+
+
+def _split_by_sentence(text: str, max_len: int) -> list[str]:
+    """텍스트를 문장 단위로 분할하여 max_len 이하 청크로 결합."""
+    sentences = _SENTENCE_END.split(text)
+    if len(sentences) <= 1:
+        # 문장 분리 실패 시 마침표 기준 fallback
+        sentences = [s.strip() + "." for s in text.split(".") if s.strip()]
+    if not sentences:
+        return [text]
+
+    chunks = []
+    current = ""
+    for sent in sentences:
+        sent = sent.strip()
+        if not sent:
+            continue
+        if current and len(current) + len(sent) + 1 > max_len:
+            chunks.append(current.strip())
+            current = sent
+        else:
+            current = f"{current} {sent}".strip() if current else sent
+    if current.strip():
+        chunks.append(current.strip())
+    return chunks if chunks else [text]
+
+
+def _split_article_semantic(text: str, max_len: int, article_header: str = "") -> list[str]:
+    """
+    조문 의미론적 분할: 항(①②③) → 문장 → 고정길이 (최후 수단)
+    500자 고정 분할 대신 의미 단위를 보존하면서 max_len 이하로 분할.
+
+    article_header: 조문 제목 (예: "제45조(불공정거래행위의 금지)")
+        — 첫 청크 이후 분할된 청크에 "[제45조]" 접두사를 붙여 검색 매칭률 보장
+    """
+    # 조문 번호 추출 (예: "제45조(불공정거래행위...)" → "제45조")
+    _art_num_match = re.match(r"(제\d+조(?:의\d+)?)", article_header) if article_header else None
+    _art_prefix = f"[{_art_num_match.group(1)}] " if _art_num_match else ""
+
+    # 1단계: 항 단위 분할
+    hang_parts = _split_by_hang(text)
+
+    result = []
+    for i, part in enumerate(hang_parts):
+        # 첫 청크는 조문 제목이 이미 포함되어 있으므로 접두사 불필요
+        prefix = _art_prefix if i > 0 else ""
+        prefixed = f"{prefix}{part}"
+
+        if len(prefixed) <= max_len:
+            result.append(prefixed)
+        else:
+            # 2단계: 문장 단위 분할
+            sent_chunks = _split_by_sentence(part, max_len - len(prefix))
+            for sc in sent_chunks:
+                sc_prefixed = f"{prefix}{sc}"
+                if len(sc_prefixed) <= max_len:
+                    result.append(sc_prefixed)
+                else:
+                    # 3단계: 최후 수단 — 고정 길이 분할 (overlap 50자)
+                    for piece in _split_long_text(sc, max_len - len(prefix), overlap=50):
+                        result.append(f"{prefix}{piece}")
+
+    return [r for r in result if r.strip()]
 
 
 def _clean_text(text: str) -> str:

@@ -29,9 +29,9 @@ const LEGAL_TYPE_LABEL: Record<string, string> = {
 };
 
 const LEVEL_CLS: Record<string, { border: string; text: string; label: string }> = {
-  HIGH: { border: 'border-l-4 border-rose-500', text: 'text-rose-400', label: '위험' },
-  MEDIUM: { border: 'border-l-4 border-yellow-500', text: 'text-yellow-400', label: '주의' },
-  LOW: { border: 'border-l-4 border-emerald-500', text: 'text-emerald-400', label: '안전' },
+  HIGH: { border: 'border-l-4 border-rose-500', text: 'text-rose-400', label: '필수이행' },
+  MEDIUM: { border: 'border-l-4 border-yellow-500', text: 'text-yellow-400', label: '확인필요' },
+  LOW: { border: 'border-l-4 border-emerald-500', text: 'text-emerald-400', label: '참고사항' },
 };
 
 function normalizeLevel(level: string): 'HIGH' | 'MEDIUM' | 'LOW' {

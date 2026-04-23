@@ -8,7 +8,6 @@ import { QuarterlyForecast } from './sections/QuarterlyForecast';
 import { ScenarioSplit } from './sections/ScenarioSplit';
 import { ShapContribution } from './sections/ShapContribution';
 import { TimelineForecast } from './sections/TimelineForecast';
-import { CustomerSegment } from './sections/CustomerSegment';
 import { DistrictRankings } from './sections/DistrictRankings';
 import { InsightsGrid } from './sections/InsightsGrid';
 import { ReportFooter } from './sections/ReportFooter';
@@ -64,10 +63,7 @@ export function IntegratedReport({
       <div id="section-09" data-section="timeline">
         <TimelineForecast simResult={simResult} />
       </div>
-      <div id="section-11-5" data-section="customer-segment">
-        <CustomerSegment simResult={simResult} />
-      </div>
-      <div id="section-12" data-section="district-rankings">
+      <div id="section-11" data-section="district-rankings">
         <DistrictRankings simResult={simResult} />
       </div>
       <div id="section-12" data-section="insights-grid">
