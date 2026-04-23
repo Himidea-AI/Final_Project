@@ -28,7 +28,11 @@ load_dotenv()
 # ---------------------------------------------------------------
 @dataclass
 class AgentProfile:
-    """한 에이전트의 개성 벡터 - 개인 의사결정에 반영."""
+    """한 에이전트의 개성 벡터 - 개인 의사결정에 반영.
+
+    v2 (2026-04) 확장: occupation/family_size/schedule_type/diet_pref/shopping_freq/
+    exercise_habit/health_bucket — 정책 scoring 에 반영되는 개인 특성 추가.
+    """
 
     age: int
     gender: str  # M/F
@@ -51,6 +55,17 @@ class AgentProfile:
 
     # 라이프스타일 태그 (LLM 프롬프트에 주입)
     lifestyle_tag: str
+
+    # v2 — 개인 디테일 확장
+    occupation: str = "직장인"  # 대학생/직장인/프리랜서/주부/은퇴자/자영업
+    family_size: int = 2  # 1=혼자, 2=커플, 3+=가족
+    has_kids: bool = False
+    schedule_type: str = "아침형"  # 아침형 / 올빼미 / 유연
+    diet_pref: str = "일반"  # 일반 / 채식 / 저칼로리 / 매운맛 / 건강식
+    shopping_freq: float = 0.5  # 0(드묾)~1(자주) 외식/장보기 빈도
+    exercise_habit: float = 0.3  # 0(안함)~1(매일) — 시간대 이동 패턴 영향
+    car_ownership: bool = False
+    archetype: str = "balanced_commuter"  # archetypes.py 의 키 (role 별 샘플)
 
     def category_weights(self) -> dict[str, float]:
         return {
@@ -326,6 +341,75 @@ class ProfileBuilder:
 
         tag = _lifestyle_tag(age, gender, home_dong, role)
 
+        # v2 확장 필드 — 인구통계 기반 파생
+        # 직업 — age × role × lifestyle_tag
+        if role.value == "owner":
+            occupation = "자영업"
+        elif tag == "대학생":
+            occupation = "대학생"
+        elif age >= 65:
+            occupation = "은퇴자"
+        elif gender == "F" and age in range(30, 45) and self.rng.random() < 0.15:
+            occupation = "주부"
+        elif self.rng.random() < 0.1:
+            occupation = "프리랜서"
+        else:
+            occupation = "직장인"
+
+        # 가구 크기 — age × 결혼 연령 근사
+        if age < 28:
+            family_size = self.rng.choices([1, 2, 3], weights=[0.6, 0.25, 0.15])[0]
+        elif age < 40:
+            family_size = self.rng.choices([1, 2, 3, 4], weights=[0.3, 0.35, 0.2, 0.15])[0]
+        elif age < 55:
+            family_size = self.rng.choices([1, 2, 3, 4], weights=[0.1, 0.3, 0.3, 0.3])[0]
+        else:
+            family_size = self.rng.choices([1, 2, 3], weights=[0.2, 0.55, 0.25])[0]
+        has_kids = family_size >= 3 and 25 <= age <= 55
+
+        # 스케줄 타입 — age × occupation
+        if occupation == "대학생":
+            schedule_type = self.rng.choice(["올빼미", "유연"])
+        elif occupation in ("은퇴자", "주부"):
+            schedule_type = "아침형"
+        elif age < 35 and occupation == "직장인":
+            schedule_type = self.rng.choices(["아침형", "올빼미", "유연"], weights=[0.4, 0.3, 0.3])[0]
+        else:
+            schedule_type = self.rng.choices(["아침형", "유연"], weights=[0.7, 0.3])[0]
+
+        # 식사 선호 — age × income × 일반 분포
+        diet_options = ["일반", "채식", "저칼로리", "매운맛", "건강식"]
+        if age >= 50 and income_level >= 2:
+            diet_weights = [0.3, 0.05, 0.2, 0.05, 0.4]
+        elif age < 30:
+            diet_weights = [0.5, 0.08, 0.1, 0.25, 0.07]
+        else:
+            diet_weights = [0.55, 0.07, 0.13, 0.15, 0.1]
+        diet_pref = self.rng.choices(diet_options, weights=diet_weights)[0]
+
+        # 외식/쇼핑 빈도 — income × age × family (혼자=높음, 가족=낮음)
+        base_shop = 0.3 + (income_level - 1) * 0.15
+        if family_size == 1:
+            base_shop += 0.15
+        elif family_size >= 4:
+            base_shop -= 0.1
+        if age < 30:
+            base_shop += 0.1
+        shopping_freq = max(0.05, min(1.0, base_shop + self.rng.uniform(-0.1, 0.1)))
+
+        # 운동 습관 — age 역상관 + 랜덤
+        base_ex = 0.4 - (max(0, age - 30) / 100) + self.rng.uniform(-0.15, 0.2)
+        exercise_habit = max(0.0, min(1.0, base_ex))
+
+        # 차량 보유 — age × income × family
+        car_p = 0.2 + (income_level - 1) * 0.2 + (0.15 if family_size >= 3 else 0) + (0.1 if age >= 35 else -0.1)
+        car_ownership = self.rng.random() < max(0.0, min(0.9, car_p))
+
+        # Archetype 샘플 — role × age × income 분포
+        from .archetypes import sample_archetype
+
+        archetype = sample_archetype(role.value, self.rng, age=age, income_level=income_level)
+
         return AgentProfile(
             age=age,
             gender=gender,
@@ -340,6 +424,15 @@ class ProfileBuilder:
             pref_pub=round(pref_pub, 3),
             pref_convenience=round(pref_cvs, 3),
             lifestyle_tag=tag,
+            occupation=occupation,
+            family_size=family_size,
+            has_kids=has_kids,
+            schedule_type=schedule_type,
+            diet_pref=diet_pref,
+            shopping_freq=round(shopping_freq, 3),
+            exercise_habit=round(exercise_habit, 3),
+            car_ownership=car_ownership,
+            archetype=archetype,
         )
 
     def sample_many(self, counts: dict[Role, int]) -> list[AgentProfile]:
@@ -354,16 +447,23 @@ class ProfileBuilder:
     # 실데이터 기반 시간×동×연령×요일 가중치
     # -----------------------------------------------------------
     def load_time_age_boost(self) -> dict:
-        """living_population 최신 60일 → (age_group, dong, hour, weekday) boost.
+        """실데이터 → (age_group, dong, hour, is_weekend_flag) boost.
 
-        방식:
-        - 각 (연령그룹 × 동)의 전체 평균 인구를 기준(1.0)으로 해서
-          (연령그룹, 동, 시간대, 요일)의 상대비를 0.5~2.0 범위로 정규화.
-        - 예: 상암동 30대가 평일 14시에 평균 1.8배 → 오피스 유입 반영.
-              서교동 20대가 금요일 20시에 평균 2.2배 → 홍대 금요일 저녁.
+        v2 (2026-04): living_population_grid (24h × 3년치) 우선, 실패 시 legacy living_population fallback.
+            격자 데이터를 동 단위로 집계하되 시간 해상도는 24h 그대로 유지 → 6시간대 zone 보정 제거.
+            요일 차원은 평일(0)/주말(1) 2값으로 축소 → peak hour 일치율 개선 목표.
         """
         if "time_age_boost" in self._cache:
             return self._cache["time_age_boost"]
+
+        try:
+            grid_boost = self._load_time_age_boost_from_grid()
+            if grid_boost:
+                self._cache["time_age_boost"] = grid_boost
+                print(f"[loader] time_age_boost (grid) {len(grid_boost):,}개 항목 (24h × 평일/주말)")
+                return grid_boost
+        except Exception as e:
+            print(f"[loader] grid-boost 로드 실패, legacy fallback: {e}")
 
         # 연령그룹 정의 (컬럼 직접 합산)
         groups_sql = {
@@ -434,6 +534,80 @@ class ProfileBuilder:
 
         self._cache["time_age_boost"] = boost
         print(f"[loader] time_age_boost {len(boost):,}개 항목 계산 (실 생활인구 기반)")
+        return boost
+
+    def _load_time_age_boost_from_grid(self) -> dict:
+        """living_population_grid (384 cells × 24h × 3년) → 동 집계 boost.
+
+        반환: {(age_group, dong_name, hour, is_weekend): ratio} — ratio 0.5~2.0.
+        """
+        # 마포 동코드 ↔ 이름 — 격자 테이블은 code 만, boost key 는 name 필요
+        from collections import defaultdict
+
+        dong_code_to_name: dict[str, str] = {}
+        with self.engine.connect() as c:
+            for r in c.execute(
+                text("SELECT DISTINCT dong_code, dong_name FROM living_population WHERE dong_code LIKE '1144%'")
+            ).fetchall():
+                dong_code_to_name[str(r[0])] = str(r[1])
+
+        if not dong_code_to_name:
+            return {}
+
+        # 격자 → 동 시간별 연령대 집계. DOW 7분리 유지 (PostgreSQL: 일=0, 월=1, ..., 토=6).
+        # 해상도: 24h × 7요일 — legacy 의 6 time-zone × 7요일보다 4배 세밀.
+        sql = text("""
+            SELECT dong_code,
+                   tt,
+                   EXTRACT(DOW FROM ymd)::int AS dow,
+                   AVG(COALESCE(m_20_24,0)+COALESCE(m_25_29,0)+COALESCE(f_20_24,0)+COALESCE(f_25_29,0)) g_20s,
+                   AVG(COALESCE(m_30_34,0)+COALESCE(m_35_39,0)+COALESCE(f_30_34,0)+COALESCE(f_35_39,0)) g_30s,
+                   AVG(COALESCE(m_40_44,0)+COALESCE(m_45_49,0)+COALESCE(f_40_44,0)+COALESCE(f_45_49,0)) g_40s,
+                   AVG(COALESCE(m_50_54,0)+COALESCE(m_55_59,0)+COALESCE(f_50_54,0)+COALESCE(f_55_59,0)) g_50s,
+                   AVG(COALESCE(m_60_64,0)+COALESCE(m_65_69,0)+COALESCE(m_70_plus,0)
+                       +COALESCE(f_60_64,0)+COALESCE(f_65_69,0)+COALESCE(f_70_plus,0)) g_60p
+            FROM living_population_grid
+            WHERE dong_code LIKE '1144%'
+              AND ymd >= (SELECT MAX(ymd) - 365 FROM living_population_grid)
+            GROUP BY dong_code, tt, dow
+        """)
+        rows: list[dict] = []
+        with self.engine.connect() as c:
+            for r in c.execute(sql).mappings():
+                rows.append(dict(r))
+
+        if not rows:
+            return {}
+
+        # (age_group, dong) 평균 기준 정규화
+        groups = ["20s", "30s", "40s", "50s", "60+"]
+        group_col = {"20s": "g_20s", "30s": "g_30s", "40s": "g_40s", "50s": "g_50s", "60+": "g_60p"}
+
+        by_group_dong: dict[tuple, list[float]] = defaultdict(list)
+        raw: dict[tuple, float] = {}
+        for r in rows:
+            dong_name = dong_code_to_name.get(str(r["dong_code"]))
+            if not dong_name:
+                continue
+            tt = int(r["tt"])
+            dow = int(r["dow"])  # 0=일, 1=월, ..., 6=토 (PostgreSQL)
+            for g in groups:
+                v = float(r.get(group_col[g]) or 0)
+                if v > 0:
+                    by_group_dong[(g, dong_name)].append(v)
+                    raw[(g, dong_name, tt, dow)] = v
+
+        mean_gd = {k: (sum(vs) / len(vs)) for k, vs in by_group_dong.items() if vs}
+        boost: dict = {}
+        for (g, d, tt, dow), v in raw.items():
+            base = mean_gd.get((g, d))
+            if not base or base <= 0:
+                continue
+            ratio = v / base
+            ratio = max(0.5, min(2.0, ratio))
+            # PostgreSQL DOW (일=0) → ABM py_weekday (월=0): py = (dow - 1) % 7, 일요일 dow=0 → py=6
+            py_weekday = 6 if dow == 0 else dow - 1
+            boost[(g, d, tt, py_weekday)] = round(ratio, 3)
         return boost
 
 

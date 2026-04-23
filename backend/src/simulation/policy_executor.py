@@ -15,7 +15,8 @@ import random
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from .policy_generator import PersonaPolicy, apply_personal_variation
+from .policy_generator import PersonaPolicy, apply_personal_variation, hour_to_time_block
+from .archetypes import get_multipliers as _archetype_muls
 
 if TYPE_CHECKING:
     from .agents import Agent, Decision
@@ -439,6 +440,26 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
     repeat_bonus = policy.repeat_visit_bonus if store.store_id in agent.visited_today else 0.0
     satisfaction = agent.store_satisfaction.get(store.store_id, 0.0)  # 0~1
 
+    # Layer 2 기억: visit_history 기반 누적 만족도 + habit + blacklist
+    if store.store_id in getattr(agent, "blacklist", set()):
+        return 0.0  # 블랙리스트 완전 배제
+    recalled = agent.recall_satisfaction(store.store_id) if hasattr(agent, "recall_satisfaction") else None
+    memory_bonus = 0.0
+    if recalled is not None:
+        memory_bonus = (recalled - 0.5) * 0.8  # 만족도>0.5 면 +, <0.5 면 -
+    # 습관 (같은 시간대 자주 감)
+    habit_bonus = 0.4 if getattr(agent, "habit_store", {}).get(h) == store.store_id else 0.0
+    # Layer 2 category 학습 선호 (exponential moving average 로 업데이트된 값)
+    learned_cat = getattr(agent, "learned_prefs", {}).get(store.category, 0.5)
+    learned_mult = 0.7 + 0.6 * learned_cat  # 0.7~1.3
+
+    # Layer 5 친구 추천 반영
+    rec_bonus = 0.0
+    for rec in getattr(agent, "pending_recommendations", []):
+        if rec.get("store_id") == store.store_id:
+            rec_bonus = 0.3 * rec.get("strength", 0.5)
+            break
+
     # 계절 보정
     season_mult = _SEASON_CATEGORY.get(getattr(world, "month", 4), {}).get(store.category, 1.0)
 
@@ -449,11 +470,14 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
 
     score = (
         policy.indoor_preference * indoor_score
-        + cat_pref * age_cat_mult * price_mult * season_mult * close_rush
+        + cat_pref * age_cat_mult * price_mult * season_mult * close_rush * learned_mult
         + dong_aff
         + popularity * 0.3
         + repeat_bonus
         + satisfaction * 0.5  # 학습된 만족도 가중 (0~0.5)
+        + memory_bonus  # Layer 2: 장기 기억 (-0.4 ~ +0.4)
+        + habit_bonus  # Layer 2: 습관 (0 or +0.4)
+        + rec_bonus  # Layer 5: 친구 추천 (0 ~ +0.3)
         - policy.distance_sensitivity * distance_cost
         - (1.0 - policy.crowd_tolerance) * congestion_penalty
     )
@@ -490,7 +514,18 @@ def should_visit(agent: "Agent", policy: PersonaPolicy, world: "World", rng: ran
     # profile의 mobility_score도 반영
     personal_mob = getattr(agent.profile, "mobility_score", 0.5) if agent.profile else 0.5
 
-    p = _clamp(policy.visit_probability * boost * personal_mob)
+    # Layer 3: 내부 상태 반영
+    hunger = getattr(agent, "hunger", 0.0)
+    fatigue = getattr(agent, "fatigue", 0.0)
+    mood = getattr(agent, "mood", 0.5)
+    # 배고프면 식사 시간대 visit ↑, 피곤하면 visit ↓, 기분 좋으면 visit ↑
+    state_mult = 1.0
+    if h in (12, 13, 18, 19, 20) and hunger > 0.5:
+        state_mult *= 1.0 + 0.6 * hunger  # 배고픔 × 점심/저녁 → visit_p 최대 1.6배
+    state_mult *= 1.0 - 0.4 * fatigue  # fatigue=1.0 면 0.6배
+    state_mult *= 0.7 + 0.6 * mood  # mood=0 이면 0.7, mood=1 이면 1.3
+
+    p = _clamp(policy.visit_probability * boost * personal_mob * state_mult)
     return rng.random() < p
 
 
@@ -649,15 +684,19 @@ def policy_decide(
     weather_key = world.weather if world.weather in ("맑음", "비", "눈") else "맑음"
     if weather_key == "눈":
         weather_key = "비"  # 눈은 비 정책 공유 (§3 스펙)
+    tb = hour_to_time_block(h)
+    # v2: role × weather × time_block 키 우선 조회, 없으면 role × weather fallback
+    policy_key_v2 = f"{agent.role.value}_{weather_key}_{tb}"
     policy_key = f"{agent.role.value}_{weather_key}"
     if agent.role.value == "owner":
+        policy_key_v2 = f"owner_맑음_{tb}"
         policy_key = "owner_맑음"
 
-    policy = world.policy_cache.get(policy_key)
+    policy = world.policy_cache.get(policy_key_v2) or world.policy_cache.get(policy_key)
     if policy is None:
         # 정책 미로드 — rule_decide로 fallback, 최초 1회만 경고
         if not getattr(world, "_policy_miss_warned", False):
-            print(f"[policy] cache miss: {policy_key} — rule_decide fallback 활성")
+            print(f"[policy] cache miss: {policy_key_v2}/{policy_key} — rule_decide fallback 활성")
             world._policy_miss_warned = True  # type: ignore[attr-defined]
         return agent._rule_decide(world, rng)
 
@@ -666,6 +705,36 @@ def policy_decide(
 
     # 3. 개체별 편차 (±15%)
     policy = apply_personal_variation(policy, rng)
+
+    # 3.5 Archetype multiplier — 개인 성격 유형별 field 배율 (profile 에 기록)
+    prof = getattr(agent, "profile", None)
+    if prof is not None and getattr(prof, "archetype", None):
+        muls = _archetype_muls(prof.archetype)
+        if muls:
+            patch: dict = {}
+            for f in (
+                "visit_probability",
+                "mobility",
+                "cafe_preference",
+                "meal_preference",
+                "pub_preference",
+                "cvs_preference",
+                "spend_tendency",
+                "crowd_tolerance",
+                "distance_sensitivity",
+                "repeat_visit_bonus",
+            ):
+                m = muls.get(f)
+                if m is not None:
+                    patch[f] = max(0.01, min(1.0, getattr(policy, f) * m))
+            # time_block bias (morning/lunch/afternoon/evening/night) — visit_probability 에만 반영
+            tb_bias = muls.get(f"{tb}_bias", 1.0)
+            if tb_bias != 1.0 and "visit_probability" not in patch:
+                patch["visit_probability"] = max(0.01, min(1.0, policy.visit_probability * tb_bias))
+            elif tb_bias != 1.0:
+                patch["visit_probability"] = max(0.01, min(1.0, patch["visit_probability"] * tb_bias))
+            if patch:
+                policy = replace(policy, **patch)
 
     # 4. 친구 동반 — 최근 친구가 방문한 매장 있으면 30% 확률로 따라감
     friend_store = None

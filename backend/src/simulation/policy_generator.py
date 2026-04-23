@@ -66,8 +66,43 @@ class PersonaPolicy:
 
 
 # ---------------------------------------------------------------
-# 정책 카탈로그 (생성할 11개 조합)
+# 정책 카탈로그 — v2 (2026-04): role × weather × time_block 확장
 # ---------------------------------------------------------------
+# 시간 블록 5구간
+TIME_BLOCKS: list[TimeBlock] = ["morning", "lunch", "afternoon", "evening", "night"]
+
+
+def hour_to_time_block(hour: int) -> TimeBlock:
+    """hour (0-23) → time_block."""
+    h = hour % 24
+    if 6 <= h <= 10:
+        return "morning"
+    if 11 <= h <= 13:
+        return "lunch"
+    if 14 <= h <= 17:
+        return "afternoon"
+    if 18 <= h <= 21:
+        return "evening"
+    return "night"
+
+
+# 11 → 55 조합 (role × weather × time_block), owner 는 weather 무관 (5 time_block × 1 = 5)
+def _build_catalog() -> list[tuple[Role, Weather, TimeBlock]]:
+    cat: list[tuple[Role, Weather, TimeBlock]] = []
+    roles_with_weather: list[Role] = ["resident", "commuter", "visitor", "ext_commuter", "ext_visitor"]
+    weathers: list[Weather] = ["맑음", "비"]
+    for r in roles_with_weather:
+        for w in weathers:
+            for tb in TIME_BLOCKS:
+                cat.append((r, w, tb))
+    # owner — weather 무관, time_block 은 활용
+    for tb in TIME_BLOCKS:
+        cat.append(("owner", "맑음", tb))
+    return cat
+
+
+POLICY_CATALOG_V2: list[tuple[Role, Weather, TimeBlock]] = _build_catalog()
+# 하위 호환: 기존 코드가 POLICY_CATALOG 를 참조하면 role×weather 만 (time_block 생략)
 POLICY_CATALOG: list[tuple[Role, Weather]] = [
     ("resident", "맑음"),
     ("resident", "비"),
@@ -79,12 +114,15 @@ POLICY_CATALOG: list[tuple[Role, Weather]] = [
     ("ext_commuter", "비"),
     ("ext_visitor", "맑음"),
     ("ext_visitor", "비"),
-    ("owner", "맑음"),  # owner는 날씨 무관 단일 정책
+    ("owner", "맑음"),
 ]
 
 
-def policy_id(role: Role, weather: Weather) -> str:
-    return f"{role}_{weather}"
+def policy_id(role: Role, weather: Weather, time_block: TimeBlock | None = None) -> str:
+    """role+weather+time_block 복합 키. time_block None 이면 기존 2-key (fallback)."""
+    if time_block is None:
+        return f"{role}_{weather}"
+    return f"{role}_{weather}_{time_block}"
 
 
 # ---------------------------------------------------------------
@@ -387,8 +425,8 @@ _MOCK_BASE: dict[Role, dict] = {
 
 
 def _mock_policy(role: Role, weather: Weather) -> PersonaPolicy:
+    """(하위 호환) role×weather 단일 정책."""
     base = _MOCK_BASE[role].copy()
-    # 비 오면 실내 선호 ↑, 이동 ↓
     if weather == "비":
         base["indoor_preference"] = min(1.0, base.get("indoor_preference", 0.5) * 1.3)
         base["mobility"] = max(0.1, base.get("mobility", 0.5) * 0.7)
@@ -402,20 +440,194 @@ def _mock_policy(role: Role, weather: Weather) -> PersonaPolicy:
 
 
 # ---------------------------------------------------------------
+# v2 하드코딩 정책 — role × weather × time_block 55 조합
+# ---------------------------------------------------------------
+# time_block 별 field 배율 (role 독립적 기본 효과)
+_TIME_BLOCK_DELTAS: dict[TimeBlock, dict[str, float]] = {
+    "morning": {
+        "visit_probability": 0.6,
+        "cafe_preference": 1.1,
+        "meal_preference": 0.8,
+        "pub_preference": 0.1,
+        "mobility": 1.0,
+        "spend_tendency": 0.7,
+    },
+    "lunch": {
+        "visit_probability": 1.6,
+        "cafe_preference": 1.2,
+        "meal_preference": 1.5,
+        "pub_preference": 0.2,
+        "mobility": 1.0,
+        "spend_tendency": 1.1,
+    },
+    "afternoon": {
+        "visit_probability": 1.1,
+        "cafe_preference": 1.4,
+        "meal_preference": 0.8,
+        "pub_preference": 0.3,
+        "mobility": 1.0,
+        "spend_tendency": 0.9,
+    },
+    "evening": {
+        "visit_probability": 1.7,
+        "cafe_preference": 0.9,
+        "meal_preference": 1.4,
+        "pub_preference": 1.3,
+        "mobility": 1.1,
+        "spend_tendency": 1.2,
+    },
+    "night": {
+        "visit_probability": 0.5,
+        "cafe_preference": 0.4,
+        "meal_preference": 0.6,
+        "pub_preference": 1.5,
+        "mobility": 0.7,
+        "spend_tendency": 0.9,
+    },
+}
+
+# role × time_block 특이 오버라이드 (출퇴근·영업 패턴)
+_ROLE_TIME_OVERRIDES: dict[tuple[Role, TimeBlock], dict[str, float]] = {
+    ("ext_commuter", "morning"): {"visit_probability": 1.2, "mobility": 1.3, "spend_tendency": 0.7},
+    ("ext_commuter", "evening"): {"visit_probability": 0.8, "mobility": 1.3, "spend_tendency": 0.9},
+    ("ext_commuter", "night"): {"visit_probability": 0.2, "mobility": 0.3},
+    ("ext_visitor", "morning"): {"visit_probability": 0.2, "mobility": 0.3},
+    ("ext_visitor", "evening"): {
+        "visit_probability": 2.0,
+        "pub_preference": 1.7,
+        "mobility": 1.4,
+        "spend_tendency": 1.4,
+    },
+    ("ext_visitor", "night"): {"visit_probability": 1.5, "pub_preference": 1.8, "mobility": 1.0},
+    ("commuter", "lunch"): {"visit_probability": 2.0, "meal_preference": 1.7, "spend_tendency": 1.2},
+    ("commuter", "evening"): {"visit_probability": 1.5, "meal_preference": 1.4, "pub_preference": 1.3},
+    ("owner", "morning"): {"visit_probability": 0.3, "mobility": 0.1},
+    ("owner", "lunch"): {"visit_probability": 0.2, "mobility": 0.05},
+    ("owner", "afternoon"): {"visit_probability": 0.15, "mobility": 0.05},
+    ("owner", "evening"): {"visit_probability": 0.4, "mobility": 0.1},
+    ("owner", "night"): {"visit_probability": 0.5, "mobility": 0.2},
+    ("resident", "morning"): {"visit_probability": 0.7, "cvs_preference": 1.3},
+    ("resident", "night"): {"visit_probability": 0.4, "cvs_preference": 1.5},
+    ("visitor", "morning"): {"visit_probability": 0.5},
+    ("visitor", "afternoon"): {"visit_probability": 1.4, "cafe_preference": 1.3},
+}
+
+
+def expand_policy_to_time_block(base_policy: PersonaPolicy, time_block: TimeBlock) -> PersonaPolicy:
+    """(v2) LLM 이 생성한 base PersonaPolicy 를 받아 time_block delta/override 적용.
+
+    base_policy 는 보통 afternoon 기준으로 만든 값 → 다른 시간대로 변형.
+    하드코딩 테이블 (TIME_BLOCK_DELTAS, ROLE_TIME_OVERRIDES) 을 곱셈 적용.
+    """
+    role = base_policy.role
+    weather = base_policy.weather
+
+    fields = {
+        "mobility": base_policy.mobility,
+        "indoor_preference": base_policy.indoor_preference,
+        "distance_sensitivity": base_policy.distance_sensitivity,
+        "crowd_tolerance": base_policy.crowd_tolerance,
+        "cafe_preference": base_policy.cafe_preference,
+        "meal_preference": base_policy.meal_preference,
+        "pub_preference": base_policy.pub_preference,
+        "cvs_preference": base_policy.cvs_preference,
+        "visit_probability": base_policy.visit_probability,
+        "repeat_visit_bonus": base_policy.repeat_visit_bonus,
+        "spend_tendency": base_policy.spend_tendency,
+    }
+
+    # 1) time_block 기본 배율
+    for k, mult in _TIME_BLOCK_DELTAS[time_block].items():
+        if k in fields:
+            fields[k] = max(0.01, min(1.0, fields[k] * mult))
+    # 2) role × time_block 오버라이드
+    ov = _ROLE_TIME_OVERRIDES.get((role, time_block))
+    if ov:
+        for k, mult in ov.items():
+            if k in fields:
+                fields[k] = max(0.01, min(1.0, fields[k] * mult))
+
+    return replace(
+        base_policy,
+        policy_id=policy_id(role, weather, time_block),
+        time_block=time_block,
+        rationale=base_policy.rationale + f" | +time={time_block}",
+        **fields,
+    )
+
+
+def _hardcoded_policy(role: Role, weather: Weather, time_block: TimeBlock) -> PersonaPolicy:
+    """(fallback) LLM 없을 때만 사용 — _MOCK_BASE 에서 시작해 time_block 확장."""
+    mock = _mock_policy(role, weather)
+    return expand_policy_to_time_block(mock, time_block)
+
+
+def _expand_base_to_v2(base_policies: dict[str, PersonaPolicy]) -> dict[str, PersonaPolicy]:
+    """LLM 이 만든 11개 base (role×weather) → time_block 5개 delta 적용으로 55개로 확장.
+
+    반환: 55 (role×weather×time_block) + 11 (legacy role×weather alias = afternoon) = 66 개.
+    """
+    out: dict[str, PersonaPolicy] = {}
+    for base_key, base_pol in base_policies.items():
+        for tb in TIME_BLOCKS:
+            expanded = expand_policy_to_time_block(base_pol, tb)
+            out[expanded.policy_id] = expanded
+        # legacy alias: {role}_{weather} 키 → afternoon 값
+        out[base_key] = out[policy_id(base_pol.role, base_pol.weather, "afternoon")]
+    return out
+
+
+# ---------------------------------------------------------------
 # 메인 생성 함수
 # ---------------------------------------------------------------
+def generate_hardcoded_policies_v2() -> dict[str, PersonaPolicy]:
+    """v2 — 55개 role×weather×time_block 하드코딩 정책 (LLM 0 호출)."""
+    policies: dict[str, PersonaPolicy] = {}
+    for role, weather, tb in POLICY_CATALOG_V2:
+        pid = policy_id(role, weather, tb)
+        pol = _hardcoded_policy(role, weather, tb)
+        policies[pid] = pol
+
+        # 하위 호환: tb=afternoon 을 기본 role_weather 키로도 노출 (time_block 없이 조회되는 경로 대비)
+        if tb == "afternoon":
+            legacy_key = policy_id(role, weather)
+            policies[legacy_key] = pol
+    return policies
+
+
 def generate_policies(
     cache_path: str | Path | None = None,
     force_regenerate: bool = False,
     use_mock: bool = False,
     provider: str = "auto",
+    use_hardcoded_v2: bool = True,
+    llm_base_cache: str | Path | None = None,
 ) -> dict[str, PersonaPolicy]:
-    """11개 PersonaPolicy 생성 + 캐시.
+    """PersonaPolicy 생성 + 캐시.
 
-    cache_path 파일이 있으면 재사용 (force_regenerate=True면 덮어씀).
-    use_mock=True면 LLM 호출 없이 mock 정책만 반환.
-    provider: "openai" | "ollama" | "auto" (OpenAI 키 있으면 OpenAI, 없으면 Ollama)
+    v2 (2026-04): use_hardcoded_v2=True (기본) 이면 LLM 0 호출, 55+11 개 하드코딩.
+    기존 LLM 경로는 use_hardcoded_v2=False 로 유지.
+
+    v3 (하이브리드): llm_base_cache 경로 지정 시 → LLM 11 base 로드 → time_block 확장 → 55+11 개 반환.
     """
+    # [하이브리드] LLM base + time_block 확장
+    if llm_base_cache is not None:
+        base_path = Path(llm_base_cache)
+        if not base_path.exists():
+            raise FileNotFoundError(f"LLM base cache not found: {base_path}")
+        base_policies = _load_cache(base_path)
+        policies = _expand_base_to_v2(base_policies)
+        print(f"[policy_gen] 하이브리드: LLM base {len(base_policies)} → expand {len(policies)} (time_block×5)")
+        return policies
+
+    if use_hardcoded_v2:
+        policies = generate_hardcoded_policies_v2()
+        print(f"[policy_gen] v2 하드코딩 {len(policies)}개 (role×weather×time_block)")
+        if cache_path is None:
+            cache_path = Path(__file__).resolve().parents[3] / "data" / "processed" / "policy_cache_v2.json"
+        cache_path = Path(cache_path)
+        _save_cache(cache_path, policies)
+        return policies
     if cache_path is None:
         cache_path = Path(__file__).resolve().parents[3] / "data" / "processed" / "policy_cache.json"
     cache_path = Path(cache_path)

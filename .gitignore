@@ -1,3 +1,6 @@
+# Git worktrees (평행 작업 디렉토리)
+.worktrees/
+
 # Python
 __pycache__/
 *.py[cod]

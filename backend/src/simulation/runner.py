@@ -247,6 +247,10 @@ def run_simulation(
     use_policy: bool = False,
     collect_trajectory: bool = False,
     trajectory_sample_size: int = 300,
+    seed_memory: bool = True,
+    memory_seed_days: int = 14,
+    warmup_days: int = 0,
+    llm_base_cache: str | Path | None = None,
 ) -> SimulationResult:
     pop = pop or PopulationMix()
     tier = tier or TierDistribution()
@@ -327,7 +331,7 @@ def run_simulation(
 
     # Policy Generator — use_policy=True면 11개 정책 로드 (캐시 있으면 재사용)
     if use_policy:
-        world.policy_cache = generate_policies()
+        world.policy_cache = generate_policies(llm_base_cache=llm_base_cache) if llm_base_cache else generate_policies()
         if verbose:
             print(f"  정책 캐시: {len(world.policy_cache)}개 (LLM 호출 0회 모드)", flush=True)
 
@@ -385,6 +389,15 @@ def run_simulation(
         world.time_age_boost = _pb.load_time_age_boost()
     except Exception as e:
         print(f"  [warn] time_age_boost 로드 실패: {e}")
+
+    # 2.6 [v12] Memory Seeding — 격자 데이터 기반 가상 visit_history 주입 (Cold Start 완화)
+    if seed_memory:
+        try:
+            from .memory_seeder import seed_all_agents
+
+            seed_all_agents(agents, world, days_of_history=memory_seed_days, verbose=verbose)
+        except Exception as e:
+            print(f"  [warn] memory seeding 실패: {e}")
 
     # 3. Brain + Scheduler 준비 (+ pgvector 메모리 옵션)
     memory_index: PgVectorMemory | None = None
@@ -471,22 +484,40 @@ def run_simulation(
             print("  [PAY] 월급일 주간 (budget × 1.15, spend_tendency × 1.3)", flush=True)
         print(f"  [SEASON] 현재 월: {world.month}월 (계절 보정 적용)", flush=True)
 
-    for day in range(1, days + 1):
-        real_date = sim_start + _dt.timedelta(days=day - 1)
+    # [v12] Warmup: 측정 전 N 일 시뮬 후 집계 초기화 — Layer 2/5 습관 형성
+    total_loops = warmup_days + days
+    for day_idx in range(1, total_loops + 1):
+        day = day_idx - warmup_days  # day <= 0 이면 warmup
+        is_warmup = day_idx <= warmup_days
+        real_date = sim_start + _dt.timedelta(days=day_idx - 1 - warmup_days)
         hol = holiday_map.get(real_date.isoformat(), {})
-        world.is_weekend = scenario.weekend_force or hol.get("is_weekend", (day % 7) in (6, 0))
+        world.is_weekend = scenario.weekend_force or hol.get("is_weekend", (day_idx % 7) in (6, 0))
         world.is_holiday = hol.get("is_holiday", False)
         world.holiday_name = hol.get("holiday_name")
 
         if verbose:
-            tag = "주말" if world.is_weekend else "평일"
+            tag = ("WARMUP " if is_warmup else "") + ("주말" if world.is_weekend else "평일")
             if world.is_holiday:
                 tag += f" · 공휴일({world.holiday_name})"
-            print(f"\n  --- Day {day} ({tag}) ---", flush=True)
+            print(f"\n  --- Day {day_idx} ({tag}) ---", flush=True)
+
+        # Warmup 마지막 시점에 집계 리셋 — 측정 day 들부터 stats 깨끗하게 시작
+        if is_warmup and day_idx == warmup_days:
+            if verbose:
+                print(f"  [warmup] {warmup_days}일 warmup 종료, 집계 리셋", flush=True)
+            for s in world.stores.values():
+                s.visits_today = 0
+                s.revenue_today = 0.0
+            total_decisions = 0
+            visits_log.clear()
+            trajectory.clear()
 
         for _ in range(time_cfg.total_steps):
             res = scheduler.step(brain)
             total_decisions += res.activated
+            # agent_id → Agent lookup (v11: Layer 2/3/5 업데이트용)
+            _agent_by_id = {a.agent_id: a for a in agents}
+
             for aid, dec in res.decisions:
                 target_str = str(dec.target_store_id or dec.target_dong or "")
                 memory.of(aid).add(
@@ -495,6 +526,52 @@ def run_simulation(
                     action=dec.action,
                     target=target_str,
                 )
+                # v11 Layer 2: 방문 기록 → agent.record_visit + store_satisfaction 갱신
+                _a = _agent_by_id.get(aid)
+                if _a is not None and dec.action == "visit" and dec.target_store_id:
+                    _store = world.stores.get(dec.target_store_id)
+                    if _store is not None:
+                        # 만족도 — rating + price fit + congestion
+                        cong = min(1.0, _store.visits_today / max(_store.seats, 1))
+                        sat = max(
+                            0.0,
+                            min(
+                                1.0,
+                                0.5
+                                + 0.1 * (_store.rating - 3.0)
+                                - 0.3 * cong
+                                + 0.15 * (1.0 if _store.price_level <= _a.income_level else -0.5),
+                            ),
+                        )
+                        _a.record_visit(
+                            day=day, hour=res.hour, store_id=_store.store_id, category=_store.category, satisfaction=sat
+                        )
+                        _a.store_satisfaction[_store.store_id] = sat
+                        # 배고픔 리셋
+                        if _store.category in ("음식점", "편의점"):
+                            _a.hunger = max(0.0, _a.hunger - 0.8)
+                        # v11 Layer 5: 친구에게 추천 전파 (만족도 >0.7 일 때만)
+                        if sat > 0.7 and _a.friends:
+                            # 친한 친구 최대 2명에게 추천
+                            import random as _rnd
+
+                            for fid in _a.friends[:2]:
+                                friend = _agent_by_id.get(fid)
+                                if friend is not None and _rnd.random() < 0.3:
+                                    friend.pending_recommendations.append(
+                                        {
+                                            "store_id": _store.store_id,
+                                            "from_agent": aid,
+                                            "category": _store.category,
+                                            "strength": sat,
+                                        }
+                                    )
+                                    # 추천 큐는 최대 20건 유지
+                                    if len(friend.pending_recommendations) > 20:
+                                        friend.pending_recommendations = friend.pending_recommendations[-20:]
+                # v11 Layer 3: 매 tick 내부 상태 진화 (visit 여부 무관)
+                if _a is not None:
+                    _a.tick_state(res.hour, dec.action, world)
                 # 방문 이벤트 수집 (지도 시각화용) + 주문 메뉴 추정
                 if trajectory_path and dec.action == "visit" and dec.target_store_id:
                     store = world.stores.get(dec.target_store_id)
