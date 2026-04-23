@@ -348,13 +348,6 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     # 랭킹 데이터
     district_rankings = _sanitize(analysis.get("district_rankings", []))
     winner_district = _sanitize(analysis.get("winner_district", target_dist))
-    # district_rankings[0]과 winner_district 강제 동기화
-    # (target_districts 필터링 버그로 winner가 전체 1위와 다를 수 있음)
-    if district_rankings and isinstance(district_rankings, list):
-        _top = district_rankings[0] if isinstance(district_rankings[0], dict) else {}
-        _top_dong = _top.get("district")
-        if _top_dong:
-            winner_district = _top_dong
     top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
@@ -477,10 +470,22 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         for r in district_rankings
     ]
 
+    # 사용자 선택 동이 상단에 오도록 정렬: winner → 나머지 선택 동 → 미선택 동
+    _selected = set(state.get("target_districts") or [target_dist])
+    district_rankings = sorted(
+        district_rankings,
+        key=lambda r: (
+            0 if r.get("district") == winner_district else
+            1 if r.get("district") in _selected else
+            2
+        ),
+    )
+
     # [B1 고도화] 응답 구조 재설계
     response_data = {
         "request_id": request_id,
         "target_district": target_dist,
+        "target_districts": state.get("target_districts") or [target_dist],
         "winner_district": winner_district,
         "top_3_candidates": top_3_candidates,
         "district_rankings": district_rankings,
