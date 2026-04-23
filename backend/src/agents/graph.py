@@ -195,12 +195,24 @@ async def ml_prediction_phase_node(state: AgentState) -> dict:
             f"--- [PHASE 2.5] TCN 완료 ({elapsed:.1f}s) | "
             f"월매출={monthly_rev:,.0f}원 BEP={bep}개월 폐업률={closure} ---"
         )
-        return {"tcn_sim_result": sim_result}
+
+        # SHAP 분석 — synthesis 프롬프트 주입용 (main.py 중복 실행 대체)
+        shap_result: dict = {}
+        try:
+            from models.explainability.shap_analysis import explain_tcn_prediction
+
+            shap_result = explain_tcn_prediction(dong_code, industry_code)
+            top_feat = (shap_result.get("feature_importance") or [{}])[0].get("feature_ko", "N/A")
+            print(f"--- [PHASE 2.5] SHAP 완료 | top_feat={top_feat} ---")
+        except Exception as _shap_err:
+            print(f"--- [PHASE 2.5] SHAP 실패 (무시): {_shap_err} ---")
+
+        return {"tcn_sim_result": sim_result, "shap_result": shap_result}
 
     except Exception as e:
         elapsed = time.perf_counter() - t_start
         print(f"--- [PHASE 2.5] TCN 실패 ({elapsed:.1f}s): {e} ---")
-        return {"tcn_sim_result": {}}
+        return {"tcn_sim_result": {}, "shap_result": {}}
 
 
 def build_graph() -> StateGraph:

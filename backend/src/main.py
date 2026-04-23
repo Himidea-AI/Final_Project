@@ -71,7 +71,6 @@ from models.explainability.simulation import (
     build_scenarios,
 )
 from models.explainability.shap_analysis import explain_tcn_prediction
-from models.customer_revenue.predict import predict as customer_predict, SegmentProfile
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -449,15 +448,17 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             for q in range(1, 5)
         ]
 
-    # TCN SHAP 분석 실행 — 피처별 매출 기여도 계산
-    try:
-        shap_result = explain_tcn_prediction(
-            dong_code=_dong_code,
-            industry_code=_industry_code,
-        )
-    except Exception as e:
-        logger.warning("SHAP 분석 실패: %s", e)
-        shap_result = None
+    # SHAP 분석 — Phase 2.5에서 이미 계산된 값을 state에서 읽음 (중복 실행 방지)
+    shap_result = state.get("shap_result") or None
+    if not shap_result:
+        try:
+            shap_result = explain_tcn_prediction(
+                dong_code=_dong_code,
+                industry_code=_industry_code,
+            )
+        except Exception as e:
+            logger.warning("SHAP 분석 실패: %s", e)
+            shap_result = None
 
     _sim_closure_rate = (sim_result.get("closure_rate") or {}).get("closure_rate")
     _sim_bep_months = (sim_result.get("bep") or {}).get("bep_months")
@@ -511,7 +512,12 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 "score": district_score,
                 # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
                 "revenue": (md.get("avg_revenue") or 30000000) // 10000,
-                "bep": int(metrics.get("bep_months") or final_report.get("bep_months") or 14),
+                "bep": int(
+                    metrics.get("bep_months")
+                    or (final_report.get("profit_simulation") or {}).get("bep_months")
+                    or _sim_bep_months
+                    or 14
+                ),
                 "survival": float(market_report["survival_rate"]),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),
             }
@@ -1043,35 +1049,6 @@ async def run_simulation(input_data: SimulationInput):
     try:
         final_state = await _run_pipeline(input_data)
         result = map_state_to_simulation_output(final_state, request_id)
-        # [customer_revenue P1-C] 타겟 고객 매출 분석 주입 — 실패해도 None 으로 조용히 fallback
-        try:
-            from src.services.dong_resolver import resolve_dong_code
-
-            _seg_dong = resolve_dong_code(result.get("winner_district") or input_data.target_district)
-            _seg_industry = _BIZ_TO_INDUSTRY_CODE.get(input_data.business_type, "CS100010")
-            _seg_profile = SegmentProfile(
-                age_groups=list(input_data.target_age_groups or []),
-                gender=input_data.target_gender or "all",
-                time_slots=list(input_data.target_time_slots or []),
-                day_type=input_data.target_day_type or "all",
-            )
-            _qp = result.get("quarterly_projection") or []
-            _q_num = (
-                int(_qp[0]["quarter"])
-                if _qp and isinstance(_qp[0], dict) and _qp[0].get("quarter")
-                else ((datetime.now().month - 1) // 3 + 1)
-            )
-            _year = datetime.now().year
-            if _seg_dong:
-                result["customer_segment"] = customer_predict(
-                    _seg_dong, _seg_industry, _seg_profile,
-                    input_data.target_monthly_sales, _q_num, _year,
-                )
-            else:
-                result["customer_segment"] = None
-        except Exception as _seg_err:
-            print(f"[customer_revenue] predict 실패: {type(_seg_err).__name__}: {_seg_err}")
-            result["customer_segment"] = None
         return result
     except Exception as e:
         import traceback

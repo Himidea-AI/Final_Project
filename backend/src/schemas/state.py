@@ -62,3 +62,6 @@ class AgentState(TypedDict):
 
     # 7. TCN ML 모델 결과 (Phase 2.5 — winner 동 기준 실행, synthesis 프롬프트에 주입)
     tcn_sim_result: dict[str, Any]  # ModelOutput.generate() 전체 결과
+
+    # 8. SHAP 피처 기여도 분석 결과 (Phase 2.5 — TCN 직후 실행, synthesis 프롬프트 주입용)
+    shap_result: dict[str, Any]  # explain_tcn_prediction() 전체 결과
