@@ -43,8 +43,8 @@ export function ShapContribution({ simResult }: Props) {
       </div>
       {(demo || competitor) && (
         <div className="grid gap-2 md:grid-cols-2">
-          {demo && <AgentCard attribution={demo} size="compact" />}
-          {competitor && <AgentCard attribution={competitor} size="compact" />}
+          {demo && <AgentCard attribution={demo} size="full" />}
+          {competitor && <AgentCard attribution={competitor} size="full" />}
         </div>
       )}
     </section>
