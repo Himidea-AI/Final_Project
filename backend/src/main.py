@@ -313,7 +313,8 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "rent_affordability": "CAUTION",
         "population_score": 7,
     }
-    target_dist = state.get("target_district", "마포구")
+    # winner_district 우선 사용 — Phase1에서 선택 동 중 1위로 확정된 동
+    target_dist = state.get("winner_district") or state.get("target_district", "마포구")
 
     # [좌표 기본값 처리]
     lat = md.get("lat") if md.get("lat") else DEFAULT_LAT
@@ -1039,7 +1040,7 @@ async def run_simulation(input_data: SimulationInput):
         try:
             from src.services.dong_resolver import resolve_dong_code
 
-            _seg_dong = resolve_dong_code(input_data.target_district)
+            _seg_dong = resolve_dong_code(result.get("winner_district") or input_data.target_district)
             _seg_industry = _BIZ_TO_INDUSTRY_CODE.get(input_data.business_type, "CS100010")
             _seg_profile = SegmentProfile(
                 age_groups=list(input_data.target_age_groups or []),
