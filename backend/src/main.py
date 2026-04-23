@@ -331,6 +331,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
             "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
+            "is_fallback": r.get("is_fallback", False),
         }
         for r in legal_risks_raw
     ]
