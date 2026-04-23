@@ -1,9 +1,9 @@
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 import os
 import uuid
+from datetime import datetime
 import asyncio
 from typing import Any, Dict
 
@@ -189,33 +189,15 @@ _BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 업종 → kakao 검색 키워드 매핑
 _BIZ_TO_KAKAO_KW: Dict[str, str] = {
-    "치킨전문점": "치킨",
-    "커피-음료": "커피",
-    "한식음식점": "한식",
-    "중식음식점": "중식",
-    "일식음식점": "일식",
-    "양식음식점": "양식",
-    "제과점": "베이커리",
-    "패스트푸드점": "버거",
-    "분식전문점": "분식",
+    "치킨전문점": "치킨", "커피-음료": "커피", "한식음식점": "한식",
+    "중식음식점": "중식", "일식음식점": "일식", "양식음식점": "양식",
+    "제과점": "베이커리", "패스트푸드점": "버거", "분식전문점": "분식",
     "호프-간이주점": "주점",
-    "치킨": "치킨",
-    "커피": "커피",
-    "카페": "커피",
-    "한식": "한식",
-    "중식": "중식",
-    "일식": "일식",
-    "양식": "양식",
-    "베이커리": "베이커리",
-    "버거": "버거",
-    "분식": "분식",
-    "주점": "주점",
-    "chicken": "치킨",
-    "cafe": "커피",
-    "coffee": "커피",
-    "burger": "버거",
-    "bakery": "베이커리",
-    "korean": "한식",
+    "치킨": "치킨", "커피": "커피", "카페": "커피", "한식": "한식",
+    "중식": "중식", "일식": "일식", "양식": "양식", "베이커리": "베이커리",
+    "버거": "버거", "분식": "분식", "주점": "주점",
+    "chicken": "치킨", "cafe": "커피", "coffee": "커피", "burger": "버거",
+    "bakery": "베이커리", "korean": "한식",
 }
 
 
@@ -246,22 +228,19 @@ async def _collect_all_competitor_locations(
                     continue
                 seen_ids.add(cid)
                 if s.get("lat") and s.get("lon"):
-                    results.append(
-                        {
-                            "id": cid,
-                            "place_name": s.get("place_name", ""),
-                            "brand_name": s.get("brand_name", ""),
-                            "lat": s["lat"],
-                            "lng": s["lon"],
-                            "distance_m": s.get("distance_m"),
-                            "is_franchise": s.get("is_franchise", False),
-                            "category": s.get("category", ""),
-                            "source_dong": dong_name,
-                        }
-                    )
+                    results.append({
+                        "id": cid,
+                        "place_name": s.get("place_name", ""),
+                        "brand_name": s.get("brand_name", ""),
+                        "lat": s["lat"],
+                        "lng": s["lon"],
+                        "distance_m": s.get("distance_m"),
+                        "is_franchise": s.get("is_franchise", False),
+                        "category": s.get("category", ""),
+                        "source_dong": dong_name,
+                    })
         except Exception as e:
             import traceback
-
             print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
 
     await asyncio.gather(*[_fetch_one(d) for d in districts])
@@ -312,7 +291,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         "competitor_intel_result": {},
     }
 
-    task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=120.0))
+    task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=600.0))
     _pending_pipelines[key] = task
     try:
         return await task
@@ -369,6 +348,13 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     # 랭킹 데이터
     district_rankings = _sanitize(analysis.get("district_rankings", []))
     winner_district = _sanitize(analysis.get("winner_district", target_dist))
+    # district_rankings[0]과 winner_district 강제 동기화
+    # (target_districts 필터링 버그로 winner가 전체 1위와 다를 수 있음)
+    if district_rankings and isinstance(district_rankings, list):
+        _top = district_rankings[0] if isinstance(district_rankings[0], dict) else {}
+        _top_dong = _top.get("district")
+        if _top_dong:
+            winner_district = _top_dong
     top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
@@ -553,6 +539,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "closure_risk": sim_result.get("closure_risk") if "sim_result" in locals() else None,
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
         "competitor_intel": _sanitize(state.get("competitor_intel_result") or {}),
+        # 8 에이전트 판단 근거 (AgentAttribution)
+        "agent_attributions": _sanitize(
+            analysis.get("agent_attributions") or state.get("agent_attributions") or []
+        ),
     }
 
     print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")
@@ -968,27 +958,6 @@ async def get_mapo_spots(dong_name: str, limit: int = 4):
     return {"dong_name": dong_name, "spots": spots}
 
 
-@app.get("/mapo/spots-all")
-async def get_mapo_spots_all(per_dong: int = 3):
-    """마포구 16개 동 전체의 대표 스팟 합본 (ABM 시각화용).
-
-    지하철역 + 동별 주요 상점 per_dong 개씩 — 에이전트가 마포 전역을 routine 으로
-    순회하는 유동인구 시각화에 사용. `vacancySpots` (공실) 와는 별개.
-    """
-    from src.config.constants import MAPO_DISTRICTS
-    from src.services.mapo_spots import get_dong_spots
-
-    all_spots: list[dict] = []
-    seen_ids: set[str] = set()
-    for dong in MAPO_DISTRICTS:
-        for s in get_dong_spots(dong, limit=per_dong + 1):
-            if s["id"] in seen_ids:
-                continue
-            seen_ids.add(s["id"])
-            all_spots.append({**s, "dong_name": dong})
-    return {"count": len(all_spots), "spots": all_spots}
-
-
 @app.get("/population/live")
 async def get_live_population(dongs: str | None = None):
     """
@@ -1061,7 +1030,6 @@ async def run_simulation(input_data: SimulationInput):
     try:
         final_state = await _run_pipeline(input_data)
         result = map_state_to_simulation_output(final_state, request_id)
-
         # [customer_revenue P1-C] 타겟 고객 매출 분석 주입 — 실패해도 None 으로 조용히 fallback
         try:
             from src.services.dong_resolver import resolve_dong_code
@@ -1074,7 +1042,6 @@ async def run_simulation(input_data: SimulationInput):
                 time_slots=list(input_data.target_time_slots or []),
                 day_type=input_data.target_day_type or "all",
             )
-            # quarter_num: 미래 분기 (quarterly_projection[0].quarter). 없으면 현재 분기.
             _qp = result.get("quarterly_projection") or []
             _q_num = (
                 int(_qp[0]["quarter"])
@@ -1084,19 +1051,14 @@ async def run_simulation(input_data: SimulationInput):
             _year = datetime.now().year
             if _seg_dong:
                 result["customer_segment"] = customer_predict(
-                    _seg_dong,
-                    _seg_industry,
-                    _seg_profile,
-                    input_data.target_monthly_sales,
-                    _q_num,
-                    _year,
+                    _seg_dong, _seg_industry, _seg_profile,
+                    input_data.target_monthly_sales, _q_num, _year,
                 )
             else:
                 result["customer_segment"] = None
         except Exception as _seg_err:
             print(f"[customer_revenue] predict 실패: {type(_seg_err).__name__}: {_seg_err}")
             result["customer_segment"] = None
-
         return result
     except Exception as e:
         import traceback
@@ -1119,7 +1081,7 @@ async def run_simulation(input_data: SimulationInput):
             "trend_forecast": None,
             "map_data": None,
             "financial_report": {},
-            # [스키마 일관성] SimulationOutput optional 필드 명시적 null — 프론트 optional chain 과 정합
+            # [스키마 일관성] SimulationOutput optional 필드 명시적 null
             "winner_district": None,
             "top_3_candidates": [],
             "district_rankings": [],
@@ -1155,7 +1117,7 @@ class AbmSimulationRequest(BaseModel):
     brand_name: str
     langgraph_result: Dict[str, Any]
     # 시뮬 규모
-    n_agents: int = 1000  # 100 | 1000 — 기본값 마포 전체 규모(1000)
+    n_agents: int = 100  # 100 | 1000
     days: int = 1
     # GameMaster 시나리오
     scenario: AbmScenarioParams = AbmScenarioParams()
@@ -1270,8 +1232,6 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             use_profiles=True,
             scenario=scenario,
             days=req.days,
-            collect_trajectory=True,
-            trajectory_sample_size=1000,
         )
     except Exception as e:
         logger.error(f"[ABM] 시뮬레이션 실패: {e}")

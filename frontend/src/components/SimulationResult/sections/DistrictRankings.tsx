@@ -10,6 +10,11 @@ const ZONING_CLS: Record<string, string> = {
   caution: 'text-yellow-400',
   danger: 'text-rose-400',
 };
+const ZONING_KO: Record<string, string> = {
+  safe: '안전',
+  caution: '주의',
+  danger: '위험',
+};
 
 export function DistrictRankings({ simResult }: Props) {
   const rankings = simResult.district_rankings ?? [];
@@ -44,7 +49,8 @@ export function DistrictRankings({ simResult }: Props) {
                 매출성장
               </th>
               <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
-                폐업률
+                폐업위험
+                <span className="ml-1 text-[9px] font-normal text-stone-600">(ML예측)</span>
               </th>
               <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">BEP</th>
               <th className="p-3 text-center text-xs font-semibold uppercase text-stone-400">
@@ -87,7 +93,7 @@ export function DistrictRankings({ simResult }: Props) {
                       ZONING_CLS[r.zoning_risk] ?? 'text-stone-400'
                     }`}
                   >
-                    ● {r.zoning_risk}
+                    ● {ZONING_KO[r.zoning_risk] ?? r.zoning_risk}
                   </td>
                 </tr>
               );

@@ -1,17 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import {
-  TrendingUp,
-  Users,
-  ShieldAlert,
-  Target,
-  Brain,
-  UserSearch,
-  LineChart as LineChartIcon,
-  Crosshair,
-  type LucideIcon,
-} from 'lucide-react';
-import type { AgentId } from '../../../types';
 import { useKakaoMap } from '../../kakao/useKakaoMap';
 
 export interface Competitor {
@@ -118,43 +105,6 @@ function rankingOpacity(score: number): number {
   return Math.max(0.08, Math.min(0.45, score / 220));
 }
 
-// 에이전트 색 팔레트 — AgentCard AGENT_COLORS와 톤 일치 (Tailwind text-*-400 계열 hex 대응)
-const AGENT_RING: Array<{
-  id: AgentId;
-  label: string;
-  color: string;
-  Icon: LucideIcon;
-  angleDeg: number;
-}> = [
-  { id: 'market_analyst', label: '시장', color: '#60a5fa', Icon: TrendingUp, angleDeg: 0 },
-  { id: 'population_analyst', label: '인구', color: '#34d399', Icon: Users, angleDeg: 45 },
-  { id: 'legal', label: '법률', color: '#fb7185', Icon: ShieldAlert, angleDeg: 90 },
-  { id: 'district_ranking', label: '랭킹', color: '#38bdf8', Icon: Target, angleDeg: 135 },
-  { id: 'synthesis', label: '종합', color: '#fbbf24', Icon: Brain, angleDeg: 180 },
-  { id: 'demographic_depth', label: '인구심층', color: '#a78bfa', Icon: UserSearch, angleDeg: 225 },
-  { id: 'trend_forecaster', label: '트렌드', color: '#22d3ee', Icon: LineChartIcon, angleDeg: 270 },
-  { id: 'competitor_intel', label: '경쟁', color: '#fb923c', Icon: Crosshair, angleDeg: 315 },
-];
-
-// 지리상 각도·거리로 중심점에서 편차 좌표 계산 — 지구 반지름 6371km 기준 평면 근사
-function offsetLatLng(
-  center: { lat: number; lng: number },
-  meters: number,
-  angleDeg: number,
-): { lat: number; lng: number } {
-  const R = 6371000;
-  const rad = (angleDeg * Math.PI) / 180;
-  const dLat = ((meters * Math.cos(rad)) / R) * (180 / Math.PI);
-  const dLng =
-    ((meters * Math.sin(rad)) / (R * Math.cos((center.lat * Math.PI) / 180))) * (180 / Math.PI);
-  return { lat: center.lat + dLat, lng: center.lng + dLng };
-}
-
-// CustomOverlay DOM은 React 트리 밖이므로 lucide 아이콘을 HTML 문자열로 변환해 주입
-function iconHtml(Icon: LucideIcon, color: string, size = 14): string {
-  return renderToStaticMarkup(<Icon size={size} color={color} strokeWidth={2} />);
-}
-
 const PULSE_STYLE_ID = 'mm-pulse-style';
 const PULSE_CSS = `
 @keyframes mm-pulse {
@@ -186,19 +136,6 @@ function buildTargetOverlayContent(): HTMLElement {
       <div class="mm-pulse-ring"></div>
       <div class="mm-pulse-ring mm-pulse-ring-delay"></div>
       <div style="position:absolute;inset:9px;border-radius:9999px;background:#f59e0b;border:2px solid #ffffff;box-shadow:0 0 10px rgba(245,158,11,0.8);"></div>
-    </div>
-  `;
-  return wrap;
-}
-
-function buildAgentPinContent(agent: (typeof AGENT_RING)[number]): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;pointer-events:none;">
-      <div style="width:32px;height:32px;border-radius:9999px;display:flex;align-items:center;justify-content:center;background:rgba(24,24,27,0.88);border:1px solid rgba(255,255,255,0.08);box-shadow:0 0 10px ${agent.color}55;">
-        <span style="color:${agent.color};display:inline-flex;">${iconHtml(agent.Icon, agent.color, 14)}</span>
-      </div>
-      <span style="margin-top:2px;font-family:ui-monospace,Menlo,monospace;font-size:9px;font-weight:700;color:#d4d4d8;background:rgba(24,24,27,0.85);border:1px solid rgba(63,63,70,0.5);padding:1px 4px;border-radius:3px;">${agent.label}</span>
     </div>
   `;
   return wrap;
@@ -323,14 +260,14 @@ export function MarketMap({
         setGeoError(msg);
       });
 
-    // Layer 2 — 경쟁점 마커 (반경 내/외 색 구분 + 클릭 InfoWindow)
+    // Layer 2 — 경쟁점 마커 (빨간 삼각형, 반경 내/외 불투명도 구분 + 클릭 InfoWindow)
     competitors.forEach((c) => {
       if (typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
       const within = (c.distance_m ?? Number.POSITIVE_INFINITY) <= radius;
       const dot = document.createElement('div');
       dot.style.cssText = within
-        ? 'width:10px;height:10px;border-radius:9999px;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 6px rgba(245,158,11,0.6);cursor:pointer;'
-        : 'width:7px;height:7px;border-radius:9999px;background:#71717a;border:1px solid #fff;opacity:0.7;cursor:pointer;';
+        ? 'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #ef4444;filter:drop-shadow(0 0 3px rgba(239,68,68,0.7));cursor:pointer;'
+        : 'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #ef4444;opacity:0.45;cursor:pointer;';
       dot.title = c.place_name;
 
       const pos = new maps.LatLng(c.lat, c.lng);
@@ -367,33 +304,6 @@ export function MarketMap({
     });
     targetOverlay.setMap(mapInstance);
     overlayLayersRef.current.push(targetOverlay);
-
-    // Layer 4 — 에이전트 8핀 링 + 타겟 연결 Polyline
-    const AGENT_RING_METERS = 700;
-    AGENT_RING.forEach((a) => {
-      const pos = offsetLatLng(center, AGENT_RING_METERS, a.angleDeg);
-      const agentLatLng = new maps.LatLng(pos.lat, pos.lng);
-
-      const polyline = new maps.Polyline({
-        path: [new maps.LatLng(center.lat, center.lng), agentLatLng],
-        strokeWeight: 1,
-        strokeColor: '#f59e0b',
-        strokeOpacity: 0.35,
-        strokeStyle: 'shortdash',
-      });
-      polyline.setMap(mapInstance);
-      overlayLayersRef.current.push(polyline);
-
-      const pin = new maps.CustomOverlay({
-        position: agentLatLng,
-        content: buildAgentPinContent(a),
-        xAnchor: 0.5,
-        yAnchor: 0.5,
-        zIndex: 4,
-      });
-      pin.setMap(mapInstance);
-      overlayLayersRef.current.push(pin);
-    });
 
     return () => {
       overlayLayersRef.current.forEach((layer) => layer.setMap(null));

@@ -9,7 +9,41 @@ interface Props {
 
 const DEFAULT_MAPO_CENTER = { lat: 37.5558, lng: 126.9193 };
 
+const DONG_COORDS: Record<string, { lat: number; lng: number }> = {
+  아현동: { lat: 37.5502, lng: 126.9594 },
+  공덕동: { lat: 37.543, lng: 126.9519 },
+  도화동: { lat: 37.5393, lng: 126.9457 },
+  용강동: { lat: 37.5382, lng: 126.9383 },
+  대흥동: { lat: 37.548, lng: 126.9437 },
+  염리동: { lat: 37.5523, lng: 126.9474 },
+  신수동: { lat: 37.5453, lng: 126.9361 },
+  서강동: { lat: 37.5493, lng: 126.9347 },
+  서교동: { lat: 37.5565, lng: 126.9239 },
+  합정동: { lat: 37.5497, lng: 126.9143 },
+  망원1동: { lat: 37.5558, lng: 126.9059 },
+  망원2동: { lat: 37.5531, lng: 126.9021 },
+  연남동: { lat: 37.5617, lng: 126.9226 },
+  성산1동: { lat: 37.5663, lng: 126.9069 },
+  성산2동: { lat: 37.5706, lng: 126.9111 },
+  상암동: { lat: 37.5789, lng: 126.8899 },
+};
+
 function buildCompetitors(simResult: SimulationOutput): Competitor[] {
+  // all_competitor_locations (winner+top3 멀티동) 우선, fallback은 winner 단일 동
+  if (simResult.all_competitor_locations?.length) {
+    return simResult.all_competitor_locations
+      .filter((s) => typeof s.lat === 'number' && typeof s.lng === 'number')
+      .slice(0, 200)
+      .map((s) => ({
+        place_name: s.place_name ?? '경쟁점',
+        lat: s.lat,
+        lng: s.lng,
+        distance_m: s.distance_m,
+        is_franchise: s.is_franchise ?? false,
+        brand_name: s.brand_name ?? null,
+        daily_revenue: null,
+      }));
+  }
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
   const competition = compIntel?.['competition_500m'] as
     | { samples?: Array<Record<string, unknown>> }
@@ -45,6 +79,10 @@ function buildRankings(simResult: SimulationOutput): RankingEntry[] {
 }
 
 function buildCenter(simResult: SimulationOutput): { lat: number; lng: number } {
+  // winner_district 좌표 우선 → competitor_intel.target_coords → 기본 마포 중심
+  const sim = simResult as SimulationOutput & Record<string, unknown>;
+  const winner = (sim.winner_district ?? sim.target_district) as string | undefined;
+  if (winner && DONG_COORDS[winner]) return DONG_COORDS[winner];
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
   const target = compIntel?.['target_coords'] as { lat?: unknown; lng?: unknown } | undefined;
   if (target && typeof target.lat === 'number' && typeof target.lng === 'number') {
@@ -78,10 +116,7 @@ export function MapSection({ simResult }: Props) {
 
   return (
     <section>
-      <SectionLabel
-        label="MARKET MAP"
-        subtitle="마포 16동 choropleth · 500m 반경 경쟁점 · 에이전트 링"
-      />
+      <SectionLabel label="MARKET MAP" subtitle="마포 16동 choropleth · 경쟁점 분포" />
       <div className="relative overflow-hidden rounded-lg border border-stone-700">
         <MarketMap
           center={center}
@@ -119,12 +154,31 @@ export function MapSection({ simResult }: Props) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-indigo-500 shadow-[0_0_4px_rgba(245,158,11,0.6)]" />
-              <span>반경 내 경쟁점 (amber)</span>
+              <span
+                style={{
+                  width: 0,
+                  height: 0,
+                  borderLeft: '6px solid transparent',
+                  borderRight: '6px solid transparent',
+                  borderBottom: '11px solid #ef4444',
+                  display: 'inline-block',
+                }}
+              />
+              <span>반경 내 경쟁점</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full border border-white bg-stone-500" />
-              <span>외부 경쟁점 (zinc)</span>
+              <span
+                style={{
+                  width: 0,
+                  height: 0,
+                  borderLeft: '5px solid transparent',
+                  borderRight: '5px solid transparent',
+                  borderBottom: '9px solid #ef4444',
+                  opacity: 0.45,
+                  display: 'inline-block',
+                }}
+              />
+              <span>외부 경쟁점</span>
             </div>
             {saturation && (
               <div className="pt-1 text-[10px] text-stone-500">포화도: {saturation}</div>
