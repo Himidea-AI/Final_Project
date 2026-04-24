@@ -30,6 +30,8 @@ interface DecisionCardProps {
     agents: DecisionCardAgent[];
     methodology: string;
   };
+  /** footer "근거" 영역 클릭 시 실행. 지정되면 row가 버튼으로 활성화되고 hover/focus 링 표시. */
+  onFootnoteClick?: () => void;
 }
 
 const HERO_CLS: Record<DecisionCardProps['heroColor'], string> = {
@@ -46,7 +48,10 @@ export function DecisionCard({
   description,
   items,
   footer,
+  onFootnoteClick,
 }: DecisionCardProps) {
+  const FootnoteEl = onFootnoteClick ? 'button' : 'div';
+  const footnoteInteractive = onFootnoteClick != null;
   return (
     <div className="relative bg-[#141210] border border-stone-800/60 rounded-3xl p-8 flex flex-col h-full hover:border-stone-700 hover:shadow-[0_20px_50px_-25px_rgba(34,211,238,0.15)] transition-all group overflow-hidden">
       {/* 모서리 micro dot — 디자인 "완결감" */}
@@ -89,9 +94,26 @@ export function DecisionCard({
         ))}
       </ul>
 
-      <div className="flex items-center justify-between mt-auto pt-6 border-t border-stone-900 group-hover:border-stone-800 transition-colors">
+      <FootnoteEl
+        {...(footnoteInteractive
+          ? {
+              type: 'button' as const,
+              onClick: onFootnoteClick,
+              'aria-label': `${title} — 근거 상세 보기`,
+            }
+          : {})}
+        className={`w-full flex items-center justify-between mt-auto pt-6 border-t border-stone-900 text-left transition-colors ${
+          footnoteInteractive
+            ? 'cursor-pointer rounded-b-3xl -mx-8 -mb-8 px-8 pb-8 hover:bg-stone-900/40 hover:border-cyan-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40'
+            : 'group-hover:border-stone-800'
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-black text-stone-600 uppercase tracking-[0.2em]">
+          <span
+            className={`text-[9px] font-black uppercase tracking-[0.2em] transition-colors ${
+              footnoteInteractive ? 'text-stone-500 group-hover:text-cyan-400' : 'text-stone-600'
+            }`}
+          >
             근거
           </span>
           <div className="flex -space-x-1.5">
@@ -108,11 +130,24 @@ export function DecisionCard({
             })}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-[9px] font-black text-stone-600 uppercase tracking-widest truncate max-w-[180px] group-hover:text-stone-400 transition-colors">
+        <div
+          className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest truncate max-w-[180px] transition-colors ${
+            footnoteInteractive
+              ? 'text-stone-500 group-hover:text-cyan-400'
+              : 'text-stone-600 group-hover:text-stone-400'
+          }`}
+        >
           {footer.methodology}
-          <ChevronRight size={12} className="text-stone-800 group-hover:text-stone-500 shrink-0" />
+          <ChevronRight
+            size={12}
+            className={`shrink-0 transition-all ${
+              footnoteInteractive
+                ? 'text-stone-600 group-hover:text-cyan-400 group-hover:translate-x-0.5'
+                : 'text-stone-800 group-hover:text-stone-500'
+            }`}
+          />
         </div>
-      </div>
+      </FootnoteEl>
     </div>
   );
 }

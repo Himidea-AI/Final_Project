@@ -23,6 +23,7 @@ import {
 import type { SimulationOutput } from '../../../../types';
 import { DecisionCard } from '../shared/DecisionCard';
 import { MetricBox } from '../shared/MetricBox';
+import type { DetailModalContent } from '../shared/DetailModal';
 import { INCOME_MAP, TREND_MAP, safeMap } from '../utils/mappings';
 import { formatKrw, formatPct, formatPeakHours, quarterlyToMonthly } from '../utils/formatters';
 import { computeDecision, DECISION_COPY } from '../../../../constants/decisionThresholds';
@@ -33,6 +34,8 @@ import { StackedAgeBar } from '../charts/StackedAgeBar';
 
 interface Props {
   simResult: SimulationOutput;
+  /** DecisionCard의 "근거" footer 클릭 시 상세 모달 오픈 (없으면 footer 비활성) */
+  openModal?: (content: DetailModalContent) => void;
 }
 
 // 에이전트 아이콘 공용 (DecisionCard footer용)
@@ -47,7 +50,7 @@ const AGENT_ICON = {
   synthesis: { icon: BrainCircuit, color: 'text-white' },
 };
 
-export function SummaryTab({ simResult }: Props) {
+export function SummaryTab({ simResult, openModal }: Props) {
   const fr = simResult.final_report ?? null;
   const ps = fr?.profit_simulation ?? null;
   const ci = simResult.competitor_intel as Record<string, any> | null | undefined;
@@ -89,6 +92,90 @@ export function SummaryTab({ simResult }: Props) {
   // ── Hero Entry Signal ──
   const entrySignal = (ci?.market_entry_signal as 'green' | 'yellow' | 'red' | undefined) ?? null;
 
+  // ── DecisionCard footer 클릭 → "근거" 설명 모달 ──
+  const openDecisionExplainer = openModal
+    ? () =>
+        openModal({
+          title: '이 자리, 창업해도 될까? — 판단 근거',
+          content: [
+            `종합 판정: ${verdict} (${verdictCopy.label})`,
+            `법률 리스크 레벨: ${legalRaw} · 진입 신호: ${entryRaw}`,
+            vacancyApplied ? '공실 페널티 반영됨 — 매출 기대치가 하향 조정되었습니다.' : '',
+            '',
+            '【 판단 로직 】',
+            '법률 리스크(safe/caution/danger) × 경쟁 진입 신호(green/yellow/red)의 2D 매트릭스로 GO / HOLD / NOGO 3단계 판정을 도출합니다.',
+            '  · 둘 다 양호 → GO',
+            '  · 한 쪽이 주의 이상 → HOLD (조건부)',
+            '  · 둘 다 위험 → NOGO',
+            '',
+            '【 기여 에이전트 】',
+            '  · synthesis — 8개 에이전트 결과 통합 + LLM 최종 판정',
+            '  · legal — 가맹사업법/임대차보호법 RAG 기반 리스크 추출',
+            '  · competitor_intel — 500m 반경 포화도 + 카니발리제이션 지수',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        })
+    : undefined;
+
+  const openRevenueExplainer = openModal
+    ? () =>
+        openModal({
+          title: '얼마나 벌 수 있을까? — TCN 모델 근거',
+          content: [
+            hasQp
+              ? `연 매출 (P50 기본) ₩${formatKrw(annualRevenue)}\nP10 (비관) ₩${formatKrw(annualLower)} · P90 (낙관) ₩${formatKrw(annualUpper)}`
+              : '분기 예측 데이터 준비 중입니다.',
+            '',
+            '【 예측 방법 】',
+            'TCN (Temporal Convolutional Network) v2 모델이 해당 동·업종의 분기별 매출을 4분기 예측합니다. 학습 피처: 유동인구, 임대시세, 경쟁 매장 수, 계절성, 골목상권 밀도.',
+            '',
+            '【 신뢰 구간 의미 】',
+            '  · P10 (비관): 최악 10% 시나리오 — 확률적 하한',
+            '  · P50 (기본): 중앙값 — 예상 가능한 가장 가능성 높은 결과',
+            '  · P90 (낙관): 최상 10% 시나리오 — 확률적 상한',
+            '',
+            '【 보정 에이전트 】',
+            '  · market_analyst — 상권 8대 지표 정규화',
+            '  · trend_forecaster — 네이버 검색량 + 한국은행 기준금리 매크로 보정',
+            '  · demographic_depth — 타겟 고객 프로필 매칭도 반영',
+            '',
+            '※ 현재 P10~P90 연 합산은 단순 sum으로, 분기 간 상관 반영 시 구간이 좁아질 수 있음 (후속 개선 예정).',
+          ].join('\n'),
+        })
+    : undefined;
+
+  const openBepExplainer = openModal
+    ? () =>
+        openModal({
+          title: '언제 본전을 뽑을까? — BEP 계산 근거',
+          content: [
+            bepMonths != null
+              ? `예상 BEP 도달: ${bepMonths.toFixed(1)} 개월`
+              : 'BEP 계산 데이터 준비 중입니다.',
+            monthlyRev != null ? `월 매출 (추정) ₩${formatKrw(monthlyRev)}` : '',
+            monthlyCost != null ? `월 운영비 ₩${formatKrw(monthlyCost)}` : '',
+            netProfit != null ? `월 영업이익 ₩${formatKrw(netProfit)}` : '',
+            margin != null ? `마진율 ${formatPct(margin)}` : '',
+            '',
+            '【 BEP 계산식 】',
+            'BEP (개월) = 초기 투자금 ÷ 월 영업이익',
+            '월 영업이익 = 월 매출 − 월 운영비 (임대료 · 인건비 · 원가 등)',
+            '',
+            '【 판정 기준 】',
+            '  · 12개월 이내 — 우수 (emerald)',
+            '  · 12~18개월 — 주의 (amber) · 업종 평균 범위',
+            '  · 18개월 초과 — 위험 (rose) · 계약 기간 내 회수 어려움',
+            '',
+            '【 기여 에이전트 】',
+            '  · synthesis — 분기 매출 예측을 월 단위로 환산 + 계절성 가중',
+            '  · legal — 프랜차이즈 가맹금/보증금 등 계약상 초기 비용 검증',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        })
+    : undefined;
+
   return (
     <div className="space-y-8">
       {/* ═══ Hero: Market Entry Signal ═══ */}
@@ -128,6 +215,7 @@ export function SummaryTab({ simResult }: Props) {
             })),
             methodology: 'synthesis + legal + competitor',
           }}
+          onFootnoteClick={openDecisionExplainer}
         />
 
         <DecisionCard
@@ -151,6 +239,7 @@ export function SummaryTab({ simResult }: Props) {
             })),
             methodology: 'TCN + trend + demographic',
           }}
+          onFootnoteClick={openRevenueExplainer}
         />
 
         <DecisionCard
@@ -179,6 +268,7 @@ export function SummaryTab({ simResult }: Props) {
             })),
             methodology: 'TCN + BEP 계산',
           }}
+          onFootnoteClick={openBepExplainer}
         />
       </div>
 

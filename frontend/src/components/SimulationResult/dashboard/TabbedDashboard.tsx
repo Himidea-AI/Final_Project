@@ -440,7 +440,9 @@ export function TabbedDashboard({
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === TABS.SUMMARY && <SummaryTab simResult={simResult} />}
+            {activeTab === TABS.SUMMARY && (
+              <SummaryTab simResult={simResult} openModal={openModal} />
+            )}
             {activeTab === TABS.MARKET && <MarketTab simResult={simResult} openModal={openModal} />}
             {activeTab === TABS.FORECAST && (
               <ForecastTab simResult={simResult} openModal={openModal} />
