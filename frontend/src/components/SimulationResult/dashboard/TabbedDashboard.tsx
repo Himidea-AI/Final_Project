@@ -1,0 +1,435 @@
+/**
+ * TabbedDashboard — SPOTTER v4.2 대시보드 리디자인
+ *
+ * 구조: Compact Sticky Header + 4 탭 (종합 요약 / 상권 분석 / 매출 예측 / AI 분석 근거)
+ * 원칙: Bento Grid, Contextual AI Attribution, LangGraph 기반 8대 멀티 에이전트 시스템
+ */
+
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  BarChart3,
+  BrainCircuit,
+  MapPin,
+  TrendingUp,
+  Users,
+  PieChart,
+  ShieldAlert,
+  AlertTriangle,
+  Layers,
+  type LucideIcon,
+} from 'lucide-react';
+import type { SimulationOutput } from '../../../types';
+import { formatDocumentId } from '../../../types/simulationHistory';
+import { TabButton } from './shared/TabButton';
+import { DetailModal, type DetailModalContent } from './shared/DetailModal';
+import { GradeCard } from './shared/GradeCard';
+import { KpiMiniGrid, type KpiItem } from './shared/KpiMiniGrid';
+import { SummaryTab } from './tabs/SummaryTab';
+import { MarketTab } from './tabs/MarketTab';
+import { ForecastTab } from './tabs/ForecastTab';
+import { InsightTab } from './tabs/InsightTab';
+import { getGrade } from '../../../constants/decisionThresholds';
+import { formatKrw, formatScore } from './utils/formatters';
+
+const TABS = {
+  SUMMARY: 'summary',
+  MARKET: 'market',
+  FORECAST: 'forecast',
+  INSIGHT: 'insight',
+} as const;
+
+type TabKey = (typeof TABS)[keyof typeof TABS];
+
+const TAB_ORDER: TabKey[] = [TABS.SUMMARY, TABS.MARKET, TABS.FORECAST, TABS.INSIGHT];
+
+interface AgentDef {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+  color: string;
+  desc: string;
+}
+
+export const AGENTS_LIST: AgentDef[] = [
+  {
+    id: 'market',
+    name: '시장 분석',
+    icon: BarChart3,
+    color: 'text-blue-400',
+    desc: 'market_analyst',
+  },
+  {
+    id: 'population',
+    name: '유동 인구',
+    icon: Users,
+    color: 'text-emerald-400',
+    desc: 'population_analyst',
+  },
+  {
+    id: 'demographic',
+    name: '인구 심층',
+    icon: PieChart,
+    color: 'text-indigo-400',
+    desc: 'demographic_depth',
+  },
+  {
+    id: 'competitor',
+    name: '경쟁 분석',
+    icon: ShieldAlert,
+    color: 'text-amber-400',
+    desc: 'competitor_intel',
+  },
+  {
+    id: 'legal',
+    name: '법률 리스크',
+    icon: AlertTriangle,
+    color: 'text-rose-400',
+    desc: 'legal_agent',
+  },
+  {
+    id: 'trend',
+    name: '트렌드 예측',
+    icon: TrendingUp,
+    color: 'text-cyan-400',
+    desc: 'trend_forecaster',
+  },
+  {
+    id: 'ranking',
+    name: '입지 랭킹',
+    icon: Layers,
+    color: 'text-violet-400',
+    desc: 'district_ranking',
+  },
+  {
+    id: 'synthesis',
+    name: '종합 전략',
+    icon: BrainCircuit,
+    color: 'text-white',
+    desc: 'synthesis_agent',
+  },
+];
+
+interface TabbedDashboardProps {
+  simResult: SimulationOutput | null;
+  /** 상위 SimulatorDashboard 헤더의 기존 버튼을 사용하므로, 이 props들은 호환성 유지용 (옵셔널). */
+  onExportPdf?: () => void;
+  onExportXlsx?: () => void;
+  onSaveClick?: () => void;
+  savedHistoryId?: number | null;
+  /** 상단 Hero 브랜드명 (user.company_name) */
+  brandName: string;
+}
+
+export function TabbedDashboard({
+  simResult,
+  savedHistoryId = null,
+  brandName,
+}: TabbedDashboardProps) {
+  // URL ?tab= deep link sync — 새로고침 / 공유 링크 지원
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab') as TabKey | null;
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    urlTab && TAB_ORDER.includes(urlTab) ? urlTab : TABS.SUMMARY,
+  );
+
+  const handleTabChange = (id: string) => {
+    const tab = id as TabKey;
+    setActiveTab(tab);
+    // ?tab=forecast 같이 쿼리 업데이트 (history 누적 X)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', tab);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  // URL 쿼리 외부 변경 감지 (뒤로가기 등)
+  useEffect(() => {
+    if (urlTab && TAB_ORDER.includes(urlTab) && urlTab !== activeTab) {
+      setActiveTab(urlTab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
+
+  // Compact Sticky Header — 스크롤 감지
+  // SimulatorDashboard는 window가 아니라 내부 overflow-y-auto 컨테이너(dashboardRef)에서 스크롤.
+  // 루트 ref 기준으로 스크롤 부모를 자동 탐색해 그 element의 scroll event 구독.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+  useEffect(() => {
+    const findScrollParent = (el: HTMLElement | null): HTMLElement | Window => {
+      let cur = el?.parentElement ?? null;
+      while (cur) {
+        const overflowY = window.getComputedStyle(cur).overflowY;
+        if (overflowY === 'auto' || overflowY === 'scroll') return cur;
+        cur = cur.parentElement;
+      }
+      return window;
+    };
+    const scrollSrc = findScrollParent(rootRef.current);
+    const getScrollTop = () =>
+      scrollSrc === window ? window.scrollY : (scrollSrc as HTMLElement).scrollTop;
+    const onScroll = () => setIsScrolled(getScrollTop() > 50);
+    // 초기 상태 체크 — 히스토리 복귀 시 이미 스크롤된 상태일 수 있음
+    onScroll();
+    (scrollSrc as HTMLElement | Window).addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      (scrollSrc as HTMLElement | Window).removeEventListener('scroll', onScroll);
+    };
+  }, []);
+
+  // 상세 모달
+  const [modalContent, setModalContent] = useState<DetailModalContent | null>(null);
+  const openModal = (content: DetailModalContent) => setModalContent(content);
+
+  // 실데이터 기반 헤더 정보 조립
+  const ci = simResult?.competitor_intel as Record<string, any> | null | undefined;
+  const winnerDistrict = simResult?.winner_district || simResult?.target_district || '—';
+  const documentId = formatDocumentId(savedHistoryId);
+
+  // GRADE 매핑
+  const gradeInfo = getGrade(simResult?.analysis_metrics?.district_grade);
+  const synthAttr = simResult?.agent_attributions?.find((a) => a.id === 'synthesis');
+  const confidencePct =
+    synthAttr?.confidence != null ? Math.round(synthAttr.confidence * 100) : null;
+
+  // Narrative subtitle (final_recommendation 80자 trim)
+  const narrative =
+    simResult?.final_report?.final_recommendation?.slice(0, 140) ??
+    simResult?.ai_recommendation?.slice(0, 140) ??
+    null;
+
+  // KPI 4 mini grid — delta 없음, 실데이터만
+  const kpiItems: KpiItem[] = (() => {
+    if (!simResult) return [];
+    const qp = simResult.quarterly_projection ?? [];
+    const monthlyRev =
+      simResult.final_report?.profit_simulation?.monthly_revenue ??
+      (qp[0]?.revenue ? Math.round(qp[0].revenue / 3) : null);
+    const compIntensity = simResult.market_report?.competition_intensity;
+    const comp500 = ci?.competition_500m?.count ?? null;
+    const dangerLegalCount = (simResult.legal_risks ?? []).filter(
+      (r) => String(r.risk_level).toUpperCase() === 'HIGH' || r.risk_level === 'danger',
+    ).length;
+    const totalLegal = (simResult.legal_risks ?? []).length;
+
+    return [
+      {
+        label: '예상 월매출',
+        value: monthlyRev != null ? `₩${formatKrw(monthlyRev)}` : '—',
+        sub: 'profit_simulation',
+      },
+      {
+        label: '유동인구 점수',
+        value:
+          simResult.market_report?.floating_population != null
+            ? `${formatScore(simResult.market_report.floating_population)}/100`
+            : '—',
+        sub: `${winnerDistrict} · 동 기준`,
+      },
+      {
+        label: '경쟁 강도',
+        value: compIntensity != null ? `${formatScore(compIntensity)}/100` : '—',
+        tag:
+          compIntensity != null
+            ? compIntensity >= 70
+              ? 'HIGH'
+              : compIntensity >= 40
+                ? 'MID'
+                : 'LOW'
+            : undefined,
+        tagColor: compIntensity != null && compIntensity >= 70 ? 'rose' : 'emerald',
+        sub: comp500 != null ? `500m 내 ${comp500}개` : undefined,
+      },
+      {
+        label: '법률 리스크',
+        value: totalLegal > 0 ? `${dangerLegalCount}건` : '—',
+        tag: dangerLegalCount > 0 ? 'DANGER' : 'SAFE',
+        tagColor: dangerLegalCount > 0 ? 'rose' : 'emerald',
+        sub: `${totalLegal}항목 중`,
+      },
+    ];
+  })();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const agentCount = simResult?.agent_attributions?.length ?? 0;
+
+  if (!simResult) return null;
+
+  return (
+    <div
+      ref={rootRef}
+      className="min-h-screen bg-[#0C0B0A] text-stone-200 font-sans selection:bg-indigo-500/30"
+    >
+      {/* ════════════════ STICKY HEADER (v4.3 리디자인) ════════════════ */}
+      <header
+        className={`sticky top-0 z-40 bg-[#0C0B0A]/90 backdrop-blur-2xl border-b border-stone-800/40 transition-all duration-500 ${
+          isScrolled ? 'py-3 shadow-2xl' : 'py-8'
+        }`}
+      >
+        <div className="max-w-[1600px] mx-auto px-8">
+          {/* ── 상단: 타이틀 + GRADE 카드 ── */}
+          <div className="flex justify-between items-start gap-6">
+            <div className="flex flex-col text-left flex-1 min-w-0">
+              {/* 메타 바 */}
+              <div className="flex items-center gap-3 text-[10px] font-bold text-stone-500 tracking-widest mb-3 uppercase">
+                <span>SPOTTER</span>
+                <span className="w-1 h-1 rounded-full bg-stone-700" />
+                <span>Simulation Result</span>
+                <span className="w-1 h-1 rounded-full bg-stone-700" />
+                <span className="text-stone-400 tabular-nums">{today}</span>
+                <span className="w-1 h-1 rounded-full bg-stone-700" />
+                <span className="text-stone-400 tabular-nums">{documentId}</span>
+              </div>
+
+              {/* 메인 타이틀 — text-4xl (스크롤 시 축소) */}
+              <div className="flex flex-wrap items-center gap-4 mb-2">
+                <h1
+                  className={`font-black text-stone-100 tracking-tighter transition-all ${
+                    isScrolled ? 'text-xl' : 'text-4xl'
+                  }`}
+                >
+                  {brandName || '미지정 브랜드'}
+                </h1>
+                {!isScrolled && (
+                  <div className="flex items-center gap-2 text-stone-400 text-lg font-medium">
+                    {simResult.target_district && (
+                      <>
+                        <span className="w-1 h-1 rounded-full bg-stone-700" />
+                        <span>{winnerDistrict}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Narrative subtitle */}
+              {!isScrolled && narrative && (
+                <p className="text-sm text-stone-500 max-w-2xl leading-relaxed mt-1">{narrative}</p>
+              )}
+            </div>
+
+            {/* 우측: GRADE 카드 (스크롤 시 숨김) */}
+            {!isScrolled && (
+              <GradeCard
+                letter={gradeInfo.letter}
+                color={gradeInfo.color}
+                confidencePct={confidencePct}
+              />
+            )}
+          </div>
+
+          {/* ── KPI 4 Mini Grid (스크롤 시 숨김) ── */}
+          <AnimatePresence>
+            {!isScrolled && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <KpiMiniGrid items={kpiItems} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Agents 배지 (정사각 8개) + 카운트 ── */}
+          <AnimatePresence>
+            {!isScrolled && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-8 pt-6 border-t border-stone-800/40 flex items-center gap-6"
+              >
+                <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest shrink-0">
+                  AGENTS · {agentCount}/8
+                </div>
+                <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+                  {AGENTS_LIST.map((agent) => {
+                    const AgentIcon = agent.icon;
+                    return (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        onClick={() => handleTabChange(TABS.INSIGHT)}
+                        title={agent.name}
+                        className="w-9 h-9 rounded-lg bg-stone-900 border border-stone-800 flex items-center justify-center group hover:border-indigo-500/50 transition-all shrink-0"
+                      >
+                        <AgentIcon
+                          size={14}
+                          className={`${agent.color} opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 탭 네비게이션 */}
+          <nav className="flex mt-6 border-t border-stone-800/30 pt-2">
+            <TabButton
+              id={TABS.SUMMARY}
+              label="요약"
+              icon={BarChart3}
+              active={activeTab === TABS.SUMMARY}
+              onClick={handleTabChange}
+            />
+            <TabButton
+              id={TABS.MARKET}
+              label="상권·위치"
+              icon={MapPin}
+              active={activeTab === TABS.MARKET}
+              onClick={handleTabChange}
+            />
+            <TabButton
+              id={TABS.FORECAST}
+              label="예측"
+              icon={TrendingUp}
+              active={activeTab === TABS.FORECAST}
+              onClick={handleTabChange}
+            />
+            <TabButton
+              id={TABS.INSIGHT}
+              label="AI 분석 근거"
+              icon={BrainCircuit}
+              active={activeTab === TABS.INSIGHT}
+              onClick={handleTabChange}
+            />
+          </nav>
+        </div>
+      </header>
+
+      {/* ════════════════ MAIN CONTENT ════════════════ */}
+      <main className="max-w-[1600px] mx-auto px-6 py-8">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.2 }}
+          >
+            {activeTab === TABS.SUMMARY && <SummaryTab simResult={simResult} />}
+            {activeTab === TABS.MARKET && <MarketTab simResult={simResult} openModal={openModal} />}
+            {activeTab === TABS.FORECAST && (
+              <ForecastTab simResult={simResult} openModal={openModal} />
+            )}
+            {activeTab === TABS.INSIGHT && (
+              <InsightTab simResult={simResult} openModal={openModal} />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      {/* ════════════════ DETAIL MODAL ════════════════ */}
+      <DetailModal modalContent={modalContent} onClose={() => setModalContent(null)} />
+    </div>
+  );
+}

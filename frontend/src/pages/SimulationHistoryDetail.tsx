@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, RotateCw } from 'lucide-react';
 import { useSimulationDetail } from '../hooks/useSimulationDetail';
-import { IntegratedReport } from '../components/SimulationResult/IntegratedReport';
+import { TabbedDashboard } from '../components/SimulationResult/dashboard/TabbedDashboard';
 import { formatDocumentId } from '../types/simulationHistory';
 
 function formatWhen(iso: string): string {
@@ -27,8 +27,8 @@ export default function SimulationHistoryDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1e1b18] pb-16 text-stone-100">
-      <div className="mx-auto max-w-7xl px-6 pt-20">
+    <div className="min-h-screen bg-[#0C0B0A] pb-16 text-stone-100">
+      <div className="mx-auto max-w-[1600px] px-6 pt-20">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -70,21 +70,10 @@ export default function SimulationHistoryDetail() {
               }}
             />
             <div className="mt-6">
-              <IntegratedReport
+              <TabbedDashboard
                 simResult={data.simulation_result}
-                onExportPdf={() => {
-                  // 상세 뷰는 읽기 전용 — PDF 내보내기는 원 화면에서 이미 가능하므로 안내.
-                  window.alert(
-                    '이 페이지는 읽기 전용입니다. PDF 다운로드는 시뮬레이터 화면에서 이용해주세요.',
-                  );
-                }}
-                onExportXlsx={() => {
-                  window.alert(
-                    '이 페이지는 읽기 전용입니다. XLSX 다운로드는 시뮬레이터 화면에서 이용해주세요.',
-                  );
-                }}
-                compareMode={false}
-                onToggleCompare={() => {}}
+                savedHistoryId={data.id}
+                brandName={data.brand_name}
               />
             </div>
           </>

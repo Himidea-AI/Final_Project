@@ -212,6 +212,25 @@ export interface SimulationOutput {
   }>;
   // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
   customer_segment?: CustomerSegment | null;
+  // [synthesis.FinalStrategyResult] 종합 전략 리포트 — profit_simulation 포함
+  final_report?: {
+    summary?: string;
+    is_direct?: boolean;
+    brand_category?: string;
+    overall_legal_risk?: string;
+    final_recommendation?: string;
+    profit_simulation?: {
+      monthly_revenue?: number;
+      monthly_cost?: number;
+      net_profit?: number;
+      margin_rate?: number;
+      bep_months?: number;
+    };
+    competitor_analysis?: {
+      count?: number;
+      density?: string;
+    };
+  } | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */

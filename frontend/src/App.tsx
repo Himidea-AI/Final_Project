@@ -73,7 +73,7 @@ import type {
 } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
-import { IntegratedReport } from './components/SimulationResult/IntegratedReport';
+import { TabbedDashboard } from './components/SimulationResult/dashboard/TabbedDashboard';
 import { SaveButton } from './components/SimulationHistory/SaveButton';
 import { SaveDialog } from './components/SimulationHistory/SaveDialog';
 import { useSaveSimulation } from './hooks/useSaveSimulation';
@@ -2211,7 +2211,9 @@ function SimulatorDashboard({
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
-  const [viewMode, setViewMode] = useState<'integrated' | 'legacy'>('integrated');
+  // viewMode: TabbedDashboard (v4.2 리디자인) 전용. legacy JSX 블록은 idle/loading 상태 UI 보존용으로 남아있음.
+  // useState 유지 이유: TS literal narrowing 방지 (legacy 비교 구문이 dead code로 남아있어도 타입 체크 통과).
+  const [viewMode] = useState<'integrated' | 'legacy'>('integrated');
 
   // [R4] saveDialogOpen 은 UI-only 로컬. savedHistoryId 는 [R1] store 에서 파생.
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -3476,32 +3478,7 @@ function SimulatorDashboard({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    {!isSplitMode && rawSimResult && (
-                      <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
-                        <button
-                          onClick={() => setViewMode('integrated')}
-                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
-                            viewMode === 'integrated'
-                              ? 'bg-[#3a3633] text-amber-400 shadow-sm'
-                              : 'text-[#9ca3af] hover:text-white'
-                          }`}
-                          title="15 섹션 통합 리포트"
-                        >
-                          통합 리포트
-                        </button>
-                        <button
-                          onClick={() => setViewMode('legacy')}
-                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
-                            viewMode === 'legacy'
-                              ? 'bg-[#3a3633] text-[#818cf8] shadow-sm'
-                              : 'text-[#9ca3af] hover:text-white'
-                          }`}
-                          title="기존 상세 대시보드"
-                        >
-                          상세 뷰
-                        </button>
-                      </div>
-                    )}
+                    {/* v4.2 리디자인 — 통합/상세 뷰 토글 제거, TabbedDashboard 단일 뷰 */}
                     {!isSplitMode && viewMode === 'legacy' && (
                       <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
                         <button
@@ -3653,13 +3630,11 @@ function SimulatorDashboard({
                     );
                   })()}
 
-                {!isSplitMode && viewMode === 'integrated' && rawSimResult && (
-                  <IntegratedReport
+                {!isSplitMode && rawSimResult && (
+                  <TabbedDashboard
                     simResult={rawSimResult}
-                    onExportPdf={handleDownloadPDF}
-                    onExportXlsx={handleDownloadExcel}
-                    compareMode={isSplitMode}
-                    onToggleCompare={() => setIsSplitMode(!isSplitMode)}
+                    savedHistoryId={savedHistoryId}
+                    brandName={user?.company_name || ''}
                   />
                 )}
 
