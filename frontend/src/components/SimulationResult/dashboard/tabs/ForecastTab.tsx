@@ -2,16 +2,16 @@
  * ForecastTab — 매출 예측 탭
  * 1) TCN-v2 분기별 매출 예측 (Confidence Band P10-P90)
  * 2) SHAP 피처 기여도 분석 (Waterfall — 가이드 #1)
- * 3) 폐업 위험도 Bullet (가이드 #9)
+ *
+ * 이관됨: 폐업 위험도 Bullet → FinancialTab
  */
 
 import { TrendingUp, Zap, Maximize2 } from 'lucide-react';
-import type { SimulationOutput, ShapResult, ClosureRisk } from '../../../../types';
+import type { SimulationOutput, ShapResult } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { QuarterlyProjectionChart } from '../../QuarterlyProjectionChart';
 import { formatScore } from '../utils/formatters';
 import { WaterfallChart, type WaterfallStep } from '../charts/WaterfallChart';
-import { BulletChart } from '../charts/BulletChart';
 
 interface Props {
   simResult: SimulationOutput;
@@ -124,43 +124,6 @@ export function ForecastTab({ simResult, openModal }: Props) {
           )}
         </div>
       </div>
-
-      {/* Closure Risk Bullet */}
-      <ClosureRiskPanel closure={simResult.closure_risk} />
-    </div>
-  );
-}
-
-function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | undefined }) {
-  if (!closure) {
-    return (
-      <div className="rounded-2xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
-        closure_risk 분석 대기
-      </div>
-    );
-  }
-  return (
-    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
-          폐업 위험도
-        </h4>
-        {closure.is_mock && (
-          <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full uppercase">
-            MOCK
-          </span>
-        )}
-      </div>
-      <BulletChart
-        actual={closure.risk_score}
-        target={30}
-        max={100}
-        label="위험 점수"
-        thresholds={[30, 60]}
-      />
-      {closure.summary && closure.summary.length > 0 && (
-        <p className="mt-3 text-[11px] text-stone-400 leading-relaxed">{closure.summary[0]}</p>
-      )}
     </div>
   );
 }

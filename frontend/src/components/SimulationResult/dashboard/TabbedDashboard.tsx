@@ -18,6 +18,8 @@ import {
   ShieldAlert,
   AlertTriangle,
   Layers,
+  Activity,
+  Scale,
   type LucideIcon,
 } from 'lucide-react';
 import type { SimulationOutput } from '../../../types';
@@ -29,7 +31,10 @@ import { KpiMiniGrid, type KpiItem } from './shared/KpiMiniGrid';
 import { NarrativeText } from './shared/NarrativeText';
 import { SummaryTab } from './tabs/SummaryTab';
 import { MarketTab } from './tabs/MarketTab';
+import { DemographicTab } from './tabs/DemographicTab';
+import { FinancialTab } from './tabs/FinancialTab';
 import { ForecastTab } from './tabs/ForecastTab';
+import { LegalTab } from './tabs/LegalTab';
 import { InsightTab } from './tabs/InsightTab';
 import { getGrade } from '../../../constants/decisionThresholds';
 import { formatKrw, formatScore } from './utils/formatters';
@@ -37,13 +42,26 @@ import { formatKrw, formatScore } from './utils/formatters';
 const TABS = {
   SUMMARY: 'summary',
   MARKET: 'market',
+  DEMOGRAPHIC: 'demographic',
+  FINANCIAL: 'financial',
   FORECAST: 'forecast',
+  LEGAL: 'legal',
   INSIGHT: 'insight',
 } as const;
 
 type TabKey = (typeof TABS)[keyof typeof TABS];
 
-const TAB_ORDER: TabKey[] = [TABS.SUMMARY, TABS.MARKET, TABS.FORECAST, TABS.INSIGHT];
+// 탭 순서 규칙: 첫 = 요약, 끝 = AI 분석근거 (고정). 중간 흐름:
+// 상권(지리) → 인구(사람) → 재무(돈) → 예측(미래) → 법률(규제)
+const TAB_ORDER: TabKey[] = [
+  TABS.SUMMARY,
+  TABS.MARKET,
+  TABS.DEMOGRAPHIC,
+  TABS.FINANCIAL,
+  TABS.FORECAST,
+  TABS.LEGAL,
+  TABS.INSIGHT,
+];
 
 interface AgentDef {
   id: string;
@@ -396,8 +414,8 @@ export function TabbedDashboard({
             )}
           </AnimatePresence>
 
-          {/* 탭 네비게이션 */}
-          <nav className="flex mt-6 border-t border-stone-800/30 pt-2">
+          {/* 탭 네비게이션 (7개) */}
+          <nav className="flex mt-6 border-t border-stone-800/30 pt-2 overflow-x-auto scrollbar-hide">
             <TabButton
               id={TABS.SUMMARY}
               label="요약"
@@ -413,10 +431,31 @@ export function TabbedDashboard({
               onClick={handleTabChange}
             />
             <TabButton
+              id={TABS.DEMOGRAPHIC}
+              label="인구·고객"
+              icon={Users}
+              active={activeTab === TABS.DEMOGRAPHIC}
+              onClick={handleTabChange}
+            />
+            <TabButton
+              id={TABS.FINANCIAL}
+              label="재무·수익성"
+              icon={Activity}
+              active={activeTab === TABS.FINANCIAL}
+              onClick={handleTabChange}
+            />
+            <TabButton
               id={TABS.FORECAST}
               label="예측"
               icon={TrendingUp}
               active={activeTab === TABS.FORECAST}
+              onClick={handleTabChange}
+            />
+            <TabButton
+              id={TABS.LEGAL}
+              label="법률·규제"
+              icon={Scale}
+              active={activeTab === TABS.LEGAL}
               onClick={handleTabChange}
             />
             <TabButton
@@ -444,9 +483,12 @@ export function TabbedDashboard({
               <SummaryTab simResult={simResult} openModal={openModal} />
             )}
             {activeTab === TABS.MARKET && <MarketTab simResult={simResult} openModal={openModal} />}
+            {activeTab === TABS.DEMOGRAPHIC && <DemographicTab simResult={simResult} />}
+            {activeTab === TABS.FINANCIAL && <FinancialTab simResult={simResult} />}
             {activeTab === TABS.FORECAST && (
               <ForecastTab simResult={simResult} openModal={openModal} />
             )}
+            {activeTab === TABS.LEGAL && <LegalTab simResult={simResult} openModal={openModal} />}
             {activeTab === TABS.INSIGHT && (
               <InsightTab simResult={simResult} openModal={openModal} />
             )}

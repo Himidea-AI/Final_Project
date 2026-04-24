@@ -5,24 +5,22 @@
  * 3) 하단 풀와이드: 법률 리스크 (InsightsGrid legalOnly)
  */
 
-import { AlertTriangle, Layers, MapPin, Maximize2, BarChart3 } from 'lucide-react';
+import { AlertTriangle, Layers, MapPin, BarChart3 } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { MapSection } from '../../sections/MapSection';
 import { IndicatorGrid } from '../../sections/IndicatorGrid';
 import { DistrictRankings } from '../../sections/DistrictRankings';
-import { InsightsGrid } from '../../sections/InsightsGrid';
 import { calcHHI, hhiToDiversity } from '../utils/formatters';
 import { interpretHHI, SATURATION_MAP, safeMap } from '../utils/mappings';
 import { FlowVsRevenueScatter } from '../charts/FlowVsRevenueScatter';
-import { LegalDistributionBar } from '../charts/LegalDistributionBar';
 
 interface Props {
   simResult: SimulationOutput;
-  openModal: (content: DetailModalContent) => void;
+  openModal?: (content: DetailModalContent) => void;
 }
 
-export function MarketTab({ simResult, openModal }: Props) {
+export function MarketTab({ simResult }: Props) {
   const ci = simResult.competitor_intel as Record<string, any> | null | undefined;
   const samples = (ci?.competition_500m?.samples as Array<{ brand_name?: string | null }>) ?? [];
   const hhi = calcHHI(samples);
@@ -146,43 +144,6 @@ export function MarketTab({ simResult, openModal }: Props) {
           </div>
         </div>
       )}
-
-      {/* ═══ 하단 풀와이드: 법률 리스크 ═══ */}
-      <div className="bg-stone-900/40 border border-stone-800/60 p-8 rounded-3xl">
-        <div className="flex justify-between items-center mb-6">
-          <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
-            <AlertTriangle size={16} className="text-rose-400" /> 법률 규제 및 리스크 검토
-            <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal">
-              ({(simResult.legal_risks ?? []).length}건 검토)
-            </span>
-          </h4>
-          <button
-            type="button"
-            onClick={() =>
-              openModal({
-                title: '법률 리스크 종합 검토',
-                content: (simResult.legal_risks ?? [])
-                  .map(
-                    (r, i) =>
-                      `${i + 1}. [${r.risk_level}] ${r.type}\n   ${r.detail || r.recommendation || ''}`,
-                  )
-                  .join('\n\n'),
-              })
-            }
-            className="text-[10px] font-black text-stone-500 hover:text-indigo-400 flex items-center gap-1 uppercase transition-colors"
-          >
-            <Maximize2 size={12} /> 전체 리포트 보기
-          </button>
-        </div>
-        {/* 법률 리스크 등급 분포 (가이드 #11) */}
-        <div className="bg-stone-950/40 border border-stone-800/60 rounded-2xl p-6 mb-4">
-          <h5 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-3">
-            법률 리스크 등급 분포
-          </h5>
-          <LegalDistributionBar risks={simResult.legal_risks} />
-        </div>
-        <InsightsGrid simResult={simResult} legalOnly />
-      </div>
     </div>
   );
 }
