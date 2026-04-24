@@ -7,16 +7,21 @@
  * non-symmetric: 법률 danger는 시장 신호로 상쇄 불가 (사업 폐쇄 가능성).
  */
 
-export type DecisionVerdict = 'GO' | 'HOLD' | 'STOP';
+export type DecisionVerdict = 'GO' | 'HOLD' | 'STOP' | 'UNKNOWN';
 
 export type MarketEntrySignal = 'green' | 'yellow' | 'red';
 
 export type LegalRiskLevel = 'safe' | 'caution' | 'danger' | string;
 
+/**
+ * 법률·경쟁 데이터가 하나라도 없으면 UNKNOWN — "분석 대기" 판정.
+ * 기존에는 ?? 'safe'/'green' 폴백으로 항상 GO/HOLD가 나와서 거짓 "권장" 유발.
+ */
 export function computeDecision(
   legal: LegalRiskLevel | undefined | null,
   entry: MarketEntrySignal | string | undefined | null,
 ): DecisionVerdict {
+  if (legal == null || entry == null) return 'UNKNOWN';
   if (legal === 'danger' || entry === 'red') return 'STOP';
   if (legal === 'safe' && entry === 'green') return 'GO';
   return 'HOLD';
@@ -24,11 +29,12 @@ export function computeDecision(
 
 export const DECISION_COPY: Record<
   DecisionVerdict,
-  { label: string; color: 'emerald' | 'amber' | 'rose' }
+  { label: string; color: 'emerald' | 'amber' | 'rose' | 'stone' }
 > = {
   GO: { label: '진입 권장', color: 'emerald' },
   HOLD: { label: '조건부 진입', color: 'amber' },
   STOP: { label: '진입 비권장', color: 'rose' },
+  UNKNOWN: { label: '분석 대기', color: 'stone' },
 };
 
 /**

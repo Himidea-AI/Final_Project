@@ -24,7 +24,9 @@ export function FinancialTab({ simResult }: Props) {
   const margin = ps?.margin_rate ?? null;
   const bepMonths = ps?.bep_months ?? null;
   const synthAttr = simResult.agent_attributions?.find((a) => a.id === 'synthesis');
-  const confidencePct = synthAttr?.confidence != null ? Math.round(synthAttr.confidence * 100) : 90;
+  // 실데이터 원칙: synthesis 에이전트 신뢰도가 없으면 null (이전 90% 기본값 제거)
+  const confidencePct =
+    synthAttr?.confidence != null ? Math.round(synthAttr.confidence * 100) : null;
 
   return (
     <div className="space-y-6">
@@ -48,7 +50,8 @@ interface ProfitPanelProps {
   netProfit: number | null | undefined;
   margin: number | null | undefined;
   bepMonths: number | null | undefined;
-  confidencePct: number;
+  /** synthesis.confidence × 100. null이면 "미산정" empty state */
+  confidencePct: number | null;
 }
 
 function ProfitSimulationPanelFull({
@@ -117,18 +120,30 @@ function ProfitSimulationPanelFull({
               분석 신뢰도
             </span>
           </div>
-          <div className="text-3xl font-black text-indigo-400 tabular-nums mb-2">
-            {confidencePct}%
-          </div>
-          <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
-            <div
-              className="bg-indigo-500 h-full transition-all"
-              style={{ width: `${Math.min(100, Math.max(0, confidencePct))}%` }}
-            />
-          </div>
-          <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
-            synthesis 에이전트 판단 신뢰도 기반. TCN MAPE 제공 시 교체됩니다.
-          </p>
+          {confidencePct != null ? (
+            <>
+              <div className="text-3xl font-black text-indigo-400 tabular-nums mb-2">
+                {confidencePct}%
+              </div>
+              <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-indigo-500 h-full transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, confidencePct))}%` }}
+                />
+              </div>
+              <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+                synthesis 에이전트 판단 신뢰도 기반. TCN MAPE 제공 시 교체됩니다.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-black text-stone-500 tabular-nums mb-2">—</div>
+              <div className="w-full bg-stone-800 h-1.5 rounded-full" />
+              <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+                synthesis 에이전트 신뢰도 미산정. 분석 완료 후 표시됩니다.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>

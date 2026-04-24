@@ -62,10 +62,12 @@ export function SummaryTab({ simResult, openModal }: Props) {
   const margin = ps?.margin_rate ?? null;
 
   // ── DecisionCard 1: 창업 가능성 ──
-  const legalRaw = simResult.overall_legal_risk ?? 'safe';
-  const entryRaw = (ci?.market_entry_signal as string | undefined) ?? 'green';
+  // 실데이터 원칙: 두 값 중 하나라도 없으면 computeDecision이 UNKNOWN 반환 (거짓 GO 판정 방지)
+  const legalRaw = simResult.overall_legal_risk ?? null;
+  const entryRaw = (ci?.market_entry_signal as string | undefined) ?? null;
   const verdict = computeDecision(legalRaw, entryRaw);
   const verdictCopy = DECISION_COPY[verdict];
+  const isVerdictUnknown = verdict === 'UNKNOWN';
   const matchScore = demo?.brand_target_match_score;
   const compCount = ci?.competition_500m?.count as number | undefined;
   const vacancyApplied = Boolean(simResult.vacancy_applied);
@@ -90,7 +92,7 @@ export function SummaryTab({ simResult, openModal }: Props) {
           title: '이 자리, 창업해도 될까? — 판단 근거',
           content: [
             `종합 판정: ${verdict} (${verdictCopy.label})`,
-            `법률 리스크 레벨: ${legalRaw} · 진입 신호: ${entryRaw}`,
+            `법률 리스크 레벨: ${legalRaw ?? '미수신'} · 진입 신호: ${entryRaw ?? '미수신'}`,
             vacancyApplied ? '공실 페널티 반영됨 — 매출 기대치가 하향 조정되었습니다.' : '',
             '',
             '【 판단 로직 】',
@@ -178,12 +180,14 @@ export function SummaryTab({ simResult, openModal }: Props) {
       <div className="grid grid-cols-3 gap-8">
         <DecisionCard
           title="이 자리, 창업해도 될까?"
-          heroBadge={`${verdict} · ${verdictCopy.label}`}
+          heroBadge={isVerdictUnknown ? verdictCopy.label : `${verdict} · ${verdictCopy.label}`}
           heroColor={verdictCopy.color}
           description={
-            fr?.final_recommendation?.slice(0, 200) ??
-            simResult.ai_recommendation?.slice(0, 200) ??
-            '법률 리스크와 경쟁 진입 신호를 종합한 의사결정 지표입니다.'
+            isVerdictUnknown
+              ? '법률 분석 또는 경쟁 진입 신호 중 일부가 아직 수신되지 않았습니다. 해당 에이전트 실행이 완료되면 판정이 산출됩니다.'
+              : (fr?.final_recommendation?.slice(0, 200) ??
+                simResult.ai_recommendation?.slice(0, 200) ??
+                '법률 리스크와 경쟁 진입 신호를 종합한 의사결정 지표입니다.')
           }
           items={[
             {
@@ -197,7 +201,10 @@ export function SummaryTab({ simResult, openModal }: Props) {
             },
             vacancyApplied
               ? { text: '공실 페널티 반영됨', highlight: true }
-              : { text: `법률 리스크 ${legalRaw} · 진입 신호 ${entryRaw}`, highlight: false },
+              : {
+                  text: `법률 리스크 ${legalRaw ?? '미수신'} · 진입 신호 ${entryRaw ?? '미수신'}`,
+                  highlight: false,
+                },
           ]}
           footer={{
             agents: [AGENT_ICON.synthesis, AGENT_ICON.legal, AGENT_ICON.competitor].map((a, i) => ({

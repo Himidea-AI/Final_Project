@@ -25,7 +25,7 @@ interface DecisionCardProps {
   title: string;
   heroBadge: string;
   /** Tailwind color 토큰명 (emerald/amber/rose/indigo) */
-  heroColor: 'emerald' | 'amber' | 'rose' | 'indigo';
+  heroColor: 'emerald' | 'amber' | 'rose' | 'indigo' | 'stone';
   description: string;
   items: DecisionCardItem[];
   footer: {
@@ -41,6 +41,7 @@ const HERO_CLS: Record<DecisionCardProps['heroColor'], string> = {
   amber: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
   rose: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
   indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+  stone: 'bg-stone-700/20 text-stone-400 border-stone-600/40 border-dashed',
 };
 
 export function DecisionCard({
