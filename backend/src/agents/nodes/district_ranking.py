@@ -17,17 +17,20 @@ market / population / legal 에이전트와 asyncio.gather로 병렬 실행됩�
 import asyncio
 import json
 import logging
-import redis.asyncio as aioredis
-from sqlalchemy import select, func
 
-logger = logging.getLogger(__name__)
-from src.schemas.state import AgentState
-from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
-from src.config.settings import settings
+import redis.asyncio as aioredis
+from sqlalchemy import func, select
+
 from src.agents.nodes._attribution_helpers import build_attribution
 from src.agents.nodes.market_analyst import db_client, market_tool
+from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, MAPO_DISTRICTS, ZONING_RULES
+from src.config.settings import settings
 from src.database.models import NaverVacancy, StoreQuarterly
+from src.schemas.state import AgentState
+from src.services.operational_fit_scorer import score_all_districts as _score_operational_fit
 from src.services.population_api import MAPO_DONG_CODES
+
+logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 86400  # 24시간
 
@@ -284,6 +287,7 @@ def _normalize_and_rank(
     store_area: float = 15.0,
     vacancy_rate_map: dict[str, float] | None = None,
     business_type: str = "",
+    operfit_map: dict[str, dict] | None = None,
 ) -> list[dict]:
     """
     16개 동의 원시 지표를 0~100으로 정규화 후 가중 합산 → 내림차순 정렬
@@ -293,11 +297,14 @@ def _normalize_and_rank(
     monthly_rent_budget > 0 : 예산 초과 동에 페널티 적용
     vacancy_rate_map        : 공실률 높은 동 추가 패널티 (5~10%: -15%, 10%+: -30%)
     business_type           : 용도지역 규제 패널티 판정용 업종 코드
+    operfit_map             : operational_fit_scorer 결과 (dict[dong, OperationalFitResult])
+                              Hansen(1959) + E2SFCA(2009) 교통·집객 접근성 점수
     """
     if not raw:
         return []
 
     vacancy_rate_map = vacancy_rate_map or {}
+    operfit_map = operfit_map or {}
 
     # 동적 가중치
     if population_weight:
@@ -350,22 +357,32 @@ def _normalize_and_rank(
     has_trend = any(v is not None for v in trend_vals)
     trend_norm = _minmax(trend_vals) if has_trend else None
 
+    # operational_fit — 교통·집객 접근성 (Hansen 1959 + E2SFCA 2009, 0~100 사전 정규화)
+    operfit_vals = [
+        operfit_map.get(r["district"], {}).get("operational_fit_score") if operfit_map else None for r in raw
+    ]
+    has_operfit = any(v is not None for v in operfit_vals)
+    operfit_norm = _minmax(operfit_vals, floor=10.0) if has_operfit else None
+
     # 데이터 커버리지 로그
     sales_hit = sum(1 for r in raw if r["sales_growth"] is not None)
     pop_hit = sum(1 for r in raw if r["pop_growth"] is not None)
     rent_hit = sum(1 for r in raw if r["avg_rent"] is not None)
     density_hit = sum(1 for v in density_vals if v is not None)
     trend_hit = sum(1 for v in trend_vals if v is not None)
+    operfit_hit = sum(1 for v in operfit_vals if v is not None)
     logger.info(
         f"[district_ranking] 데이터 커버리지 — 매출:{sales_hit}/16, 인구:{pop_hit}/16, "
-        f"임대료:{rent_hit}/16, 밀집도:{density_hit}/16, 트렌드:{trend_hit}/16"
+        f"임대료:{rent_hit}/16, 밀집도:{density_hit}/16, 트렌드:{trend_hit}/16, "
+        f"접근성:{operfit_hit}/16"
     )
 
-    # 가중치 재분배: 경쟁밀도 15% (5% → 15%: 포화 업종 진입 페널티 강화), 트렌드 5%
-    # 경쟁밀도는 매출에서 차감 — 인구/임대료 가중치는 유지
+    # 가중치 재분배: 경쟁밀도 15%, 트렌드 5%, operational_fit 15%
+    # 전부 매출에서 차감 — 인구/임대료 가중치는 유지. 매출 최소 5% 보장.
     w_density = 0.15 if has_density else 0.0
     w_trend = 0.05 if has_trend else 0.0
-    w_sales_adj = max(w_sales - w_density - w_trend, 0.05)  # 매출 가중치 최소 5% 보장
+    w_operfit = 0.15 if has_operfit else 0.0
+    w_sales_adj = max(w_sales - w_density - w_trend - w_operfit, 0.05)
 
     ranked = []
     for i, r in enumerate(raw):
@@ -374,6 +391,8 @@ def _normalize_and_rank(
             score += density_norm[i] * w_density
         if trend_norm is not None:
             score += trend_norm[i] * w_trend
+        if operfit_norm is not None:
+            score += operfit_norm[i] * w_operfit
 
         # 예산 초과 페널티
         if budget_per_3_3m2 > 0 and r["avg_rent"] is not None and r["avg_rent"] > 0:
@@ -403,6 +422,7 @@ def _normalize_and_rank(
                 zoning_risk = "caution"
                 score *= 0.85  # 회색지역: -15%
 
+        _operfit_entry = operfit_map.get(r["district"], {}) if operfit_map else {}
         ranked.append(
             {
                 **r,
@@ -416,6 +436,10 @@ def _normalize_and_rank(
                 "rent_score": round(rent_norm[i], 1),
                 "density_score": round(density_norm[i], 1) if density_norm else None,
                 "trend_score": round(trend_norm[i], 1) if trend_norm else None,
+                "operational_fit_score": _operfit_entry.get("operational_fit_score"),
+                "operational_fit_subway": _operfit_entry.get("subway_sub"),
+                "operational_fit_bus": _operfit_entry.get("bus_sub"),
+                "operational_fit_fclty": _operfit_entry.get("fclty_sub"),
                 "semas_density": r.get("semas_density"),
                 "naver_trend": r.get("naver_trend"),
                 "vacancy_rate": vacancy_rate,
@@ -458,7 +482,10 @@ async def district_ranking_node(state: AgentState) -> dict:
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
     # v5: target_districts를 캐시 키에 포함 — 선택 동이 다르면 별도 캐시 (v4 무효화)
     # v6: top_3도 선택 동 내로 제한 (v5 잘못된 top_3 캐시 무효화)
-    cache_key = f"v6:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+    # v7: operational_fit(교통·집객 접근성) 점수 추가 — Hansen/E2SFCA (v6 무효화)
+    cache_key = (
+        f"v7:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+    )
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -475,7 +502,13 @@ async def district_ranking_node(state: AgentState) -> dict:
             _user_ranked = [r for r in _cached_ranked if isinstance(r, dict) and r.get("district") in _target_dists_set]
             _winner_pool = _user_ranked if _user_ranked else ([r for r in _cached_ranked if isinstance(r, dict)] or [])
             _cached_winner = _winner_pool[0]["district"] if _winner_pool else cached_data.get("winner_district", "")
-            _cached_top_3 = [r["district"] for r in _cached_ranked if isinstance(r, dict) and r.get("district") != _cached_winner and r.get("district") in _target_dists_set][:3]
+            _cached_top_3 = [
+                r["district"]
+                for r in _cached_ranked
+                if isinstance(r, dict)
+                and r.get("district") != _cached_winner
+                and r.get("district") in _target_dists_set
+            ][:3]
             _cached_winner_score = 0
             if _cached_ranked:
                 _first = _cached_ranked[0] if isinstance(_cached_ranked[0], dict) else {}
@@ -491,14 +524,24 @@ async def district_ranking_node(state: AgentState) -> dict:
             )
             _cached_analysis = dict(state.get("analysis_results", {}))
             _cached_analysis["district_ranking_result"] = {"agent_attribution": cached_ranking_attr}
+            _cached_operfit = cached_data.get("operational_fit_results") or {}
+            _cached_winner_operfit = _cached_operfit.get(_cached_winner, {}) if _cached_winner else {}
             return {
                 "scouting_results": cached_data["scouting_results"],
-                "winner_district": _cached_winner,   # ranked[0] 재계산값
-                "top_3_candidates": _cached_top_3,   # ranked[1:4] 재계산값
+                "winner_district": _cached_winner,  # ranked[0] 재계산값
+                "top_3_candidates": _cached_top_3,  # ranked[1:4] 재계산값
                 "vacancy_applied": cached_data.get("vacancy_applied", False),
                 "vacancy_spots": cached_data.get("vacancy_spots", []),
                 "current_agent": "district_ranking",
                 "analysis_results": _cached_analysis,
+                "analysis_metrics": {
+                    "operational_fit_score": _cached_winner_operfit.get("operational_fit_score"),
+                    "operational_fit_subway": _cached_winner_operfit.get("subway_sub"),
+                    "operational_fit_bus": _cached_winner_operfit.get("bus_sub"),
+                    "operational_fit_fclty": _cached_winner_operfit.get("fclty_sub"),
+                    "operational_fit_evidence": _cached_winner_operfit.get("evidence"),
+                },
+                "operational_fit_results": _cached_operfit,
                 "agent_attribution": cached_ranking_attr,
             }
     except Exception as e:
@@ -530,9 +573,19 @@ async def district_ranking_node(state: AgentState) -> dict:
             return await _score_single_district(dong, business_type)
 
     tasks = [_guarded_score(dong) for dong in MAPO_DISTRICTS]
-    raw_scores, vacancy_result = await asyncio.gather(
+
+    async def _safe_operfit() -> dict[str, dict]:
+        """operational_fit_scorer 실패 시 빈 dict로 graceful degradation."""
+        try:
+            return await _score_operational_fit()
+        except Exception as exc:
+            logger.warning(f"[district_ranking] operational_fit 실패 (무시하고 계속): {exc}")
+            return {}
+
+    raw_scores, vacancy_result, operfit_map = await asyncio.gather(
         asyncio.gather(*tasks),
         _load_vacancy_map(),
+        _safe_operfit(),
     )
     vacancy_rate_map, vacancy_applied = vacancy_result
 
@@ -543,6 +596,7 @@ async def district_ranking_node(state: AgentState) -> dict:
         store_area=store_area,
         vacancy_rate_map=vacancy_rate_map,
         business_type=business_type,
+        operfit_map=operfit_map,
     )
 
     # winner = 사용자 선택 동(_target_dists_set) 중 점수 1위
@@ -574,6 +628,7 @@ async def district_ranking_node(state: AgentState) -> dict:
                         "top_3_candidates": top_3,
                         "vacancy_applied": vacancy_applied,
                         "vacancy_spots": vacancy_spots,
+                        "operational_fit_results": operfit_map,
                     },
                     ensure_ascii=False,
                 ),
@@ -592,17 +647,27 @@ async def district_ranking_node(state: AgentState) -> dict:
     if ranked:
         _first_ranked = ranked[0] if isinstance(ranked[0], dict) else {}
         _winner_score = _first_ranked.get("final_score") or _first_ranked.get("score") or 0
+    _sources = ["district_sales", "golmok_rent", "seoul_adstrd_flpop"]
+    if operfit_map:
+        _sources.extend(["dong_subway_access", "bus_boarding_daily", "seoul_adstrd_fclty"])
     ranking_attr = build_attribution(
         agent_id="district_ranking",
         display_name="행정동 랭킹",
         kind="Python",
-        sources=["district_sales", "golmok_rent", "seoul_adstrd_flpop"],
+        sources=_sources,
         verdict=f"1위 {winner} ({_winner_score}점)",
-        reasoning="마포 16동 정량 스코어링 — 매출/인구/임대료 가중합",
+        reasoning=(
+            "마포 16동 정량 스코어링 — 매출/인구/임대료"
+            + (" + 교통·집객 접근성(Hansen 1959, E2SFCA 2009)" if operfit_map else "")
+            + " 가중합"
+        ),
         confidence=0.9,
     )
     _analysis = dict(state.get("analysis_results", {}))
     _analysis["district_ranking_result"] = {"agent_attribution": ranking_attr}
+
+    # winner 동의 operational_fit_score를 analysis_metrics에 주입 (main.py가 market_report.accessibility로 사용)
+    winner_operfit = operfit_map.get(winner, {}) if operfit_map else {}
 
     return {
         "scouting_results": ranked,
@@ -612,5 +677,13 @@ async def district_ranking_node(state: AgentState) -> dict:
         "vacancy_spots": vacancy_spots,
         "current_agent": "district_ranking",
         "analysis_results": _analysis,
+        "analysis_metrics": {
+            "operational_fit_score": winner_operfit.get("operational_fit_score"),
+            "operational_fit_subway": winner_operfit.get("subway_sub"),
+            "operational_fit_bus": winner_operfit.get("bus_sub"),
+            "operational_fit_fclty": winner_operfit.get("fclty_sub"),
+            "operational_fit_evidence": winner_operfit.get("evidence"),
+        },
+        "operational_fit_results": operfit_map,
         "agent_attribution": ranking_attr,
     }

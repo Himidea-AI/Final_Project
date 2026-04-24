@@ -430,7 +430,10 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "estimated_revenue": _estimated_rev_r,
         "survival_rate": _survival_r,
         "growth_potential": _growth_r,
-        "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
+        # operational_fit_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백, 최종 기본값 75
+        "accessibility": min(
+            int(float(metrics.get("operational_fit_score") or metrics.get("accessibility_score") or 75)), 100
+        ),
     }
 
     # [Phase 2.5] graph.py ml_prediction_phase_node에서 실행된 TCN 결과를 state에서 읽음
