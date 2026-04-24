@@ -45,13 +45,29 @@ export function ForecastTab({ simResult, openModal }: Props) {
   return (
     <div className="space-y-6">
       <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8 relative overflow-hidden">
-        <div className="flex items-center justify-between mb-8">
-          <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left">
-            <TrendingUp className="text-indigo-400" /> TCN-v2 분기별 매출 예측 모델
-          </h3>
-          <div className="flex items-center gap-2 text-stone-500">
-            <div className="w-3 h-3 bg-indigo-500/20 border border-indigo-500/50 rounded" />
-            <span className="text-[10px] font-bold tracking-widest">신뢰 구간 표시</span>
+        <div className="flex items-start justify-between mb-8 gap-6">
+          <div>
+            <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
+              <TrendingUp className="text-indigo-400" /> TCN-v2 분기별 매출 예측 모델
+            </h3>
+            <p className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+              Temporal Convolutional Network · P10~P90 신뢰 구간
+            </p>
+          </div>
+          {/* 범례 미니 카드 — Linear/Vercel 스타일 분리 범례 */}
+          <div className="flex gap-5 items-center bg-stone-950/50 px-4 py-3 rounded-2xl border border-stone-800/60 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-[2px] bg-indigo-400 rounded-full shadow-[0_0_6px_rgba(129,140,248,0.8)]" />
+              <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+                P50 Expected
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-indigo-500/10 border border-indigo-500/30 rounded-sm" />
+              <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+                P10~P90 Range
+              </span>
+            </div>
           </div>
         </div>
 
