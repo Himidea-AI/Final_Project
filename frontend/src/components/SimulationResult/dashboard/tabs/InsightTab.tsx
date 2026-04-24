@@ -7,6 +7,7 @@ import { BrainCircuit, Maximize2 } from 'lucide-react';
 import type { SimulationOutput, AgentId } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { AGENTS_LIST } from '../TabbedDashboard';
+import { AgentConfidenceRadar } from '../charts/AgentConfidenceRadar';
 
 interface Props {
   simResult: SimulationOutput;
@@ -42,6 +43,14 @@ export function InsightTab({ simResult, openModal }: Props) {
         <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
           {attributions.length}/8 에이전트 분석 완료
         </div>
+      </div>
+
+      {/* ═══ Radar Overview (가이드 #7) ═══ */}
+      <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-4">
+          8 에이전트 신뢰도 Overview
+        </h4>
+        <AgentConfidenceRadar attributions={attributions} />
       </div>
 
       <div className="grid grid-cols-4 gap-4">
