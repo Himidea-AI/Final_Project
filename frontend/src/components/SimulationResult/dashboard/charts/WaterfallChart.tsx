@@ -49,7 +49,10 @@ interface BarRow {
  * base/final은 spacer=0, bar=value (positive 가정).
  * contribution은 running total 기준 spacer 위치 계산.
  */
-function buildRows(steps: WaterfallStep[]): { rows: BarRow[]; runningTotals: number[] } {
+export function buildRows(steps: WaterfallStep[]): {
+  rows: BarRow[];
+  runningTotals: number[];
+} {
   let running = 0;
   const rows: BarRow[] = [];
   const runningTotals: number[] = [];
