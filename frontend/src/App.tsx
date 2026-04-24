@@ -900,14 +900,14 @@ const OPERATING_HOURS_OPTIONS = ['오전', '점심', '저녁', '심야'];
 /* ═══════════════════════════════════════════════════════
    상세 데이터 테이블 — 정렬 가능한 row data (Mock)
    ═══════════════════════════════════════════════════════ */
-interface CannRow {
+export interface CannRow {
   [key: string]: string;
   name: string;
   distance: string;
   impact: string;
   status: string;
 }
-interface NeighborhoodRow {
+export interface NeighborhoodRow {
   [key: string]: string;
   name: string;
   score: string;
@@ -5942,7 +5942,7 @@ function PDFPageFooter({ reportDate }: { reportDate: string }) {
   );
 }
 
-const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
+export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
   (
     {
       districtFull,

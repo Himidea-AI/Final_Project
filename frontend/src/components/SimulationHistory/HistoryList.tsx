@@ -39,6 +39,7 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const handleOpen = (id: number) => navigate(`/dashboard/history/${id}`);
+  const handleDownloadPdf = (id: number) => navigate(`/dashboard/history/${id}?autopdf=1`);
   const handleDelete = async (id: number) => {
     await remove(id);
     setSelectedIds((prev) => prev.filter((sid) => sid !== id));
@@ -105,6 +106,7 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
               item={item}
               onOpen={handleOpen}
               onDelete={handleDelete}
+              onDownloadPdf={handleDownloadPdf}
               selectable={{
                 checked: selectedIds.includes(item.id),
                 disabled: selectionFull,
