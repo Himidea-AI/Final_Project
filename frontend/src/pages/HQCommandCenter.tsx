@@ -50,6 +50,7 @@ import {
   History,
 } from 'lucide-react';
 import { HistoryList } from '../components/SimulationHistory/HistoryList';
+import { TokenBurnrateSection } from '../components/TokenBurnrate/TokenBurnrateSection';
 
 /* ═══════════════════════════════════════════════════════
    Types
@@ -1788,6 +1789,15 @@ function BillingManagementView() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* 1.5 LLM 토큰 번레이트 (LangSmith 실데이터) — 리서치 #7 */}
+      <section className="mt-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-[#e2e8f0]">LLM 토큰 번레이트 (최근 30일)</h3>
+          <span className="text-[10px] text-[#9ca3af]">LangSmith 실데이터 기반</span>
+        </div>
+        <TokenBurnrateSection />
       </section>
 
       {/* 2. Plan Upgrade (Pricing Cards) */}

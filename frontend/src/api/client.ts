@@ -22,6 +22,7 @@ import type {
   SaveSimulationResponse,
   SimulationHistoryDetail,
 } from '../types/simulationHistory';
+import type { TokenUsageResponse } from '../types/tokenUsage';
 
 /**
  * [v11.5 멀티테넌시 사전 준비]
@@ -179,6 +180,19 @@ export async function getSimulationHistoryDetail(id: number): Promise<Simulation
 
 export async function deleteSimulationHistory(id: number): Promise<void> {
   await apiClient.delete(`/simulation-history/${id}`);
+}
+
+// ─────────────────────────────────────────────────────────
+// ops (운영 메트릭) — 백엔드 미구현 시 404. B1 예진 구현 대기.
+// 계약: frontend/src/types/tokenUsage.ts 주석 참조.
+// ─────────────────────────────────────────────────────────
+
+export async function getTokenUsage(params: {
+  from?: string;
+  to?: string;
+}): Promise<TokenUsageResponse> {
+  const response = await apiClient.get('/ops/token-usage', { params });
+  return response.data;
 }
 
 export default apiClient;
