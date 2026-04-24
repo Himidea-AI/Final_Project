@@ -171,7 +171,7 @@ function MasterCommandCenter() {
             active={activeMenu === 'tuning'}
             onClick={() => setActiveMenu('tuning')}
             icon={<SlidersHorizontal className="w-4 h-4" />}
-            label="브랜드 AI 튜닝"
+            label="브랜드 설정"
           />
           <MenuButton
             active={activeMenu === 'history'}
@@ -230,7 +230,7 @@ function MasterCommandCenter() {
           <h2 className="text-lg font-bold flex items-center gap-2">
             {activeMenu === 'team' && '팀 및 권역 관리'}
             {activeMenu === 'pipeline' && '출점 파이프라인 보드'}
-            {activeMenu === 'tuning' && '자사 브랜드 AI 튜닝 (Master Data)'}
+            {activeMenu === 'tuning' && '브랜드 설정'}
             {activeMenu === 'history' && '내 시뮬 이력'}
             {activeMenu === 'billing' && '결제 및 API 토큰 관리'}
             {activeMenu === 'mypage' && '내 정보 관리'}
@@ -282,7 +282,7 @@ function MasterCommandCenter() {
               />
             )}
             {activeMenu === 'pipeline' && <PipelineKanbanView />}
-            {activeMenu === 'tuning' && <BrandTuningView />}
+            {activeMenu === 'tuning' && <BrandSettingsView />}
             {activeMenu === 'history' && <HistoryList />}
             {activeMenu === 'billing' && <BillingManagementView />}
             {activeMenu === 'mypage' && <MyPageView />}
@@ -1371,93 +1371,283 @@ function KanbanCard({
 }
 
 /* ═══════════════════════════════════════════════════════
-   View 3: Brand AI Tuning (브랜드 AI 튜닝)
+   View 3: Brand Settings (브랜드 설정)
+   상단 서브탭: 자사 브랜드 프로필 (작동) | AI 튜닝 (Phase 2, 로드맵)
    ═══════════════════════════════════════════════════════ */
-function BrandTuningView() {
-  const { showToast } = useToast();
+type BrandSettingsTab = 'profile' | 'tuning';
+
+function BrandSettingsView() {
+  const [tab, setTab] = useState<BrandSettingsTab>('profile');
+
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
-      <div className="bg-[#2c2825] border border-[#818cf8]/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(129,140,248,0.05)] relative overflow-hidden">
-        {/* 장식용 배경 */}
-        <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-[#818cf8] opacity-5 pointer-events-none" />
+      <div className="flex items-center gap-1 p-1 bg-[#1e1b18] border border-[#3a3633] rounded-xl self-start">
+        <BrandSubTabButton
+          active={tab === 'profile'}
+          onClick={() => setTab('profile')}
+          label="자사 브랜드 프로필"
+        />
+        <BrandSubTabButton
+          active={tab === 'tuning'}
+          onClick={() => setTab('tuning')}
+          label="AI 튜닝"
+          badge="Phase 2"
+        />
+      </div>
 
-        <div className="relative z-10">
-          <h3 className="text-lg font-bold text-[#818cf8] flex items-center gap-2 mb-2">
-            <Zap className="w-5 h-5" /> Brand AI Weights
-          </h3>
-          <p className="text-sm text-[#9ca3af] mb-8">
-            우리 프랜차이즈의 특성을 입력하면, AI 예측 모델이 이를 반영하여 맞춤형 예상 매출과
-            리스크를 산출합니다.
-          </p>
+      {tab === 'profile' ? <BrandProfileView /> : <BrandTuningPhase2View />}
+    </div>
+  );
+}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 객단가 (AOV) 설정 */}
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-[#e2e8f0]">예상 평균 객단가 (AOV)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af] font-bold">
-                  ₩
-                </span>
-                <input
-                  type="text"
-                  defaultValue="25,000"
-                  className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg pl-8 pr-4 py-2.5 text-sm font-mono text-[#e2e8f0] focus:border-[#818cf8] outline-none"
-                />
-              </div>
-              <p className="text-[10px] text-[#9ca3af]">
-                유동인구 소비력 스코어 계산에 가중치로 작용합니다.
-              </p>
-            </div>
+function BrandSubTabButton({
+  active,
+  onClick,
+  label,
+  badge,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  badge?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${
+        active ? 'bg-[#818cf8] text-[#1e1b18]' : 'text-[#9ca3af] hover:text-[#e2e8f0]'
+      }`}
+    >
+      {label}
+      {badge && (
+        <span
+          className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+            active ? 'bg-[#1e1b18]/20 text-[#1e1b18]' : 'bg-[#818cf8]/10 text-[#818cf8]'
+          }`}
+        >
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
 
-            {/* 타겟 연령층 */}
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-[#e2e8f0]">
-                핵심 타겟 고객층 (Primary Target)
-              </label>
-              <select className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm font-medium text-[#e2e8f0] focus:border-[#818cf8] outline-none appearance-none">
-                <option value="2030f">2030 여성 (트렌드/디저트)</option>
-                <option value="2030m">2030 남성/여성 (가성비/식사)</option>
-                <option value="3040">3040 직장인 (회식/저녁)</option>
-                <option value="family">주거 배후세대 (가족/배달)</option>
-              </select>
-              <p className="text-[10px] text-[#9ca3af]">
-                선택한 타겟층의 해당 상권 거주/유동 비율을 우선 분석합니다.
-              </p>
-            </div>
+/* ───── 자사 브랜드 프로필 (읽기 전용 + 간단 메모) ───── */
+const BRAND_MEMO_KEY = 'spotter_brand_memo';
 
-            {/* 배달 vs 홀 비중 슬라이더 */}
-            <div className="flex flex-col gap-4 md:col-span-2 mt-4 p-5 bg-[#1e1b18] border border-[#3a3633] rounded-xl">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-[#e2e8f0]">매출 비중 (홀 vs 배달)</label>
-                <span className="text-xs font-mono font-bold text-[#818cf8]">
-                  홀 30% : 배달 70%
-                </span>
-              </div>
+function BrandProfileView() {
+  const { brand, user } = useAuth();
+  const { showToast } = useToast();
+  const [memo, setMemo] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(BRAND_MEMO_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const [memoDirty, setMemoDirty] = useState(false);
 
-              <div className="relative w-full h-3 bg-[#3a3633] rounded-full overflow-hidden flex cursor-pointer">
-                <div className="h-full bg-[#3a3633]" style={{ width: '30%' }} />
-                <div className="h-full bg-[#818cf8]" style={{ width: '70%' }} />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-[#818cf8] transition-transform hover:scale-110"
-                  style={{ left: 'calc(30% - 10px)' }}
-                />
-              </div>
+  const formatMoney = (v: number | null | undefined): string => {
+    if (v == null) return '—';
+    if (v >= 100_000_000) return `₩${(v / 100_000_000).toFixed(1)}억`;
+    if (v >= 10_000) return `₩${Math.round(v / 10_000).toLocaleString()}만`;
+    return `₩${v.toLocaleString()}`;
+  };
 
-              <div className="flex justify-between text-[10px] font-bold text-[#9ca3af]">
-                <span>Dine-in (입지/접근성 가중치 상승)</span>
-                <span>Delivery (배후세대 가중치 상승)</span>
-              </div>
-            </div>
+  const fields: { label: string; value: string; hint?: string }[] = [
+    { label: '브랜드명', value: brand?.brand_name ?? '—', hint: 'users.brand_name' },
+    {
+      label: '전체 가맹점 수',
+      value: brand?.franchise_count != null ? `${brand.franchise_count.toLocaleString()}개` : '—',
+      hint: '본사 공시 기준',
+    },
+    {
+      label: '평균 월매출',
+      value: formatMoney(brand?.avg_sales),
+      hint: '가맹점당 월 평균',
+    },
+    {
+      label: '마포구 내 매장',
+      value: brand?.mapo_store_count != null ? `${brand.mapo_store_count.toLocaleString()}개` : '—',
+      hint: '시뮬 지역 기준',
+    },
+  ];
+
+  const saveMemo = () => {
+    try {
+      window.localStorage.setItem(BRAND_MEMO_KEY, memo);
+      setMemoDirty(false);
+      showToast('success', '브랜드 메모가 저장되었습니다.');
+    } catch {
+      showToast('info', '메모 저장에 실패했습니다.');
+    }
+  };
+
+  return (
+    <div className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-6 relative overflow-hidden">
+      <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-[#818cf8] opacity-5 pointer-events-none" />
+
+      <div className="relative z-10">
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-bold text-[#e2e8f0] flex items-center gap-2 mb-1">
+              <Building2 className="w-5 h-5 text-[#818cf8]" /> 자사 브랜드 프로필
+            </h3>
+            <p className="text-xs text-[#9ca3af]">
+              로그인 시 회사 마스터 데이터에서 불러온 기본 정보입니다. 수정은 본사 담당자 승인이
+              필요해요.
+            </p>
           </div>
+          {user?.role === 'master' && (
+            <span className="text-[9px] font-mono text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/30 px-2 py-1 rounded-md uppercase tracking-widest">
+              Master
+            </span>
+          )}
+        </div>
 
-          <div className="mt-8 flex justify-end">
-            <button
-              onClick={() => showToast('info', 'AI 모델 가중치 업데이트 기능은 준비 중입니다.')}
-              className="px-6 py-2.5 bg-[#818cf8] text-[#1e1b18] text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-[#6366f1] transition-colors"
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {fields.map((f) => (
+            <div
+              key={f.label}
+              className="p-4 bg-[#1e1b18] border border-[#3a3633] rounded-xl flex flex-col gap-1"
             >
-              AI 모델 업데이트 적용
+              <span className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">
+                {f.label}
+              </span>
+              <span className="text-lg font-black text-[#e2e8f0] tabular-nums">{f.value}</span>
+              {f.hint && <span className="text-[10px] text-[#57534e]">{f.hint}</span>}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-[#e2e8f0] flex items-center justify-between">
+            <span>브랜드 메모</span>
+            <span className="text-[10px] font-normal text-[#57534e]">
+              이 브라우저에만 저장 · 팀 공유 X
+            </span>
+          </label>
+          <textarea
+            value={memo}
+            onChange={(e) => {
+              setMemo(e.target.value);
+              setMemoDirty(true);
+            }}
+            rows={4}
+            placeholder="예: 2026 Q3 신규 상권 서교/합정 우선 검토. 배달 채널 비중 높은 입지 선호."
+            className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg p-3 text-sm text-[#e2e8f0] placeholder-[#57534e] focus:border-[#818cf8] outline-none resize-none"
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={saveMemo}
+              disabled={!memoDirty}
+              className="px-4 py-2 bg-[#818cf8] text-[#1e1b18] text-xs font-bold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#6366f1]"
+            >
+              메모 저장
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───── AI 튜닝 (Phase 2 로드맵 프리뷰) ───── */
+function BrandTuningPhase2View() {
+  return (
+    <div className="bg-[#2c2825] border border-[#818cf8]/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(129,140,248,0.05)] relative overflow-hidden">
+      <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-[#818cf8] opacity-5 pointer-events-none" />
+
+      <div className="relative z-10">
+        <div className="flex items-start justify-between gap-4 mb-2">
+          <h3 className="text-lg font-bold text-[#818cf8] flex items-center gap-2">
+            <Zap className="w-5 h-5" /> Brand AI Weights
+          </h3>
+          <span className="text-[10px] font-mono text-[#f59e0b] bg-[#f59e0b]/10 border border-[#f59e0b]/30 px-2 py-1 rounded-md uppercase tracking-widest whitespace-nowrap">
+            Phase 2 · 2026 Q3
+          </span>
+        </div>
+        <p className="text-sm text-[#9ca3af] mb-4">
+          우리 프랜차이즈의 특성을 입력하면 AI 예측 모델이 가중치로 반영해 맞춤형 매출/리스크를
+          산출하는 기능입니다.
+        </p>
+
+        <div className="flex items-start gap-2 mb-8 p-3 bg-[#f59e0b]/10 border border-[#f59e0b]/30 rounded-xl">
+          <AlertTriangle className="w-4 h-4 text-[#f59e0b] mt-0.5 shrink-0" />
+          <p className="text-[11px] text-[#f59e0b] leading-relaxed">
+            <strong>로드맵 프리뷰입니다.</strong> 현재 입력값은 AI 모델에 반영되지 않습니다. 2026 Q3
+            백엔드 가중치 API 구축 완료 후 정식 활성화됩니다.
+          </p>
+        </div>
+
+        <fieldset disabled className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-60">
+          {/* 객단가 (AOV) */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-[#e2e8f0]">예상 평균 객단가 (AOV)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af] font-bold">
+                ₩
+              </span>
+              <input
+                type="text"
+                defaultValue="25,000"
+                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg pl-8 pr-4 py-2.5 text-sm font-mono text-[#e2e8f0] outline-none cursor-not-allowed"
+              />
+            </div>
+            <p className="text-[10px] text-[#9ca3af]">
+              유동인구 소비력 스코어 계산에 가중치로 작용합니다.
+            </p>
+          </div>
+
+          {/* 타겟 연령층 */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-[#e2e8f0]">
+              핵심 타겟 고객층 (Primary Target)
+            </label>
+            <select className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm font-medium text-[#e2e8f0] outline-none appearance-none cursor-not-allowed">
+              <option value="2030f">2030 여성 (트렌드/디저트)</option>
+              <option value="2030m">2030 남성/여성 (가성비/식사)</option>
+              <option value="3040">3040 직장인 (회식/저녁)</option>
+              <option value="family">주거 배후세대 (가족/배달)</option>
+            </select>
+            <p className="text-[10px] text-[#9ca3af]">
+              선택한 타겟층의 해당 상권 거주/유동 비율을 우선 분석합니다.
+            </p>
+          </div>
+
+          {/* 배달 vs 홀 비중 슬라이더 */}
+          <div className="flex flex-col gap-4 md:col-span-2 mt-4 p-5 bg-[#1e1b18] border border-[#3a3633] rounded-xl">
+            <div className="flex justify-between items-center">
+              <label className="text-xs font-bold text-[#e2e8f0]">매출 비중 (홀 vs 배달)</label>
+              <span className="text-xs font-mono font-bold text-[#818cf8]">홀 30% : 배달 70%</span>
+            </div>
+
+            <div className="relative w-full h-3 bg-[#3a3633] rounded-full overflow-hidden flex cursor-not-allowed">
+              <div className="h-full bg-[#3a3633]" style={{ width: '30%' }} />
+              <div className="h-full bg-[#818cf8]" style={{ width: '70%' }} />
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-[#818cf8]"
+                style={{ left: 'calc(30% - 10px)' }}
+              />
+            </div>
+
+            <div className="flex justify-between text-[10px] font-bold text-[#9ca3af]">
+              <span>Dine-in (입지/접근성 가중치 상승)</span>
+              <span>Delivery (배후세대 가중치 상승)</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <div className="mt-8 flex justify-end">
+          <button
+            type="button"
+            disabled
+            className="px-6 py-2.5 bg-[#818cf8]/30 text-[#1e1b18]/60 text-sm font-bold rounded-lg cursor-not-allowed"
+          >
+            AI 모델 업데이트 적용 (Phase 2)
+          </button>
         </div>
       </div>
     </div>
