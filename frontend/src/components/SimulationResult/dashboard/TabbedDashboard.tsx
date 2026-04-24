@@ -272,8 +272,17 @@ export function TabbedDashboard({
   return (
     <div
       ref={rootRef}
-      className="min-h-screen bg-[#0C0B0A] text-stone-200 font-sans selection:bg-indigo-500/30"
+      className="min-h-screen bg-[#0C0B0A] text-stone-200 font-sans selection:bg-indigo-500/30 relative"
     >
+      {/* 도트-그리드 텍스쳐 — 전체 배경의 정보 밀도 감 상승 (opacity 3%) */}
+      <div
+        className="fixed inset-0 pointer-events-none opacity-[0.035]"
+        aria-hidden="true"
+        style={{
+          backgroundImage: 'radial-gradient(#ffffff 1px, transparent 0)',
+          backgroundSize: '24px 24px',
+        }}
+      />
       {/* ════════════════ STICKY HEADER (v4.3 리디자인) ════════════════ */}
       <header
         className={`sticky top-0 z-40 bg-[#0C0B0A]/90 backdrop-blur-2xl border-b border-stone-800/40 transition-all duration-500 ${

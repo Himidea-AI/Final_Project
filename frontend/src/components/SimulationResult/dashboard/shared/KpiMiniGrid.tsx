@@ -45,13 +45,17 @@ export function KpiMiniGrid({ items }: KpiMiniGridProps) {
       {items.map((kpi, i) => (
         <div
           key={i}
-          className="bg-stone-900/40 border border-stone-800/60 rounded-xl p-4 flex flex-col justify-center"
+          className="group relative bg-stone-900/40 border border-stone-800/60 rounded-xl p-4 flex flex-col justify-center hover:border-cyan-500/30 hover:bg-stone-900/60 transition-all overflow-hidden"
         >
-          <div className="text-[10px] font-bold text-stone-500 uppercase tracking-tight mb-1">
+          {/* 모서리 micro dot */}
+          <span className="absolute top-2.5 right-2.5 w-1 h-1 rounded-full bg-stone-800 group-hover:bg-cyan-500/50 transition-colors" />
+          <div className="text-[10px] font-black text-stone-500 uppercase tracking-[0.15em] mb-1">
             {kpi.label}
           </div>
           <div className="flex items-end gap-2">
-            <div className="text-2xl font-black text-stone-100 tabular-nums">{kpi.value}</div>
+            <div className="text-2xl font-black text-stone-100 tabular-nums tracking-tighter">
+              {kpi.value}
+            </div>
             {kpi.tag && (
               <div
                 className={`text-[10px] font-black px-1.5 py-0.5 rounded-md mb-1 bg-stone-800 ${
