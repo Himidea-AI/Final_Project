@@ -1,0 +1,193 @@
+name: "🚀 Deploy to Lightsail"
+
+on:
+  # dev 브랜치 push 시 자동 배포
+  push:
+    branches: [dev]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/auto-pr-title.yml"
+      - "notebooks/**"
+      - "tests/**"
+
+  # 수동 배포 트리거 (긴급 배포 또는 전체 재빌드)
+  workflow_dispatch:
+    inputs:
+      full_rebuild:
+        description: "전체 재빌드 (기본: 변경된 서비스만 빌드)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+# 동시 배포 방지 — 이전 배포가 진행 중이면 취소하고 최신 버전만 배포
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: "🚢 Deploy to Production"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ──────────────────────────────────────────
+      # Step 1: 코드 체크아웃 (변경 감지용)
+      # ──────────────────────────────────────────
+      - name: "📋 Checkout"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # ──────────────────────────────────────────
+      # Step 2: 변경된 서비스 감지
+      # ──────────────────────────────────────────
+      - name: "🔍 Detect changes"
+        id: changes
+        run: |
+          # 첫 번째 커밋이거나 fetch-depth 문제 시 전체 빌드로 fallback
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "all")
+          echo "--- 변경 파일 목록 ---"
+          echo "$CHANGED"
+          echo "----------------------"
+
+          # 수동 트리거 전체 재빌드 플래그
+          FULL="${{ github.event.inputs.full_rebuild }}"
+          if [ "$FULL" = "true" ] || [ "$CHANGED" = "all" ]; then
+            echo "frontend_changed=true"  >> $GITHUB_OUTPUT
+            echo "backend_changed=true"   >> $GITHUB_OUTPUT
+            echo "infra_changed=true"     >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 프론트엔드 변경 감지
+          if echo "$CHANGED" | grep -qE "^frontend/"; then
+            echo "frontend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          # 백엔드/모델/데이터 변경 감지
+          if echo "$CHANGED" | grep -qE "^(backend/|models/|data/|validation/)"; then
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          # 인프라(docker-compose) 변경 감지
+          if echo "$CHANGED" | grep -qE "^docker-compose"; then
+            echo "infra_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "infra_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      # ──────────────────────────────────────────
+      # Step 3: SSH로 Lightsail 배포
+      # ──────────────────────────────────────────
+      - name: "🚀 Deploy via SSH"
+        uses: appleboy/ssh-action@v1
+        env:
+          FRONTEND_CHANGED: ${{ steps.changes.outputs.frontend_changed }}
+          BACKEND_CHANGED: ${{ steps.changes.outputs.backend_changed }}
+          INFRA_CHANGED: ${{ steps.changes.outputs.infra_changed }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          envs: FRONTEND_CHANGED,BACKEND_CHANGED,INFRA_CHANGED
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "📥 최신 코드 가져오기 (dev 브랜치)..."
+            git fetch origin dev
+            git reset --hard origin/dev
+
+            echo "🧹 Docker 미사용 리소스 정리..."
+            docker system prune -f --volumes=false
+
+            # ── 빌드 대상 결정 ──────────────────────
+            if [ "$INFRA_CHANGED" = "true" ]; then
+              echo "🏗️  인프라 변경 감지 → 전체 재빌드"
+              docker-compose -f docker-compose.prod.yml up --build -d
+
+            elif [ "$FRONTEND_CHANGED" = "true" ] && [ "$BACKEND_CHANGED" = "true" ]; then
+              echo "🏗️  Frontend + Backend 변경 → 둘 다 재빌드"
+              docker-compose -f docker-compose.prod.yml up --build -d frontend backend
+
+            elif [ "$FRONTEND_CHANGED" = "true" ]; then
+              echo "🏗️  Frontend 변경 → Frontend만 재빌드"
+              docker-compose -f docker-compose.prod.yml up --build -d frontend
+
+            elif [ "$BACKEND_CHANGED" = "true" ]; then
+              echo "🏗️  Backend 변경 → Backend만 재빌드"
+              docker-compose -f docker-compose.prod.yml up --build -d backend
+
+            else
+              echo "⏭️  배포 대상 없음 (docs/tests 변경만). 스킵."
+              exit 0
+            fi
+
+            # ── 헬스체크 ────────────────────────────
+            echo "⏳ 컨테이너 기동 대기 (20초)..."
+            sleep 20
+
+            echo "🔍 컨테이너 상태:"
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            echo "🏥 Backend /health 체크..."
+            SUCCESS=false
+            for i in 1 2 3 4 5; do
+              if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ Backend 정상!"
+                SUCCESS=true
+                break
+              fi
+              echo "  ⏳ 재시도 $i/5 (5초 후)..."
+              sleep 5
+            done
+
+            if [ "$SUCCESS" = "false" ]; then
+              echo "❌ Backend 헬스체크 실패! 최근 로그:"
+              docker logs mapo_backend_prod --tail 50
+              exit 1
+            fi
+
+            echo "🏥 Frontend 체크..."
+            if curl -sf http://localhost > /dev/null 2>&1; then
+              echo "✅ Frontend 정상!"
+            else
+              echo "⚠️  Frontend 응답 없음. 로그:"
+              docker logs mapo_frontend_prod --tail 20
+            fi
+
+            echo ""
+            echo "🎉 배포 완료! $(date '+%Y-%m-%d %H:%M:%S KST')"
+
+      # ──────────────────────────────────────────
+      # Step 4: 배포 요약 (Actions Summary 탭)
+      # ──────────────────────────────────────────
+      - name: "📊 Deployment Summary"
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON="✅"
+          [ "$STATUS" != "success" ] && ICON="❌"
+
+          echo "## ${ICON} Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 항목 | 값 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| 브랜치 | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 커밋 | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 작성자 | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 결과 | **$STATUS** |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend 변경 | ${{ steps.changes.outputs.frontend_changed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend 변경 | ${{ steps.changes.outputs.backend_changed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 인프라 변경 | ${{ steps.changes.outputs.infra_changed }} |" >> $GITHUB_STEP_SUMMARY

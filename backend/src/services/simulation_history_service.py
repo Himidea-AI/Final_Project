@@ -24,6 +24,7 @@ def _db_url() -> str:
 def create_history(
     *,
     manager_id: UUID,
+    user_type: str = "manager",  # 'master'(팀장/users) | 'manager'(매니저/manager_users)
     client_name: str,
     district: str,
     brand_name: str,
@@ -33,7 +34,7 @@ def create_history(
     ai_verdict_summary: Optional[str],
     market_entry_signal: Optional[str],
 ) -> dict[str, Any]:
-    """신규 이력 INSERT. 반환: {id, manager_id, client_name, created_at}"""
+    """신규 이력 INSERT. 팀장/매니저 모두 저장 가능. 반환: {id, manager_id, client_name, created_at}"""
     import json
 
     engine = get_sync_engine(_db_url())
@@ -42,10 +43,10 @@ def create_history(
             text(
                 """
                 INSERT INTO simulation_history
-                    (manager_id, client_name, district, brand_name, business_type,
+                    (manager_id, user_type, client_name, district, brand_name, business_type,
                      scenario, simulation_result, ai_verdict_summary, market_entry_signal)
                 VALUES
-                    (:manager_id, :client_name, :district, :brand_name, :business_type,
+                    (:manager_id, :user_type, :client_name, :district, :brand_name, :business_type,
                      CAST(:scenario AS jsonb), CAST(:simulation_result AS jsonb),
                      :ai_verdict_summary, :market_entry_signal)
                 RETURNING id, manager_id, client_name, created_at
@@ -53,6 +54,7 @@ def create_history(
             ),
             {
                 "manager_id": str(manager_id),
+                "user_type": user_type,
                 "client_name": client_name,
                 "district": district,
                 "brand_name": brand_name,
