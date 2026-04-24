@@ -115,19 +115,19 @@ jobs:
             # ── 빌드 대상 결정 ──────────────────────
             if [ "$INFRA_CHANGED" = "true" ]; then
               echo "🏗️  인프라 변경 감지 → 전체 재빌드"
-              docker compose -f docker-compose.prod.yml up --build -d
+              docker-compose -f docker-compose.prod.yml up --build -d
 
             elif [ "$FRONTEND_CHANGED" = "true" ] && [ "$BACKEND_CHANGED" = "true" ]; then
               echo "🏗️  Frontend + Backend 변경 → 둘 다 재빌드"
-              docker compose -f docker-compose.prod.yml up --build -d frontend backend
+              docker-compose -f docker-compose.prod.yml up --build -d frontend backend
 
             elif [ "$FRONTEND_CHANGED" = "true" ]; then
               echo "🏗️  Frontend 변경 → Frontend만 재빌드"
-              docker compose -f docker-compose.prod.yml up --build -d frontend
+              docker-compose -f docker-compose.prod.yml up --build -d frontend
 
             elif [ "$BACKEND_CHANGED" = "true" ]; then
               echo "🏗️  Backend 변경 → Backend만 재빌드"
-              docker compose -f docker-compose.prod.yml up --build -d backend
+              docker-compose -f docker-compose.prod.yml up --build -d backend
 
             else
               echo "⏭️  배포 대상 없음 (docs/tests 변경만). 스킵."
