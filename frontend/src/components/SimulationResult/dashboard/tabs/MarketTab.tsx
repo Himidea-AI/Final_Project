@@ -14,6 +14,8 @@ import { DistrictRankings } from '../../sections/DistrictRankings';
 import { InsightsGrid } from '../../sections/InsightsGrid';
 import { calcHHI, hhiToDiversity } from '../utils/formatters';
 import { interpretHHI, SATURATION_MAP, safeMap } from '../utils/mappings';
+import { FlowVsRevenueScatter } from '../charts/FlowVsRevenueScatter';
+import { LegalDistributionBar } from '../charts/LegalDistributionBar';
 
 interface Props {
   simResult: SimulationOutput;
@@ -92,6 +94,17 @@ export function MarketTab({ simResult, openModal }: Props) {
         </div>
       </div>
 
+      {/* ═══ Scatter: 유동인구 × 매출 상관 (가이드 #8) ═══ */}
+      <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+        <h4 className="text-sm font-black text-stone-100 mb-6 flex items-center gap-2 uppercase tracking-tight">
+          유동인구 × 매출 상관 (16 동)
+        </h4>
+        <FlowVsRevenueScatter
+          rankings={simResult.district_rankings ?? []}
+          winnerDistrict={simResult.winner_district}
+        />
+      </div>
+
       {/* ═══ HHI 경쟁 집중도 카드 (실데이터 기반) ═══ */}
       {samples.length > 0 && (
         <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6 grid grid-cols-3 gap-6">
@@ -160,6 +173,13 @@ export function MarketTab({ simResult, openModal }: Props) {
           >
             <Maximize2 size={12} /> 전체 리포트 보기
           </button>
+        </div>
+        {/* 법률 리스크 등급 분포 (가이드 #11) */}
+        <div className="bg-stone-950/40 border border-stone-800/60 rounded-2xl p-6 mb-4">
+          <h5 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-3">
+            법률 리스크 등급 분포
+          </h5>
+          <LegalDistributionBar risks={simResult.legal_risks} />
         </div>
         <InsightsGrid simResult={simResult} legalOnly />
       </div>
