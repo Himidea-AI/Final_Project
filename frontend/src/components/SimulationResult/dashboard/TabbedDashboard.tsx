@@ -68,6 +68,8 @@ interface AgentDef {
   name: string;
   icon: LucideIcon;
   color: string;
+  /** 컨테이너 보더 색 (아이콘 컬러에 맞춘 정적 Tailwind 클래스). 시인성 강조용. */
+  borderCls: string;
   desc: string;
 }
 
@@ -77,6 +79,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '시장 분석',
     icon: BarChart3,
     color: 'text-blue-400',
+    borderCls: 'border-blue-500/30 hover:border-blue-500/70',
     desc: 'market_analyst',
   },
   {
@@ -84,6 +87,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '유동 인구',
     icon: Users,
     color: 'text-emerald-400',
+    borderCls: 'border-emerald-500/30 hover:border-emerald-500/70',
     desc: 'population_analyst',
   },
   {
@@ -91,6 +95,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '인구 심층',
     icon: PieChart,
     color: 'text-indigo-400',
+    borderCls: 'border-indigo-500/30 hover:border-indigo-500/70',
     desc: 'demographic_depth',
   },
   {
@@ -98,6 +103,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '경쟁 분석',
     icon: ShieldAlert,
     color: 'text-amber-400',
+    borderCls: 'border-amber-500/30 hover:border-amber-500/70',
     desc: 'competitor_intel',
   },
   {
@@ -105,6 +111,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '법률 리스크',
     icon: AlertTriangle,
     color: 'text-rose-400',
+    borderCls: 'border-rose-500/30 hover:border-rose-500/70',
     desc: 'legal_agent',
   },
   {
@@ -112,6 +119,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '트렌드 예측',
     icon: TrendingUp,
     color: 'text-cyan-400',
+    borderCls: 'border-cyan-500/30 hover:border-cyan-500/70',
     desc: 'trend_forecaster',
   },
   {
@@ -119,6 +127,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '입지 랭킹',
     icon: Layers,
     color: 'text-violet-400',
+    borderCls: 'border-violet-500/30 hover:border-violet-500/70',
     desc: 'district_ranking',
   },
   {
@@ -126,6 +135,7 @@ export const AGENTS_LIST: AgentDef[] = [
     name: '종합 전략',
     icon: BrainCircuit,
     color: 'text-white',
+    borderCls: 'border-stone-400/40 hover:border-stone-200/80',
     desc: 'synthesis_agent',
   },
 ];
@@ -307,7 +317,7 @@ export function TabbedDashboard({
           isScrolled ? 'py-3 shadow-2xl' : 'py-8'
         }`}
       >
-        <div className="max-w-[1600px] mx-auto px-8">
+        <div className="mx-auto max-w-[1728px] px-8">
           {/* ── 상단: 타이틀 + GRADE 카드 ── */}
           <div className="flex justify-between items-start gap-6">
             <div className="flex flex-col text-left flex-1 min-w-0">
@@ -400,11 +410,11 @@ export function TabbedDashboard({
                         type="button"
                         onClick={() => handleTabChange(TABS.INSIGHT)}
                         title={`${agent.name} · ${agent.desc}`}
-                        className="w-9 h-9 rounded-xl bg-stone-900/60 border border-stone-800/60 flex items-center justify-center group hover:border-cyan-500/40 hover:bg-stone-900 transition-all shrink-0 shadow-inner"
+                        className={`w-9 h-9 rounded-xl bg-stone-900/60 border-2 ${agent.borderCls} flex items-center justify-center group hover:bg-stone-900 transition-all shrink-0 shadow-inner`}
                       >
                         <AgentIcon
                           size={14}
-                          className={`${agent.color} opacity-50 group-hover:opacity-100 transition-opacity`}
+                          className={`${agent.color} opacity-60 group-hover:opacity-100 transition-opacity`}
                         />
                       </button>
                     );
@@ -470,7 +480,7 @@ export function TabbedDashboard({
       </header>
 
       {/* ════════════════ MAIN CONTENT ════════════════ */}
-      <main className="max-w-[1600px] mx-auto px-6 py-8">
+      <main className="mx-auto max-w-[1728px] px-8 py-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

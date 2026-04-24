@@ -23,7 +23,7 @@ export function TabButton({ id, label, icon: Icon, active, onClick }: TabButtonP
       {active && (
         <motion.div
           layoutId="activeTabIndicator"
-          className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]"
+          className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.85)]"
         />
       )}
     </button>

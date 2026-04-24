@@ -12,6 +12,8 @@ export interface DecisionCardAgent {
   id: string;
   icon: LucideIcon;
   color: string;
+  /** 선택: 에이전트 고유 색 테두리 (지정 안 되면 stone 중립) */
+  borderCls?: string;
 }
 
 export interface DecisionCardItem {
@@ -122,7 +124,9 @@ export function DecisionCard({
               return (
                 <div
                   key={agent.id}
-                  className="w-6 h-6 rounded-full bg-stone-900 border-2 border-[#141210] flex items-center justify-center shadow-md"
+                  className={`w-6 h-6 rounded-full bg-stone-900 border-2 flex items-center justify-center shadow-md ${
+                    agent.borderCls ?? 'border-[#141210]'
+                  }`}
                 >
                   <AgentIcon size={11} className={agent.color} />
                 </div>

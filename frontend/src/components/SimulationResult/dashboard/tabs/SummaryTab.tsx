@@ -34,16 +34,16 @@ interface Props {
   openModal?: (content: DetailModalContent) => void;
 }
 
-// 에이전트 아이콘 공용 (DecisionCard footer용)
+// 에이전트 아이콘 공용 (DecisionCard footer용) — borderCls는 시인성용 고유 색 테두리
 const AGENT_ICON = {
-  market: { icon: BarChart3, color: 'text-blue-400' },
-  population: { icon: Users, color: 'text-emerald-400' },
-  demographic: { icon: PieChart, color: 'text-indigo-400' },
-  competitor: { icon: ShieldAlert, color: 'text-amber-400' },
-  legal: { icon: AlertTriangle, color: 'text-rose-400' },
-  trend: { icon: TrendingUp, color: 'text-cyan-400' },
-  ranking: { icon: Layers, color: 'text-violet-400' },
-  synthesis: { icon: BrainCircuit, color: 'text-white' },
+  market: { icon: BarChart3, color: 'text-blue-400', borderCls: 'border-blue-500/50' },
+  population: { icon: Users, color: 'text-emerald-400', borderCls: 'border-emerald-500/50' },
+  demographic: { icon: PieChart, color: 'text-indigo-400', borderCls: 'border-indigo-500/50' },
+  competitor: { icon: ShieldAlert, color: 'text-amber-400', borderCls: 'border-amber-500/50' },
+  legal: { icon: AlertTriangle, color: 'text-rose-400', borderCls: 'border-rose-500/50' },
+  trend: { icon: TrendingUp, color: 'text-cyan-400', borderCls: 'border-cyan-500/50' },
+  ranking: { icon: Layers, color: 'text-violet-400', borderCls: 'border-violet-500/50' },
+  synthesis: { icon: BrainCircuit, color: 'text-white', borderCls: 'border-stone-300/60' },
 };
 
 export function SummaryTab({ simResult, openModal }: Props) {
