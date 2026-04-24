@@ -26,6 +26,7 @@ import { TabButton } from './shared/TabButton';
 import { DetailModal, type DetailModalContent } from './shared/DetailModal';
 import { GradeCard } from './shared/GradeCard';
 import { KpiMiniGrid, type KpiItem } from './shared/KpiMiniGrid';
+import { NarrativeText } from './shared/NarrativeText';
 import { SummaryTab } from './tabs/SummaryTab';
 import { MarketTab } from './tabs/MarketTab';
 import { ForecastTab } from './tabs/ForecastTab';
@@ -283,9 +284,12 @@ export function TabbedDashboard({
           {/* ── 상단: 타이틀 + GRADE 카드 ── */}
           <div className="flex justify-between items-start gap-6">
             <div className="flex flex-col text-left flex-1 min-w-0">
-              {/* 메타 바 */}
-              <div className="flex items-center gap-3 text-[10px] font-bold text-stone-500 tracking-widest mb-3 uppercase">
-                <span>SPOTTER</span>
+              {/* 메타 브레드크럼 — cyan 시그니처 dot로 SPOTTER 브랜드 식별 */}
+              <div className="flex items-center gap-3 text-[10px] font-black text-stone-500 tracking-[0.25em] mb-3 uppercase">
+                <span className="flex items-center gap-2">
+                  <span className="w-1 h-1 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
+                  <span className="text-stone-300">SPOTTER</span>
+                </span>
                 <span className="w-1 h-1 rounded-full bg-stone-700" />
                 <span>Simulation Result</span>
                 <span className="w-1 h-1 rounded-full bg-stone-700" />
@@ -315,9 +319,12 @@ export function TabbedDashboard({
                 )}
               </div>
 
-              {/* Narrative subtitle */}
+              {/* Narrative subtitle — 숫자·퍼센트 cyan 하이라이트 */}
               {!isScrolled && narrative && (
-                <p className="text-sm text-stone-500 max-w-2xl leading-relaxed mt-1">{narrative}</p>
+                <NarrativeText
+                  text={narrative}
+                  className="text-sm text-stone-500 max-w-2xl leading-relaxed mt-1 font-medium"
+                />
               )}
             </div>
 
@@ -353,10 +360,11 @@ export function TabbedDashboard({
                 exit={{ opacity: 0, height: 0 }}
                 className="mt-8 pt-6 border-t border-stone-800/40 flex items-center gap-6"
               >
-                <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest shrink-0">
-                  AGENTS · {agentCount}/8
+                <div className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] shrink-0">
+                  Agents · <span className="text-cyan-400 tabular-nums">{agentCount}</span>
+                  <span className="text-stone-600">/8</span>
                 </div>
-                <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                   {AGENTS_LIST.map((agent) => {
                     const AgentIcon = agent.icon;
                     return (
@@ -364,12 +372,12 @@ export function TabbedDashboard({
                         key={agent.id}
                         type="button"
                         onClick={() => handleTabChange(TABS.INSIGHT)}
-                        title={agent.name}
-                        className="w-9 h-9 rounded-lg bg-stone-900 border border-stone-800 flex items-center justify-center group hover:border-indigo-500/50 transition-all shrink-0"
+                        title={`${agent.name} · ${agent.desc}`}
+                        className="w-9 h-9 rounded-xl bg-stone-900/60 border border-stone-800/60 flex items-center justify-center group hover:border-cyan-500/40 hover:bg-stone-900 transition-all shrink-0 shadow-inner"
                       >
                         <AgentIcon
                           size={14}
-                          className={`${agent.color} opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all`}
+                          className={`${agent.color} opacity-50 group-hover:opacity-100 transition-opacity`}
                         />
                       </button>
                     );
