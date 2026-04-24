@@ -5,10 +5,13 @@
  * 3) 하단: 인구 심층 분석 리포트 (기존 DemographicReportSection)
  */
 
+import { useState } from 'react';
 import {
   Activity,
   BarChart3,
   BrainCircuit,
+  ChevronDown,
+  ChevronRight,
   Gauge,
   Users,
   PieChart,
@@ -23,6 +26,10 @@ import { MetricBox } from '../shared/MetricBox';
 import { INCOME_MAP, TREND_MAP, safeMap } from '../utils/mappings';
 import { formatKrw, formatPct, formatPeakHours, quarterlyToMonthly } from '../utils/formatters';
 import { computeDecision, DECISION_COPY } from '../../../../constants/decisionThresholds';
+import { EntrySignalLight } from '../charts/EntrySignalLight';
+import { CoreDemographicDonut } from '../charts/CoreDemographicDonut';
+import { WeekdayWeekendBar } from '../charts/WeekdayWeekendBar';
+import { StackedAgeBar } from '../charts/StackedAgeBar';
 
 interface Props {
   simResult: SimulationOutput;
@@ -79,8 +86,16 @@ export function SummaryTab({ simResult }: Props) {
   const bepStatus: 'emerald' | 'amber' | 'rose' =
     bepMonths == null ? 'amber' : bepMonths <= 12 ? 'emerald' : bepMonths <= 18 ? 'amber' : 'rose';
 
+  // ── Hero Entry Signal ──
+  const entrySignal = (ci?.market_entry_signal as 'green' | 'yellow' | 'red' | undefined) ?? null;
+
   return (
     <div className="space-y-8">
+      {/* ═══ Hero: Market Entry Signal ═══ */}
+      <div className="flex justify-end">
+        <EntrySignalLight signal={entrySignal} />
+      </div>
+
       {/* ═══ 상단: DecisionCard 3 (질문형) ═══ */}
       <div className="grid grid-cols-3 gap-8">
         <DecisionCard
@@ -176,8 +191,53 @@ export function SummaryTab({ simResult }: Props) {
         confidencePct={tcnConfidencePct}
       />
 
+      {/* ═══ 인구 구성 상세 (Collapsible, 가이드 #2 #5 #6) ═══ */}
+      <DemographicCompositionSection demo={demo} />
+
       {/* ═══ 하단: 인구 심층 분석 ═══ */}
       <DemographicReportSection demo={demo} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   인구 구성 Collapsible — Donut + StackedAge + Weekday/Weekend
+   ═══════════════════════════════════════════════════════ */
+function DemographicCompositionSection({ demo }: { demo: SimulationOutput['demographic_report'] }) {
+  const [open, setOpen] = useState(true);
+  const hasAny = Boolean(
+    demo?.core_demographic ||
+    (demo?.top_3_age_groups && demo.top_3_age_groups.length > 0) ||
+    typeof demo?.weekday_weekend_ratio === 'number',
+  );
+  if (!hasAny) return null;
+
+  return (
+    <div className="bg-stone-900/30 border border-stone-800/40 rounded-3xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-3 p-6 hover:bg-stone-900/40 transition-colors"
+      >
+        {open ? (
+          <ChevronDown size={16} className="text-stone-500" />
+        ) : (
+          <ChevronRight size={16} className="text-stone-500" />
+        )}
+        <h3 className="text-sm font-black text-stone-100 uppercase tracking-tight">
+          인구 구성 상세
+        </h3>
+        <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+          demographic_depth
+        </span>
+      </button>
+      {open && (
+        <div className="grid grid-cols-3 gap-6 p-6 pt-0">
+          <CoreDemographicDonut core={demo?.core_demographic ?? null} />
+          <StackedAgeBar groups={demo?.top_3_age_groups ?? []} />
+          <WeekdayWeekendBar ratio={demo?.weekday_weekend_ratio} />
+        </div>
+      )}
     </div>
   );
 }

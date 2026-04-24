@@ -223,6 +223,7 @@ export function TabbedDashboard({
         label: '예상 월매출',
         value: monthlyRev != null ? `₩${formatKrw(monthlyRev)}` : '—',
         sub: 'profit_simulation',
+        spark: qp.map((q) => q.revenue),
       },
       {
         label: '유동인구 점수',
@@ -231,6 +232,12 @@ export function TabbedDashboard({
             ? `${formatScore(simResult.market_report.floating_population)}/100`
             : '—',
         sub: `${winnerDistrict} · 동 기준`,
+        bullet: {
+          actual: simResult.market_report?.floating_population ?? null,
+          target: 70,
+          max: 100,
+          thresholds: [40, 70] as [number, number],
+        },
       },
       {
         label: '경쟁 강도',
