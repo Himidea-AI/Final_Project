@@ -11,6 +11,7 @@ from src.agents.nodes.district_ranking import district_ranking_node, _clear_shar
 from src.agents.nodes.demographic_depth import demographic_depth_node
 from src.agents.nodes.trend_forecaster import trend_forecaster_node
 from src.agents.nodes.competitor_intel import competitor_intel_node
+from src.agents.nodes.operational_fit import operational_fit_node
 from src.agents.tools import MarketDataTool as _MarketDataTool
 
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
@@ -81,9 +82,7 @@ async def llm_analysis_phase_node(state: AgentState) -> dict:
     winner = state.get("winner_district") or state.get("target_district", "")
     original_target = state.get("target_district", "")
     if winner and winner != original_target:
-        print(
-            f"--- [PHASE 2] target_district 교체: {original_target} → {winner} (winner 기준 분석) ---"
-        )
+        print(f"--- [PHASE 2] target_district 교체: {original_target} → {winner} (winner 기준 분석) ---")
     else:
         print(f"--- [PHASE 2] target_district={winner} (변경 없음) ---")
 
@@ -219,22 +218,29 @@ def build_graph() -> StateGraph:
     """
     상권분석 워크플로우 그래프 빌드 (2단계 실행)
 
-    Phase 1: ranking_phase (district_ranking만, LLM 없음, ~5-10초)
-      → winner_district 확정
+    Phase 0: operational_fit (Python, LLM 없음, ~50ms)
+      → 교통·집객 인프라 16동 점수 계산 → state.operational_fit_results
+
+    Phase 1: ranking_phase (district_ranking, LLM 없음, ~5-10초)
+      → winner_district 확정 (operational_fit 결과 15% 반영)
 
     Phase 2: llm_analysis_phase (6개 LLM 에이전트 병렬, winner 동 기준)
       → 시장/인구/법률 등 분석 데이터가 winner 동에서 생성
 
-    Phase 3: synthesis (winner + 분석 데이터 기반 최종 리포트)
+    Phase 2.5: ml_prediction_phase (TCN, winner 기준 실측 수치)
+
+    Phase 3: synthesis (winner + 모든 에이전트 결과 기반 최종 리포트)
     """
     workflow = StateGraph(AgentState)
 
+    workflow.add_node("operational_fit", operational_fit_node)
     workflow.add_node("ranking_phase", ranking_phase_node)
     workflow.add_node("llm_analysis_phase", llm_analysis_phase_node)
     workflow.add_node("ml_prediction_phase", ml_prediction_phase_node)
     workflow.add_node("synthesis", synthesis_node)
 
-    workflow.set_entry_point("ranking_phase")
+    workflow.set_entry_point("operational_fit")
+    workflow.add_edge("operational_fit", "ranking_phase")
     workflow.add_edge("ranking_phase", "llm_analysis_phase")
     workflow.add_edge("llm_analysis_phase", "ml_prediction_phase")
     workflow.add_edge("ml_prediction_phase", "synthesis")

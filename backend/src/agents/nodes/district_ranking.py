@@ -574,19 +574,29 @@ async def district_ranking_node(state: AgentState) -> dict:
 
     tasks = [_guarded_score(dong) for dong in MAPO_DISTRICTS]
 
-    async def _safe_operfit() -> dict[str, dict]:
-        """operational_fit_scorer 실패 시 빈 dict로 graceful degradation."""
-        try:
-            return await _score_operational_fit()
-        except Exception as exc:
-            logger.warning(f"[district_ranking] operational_fit 실패 (무시하고 계속): {exc}")
-            return {}
+    # operational_fit은 Phase 0 (operational_fit_node)에서 미리 계산되어 state에 주입됨.
+    # 그래프 우회 호출(/analyze/quick)에서는 state에 없을 수 있어 fallback 실행.
+    operfit_map: dict[str, dict] = state.get("operational_fit_results") or {}
 
-    raw_scores, vacancy_result, operfit_map = await asyncio.gather(
-        asyncio.gather(*tasks),
-        _load_vacancy_map(),
-        _safe_operfit(),
-    )
+    if not operfit_map:
+
+        async def _fallback_operfit() -> dict[str, dict]:
+            try:
+                return await _score_operational_fit()
+            except Exception as exc:
+                logger.warning(f"[district_ranking] operational_fit fallback 실패 (무시하고 계속): {exc}")
+                return {}
+
+        raw_scores, vacancy_result, operfit_map = await asyncio.gather(
+            asyncio.gather(*tasks),
+            _load_vacancy_map(),
+            _fallback_operfit(),
+        )
+    else:
+        raw_scores, vacancy_result = await asyncio.gather(
+            asyncio.gather(*tasks),
+            _load_vacancy_map(),
+        )
     vacancy_rate_map, vacancy_applied = vacancy_result
 
     ranked = _normalize_and_rank(

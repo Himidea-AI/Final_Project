@@ -71,9 +71,9 @@ def test_minmax_to_100_empty() -> None:
 
 
 def test_calibrate_weights_from_shap_empty() -> None:
-    """shap_result 비어있으면 default 가중치 반환."""
+    """shap_result 비어있으면 default 가중치(실매출 R² 기반 0.10/0.40/0.50) 반환."""
     w_sub, w_bus, w_fclty = calibrate_weights_from_shap({})
-    assert (w_sub, w_bus, w_fclty) == (0.40, 0.30, 0.30)
+    assert (w_sub, w_bus, w_fclty) == (0.10, 0.40, 0.50)
 
 
 def test_calibrate_weights_from_shap_bus_dominant() -> None:
@@ -108,7 +108,7 @@ def test_calibrate_weights_from_shap_bus_and_fclty() -> None:
 
 
 def test_calibrate_weights_from_shap_no_relevant_features() -> None:
-    """operfit 비관련 피처만 있으면 default 반환."""
+    """operfit 비관련 피처만 있으면 default(R² 기반) 반환."""
     shap_result = {
         "feature_importance": [
             {"feature": "monthly_sales", "abs_shap": 0.10},
@@ -116,7 +116,7 @@ def test_calibrate_weights_from_shap_no_relevant_features() -> None:
         ]
     }
     w_sub, w_bus, w_fclty = calibrate_weights_from_shap(shap_result)
-    assert (w_sub, w_bus, w_fclty) == (0.40, 0.30, 0.30)
+    assert (w_sub, w_bus, w_fclty) == (0.10, 0.40, 0.50)
 
 
 # ---------------------------------------------------------------------------
