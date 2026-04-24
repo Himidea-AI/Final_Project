@@ -47,6 +47,7 @@ def save_history(
     manager_uuid = _to_uuid(user.user_id)
     created = svc.create_history(
         manager_id=manager_uuid,
+        user_type=user.role,  # 'master'(팀장/users) | 'manager'(매니저/manager_users)
         client_name=body.client_name.strip(),
         district=body.district,
         brand_name=body.brand_name,
