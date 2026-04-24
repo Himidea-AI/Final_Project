@@ -232,10 +232,21 @@ function DemographicCompositionSection({ demo }: { demo: SimulationOutput['demog
         </span>
       </button>
       {open && (
-        <div className="grid grid-cols-3 gap-6 p-6 pt-0">
+        <div
+          className={`grid gap-6 p-6 pt-0 ${
+            Array.isArray(demo?.peak_hour_matrix) && demo.peak_hour_matrix.length === 7
+              ? 'grid-cols-4'
+              : 'grid-cols-3'
+          }`}
+        >
           <CoreDemographicDonut core={demo?.core_demographic ?? null} />
           <StackedAgeBar groups={demo?.top_3_age_groups ?? []} />
           <WeekdayWeekendBar ratio={demo?.weekday_weekend_ratio} />
+          {Array.isArray(demo?.peak_hour_matrix) && demo.peak_hour_matrix.length === 7 && (
+            <div className="flex h-[140px] items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+              Calendar Heatmap — Track B #106 구현 대기
+            </div>
+          )}
         </div>
       )}
     </div>

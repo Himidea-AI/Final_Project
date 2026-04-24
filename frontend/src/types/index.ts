@@ -53,6 +53,11 @@ export interface QuarterlyProjection {
   cumulative_profit: number;
   confidence_lower: number;
   confidence_upper: number;
+  // Track B #107 — 백엔드 2단계 CI 밴드 구현 시 자동 활성화
+  ci_80_lower?: number | null;
+  ci_80_upper?: number | null;
+  ci_95_lower?: number | null;
+  ci_95_upper?: number | null;
 }
 
 /** @deprecated monthly→quarterly 전환됨. QuarterlyProjection 사용 */
@@ -146,6 +151,8 @@ export interface DemographicReport {
   brand_target_match_score: number | null;
   match_rationale: string | null;
   narrative: string;
+  // Track B #106 — 백엔드 peak_hour_matrix [7][24] 제공 시 자동 활성화
+  peak_hour_matrix?: number[][] | null;
 }
 
 /** 시뮬레이션 결과 출력 */

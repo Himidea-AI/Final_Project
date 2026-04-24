@@ -95,31 +95,86 @@ export function QuarterlyProjectionChart({ data }: Props) {
           }}
         />
 
-        {/* 신뢰구간 — confidence_lower를 기준으로 상한 폭을 Area로 표현 */}
-        <Area
-          type="monotone"
-          dataKey="confidence_lower"
-          stroke="none"
-          fill="#3B82F6"
-          fillOpacity={0}
-          legendType="none"
-          isAnimationActive={false}
-          dot={false}
-          activeDot={false}
-          name="신뢰구간 하한"
-        />
-        <Area
-          type="monotone"
-          dataKey="confidence_upper"
-          stroke="none"
-          fill="#3B82F6"
-          fillOpacity={0.1}
-          name="신뢰구간 상한"
-          legendType="square"
-          isAnimationActive={false}
-          dot={false}
-          activeDot={false}
-        />
+        {/* 신뢰구간 — Track B #107 2단계 CI 있으면 95/80 이중 밴드, 없으면 기존 단일 */}
+        {data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null) ? (
+          <>
+            <Area
+              type="monotone"
+              dataKey="ci_95_lower"
+              stroke="none"
+              fill="#3B82F6"
+              fillOpacity={0}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="95% 하한"
+            />
+            <Area
+              type="monotone"
+              dataKey="ci_95_upper"
+              stroke="none"
+              fill="#3B82F6"
+              fillOpacity={0.08}
+              legendType="square"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="95% 상한"
+            />
+            <Area
+              type="monotone"
+              dataKey="ci_80_lower"
+              stroke="none"
+              fill="#3B82F6"
+              fillOpacity={0}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="80% 하한"
+            />
+            <Area
+              type="monotone"
+              dataKey="ci_80_upper"
+              stroke="none"
+              fill="#3B82F6"
+              fillOpacity={0.22}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="80% 상한"
+            />
+          </>
+        ) : (
+          <>
+            <Area
+              type="monotone"
+              dataKey="confidence_lower"
+              stroke="none"
+              fill="#3B82F6"
+              fillOpacity={0}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="신뢰구간 하한"
+            />
+            <Area
+              type="monotone"
+              dataKey="confidence_upper"
+              stroke="none"
+              fill="#3B82F6"
+              fillOpacity={0.1}
+              name="신뢰구간 상한"
+              legendType="square"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+            />
+          </>
+        )}
 
         {/* 분기 매출 라인 */}
         <Line
