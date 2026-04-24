@@ -21,11 +21,11 @@ describe('buildRadarData', () => {
     const market = data.find((d) => d.id === 'market_analyst');
     expect(market?.score).toBe(85);
   });
-  it('missing 에이전트는 score=0', () => {
+  it('missing 에이전트는 score=null (0 폴백 금지 — 거짓 0% 신뢰도 방지)', () => {
     const data = buildRadarData([]);
-    expect(data.every((d) => d.score === 0)).toBe(true);
+    expect(data.every((d) => d.score === null)).toBe(true);
   });
-  it('confidence null → score=0', () => {
+  it('confidence null → score=null', () => {
     const attrs: AgentAttribution[] = [
       {
         id: 'legal',
@@ -37,7 +37,7 @@ describe('buildRadarData', () => {
       },
     ];
     const legal = buildRadarData(attrs).find((d) => d.id === 'legal');
-    expect(legal?.score).toBe(0);
+    expect(legal?.score).toBeNull();
   });
 });
 

@@ -249,10 +249,14 @@ export function TabbedDashboard({
       (qp[0]?.revenue ? Math.round(qp[0].revenue / 3) : null);
     const compIntensity = simResult.market_report?.competition_intensity;
     const comp500 = ci?.competition_500m?.count ?? null;
-    const dangerLegalCount = (simResult.legal_risks ?? []).filter(
+    // 실데이터 원칙: legal_risks 자체가 null/undefined면 "법률 분석 미실행"
+    // 빈 배열 []은 "분석 완료 + 리스크 없음"으로 구분 (B1 status 필드 도입 전 임시 가정)
+    const legalAnalyzed = Array.isArray(simResult.legal_risks);
+    const legalRisks = simResult.legal_risks ?? [];
+    const dangerLegalCount = legalRisks.filter(
       (r) => String(r.risk_level).toUpperCase() === 'HIGH' || r.risk_level === 'danger',
     ).length;
-    const totalLegal = (simResult.legal_risks ?? []).length;
+    const totalLegal = legalRisks.length;
 
     return [
       {
@@ -286,15 +290,28 @@ export function TabbedDashboard({
                 ? 'MID'
                 : 'LOW'
             : undefined,
-        tagColor: compIntensity != null && compIntensity >= 70 ? 'rose' : 'emerald',
+        // 데이터 없음 → stone(중립). 이전엔 기본 'emerald'(안전색)로 거짓 안전 신호 유발.
+        tagColor:
+          compIntensity == null
+            ? ('stone' as const)
+            : compIntensity >= 70
+              ? ('rose' as const)
+              : compIntensity >= 40
+                ? ('amber' as const)
+                : ('emerald' as const),
         sub: comp500 != null ? `500m 내 ${comp500}개` : undefined,
       },
       {
         label: '법률 리스크',
-        value: totalLegal > 0 ? `${dangerLegalCount}건` : '—',
-        tag: dangerLegalCount > 0 ? 'DANGER' : 'SAFE',
-        tagColor: dangerLegalCount > 0 ? 'rose' : 'emerald',
-        sub: `${totalLegal}항목 중`,
+        // legal_risks 자체가 null이면 "분석 미실행". 빈 배열과 구분.
+        value: !legalAnalyzed ? '—' : totalLegal === 0 ? '0건' : `${dangerLegalCount}건`,
+        tag: !legalAnalyzed ? '미분석' : dangerLegalCount > 0 ? 'DANGER' : 'SAFE',
+        tagColor: !legalAnalyzed
+          ? ('stone' as const)
+          : dangerLegalCount > 0
+            ? ('rose' as const)
+            : ('emerald' as const),
+        sub: legalAnalyzed ? `${totalLegal}항목 중` : 'legal agent 대기',
       },
     ];
   })();

@@ -73,14 +73,23 @@ export function SummaryTab({ simResult, openModal }: Props) {
   const vacancyApplied = Boolean(simResult.vacancy_applied);
 
   // ── DecisionCard 2: 매출 전망 ──
-  const annualRevenue = qp.reduce((sum, q) => sum + (q.revenue ?? 0), 0);
-  const annualLower = qp.reduce((sum, q) => sum + (q.confidence_lower ?? 0), 0);
-  const annualUpper = qp.reduce((sum, q) => sum + (q.confidence_upper ?? 0), 0);
-  const hasQp = qp.length > 0;
+  // 실데이터 원칙: 4분기 중 일부 revenue null이면 부분 합산으로 "연 매출" 속임 → 완전한 분기만 집계
+  const fullQuarters = qp.filter(
+    (q) =>
+      typeof q.revenue === 'number' &&
+      typeof q.confidence_lower === 'number' &&
+      typeof q.confidence_upper === 'number',
+  );
+  const hasQp = fullQuarters.length === 4; // TCN은 4분기 예측 고정
+  const hasPartialQp = fullQuarters.length > 0 && fullQuarters.length < 4;
+  const annualRevenue = fullQuarters.reduce((sum, q) => sum + (q.revenue ?? 0), 0);
+  const annualLower = fullQuarters.reduce((sum, q) => sum + (q.confidence_lower ?? 0), 0);
+  const annualUpper = fullQuarters.reduce((sum, q) => sum + (q.confidence_upper ?? 0), 0);
 
   // ── DecisionCard 3: BEP ──
-  const bepStatus: 'emerald' | 'amber' | 'rose' =
-    bepMonths == null ? 'amber' : bepMonths <= 12 ? 'emerald' : bepMonths <= 18 ? 'amber' : 'rose';
+  // 데이터 없으면 stone(중립) — 이전 amber 기본값은 "주의 판정" 색감 유발 (거짓 신호)
+  const bepStatus: 'emerald' | 'amber' | 'rose' | 'stone' =
+    bepMonths == null ? 'stone' : bepMonths <= 12 ? 'emerald' : bepMonths <= 18 ? 'amber' : 'rose';
 
   // ── Hero Entry Signal ──
   const entrySignal = (ci?.market_entry_signal as 'green' | 'yellow' | 'red' | undefined) ?? null;
@@ -218,9 +227,21 @@ export function SummaryTab({ simResult, openModal }: Props) {
 
         <DecisionCard
           title="얼마나 벌 수 있을까?"
-          heroBadge={hasQp ? `₩${formatKrw(annualRevenue)} · 연 P50` : '—'}
-          heroColor="indigo"
-          description="TCN 모델 분기 예측 합산 (12개월). P10~P90 신뢰 구간은 계절성을 보존한 분기 단위 정규화 결과입니다."
+          heroBadge={
+            hasQp
+              ? `₩${formatKrw(annualRevenue)} · 연 P50`
+              : hasPartialQp
+                ? `${fullQuarters.length}/4 분기만 집계`
+                : '—'
+          }
+          heroColor={hasQp ? 'indigo' : hasPartialQp ? 'amber' : 'stone'}
+          description={
+            hasQp
+              ? 'TCN 모델 분기 예측 합산 (12개월). P10~P90 신뢰 구간은 계절성을 보존한 분기 단위 정규화 결과입니다.'
+              : hasPartialQp
+                ? `TCN이 4분기 중 ${fullQuarters.length}분기만 예측을 반환했습니다. 연간 합산은 데이터 불충분으로 표시 보류. 개별 분기 값은 예측 탭에서 확인 가능.`
+                : '분기 예측 데이터가 아직 수신되지 않았습니다. TCN 에이전트 실행 완료 후 P10~P90 분포가 표시됩니다.'
+          }
           items={
             hasQp
               ? [
@@ -228,7 +249,15 @@ export function SummaryTab({ simResult, openModal }: Props) {
                   { text: `P50 (기본) ₩${formatKrw(annualRevenue)}`, highlight: true },
                   { text: `P90 (낙관) ₩${formatKrw(annualUpper)}`, highlight: false },
                 ]
-              : [{ text: '분기 예측 데이터 없음', highlight: false }]
+              : hasPartialQp
+                ? [
+                    {
+                      text: `수신 분기: Q${fullQuarters.map((q) => q.quarter).join(', Q')}`,
+                      highlight: false,
+                    },
+                    { text: '나머지 분기는 TCN 예측 대기', highlight: false },
+                  ]
+                : [{ text: '분기 예측 데이터 없음', highlight: false }]
           }
           footer={{
             agents: [AGENT_ICON.market, AGENT_ICON.trend, AGENT_ICON.demographic].map((a, i) => ({
