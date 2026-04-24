@@ -1,22 +1,48 @@
 #!/bin/bash
+# 수동 배포 스크립트 (긴급 시 서버에서 직접 실행용)
+# CI/CD는 GitHub Actions (.github/workflows/deploy.yml)가 자동으로 처리합니다.
+# 사용법:
+#   ./scripts/deploy.sh          → 전체 재빌드
+#   ./scripts/deploy.sh frontend → Frontend만 재빌드
+#   ./scripts/deploy.sh backend  → Backend만 재빌드
 set -e
 
-echo "🚀 애플리케이션 프로덕션 배포 스크립트 시작..."
+TARGET=${1:-"all"}  # 인자 없으면 전체 빌드
 
-# 1. 최신 코드 가져오기 (필요시 활성화)
-# git pull origin dev
+echo "🚀 수동 배포 시작 (대상: $TARGET)..."
 
-# 2. 기존 컨테이너 및 미사용 리소스 정리
-echo "🧹 기존 Docker 리소스 정리 중..."
-docker system prune -f
+# 최신 코드 가져오기
+echo "📥 최신 코드 가져오기 (dev 브랜치)..."
+git fetch origin dev
+git reset --hard origin/dev
 
-# 3. docker-compose.prod.yml 기반으로 컨테이너 빌드 및 재시작
-echo "📦 컨테이너 빌드 및 프로덕션 환경 시작 중..."
-docker compose -f docker-compose.prod.yml up --build -d
+# 미사용 Docker 리소스 정리
+echo "🧹 Docker 리소스 정리..."
+docker system prune -f --volumes=false
 
-# 4. 배포 후 상태 확인
-echo "⏳ 컨테이너 상태 대기 (10초)..."
-sleep 10
-docker ps
+# 빌드 및 재시작
+echo "📦 빌드 및 재시작..."
+if [ "$TARGET" = "frontend" ]; then
+  docker-compose -f docker-compose.prod.yml up --build -d frontend
+elif [ "$TARGET" = "backend" ]; then
+  docker-compose -f docker-compose.prod.yml up --build -d backend
+else
+  docker-compose -f docker-compose.prod.yml up --build -d
+fi
 
-echo "✅ 배포가 성공적으로 완료되었습니다!"
+# 배포 후 상태 확인
+echo "⏳ 기동 대기 (20초)..."
+sleep 20
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+# 헬스체크
+echo "🏥 Backend 헬스체크..."
+if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+  echo "✅ Backend 정상!"
+else
+  echo "❌ Backend 응답 없음. 로그:"
+  docker logs mapo_backend_prod --tail 30
+  exit 1
+fi
+
+echo "✅ 수동 배포 완료! $(date '+%Y-%m-%d %H:%M:%S')"
