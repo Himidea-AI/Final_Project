@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 import os
 import uuid
-from datetime import datetime
 import asyncio
 from typing import Any, Dict
 
@@ -188,15 +187,33 @@ _BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 업종 → kakao 검색 키워드 매핑
 _BIZ_TO_KAKAO_KW: Dict[str, str] = {
-    "치킨전문점": "치킨", "커피-음료": "커피", "한식음식점": "한식",
-    "중식음식점": "중식", "일식음식점": "일식", "양식음식점": "양식",
-    "제과점": "베이커리", "패스트푸드점": "버거", "분식전문점": "분식",
+    "치킨전문점": "치킨",
+    "커피-음료": "커피",
+    "한식음식점": "한식",
+    "중식음식점": "중식",
+    "일식음식점": "일식",
+    "양식음식점": "양식",
+    "제과점": "베이커리",
+    "패스트푸드점": "버거",
+    "분식전문점": "분식",
     "호프-간이주점": "주점",
-    "치킨": "치킨", "커피": "커피", "카페": "커피", "한식": "한식",
-    "중식": "중식", "일식": "일식", "양식": "양식", "베이커리": "베이커리",
-    "버거": "버거", "분식": "분식", "주점": "주점",
-    "chicken": "치킨", "cafe": "커피", "coffee": "커피", "burger": "버거",
-    "bakery": "베이커리", "korean": "한식",
+    "치킨": "치킨",
+    "커피": "커피",
+    "카페": "커피",
+    "한식": "한식",
+    "중식": "중식",
+    "일식": "일식",
+    "양식": "양식",
+    "베이커리": "베이커리",
+    "버거": "버거",
+    "분식": "분식",
+    "주점": "주점",
+    "chicken": "치킨",
+    "cafe": "커피",
+    "coffee": "커피",
+    "burger": "버거",
+    "bakery": "베이커리",
+    "korean": "한식",
 }
 
 
@@ -227,19 +244,22 @@ async def _collect_all_competitor_locations(
                     continue
                 seen_ids.add(cid)
                 if s.get("lat") and s.get("lon"):
-                    results.append({
-                        "id": cid,
-                        "place_name": s.get("place_name", ""),
-                        "brand_name": s.get("brand_name", ""),
-                        "lat": s["lat"],
-                        "lng": s["lon"],
-                        "distance_m": s.get("distance_m"),
-                        "is_franchise": s.get("is_franchise", False),
-                        "category": s.get("category", ""),
-                        "source_dong": dong_name,
-                    })
+                    results.append(
+                        {
+                            "id": cid,
+                            "place_name": s.get("place_name", ""),
+                            "brand_name": s.get("brand_name", ""),
+                            "lat": s["lat"],
+                            "lng": s["lon"],
+                            "distance_m": s.get("distance_m"),
+                            "is_franchise": s.get("is_franchise", False),
+                            "category": s.get("category", ""),
+                            "source_dong": dong_name,
+                        }
+                    )
         except Exception as e:
             import traceback
+
             print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
 
     await asyncio.gather(*[_fetch_one(d) for d in districts])
@@ -336,6 +356,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
             "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
+            "checklist": r.get("checklist", []),
             "is_fallback": r.get("is_fallback", False),
         }
         for r in legal_risks_raw
@@ -426,7 +447,9 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     # TCN 결과가 없으면(Phase 2.5 실패) 직접 실행 fallback
     if not sim_result:
         try:
-            sim_result = ModelOutput.generate(_dong_code, _industry_code, state.get("business_type", "카페"), model="tcn")
+            sim_result = ModelOutput.generate(
+                _dong_code, _industry_code, state.get("business_type", "카페"), model="tcn"
+            )
         except Exception as _sim_err:
             print(f"[SIM] ModelOutput fallback 실패: {_sim_err}")
             sim_result = {}
@@ -489,11 +512,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
     _selected = set(state.get("target_districts") or [target_dist])
     district_rankings = sorted(
         district_rankings,
-        key=lambda r: (
-            0 if r.get("district") == winner_district else
-            1 if r.get("district") in _selected else
-            2
-        ),
+        key=lambda r: 0 if r.get("district") == winner_district else 1 if r.get("district") in _selected else 2,
     )
 
     # [B1 고도화] 응답 구조 재설계
@@ -565,9 +584,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
         "competitor_intel": _sanitize(state.get("competitor_intel_result") or {}),
         # 8 에이전트 판단 근거 (AgentAttribution)
-        "agent_attributions": _sanitize(
-            analysis.get("agent_attributions") or state.get("agent_attributions") or []
-        ),
+        "agent_attributions": _sanitize(analysis.get("agent_attributions") or state.get("agent_attributions") or []),
     }
 
     print(f"\nDEBUG: [{target_dist}] API 응답 전송 (Grade: {grade}, ai_rec: {ai_recommendation[:40]}...)")

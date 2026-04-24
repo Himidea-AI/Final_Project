@@ -80,43 +80,61 @@ _PENALTY_ARTICLE_MAP: dict[tuple[str, str], list[tuple[str, str]]] = {
 }
 
 
-def _derive_checklist_from_articles(articles: list, risk_type: str) -> list[dict]:
-    """조문 본문에서 창업 체크리스트 항목 파생 (간단 휴리스틱).
-
-    §13 법률 리스크 드로어의 체크리스트 UI 에 사용.
-    articles 가 비어있거나 휴리스틱 매치가 없으면 fallback 1건 반환 (타입 안전).
-    """
-    items: list[dict] = []
-    seen: set[str] = set()
-    for a in (articles or [])[:5]:
-        content = (a.get("content") if isinstance(a, dict) else "") or ""
-        if "정보공개서" in content and "정보공개서 수령" not in seen:
-            items.append({"text": "가맹본부로부터 정보공개서 수령", "isRequired": True})
-            seen.add("정보공개서 수령")
-        if ("14일" in content or "숙고기간" in content) and "숙고기간" not in seen:
-            items.append({"text": "14일 숙고기간 확보 후 계약 체결", "isRequired": True})
-            seen.add("숙고기간")
-        if "가맹금" in content and "가맹금" not in seen:
-            items.append({"text": "가맹금 예치 여부 확인", "isRequired": True})
-            seen.add("가맹금")
-        if ("영업지역" in content or "지역" in content) and "영업지역" not in seen:
-            items.append({"text": "영업지역 독점 보호 조항 확인", "isRequired": False})
-            seen.add("영업지역")
-        if ("권리금" in content) and "권리금" not in seen:
-            items.append({"text": "권리금 회수 기회 보호 조항 확인", "isRequired": True})
-            seen.add("권리금")
-        if ("위생" in content or "영업신고" in content) and "위생" not in seen:
-            items.append({"text": "영업신고·위생교육 이수 증빙 준비", "isRequired": True})
-            seen.add("위생")
-        if ("소방" in content or "스프링클러" in content) and "소방" not in seen:
-            items.append({"text": "소방시설 설치 및 안전시설 완비증명 확보", "isRequired": True})
-            seen.add("소방")
-        if ("근로계약" in content or "최저임금" in content) and "근로" not in seen:
-            items.append({"text": "근로계약서 작성·교부 및 최저임금 준수 확인", "isRequired": True})
-            seen.add("근로")
-    if not items:
-        items.append({"text": f"{risk_type} 관련 조문 상세 검토", "isRequired": False})
-    return items
+_CHECKLIST_RULES: list[tuple[list[str], str, str, bool]] = [
+    # (키워드 목록, 중복 키, 체크리스트 텍스트, 필수 여부)
+    # --- 가맹사업법 ---
+    (["정보공개서"], "정보공개서", "가맹본부로부터 정보공개서 수령 및 내용 확인", True),
+    (["14일", "숙고기간"], "숙고기간", "14일 숙고기간 확보 후 계약 체결", True),
+    (["가맹금"], "가맹금", "가맹금 예치 여부 확인", True),
+    (["영업지역", "지역"], "영업지역", "영업지역 독점 보호 조항 확인", False),
+    # --- 상가임대차보호법 ---
+    (["권리금"], "권리금", "권리금 회수 기회 보호 조항 확인", True),
+    (["대항력", "확정일자"], "대항력", "임대차계약 확정일자 확보 (대항력 취득)", True),
+    (["계약갱신"], "계약갱신", "계약갱신 요구권 행사 요건 확인 (10년)", True),
+    (["보증금", "임차보증금"], "보증금", "임차보증금 반환 보장 장치 확인", True),
+    # --- 식품위생법 ---
+    (["위생", "영업신고"], "위생", "영업신고·위생교육 이수 증빙 준비", True),
+    (["영업허가"], "영업허가", "영업허가(신고) 신청 및 허가증 수령", True),
+    (["HACCP", "위해요소"], "HACCP", "HACCP 적용 대상 여부 확인", False),
+    (["유통기한", "표시기준"], "유통기한", "식품 표시기준·유통기한 관리 체계 마련", False),
+    # --- 건축법 ---
+    (["용도변경"], "용도변경", "건축물 용도변경 허가·신고 필요 여부 확인", True),
+    (["건축허가", "건축신고"], "건축허가", "건축허가(신고) 대상 여부 확인", True),
+    (["불법건축", "이행강제금"], "불법건축", "불법 건축물 여부 확인 (이행강제금 리스크)", True),
+    # --- 소방시설법 ---
+    (["소방", "스프링클러"], "소방", "소방시설 설치 및 안전시설 완비증명 확보", True),
+    (["소방안전관리자"], "소방관리자", "소방안전관리자 선임 의무 확인", True),
+    (["방염"], "방염", "인테리어 방염 대상 자재 사용 여부 확인", False),
+    # --- 근로기준법 ---
+    (["근로계약", "최저임금"], "근로", "근로계약서 작성·교부 및 최저임금 준수 확인", True),
+    (["주휴수당", "주휴"], "주휴수당", "주휴수당 지급 의무 확인 (주 15시간 이상)", True),
+    (["퇴직급여", "퇴직금"], "퇴직금", "퇴직급여 지급 요건 확인 (1년 이상 근속)", True),
+    (["4대보험", "사회보험"], "4대보험", "4대 사회보험 가입 의무 이행", True),
+    # --- 부가가치세법 ---
+    (["부가가치세", "부가세"], "부가세", "부가가치세 과세·면세 여부 확인", True),
+    (["사업자등록"], "사업자등록", "사업자등록 신청 (개업일 전 20일 이내)", True),
+    (["세금계산서"], "세금계산서", "전자세금계산서 발행 의무 확인", False),
+    (["간이과세"], "간이과세", "간이과세자 적용 여부 확인", False),
+    # --- 개인정보보호법 ---
+    (["개인정보", "CCTV"], "개인정보", "개인정보 수집·이용 동의 절차 마련", True),
+    (["개인정보처리방침"], "처리방침", "개인정보처리방침 작성·게시", True),
+    (["영상정보"], "영상정보", "CCTV 설치 시 안내판 게시 및 운영 방침 수립", False),
+    # --- 장애인편의증진법 ---
+    (["편의시설", "장애인"], "편의시설", "장애인 편의시설 설치 의무 대상 확인", True),
+    (["경사로", "점자"], "경사로", "출입구 경사로·점자블록 등 편의시설 설치", True),
+    (["장애인주차"], "장애인주차", "장애인 전용 주차구역 확보 여부 확인", False),
+    # --- 하수도법 ---
+    (["배수설비", "하수"], "배수설비", "배수설비 설치 및 하수도 연결 신고", True),
+    (["오수", "정화조"], "정화조", "개인 오수처리시설(정화조) 설치 의무 확인", True),
+    (["폐수", "방류수"], "폐수", "폐수 배출 기준 충족 여부 확인", False),
+    # --- 공정거래법 ---
+    (["표시광고", "허위광고"], "표시광고", "허위·과장 광고 금지 사항 확인", True),
+    (["불공정거래"], "불공정거래", "불공정 거래행위 해당 여부 검토", False),
+    (["약관"], "약관", "표준약관 사용 또는 약관 공정성 검토", False),
+    # --- 용도지역 (zoning_regulation) ---
+    (["용도지역", "용도지구"], "용도지역", "해당 용도지역 내 영업 허용 여부 확인", True),
+    (["학교환경위생"], "학교정화", "학교정화구역 내 영업제한 대상 확인", True),
+]
 
 
 _TYPE_TO_CATEGORY = {
@@ -131,7 +149,100 @@ _TYPE_TO_CATEGORY = {
     "accessibility_law": "장애인편의증진법",
     "sewage_law": "하수도법",
     "fair_trade_law": "공정거래법",
+    "zoning_regulation": "용도지역 규제",
+    "safety_regulation": "안전관리법",
+    "ftc_franchise": "공정위 정보공개서",
 }
+
+# 키워드 매칭 실패 시 타입별 기본 체크리스트
+_DEFAULT_CHECKLIST: dict[str, list[dict]] = {
+    "franchise_law": [
+        {"text": "가맹본부로부터 정보공개서 수령 및 내용 확인", "isRequired": True},
+        {"text": "14일 숙고기간 확보 후 계약 체결", "isRequired": True},
+    ],
+    "commercial_lease_law": [
+        {"text": "임대차계약 확정일자 확보 (대항력 취득)", "isRequired": True},
+        {"text": "권리금 회수 기회 보호 조항 확인", "isRequired": True},
+    ],
+    "food_hygiene": [
+        {"text": "영업신고·위생교육 이수 증빙 준비", "isRequired": True},
+        {"text": "영업허가(신고) 신청 및 허가증 수령", "isRequired": True},
+    ],
+    "building_law": [
+        {"text": "건축물 용도변경 허가·신고 필요 여부 확인", "isRequired": True},
+        {"text": "불법 건축물 여부 확인 (이행강제금 리스크)", "isRequired": True},
+    ],
+    "fire_safety_law": [
+        {"text": "소방시설 설치 및 안전시설 완비증명 확보", "isRequired": True},
+        {"text": "소방안전관리자 선임 의무 확인", "isRequired": True},
+    ],
+    "labor_law": [
+        {"text": "근로계약서 작성·교부 및 최저임금 준수 확인", "isRequired": True},
+        {"text": "4대 사회보험 가입 의무 이행", "isRequired": True},
+    ],
+    "vat_law": [
+        {"text": "사업자등록 신청 (개업일 전 20일 이내)", "isRequired": True},
+        {"text": "부가가치세 과세·면세 여부 확인", "isRequired": True},
+    ],
+    "privacy_law": [
+        {"text": "개인정보 수집·이용 동의 절차 마련", "isRequired": True},
+        {"text": "개인정보처리방침 작성·게시", "isRequired": True},
+        {"text": "CCTV 설치 시 안내판 게시 및 운영 방침 수립", "isRequired": False},
+    ],
+    "accessibility_law": [
+        {"text": "장애인 편의시설 설치 의무 대상 확인", "isRequired": True},
+        {"text": "출입구 경사로·점자블록 등 편의시설 설치", "isRequired": True},
+    ],
+    "sewage_law": [
+        {"text": "배수설비 설치 및 하수도 연결 신고", "isRequired": True},
+        {"text": "개인 오수처리시설(정화조) 설치 의무 확인", "isRequired": True},
+    ],
+    "fair_trade_law": [
+        {"text": "허위·과장 광고 금지 사항 확인", "isRequired": True},
+        {"text": "표준약관 사용 또는 약관 공정성 검토", "isRequired": False},
+    ],
+    "zoning_regulation": [
+        {"text": "해당 용도지역 내 영업 허용 여부 확인", "isRequired": True},
+        {"text": "학교정화구역 내 영업제한 대상 확인", "isRequired": True},
+    ],
+    "safety_regulation": [
+        {"text": "다중이용업소 안전관리 대상 여부 확인", "isRequired": True},
+        {"text": "안전시설 등 세부점검표 작성 및 비치", "isRequired": True},
+    ],
+    "ftc_franchise": [
+        {"text": "공정위 정보공개서 등록 여부 확인", "isRequired": True},
+        {"text": "가맹본부 재무 현황 및 분쟁 이력 검토", "isRequired": False},
+    ],
+}
+
+
+def _derive_checklist_from_articles(articles: list, risk_type: str) -> list[dict]:
+    """조문 본문에서 창업 체크리스트 항목 파생.
+
+    §13 법률 리스크 드로어의 체크리스트 UI 에 사용.
+    1차: 조문 키워드 매칭, 2차: 타입별 기본 체크리스트 fallback.
+    """
+    items: list[dict] = []
+    seen: set[str] = set()
+    for a in (articles or [])[:8]:
+        content = (a.get("content") if isinstance(a, dict) else "") or ""
+        for keywords, dedup_key, text, required in _CHECKLIST_RULES:
+            if dedup_key in seen:
+                continue
+            if any(kw in content for kw in keywords):
+                items.append({"text": text, "isRequired": required})
+                seen.add(dedup_key)
+    # 키워드 매칭 결과가 부족하면 타입별 기본 체크리스트로 보충
+    defaults = _DEFAULT_CHECKLIST.get(risk_type, [])
+    if defaults:
+        existing_texts = {it["text"] for it in items}
+        for d in defaults:
+            if d["text"] not in existing_texts:
+                items.append(dict(d))
+    if not items:
+        label = _TYPE_TO_CATEGORY.get(risk_type, risk_type)
+        items.append({"text": f"{label} 관련 조문 상세 검토", "isRequired": False})
+    return items
 
 
 def _enrich_penalty_info(risks: list) -> None:
@@ -574,10 +685,6 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 analysis["legal_risks"] = legal_risks
                 overall_cached = cached_data.get("overall_legal_risk", "caution")
                 analysis["overall_legal_risk"] = overall_cached
-                try:
-                    await _redis.aclose()
-                except Exception:
-                    pass
                 _cached_high = sum(1 for r in (legal_risks or []) if isinstance(r, dict) and r.get("level") == "danger")
                 cached_legal_attr = build_attribution(
                     agent_id="legal",
@@ -589,6 +696,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     confidence=0.85,
                 )
                 analysis["legal_result"] = {"agent_attribution": cached_legal_attr}
+                try:
+                    await _redis.aclose()
+                except Exception:
+                    pass
                 return {
                     **state,
                     "analysis_results": analysis,
@@ -598,12 +709,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 }
     except Exception as e:
         logger.warning(f"[legal_node] Redis 캐시 조회 실패 (무시하고 계속): {e}")
-        if _redis is not None:  # 조회 실패 시 연결 누수 방지
+        if _redis is not None:
             try:
                 await _redis.aclose()
             except Exception:
                 pass
-        _redis = None
+            _redis = None
 
     # LegalDocumentRetriever — 모듈 레벨 싱글톤 (임베딩 모델 재로딩 방지)
     if not hasattr(_run_legal_pipeline, "_retriever"):
