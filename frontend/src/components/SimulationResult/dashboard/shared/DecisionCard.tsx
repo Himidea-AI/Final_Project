@@ -1,8 +1,9 @@
 /**
- * DecisionCard — SummaryTab 상단 3 카드 (참고 v4.3 디자인 배치 차용)
- * 질문형 제목 + Hero 배지 + 본문 설명 + 체크리스트 + footer 에이전트 아이콘
+ * DecisionCard — SummaryTab 상단 3 카드.
+ * 질문형 제목 + Hero 배지 + 본문 설명 + 체크리스트 + footer 에이전트 아이콘.
  *
  * 모든 데이터는 상위에서 실 simResult 필드로 조립하여 props로 전달.
+ * 디자인: italic 제목 + 모서리 micro dot + highlight 항목은 cyan 다이아 glow.
  */
 
 import { ChevronRight, type LucideIcon } from 'lucide-react';
@@ -47,27 +48,40 @@ export function DecisionCard({
   footer,
 }: DecisionCardProps) {
   return (
-    <div className="bg-[#141210] border border-stone-800/60 rounded-3xl p-8 flex flex-col h-full hover:border-stone-700 transition-all group">
-      <h3 className="text-xl font-bold text-stone-100 mb-6">{title}</h3>
+    <div className="relative bg-[#141210] border border-stone-800/60 rounded-3xl p-8 flex flex-col h-full hover:border-stone-700 hover:shadow-[0_20px_50px_-25px_rgba(34,211,238,0.15)] transition-all group overflow-hidden">
+      {/* 모서리 micro dot — 디자인 "완결감" */}
+      <div className="absolute top-6 right-6 w-1 h-1 rounded-full bg-stone-800" />
+
+      <h3 className="text-[20px] font-black text-stone-100 mb-6 italic tracking-tighter leading-tight">
+        {title}
+      </h3>
 
       <div
-        className={`inline-block self-start px-4 py-2 rounded-xl border font-black text-lg mb-6 ${HERO_CLS[heroColor]}`}
+        className={`inline-block self-start px-4 py-2 rounded-xl border font-black text-lg mb-6 tracking-tight shadow-inner ${HERO_CLS[heroColor]}`}
       >
         {heroBadge}
       </div>
 
-      <p className="text-sm text-stone-400 leading-relaxed mb-8 flex-grow">{description}</p>
+      <p className="text-[13px] text-stone-400 leading-relaxed mb-8 flex-grow font-medium">
+        {description}
+      </p>
 
-      <div className="border-t border-dashed border-stone-800 mb-6 w-full" />
+      <div className="border-t border-dashed border-stone-800/80 mb-6 w-full" />
 
       <ul className="space-y-3 mb-8">
         {items.map((item, i) => (
           <li key={i} className="flex items-center gap-3">
             <span
-              className={`w-1.5 h-1.5 rotate-45 ${item.highlight ? 'bg-indigo-400' : 'bg-stone-700'}`}
+              className={`w-1.5 h-1.5 rotate-45 transition-colors shrink-0 ${
+                item.highlight
+                  ? 'bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]'
+                  : 'bg-stone-700'
+              }`}
             />
             <span
-              className={`text-[13px] ${item.highlight ? 'text-stone-300 font-bold' : 'text-stone-500'}`}
+              className={`text-[13px] tracking-tight ${
+                item.highlight ? 'text-stone-100 font-bold' : 'text-stone-500'
+              }`}
             >
               {item.text}
             </span>
@@ -77,24 +91,26 @@ export function DecisionCard({
 
       <div className="flex items-center justify-between mt-auto pt-6 border-t border-stone-900 group-hover:border-stone-800 transition-colors">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-stone-600 uppercase">근거</span>
+          <span className="text-[9px] font-black text-stone-600 uppercase tracking-[0.2em]">
+            근거
+          </span>
           <div className="flex -space-x-1.5">
             {footer.agents.map((agent) => {
               const AgentIcon = agent.icon;
               return (
                 <div
                   key={agent.id}
-                  className="w-5 h-5 rounded-full bg-stone-800 border border-[#141210] flex items-center justify-center"
+                  className="w-6 h-6 rounded-full bg-stone-900 border-2 border-[#141210] flex items-center justify-center shadow-md"
                 >
-                  <AgentIcon size={10} className={agent.color} />
+                  <AgentIcon size={11} className={agent.color} />
                 </div>
               );
             })}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] font-bold text-stone-500 tracking-tight truncate max-w-[180px]">
+        <div className="flex items-center gap-1.5 text-[9px] font-black text-stone-600 uppercase tracking-widest truncate max-w-[180px] group-hover:text-stone-400 transition-colors">
           {footer.methodology}
-          <ChevronRight size={12} className="text-stone-700" />
+          <ChevronRight size={12} className="text-stone-800 group-hover:text-stone-500 shrink-0" />
         </div>
       </div>
     </div>
