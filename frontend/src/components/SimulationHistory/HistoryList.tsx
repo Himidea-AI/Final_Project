@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { GitCompareArrows, X } from 'lucide-react';
 import { HistoryCard } from './HistoryCard';
 import { HistoryFilter } from './HistoryFilter';
+import { ActivityDashboard } from './ActivityDashboard';
 import { useSimulationHistory } from '../../hooks/useSimulationHistory';
 import type { HistoryFilterParams } from '../../types/simulationHistory';
 
@@ -59,6 +60,8 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
 
   return (
     <div className="space-y-4">
+      <ActivityDashboard items={items} total={total} isLoading={isLoading} />
+
       <HistoryFilter value={filter} onChange={setFilter} />
 
       <div className="flex items-center justify-between text-xs text-stone-400">
