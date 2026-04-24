@@ -6,22 +6,39 @@
 
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Loader2, ChevronRight } from 'lucide-react';
-import { Navigate } from 'react-router-dom';
+import { Eye, EyeOff, Loader2, ChevronRight, AlertCircle } from 'lucide-react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth, loginWithFallback } from '../auth/AuthContext';
 import { useToast } from '../components/Toast';
 import { useTransition } from '../App';
+
+// 외부 redirect 주입 방지 — 내부 경로(/로 시작, //로 시작은 프로토콜-상대 URL이라 거부)만 허용.
+function safeRedirect(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const decoded = decodeURIComponent(raw);
+    if (!decoded.startsWith('/') || decoded.startsWith('//')) return null;
+    if (decoded === '/login' || decoded.startsWith('/login?')) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
 
 export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void }) {
   const nav = useTransition();
   const auth = useAuth();
   const { showToast } = useToast();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+
+  const sessionExpired = searchParams.get('reason') === 'session_expired';
+  const redirectTarget = safeRedirect(searchParams.get('redirect'));
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const canSubmit = emailValid && password.length >= 8;
@@ -34,18 +51,19 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
     const result = await loginWithFallback(email, password);
 
     if (result.success) {
+      const defaultLanding = result.role === 'manager' ? '/simulator' : '/hq';
+      const destination = redirectTarget ?? defaultLanding;
       if (result.role === 'master') {
         auth.login(result.user, result.brand, result.token);
         showToast(
           'success',
           `환영합니다! ${result.user.company_name || 'SPOTTER'} 엔진에 연결되었습니다.`,
         );
-        nav('/hq');
       } else {
         auth.login(result.user, null, result.token);
         showToast('success', `${result.user.contact_name || '매니저'}님, 환영합니다.`);
-        nav('/simulator');
       }
+      nav(destination);
     } else {
       if (result.reason === 'pending_approval') {
         setError(result.message || '팀장의 승인을 기다리고 있습니다. 잠시 후 다시 시도해주세요.');
@@ -67,10 +85,10 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
     if (e.key === 'Enter') handleLogin();
   };
 
-  // 이미 로그인 상태면 역할별 홈으로 리다이렉트
+  // 이미 로그인 상태면 redirect 파라미터 우선, 없으면 역할별 홈으로
   if (auth.isLoggedIn) {
     const fallback = auth.user?.role === 'manager' ? '/simulator' : '/hq';
-    return <Navigate to={fallback} replace />;
+    return <Navigate to={redirectTarget ?? fallback} replace />;
   }
 
   return (
@@ -113,6 +131,17 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-8">
           <h2 className="text-lg font-black text-[#e2e8f0] mb-1">로그인</h2>
           <p className="text-xs text-[#9ca3af] mb-8">워크스페이스에 로그인하세요</p>
+
+          {sessionExpired && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-5 flex items-start gap-2 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300"
+            >
+              <AlertCircle size={14} className="mt-0.5 shrink-0" />
+              <span>세션이 만료되어 다시 로그인해주세요.</span>
+            </div>
+          )}
 
           {/* Email */}
           <div className="mb-5">
