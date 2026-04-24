@@ -1,19 +1,36 @@
 /**
  * ForecastTab — 매출 예측 탭
  * 1) TCN-v2 분기별 매출 예측 (Confidence Band P10-P90)
- * 2) SHAP 피처 기여도 분석 (상위 4개 raw value)
- * 3) 시나리오 낙관/기본/비관 (선택 표시)
+ * 2) SHAP 피처 기여도 분석 (Waterfall — 가이드 #1)
+ * 3) 폐업 위험도 Bullet (가이드 #9)
  */
 
 import { TrendingUp, Zap, Maximize2 } from 'lucide-react';
-import type { SimulationOutput } from '../../../../types';
+import type { SimulationOutput, ShapResult, ClosureRisk } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { QuarterlyProjectionChart } from '../../QuarterlyProjectionChart';
-import { formatShapValue, shapBarWidth, formatScore } from '../utils/formatters';
+import { formatScore } from '../utils/formatters';
+import { WaterfallChart, type WaterfallStep } from '../charts/WaterfallChart';
+import { BulletChart } from '../charts/BulletChart';
 
 interface Props {
   simResult: SimulationOutput;
   openModal: (content: DetailModalContent) => void;
+}
+
+function shapToWaterfall(shap: ShapResult | null | undefined): WaterfallStep[] {
+  if (!shap) return [];
+  const top = (shap.feature_importance ?? []).slice(0, 6);
+  const steps: WaterfallStep[] = [{ label: 'Base', value: shap.base_value, kind: 'base' }];
+  top.forEach((f) => {
+    steps.push({
+      label: f.feature_ko || f.feature,
+      value: f.shap_value,
+      kind: 'contribution',
+    });
+  });
+  steps.push({ label: 'Final', value: shap.predicted_value, kind: 'final' });
+  return steps;
 }
 
 export function ForecastTab({ simResult, openModal }: Props) {
@@ -24,9 +41,6 @@ export function ForecastTab({ simResult, openModal }: Props) {
   const trendNarrative = simResult.trend_forecast?.forecast?.narrative;
 
   const dirLabel = trendDir === 'growth' ? '성장' : trendDir === 'decline' ? '하락' : '유지';
-
-  // SHAP 상위 4개 (abs_shap 기준 이미 정렬됨)
-  const shapTop4 = (shap?.feature_importance ?? []).slice(0, 4);
 
   return (
     <div className="space-y-6">
@@ -75,11 +89,11 @@ export function ForecastTab({ simResult, openModal }: Props) {
           )}
         </div>
 
-        {/* SHAP 피처 기여도 */}
+        {/* SHAP Waterfall */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-stone-800 pb-3">
             <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2 italic">
-              <Zap className="text-amber-400" size={14} /> 피처 기여도 분석 (SHAP)
+              <Zap className="text-amber-400" size={14} /> 피처 기여도 분석 (SHAP Waterfall)
             </h4>
             {shap && (
               <button
@@ -87,7 +101,7 @@ export function ForecastTab({ simResult, openModal }: Props) {
                 onClick={() =>
                   openModal({
                     title: 'SHAP 해석 상세',
-                    content: `SHAP (SHapley Additive exPlanations)는 각 피처가 예측값에 얼마나 기여했는지를 정량화하는 기법입니다.\n\nbase_value (평균 예측): ${shap.base_value.toLocaleString('ko-KR')}원\nfinal_value (최종 예측): ${shap.predicted_value.toLocaleString('ko-KR')}원\n\n양수 (+) 피처는 매출을 밀어올리고, 음수 (-) 피처는 매출을 낮추는 방향으로 작동합니다.${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다. 실제 모델 예측값이 아닙니다.' : ''}`,
+                    content: `SHAP (SHapley Additive exPlanations)은 각 피처가 예측값에 얼마나 기여했는지 정량화합니다.\n\nbase_value: ${shap.base_value.toLocaleString('ko-KR')}원\npredicted_value: ${shap.predicted_value.toLocaleString('ko-KR')}원\n\n양수 피처는 매출을 밀어올리고, 음수는 낮춥니다.${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다.' : ''}`,
                   })
                 }
                 className="text-[10px] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1 transition-colors"
@@ -97,34 +111,12 @@ export function ForecastTab({ simResult, openModal }: Props) {
             )}
           </div>
 
-          {shapTop4.length > 0 ? (
-            <div className="grid grid-cols-2 gap-4">
-              {shapTop4.map((item, i) => {
-                const pos = item.shap_value >= 0;
-                const label = item.feature_ko || item.feature;
-                return (
-                  <div
-                    key={`${label}-${i}`}
-                    className="flex items-center gap-4 p-4 bg-stone-950/40 border border-stone-800/40 rounded-2xl hover:border-stone-700 transition-colors"
-                  >
-                    <span className="text-[11px] font-bold text-stone-400 w-28 tracking-tighter text-left">
-                      {label}
-                    </span>
-                    <div className="flex-1 bg-stone-800 h-2.5 rounded-full overflow-hidden flex justify-center shadow-inner">
-                      <div
-                        className={`h-full ${pos ? 'bg-indigo-500 ml-auto' : 'bg-rose-500 mr-auto'}`}
-                        style={{ width: `${shapBarWidth(item.shap_value)}%` }}
-                      />
-                    </div>
-                    <span
-                      className={`text-[11px] font-black w-14 text-right tabular-nums ${pos ? 'text-indigo-400' : 'text-rose-400'}`}
-                    >
-                      {formatShapValue(item.shap_value)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+          {shap ? (
+            <WaterfallChart
+              steps={shapToWaterfall(shap)}
+              formatY={(n) => `${(n / 10000).toFixed(0)}만`}
+              height={320}
+            />
           ) : (
             <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-8 text-center text-xs text-stone-500">
               SHAP 해석 데이터 없음 — 모델 예측 신뢰도가 확정되면 표시됩니다
@@ -132,6 +124,43 @@ export function ForecastTab({ simResult, openModal }: Props) {
           )}
         </div>
       </div>
+
+      {/* Closure Risk Bullet */}
+      <ClosureRiskPanel closure={simResult.closure_risk} />
+    </div>
+  );
+}
+
+function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | undefined }) {
+  if (!closure) {
+    return (
+      <div className="rounded-2xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+        closure_risk 분석 대기
+      </div>
+    );
+  }
+  return (
+    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
+          폐업 위험도
+        </h4>
+        {closure.is_mock && (
+          <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full uppercase">
+            MOCK
+          </span>
+        )}
+      </div>
+      <BulletChart
+        actual={closure.risk_score}
+        target={30}
+        max={100}
+        label="위험 점수"
+        thresholds={[30, 60]}
+      />
+      {closure.summary && closure.summary.length > 0 && (
+        <p className="mt-3 text-[11px] text-stone-400 leading-relaxed">{closure.summary[0]}</p>
+      )}
     </div>
   );
 }
