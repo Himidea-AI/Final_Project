@@ -20,6 +20,7 @@ import {
   Layers,
   Activity,
   Scale,
+  Radar,
   type LucideIcon,
 } from 'lucide-react';
 import type { SimulationOutput } from '../../../types';
@@ -31,6 +32,7 @@ import { KpiMiniGrid, type KpiItem } from './shared/KpiMiniGrid';
 import { NarrativeText } from './shared/NarrativeText';
 import { SummaryTab } from './tabs/SummaryTab';
 import { MarketTab } from './tabs/MarketTab';
+import { AbmTab } from './tabs/AbmTab';
 import { DemographicTab } from './tabs/DemographicTab';
 import { FinancialTab } from './tabs/FinancialTab';
 import { ForecastTab } from './tabs/ForecastTab';
@@ -42,6 +44,7 @@ import { formatKrw, formatScore } from './utils/formatters';
 const TABS = {
   SUMMARY: 'summary',
   MARKET: 'market',
+  ABM: 'abm',
   DEMOGRAPHIC: 'demographic',
   FINANCIAL: 'financial',
   FORECAST: 'forecast',
@@ -52,10 +55,11 @@ const TABS = {
 type TabKey = (typeof TABS)[keyof typeof TABS];
 
 // 탭 순서 규칙: 첫 = 요약, 끝 = AI 분석근거 (고정). 중간 흐름:
-// 상권(지리) → 인구(사람) → 재무(돈) → 예측(미래) → 법률(규제)
+// 상권(지리) → ABM(공실 시뮬) → 인구(사람) → 재무(돈) → 예측(미래) → 법률(규제)
 const TAB_ORDER: TabKey[] = [
   TABS.SUMMARY,
   TABS.MARKET,
+  TABS.ABM,
   TABS.DEMOGRAPHIC,
   TABS.FINANCIAL,
   TABS.FORECAST,
@@ -142,6 +146,8 @@ export const AGENTS_LIST: AgentDef[] = [
 
 interface TabbedDashboardProps {
   simResult: SimulationOutput | null;
+  /** ABM /simulate-abm POST 호출에 필요 (없으면 기본 'cafe') */
+  businessType?: string | null;
   /** 상위 SimulatorDashboard 헤더의 기존 버튼을 사용하므로, 이 props들은 호환성 유지용 (옵셔널). */
   onExportPdf?: () => void;
   onExportXlsx?: () => void;
@@ -155,6 +161,7 @@ export function TabbedDashboard({
   simResult,
   savedHistoryId = null,
   brandName,
+  businessType = null,
 }: TabbedDashboardProps) {
   // URL ?tab= deep link sync — 새로고침 / 공유 링크 지원
   const [searchParams, setSearchParams] = useSearchParams();
@@ -441,6 +448,13 @@ export function TabbedDashboard({
               onClick={handleTabChange}
             />
             <TabButton
+              id={TABS.ABM}
+              label="ABM"
+              icon={Radar}
+              active={activeTab === TABS.ABM}
+              onClick={handleTabChange}
+            />
+            <TabButton
               id={TABS.DEMOGRAPHIC}
               label="인구·고객"
               icon={Users}
@@ -493,6 +507,9 @@ export function TabbedDashboard({
               <SummaryTab simResult={simResult} openModal={openModal} />
             )}
             {activeTab === TABS.MARKET && <MarketTab simResult={simResult} openModal={openModal} />}
+            {activeTab === TABS.ABM && (
+              <AbmTab simResult={simResult} brandName={brandName} businessType={businessType} />
+            )}
             {activeTab === TABS.DEMOGRAPHIC && <DemographicTab simResult={simResult} />}
             {activeTab === TABS.FINANCIAL && <FinancialTab simResult={simResult} />}
             {activeTab === TABS.FORECAST && (

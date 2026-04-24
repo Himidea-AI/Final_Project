@@ -137,6 +137,7 @@ export default function SimulationHistoryDetail() {
                 simResult={data.simulation_result}
                 savedHistoryId={data.id}
                 brandName={data.brand_name}
+                businessType={data.business_type}
               />
             </div>
           </>
