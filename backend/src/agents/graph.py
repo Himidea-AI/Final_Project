@@ -81,9 +81,7 @@ async def llm_analysis_phase_node(state: AgentState) -> dict:
     winner = state.get("winner_district") or state.get("target_district", "")
     original_target = state.get("target_district", "")
     if winner and winner != original_target:
-        print(
-            f"--- [PHASE 2] target_district 교체: {original_target} → {winner} (winner 기준 분석) ---"
-        )
+        print(f"--- [PHASE 2] target_district 교체: {original_target} → {winner} (winner 기준 분석) ---")
     else:
         print(f"--- [PHASE 2] target_district={winner} (변경 없음) ---")
 
@@ -186,7 +184,15 @@ async def ml_prediction_phase_node(state: AgentState) -> dict:
         biz = state.get("business_type", "카페")
         industry_code = _BIZ_TO_INDUSTRY_CODE.get(biz, "CS100010")
 
-        sim_result = ModelOutput.generate(dong_code, industry_code, biz, model="tcn")
+        from models.revenue_predictor.bep import BEPCalculator
+
+        cost_config = BEPCalculator.get_default_costs(
+            biz,
+            initial_capital=state.get("initial_capital", 130_000_000),
+            monthly_rent=state.get("monthly_rent_budget", 2_000_000),
+        )
+
+        sim_result = ModelOutput.generate(dong_code, industry_code, biz, model="tcn", cost_config=cost_config)
         elapsed = time.perf_counter() - t_start
         monthly_rev = sim_result.get("revenue_forecast", {}).get("quarterly_avg", 0)
         bep = sim_result.get("bep", {}).get("bep_months", "?")

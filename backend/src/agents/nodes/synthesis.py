@@ -196,11 +196,11 @@ async def synthesis_node(state: AgentState) -> dict:
 
     # TCN ML 실측 수치 (Phase 2.5에서 계산된 값 — 없으면 빈 블록)
     _tcn = state.get("tcn_sim_result") or {}
-    _tcn_rev = _tcn.get("revenue_forecast", {}).get("quarterly_avg")
+    _tcn_rev = _tcn.get("revenue_forecast", {}).get("monthly_per_store")
     _tcn_bep = _tcn.get("bep", {}).get("bep_months")
     _tcn_closure = _tcn.get("closure_rate", {}).get("closure_rate")
     _tcn_risk = (_tcn.get("closure_risk") or {}).get("risk_score")
-    if _tcn_rev or _tcn_bep or _tcn_closure:
+    if _tcn_rev or _tcn_bep or _tcn_closure or _tcn_risk:
         tcn_block = (
             "\n[ML 모델 실측 수치 — 추측 금지, 아래 수치를 profit_simulation에 그대로 사용]\n"
             + (f"- 월 예상 매출(monthly_revenue): {_tcn_rev:,.0f}원\n" if _tcn_rev else "")
@@ -277,13 +277,17 @@ async def synthesis_node(state: AgentState) -> dict:
         f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
         + (
             "7. profit_simulation에 ML 실측 수치를 반드시 사용:\n"
-            f"   - monthly_revenue = {_tcn_rev:,.0f}원 (TCN 예측값, 변경 금지)\n"
-            f"   - bep_months = {_tcn_bep} (TCN 예측값, profit_simulation.bep_months 필드에 정수로 입력)\n"
-            "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
-            "   - net_profit = monthly_revenue - monthly_cost\n"
-            "   - margin_rate = net_profit / monthly_revenue (소수점 2자리)\n"
-            if tcn_block else
-            "7. profit_simulation 계산 기준:\n"
+            + (f"   - monthly_revenue = {_tcn_rev:,.0f}원 (TCN 점포평균 월매출, 변경 금지)\n" if _tcn_rev else "")
+            + (
+                f"   - bep_months = {_tcn_bep} (TCN 예측값, profit_simulation.bep_months 필드에 정수로 입력)\n"
+                if _tcn_bep
+                else ""
+            )
+            + "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
+            + "   - net_profit = monthly_revenue - monthly_cost\n"
+            + "   - margin_rate = net_profit / monthly_revenue (소수점 2자리)\n"
+            if tcn_block
+            else "7. profit_simulation 계산 기준:\n"
             "   - monthly_revenue = 일평균 유동인구 × 방문 전환율 3% × 객단가(원)\n"
             "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
             "   - net_profit = monthly_revenue - monthly_cost\n"
