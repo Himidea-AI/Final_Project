@@ -2,8 +2,11 @@
  * KpiMiniGrid — 헤더 하단 4칸 미니 KPI (참고 v4.3 배치)
  *
  * 실데이터만 표시, delta/피어비교 제거 (이전 원칙 고수).
- * 각 칸: 라벨 + 큰 값 + 보조 태그 + 서브텍스트.
+ * 각 칸: 라벨 + 큰 값 + 보조 태그 + 서브텍스트 + (선택) Sparkline / Bullet.
  */
+
+import { Sparkline } from '../charts/Sparkline';
+import { BulletChart } from '../charts/BulletChart';
 
 export interface KpiItem {
   label: string;
@@ -14,6 +17,15 @@ export interface KpiItem {
   tagColor?: 'emerald' | 'amber' | 'rose' | 'stone';
   /** 서브텍스트 (단위 / 맥락) */
   sub?: string;
+  /** Sparkline용 시계열 (없으면 표시 안 함) */
+  spark?: number[];
+  /** Bullet Chart 데이터 (없으면 표시 안 함) */
+  bullet?: {
+    actual: number | null;
+    target?: number;
+    max?: number;
+    thresholds?: [number, number];
+  };
 }
 
 interface KpiMiniGridProps {
@@ -51,6 +63,21 @@ export function KpiMiniGrid({ items }: KpiMiniGridProps) {
             )}
           </div>
           {kpi.sub && <div className="text-[9px] text-stone-600 mt-1 font-bold">{kpi.sub}</div>}
+          {kpi.spark && kpi.spark.length > 0 && (
+            <div className="mt-2">
+              <Sparkline data={kpi.spark} />
+            </div>
+          )}
+          {kpi.bullet && (
+            <div className="mt-2">
+              <BulletChart
+                actual={kpi.bullet.actual}
+                target={kpi.bullet.target}
+                max={kpi.bullet.max ?? 100}
+                thresholds={kpi.bullet.thresholds}
+              />
+            </div>
+          )}
         </div>
       ))}
     </div>
