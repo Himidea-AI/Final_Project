@@ -3,7 +3,7 @@
 
 BEP(개월) = 초기투자비 / (월 예상매출 - 월 고정비 - 월 변동비)
 
-매출 예측값(LSTM 모델 출력)과 비용 항목을 받아 BEP를 산출합니다.
+매출 예측값(TCN 모델 출력)과 비용 항목을 받아 BEP를 산출합니다.
 담당: B2 — 딥러닝 모델
 """
 
@@ -11,18 +11,37 @@ from __future__ import annotations
 
 import math
 
-# 업종별 기본 비용 구조
+# 업종 별칭 → INDUSTRY_DEFAULTS 키 정규화
+# business_type("카페", "한식" 등 단축형)을 정규 업종명으로 변환
+_BIZ_ALIAS: dict[str, str] = {
+    "카페": "커피-음료",
+    "커피": "커피-음료",
+    "한식": "한식음식점",
+    "중식": "중식음식점",
+    "일식": "일식음식점",
+    "양식": "양식음식점",
+    "치킨": "치킨전문점",
+    "분식": "분식전문점",
+    "호프": "호프-간이주점",
+    "주점": "호프-간이주점",
+    "패스트푸드": "패스트푸드점",
+    "베이커리": "제과점",
+    "빵": "제과점",
+}
+
+# 업종별 재료비율 (소상공인진흥공단 업종별 평균 원가율 기준)
+# 인건비는 운영 규모에 따라 편차가 크므로 BEP 계산에서 제외 (※ 결과 화면에 면책 문구 표시)
 INDUSTRY_DEFAULTS: dict[str, dict] = {
-    "한식음식점": {"variable_cost_rate": 0.35, "monthly_labor": 5_000_000},
-    "중식음식점": {"variable_cost_rate": 0.33, "monthly_labor": 4_500_000},
-    "일식음식점": {"variable_cost_rate": 0.38, "monthly_labor": 5_500_000},
-    "양식음식점": {"variable_cost_rate": 0.35, "monthly_labor": 5_000_000},
-    "제과점": {"variable_cost_rate": 0.30, "monthly_labor": 4_000_000},
-    "패스트푸드점": {"variable_cost_rate": 0.32, "monthly_labor": 3_500_000},
-    "치킨전문점": {"variable_cost_rate": 0.40, "monthly_labor": 3_500_000},
-    "분식전문점": {"variable_cost_rate": 0.30, "monthly_labor": 3_000_000},
-    "호프-간이주점": {"variable_cost_rate": 0.35, "monthly_labor": 4_000_000},
-    "커피-음료": {"variable_cost_rate": 0.25, "monthly_labor": 4_000_000},
+    "한식음식점": {"variable_cost_rate": 0.375},
+    "중식음식점": {"variable_cost_rate": 0.394},
+    "일식음식점": {"variable_cost_rate": 0.422},
+    "양식음식점": {"variable_cost_rate": 0.362},
+    "제과점": {"variable_cost_rate": 0.341},
+    "패스트푸드점": {"variable_cost_rate": 0.405},
+    "치킨전문점": {"variable_cost_rate": 0.418},
+    "분식전문점": {"variable_cost_rate": 0.387},
+    "호프-간이주점": {"variable_cost_rate": 0.328},
+    "커피-음료": {"variable_cost_rate": 0.264},
 }
 
 
@@ -33,11 +52,10 @@ class BEPCalculator:
 
     Args:
         config: 비용 구조 딕셔너리.
-            - initial_investment: 보증금(deposit), 권리금(premium),
-              인테리어(interior), 가맹비(franchise_fee)
-            - monthly_fixed_cost: 월세(rent), 관리비(maintenance),
-              인건비(labor)
-            - variable_cost_rate: 원가율 (매출 대비 비율, 0~1)
+            - initial_investment: 초기투자비 합계 {"total": 금액}
+            - monthly_fixed_cost: 월세(rent), 관리비(maintenance=임대료×10%)
+              ※ 인건비는 운영 규모 편차가 커서 제외 — 결과 화면에 면책 문구 표시
+            - variable_cost_rate: 재료비율 (매출 대비 비율, 0~1)
     """
 
     def __init__(self, config: dict) -> None:
@@ -50,11 +68,11 @@ class BEPCalculator:
     # ------------------------------------------------------------------
 
     def _total_initial_investment(self) -> float:
-        """초기투자비 합계 (보증금 + 권리금 + 인테리어 + 가맹비)"""
+        """초기투자비 합계 (사용자 입력 initial_capital)"""
         return sum(self.initial_investment.values())
 
     def _total_monthly_fixed_cost(self) -> float:
-        """월 고정비 합계 (임대료 + 관리비 + 인건비)"""
+        """월 고정비 합계 (임대료 + 관리비). 인건비 미포함."""
         return sum(self.monthly_fixed_cost.values())
 
     def _monthly_variable_cost(self, monthly_revenue: float) -> float:
@@ -156,7 +174,11 @@ class BEPCalculator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def get_default_costs(industry_name: str) -> dict:
+    def get_default_costs(
+        industry_name: str,
+        initial_capital: int = 130_000_000,
+        monthly_rent: int = 2_000_000,
+    ) -> dict:
         """업종별 기본 비용 구조 반환
 
         지원 업종: 한식음식점, 중식음식점, 일식음식점, 양식음식점, 제과점,
@@ -164,24 +186,22 @@ class BEPCalculator:
 
         Args:
             industry_name: 업종명 (예: "한식음식점")
+            initial_capital: 사용자 입력 초기 자본금 (원). 기본값 1.3억.
+            monthly_rent: 사용자 입력 월 임대료 (원). 기본값 200만.
 
         Returns:
             dict — config 형식과 동일한 기본 비용 구조.
             업종이 목록에 없으면 한식음식점 기본값을 사용합니다.
         """
-        defaults = INDUSTRY_DEFAULTS.get(industry_name, INDUSTRY_DEFAULTS["한식음식점"])
+        normalized = _BIZ_ALIAS.get(industry_name, industry_name)
+        defaults = INDUSTRY_DEFAULTS.get(normalized, INDUSTRY_DEFAULTS["한식음식점"])
+        maintenance = round(monthly_rent * 0.10)
 
         return {
-            "initial_investment": {
-                "deposit": 50_000_000,
-                "premium": 30_000_000,
-                "interior": 40_000_000,
-                "franchise_fee": 10_000_000,
-            },
+            "initial_investment": {"total": initial_capital},
             "monthly_fixed_cost": {
-                "rent": 2_000_000,
-                "maintenance": 300_000,
-                "labor": defaults["monthly_labor"],
+                "rent": monthly_rent,
+                "maintenance": maintenance,
             },
             "variable_cost_rate": defaults["variable_cost_rate"],
         }

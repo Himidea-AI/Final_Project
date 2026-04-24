@@ -155,6 +155,26 @@ def _run_gru_forecast(dong_code: str, industry_code: str) -> dict:
     }
 
 
+def _get_latest_store_count(dong_code: str, industry_code: str) -> int:
+    """해당 동×업종의 최신 분기 store_count 반환. 조회 실패 시 1."""
+    try:
+        from models.lstm_forecast.data_prep import load_store_data
+
+        dong_prefix = dong_code[:5] if len(dong_code) >= 5 else dong_code
+        store_df = load_store_data(dong_prefix=dong_prefix)
+        mask = (store_df["dong_code"].astype(str) == dong_code) & (
+            store_df["industry_code"].astype(str) == industry_code
+        )
+        subset = store_df[mask]
+        if subset.empty:
+            return 1
+        latest = subset.sort_values("quarter").iloc[-1]
+        return max(int(latest.get("store_count", 1)), 1)
+    except Exception as exc:
+        logger.warning("store_count 조회 실패 (1로 대체): %s", exc)
+        return 1
+
+
 def _run_closure_rate(dong_code: str, industry_code: str) -> dict:
     """폐업률 예측 모델 호출."""
     from models.revenue_predictor.predict import predict as closure_predict
@@ -419,9 +439,19 @@ class ModelOutput:
         try:
             quarterly_avg = revenue_forecast["quarterly_avg"]
             quarterly_preds = revenue_forecast["quarterly_predictions"]
+
+            # district_sales.monthly_sales = 분기 합계(3개월치, 컬럼명 오기)
+            # quarterly_avg = 4분기 예측의 평균 → 분기 합계 단위
+            # ÷ store_count : 점포 1개 기준, ÷ 3 : 분기 → 월 환산
+            store_count = _get_latest_store_count(dong_code, industry_code)
+            monthly_per_store = round(quarterly_avg / store_count / 3)
+            revenue_forecast["store_count"] = store_count
+            revenue_forecast["monthly_per_store"] = monthly_per_store
+            logger.info("store_count=%d → monthly_per_store=%s원", store_count, f"{monthly_per_store:,}")
+
             bep = _run_bep(
-                quarterly_avg=quarterly_avg,  # 분기 평균 매출 전달
-                quarterly_predictions=quarterly_preds,  # 분기 예측 4개 전달
+                quarterly_avg=monthly_per_store,  # 점포 1개 월매출 기준
+                quarterly_predictions=quarterly_preds,
                 industry_name=industry_name,
                 cost_config=cost_config,
             )
