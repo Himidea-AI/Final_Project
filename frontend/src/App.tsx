@@ -57,6 +57,7 @@ import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
 import ManagerDetail from './pages/ManagerDetail';
 import SimulationHistoryDetail from './pages/SimulationHistoryDetail';
+import SimulationCompare from './pages/SimulationCompare';
 import LoginPage from './pages/LoginPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -8145,6 +8146,15 @@ export default function App() {
                   element={
                     <ProtectedRoute>
                       <SimulationHistoryDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* 시뮬 이력 최대 4건 비교 + PDF export */}
+                <Route
+                  path="/dashboard/compare"
+                  element={
+                    <ProtectedRoute>
+                      <SimulationCompare />
                     </ProtectedRoute>
                   }
                 />
