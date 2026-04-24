@@ -1,4 +1,5 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { mapGender } from '../utils/mappings';
 
 interface CoreDemo {
   age: string;
@@ -45,7 +46,7 @@ export function CoreDemographicDonut({ core }: Props) {
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <span className="text-[9px] font-black text-stone-500 uppercase tracking-widest">Core</span>
         <span className="text-sm font-black text-stone-100 tabular-nums">
-          {core.age} {core.gender}
+          {core.age} {mapGender(core.gender)}
         </span>
         <span className="text-[11px] font-black text-indigo-400 tabular-nums">{sharePct}%</span>
       </div>

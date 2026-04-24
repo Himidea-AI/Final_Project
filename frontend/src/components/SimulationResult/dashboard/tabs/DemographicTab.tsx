@@ -12,7 +12,7 @@
 import { Users } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import { MetricBox } from '../shared/MetricBox';
-import { INCOME_MAP, TREND_MAP, safeMap } from '../utils/mappings';
+import { INCOME_MAP, TREND_MAP, safeMap, mapGender } from '../utils/mappings';
 import { formatPeakHours } from '../utils/formatters';
 import { CoreDemographicDonut } from '../charts/CoreDemographicDonut';
 import { WeekdayWeekendBar } from '../charts/WeekdayWeekendBar';
@@ -103,7 +103,7 @@ export function DemographicTab({ simResult }: Props) {
           <div className="grid grid-cols-4 gap-6 mb-8 text-left">
             <MetricBox
               label="주요 소비 연령대"
-              val={core ? `${core.age} ${core.gender}` : '—'}
+              val={core ? `${core.age} ${mapGender(core.gender)}` : '—'}
               sub={corePct ? `전체 방문객의 ${corePct} 차지` : 'core_demographic 기준'}
             />
             <MetricBox

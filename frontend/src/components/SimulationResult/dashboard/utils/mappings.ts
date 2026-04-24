@@ -50,6 +50,16 @@ export const LEGAL_RISK_LEVEL_MAP = {
   LOW: { label: '안전', color: 'emerald' },
 } as const;
 
+/** core_demographic.gender 영어/약자 → 한글 라벨 */
+export function mapGender(raw: string | null | undefined): string {
+  if (!raw) return '—';
+  const k = raw.toString().trim().toLowerCase();
+  if (k === 'male' || k === 'm' || k === '남' || k === '남성') return '남성';
+  if (k === 'female' || k === 'f' || k === '여' || k === '여성') return '여성';
+  if (k === 'mixed' || k === 'both' || k === 'all') return '혼성';
+  return raw; // 알 수 없는 값은 원본 유지 (데이터 디버깅 목적)
+}
+
 /** HHI 집중도 해석 (미 법무부/FTC 표준) */
 export function interpretHHI(hhi: number): { label: string; color: string } {
   if (hhi < 1500) return { label: '경쟁 시장', color: 'emerald' };
