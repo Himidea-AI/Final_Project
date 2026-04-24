@@ -12,6 +12,7 @@ import { ArrowLeft, FileDown, Loader2, AlertCircle } from 'lucide-react';
 import { getSimulationHistoryDetail } from '../api/client';
 import type { SimulationHistoryDetail } from '../types/simulationHistory';
 import { formatDocumentId } from '../types/simulationHistory';
+import CompareHiddenTemplate, { type CompareItem } from '../components/PDF/CompareHiddenTemplate';
 
 const MAX_COMPARE = 4;
 
@@ -114,12 +115,38 @@ function extractMetrics(d: SimulationHistoryDetail | null) {
   };
 }
 
+function toCompareItem(d: SimulationHistoryDetail): CompareItem {
+  const m = extractMetrics(d)!;
+  return {
+    id: d.id,
+    clientName: d.client_name,
+    brandName: d.brand_name,
+    businessType: d.business_type,
+    district: d.district,
+    createdAt: d.created_at,
+    signal: (d.market_entry_signal as CompareItem['signal']) ?? null,
+    monthlyRev: m.monthlyRev,
+    annualRev: m.annualRev,
+    netProfit: m.netProfit,
+    margin: m.margin,
+    bep: m.bep,
+    closure: m.closure,
+    closureLevel: m.closureLevel as CompareItem['closureLevel'],
+    legalHigh: m.legalHigh,
+    legalTotal: m.legalTotal,
+    confidencePct: m.confidencePct,
+    winnerDistrict: m.winnerDistrict,
+    shapTop: m.shap,
+    recommendation: m.recommendation,
+  };
+}
+
 export default function SimulationCompare() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const ids = useMemo(() => parseIdsParam(searchParams.get('ids')), [searchParams]);
   const [details, setDetails] = useState<DetailState[]>([]);
-  const printRef = useRef<HTMLDivElement | null>(null);
+  const hiddenPdfRef = useRef<HTMLDivElement | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   // 각 id별 병렬 fetch
@@ -147,42 +174,31 @@ export default function SimulationCompare() {
   }, [ids]);
 
   const handleExportPdf = async () => {
-    if (!printRef.current || isExporting) return;
+    if (!hiddenPdfRef.current || isExporting) return;
     setIsExporting(true);
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import('html2canvas'),
         import('jspdf'),
       ]);
-      const node = printRef.current;
-      const canvas = await html2canvas(node, {
-        backgroundColor: '#1e1b18',
-        scale: 2,
-        useCORS: true,
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
-      });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      // 한 페이지 초과 시 여러 페이지로 나눔
-      let heightLeft = imgHeight;
-      let position = 0;
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      const node = hiddenPdfRef.current;
+      const pages = Array.from(node.children) as HTMLElement[];
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      for (let i = 0; i < pages.length; i++) {
+        const canvas = await html2canvas(pages[i], {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+        });
+        const imgData = canvas.toDataURL('image/png');
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       }
-      const stamp = new Date().toISOString().slice(0, 10);
-      pdf.save(`spotter-compare-${stamp}.pdf`);
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      pdf.save(`SPOTTER_compare_${ids.length}items_${stamp}.pdf`);
     } catch (err) {
       console.error('[compare] PDF export failed', err);
       window.alert('PDF 내보내기에 실패했습니다. 콘솔을 확인해주세요.');
@@ -224,6 +240,9 @@ export default function SimulationCompare() {
           ? 'grid-cols-1 md:grid-cols-3'
           : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4';
 
+  const loadedItems = details.filter((d) => d.data !== null).map((d) => toCompareItem(d.data!));
+  const pdfReportDate = `${new Date().getFullYear()}.${String(new Date().getMonth() + 1).padStart(2, '0')}.${String(new Date().getDate()).padStart(2, '0')}`;
+
   return (
     <div className="min-h-screen bg-[#1e1b18] p-8 text-stone-200">
       <div className="mx-auto max-w-[1600px]">
@@ -255,8 +274,8 @@ export default function SimulationCompare() {
           </div>
         </div>
 
-        {/* 인쇄 대상 영역 */}
-        <div ref={printRef} className="rounded-2xl border border-stone-800 bg-[#2c2825] p-6">
+        {/* 화면 미리보기 영역 */}
+        <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-6">
           <div className="mb-6 flex items-center justify-between border-b border-stone-800 pb-4">
             <div>
               <h1 className="text-lg font-black text-stone-100">시뮬레이션 비교 리포트</h1>
@@ -272,6 +291,15 @@ export default function SimulationCompare() {
             ))}
           </div>
         </div>
+
+        {/* 화면 밖 A4 landscape 템플릿 — PDF 캡처 전용 */}
+        {loadedItems.length > 0 && (
+          <CompareHiddenTemplate
+            ref={hiddenPdfRef}
+            items={loadedItems}
+            reportDate={pdfReportDate}
+          />
+        )}
       </div>
     </div>
   );
