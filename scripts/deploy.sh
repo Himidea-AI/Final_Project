@@ -23,11 +23,11 @@ docker system prune -f --volumes=false
 # 빌드 및 재시작
 echo "📦 빌드 및 재시작..."
 if [ "$TARGET" = "frontend" ]; then
-  docker compose -f docker-compose.prod.yml up --build -d frontend
+  docker-compose -f docker-compose.prod.yml up --build -d frontend
 elif [ "$TARGET" = "backend" ]; then
-  docker compose -f docker-compose.prod.yml up --build -d backend
+  docker-compose -f docker-compose.prod.yml up --build -d backend
 else
-  docker compose -f docker-compose.prod.yml up --build -d
+  docker-compose -f docker-compose.prod.yml up --build -d
 fi
 
 # 배포 후 상태 확인
