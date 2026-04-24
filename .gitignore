@@ -79,3 +79,4 @@ backend/scripts/verify/_*.txt
 # ABM 시뮬 결과물 (재현 가능, 용량 큼 — 77MB+)
 data/processed/sim_policy_*.json
 data/processed/policy_cache_*.json
+validation/results/imputed_seoul_sales_63ind.csv
