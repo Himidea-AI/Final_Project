@@ -143,6 +143,11 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
       </div>
     );
   }
+  // 백엔드는 risk_score를 0~1 소수점으로 저장 (synthesis.py:209가 *100해서 표시).
+  // BulletChart는 0~100 스케일 기대 → 여기서 정규화.
+  const scoreRaw = closure.risk_score;
+  const score100 =
+    scoreRaw == null ? null : scoreRaw <= 1 ? Math.round(scoreRaw * 100) : Math.round(scoreRaw);
   return (
     <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
       <div className="flex items-center justify-between mb-4">
@@ -156,7 +161,7 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
         )}
       </div>
       <BulletChart
-        actual={closure.risk_score}
+        actual={score100}
         target={30}
         max={100}
         label="위험 점수"

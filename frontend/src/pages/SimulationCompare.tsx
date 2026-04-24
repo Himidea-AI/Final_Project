@@ -79,7 +79,14 @@ function extractMetrics(d: SimulationHistoryDetail | null) {
   const bep = ps?.bep_months ?? null;
   const netProfit = ps?.net_profit ?? null;
   const margin = ps?.margin_rate ?? null;
-  const closure = r?.closure_risk?.risk_score ?? null;
+  // 백엔드 risk_score는 0~1 소수점 — 0~100 스케일로 정규화
+  const closureRaw = r?.closure_risk?.risk_score ?? null;
+  const closure =
+    closureRaw == null
+      ? null
+      : closureRaw <= 1
+        ? Math.round(closureRaw * 100)
+        : Math.round(closureRaw);
   const closureLevel = r?.closure_risk?.risk_level ?? null;
   const legalRisks = Array.isArray(r?.legal_risks) ? r.legal_risks : [];
   const legalHigh = legalRisks.filter(
