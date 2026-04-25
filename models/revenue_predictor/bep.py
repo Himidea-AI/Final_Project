@@ -1,9 +1,10 @@
 """
 손익분기점(BEP) 계산 모듈
 
-BEP(개월) = 초기투자비 / (월 예상매출 - 월 고정비 - 월 변동비)
+BEP(분기) = 초기투자비 / (분기 예상매출 - 분기 고정비 - 분기 변동비)
 
-매출 예측값(TCN 모델 출력)과 비용 항목을 받아 BEP를 산출합니다.
+매출 예측값(TCN 모델 출력, 분기 단위)과 비용 항목을 받아 BEP를 산출합니다.
+config의 monthly_fixed_cost는 사용자 입력 월 단위값이며, 내부적으로 ×3하여 분기 기준으로 변환합니다.
 담당: B2 — 딥러닝 모델
 """
 
@@ -75,95 +76,95 @@ class BEPCalculator:
         """월 고정비 합계 (임대료 + 관리비). 인건비 미포함."""
         return sum(self.monthly_fixed_cost.values())
 
-    def _monthly_variable_cost(self, monthly_revenue: float) -> float:
-        """월 변동비 (매출 × 원가율)"""
-        return monthly_revenue * self.variable_cost_rate
+    def _quarterly_variable_cost(self, quarterly_revenue: float) -> float:
+        """분기 변동비 (분기 매출 × 원가율)"""
+        return quarterly_revenue * self.variable_cost_rate
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def calculate_bep(self, monthly_revenue: float) -> dict:
-        """단일 월 매출 기준 BEP 산출
+    def calculate_bep(self, quarterly_revenue: float) -> dict:
+        """단일 분기 매출 기준 BEP 산출
 
         Args:
-            monthly_revenue: 월 예상매출 (원)
+            quarterly_revenue: 분기 예상매출 (원)
 
         Returns:
             dict with keys:
-                bep_months             — BEP 도달 개월 수
-                monthly_profit         — 월 순이익
-                monthly_fixed_cost     — 월 고정비 합계
-                monthly_variable_cost  — 월 변동비
+                bep_quarters             — BEP 도달 분기 수
+                quarterly_profit         — 분기 순이익
+                quarterly_fixed_cost     — 분기 고정비 합계 (월고정비×3)
+                quarterly_variable_cost  — 분기 변동비
                 total_initial_investment — 초기투자비 합계
-                annual_roi             — 연간 ROI (%)
+                annual_roi               — 연간 ROI (%)
         """
         total_initial = self._total_initial_investment()
-        fixed = self._total_monthly_fixed_cost()
-        variable = self._monthly_variable_cost(monthly_revenue)
-        monthly_profit = monthly_revenue - fixed - variable
+        quarterly_fixed = self._total_monthly_fixed_cost() * 3  # 월→분기
+        quarterly_variable = self._quarterly_variable_cost(quarterly_revenue)
+        quarterly_profit = quarterly_revenue - quarterly_fixed - quarterly_variable
 
-        # BEP 개월 수: 순이익이 0 이하이면 도달 불가(무한)
-        if monthly_profit <= 0:
-            bep_months = -1  # -1 은 "도달 불가"를 의미
+        # BEP 분기 수: 순이익이 0 이하이면 도달 불가(무한)
+        if quarterly_profit <= 0:
+            bep_quarters = -1  # -1 은 "도달 불가"를 의미
             annual_roi = 0.0
         else:
-            bep_months = math.ceil(total_initial / monthly_profit)
-            annual_roi = (monthly_profit * 12) / total_initial * 100 if total_initial > 0 else 0.0
+            bep_quarters = math.ceil(total_initial / quarterly_profit)
+            annual_roi = (quarterly_profit * 4) / total_initial * 100 if total_initial > 0 else 0.0
 
         return {
-            "bep_months": bep_months,
-            "monthly_profit": monthly_profit,
-            "monthly_fixed_cost": fixed,
-            "monthly_variable_cost": variable,
+            "bep_quarters": bep_quarters,
+            "quarterly_profit": quarterly_profit,
+            "quarterly_fixed_cost": quarterly_fixed,
+            "quarterly_variable_cost": quarterly_variable,
             "total_initial_investment": total_initial,
             "annual_roi": round(annual_roi, 2),
         }
 
-    def simulate_monthly(self, monthly_revenues: list[float]) -> list[dict]:
-        """12개월 매출 리스트를 받아 월별 손익 시뮬레이션
+    def simulate_quarterly(self, quarterly_revenues: list[float]) -> list[dict]:
+        """N분기 매출 리스트를 받아 분기별 손익 시뮬레이션
 
         Args:
-            monthly_revenues: 월별 예상 매출 리스트 (예: 12개월)
+            quarterly_revenues: 분기별 예상 매출 리스트 (N개, 최대 20분기)
 
         Returns:
             list of dict — 각 항목은:
-                month              — 월 번호 (1-based)
-                revenue            — 해당 월 매출
-                fixed_cost         — 월 고정비
-                variable_cost      — 월 변동비
-                total_cost         — 월 총비용
-                profit             — 월 순이익
-                cumulative_profit  — 누적 순이익 (초기투자비 차감 후)
-                bep_reached        — 이 달에 BEP 도달 여부 (bool)
+                quarter                — 분기 번호 (1-based)
+                revenue                — 해당 분기 매출
+                quarterly_fixed_cost   — 분기 고정비 (월고정비×3)
+                quarterly_variable_cost — 분기 변동비
+                quarterly_total_cost   — 분기 총비용
+                quarterly_profit       — 분기 순이익
+                cumulative_profit      — 누적 순이익 (초기투자비 차감 후)
+                bep_reached            — 이 분기에 BEP 도달 여부 (bool)
         """
         total_initial = self._total_initial_investment()
-        fixed = self._total_monthly_fixed_cost()
+        quarterly_fixed = self._total_monthly_fixed_cost() * 3  # 월→분기
         cumulative_profit = -total_initial  # 초기투자비를 빚으로 시작
         bep_already_reached = False
         results: list[dict] = []
 
-        for idx, revenue in enumerate(monthly_revenues, start=1):
-            variable = self._monthly_variable_cost(revenue)
-            total_cost = fixed + variable
+        for idx, revenue in enumerate(quarterly_revenues, start=1):
+            variable = self._quarterly_variable_cost(revenue)
+            total_cost = quarterly_fixed + variable
             profit = revenue - total_cost
             cumulative_profit += profit
 
-            reached_this_month = False
+            reached_this_quarter = False
             if not bep_already_reached and cumulative_profit >= 0:
-                reached_this_month = True
+                reached_this_quarter = True
                 bep_already_reached = True
 
             results.append(
                 {
-                    "month": idx,
+                    "quarter": idx,
                     "revenue": revenue,
-                    "fixed_cost": fixed,
-                    "variable_cost": variable,
-                    "total_cost": total_cost,
-                    "profit": profit,
+                    "quarterly_fixed_cost": quarterly_fixed,
+                    "quarterly_variable_cost": variable,
+                    "quarterly_total_cost": total_cost,
+                    "quarterly_profit": profit,
                     "cumulative_profit": cumulative_profit,
-                    "bep_reached": reached_this_month,
+                    "bep_reached": reached_this_quarter,
                 }
             )
 
