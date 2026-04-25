@@ -1,17 +1,17 @@
 import asyncio
 import time
-from langgraph.graph import StateGraph, END
 
-from src.schemas.state import AgentState
+from langgraph.graph import END, StateGraph
+from src.agents.nodes.competitor_intel import competitor_intel_node
+from src.agents.nodes.demographic_depth import demographic_depth_node
+from src.agents.nodes.district_ranking import _clear_shared_population_cache, district_ranking_node
+from src.agents.nodes.legal import legal_node
 from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
-from src.agents.nodes.legal import legal_node
 from src.agents.nodes.synthesis import synthesis_node
-from src.agents.nodes.district_ranking import district_ranking_node, _clear_shared_population_cache
-from src.agents.nodes.demographic_depth import demographic_depth_node
 from src.agents.nodes.trend_forecaster import trend_forecaster_node
-from src.agents.nodes.competitor_intel import competitor_intel_node
 from src.agents.tools import MarketDataTool as _MarketDataTool
+from src.schemas.state import AgentState
 
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
@@ -175,6 +175,7 @@ async def ml_prediction_phase_node(state: AgentState) -> dict:
 
     try:
         from src.services.dong_resolver import resolve_dong_code
+
         from models.interface import ModelOutput
 
         dong_code = resolve_dong_code(winner)
@@ -195,11 +196,11 @@ async def ml_prediction_phase_node(state: AgentState) -> dict:
         sim_result = ModelOutput.generate(dong_code, industry_code, biz, model="tcn", cost_config=cost_config)
         elapsed = time.perf_counter() - t_start
         monthly_rev = sim_result.get("revenue_forecast", {}).get("quarterly_avg", 0)
-        bep = sim_result.get("bep", {}).get("bep_months", "?")
+        bep = sim_result.get("bep", {}).get("bep_quarters", "?")
         closure = sim_result.get("closure_rate", {}).get("closure_rate", "?")
         print(
             f"--- [PHASE 2.5] TCN 완료 ({elapsed:.1f}s) | "
-            f"월매출={monthly_rev:,.0f}원 BEP={bep}개월 폐업률={closure} ---"
+            f"월매출={monthly_rev:,.0f}원 BEP={bep}분기 폐업률={closure} ---"
         )
 
         # SHAP 분석 — synthesis 프롬프트 주입용 (main.py 중복 실행 대체)

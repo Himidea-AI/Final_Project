@@ -79,17 +79,18 @@ BEP_DEFAULTS = {
 
 
 def calc_bep(monthly_revenue, industry):
-    """Simple BEP calculation."""
+    """Simple BEP calculation (월 기준, 검증 스크립트 전용)."""
     cfg = BEP_DEFAULTS.get(industry, BEP_DEFAULTS["한식"])
     monthly_fixed = cfg["rent"] + cfg["labor"]
     monthly_variable = monthly_revenue * cfg["variable_rate"]
     monthly_profit = monthly_revenue - monthly_fixed - monthly_variable
-    if monthly_profit <= 0:
-        return {"bep_months": 999, "monthly_profit": monthly_profit,
+    quarterly_profit = monthly_profit * 3
+    if quarterly_profit <= 0:
+        return {"bep_quarters": 999, "quarterly_profit": quarterly_profit,
                 "initial": cfg["initial"], "annual_roi": -100}
-    bep_months = cfg["initial"] / monthly_profit
-    annual_roi = (monthly_profit * 12 - cfg["initial"]) / cfg["initial"] * 100
-    return {"bep_months": round(bep_months, 1), "monthly_profit": round(monthly_profit),
+    bep_quarters = cfg["initial"] / quarterly_profit
+    annual_roi = (quarterly_profit * 4 - cfg["initial"]) / cfg["initial"] * 100
+    return {"bep_quarters": round(bep_quarters, 1), "quarterly_profit": round(quarterly_profit),
             "initial": cfg["initial"], "annual_roi": round(annual_roi, 1)}
 
 
@@ -261,8 +262,8 @@ def main():
                 "monthly_avg": round(monthly_avg),
                 "closure": closure_rate_val,
                 "risk": risk_level,
-                "bep_months": bep["bep_months"],
-                "monthly_profit": bep["monthly_profit"],
+                "bep_quarters": bep["bep_quarters"],
+                "quarterly_profit": bep["quarterly_profit"],
                 "annual_roi": bep["annual_roi"],
                 "initial_invest": bep["initial"],
                 "confidence": confidence,
@@ -280,7 +281,7 @@ def main():
         annual_total=("annual", "sum"),
         monthly_avg=("monthly_avg", "mean"),
         avg_closure=("closure", "mean"),
-        avg_bep=("bep_months", lambda x: x[x < 999].mean() if (x < 999).any() else 999),
+        avg_bep=("bep_quarters", lambda x: x[x < 999].mean() if (x < 999).any() else 999),
     ).sort_values("annual_total", ascending=False)
 
     print(f"  {'dong':<8} {'annual_total':>16} {'monthly_avg':>14} {'closure':>10} {'avg_bep':>10}")
@@ -296,7 +297,7 @@ def main():
         annual_total=("annual", "sum"),
         monthly_avg=("monthly_avg", "mean"),
         avg_closure=("closure", "mean"),
-        avg_bep=("bep_months", lambda x: x[x < 999].mean() if (x < 999).any() else 999),
+        avg_bep=("bep_quarters", lambda x: x[x < 999].mean() if (x < 999).any() else 999),
         avg_roi=("annual_roi", lambda x: x[x > -100].mean() if (x > -100).any() else -100),
     ).sort_values("annual_total", ascending=False)
 
@@ -319,7 +320,7 @@ def main():
         print(f"  {'dong':<8} {'Q1':>12} {'Q2':>12} {'Q3':>12} {'Q4':>12} {'annual':>14} {'BEP':>6} {'closure':>10} {'risk':>8}")
         print("  " + "-" * 100)
         for _, r in sub.iterrows():
-            print(f"  {r['dong']:<8} {r['Q1']:>11,.0f} {r['Q2']:>11,.0f} {r['Q3']:>11,.0f} {r['Q4']:>11,.0f} {r['annual']:>13,.0f} {r['bep_months']:>5.1f} {r['closure']:>9.1%} {r['risk']:>8}")
+            print(f"  {r['dong']:<8} {r['Q1']:>11,.0f} {r['Q2']:>11,.0f} {r['Q3']:>11,.0f} {r['Q4']:>11,.0f} {r['annual']:>13,.0f} {r['bep_quarters']:>5.1f} {r['closure']:>9.1%} {r['risk']:>8}")
 
     # 4. Top/Bottom combinations
     print(f"\n{'='*100}")
@@ -331,27 +332,27 @@ def main():
     print(f"  {'dong':<8} {'ind':<10} {'annual':>14} {'monthly':>12} {'BEP':>6} {'ROI':>8} {'risk':>8}")
     print("  " + "-" * 72)
     for _, r in df_sorted.head(10).iterrows():
-        print(f"  {r['dong']:<8} {r['ind']:<10} {r['annual']:>13,.0f} {r['monthly_avg']:>11,.0f} {r['bep_months']:>5.1f} {r['annual_roi']:>7.1f}% {r['risk']:>8}")
+        print(f"  {r['dong']:<8} {r['ind']:<10} {r['annual']:>13,.0f} {r['monthly_avg']:>11,.0f} {r['bep_quarters']:>5.1f} {r['annual_roi']:>7.1f}% {r['risk']:>8}")
 
     print("\n  [하위 10 - 가장 낮은 매출]")
     print(f"  {'dong':<8} {'ind':<10} {'annual':>14} {'monthly':>12} {'BEP':>6} {'ROI':>8} {'risk':>8}")
     print("  " + "-" * 72)
     for _, r in df_sorted.tail(10).iterrows():
-        print(f"  {r['dong']:<8} {r['ind']:<10} {r['annual']:>13,.0f} {r['monthly_avg']:>11,.0f} {r['bep_months']:>5.1f} {r['annual_roi']:>7.1f}% {r['risk']:>8}")
+        print(f"  {r['dong']:<8} {r['ind']:<10} {r['annual']:>13,.0f} {r['monthly_avg']:>11,.0f} {r['bep_quarters']:>5.1f} {r['annual_roi']:>7.1f}% {r['risk']:>8}")
 
     # 5. BEP analysis
     print(f"\n{'='*100}")
     print("  [5] BEP 분석")
     print("=" * 100)
-    profitable = df[df["bep_months"] < 999]
-    unprofitable = df[df["bep_months"] >= 999]
+    profitable = df[df["bep_quarters"] < 999]
+    unprofitable = df[df["bep_quarters"] >= 999]
     print(f"  흑자 조합: {len(profitable)}개 ({len(profitable)/len(df)*100:.0f}%)")
     print(f"  적자 조합: {len(unprofitable)}개 ({len(unprofitable)/len(df)*100:.0f}%)")
 
     if len(profitable) > 0:
         print("\n  BEP 구간별 분포:")
-        for lo, hi, label in [(0,6,"6개월 이내"),(6,12,"6~12개월"),(12,24,"1~2년"),(24,36,"2~3년"),(36,999,"3년 이상")]:
-            cnt = len(profitable[(profitable["bep_months"]>=lo) & (profitable["bep_months"]<hi)])
+        for lo, hi, label in [(0,2,"2분기 이내"),(2,4,"2~4분기"),(4,8,"1~2년"),(8,12,"2~3년"),(12,999,"3년 이상")]:
+            cnt = len(profitable[(profitable["bep_quarters"]>=lo) & (profitable["bep_quarters"]<hi)])
             print(f"    {label:<12} {cnt:>3}개")
 
     # 6. Risk summary
