@@ -486,6 +486,21 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
     # 평점 가중
     score += (store.rating - 3.0) * 0.1
 
+    # OFS dong score boost (외부 입지 매력도, Option E — role별 차등)
+    # 외부 agent 일수록 OFS 같은 거시 신호에 의존, 거주민은 본인 휴리스틱 사용.
+    # ofs_dong_score 비어있으면 1.0 (기존 동작 보존).
+    ofs = world.ofs_dong_score.get(store.dong) if world.ofs_dong_score else None
+    if ofs is not None:
+        ofs_norm = max(0.0, min(1.0, ofs / 100.0))  # 10~100 → 0.1~1.0
+        role_v = agent.role.value if hasattr(agent.role, "value") else str(agent.role)
+        if role_v in ("ext_commuter", "ext_visitor"):
+            ofs_mult = 0.5 + 0.5 * ofs_norm  # 0.5~1.0 (강한 영향)
+        elif role_v in ("commuter", "visitor"):
+            ofs_mult = 0.85 + 0.3 * ofs_norm  # 0.85~1.15 (약한 영향)
+        else:  # resident, owner
+            ofs_mult = 1.0  # 영향 없음
+        score *= ofs_mult
+
     return max(0.0, score)
 
 
