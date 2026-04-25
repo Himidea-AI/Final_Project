@@ -75,30 +75,31 @@ def _mock_bep(industry_name: str) -> dict:
 
     cost_cfg = BEPCalculator.get_default_costs(industry_name)
     calc = BEPCalculator(cost_cfg)
-    monthly_revenue = 15_000_000.0
-    bep_result = calc.calculate_bep(monthly_revenue)
+    quarterly_revenue = 45_000_000.0  # 분기 매출 (월 15M × 3)
+    bep_result = calc.calculate_bep(quarterly_revenue)
 
-    monthly_simulation = calc.simulate_monthly([monthly_revenue] * 12)
-    # simulate_monthly 에는 cost 키가 없으므로 변환
+    simulation_quarters = 8  # mock은 2년 고정
+    quarterly_simulation_raw = calc.simulate_quarterly([quarterly_revenue] * simulation_quarters)
     simulation = []
-    for row in monthly_simulation:
+    for row in quarterly_simulation_raw:
         simulation.append(
             {
-                "month": row["month"],
+                "quarter": row["quarter"],
                 "revenue": row["revenue"],
-                "cost": row["total_cost"],
-                "profit": row["profit"],
+                "cost": row["quarterly_total_cost"],
+                "profit": row["quarterly_profit"],
                 "cumulative_profit": row["cumulative_profit"],
                 "bep_reached": row["bep_reached"],
             }
         )
 
     return {
-        "bep_months": bep_result["bep_months"],
-        "monthly_profit": bep_result["monthly_profit"],
+        "bep_quarters": bep_result["bep_quarters"],
+        "quarterly_profit": bep_result["quarterly_profit"],
         "total_initial_investment": bep_result["total_initial_investment"],
         "annual_roi": bep_result["annual_roi"],
-        "quarterly_simulation": simulation,  # 실제 4개 분기 데이터 (키명 quarterly로 정정)
+        "quarterly_simulation": simulation,
+        "simulation_quarters": simulation_quarters,
     }
 
 
@@ -188,41 +189,51 @@ def _run_closure_rate(dong_code: str, industry_code: str) -> dict:
 
 
 def _run_bep(
-    quarterly_avg: float,  # 분기 평균 매출 (파라미터명 quarterly로 정정)
-    quarterly_predictions: list[dict],  # 분기 예측 4개 (파라미터명 quarterly로 정정)
+    quarterly_per_store: float,  # 점포 1개 기준 분기 매출
+    quarterly_predictions: list[dict],  # 분기 예측 4개
     industry_name: str,
     cost_config: dict | None,
+    store_count: int = 1,
 ) -> dict:
-    """BEP 계산."""
+    """BEP 계산 (분기 단위)."""
     from models.revenue_predictor.bep import BEPCalculator
 
     if cost_config is None:
         cost_config = BEPCalculator.get_default_costs(industry_name)
 
     calc = BEPCalculator(cost_config)
-    bep_result = calc.calculate_bep(quarterly_avg)  # 분기 평균 매출로 BEP 계산
+    bep_result = calc.calculate_bep(quarterly_per_store)
 
-    quarterly_revenues = [p["predicted_sales"] for p in quarterly_predictions]  # 분기별 매출 리스트
-    quarterly_simulation_raw = calc.simulate_monthly(quarterly_revenues)  # simulate_monthly 함수명은 bep.py 유지
+    raw_bep = bep_result["bep_quarters"]
+    if raw_bep == -1:
+        simulation_quarters = 12  # 도달 불가 → 3년 표시
+    else:
+        simulation_quarters = min(raw_bep + 1, 20)  # BEP+1분기 버퍼, 최대 5년
+
+    base_revenues = [p["predicted_sales"] / store_count for p in quarterly_predictions]
+    quarterly_revenues_list = [base_revenues[i % len(base_revenues)] for i in range(simulation_quarters)]
+
+    quarterly_simulation_raw = calc.simulate_quarterly(quarterly_revenues_list)
     simulation = []
-    for row in quarterly_simulation_raw:  # 분기 시뮬레이션 루프
+    for row in quarterly_simulation_raw:
         simulation.append(
             {
-                "month": row["month"],
+                "quarter": row["quarter"],
                 "revenue": row["revenue"],
-                "cost": row["total_cost"],
-                "profit": row["profit"],
+                "cost": row["quarterly_total_cost"],
+                "profit": row["quarterly_profit"],
                 "cumulative_profit": row["cumulative_profit"],
                 "bep_reached": row["bep_reached"],
             }
         )
 
     return {
-        "bep_months": bep_result["bep_months"],
-        "monthly_profit": bep_result["monthly_profit"],
+        "bep_quarters": bep_result["bep_quarters"],
+        "quarterly_profit": bep_result["quarterly_profit"],
         "total_initial_investment": bep_result["total_initial_investment"],
         "annual_roi": bep_result["annual_roi"],
-        "quarterly_simulation": simulation,  # 분기별 4개 시뮬레이션 결과
+        "quarterly_simulation": simulation,
+        "simulation_quarters": simulation_quarters,
     }
 
 
@@ -442,18 +453,19 @@ class ModelOutput:
 
             # district_sales.monthly_sales = 분기 합계(3개월치, 컬럼명 오기)
             # quarterly_avg = 4분기 예측의 평균 → 분기 합계 단위
-            # ÷ store_count : 점포 1개 기준, ÷ 3 : 분기 → 월 환산
+            # ÷ store_count : 점포 1개 기준 (분기→월 환산 불필요: bep.py 내부에서 ×3 처리)
             store_count = _get_latest_store_count(dong_code, industry_code)
-            monthly_per_store = round(quarterly_avg / store_count / 3)
+            quarterly_per_store = round(quarterly_avg / store_count)
             revenue_forecast["store_count"] = store_count
-            revenue_forecast["monthly_per_store"] = monthly_per_store
-            logger.info("store_count=%d → monthly_per_store=%s원", store_count, f"{monthly_per_store:,}")
+            revenue_forecast["quarterly_per_store"] = quarterly_per_store
+            logger.info("store_count=%d → quarterly_per_store=%s원", store_count, f"{quarterly_per_store:,}")
 
             bep = _run_bep(
-                quarterly_avg=monthly_per_store,  # 점포 1개 월매출 기준
+                quarterly_per_store=quarterly_per_store,
                 quarterly_predictions=quarterly_preds,
                 industry_name=industry_name,
                 cost_config=cost_config,
+                store_count=store_count,
             )
             logger.info("BEP 계산 완료")
         except Exception as exc:
