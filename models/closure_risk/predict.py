@@ -84,7 +84,7 @@ def _load_models() -> tuple:
             tcn_scaler = pickle.load(f)  # noqa: S301
 
     _cache.update({"lgbm": lgbm, "tcn": tcn, "weights": ensemble_w, "scaler": tcn_scaler})
-    return lgbm, tcn, ensemble_w
+    return lgbm, tcn, ensemble_w, tcn_scaler
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +135,8 @@ _RISK_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
         "negative": "프랜차이즈 비율이 낮아 독자적 경쟁 우위가 유지됩니다.",
     },
     "sales_yoy_change": {
-        "positive": "전년 동기 대비 매출이 증가해 양호한 상태입니다.",
-        "negative": "전년 동기 대비 매출이 감소해 위험도가 높아집니다.",
+        "positive": "전년 동기 대비 매출이 감소해 위험도가 높아집니다.",
+        "negative": "전년 동기 대비 매출이 증가해 양호한 상태입니다.",
     },
     "monthly_sales_lag1": {
         "positive": "직전 분기 매출 수준이 높아 기초 체력이 양호합니다.",
@@ -195,6 +195,72 @@ def _top_signals(lgbm_model, x_row: np.ndarray, feature_names: list[str], top_n:
         return []
 
 
+class _TCNWithSigmoid(torch.nn.Module):
+    """GradientExplainer용 sigmoid 래퍼 — 확률 단위로 SHAP 계산."""
+
+    def __init__(self, model: torch.nn.Module) -> None:
+        super().__init__()
+        self.model = model
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.sigmoid(self.model(x))
+
+
+def _top_signals_tcn(
+    tcn_model: torch.nn.Module,
+    x_seq: torch.Tensor,
+    feature_names: list[str],
+    top_n: int = 3,
+) -> list[dict]:
+    """TCN SHAP 기반 상위 기여 피처 반환 (GradientExplainer → DeepExplainer fallback)."""
+    from models.explainability.shap_analysis import _TCN_FEATURE_KO
+
+    try:
+        import shap
+
+        wrapped = _TCNWithSigmoid(tcn_model)
+        wrapped.eval()
+        window_size = x_seq.shape[1]
+        input_size = x_seq.shape[2]
+        background = torch.zeros(10, window_size, input_size)
+
+        shap_values_raw = None
+        try:
+            explainer = shap.GradientExplainer(wrapped, background)
+            shap_values_raw = explainer.shap_values(x_seq)
+        except Exception:
+            explainer = shap.DeepExplainer(wrapped, background)
+            shap_values_raw = explainer.shap_values(x_seq)
+
+        shap_array = np.array(shap_values_raw)
+        if shap_array.ndim >= 3 and shap_array.shape[-1] == 1:
+            shap_array = shap_array.squeeze(-1)
+        while shap_array.ndim >= 4:
+            shap_array = shap_array[0]
+        if shap_array.ndim == 3:
+            shap_array = shap_array[0]
+        if shap_array.ndim == 2:
+            shap_array = shap_array.mean(axis=0)
+        if shap_array.ndim != 1:
+            return []
+
+        n_feats = min(len(shap_array), len(feature_names))
+        shap_array = shap_array[:n_feats]
+        feat_names = feature_names[:n_feats]
+
+        top_idx = np.argsort(np.abs(shap_array))[::-1][:top_n]
+        return [
+            {
+                "feature": _TCN_FEATURE_KO.get(feat_names[i], feat_names[i]),
+                "feature_key": feat_names[i],
+                "contribution": round(float(shap_array[i]), 4),
+            }
+            for i in top_idx
+        ]
+    except Exception:
+        return []
+
+
 def _generate_risk_summary(top_signals: list[dict], threshold: float = 0.005) -> list[str]:
     """폐업위험도 SHAP 결과를 자연어 문장으로 요약한다."""
     sentences = []
@@ -239,10 +305,13 @@ def predict(
     -------
     dict
         {
-            "risk_score": float,      # 폐업 위험 확률 (0~1)
-            "risk_level": str,        # "safe" / "caution" / "danger"
-            "top_signals": list[dict],# 상위 기여 피처 (SHAP)
-            "model": str,             # "lgbm_tcn_ensemble"
+            "risk_score": float,           # 폐업 위험 확률 (0~1). 실패 시 None.
+            "risk_level": str,             # "safe" / "caution" / "danger" / "unknown"
+            "top_signals_lgbm": list[dict],# LightGBM SHAP 상위 기여 피처 (과거 패턴 기반)
+            "summary_lgbm": list[str],     # LightGBM SHAP 자연어 요약
+            "top_signals_tcn": list[dict], # TCN SHAP 상위 기여 피처 (시계열 흐름 기반)
+            "summary_tcn": list[str],      # TCN SHAP 자연어 요약
+            "model": str,                  # "lgbm_tcn_ensemble"
             "is_mock": bool,
         }
     """
@@ -251,8 +320,7 @@ def predict(
     window_size = 4
 
     try:
-        lgbm_model, tcn_model, ensemble_w = _load_models()
-        tcn_scaler = _cache.get("scaler")
+        lgbm_model, tcn_model, ensemble_w, tcn_scaler = _load_models()
     except FileNotFoundError as e:
         logger.warning("모델 없음 — mock 반환: %s", e)
         return _mock_result()
@@ -307,8 +375,8 @@ def predict(
         seq = MinMaxScaler().fit_transform(recent[-window_size:])
 
     tcn_model.eval()
+    x_tcn = torch.from_numpy(seq).unsqueeze(0)  # (1, 4, features)
     with torch.no_grad():
-        x_tcn = torch.from_numpy(seq).unsqueeze(0)  # (1, 4, features)
         p_tcn = float(torch.sigmoid(tcn_model(x_tcn)).cpu().numpy().flatten()[0])
 
     # --- 앙상블 ---
@@ -316,29 +384,30 @@ def predict(
     w_tcn = ensemble_w.get("w_tcn", 0.5)
     risk_score = round((w_lgbm * p_lgbm + w_tcn * p_tcn) / (w_lgbm + w_tcn), 4)
 
-    top_signals = _top_signals(lgbm_model, x_lgbm, LGBM_FEATURES)
+    # --- SHAP (LightGBM + TCN 분리) ---
+    lgbm_signals = _top_signals(lgbm_model, x_lgbm, LGBM_FEATURES)
+    tcn_signals = _top_signals_tcn(tcn_model, x_tcn, tcn_features)
 
     return {
         "risk_score": risk_score,
         "risk_level": _classify(risk_score),
-        "top_signals": top_signals,
-        "summary": _generate_risk_summary(top_signals),
+        "top_signals_lgbm": lgbm_signals,
+        "summary_lgbm": _generate_risk_summary(lgbm_signals),
+        "top_signals_tcn": tcn_signals,
+        "summary_tcn": _generate_risk_summary(tcn_signals),
         "model": "lgbm_tcn_ensemble",
         "is_mock": False,
     }
 
 
 def _mock_result() -> dict:
-    top_signals = [
-        {"feature": "직전 분기 폐업률", "feature_key": "closure_rate_lag1", "contribution": 0.18},
-        {"feature": "점포 수 증감", "feature_key": "store_change", "contribution": -0.12},
-        {"feature": "매출 전년동기 변화율", "feature_key": "sales_yoy_change", "contribution": -0.09},
-    ]
     return {
-        "risk_score": 0.42,
-        "risk_level": "caution",
-        "top_signals": top_signals,
-        "summary": _generate_risk_summary(top_signals),
+        "risk_score": None,
+        "risk_level": "unknown",
+        "top_signals_lgbm": [],
+        "summary_lgbm": [],
+        "top_signals_tcn": [],
+        "summary_tcn": [],
         "model": "lgbm_tcn_ensemble",
         "is_mock": True,
     }

@@ -54,18 +54,14 @@ def _mock_revenue_forecast() -> dict:
 
 
 def _mock_closure_rate() -> dict:
-    """폐업률 mock 데이터."""
-    closure_rate = 0.28
-    monthly_decay = (1.0 - closure_rate) ** (1 / 3)
-    monthly_rates = []
-    cumulative = 1.0
-    for _ in range(12):
-        cumulative *= monthly_decay
-        monthly_rates.append(round(max(0.0, min(1.0, 1.0 - cumulative)), 4))
+    """폐업률 계산 실패 시 반환 — predict._mock_result() 구조와 동일."""
+    from models.revenue_predictor.predict import _mock_result as _closure_mock
+
+    raw = _closure_mock()
     return {
-        "closure_rate": closure_rate,
-        "risk_level": "safe",
-        "monthly_closure_rates": monthly_rates,
+        "closure_rate": raw["closure_rate"],
+        "risk_level": raw["closure_risk_level"],
+        "monthly_closure_rates": raw["monthly_closure_rates"],
     }
 
 
