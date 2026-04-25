@@ -80,3 +80,39 @@ backend/scripts/verify/_*.txt
 data/processed/sim_policy_*.json
 data/processed/policy_cache_*.json
 validation/results/imputed_seoul_sales_63ind.csv
+
+# 대용량 데이터/임시 산출물 (push 거부 또는 repo 비대화 방지)
+data/processed/processed.zip
+data/processed/*.parquet
+data/processed/seoul_realtime_hotspots_*.csv
+data/processed/kakao_store_*.csv
+data/processed/naver_vacancy_*.csv
+data/processed/naver_trend_industry.csv
+data/processed/seoul_district_sales_v3imputed.csv
+data/processed/dong_subway_access.csv
+
+# ABM 시뮬레이션 결과물 (재생성 가능, 용량 큼)
+data/processed/sim_*.json
+data/processed/sim_*.png
+data/processed/sim_*.csv
+
+catboost_info/
+audit_result.txt
+
+# 임시 디버깅/검증 파일 (repo에 들어가면 안 됨)
+tmp_*.py
+tmp_*.json
+tmp_*.txt
+tmp_*.png
+
+# 모델 학습 산출물 (재현 가능, 용량 큼)
+models/**/weights/*.pkl
+validation/results/*.db
+validation/results/imputed_mapo_*.csv
+
+# Claude Code 로컬 설정 (frontend 하위)
+frontend/.claude/
+
+# 출처/용도 불명 디렉토리 (검토 후 commit 결정)
+data/seoul_card/
+test_frontend/
