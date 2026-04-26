@@ -908,6 +908,26 @@ async def reject_manager(manager_id: str, body: ManagerApprovalBody):
 
 
 # ---------------------------------------------------------------------------
+# 회원 탈퇴 API
+# ---------------------------------------------------------------------------
+
+
+class DeactivateBody(BaseModel):
+    password: str
+
+
+@app.post("/auth/user/{user_id}/deactivate")
+async def deactivate_user(user_id: str, body: DeactivateBody):
+    """팀장 회원 탈퇴 (소프트 삭제 — is_active=false, 소속 매니저·초대코드 일괄 비활성화)"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.deactivate_user, user_id, body.password)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # 마이페이지 API
 # ---------------------------------------------------------------------------
 

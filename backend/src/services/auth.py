@@ -181,7 +181,7 @@ class AuthService:
                 row = conn.execute(
                     text(
                         "SELECT id, company_name, biz_number, contact_name, position, "
-                        "email, phone, store_count, password_hash, plan "
+                        "email, phone, store_count, password_hash, plan, is_active "
                         "FROM users WHERE email = :email"
                     ),
                     {"email": email},
@@ -194,6 +194,16 @@ class AuthService:
 
                 if not _verify_password(password, user["password_hash"]):
                     return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
+
+                if user.get("is_active") is False:
+                    return {"status": "error", "message": "탈퇴 처리된 계정입니다."}
+
+                # 로그인 시각 기록
+                conn.execute(
+                    text("UPDATE users SET last_login_at = now() WHERE id = :id"),
+                    {"id": str(user["id"])},
+                )
+                conn.commit()
 
                 # 브랜드 매핑 — biz_brand_mapping 우선, 없으면 ftc_brand_franchise 검색
                 brand_row = conn.execute(
@@ -452,6 +462,13 @@ class AuthService:
                 if not _verify_password(password, mgr["password_hash"]):
                     return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
 
+                # 로그인 시각 기록
+                conn.execute(
+                    text("UPDATE manager_users SET last_login_at = now() WHERE id = :id"),
+                    {"id": str(mgr["id"])},
+                )
+                conn.commit()
+
                 return {
                     "status": "success",
                     "user": {
@@ -584,6 +601,57 @@ class AuthService:
                 return {
                     "status": "success",
                     "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 거절했습니다.",
+                }
+        finally:
+            engine.dispose()
+
+    # ------------------------------------------------------------------
+    # 회원 탈퇴 (소프트 삭제)
+    # ------------------------------------------------------------------
+
+    def deactivate_user(self, user_id: str, password: str) -> dict:
+        """
+        팀장 회원 탈퇴 — is_active=false 처리 (데이터 보존, 로그인 차단).
+        소속 매니저도 전부 비활성화.
+        """
+        engine = get_sync_engine(self._db_url)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT id, password_hash, contact_name FROM users WHERE id = :id AND is_active = true"),
+                    {"id": user_id},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "계정을 찾을 수 없습니다."}
+
+                if not _verify_password(password, row._mapping["password_hash"]):
+                    return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
+
+                # 본인 비활성화
+                conn.execute(
+                    text("UPDATE users SET is_active = false, updated_at = now() WHERE id = :id"),
+                    {"id": user_id},
+                )
+
+                # 소속 매니저 전부 비활성화
+                result = conn.execute(
+                    text("UPDATE manager_users SET is_active = false, updated_at = now() WHERE owner_id = :owner_id"),
+                    {"owner_id": user_id},
+                )
+
+                # 초대코드 비활성화
+                conn.execute(
+                    text("UPDATE invite_codes SET is_active = false WHERE owner_id = :owner_id"),
+                    {"owner_id": user_id},
+                )
+
+                conn.commit()
+
+                return {
+                    "status": "success",
+                    "message": f"{row._mapping['contact_name']}님의 계정이 탈퇴 처리되었습니다.",
+                    "deactivated_managers": result.rowcount,
                 }
         finally:
             engine.dispose()

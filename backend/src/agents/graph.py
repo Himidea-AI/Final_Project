@@ -65,6 +65,8 @@ async def ranking_phase_node(state: AgentState) -> dict:
         "vacancy_applied": ranking_result.get("vacancy_applied", False),
         "vacancy_spots": ranking_result.get("vacancy_spots", []),
         "analysis_results": ranking_result.get("analysis_results", {}),
+        "analysis_metrics": ranking_result.get("analysis_metrics", {}),
+        "operational_fit_results": ranking_result.get("operational_fit_results", {}),
         "current_agent": "ranking_phase",
     }
 
