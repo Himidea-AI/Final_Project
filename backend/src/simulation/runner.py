@@ -400,6 +400,15 @@ def run_simulation(
     except Exception as e:
         print(f"  [warn] adstrd_flpop_boost 로드 실패: {e}")
 
+    # 2.5++ OFS (Operational Fit Score) — 동 단위 입지 매력도 (Hansen+E2SFCA)
+    # ext_visitor / ext_commuter 매장 선호 boost 로 활용 (Option E, role 차등)
+    try:
+        from src.services.operational_fit import attach_ofs_to_world
+
+        attach_ofs_to_world(world, verbose=verbose)
+    except Exception as e:
+        print(f"  [warn] OFS 로드 실패: {e}")
+
     # 2.6 [v12] Memory Seeding — 격자 데이터 기반 가상 visit_history 주입 (Cold Start 완화)
     if seed_memory:
         try:
