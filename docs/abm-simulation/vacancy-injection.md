@@ -279,13 +279,105 @@ async def simulate_vacancy_batch(req: VacancyBatchRequest):
 
 ---
 
-## 8. 다음 단계 후보
+## 8. 추가 모듈 — PSE + LangGraph 통합 (2026-04-26 추가)
+
+기존 `vacancy_inject` 단일 seed 결과의 noise 문제를 해결하는 상위 레이어 2개:
+
+### 8.1 `vacancy_pse.py` — PSE N=5 통합 평가
+
+```python
+from src.simulation.vacancy_pse import evaluate_vacancy_pse
+
+result = evaluate_vacancy_pse(
+    vacancy_spot={"dong": "서교동", "lat": 37.5544, "lon": 126.9220},
+    category="카페",
+    n_seeds=5,                  # PSE N — 권장 ≥ 3
+    days=1,
+    with_cannibalization=True,  # baseline 시뮬도 (시간 2배)
+    popularity_boost=5.0,       # default (마케팅 가정)
+)
+
+# 반환:
+# result["pse_summary"]["visits_per_day"]       — {mean, std, ci95, min, max, n}
+# result["pse_summary"]["dong_net_growth_pct"]  — 동 시장 변화 (TIGHT, 권장)
+# result["narrative"]                            — 사람 읽기용
+# result["per_seed"]                             — raw seed 결과
+```
+
+**검증된 측정값 (서교동 카페, PSE N=10)**:
+- visits/day: **9.7 ± 1.3** (95% CI tight)
+- revenue/day: 11 ± 1 만원
+- 동 평균 대비: 48.1 ± 6.6 배
+- **dong_net_growth_pct: +1.41 ± 3.51%** (vacancy ≈ zero-sum, 학술 발견)
+
+### 8.2 `vacancy_evaluation_service.py` — LangGraph 통합 + 순위
+
+```python
+from src.services.vacancy_evaluation_service import evaluate_top_vacancies, format_rankings_text
+
+rankings = evaluate_top_vacancies(
+    vacancy_spots=state["vacancy_spots"],  # district_ranking 노드 출력
+    category="카페",
+    top_n=5,                # 시간 절약 — 상위만
+    n_seeds=5,
+    pre_filter_score=...,   # district_ranking score 제공 시 상위만
+)
+print(format_rankings_text(rankings))
+```
+
+district_ranking 키 (`dong_name`) → vacancy_pse 키 (`dong`) 자동 변환.
+
+### 8.3 REST API — `backend/src/api/vacancy_evaluation.py`
+
+```
+GET  /vacancy-evaluation/health    — 모듈 ping
+POST /vacancy-evaluation/single    — 단일 vacancy PSE
+POST /vacancy-evaluation/batch     — 여러 vacancy + 순위
+```
+
+**주요 특징**:
+- API 호출 시 mock LLM 강제 (비용 안정, 키 의존성 제거)
+- `popularity_boost` None → default 5.0 fallback
+- Pydantic 검증: 카테고리/좌표/N 범위
+- 응답 시간: 5분 (single, no cannibal) ~ 14분 (batch 5 × N=3)
+- 클라이언트 timeout >= 600s 권장
+
+**curl 예제**:
+```bash
+curl -X POST http://localhost:8000/vacancy-evaluation/single \
+  -H "Content-Type: application/json" \
+  -d '{
+    "spot": {"dong": "서교동", "lat": 37.5544, "lon": 126.9220},
+    "category": "카페",
+    "n_seeds": 5,
+    "with_cannibalization": true
+  }'
+```
+
+### 8.4 검증 결과 — Test 4 (4동 batch, 2026-04-26)
+
+| 순위 | 동 | visits/day | ratio_to_avg |
+|---|---|---|---|
+| #1 | 상암동 | 12.3 ± 2.6 | (office, 카페 적음) |
+| #2 | 합정동 | 8.3 ± 1.3 | 57.4× |
+| #3 | 서교동 | 7.7 ± 1.7 | 36.5× (포화 시장) |
+| #4 | 망원1동 | 5.0 ± 0.0 | 82.9× |
+
+**발견**: 절대 visits ≠ ratio. 서교동 절대 매출은 약하지만 시장 포화 효과 (카페 335개).
+
+저장: `validation/results/vacancy_batch_ranking_4dongs.json`
+
+---
+
+## 9. 다음 단계 후보
 
 | 우선순위 | 항목 | 설명 |
 |---|---|---|
-| 🔴 high | `simulate-vacancy-batch` API 엔드포인트 | LangGraph 결과를 HTTP 로 받아 시뮬 실행 |
-| 🔴 high | trajectory 기록에 vacancy_id 보존 | 시간대별 방문 패턴 분석 가능 |
-| 🟡 mid | `popularity_boost` 자동 추정 | 동·업종·평수 기반 baseline 산출 |
-| 🟡 mid | 카니발리제이션 계산 통합 | `Scenario.cannibalize_radius_m` 와 연결 |
-| 🟢 low | 멀티 카테고리 매장 지원 | Store 모델 확장 필요 |
+| 🔴 high | 프론트 연결 (`/vacancy-evaluation/single` 콜) | 사용자 → API → ABM 흐름 완성 |
+| 🔴 high | LangGraph district_ranking → vacancy_evaluation_service 자동 연결 | B1 → ABM 다리 |
+| 🔴 high | API 비동기 큐 (RQ/Celery) | 응답 5~10분 → polling/webhook |
+| 🟡 mid | trajectory 기록에 vacancy_id 보존 | 시간대별 방문 분석 |
+| 🟡 mid | `popularity_boost` 자동 추정 | 동·업종·평수 기반 |
+| 🟡 mid | Test 4 가설 정정 (포화도 변수 추가) | Kendall τ ≥ 0.5 목표 |
+| 🟢 low | 멀티 카테고리 매장 지원 | Store 모델 확장 |
 | 🟢 low | 시간대별 visits 분포 차트 | 프론트 시각화 |

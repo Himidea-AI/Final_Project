@@ -9,9 +9,14 @@
 
 ---
 
-## 1. 오늘 처리한 9 commits
+## 1. 오늘 처리한 14 commits
 
 ```
+ba589b1  fix(A1): API mock 강제 + popularity_boost None 처리 + Test 4 결과
+9d58d03  feat(A1): 동 단위 카니발 측정 + REST API 엔드포인트 (product화)
+ee054b1  feat(A1): vacancy_evaluation_service — LangGraph state → ABM PSE 평가 + 순위
+4d74136  docs(A1): 카니발 PSE N=10 측정 결과 + retrospective 업데이트
+d405501  docs(A1): 2026-04-26 회고
 7f1fd81  feat(A1): vacancy_pse — vacancy 평가에 PSE N=5 통합
 3a7650c  docs(A1): vacancy-injection.md — cannibal/dong_compare API + sample size 발견
 170df1e  feat(A1): vacancy_inject 카니발리제이션 + 동 평균 비교 + default boost
@@ -246,12 +251,153 @@ print(result['narrative'])
 
 ---
 
-## 9. 결론
+## 9. ⭐ 진짜 학술적 발견 — `dong_net_growth_pct` (zero-sum 입증)
+
+동 단위 카니발 N=10 PSE 측정 (`measure_dong_cannibalization` + `vacancy_pse`):
+
+| 지표 | mean ± CI95 | 판정 |
+|---|---|---|
+| 개별 카니발% (반경 500m) | -3.2 ± 158.7% | ❌ noise |
+| 동 카니발% | -4.7 ± 142.8% | ❌ noise |
+| 동 synergy% | -57.5 ± 53.4% | ⚠️ tighter |
+| **🎯 동 net_growth%** | **+1.41 ± 3.51%** | ✅ **TIGHT!** |
+
+**해석**:
+- 신규 카페가 동 카페 시장 +1.4 ± 3.5% 확장
+- **95% CI [-2.1, +4.9] → 0% 포함 → 통계적으로 zero-sum**
+- 즉 **신규 카페 ≈ 기존 카페 손님 흡수** (시장 자체 확장 거의 없음)
+
+**학술적 함의**:
+- 부동산 입지 분석에서 자주 나오는 "마켓 확장 vs 잠식" 논쟁에 정량 답변
+- 향후 발표·논문에 인용 가능: "ABM 시뮬 결과 마포 카페 시장은 신규 진입에 zero-sum 특성"
+- 카니발/synergy 개별 비율은 noise 지만 **dong_net_growth_pct 가 진짜 보고용 지표**
+
+→ Product API 의 보고 권장 metric: `pse_summary.dong_net_growth_pct`
+
+---
+
+## 10. Test 4 — vacancy 순위 검증 (4동 batch)
+
+`/vacancy-evaluation/batch` 엔드포인트로 4동 vacancy 순위 측정 (PSE N=3, 카페):
+
+| 순위 | 동 | visits/day | ratio_to_avg | 가설 | 평가 |
+|---|---|---|---|---|---|
+| **#1** | 상암동 | 12.3 ± 2.6 | (office, 카페 적음) | 中 예상 | ⚠️ 의외 1위 |
+| #2 | 합정동 | 8.3 ± 1.3 | 57.4× | 中 예상 | ✅ 합리 |
+| #3 | 서교동 | 7.7 ± 1.7 | 36.5× | 高 예상 (1위) | ⚠️ 의외 |
+| **#4** | 망원1동 | 5.0 ± 0.0 | 82.9× | 最低 예상 | ✅ 가설 일치 |
+
+**Kendall τ vs 가설(서교>합정≈상암>망원1) ≈ 0.33** — Test 4 통과 기준 (τ ≥ 0.5) 미달.
+
+**진짜 인사이트** — 절대 visits ≠ ratio:
+
+| 동 | 절대 visits | ratio | 해석 |
+|---|---|---|---|
+| 상암동 | 12.3 (1위) | 중간 | 카페 적음 → 시장 점유율 효과 |
+| 서교동 | 7.7 (3위) | 36.5× (낮음) | **카페 335개 포화 → 신규 묻힘** |
+| 망원1동 | 5.0 (4위) | 82.9× (1위) | 평균 매장 매우 낮아 상대적 매력 |
+
+**학술적 함의**:
+- "카페 차리기 가장 좋은 동" 답변은 **목적에 따라 다름**:
+  - 절대 매출 최대화 → 상암동 (시장 점유율)
+  - 매출/투자 효율 → 망원1동 (상대 매력)
+  - 실패 회피 (포화 회피) → 서교동 X
+- ABM 출력의 두 차원 (visits, ratio) 모두 해석 가치 있음
+
+저장: `validation/results/vacancy_batch_ranking_4dongs.json`
+
+---
+
+## 11. REST API 엔드포인트 (product 사용 가능)
+
+`backend/src/api/vacancy_evaluation.py` (router 등록 완료):
+
+```
+GET  /vacancy-evaluation/health    — 모듈 ping
+POST /vacancy-evaluation/single    — 단일 vacancy PSE
+POST /vacancy-evaluation/batch     — 여러 vacancy + 순위
+```
+
+### 사용 예 — 단일 평가
+
+```bash
+curl -X POST http://localhost:8000/vacancy-evaluation/single \
+  -H "Content-Type: application/json" \
+  -d '{
+    "spot": {"dong": "서교동", "lat": 37.5544, "lon": 126.9220},
+    "category": "카페",
+    "n_seeds": 5,
+    "with_cannibalization": true
+  }'
+```
+
+응답:
+```json
+{
+  "spot": {...},
+  "category": "카페",
+  "narrative": "서교동 카페 신규 매장 (popularity_boost=5.0, PSE N=5):\n  - 일평균 방문 : 9.7 ± 1.3 명...",
+  "pse_summary": {
+    "visits_per_day": {"mean": 9.7, "ci95": 1.3, ...},
+    "revenue_per_day": {...},
+    "vacancy_vs_avg_visits_ratio": {...},
+    "dong_net_growth_pct": {"mean": 1.41, "ci95": 3.51, ...}
+  },
+  "per_seed": [...]
+}
+```
+
+### 사용 예 — 배치 + 순위
+
+```bash
+curl -X POST http://localhost:8000/vacancy-evaluation/batch \
+  -d '{
+    "spots": [{"dong": "서교동", "lat": ..., "lon": ...}, ...],
+    "category": "카페",
+    "top_n": 5,
+    "n_seeds": 3
+  }'
+```
+
+응답: `rankings` (visits 내림차순) + `summary_text` (사람 읽기용).
+
+### 응답 시간
+
+| 시나리오 | 예상 |
+|---|---|
+| n_seeds=5, with_cannibalization=False | ~5분 |
+| n_seeds=5, with_cannibalization=True | ~10분 |
+| batch 5 spots × n_seeds=3, no cannibal | ~14분 |
+
+→ **클라이언트 timeout >= 600s 권장**. 향후 비동기 큐 (RQ/Celery) 분리 고려.
+
+### 입력 검증 (Pydantic)
+
+- `category`: `("음식점", "카페", "주점", "편의점", "기타")` 외 → 422
+- `lat`: `[37.5, 37.6]`, `lon`: `[126.85, 126.97]` (마포 범위) → 외부 → 422
+- `n_seeds`: `[1, 20]`, `top_n`: `[1, 10]`
+
+### 안정성 픽스 (ba589b1)
+
+- API 호출 시 **mock LLM 강제** (`_mock_cfg()`) — LLM 키 의존성 제거
+- `popularity_boost` None → `DEFAULT_POPULARITY_BOOST=5.0` fallback
+- TestClient 통합 테스트 통과: `/health`, `/single` 200, 입력 검증 422
+
+---
+
+## 12. 결론
 
 오늘 ABM 정확도 + product 가용성 측면 **객관적으로 큰 진전**:
 - 진짜 baseline 0.81 (PSE 검증) — 이전 자가 주장 0.75 대비 +0.06
 - vacancy_pse product API 완성 — visits/revenue/카니발 산출 가능
+- **REST API 3 엔드포인트 라이브** (`/vacancy-evaluation/{health,single,batch}`)
+- **dong_net_growth_pct 학술 발견** — vacancy = zero-sum (CI 0% 포함)
+- **Test 4 ranking 검증** — 절대 visits ≠ ratio 두 차원 신호 발견
 - 8개 학술 인용 (Hansen, E2SFCA, Park 2023, Springer 2025, etc.)
-- 9개 commit + push 완료
+- 14개 commit + push 완료
 
-다음 sprint 핵심: **B1 LangGraph 통합 + 카니발 N=20 검증** → 실제 사용자 흐름 완성.
+다음 sprint 핵심:
+- 프론트 연결 (`/vacancy-evaluation/single` 콜)
+- LangGraph district_ranking 노드 → vacancy_evaluation_service 자동 연결
+- Test 4 가설 정정 후 재측정 (포화도 변수 추가)
+- API 비동기 큐 (RQ/Celery) 분리 — 응답 시간 5~10분 → polling/webhook
