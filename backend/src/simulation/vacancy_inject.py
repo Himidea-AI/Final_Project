@@ -312,6 +312,123 @@ def measure_cannibalization(
     }
 
 
+def measure_dong_cannibalization(
+    sim_with_vacancy_world: World,
+    sim_baseline_world: World,
+    vacancy_id: str,
+) -> dict[str, Any]:
+    """동 단위 합산 카니발리제이션 — 개별 매장 X, 동 합계 변화.
+
+    개별 매장 단위 카니발 (measure_cannibalization) 은 sample size 한계로
+    PSE N=10 도 노이즈 dominant (CI ±90%). 본 함수는 동 단위 합산으로
+    variance 흡수.
+
+    Δ visits (동 카페 합계, vacancy 제외) = with - baseline
+    카니발 % = -Δ / vacancy_visits × 100  (양수 = 잠식)
+
+    Returns:
+        {
+            "vacancy_id", "vacancy_visits", "vacancy_revenue", "dong",
+            "same_category": {  # 같은 카테고리 동 합계 (vacancy 제외)
+                "n_stores": int,
+                "baseline_visits": int, "with_visits": int, "delta_visits": int,
+                "baseline_revenue": float, "with_revenue": float, "delta_revenue": float,
+                "cannibalization_pct": float,  # -delta_visits / vacancy_visits × 100
+            },
+            "other_category": {  # 동 다른 카테고리 합계
+                "n_stores", "baseline_visits", "with_visits", "delta_visits",
+                "baseline_revenue", "with_revenue", "delta_revenue",
+                "synergy_pct",
+            },
+            "dong_total": {  # 동 전체 (vacancy 포함)
+                "baseline_visits", "with_visits", "delta_visits",
+                "baseline_revenue", "with_revenue", "delta_revenue",
+                "net_growth_pct",  # +값 = 동 전체 매출 증가, vacancy effect
+            },
+        }
+    """
+    if vacancy_id not in sim_with_vacancy_world.stores:
+        raise VacancyInjectionError(f"vacancy_id '{vacancy_id}' 가 with_vacancy_world 에 없음")
+    vac = sim_with_vacancy_world.stores[vacancy_id]
+    target_dong = vac.dong
+
+    same_b_v = same_b_r = 0
+    same_w_v = same_w_r = 0
+    same_n = 0
+    other_b_v = other_b_r = 0
+    other_w_v = other_w_r = 0
+    other_n = 0
+
+    for s_with in sim_with_vacancy_world.stores.values():
+        if s_with.dong != target_dong or s_with.store_id == vacancy_id:
+            continue
+        s_base = sim_baseline_world.stores.get(s_with.store_id)
+        if s_base is None:
+            continue
+        if s_with.category == vac.category:
+            same_b_v += s_base.visits_today
+            same_b_r += s_base.revenue_today
+            same_w_v += s_with.visits_today
+            same_w_r += s_with.revenue_today
+            same_n += 1
+        else:
+            other_b_v += s_base.visits_today
+            other_b_r += s_base.revenue_today
+            other_w_v += s_with.visits_today
+            other_w_r += s_with.revenue_today
+            other_n += 1
+
+    same_dv = same_w_v - same_b_v
+    same_dr = same_w_r - same_b_r
+    other_dv = other_w_v - other_b_v
+    other_dr = other_w_r - other_b_r
+
+    cann_pct = (-same_dv / max(vac.visits_today, 1)) * 100 if vac.visits_today > 0 else 0.0
+    syn_pct = (other_dv / max(vac.visits_today, 1)) * 100 if vac.visits_today > 0 else 0.0
+
+    dong_b_v = same_b_v + other_b_v
+    dong_b_r = same_b_r + other_b_r
+    dong_w_v = same_w_v + other_w_v + vac.visits_today
+    dong_w_r = same_w_r + other_w_r + vac.revenue_today
+    net_pct = ((dong_w_v - dong_b_v) / max(dong_b_v, 1)) * 100 if dong_b_v > 0 else 0.0
+
+    return {
+        "vacancy_id": vacancy_id,
+        "dong": target_dong,
+        "vacancy_visits": vac.visits_today,
+        "vacancy_revenue": vac.revenue_today,
+        "same_category": {
+            "n_stores": same_n,
+            "baseline_visits": same_b_v,
+            "with_visits": same_w_v,
+            "delta_visits": same_dv,
+            "baseline_revenue": same_b_r,
+            "with_revenue": same_w_r,
+            "delta_revenue": same_dr,
+            "cannibalization_pct": round(cann_pct, 1),
+        },
+        "other_category": {
+            "n_stores": other_n,
+            "baseline_visits": other_b_v,
+            "with_visits": other_w_v,
+            "delta_visits": other_dv,
+            "baseline_revenue": other_b_r,
+            "with_revenue": other_w_r,
+            "delta_revenue": other_dr,
+            "synergy_pct": round(syn_pct, 1),
+        },
+        "dong_total": {
+            "baseline_visits": dong_b_v,
+            "with_visits": dong_w_v,
+            "delta_visits": dong_w_v - dong_b_v,
+            "baseline_revenue": dong_b_r,
+            "with_revenue": dong_w_r,
+            "delta_revenue": dong_w_r - dong_b_r,
+            "net_growth_pct": round(net_pct, 1),
+        },
+    }
+
+
 def compare_to_dong_average(
     world: World,
     vacancy_id: str,

@@ -124,6 +124,11 @@ from src.api.simulation_history import router as _sim_history_router  # noqa: E4
 
 app.include_router(_sim_history_router)
 
+# --- vacancy_evaluation REST (ABM PSE 평가, 무인증) ---
+from src.api.vacancy_evaluation import router as _vacancy_eval_router  # noqa: E402
+
+app.include_router(_vacancy_eval_router)
+
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):

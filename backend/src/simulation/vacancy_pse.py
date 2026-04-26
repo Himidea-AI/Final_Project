@@ -33,6 +33,7 @@ from .vacancy_inject import (
     evaluate_vacancy_store,
     inject_vacancy_as_store,
     measure_cannibalization,
+    measure_dong_cannibalization,
 )
 from .world_loader import load_world_from_rds
 
@@ -165,11 +166,18 @@ def evaluate_vacancy_pse(
                 seed_memory=True,
                 memory_seed_days=14,
             )
+            # 반경 500m (개별 매장) — sample size noise 가능
             cann = measure_cannibalization(world_w, world_b, vid, radius_m=500)
             seed_result["cannibalization_pct"] = cann["same_category"]["cannibalization_pct"]
             seed_result["synergy_pct"] = cann["other_category"]["synergy_pct"]
             seed_result["same_cat_delta_visits"] = cann["same_category"]["delta_visits"]
             seed_result["same_cat_n_stores"] = cann["same_category"]["n_stores"]
+            # 동 단위 합산 (variance 흡수, 더 안정)
+            dong_cann = measure_dong_cannibalization(world_w, world_b, vid)
+            seed_result["dong_cannibalization_pct"] = dong_cann["same_category"]["cannibalization_pct"]
+            seed_result["dong_synergy_pct"] = dong_cann["other_category"]["synergy_pct"]
+            seed_result["dong_net_growth_pct"] = dong_cann["dong_total"]["net_growth_pct"]
+            seed_result["dong_same_cat_delta_visits"] = dong_cann["same_category"]["delta_visits"]
 
         per_seed.append(seed_result)
 
@@ -182,7 +190,16 @@ def evaluate_vacancy_pse(
         "vacancy_vs_avg_revenue_ratio",
     ]
     if with_cannibalization:
-        metric_keys += ["cannibalization_pct", "synergy_pct", "same_cat_delta_visits"]
+        metric_keys += [
+            "cannibalization_pct",
+            "synergy_pct",
+            "same_cat_delta_visits",
+            # 동 단위 (더 안정)
+            "dong_cannibalization_pct",
+            "dong_synergy_pct",
+            "dong_net_growth_pct",
+            "dong_same_cat_delta_visits",
+        ]
 
     pse_summary = {k: _summarize([r[k] for r in per_seed if k in r]) for k in metric_keys}
 
