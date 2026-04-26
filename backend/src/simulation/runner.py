@@ -390,6 +390,16 @@ def run_simulation(
     except Exception as e:
         print(f"  [warn] time_age_boost 로드 실패: {e}")
 
+    # 2.5+ seoul_adstrd_flpop 분기 안정 평균 boost (16동 전체 커버, time_age_boost 보완)
+    try:
+        if "_pb" not in dir() or _pb is None:
+            from .profile_builder import ProfileBuilder
+
+            _pb = ProfileBuilder(seed=seed)
+        world.adstrd_flpop_boost = _pb.load_adstrd_flpop_boost()
+    except Exception as e:
+        print(f"  [warn] adstrd_flpop_boost 로드 실패: {e}")
+
     # 2.6 [v12] Memory Seeding — 격자 데이터 기반 가상 visit_history 주입 (Cold Start 완화)
     if seed_memory:
         try:
