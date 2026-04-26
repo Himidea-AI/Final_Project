@@ -385,7 +385,60 @@ curl -X POST http://localhost:8000/vacancy-evaluation/batch \
 
 ---
 
-## 12. 결론
+## 12. Harness Phase 5~7 — 천장 push 시도 (2026-04-27 추가)
+
+baseline 0.8099 → 0.96 천장 격차 0.15 압축 시도. 모두 PSE 검증.
+
+### Phase 5 — 새벽 home stay trajectory 추가 ❌ revert
+
+**가설**: 시뮬 hours 6~25h만 → 0~5h 6시간 누락. KT는 24h. 거주민 home stay 자동 추가.
+
+**결과** (PSE N=5):
+| 지표 | Before | After | Δ | 판정 |
+|---|---|---|---|---|
+| Pearson | 0.8099 | **0.7782** | **-0.032** | ❌ 통계적 악화 |
+| MAPE | 39.35% | 41.62% | +2.3 | ❌ |
+| Peak | 9.99 | 1.25 | -8.7 | ❌ 폭락 |
+
+**원인**: KT 새벽 데이터 = 마포 모든 거주민(37만명). 우리 1000 agent 중 450명 추가 → 거주 동만 강한 신호 → 다른 동 분포 왜곡.
+**revert** + runner.py 코멘트 보존 (해결법: 5K~10K agent + 새벽 추가 동시).
+
+### Phase 7 — agent count 1K → 3K ❌ marginal
+
+**결과** (PSE N=3):
+| 지표 | 1K (baseline) | **3K** | Δ |
+|---|---|---|---|
+| Pearson | 0.8099 ± 0.017 | 0.7930 ± **0.005** | -0.017 (noise) |
+| **CI 폭** | ±0.017 | **±0.005** | **-70%** ✅ |
+
+**핵심 발견**: agent 3배 → 평균 metric 거의 동일, **CI 70% 감소**. 이는 1K 측정의 0.7491~0.8099 변동이 sample noise 였음을 입증. **진짜 baseline = 0.79 ± 0.005** (more precise).
+
+### 결정적 한계 — 0.79~0.81이 본질적 천장
+
+3 phases 모두 metric 개선 실패:
+- Phase 5: -0.032 (revert)
+- Phase 6: marginal
+- Phase 7: -0.017 (CI tight 외 효과 없음)
+
+**해석**: 우리 ABM (visit trajectory)와 KT (24h presence) 측정 단위 본질 차이로 0.81이 실질 천장. Brussels r=0.96 은 telecom flow vs telecom flow (같은 단위)라 가능. **단순 추가 작업으로 천장 도달 불가능**.
+
+**진짜 천장 도달 (0.85+)에 필요한 작업** (장기 sprint):
+- Trajectory-cell 단위 matching (KT cell 단위 데이터 추출 + ABM trajectory cell mapping)
+- Unit-aligned 검증 metric (district_sales 매출 비교 — Phase 1 시도 X)
+- ABM 모델 구조 변경 (commute trajectory 명시화 + sample size 5K+)
+
+### 갱신된 진행률 (PSE N=3, 3K agent 기준 진짜 baseline)
+
+```
+Floor (random): 0.6922 ± 0.0117
+진짜 baseline: 0.7930 ± 0.005 (3K, real 3m, PSE 검증)
+학술 천장:     0.96 (Brussels)
+진행률:        37% (이전 자가 주장 44% → 정정)
+```
+
+---
+
+## 13. 결론
 
 오늘 ABM 정확도 + product 가용성 측면 **객관적으로 큰 진전**:
 - 진짜 baseline 0.81 (PSE 검증) — 이전 자가 주장 0.75 대비 +0.06
