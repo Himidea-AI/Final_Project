@@ -73,15 +73,27 @@ da622d4  feat(A1): seoul_realtime_hotspots 실시간 적재 인프라 (cron)
 
 → Default `popularity_boost = 5.0` 으로 변경 (마케팅 가정 명시).
 
-### 2.5 카니발리제이션은 PSE N=3 으로 부족
+### 2.5 카니발리제이션은 PSE N=10 으로도 노이즈 dominant (확정)
 
-| 지표 | mean ± CI95 |
-|---|---|
-| vacancy visits/day | 9.67 ± **1.31** ✅ tight |
-| 카니발리제이션 % | -4.07 ± **70.11%** ❌ noise |
-| synergy % | +47 ± **411%** ❌ 완전 noise |
+| 지표 | N=3 | **N=10** |
+|---|---|---|
+| visits/day | 9.67 ± 1.31 | **10.00 ± 1.43** ✅ tight |
+| revenue/day | 9 ± 1 만 | 11 ± 1 만 ✅ tight |
+| 동 평균 대비 | 42.8 ± 7.5 배 | 48.1 ± 6.6 배 ✅ |
+| **카니발 %** | -4.1 ± 70.1% | **+34.4 ± 90.2%** ❌ |
+| **synergy %** | +47 ± 411% | -3.1 ± 118.8% ❌ |
 
-→ 카니발 측정은 N=20+ 필요 (with - without 두 noisy 차이 → variance 합산).
+→ N=3 → N=10 으로 **카니발 CI 거의 안 줄어듦** (70 → 90, 오히려 ↑).
+→ **PSE 만으로는 카니발 측정 불가**. 단순 N 증가 X.
+
+**원인**: 카니발 = (with_visits - baseline_visits) of 147개 인근 매장.
+각 매장 visits 0~6 (작은 정수) → 차이 ±1~5 → vacancy 매출 8만원 대비 비율 폭주.
+
+**해결 방안**:
+- 동 단위 합산 (개별 매장 X) — variance 흡수
+- agent count ↑ (1K → 5~10K) — 매장당 visits ↑
+- multi-day 누적 (1d → 30d) — 시간 평균
+- 또는 baseline 평균 (5 baseline seeds → 1 with_vacancy seed 비교)
 
 ---
 
@@ -185,15 +197,28 @@ print(result['narrative'])
 
 ## 7. 남은 과제 (다음 sprint TODO)
 
-| 우선 | 항목 | 시간 | 가치 |
-|---|---|---|---|
-| 🔴 high | 카니발 PSE N=20 측정 | ~30min | 카니발 신뢰성 |
-| 🔴 high | LangGraph district_ranking → vacancy_pse 자동 흐름 | 1h | B1 → ABM 통합 |
-| 🟡 mid | 여러 vacancy 동시 평가 + 순위 (Test 4) | 2h | Ranking accuracy |
-| 🟡 mid | OpenAI PSE N=5 측정 ($1.25) | ~10min | LLM 진짜 효과 검증 |
-| 🟢 low | 24조합 매트릭스 PSE | ~4h | 요일/계절 효과 |
-| 🟢 low | Phase 5 hyperparameter sweep | ~30min | 클램프 최적화 |
-| 🟢 low | API 엔드포인트 `POST /api/simulate-vacancy-pse` | 2h | 프론트 연동 |
+### 7.1 완료된 항목 ✅
+
+- ~~LangGraph district_ranking → vacancy_pse 자동 흐름~~ → `vacancy_evaluation_service.py` (commit ee054b1)
+- ~~카니발 PSE N=10 측정~~ → 결과: N 증가로는 해결 불가능 입증
+
+### 7.2 카니발 측정 — 단순 PSE 한계 발견 후 다음 단계
+
+| 우선 | 항목 | 예상 효과 |
+|---|---|---|
+| 🔴 high | **동 단위 합산 카니발** — 개별 매장 X, 동 카페 합계 변화 | variance 흡수 |
+| 🔴 high | **5K agent + 7d 시뮬** — 매장당 visits ↑, baseline noise ↓ | CI 절반 가능 |
+| 🟡 mid | **Multi-baseline PSE** — N=5 baseline 평균 → 1 with_vacancy 비교 | variance 50% 감소 |
+
+### 7.3 다른 product 작업
+
+| 우선 | 항목 | 시간 |
+|---|---|---|
+| 🔴 high | API 엔드포인트 `POST /api/simulate-vacancy-pse` | 2h |
+| 🟡 mid | 여러 vacancy 동시 평가 + 순위 (Test 4) | 2h |
+| 🟡 mid | OpenAI PSE N=5 측정 ($1.25) | ~10min |
+| 🟢 low | 24조합 매트릭스 PSE | ~4h |
+| 🟢 low | Phase 5 hyperparameter sweep | ~30min |
 
 ---
 
