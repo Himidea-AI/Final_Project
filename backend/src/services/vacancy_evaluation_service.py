@@ -105,6 +105,13 @@ def evaluate_top_vacancies(
 
     pb = popularity_boost if popularity_boost is not None else DEFAULT_POPULARITY_BOOST
 
+    # API/배치 호출은 mock LLM 강제 (비용 안정 + 키 의존성 제거)
+    from src.simulation.config import ModelConfig
+
+    mock_cfg = ModelConfig()
+    mock_cfg.tier_s_provider = "mock"
+    mock_cfg.tier_a_provider = "mock"
+
     rankings: list[dict[str, Any]] = []
     for i, spot in enumerate(valid):
         if verbose:
@@ -117,6 +124,7 @@ def evaluate_top_vacancies(
                 "days": days,
                 "with_cannibalization": with_cannibalization,
                 "popularity_boost": pb,
+                "cfg": mock_cfg,
                 "verbose": False,
             }
             result = evaluate_vacancy_pse(**pse_kwargs)

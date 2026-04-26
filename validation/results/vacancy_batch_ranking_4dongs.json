@@ -1,0 +1,15 @@
+{
+  "test": "Test 4 — vacancy 순위 검증 (4동, PSE N=3)",
+  "date": "2026-04-26",
+  "category": "카페",
+  "rankings": [
+    {"rank": 1, "dong": "상암동", "visits_per_day": 12.3, "ci95": 2.6, "ratio_to_avg": null},
+    {"rank": 2, "dong": "합정동", "visits_per_day": 8.3, "ci95": 1.3, "ratio_to_avg": 57.4},
+    {"rank": 3, "dong": "서교동", "visits_per_day": 7.7, "ci95": 1.7, "ratio_to_avg": 36.5},
+    {"rank": 4, "dong": "망원1동", "visits_per_day": 5.0, "ci95": 0.0, "ratio_to_avg": 82.9}
+  ],
+  "hypothesis_kendall_tau_approx": 0.33,
+  "hypothesis": "서교 > 합정 ≈ 상암 > 망원1",
+  "interpretation": "상암동 1위는 오피스 카페 적음에 의한 시장 점유율 효과. 서교동 3위는 카페 335개 포화로 신규 매장 묻힘. 절대 visits vs ratio 가 다른 신호 — 서교동은 visits 약하지만 포화시장.",
+  "actual_ranking": ["상암동", "합정동", "서교동", "망원1동"]
+}

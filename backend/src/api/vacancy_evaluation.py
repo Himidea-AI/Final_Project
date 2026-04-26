@@ -87,6 +87,16 @@ def health() -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
+def _mock_cfg():
+    """API 호출 시 mock LLM 강제 — 비용 안정 + LLM 키 의존성 제거."""
+    from src.simulation.config import ModelConfig
+
+    cfg = ModelConfig()
+    cfg.tier_s_provider = "mock"
+    cfg.tier_a_provider = "mock"
+    return cfg
+
+
 @router.post("/single")
 def evaluate_single(body: VacancyEvaluateRequest) -> dict[str, Any]:
     """단일 vacancy PSE 평가.
@@ -95,8 +105,13 @@ def evaluate_single(body: VacancyEvaluateRequest) -> dict[str, Any]:
     - n_seeds=5, with_cannibalization=False: 약 5분
     - n_seeds=5, with_cannibalization=True:  약 10분
     - 클라이언트 timeout >= 600s 권장.
+
+    LLM provider 는 mock 강제 (비용 0, 안정적). 진짜 LLM 평가는 별도 엔드포인트 권장.
     """
+    from src.simulation.vacancy_inject import DEFAULT_POPULARITY_BOOST
     from src.simulation.vacancy_pse import evaluate_vacancy_pse
+
+    pb = body.popularity_boost if body.popularity_boost is not None else DEFAULT_POPULARITY_BOOST
 
     try:
         result = evaluate_vacancy_pse(
@@ -105,7 +120,8 @@ def evaluate_single(body: VacancyEvaluateRequest) -> dict[str, Any]:
             n_seeds=body.n_seeds,
             days=body.days,
             with_cannibalization=body.with_cannibalization,
-            popularity_boost=body.popularity_boost,
+            popularity_boost=pb,
+            cfg=_mock_cfg(),
             verbose=False,
         )
     except Exception as e:
