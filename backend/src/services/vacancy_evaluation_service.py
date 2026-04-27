@@ -26,6 +26,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.services import brand_menu_loader
+from src.services.brand_menu_loader import BrandMenuEmptyError, BrandNotFoundError
+from src.simulation.vacancy_inject import DEFAULT_POPULARITY_BOOST
+from src.simulation.vacancy_pse import evaluate_vacancy_pse
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +61,7 @@ def evaluate_top_vacancies(
     popularity_boost: float | None = None,
     pre_filter_score: list[float] | None = None,
     verbose: bool = False,
+    brand_name: str | None = None,
 ) -> list[dict[str, Any]]:
     """여러 공실 PSE 평가 + 일평균 방문 내림차순 순위.
 
@@ -70,6 +76,10 @@ def evaluate_top_vacancies(
         pre_filter_score: vacancy_spots 와 같은 길이 score 리스트 (district_ranking score)
                           제공 시 score 내림차순 top_n 만 평가
         verbose: 진행 로그
+        brand_name: 프랜차이즈 브랜드명 (예: "이디야"). 제공 시 모든 vacancy_spots 에
+            공통 적용 — services/brand_menu_loader.load_brand_menu_items() 호출
+            → 시뮬에 menu_items 패스. 마포 매장 0개 brand 이면 BrandNotFoundError
+            → 빈 list 반환 + log.warning. 메뉴 데이터 부재면 추상 fallback.
 
     Returns:
         [
@@ -83,11 +93,22 @@ def evaluate_top_vacancies(
             ...
         ]
     """
-    from src.simulation.vacancy_inject import DEFAULT_POPULARITY_BOOST
-    from src.simulation.vacancy_pse import evaluate_vacancy_pse
-
     if not vacancy_spots:
         return []
+
+    # brand_name 처리 — 모든 vacancy 에 공통 적용
+    menu_items: list[dict[str, Any]] | None = None
+    if brand_name:
+        try:
+            menu_items = brand_menu_loader.load_brand_menu_items(brand_name)
+            if verbose:
+                logger.info(f"[vacancy_evaluation] brand='{brand_name}' 메뉴 {len(menu_items)}개 로드")
+        except BrandNotFoundError as e:
+            logger.warning(f"[vacancy_evaluation] {e} — 평가 중단")
+            return []
+        except BrandMenuEmptyError as e:
+            logger.warning(f"[vacancy_evaluation] {e} — 추상 매출 fallback")
+            menu_items = None
 
     # 정규화
     normalized = [_normalize_vacancy_spot(s) for s in vacancy_spots]
@@ -126,6 +147,7 @@ def evaluate_top_vacancies(
                 "popularity_boost": pb,
                 "cfg": mock_cfg,
                 "verbose": False,
+                "menu_items": menu_items,
             }
             result = evaluate_vacancy_pse(**pse_kwargs)
             rankings.append(
