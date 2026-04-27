@@ -82,10 +82,10 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
 
     Returns:
         dict:
-            closure_rate:          최근 4분기 평균 폐업률 (0~1)
-            closure_risk_level:    위험도 ("safe" / "caution" / "danger")
-            monthly_closure_rates: 12개월 월별 누적 폐업률 리스트
-            quarterly_predictions: 최근 4분기 실측값 리스트 (추세 참고용)
+            closure_rate:          최근 4분기 평균 폐업률 (0~1). 계산 실패 시 None.
+            closure_risk_level:    위험도 ("safe" / "caution" / "danger" / "unknown")
+            monthly_closure_rates: 12개월 월별 누적 폐업률 리스트. 실패 시 빈 리스트.
+            quarterly_predictions: 최근 4분기 실측값 리스트 (추세 참고용). 실패 시 빈 리스트.
     """
     dong_code = str(dong_code)
 
@@ -93,9 +93,7 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
         df = load_store_data(seoul=False)
         df = engineer_features(df)
 
-        mask = (df["dong_code"].astype(str) == dong_code) & (
-            df["industry_code"].astype(str) == industry_code
-        )
+        mask = (df["dong_code"].astype(str) == dong_code) & (df["industry_code"].astype(str) == industry_code)
         subset = df.loc[mask].sort_values("quarter")
 
         if subset.empty:
@@ -110,7 +108,7 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
         closure_rate = round(float(np.mean(recent)), 4)
 
     except Exception as exc:
-        logger.warning("폐업률 계산 실패 — mock 반환: %s", exc)
+        logger.warning("폐업률 계산 실패 — None 반환: %s", exc)
         return _mock_result()
 
     risk_level = _classify_risk(closure_rate)
@@ -146,11 +144,10 @@ def _fallback_by_industry(df, industry_code: str) -> dict:
 
 
 def _mock_result() -> dict:
-    """최종 fallback — 하드코딩 기본값."""
-    closure_rate = 0.28
+    """최종 fallback — 계산 실패 신호 반환 (임의값 노출 방지)."""
     return {
-        "closure_rate": closure_rate,
-        "closure_risk_level": _classify_risk(closure_rate),
-        "monthly_closure_rates": _interpolate_monthly(closure_rate),
-        "quarterly_predictions": [closure_rate] * 4,
+        "closure_rate": None,
+        "closure_risk_level": "unknown",
+        "monthly_closure_rates": [],
+        "quarterly_predictions": [],
     }

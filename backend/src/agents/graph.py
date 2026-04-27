@@ -1,17 +1,17 @@
 import asyncio
 import time
-from langgraph.graph import StateGraph, END
 
-from src.schemas.state import AgentState
+from langgraph.graph import END, StateGraph
+from src.agents.nodes.competitor_intel import competitor_intel_node
+from src.agents.nodes.demographic_depth import demographic_depth_node
+from src.agents.nodes.district_ranking import _clear_shared_population_cache, district_ranking_node
+from src.agents.nodes.legal import legal_node
 from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
-from src.agents.nodes.legal import legal_node
 from src.agents.nodes.synthesis import synthesis_node
-from src.agents.nodes.district_ranking import district_ranking_node, _clear_shared_population_cache
-from src.agents.nodes.demographic_depth import demographic_depth_node
 from src.agents.nodes.trend_forecaster import trend_forecaster_node
-from src.agents.nodes.competitor_intel import competitor_intel_node
 from src.agents.tools import MarketDataTool as _MarketDataTool
+from src.schemas.state import AgentState
 
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
@@ -81,9 +81,7 @@ async def llm_analysis_phase_node(state: AgentState) -> dict:
     winner = state.get("winner_district") or state.get("target_district", "")
     original_target = state.get("target_district", "")
     if winner and winner != original_target:
-        print(
-            f"--- [PHASE 2] target_district 교체: {original_target} → {winner} (winner 기준 분석) ---"
-        )
+        print(f"--- [PHASE 2] target_district 교체: {original_target} → {winner} (winner 기준 분석) ---")
     else:
         print(f"--- [PHASE 2] target_district={winner} (변경 없음) ---")
 
@@ -177,6 +175,7 @@ async def ml_prediction_phase_node(state: AgentState) -> dict:
 
     try:
         from src.services.dong_resolver import resolve_dong_code
+
         from models.interface import ModelOutput
 
         dong_code = resolve_dong_code(winner)
@@ -186,14 +185,22 @@ async def ml_prediction_phase_node(state: AgentState) -> dict:
         biz = state.get("business_type", "카페")
         industry_code = _BIZ_TO_INDUSTRY_CODE.get(biz, "CS100010")
 
-        sim_result = ModelOutput.generate(dong_code, industry_code, biz, model="tcn")
+        from models.revenue_predictor.bep import BEPCalculator
+
+        cost_config = BEPCalculator.get_default_costs(
+            biz,
+            initial_capital=state.get("initial_capital", 130_000_000),
+            monthly_rent=state.get("monthly_rent_budget", 2_000_000),
+        )
+
+        sim_result = ModelOutput.generate(dong_code, industry_code, biz, model="tcn", cost_config=cost_config)
         elapsed = time.perf_counter() - t_start
         monthly_rev = sim_result.get("revenue_forecast", {}).get("quarterly_avg", 0)
-        bep = sim_result.get("bep", {}).get("bep_months", "?")
+        bep = sim_result.get("bep", {}).get("bep_quarters", "?")
         closure = sim_result.get("closure_rate", {}).get("closure_rate", "?")
         print(
             f"--- [PHASE 2.5] TCN 완료 ({elapsed:.1f}s) | "
-            f"월매출={monthly_rev:,.0f}원 BEP={bep}개월 폐업률={closure} ---"
+            f"월매출={monthly_rev:,.0f}원 BEP={bep}분기 폐업률={closure} ---"
         )
 
         # SHAP 분석 — synthesis 프롬프트 주입용 (main.py 중복 실행 대체)
