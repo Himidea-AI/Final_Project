@@ -76,7 +76,7 @@ function buildNeighborhoodRows(r: any): NeighborhoodRow[] {
     score: typeof row?.score === 'number' ? String(Math.round(row.score)) : '—',
     closureRate:
       typeof row?.closure_rate === 'number' ? `${Math.round(row.closure_rate * 100)}%` : '—',
-    bep: typeof row?.bep_months === 'number' ? `${row.bep_months}개월` : '—',
+    bep: typeof row?.bep_quarters === 'number' ? `${row.bep_quarters}분기` : '—',
   }));
 }
 

@@ -90,6 +90,13 @@ function ProfitSimulationPanelFull({
         </div>
       </div>
 
+      {/* 2026-04-27 BEP 면책 — 백엔드 계산식이 인건비 제외라 명시 필요 */}
+      {bepMonths != null && (
+        <p className="mb-4 text-[10px] text-stone-500 leading-relaxed">
+          ※ 인건비 미포함 기준입니다. 실제 BEP는 운영 인원에 따라 길어질 수 있습니다.
+        </p>
+      )}
+
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-3">
           {rows.map((item) => (
@@ -182,9 +189,32 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
         label="위험 점수"
         thresholds={[30, 60]}
       />
-      {closure.summary && closure.summary.length > 0 && (
-        <p className="mt-3 text-[11px] text-stone-400 leading-relaxed">{closure.summary[0]}</p>
+
+      {/* 2026-04-27: closure_risk가 LightGBM(과거 패턴) + TCN(시계열) 두 모델 결과를 별도 노출 */}
+      {closure.summary_lgbm && closure.summary_lgbm.length > 0 && (
+        <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3 py-2">
+          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-indigo-400 mb-1">
+            <span className="w-1 h-1 rounded-full bg-indigo-400" />
+            LightGBM · 과거 패턴
+          </div>
+          <p className="text-[11px] text-stone-300 leading-relaxed">{closure.summary_lgbm[0]}</p>
+        </div>
       )}
+      {closure.summary_tcn && closure.summary_tcn.length > 0 && (
+        <div className="mt-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
+          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-cyan-400 mb-1">
+            <span className="w-1 h-1 rounded-full bg-cyan-400" />
+            TCN · 시계열 흐름
+          </div>
+          <p className="text-[11px] text-stone-300 leading-relaxed">{closure.summary_tcn[0]}</p>
+        </div>
+      )}
+      {(!closure.summary_lgbm || closure.summary_lgbm.length === 0) &&
+        (!closure.summary_tcn || closure.summary_tcn.length === 0) && (
+          <p className="mt-3 text-[11px] text-stone-500 leading-relaxed">
+            폐업 위험도 모델 요약 미생성
+          </p>
+        )}
     </div>
   );
 }

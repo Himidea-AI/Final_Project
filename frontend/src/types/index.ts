@@ -110,18 +110,26 @@ export interface LegalRisk {
   is_fallback?: boolean;
 }
 
-/** 폐업 위험도 기여 피처 */
+/** 폐업 위험도 기여 피처 (LightGBM·TCN 공통 구조) */
 export interface ClosureRiskSignal {
   feature: string;
+  feature_key?: string;
   contribution: number;
 }
 
-/** 폐업 위험도 결과 (B2 수지니) */
+/**
+ * 폐업 위험도 결과 (B2 수지니)
+ * 2026-04-27 변경: top_signals/summary → top_signals_lgbm/summary_lgbm 으로 분리되고
+ * top_signals_tcn/summary_tcn 신설. UI에서 LightGBM(과거 패턴)과 TCN(시계열 흐름)
+ * 두 관점을 별도 노출.
+ */
 export interface ClosureRisk {
   risk_score: number;
   risk_level: 'safe' | 'caution' | 'danger';
-  top_signals: ClosureRiskSignal[];
-  summary?: string[]; // 자연어 요약 문장 목록
+  top_signals_lgbm: ClosureRiskSignal[];
+  summary_lgbm?: string[];
+  top_signals_tcn: ClosureRiskSignal[]; // TCN SHAP 실패 시 빈 배열
+  summary_tcn?: string[];
   is_mock: boolean;
 }
 
@@ -253,7 +261,8 @@ export interface DistrictRanking {
   rent_score: number;
   vacancy_rate: number;
   zoning_risk: 'safe' | 'caution' | 'danger';
-  bep_months?: number | null;
+  /** 2026-04-27 변경: bep_months → bep_quarters (분기 단위) */
+  bep_quarters?: number | null;
   closure_rate?: number | null;
   [key: string]: unknown;
 }

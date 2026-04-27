@@ -2374,7 +2374,8 @@ function SimulatorDashboard({
         score: typeof r.score === 'number' ? String(Math.round(r.score)) : '—',
         closureRate:
           typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
-        bep: typeof r.bep_months === 'number' ? `${r.bep_months}개월` : '—',
+        // 2026-04-27: DistrictRanking은 bep_quarters(분기 단위)로 마이그레이션됨
+        bep: typeof r.bep_quarters === 'number' ? `${r.bep_quarters}분기` : '—',
       }))
     : [];
   const sortedNeighborhoodRows = sortRows(dynamicNeighborhoodRows, sortKey, sortDir);
@@ -4713,9 +4714,13 @@ function SimulatorDashboard({
                                   bar: 'bg-slate-500',
                                   label: '—',
                                 };
-                                const topSignals = (cr.top_signals ?? []).slice(0, 3);
+                                // 2026-04-27: closure_risk가 lgbm/tcn 두 모델 결과를 별도 노출
+                                // top_signals → top_signals_lgbm + top_signals_tcn (TCN 실패 시 빈 배열)
+                                const topLgbm = (cr.top_signals_lgbm ?? []).slice(0, 3);
+                                const topTcn = (cr.top_signals_tcn ?? []).slice(0, 3);
                                 const maxAbs = Math.max(
-                                  ...topSignals.map((s) => Math.abs(s.contribution)),
+                                  ...topLgbm.map((s) => Math.abs(s.contribution)),
+                                  ...topTcn.map((s) => Math.abs(s.contribution)),
                                   0.0001,
                                 );
                                 return (
@@ -4759,38 +4764,80 @@ function SimulatorDashboard({
                                         />
                                       </div>
                                     </div>
-                                    {topSignals.length > 0 && (
-                                      <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]">
-                                        <div className="text-[10px] text-[#9ca3af] mb-1">
-                                          주요 기여 피처 Top {topSignals.length}
-                                        </div>
-                                        {topSignals.map((s, i) => {
-                                          const abs = Math.abs(s.contribution);
-                                          const w = Math.round((abs / maxAbs) * 100);
-                                          const positive = s.contribution >= 0;
-                                          return (
-                                            <div
-                                              key={i}
-                                              className="flex items-center gap-2 text-[10px]"
-                                            >
-                                              <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
-                                                {s.feature}
-                                              </span>
-                                              <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
-                                                <div
-                                                  className={`h-full ${positive ? 'bg-rose-400' : 'bg-emerald-400'}`}
-                                                  style={{ width: `${w}%` }}
-                                                />
-                                              </div>
-                                              <span
-                                                className={`w-12 text-right font-mono ${positive ? 'text-rose-300' : 'text-emerald-300'}`}
-                                              >
-                                                {positive ? '+' : ''}
-                                                {s.contribution.toFixed(2)}
-                                              </span>
+                                    {(topLgbm.length > 0 || topTcn.length > 0) && (
+                                      <div className="flex flex-col gap-3 pt-2 border-t border-[#3a3633]">
+                                        {topLgbm.length > 0 && (
+                                          <div className="flex flex-col gap-1.5">
+                                            <div className="text-[10px] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                              <span className="w-1 h-1 rounded-full bg-indigo-400" />
+                                              LightGBM · 과거 패턴 기여 Top {topLgbm.length}
                                             </div>
-                                          );
-                                        })}
+                                            {topLgbm.map((s, i) => {
+                                              const w = Math.round(
+                                                (Math.abs(s.contribution) / maxAbs) * 100,
+                                              );
+                                              const positive = s.contribution >= 0;
+                                              return (
+                                                <div
+                                                  key={`lgbm-${i}`}
+                                                  className="flex items-center gap-2 text-[10px]"
+                                                >
+                                                  <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
+                                                    {s.feature}
+                                                  </span>
+                                                  <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                                    <div
+                                                      className={`h-full ${positive ? 'bg-rose-400' : 'bg-emerald-400'}`}
+                                                      style={{ width: `${w}%` }}
+                                                    />
+                                                  </div>
+                                                  <span
+                                                    className={`w-12 text-right font-mono ${positive ? 'text-rose-300' : 'text-emerald-300'}`}
+                                                  >
+                                                    {positive ? '+' : ''}
+                                                    {s.contribution.toFixed(2)}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                        {topTcn.length > 0 && (
+                                          <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]/50">
+                                            <div className="text-[10px] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                              <span className="w-1 h-1 rounded-full bg-cyan-400" />
+                                              TCN · 시계열 흐름 기여 Top {topTcn.length}
+                                            </div>
+                                            {topTcn.map((s, i) => {
+                                              const w = Math.round(
+                                                (Math.abs(s.contribution) / maxAbs) * 100,
+                                              );
+                                              const positive = s.contribution >= 0;
+                                              return (
+                                                <div
+                                                  key={`tcn-${i}`}
+                                                  className="flex items-center gap-2 text-[10px]"
+                                                >
+                                                  <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
+                                                    {s.feature}
+                                                  </span>
+                                                  <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                                    <div
+                                                      className={`h-full ${positive ? 'bg-cyan-400' : 'bg-emerald-400'}`}
+                                                      style={{ width: `${w}%` }}
+                                                    />
+                                                  </div>
+                                                  <span
+                                                    className={`w-12 text-right font-mono ${positive ? 'text-cyan-300' : 'text-emerald-300'}`}
+                                                  >
+                                                    {positive ? '+' : ''}
+                                                    {s.contribution.toFixed(2)}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -7228,8 +7275,9 @@ function DashboardPanelView({
     .join(' ');
 
   // AI 인사이트 — 실데이터 있으면 dongName + 실수치 기반 동적 문장, 없으면 empty state
-  const bepMonths =
-    typeof dongRanking?.bep_months === 'number' ? (dongRanking.bep_months as number) : null;
+  // 2026-04-27: DistrictRanking이 bep_quarters(분기)로 마이그레이션됨
+  const bepQuarters =
+    typeof dongRanking?.bep_quarters === 'number' ? (dongRanking.bep_quarters as number) : null;
   const insights: { icon: JSX.Element; text: string }[] =
     hasRealData && dongRanking
       ? [
@@ -7258,8 +7306,8 @@ function DashboardPanelView({
           {
             icon: <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />,
             text:
-              bepMonths != null
-                ? `손익분기까지 약 ${bepMonths}개월 소요 예상.`
+              bepQuarters != null
+                ? `손익분기까지 약 ${bepQuarters}분기 소요 예상.`
                 : `손익분기 예측 데이터가 부족합니다.`,
           },
         ]

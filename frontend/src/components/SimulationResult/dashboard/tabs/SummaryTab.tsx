@@ -287,6 +287,11 @@ export function SummaryTab({ simResult, openModal }: Props) {
               text: netProfit != null ? `월 영업이익 ₩${formatKrw(netProfit)}` : '월 영업이익 —',
               highlight: netProfit != null && netProfit > 0,
             },
+            // 2026-04-27 백엔드 BEP 계산식 변경 — 인건비 미포함, 면책 명시
+            {
+              text: '※ 인건비 미포함 · 운영 인원에 따라 길어질 수 있습니다',
+              highlight: false,
+            },
           ]}
           footer={{
             agents: [AGENT_ICON.synthesis, AGENT_ICON.legal].map((a, i) => ({
