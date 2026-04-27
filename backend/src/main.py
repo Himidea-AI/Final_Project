@@ -355,6 +355,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
             "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
+            "checklist": r.get("checklist", []),
             "is_fallback": r.get("is_fallback", False),
         }
         for r in legal_risks_raw
@@ -429,7 +430,10 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "estimated_revenue": _estimated_rev_r,
         "survival_rate": _survival_r,
         "growth_potential": _growth_r,
-        "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
+        # operational_fit_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백, 최종 기본값 75
+        "accessibility": min(
+            int(float(metrics.get("operational_fit_score") or metrics.get("accessibility_score") or 75)), 100
+        ),
     }
 
     # [Phase 2.5] graph.py ml_prediction_phase_node에서 실행된 TCN 결과를 state에서 읽음
@@ -902,6 +906,26 @@ async def reject_manager(manager_id: str, body: ManagerApprovalBody):
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await run_in_threadpool(auth.reject_manager, body.owner_id, manager_id)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# 회원 탈퇴 API
+# ---------------------------------------------------------------------------
+
+
+class DeactivateBody(BaseModel):
+    password: str
+
+
+@app.post("/auth/user/{user_id}/deactivate")
+async def deactivate_user(user_id: str, body: DeactivateBody):
+    """팀장 회원 탈퇴 (소프트 삭제 — is_active=false, 소속 매니저·초대코드 일괄 비활성화)"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.deactivate_user, user_id, body.password)
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}

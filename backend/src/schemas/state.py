@@ -65,3 +65,7 @@ class AgentState(TypedDict):
 
     # 8. SHAP 피처 기여도 분석 결과 (Phase 2.5 — TCN 직후 실행, synthesis 프롬프트 주입용)
     shap_result: dict[str, Any]  # explain_tcn_prediction() 전체 결과
+
+    # 9. operational_fit_scorer 결과 (Phase 1 district_ranking에서 계산, 16동 교통·집객 점수)
+    # Hansen(1959) + E2SFCA(2009) 기반. {dong_name: OperationalFitResult}
+    operational_fit_results: dict[str, Any]
