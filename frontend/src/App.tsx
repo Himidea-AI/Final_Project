@@ -1589,33 +1589,32 @@ function SimulatorDashboard({
                   infoText="월 임대료 예산. 마포구 평균 1층 기준 200~400만원"
                 />
 
-                {/* Toggle switch */}
-                <div className="mb-2">
-                  <div className="flex items-center justify-between">
-                    <label
-                      className={`text-xs font-medium ${textSecondary} flex items-center gap-1`}
+                {/* Toggle switch — 별도 박스로 분리하여 슬라이더 항목과 시각 구분 */}
+                <div className="mb-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/40">
+                  <label
+                    className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
+                  >
+                    유동인구 가중치
+                    <span
+                      className="text-[#818cf8] cursor-help shrink-0"
+                      title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
                     >
-                      유동인구 가중치
-                      <span
-                        className="text-[#818cf8] cursor-help"
-                        title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
-                      >
-                        &#9432;
-                      </span>
-                    </label>
-                    <button
-                      onClick={() => setWeighted(!weighted)}
-                      className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
-                        weighted ? accentBg : 'bg-[#3a3633]'
+                      &#9432;
+                    </span>
+                  </label>
+                  <button
+                    onClick={() => setWeighted(!weighted)}
+                    aria-label="유동인구 가중치 토글"
+                    className={`relative w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${
+                      weighted ? accentBg : 'bg-[#3a3633]'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
+                        weighted ? 'translate-x-[22px]' : 'translate-x-0.5'
                       }`}
-                    >
-                      <div
-                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
-                          weighted ? 'translate-x-[22px]' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
+                    />
+                  </button>
                 </div>
               </div>
             </div>
