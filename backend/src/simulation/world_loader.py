@@ -181,7 +181,8 @@ def _load_menu_map(engine) -> dict[str, list[dict]]:
 def _load_dong_industry_weight(engine) -> dict[tuple[str, str], float]:
     """(dong, category) → 매출 index 0.5~1.5 (최신 분기).
 
-    district_sales_seoul의 industry_name을 우리 카테고리(카페/음식점/주점/편의점)로 매핑.
+    v4: LEFT JOIN seoul_district_sales_imputed_v4 + COALESCE.
+    confidence 가중 평균: weighted_avg = Σ(sales × conf) / Σ(conf).
     """
     cat_map = {
         "커피-음료": "카페",
@@ -197,22 +198,34 @@ def _load_dong_industry_weight(engine) -> dict[tuple[str, str], float]:
         "편의점": "편의점",
     }
     sql = text("""
-        SELECT dong_name, industry_name, AVG(monthly_sales)::double precision avg_sales
-        FROM district_sales_seoul
-        WHERE quarter >= (SELECT MAX(quarter) - 1 FROM district_sales_seoul)
-        GROUP BY 1, 2
+        SELECT s.dong_name, s.industry_name,
+               COALESCE(v.monthly_sales, s.monthly_sales)::double precision AS avg_sales,
+               COALESCE(v.confidence, 1.0)::double precision AS avg_conf
+        FROM district_sales_seoul s
+        LEFT JOIN seoul_district_sales_imputed_v4 v
+          ON s.quarter = v.quarter
+         AND s.dong_code = v.dong_code
+         AND s.industry_code = v.industry_code
+        WHERE s.quarter >= (SELECT MAX(quarter) - 1 FROM district_sales_seoul)
     """)
-    raw: dict[tuple[str, str], float] = {}
+    raw: dict[tuple[str, str], dict] = {}
     with engine.connect() as conn:
         for row in conn.execute(sql):
-            d, i, v = row[0], row[1], row[2]
+            d, i, v_sales, v_conf = row[0], row[1], row[2], row[3]
             cat = cat_map.get(i)
-            if cat and v and v > 0:
-                raw[(d, cat)] = max(raw.get((d, cat), 0), float(v))
+            if cat and v_sales and v_sales > 0:
+                key = (d, cat)
+                if key not in raw:
+                    raw[key] = {"sum_wv": 0.0, "sum_w": 0.0}
+                raw[key]["sum_wv"] += v_sales * (v_conf or 0.0)
+                raw[key]["sum_w"] += v_conf or 0.0
     if not raw:
         return {}
-    mx = max(raw.values()) or 1.0
-    return {k: round(0.5 + (v / mx), 3) for k, v in raw.items()}
+    weighted = {k: r["sum_wv"] / r["sum_w"] for k, r in raw.items() if r["sum_w"] > 0}
+    if not weighted:
+        return {}
+    mx = max(weighted.values()) or 1.0
+    return {k: round(0.5 + (v / mx), 3) for k, v in weighted.items()}
 
 
 def _load_sentiment_map(engine) -> dict[str, float]:
