@@ -298,6 +298,7 @@ def _run_validation_simulations(
     n_seeds: int,
     start_date: _dt.date | None = None,
     sample_to_pop_factor: float = 380.0,
+    popularity_boost: float = 20.0,
 ) -> dict[str, Any]:
     """시뮬 데이터 수집 — 동×업종 매트릭스 + V2 단일 vacancy.
 
@@ -396,6 +397,7 @@ def _run_validation_simulations(
         with_cannibalization=False,
         cfg=cfg,
         menu_items=menu_items,
+        popularity_boost=popularity_boost,
     )
     # vacancy_pse 의 revenue_per_day 는 이미 일평균 (총매출 / days). days 분모 X.
     # → 연 환산 = rev_per_day * 365.
@@ -515,6 +517,7 @@ def run_5track_validation(
     verbose: bool = True,
     start_date: _dt.date | None = None,
     sample_to_pop_factor: float = 380.0,
+    popularity_boost: float = 20.0,
 ) -> dict[str, Any]:
     """5트랙 검증 protocol 1회 실행.
 
@@ -544,6 +547,7 @@ def run_5track_validation(
         n_seeds,
         start_date=start_date,
         sample_to_pop_factor=sample_to_pop_factor,
+        popularity_boost=popularity_boost,
     )
 
     tracks = {
@@ -566,6 +570,7 @@ def run_5track_validation(
             "multi_quarter_avg": multi_quarter_avg,
             "start_date": start_date.isoformat() if start_date is not None else "today",
             "sample_to_pop_factor": sample_to_pop_factor,
+            "popularity_boost": popularity_boost,
         },
         "tracks": tracks,
         "production_ready": production_ready,
@@ -632,6 +637,12 @@ def _main() -> None:
             "440 (registered + floating) vs 1.0 (sim native, no scaling)."
         ),
     )
+    parser.add_argument(
+        "--popularity-boost",
+        type=float,
+        default=20.0,
+        help="신규 매장 인지도 (default 20, 마케팅 강화 가정). vacancy_pse default 5.0 대비 4배.",
+    )
     args = parser.parse_args()
 
     if not args.brand and not args.brands:
@@ -656,6 +667,7 @@ def _main() -> None:
                 verbose=True,
                 start_date=start_date,
                 sample_to_pop_factor=args.sample_pop_factor,
+                popularity_boost=args.popularity_boost,
             )
             summary.append(
                 {
