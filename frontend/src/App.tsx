@@ -93,31 +93,31 @@ interface SimResult {
   netProfit?: number | null;
   riskLevel: string;
   recommendation: string;
-  chartData: { label: string; value: number }[];
+  chartData: { label: string; value: number | null }[];
   // 분기별 매출 예측 데이터 (TCN 모델 출력) — B2 수지니 연동
   quarterlyProjection: QuarterlyProjection[];
   // TCN SHAP 피처 기여도 분석 결과 (없으면 null) — B2 수지니 연동
   shapResult: ShapResult | null;
   // [C1 응답 필드 반영] v12.6 — 백엔드가 주는데 UI가 안 쓰던 5 영역
   marketReport?: {
-    floating_population: number;
-    rent_index: number;
-    competition_intensity: number;
-    estimated_revenue: number;
-    survival_rate: number;
+    floating_population: number | null;
+    rent_index: number | null;
+    competition_intensity: number | null;
+    estimated_revenue: number | null;
+    survival_rate: number | null;
     closure_rate: number | null;
-    growth_potential: number;
-    accessibility: number;
+    growth_potential: number | null;
+    accessibility: number | null;
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   districtRankings?: { district: string; score: number; [k: string]: any }[];
   // [C1] DistrictComparison — DashboardPanelView 실데이터 렌더용 (backend SimulationOutput.comparison)
   comparison?: {
     district: string;
-    score: number;
+    score: number | null;
     revenue: number;
-    bep: number;
-    survival: number;
+    bep: number | null;
+    survival: number | null;
     cannibalization: number;
   }[];
   winnerDistrict?: string;
@@ -226,8 +226,13 @@ function toSimResultViewModel(simRes: SimulationOutput): SimResult {
           { label: '매출추정', value: mr.estimated_revenue },
           {
             label: '폐업률',
+            // closure_rate 우선. 없으면 survival_rate에서 역산하되 둘 다 null이면 null (가짜 100/100 금지).
             value:
-              mr.closure_rate != null ? Math.round(mr.closure_rate * 100) : 100 - mr.survival_rate,
+              mr.closure_rate != null
+                ? Math.round(mr.closure_rate * 100)
+                : mr.survival_rate != null
+                  ? 100 - mr.survival_rate
+                  : null,
           },
           { label: '성장성', value: mr.growth_potential },
           { label: '접근성', value: mr.accessibility },
@@ -7237,21 +7242,24 @@ function DashboardPanelView({
   const revenueTrend = hasRealData ? '—' : isVariantB ? '+6.3%' : '+12.5%';
   const scoreTrend = hasRealData ? '—' : isVariantB ? '-2.1 Pts' : '+5.2 Pts';
 
-  // Radar — winner_district와 일치할 때만 marketReport 7지표 사용 (mock 제거).
+  // Radar — winner_district 일치 + market_report 7지표 모두 실값일 때만 그림.
+  // 하나라도 null이면 차트 자체 비활성(거짓 0 채움 금지). 백엔드가 scouting_results 미실행 시 null을 보냄.
   const isWinner = !!dongName && dongName === simResult?.winnerDistrict;
-  const realRadar =
-    isWinner && simResult?.marketReport
-      ? [
-          simResult.marketReport.floating_population,
-          simResult.marketReport.rent_index,
-          simResult.marketReport.competition_intensity,
-          simResult.marketReport.estimated_revenue,
-          // survival_rate → 폐업률(=100 - survival_rate)
-          100 - (simResult.marketReport.survival_rate ?? 0),
-          simResult.marketReport.growth_potential,
-          simResult.marketReport.accessibility,
-        ]
-      : null;
+  const realRadar = (() => {
+    const mr = simResult?.marketReport;
+    if (!isWinner || !mr) return null;
+    const survivalToClosure = mr.survival_rate != null ? 100 - mr.survival_rate : null;
+    const v = [
+      mr.floating_population,
+      mr.rent_index,
+      mr.competition_intensity,
+      mr.estimated_revenue,
+      survivalToClosure,
+      mr.growth_potential,
+      mr.accessibility,
+    ];
+    return v.every((x) => x != null) ? (v as number[]) : null;
+  })();
   const radarValues: number[] = realRadar ?? [];
   const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
   const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];

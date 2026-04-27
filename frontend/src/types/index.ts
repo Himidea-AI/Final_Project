@@ -86,10 +86,12 @@ export interface ShapResult {
 /** 동별 비교 결과 */
 export interface DistrictComparison {
   district: string;
-  score: number;
+  // 2026-04-27: scouting_results 미실행 시 backend가 score/survival를 null로 보냄 (거짓 양성 회피).
+  // bep/cannibalization도 동일 정신으로 nullable 유지.
+  score: number | null;
   revenue: number;
-  bep: number;
-  survival: number;
+  bep: number | null;
+  survival: number | null;
   cannibalization: number;
 }
 
@@ -177,15 +179,18 @@ export interface SimulationOutput {
   ai_recommendation?: string; // 기존 호환성 유지
   map_data?: any;
   // /simulate 응답에 포함되는 chartData용 7개 정규화 지표 (0~100)
+  // 2026-04-27: scouting_results 미실행 시 LLM 등급 임의 매핑(SAFE:80, GOOD:75 등)으로
+  //   거짓 양성을 만들던 backend fallback을 제거 — null 또는 필드 omit으로 합의 (api-contract-frontend-input.md §3.7).
+  //   프론트는 이미 null → '—' 표시 처리되어 있어 그대로 안전.
   market_report?: {
-    floating_population: number;
-    rent_index: number;
-    competition_intensity: number;
-    estimated_revenue: number;
-    survival_rate: number;
+    floating_population: number | null;
+    rent_index: number | null;
+    competition_intensity: number | null;
+    estimated_revenue: number | null;
+    survival_rate: number | null;
     closure_rate: number | null;
-    growth_potential: number;
-    accessibility: number;
+    growth_potential: number | null;
+    accessibility: number | null;
   };
   // [B1 입지 랭킹] backend main.py:301 response_data 4필드 반영
   winner_district?: string;
