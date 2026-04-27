@@ -15,7 +15,6 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   CartesianGrid,
   ResponsiveContainer,
 } from 'recharts';
@@ -51,8 +50,8 @@ export function QuarterlyProjectionChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height={280}>
       <ComposedChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-        {/* 격자선 */}
-        <CartesianGrid strokeDasharray="3 3" stroke="#3a3633" />
+        {/* 격자선 — 수평만 (세로 노이즈 제거로 선 그래프 가독성↑) */}
+        <CartesianGrid strokeDasharray="3 3" stroke="#3a3633" vertical={false} />
 
         {/* X축 — 분기 번호를 Q1, Q2 형식으로 표시 */}
         <XAxis
@@ -84,52 +83,115 @@ export function QuarterlyProjectionChart({ data }: Props) {
           itemStyle={{ color: '#9ca3af' }}
         />
 
-        {/* 범례 */}
-        <Legend
-          formatter={(value: string) => {
-            const labels: Record<string, string> = {
-              revenue: '분기 매출',
-              confidence_lower: '신뢰구간',
-            };
-            return <span style={{ color: '#9ca3af', fontSize: 12 }}>{labels[value] ?? value}</span>;
-          }}
-        />
+        {/* 범례는 차트 외부 미니 카드로 분리 (ForecastTab에서 렌더) */}
 
-        {/* 신뢰구간 — confidence_lower를 기준으로 상한 폭을 Area로 표현 */}
-        <Area
-          type="monotone"
-          dataKey="confidence_lower"
-          stroke="none"
-          fill="#3B82F6"
-          fillOpacity={0}
-          legendType="none"
-          isAnimationActive={false}
-          dot={false}
-          activeDot={false}
-          name="신뢰구간 하한"
-        />
-        <Area
-          type="monotone"
-          dataKey="confidence_upper"
-          stroke="none"
-          fill="#3B82F6"
-          fillOpacity={0.1}
-          name="신뢰구간 상한"
-          legendType="square"
-          isAnimationActive={false}
-          dot={false}
-          activeDot={false}
-        />
+        {/* 신뢰구간 — Track B #107 2단계 CI 있으면 95/80 이중 밴드, 없으면 기존 단일 */}
+        {data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null) ? (
+          <>
+            <Area
+              type="monotone"
+              dataKey="ci_95_lower"
+              stroke="none"
+              fill="#818cf8"
+              fillOpacity={0}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="95% 하한"
+            />
+            <Area
+              type="monotone"
+              dataKey="ci_95_upper"
+              stroke="none"
+              fill="#818cf8"
+              fillOpacity={0.08}
+              legendType="square"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="95% 상한"
+            />
+            <Area
+              type="monotone"
+              dataKey="ci_80_lower"
+              stroke="none"
+              fill="#818cf8"
+              fillOpacity={0}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="80% 하한"
+            />
+            <Area
+              type="monotone"
+              dataKey="ci_80_upper"
+              stroke="none"
+              fill="#818cf8"
+              fillOpacity={0.22}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="80% 상한"
+            />
+          </>
+        ) : (
+          <>
+            <Area
+              type="monotone"
+              dataKey="confidence_lower"
+              stroke="none"
+              fill="#818cf8"
+              fillOpacity={0}
+              legendType="none"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+              name="신뢰구간 하한"
+            />
+            <Area
+              type="monotone"
+              dataKey="confidence_upper"
+              stroke="none"
+              fill="#818cf8"
+              fillOpacity={0.1}
+              name="신뢰구간 상한"
+              legendType="square"
+              isAnimationActive={false}
+              dot={false}
+              activeDot={false}
+            />
+          </>
+        )}
 
-        {/* 분기 매출 라인 */}
+        {/* 분기 매출 라인 — 은은한 drop-shadow glow + 강조 activeDot */}
+        <defs>
+          <filter id="qp-line-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
         <Line
           type="monotone"
           dataKey="revenue"
-          stroke="#3B82F6"
+          stroke="#818cf8"
           strokeWidth={2}
-          dot={{ r: 4, fill: '#3B82F6' }}
-          activeDot={{ r: 6 }}
+          dot={{ r: 3.5, fill: '#818cf8', strokeWidth: 0 }}
+          activeDot={{
+            r: 5,
+            fill: '#818cf8',
+            stroke: '#fff',
+            strokeWidth: 2,
+            filter: 'drop-shadow(0 0 6px rgba(129,140,248,0.9))',
+          }}
           name="revenue"
+          filter="url(#qp-line-glow)"
+          isAnimationActive={false}
         />
 
         {/* BEP 도달 시점 — null이면 미렌더링 */}

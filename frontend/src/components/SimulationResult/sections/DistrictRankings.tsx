@@ -86,7 +86,7 @@ export function DistrictRankings({ simResult }: Props) {
                     {r.closure_rate != null ? `${(r.closure_rate * 100).toFixed(1)}%` : '—'}
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-stone-300">
-                    {r.bep_months != null ? `${r.bep_months}개월` : '—'}
+                    {r.bep_quarters != null ? `${r.bep_quarters}분기` : '—'}
                   </td>
                   <td
                     className={`p-3 text-center text-xs font-semibold ${

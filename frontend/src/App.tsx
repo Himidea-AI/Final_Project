@@ -57,6 +57,7 @@ import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
 import ManagerDetail from './pages/ManagerDetail';
 import SimulationHistoryDetail from './pages/SimulationHistoryDetail';
+import SimulationCompare from './pages/SimulationCompare';
 import LoginPage from './pages/LoginPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -73,7 +74,7 @@ import type {
 } from './types';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
-import { IntegratedReport } from './components/SimulationResult/IntegratedReport';
+import { TabbedDashboard } from './components/SimulationResult/dashboard/TabbedDashboard';
 import { SaveButton } from './components/SimulationHistory/SaveButton';
 import { SaveDialog } from './components/SimulationHistory/SaveDialog';
 import { useSaveSimulation } from './hooks/useSaveSimulation';
@@ -92,31 +93,31 @@ interface SimResult {
   netProfit?: number | null;
   riskLevel: string;
   recommendation: string;
-  chartData: { label: string; value: number }[];
+  chartData: { label: string; value: number | null }[];
   // 분기별 매출 예측 데이터 (TCN 모델 출력) — B2 수지니 연동
   quarterlyProjection: QuarterlyProjection[];
   // TCN SHAP 피처 기여도 분석 결과 (없으면 null) — B2 수지니 연동
   shapResult: ShapResult | null;
   // [C1 응답 필드 반영] v12.6 — 백엔드가 주는데 UI가 안 쓰던 5 영역
   marketReport?: {
-    floating_population: number;
-    rent_index: number;
-    competition_intensity: number;
-    estimated_revenue: number;
-    survival_rate: number;
+    floating_population: number | null;
+    rent_index: number | null;
+    competition_intensity: number | null;
+    estimated_revenue: number | null;
+    survival_rate: number | null;
     closure_rate: number | null;
-    growth_potential: number;
-    accessibility: number;
+    growth_potential: number | null;
+    accessibility: number | null;
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   districtRankings?: { district: string; score: number; [k: string]: any }[];
   // [C1] DistrictComparison — DashboardPanelView 실데이터 렌더용 (backend SimulationOutput.comparison)
   comparison?: {
     district: string;
-    score: number;
+    score: number | null;
     revenue: number;
-    bep: number;
-    survival: number;
+    bep: number | null;
+    survival: number | null;
     cannibalization: number;
   }[];
   winnerDistrict?: string;
@@ -225,8 +226,13 @@ function toSimResultViewModel(simRes: SimulationOutput): SimResult {
           { label: '매출추정', value: mr.estimated_revenue },
           {
             label: '폐업률',
+            // closure_rate 우선. 없으면 survival_rate에서 역산하되 둘 다 null이면 null (가짜 100/100 금지).
             value:
-              mr.closure_rate != null ? Math.round(mr.closure_rate * 100) : 100 - mr.survival_rate,
+              mr.closure_rate != null
+                ? Math.round(mr.closure_rate * 100)
+                : mr.survival_rate != null
+                  ? 100 - mr.survival_rate
+                  : null,
           },
           { label: '성장성', value: mr.growth_potential },
           { label: '접근성', value: mr.accessibility },
@@ -899,14 +905,14 @@ const OPERATING_HOURS_OPTIONS = ['오전', '점심', '저녁', '심야'];
 /* ═══════════════════════════════════════════════════════
    상세 데이터 테이블 — 정렬 가능한 row data (Mock)
    ═══════════════════════════════════════════════════════ */
-interface CannRow {
+export interface CannRow {
   [key: string]: string;
   name: string;
   distance: string;
   impact: string;
   status: string;
 }
-interface NeighborhoodRow {
+export interface NeighborhoodRow {
   [key: string]: string;
   name: string;
   score: string;
@@ -2211,7 +2217,9 @@ function SimulatorDashboard({
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
-  const [viewMode, setViewMode] = useState<'integrated' | 'legacy'>('integrated');
+  // viewMode: TabbedDashboard (v4.2 리디자인) 전용. legacy JSX 블록은 idle/loading 상태 UI 보존용으로 남아있음.
+  // useState 유지 이유: TS literal narrowing 방지 (legacy 비교 구문이 dead code로 남아있어도 타입 체크 통과).
+  const [viewMode] = useState<'integrated' | 'legacy'>('integrated');
 
   // [R4] saveDialogOpen 은 UI-only 로컬. savedHistoryId 는 [R1] store 에서 파생.
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -2371,7 +2379,8 @@ function SimulatorDashboard({
         score: typeof r.score === 'number' ? String(Math.round(r.score)) : '—',
         closureRate:
           typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
-        bep: typeof r.bep_months === 'number' ? `${r.bep_months}개월` : '—',
+        // 2026-04-27: DistrictRanking은 bep_quarters(분기 단위)로 마이그레이션됨
+        bep: typeof r.bep_quarters === 'number' ? `${r.bep_quarters}분기` : '—',
       }))
     : [];
   const sortedNeighborhoodRows = sortRows(dynamicNeighborhoodRows, sortKey, sortDir);
@@ -3476,32 +3485,7 @@ function SimulatorDashboard({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    {!isSplitMode && rawSimResult && (
-                      <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
-                        <button
-                          onClick={() => setViewMode('integrated')}
-                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
-                            viewMode === 'integrated'
-                              ? 'bg-[#3a3633] text-amber-400 shadow-sm'
-                              : 'text-[#9ca3af] hover:text-white'
-                          }`}
-                          title="15 섹션 통합 리포트"
-                        >
-                          통합 리포트
-                        </button>
-                        <button
-                          onClick={() => setViewMode('legacy')}
-                          className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
-                            viewMode === 'legacy'
-                              ? 'bg-[#3a3633] text-[#818cf8] shadow-sm'
-                              : 'text-[#9ca3af] hover:text-white'
-                          }`}
-                          title="기존 상세 대시보드"
-                        >
-                          상세 뷰
-                        </button>
-                      </div>
-                    )}
+                    {/* v4.2 리디자인 — 통합/상세 뷰 토글 제거, TabbedDashboard 단일 뷰 */}
                     {!isSplitMode && viewMode === 'legacy' && (
                       <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
                         <button
@@ -3653,13 +3637,11 @@ function SimulatorDashboard({
                     );
                   })()}
 
-                {!isSplitMode && viewMode === 'integrated' && rawSimResult && (
-                  <IntegratedReport
+                {!isSplitMode && rawSimResult && (
+                  <TabbedDashboard
                     simResult={rawSimResult}
-                    onExportPdf={handleDownloadPDF}
-                    onExportXlsx={handleDownloadExcel}
-                    compareMode={isSplitMode}
-                    onToggleCompare={() => setIsSplitMode(!isSplitMode)}
+                    savedHistoryId={savedHistoryId}
+                    brandName={user?.company_name || ''}
                   />
                 )}
 
@@ -4737,9 +4719,13 @@ function SimulatorDashboard({
                                   bar: 'bg-slate-500',
                                   label: '—',
                                 };
-                                const topSignals = (cr.top_signals ?? []).slice(0, 3);
+                                // 2026-04-27: closure_risk가 lgbm/tcn 두 모델 결과를 별도 노출
+                                // top_signals → top_signals_lgbm + top_signals_tcn (TCN 실패 시 빈 배열)
+                                const topLgbm = (cr.top_signals_lgbm ?? []).slice(0, 3);
+                                const topTcn = (cr.top_signals_tcn ?? []).slice(0, 3);
                                 const maxAbs = Math.max(
-                                  ...topSignals.map((s) => Math.abs(s.contribution)),
+                                  ...topLgbm.map((s) => Math.abs(s.contribution)),
+                                  ...topTcn.map((s) => Math.abs(s.contribution)),
                                   0.0001,
                                 );
                                 return (
@@ -4783,38 +4769,80 @@ function SimulatorDashboard({
                                         />
                                       </div>
                                     </div>
-                                    {topSignals.length > 0 && (
-                                      <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]">
-                                        <div className="text-[10px] text-[#9ca3af] mb-1">
-                                          주요 기여 피처 Top {topSignals.length}
-                                        </div>
-                                        {topSignals.map((s, i) => {
-                                          const abs = Math.abs(s.contribution);
-                                          const w = Math.round((abs / maxAbs) * 100);
-                                          const positive = s.contribution >= 0;
-                                          return (
-                                            <div
-                                              key={i}
-                                              className="flex items-center gap-2 text-[10px]"
-                                            >
-                                              <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
-                                                {s.feature}
-                                              </span>
-                                              <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
-                                                <div
-                                                  className={`h-full ${positive ? 'bg-rose-400' : 'bg-emerald-400'}`}
-                                                  style={{ width: `${w}%` }}
-                                                />
-                                              </div>
-                                              <span
-                                                className={`w-12 text-right font-mono ${positive ? 'text-rose-300' : 'text-emerald-300'}`}
-                                              >
-                                                {positive ? '+' : ''}
-                                                {s.contribution.toFixed(2)}
-                                              </span>
+                                    {(topLgbm.length > 0 || topTcn.length > 0) && (
+                                      <div className="flex flex-col gap-3 pt-2 border-t border-[#3a3633]">
+                                        {topLgbm.length > 0 && (
+                                          <div className="flex flex-col gap-1.5">
+                                            <div className="text-[10px] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                              <span className="w-1 h-1 rounded-full bg-indigo-400" />
+                                              LightGBM · 과거 패턴 기여 Top {topLgbm.length}
                                             </div>
-                                          );
-                                        })}
+                                            {topLgbm.map((s, i) => {
+                                              const w = Math.round(
+                                                (Math.abs(s.contribution) / maxAbs) * 100,
+                                              );
+                                              const positive = s.contribution >= 0;
+                                              return (
+                                                <div
+                                                  key={`lgbm-${i}`}
+                                                  className="flex items-center gap-2 text-[10px]"
+                                                >
+                                                  <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
+                                                    {s.feature}
+                                                  </span>
+                                                  <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                                    <div
+                                                      className={`h-full ${positive ? 'bg-rose-400' : 'bg-emerald-400'}`}
+                                                      style={{ width: `${w}%` }}
+                                                    />
+                                                  </div>
+                                                  <span
+                                                    className={`w-12 text-right font-mono ${positive ? 'text-rose-300' : 'text-emerald-300'}`}
+                                                  >
+                                                    {positive ? '+' : ''}
+                                                    {s.contribution.toFixed(2)}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                        {topTcn.length > 0 && (
+                                          <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]/50">
+                                            <div className="text-[10px] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                              <span className="w-1 h-1 rounded-full bg-cyan-400" />
+                                              TCN · 시계열 흐름 기여 Top {topTcn.length}
+                                            </div>
+                                            {topTcn.map((s, i) => {
+                                              const w = Math.round(
+                                                (Math.abs(s.contribution) / maxAbs) * 100,
+                                              );
+                                              const positive = s.contribution >= 0;
+                                              return (
+                                                <div
+                                                  key={`tcn-${i}`}
+                                                  className="flex items-center gap-2 text-[10px]"
+                                                >
+                                                  <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
+                                                    {s.feature}
+                                                  </span>
+                                                  <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                                    <div
+                                                      className={`h-full ${positive ? 'bg-cyan-400' : 'bg-emerald-400'}`}
+                                                      style={{ width: `${w}%` }}
+                                                    />
+                                                  </div>
+                                                  <span
+                                                    className={`w-12 text-right font-mono ${positive ? 'text-cyan-300' : 'text-emerald-300'}`}
+                                                  >
+                                                    {positive ? '+' : ''}
+                                                    {s.contribution.toFixed(2)}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -5966,7 +5994,7 @@ function PDFPageFooter({ reportDate }: { reportDate: string }) {
   );
 }
 
-const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
+export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplateProps>(
   (
     {
       districtFull,
@@ -7214,21 +7242,24 @@ function DashboardPanelView({
   const revenueTrend = hasRealData ? '—' : isVariantB ? '+6.3%' : '+12.5%';
   const scoreTrend = hasRealData ? '—' : isVariantB ? '-2.1 Pts' : '+5.2 Pts';
 
-  // Radar — winner_district와 일치할 때만 marketReport 7지표 사용 (mock 제거).
+  // Radar — winner_district 일치 + market_report 7지표 모두 실값일 때만 그림.
+  // 하나라도 null이면 차트 자체 비활성(거짓 0 채움 금지). 백엔드가 scouting_results 미실행 시 null을 보냄.
   const isWinner = !!dongName && dongName === simResult?.winnerDistrict;
-  const realRadar =
-    isWinner && simResult?.marketReport
-      ? [
-          simResult.marketReport.floating_population,
-          simResult.marketReport.rent_index,
-          simResult.marketReport.competition_intensity,
-          simResult.marketReport.estimated_revenue,
-          // survival_rate → 폐업률(=100 - survival_rate)
-          100 - (simResult.marketReport.survival_rate ?? 0),
-          simResult.marketReport.growth_potential,
-          simResult.marketReport.accessibility,
-        ]
-      : null;
+  const realRadar = (() => {
+    const mr = simResult?.marketReport;
+    if (!isWinner || !mr) return null;
+    const survivalToClosure = mr.survival_rate != null ? 100 - mr.survival_rate : null;
+    const v = [
+      mr.floating_population,
+      mr.rent_index,
+      mr.competition_intensity,
+      mr.estimated_revenue,
+      survivalToClosure,
+      mr.growth_potential,
+      mr.accessibility,
+    ];
+    return v.every((x) => x != null) ? (v as number[]) : null;
+  })();
   const radarValues: number[] = realRadar ?? [];
   const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
   const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
@@ -7252,8 +7283,9 @@ function DashboardPanelView({
     .join(' ');
 
   // AI 인사이트 — 실데이터 있으면 dongName + 실수치 기반 동적 문장, 없으면 empty state
-  const bepMonths =
-    typeof dongRanking?.bep_months === 'number' ? (dongRanking.bep_months as number) : null;
+  // 2026-04-27: DistrictRanking이 bep_quarters(분기)로 마이그레이션됨
+  const bepQuarters =
+    typeof dongRanking?.bep_quarters === 'number' ? (dongRanking.bep_quarters as number) : null;
   const insights: { icon: JSX.Element; text: string }[] =
     hasRealData && dongRanking
       ? [
@@ -7282,8 +7314,8 @@ function DashboardPanelView({
           {
             icon: <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />,
             text:
-              bepMonths != null
-                ? `손익분기까지 약 ${bepMonths}개월 소요 예상.`
+              bepQuarters != null
+                ? `손익분기까지 약 ${bepQuarters}분기 소요 예상.`
                 : `손익분기 예측 데이터가 부족합니다.`,
           },
         ]
@@ -8170,6 +8202,15 @@ export default function App() {
                   element={
                     <ProtectedRoute>
                       <SimulationHistoryDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* 시뮬 이력 최대 4건 비교 + PDF export */}
+                <Route
+                  path="/dashboard/compare"
+                  element={
+                    <ProtectedRoute>
+                      <SimulationCompare />
                     </ProtectedRoute>
                   }
                 />

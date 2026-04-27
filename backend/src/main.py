@@ -407,20 +407,21 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         _survival_r = max(int(_overall_sc * 0.9), 30)
         _growth_r = min(int(abs(growth_rate) * 5) + int(_sales_sc * 0.2), 100)
     else:
-        # fallback: LLM 등급 기반 이산 버케팅
-        _rent_index_r = {"SAFE": 80, "CAUTION": 50, "DANGER": 25, "상": 25, "중": 50, "하": 80}.get(rent_raw, 50)
-        _estimated_rev_r = {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
-        _floating_pop_r = min(int(pop_score * 10), 100)
-        _competition_r = min(int(competition_score * 100), 100)
-        _survival_r = max(100 - _competition_r, 30)
-        _growth_r = min(int(abs(growth_rate) * 5), 100)
+        # 2026-04-27: scouting_results 부재 시 LLM 등급 매핑(SAFE→80, EXCELLENT→90 등)으로
+        # 7지표를 채워 보내던 fallback 제거. 임의값이 UI에서 실데이터처럼 보여
+        # 거짓 양성 판정을 만들었음 (api-contract-frontend-input.md §3.7 위반).
+        # → None으로 흘려보내 프론트가 '—' 또는 차트 비활성으로 정직하게 처리.
+        _rent_index_r = None
+        _estimated_rev_r = None
+        _floating_pop_r = None
+        _competition_r = None
+        _survival_r = None
+        _growth_r = None
 
     competition_intensity = _competition_r
-    district_score = float(
-        _target_row.get("score")
-        if _target_row
-        else {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
-    )
+    # district_score도 동일 정신 — _target_row 없으면 None.
+    # comparison[].score를 받는 프론트 DistrictComparison.score는 nullable로 동기화 완료.
+    district_score = float(_target_row.get("score") or 0) if _target_row else None
 
     market_report = {
         "floating_population": _floating_pop_r,
@@ -546,7 +547,10 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
                     or _sim_bep_quarters
                     or None
                 ),
-                "survival": float(market_report["survival_rate"]),
+                # market_report.survival_rate가 None일 수 있음 (scouting_results 미실행 폴백) → None safe
+                "survival": (
+                    float(market_report["survival_rate"]) if market_report.get("survival_rate") is not None else None
+                ),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),
             }
         ],

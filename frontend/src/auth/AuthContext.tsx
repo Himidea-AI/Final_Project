@@ -3,9 +3,12 @@
  *
  * 저장 위치: localStorage 'spotter_auth' = { user, brand, token }.
  * token은 백엔드가 발급한 JWT (HS256). axios interceptor가 Bearer로 자동 주입.
+ *
+ * isLoggedIn은 user와 token이 모두 있을 때만 true — token이 유실된 zombie
+ * 상태에서 UI가 "로그인됨"으로 오인하는 것을 방지.
  */
 
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 interface User {
   id: string;
@@ -46,17 +49,23 @@ const AuthContext = createContext<AuthState>({
 
 // localStorage에서 인증 상태를 동기적으로 읽음 (SSR safe).
 // 첫 렌더부터 올바른 isLoggedIn 반영 → ProtectedRoute의 잘못된 /login 리다이렉트 방지.
+//
+// 자가치유: user는 있는데 token이 없으면(= zombie) localStorage를 비우고 null 반환.
+// 이전 버전의 401 interceptor가 token만 drop해서 남은 잔여물을 부팅 시점에 정리한다.
 function _readStoredAuth(): { user: User | null; brand: Brand | null; token: string | null } {
   if (typeof window === 'undefined') return { user: null, brand: null, token: null };
   try {
     const stored = window.localStorage.getItem('spotter_auth');
     if (!stored) return { user: null, brand: null, token: null };
     const parsed = JSON.parse(stored);
-    return {
-      user: parsed.user ?? null,
-      brand: parsed.brand ?? null,
-      token: typeof parsed.token === 'string' ? parsed.token : null,
-    };
+    const user = parsed.user ?? null;
+    const brand = parsed.brand ?? null;
+    const token = typeof parsed.token === 'string' && parsed.token.length > 0 ? parsed.token : null;
+    if (user && !token) {
+      window.localStorage.removeItem('spotter_auth');
+      return { user: null, brand: null, token: null };
+    }
+    return { user, brand, token };
   } catch {
     try {
       window.localStorage.removeItem('spotter_auth');
@@ -87,10 +96,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('spotter_auth');
   }, []);
 
+  // 크로스탭 싱크: 다른 탭에서 로그아웃/로그인 시 spotter_auth가 바뀌면 즉시 반영.
+  // 같은 탭 내 변경은 storage 이벤트가 발생하지 않으므로 login/logout이 직접 state 업데이트.
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== 'spotter_auth' && e.key !== null) return;
+      const next = _readStoredAuth();
+      setUser(next.user);
+      setBrand(next.brand);
+      setToken(next.token);
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
-        isLoggedIn: !!user,
+        isLoggedIn: !!user && !!token,
         user,
         brand,
         token,

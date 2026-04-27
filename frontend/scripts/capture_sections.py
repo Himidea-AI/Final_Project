@@ -1,5 +1,11 @@
 """
-SimulatorDashboard 15 섹션 Playwright 스크린샷 캡처.
+TabbedDashboard (v4.2) Playwright 스크린샷 캡처.
+
+v4.2 리디자인 반영 — 13 섹션 → 4 탭 구조로 재편:
+  1) 종합 요약 (summary)
+  2) 상권 분석 (market)
+  3) 매출 예측 (forecast)
+  4) AI 분석 근거 (insight)
 
 사용 전 제약:
   1) backend 기동 (uvicorn localhost:8000) — 실 시뮬에 필수
@@ -11,8 +17,8 @@ SimulatorDashboard 15 섹션 Playwright 스크린샷 캡처.
   python frontend/scripts/capture_sections.py [--headed] [--port 3000] [--timeout 300]
 
 출력: frontend/screenshots/
-  00-integrated-full.png                전체 풀페이지
-  01-command-bar.png ~ 15-report-footer.png   섹션별 element
+  00-full.png                    전체 풀페이지 (활성 탭 상관 없이 기본)
+  01-summary.png ~ 04-insight.png  각 탭 활성화 후 캡처
 
 Auth: localStorage에 fake 'spotter_auth' 주입으로 ProtectedRoute 우회
 (현 AuthContext가 localStorage만 확인하므로 JWT 검증 없음).
@@ -39,20 +45,12 @@ _FRONTEND_DIR = _SCRIPT_DIR.parent  # frontend
 _REPO_ROOT = _FRONTEND_DIR.parent  # mapo-franchise-simulator
 _DEFAULT_OUTPUT = _FRONTEND_DIR / "screenshots"
 
-SECTIONS: list[tuple[str, str]] = [
-    ("01", "command-bar"),
-    ("02", "headline"),
-    ("03", "primary-kpis"),
-    ("04", "map"),
-    ("05", "indicator-grid"),
-    ("06", "quarterly-forecast"),
-    ("07", "scenarios"),
-    ("08", "shap"),
-    ("09", "timeline"),
-    ("10", "customer-segment"),
-    ("11", "district-rankings"),
-    ("12", "insights-grid"),
-    ("13", "report-footer"),
+# 탭 식별자: (순번, URL query tab 값, 한글 라벨, 스크린샷 파일명)
+TABS: list[tuple[str, str, str, str]] = [
+    ("01", "summary", "종합 요약", "summary"),
+    ("02", "market", "상권 분석", "market"),
+    ("03", "forecast", "매출 예측", "forecast"),
+    ("04", "insight", "AI 분석 근거", "insight"),
 ]
 
 FAKE_AUTH = {
@@ -130,10 +128,12 @@ def main() -> int:
             browser.close()
             return 3
 
-        # IntegratedReport 렌더 대기 — #section-01 = CommandBar
-        print(f"[INFO] IntegratedReport 렌더 대기 (최대 {args.timeout}s)...")
+        # TabbedDashboard 렌더 대기 — 탭 네비게이션 button 등장 기준
+        print(f"[INFO] TabbedDashboard 렌더 대기 (최대 {args.timeout}s)...")
         try:
-            page.wait_for_selector("#section-01", state="visible", timeout=args.timeout * 1000)
+            page.wait_for_selector(
+                "button:has-text('종합 요약')", state="visible", timeout=args.timeout * 1000
+            )
         except PwTimeout:
             print(f"[ERR] 결과 타임아웃 ({args.timeout}s). backend 로그 확인 권장")
             err_path = out_dir / "error-timeout.png"
@@ -142,48 +142,49 @@ def main() -> int:
             browser.close()
             return 4
 
-        try:
-            page.wait_for_selector("#section-13", state="visible", timeout=30_000)
-        except PwTimeout:
-            print("[WARN] #section-13 미등장 — 일부 섹션만 캡처될 수 있음")
-
-        # Recharts/kakao 같은 lazy 렌더를 위해 천천히 스크롤해서 viewport 통과
-        print("[INFO] 페이지 하단까지 슬로우 스크롤 (lazy 렌더 트리거)")
-        page.evaluate(
-            """
-            async () => {
-              const step = 400;
-              const total = document.documentElement.scrollHeight;
-              for (let y = 0; y < total; y += step) {
-                window.scrollTo(0, y);
-                await new Promise(r => setTimeout(r, 180));
-              }
-              window.scrollTo(0, 0);
-              await new Promise(r => setTimeout(r, 500));
-            }
-            """
-        )
-
         saved: list[Path] = []
 
-        if not args.skip_full:
-            full_path = out_dir / "00-integrated-full.png"
-            page.screenshot(path=str(full_path), full_page=True)
-            saved.append(full_path)
-            print(f"[OK] {full_path.name}")
-
-        for num, slug in SECTIONS:
-            sel = f"#section-{num}"
+        # 각 탭 클릭 → lazy 렌더 대기 → 스크롤 → 스크린샷
+        for num, _tab_key, label, slug in TABS:
             try:
-                el = page.locator(sel)
-                el.scroll_into_view_if_needed()
-                page.wait_for_timeout(250)
+                print(f"[INFO] 탭 전환 · {label}")
+                page.click(f"button:has-text('{label}')")
+                page.wait_for_timeout(600)  # framer-motion 전환 + lazy 렌더
+
+                # Recharts/Kakao 지도 렌더를 위해 슬로우 스크롤
+                page.evaluate(
+                    """
+                    async () => {
+                      const step = 400;
+                      const total = document.documentElement.scrollHeight;
+                      for (let y = 0; y < total; y += step) {
+                        window.scrollTo(0, y);
+                        await new Promise(r => setTimeout(r, 120));
+                      }
+                      window.scrollTo(0, 0);
+                      await new Promise(r => setTimeout(r, 400));
+                    }
+                    """
+                )
+
                 out_path = out_dir / f"{num}-{slug}.png"
-                el.screenshot(path=str(out_path))
+                page.screenshot(path=str(out_path), full_page=True)
                 saved.append(out_path)
                 print(f"[OK] {out_path.name}")
             except Exception as e:
-                print(f"[WARN] {sel} 캡처 실패: {e}")
+                print(f"[WARN] {label} 탭 캡처 실패: {e}")
+
+        # 기본 첫 탭(종합 요약)으로 복귀 + full page 추가 저장
+        if not args.skip_full:
+            try:
+                page.click("button:has-text('종합 요약')")
+                page.wait_for_timeout(500)
+                full_path = out_dir / "00-full.png"
+                page.screenshot(path=str(full_path), full_page=True)
+                saved.append(full_path)
+                print(f"[OK] {full_path.name}")
+            except Exception as e:
+                print(f"[WARN] full page 캡처 실패: {e}")
 
         browser.close()
 

@@ -22,6 +22,7 @@ import type {
   SaveSimulationResponse,
   SimulationHistoryDetail,
 } from '../types/simulationHistory';
+import type { TokenUsageResponse } from '../types/tokenUsage';
 
 /**
  * [v11.5 멀티테넌시 사전 준비]
@@ -70,20 +71,29 @@ apiClient.interceptors.request.use((config) => {
 });
 
 /**
- * 응답 인터셉터: 401 시 토큰 제거 → 다음 렌더에서 AuthContext가 로그아웃 상태로 복구.
- * 강제 리다이렉트는 ProtectedRoute가 담당 (중복 방지).
+ * 응답 인터셉터: 401 시 세션 전체 파기 + /login 강제 이동.
+ *
+ * 이전에는 token만 drop하고 user/brand는 유지했으나 → UI는 "로그인됨"인데
+ * 모든 API가 401로 깨지는 zombie 상태가 발생. 표준 SPA 패턴으로 교체.
+ *
+ * redirect 쿼리에 원래 가려던 경로를 실어서 로그인 후 복귀시킴.
+ * 이미 /login 경로에 있으면 루프 방지.
  */
 apiClient.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err?.response?.status === 401) {
       try {
-        const raw = window.localStorage.getItem('spotter_auth');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          // 토큰만 드롭 — user/brand는 유지해서 재로그인 화면 UX 부드럽게
-          delete parsed.token;
-          window.localStorage.setItem('spotter_auth', JSON.stringify(parsed));
+        window.localStorage.removeItem('spotter_auth');
+      } catch {
+        /* noop */
+      }
+      try {
+        const { pathname, search, hash } = window.location;
+        if (pathname !== '/login') {
+          const from = `${pathname}${search}${hash}`;
+          const redirect = encodeURIComponent(from);
+          window.location.assign(`/login?reason=session_expired&redirect=${redirect}`);
         }
       } catch {
         /* noop */
@@ -170,6 +180,19 @@ export async function getSimulationHistoryDetail(id: number): Promise<Simulation
 
 export async function deleteSimulationHistory(id: number): Promise<void> {
   await apiClient.delete(`/simulation-history/${id}`);
+}
+
+// ─────────────────────────────────────────────────────────
+// ops (운영 메트릭) — 백엔드 미구현 시 404. B1 예진 구현 대기.
+// 계약: frontend/src/types/tokenUsage.ts 주석 참조.
+// ─────────────────────────────────────────────────────────
+
+export async function getTokenUsage(params: {
+  from?: string;
+  to?: string;
+}): Promise<TokenUsageResponse> {
+  const response = await apiClient.get('/ops/token-usage', { params });
+  return response.data;
 }
 
 export default apiClient;
