@@ -486,10 +486,11 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
 
     # seoul_adstrd_flpop 분기 안정 평균 boost (16동 전체 커버, 동×시간×요일)
     # time_age_boost (grid 기반, noise 큼) 와 별개 — 분기 평균이라 안정
+    # Phase A (sprint 2026-04-27) 시도: 0.5+0.5 강화 → -0.007 noise, revert.
     af_boost_map = getattr(world, "adstrd_flpop_boost", None)
     if af_boost_map:
         af = af_boost_map.get((store.dong, h, world.weekday), 1.0)
-        score *= 0.9 + 0.1 * max(0.5, min(2.0, af))  # 0.95~1.10 범위 — 더 보수적
+        score *= 0.9 + 0.1 * max(0.5, min(2.0, af))  # 0.95~1.10 범위 — 보수적
 
     # 평점 가중
     score += (store.rating - 3.0) * 0.1

@@ -819,10 +819,9 @@ def run_simulation(
                 "affected_stores": len(world.stores_by_dong.get(target_dong, [])),
             }
 
-    # 새벽 home stay trajectory 자동 추가는 Phase 5 시도했으나 PSE 실패로 revert.
-    # 이유: KT 새벽 데이터는 마포 모든 거주민(37만)이라 1000 agent 추가는 sample 부족,
-    # 거주 동만 강한 신호 → 다른 동 분포 왜곡. Pearson -0.032 (통계적 악화).
-    # 해결하려면 agent count ↑ (5K~10K) 와 함께 적용 필요.
+    # 새벽 home stay trajectory 시도들 — 모두 실패로 revert.
+    # Phase 5 (1K 단독): Δ -0.032. Phase B (5K + 새벽): Δ -0.025.
+    # 결론: 새벽 trajectory 추가 자체가 KT 분포와 불일치 (KT는 cell stock 측정).
 
     # narrator_summary — 간단한 자연어 요약
     narrator_summary_val = (

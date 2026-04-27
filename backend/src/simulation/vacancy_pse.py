@@ -203,21 +203,57 @@ def evaluate_vacancy_pse(
 
     pse_summary = {k: _summarize([r[k] for r in per_seed if k in r]) for k in metric_keys}
 
-    # 자연어 narrative
+    # 분기/연 단위 환산 (사업 의사결정 단위, day-noise 흡수)
+    # 학습 데이터 (adstrd_flpop, district_sales) 가 분기 단위라 ABM 출력도 분기 단위
+    # 표현이 자연스럽고 사업가 친화적.
+    QUARTER_DAYS = 90
+    YEAR_DAYS = 365
+    visits_q = {
+        "mean": round(pse_summary["visits_per_day"]["mean"] * QUARTER_DAYS, 0),
+        "ci95": round(pse_summary["visits_per_day"]["ci95"] * QUARTER_DAYS, 0),
+    }
+    visits_y = {
+        "mean": round(pse_summary["visits_per_day"]["mean"] * YEAR_DAYS, 0),
+        "ci95": round(pse_summary["visits_per_day"]["ci95"] * YEAR_DAYS, 0),
+    }
+    revenue_q_mean = pse_summary["revenue_per_day"]["mean"] * QUARTER_DAYS
+    revenue_q_ci = pse_summary["revenue_per_day"]["ci95"] * QUARTER_DAYS
+    revenue_y_mean = pse_summary["revenue_per_day"]["mean"] * YEAR_DAYS
+    revenue_y_ci = pse_summary["revenue_per_day"]["ci95"] * YEAR_DAYS
+    pse_summary["visits_per_quarter"] = visits_q
+    pse_summary["visits_per_year"] = visits_y
+    pse_summary["revenue_per_quarter"] = {
+        "mean": round(revenue_q_mean, 0),
+        "ci95": round(revenue_q_ci, 0),
+    }
+    pse_summary["revenue_per_year"] = {
+        "mean": round(revenue_y_mean, 0),
+        "ci95": round(revenue_y_ci, 0),
+    }
+
+    # 자연어 narrative — 일/분기/연 모두 표시 (의사결정 친화적)
     vis = pse_summary["visits_per_day"]
     rev = pse_summary["revenue_per_day"]
     ratio = pse_summary["vacancy_vs_avg_visits_ratio"]
     narrative = (
         f"{vacancy_spot.get('dong', '?')} {category} 신규 매장 "
         f"(popularity_boost={popularity_boost}, PSE N={n_seeds}):\n"
-        f"  - 일평균 방문 : {vis['mean']:.1f} ± {vis['ci95']:.1f} 명 "
+        f"  📅 일평균   방문 : {vis['mean']:5.1f} ± {vis['ci95']:.1f} 명 "
         f"(95% CI, range [{vis['min']:.0f}, {vis['max']:.0f}])\n"
-        f"  - 일평균 매출 : {rev['mean'] / 10000:.0f} ± {rev['ci95'] / 10000:.0f} 만원\n"
-        f"  - 동 평균 대비: {ratio['mean']:.1f} ± {ratio['ci95']:.1f} 배"
+        f"  📅 일평균   매출 : {rev['mean'] / 10000:5.0f} ± {rev['ci95'] / 10000:.0f} 만원\n"
+        f"  📊 분기 추정 방문 : {visits_q['mean']:5.0f} ± {visits_q['ci95']:.0f} 명 (90일 환산)\n"
+        f"  💰 분기 추정 매출 : {revenue_q_mean / 1e8:5.2f} ± {revenue_q_ci / 1e8:.2f} 억원\n"
+        f"  💰 연  추정 매출 : {revenue_y_mean / 1e8:5.2f} ± {revenue_y_ci / 1e8:.2f} 억원\n"
+        f"  ⚖️  동 평균 대비   : {ratio['mean']:5.1f} ± {ratio['ci95']:.1f} 배 attractive"
     )
     if with_cannibalization:
         cann = pse_summary["cannibalization_pct"]
-        narrative += f"\n  - 카니발 % : {cann['mean']:+.1f} ± {cann['ci95']:.1f}% (- = 시너지, + = 잠식)"
+        dong_growth = pse_summary.get("dong_net_growth_pct", {"mean": 0, "ci95": 0})
+        narrative += (
+            f"\n  🔻 카니발 (반경 500m) : {cann['mean']:+5.1f} ± {cann['ci95']:.1f}% (- = 시너지)"
+            f"\n  📈 동 시장 성장      : {dong_growth['mean']:+5.2f} ± {dong_growth['ci95']:.2f}% "
+            f"(0% 포함 시 zero-sum)"
+        )
 
     return {
         "vacancy_spot": vacancy_spot,
