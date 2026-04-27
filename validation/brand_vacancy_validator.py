@@ -299,6 +299,7 @@ def _run_validation_simulations(
     start_date: _dt.date | None = None,
     sample_to_pop_factor: float = 380.0,
     popularity_boost: float = 20.0,
+    agents: int = 5000,
 ) -> dict[str, Any]:
     """시뮬 데이터 수집 — 동×업종 매트릭스 + V2 단일 vacancy.
 
@@ -329,6 +330,7 @@ def _run_validation_simulations(
     cfg = ModelConfig()
     cfg.tier_s_provider = "mock"  # 검증은 항상 mock 강제
     cfg.tier_a_provider = "mock"
+    cfg.n_personas = agents  # ← runner 가 PopulationMix 비례 scale
 
     # 옵션 A: start_date 지정 시 Scenario.date_override 로 sim_start 강제.
     matrix_scenario: Scenario | None = None
@@ -518,6 +520,7 @@ def run_5track_validation(
     start_date: _dt.date | None = None,
     sample_to_pop_factor: float = 380.0,
     popularity_boost: float = 20.0,
+    agents: int = 5000,
 ) -> dict[str, Any]:
     """5트랙 검증 protocol 1회 실행.
 
@@ -548,6 +551,7 @@ def run_5track_validation(
         start_date=start_date,
         sample_to_pop_factor=sample_to_pop_factor,
         popularity_boost=popularity_boost,
+        agents=agents,
     )
 
     tracks = {
@@ -571,6 +575,7 @@ def run_5track_validation(
             "start_date": start_date.isoformat() if start_date is not None else "today",
             "sample_to_pop_factor": sample_to_pop_factor,
             "popularity_boost": popularity_boost,
+            "agents": agents,
         },
         "tracks": tracks,
         "production_ready": production_ready,
@@ -643,6 +648,12 @@ def _main() -> None:
         default=20.0,
         help="신규 매장 인지도 (default 20, 마케팅 강화 가정). vacancy_pse default 5.0 대비 4배.",
     )
+    parser.add_argument(
+        "--agents",
+        type=int,
+        default=5000,
+        help="agent 수 (default 5000, sample size 5배 ↑). cfg.n_personas 로 chain.",
+    )
     args = parser.parse_args()
 
     if not args.brand and not args.brands:
@@ -668,6 +679,7 @@ def _main() -> None:
                 start_date=start_date,
                 sample_to_pop_factor=args.sample_pop_factor,
                 popularity_boost=args.popularity_boost,
+                agents=args.agents,
             )
             summary.append(
                 {
