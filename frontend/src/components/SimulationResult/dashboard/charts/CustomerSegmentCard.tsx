@@ -4,7 +4,6 @@ import { formatKrw } from '../utils/formatters';
 
 interface Props {
   segment: CustomerSegment | null | undefined;
-  monthlyRev?: number | null;
 }
 
 export function CustomerSegmentCard({ segment }: Props) {

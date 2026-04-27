@@ -95,7 +95,7 @@ export function PeakHourCard({ data }: Props) {
                   }`}
                   style={{ height: `${height}%` }}
                 />
-                {/* 시간대 라벨 — 짝수 시간만 표시 (가독성) */}
+                {/* 시간대 라벨 — 3의 배수 시간만 표시 (가독성, 24개 라벨 다 노출하면 빽빽) */}
                 <div
                   className={`text-[8px] font-bold tabular-nums ${
                     isPeak ? 'text-indigo-400' : 'text-stone-600'

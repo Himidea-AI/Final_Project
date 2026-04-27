@@ -47,7 +47,12 @@ def predict_segment(body: SegmentRequest) -> dict:
             status_code=400,
             detail=f"지원하지 않는 행정동: '{body.target_district}'. 마포구 16동만 지원.",
         )
-    industry_code = _BIZ_TO_INDUSTRY_CODE.get(body.business_type, "CS100010")
+    if body.business_type not in _BIZ_TO_INDUSTRY_CODE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"지원하지 않는 업종: '{body.business_type}'. (silent fallback 차단 — 잘못된 결과 예방)",
+        )
+    industry_code = _BIZ_TO_INDUSTRY_CODE[body.business_type]
 
     # SegmentProfile dict 변환
     profile = None
