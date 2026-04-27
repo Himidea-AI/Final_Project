@@ -17,6 +17,7 @@ class QuarterlyProjection(BaseModel):
     ci_80_upper: int | None = None
     ci_95_lower: int | None = None
     ci_95_upper: int | None = None
+    is_mock: bool = False
 
 
 # 하위 호환성 유지
@@ -128,8 +129,8 @@ class SimulationOutput(BaseModel):
     request_id: str
     target_district: str
     target_districts: list[str] = Field(default_factory=list)
-    simulation_months: int = 12
     simulation_quarters: int | None = None
+    is_excluded_combo: bool = False
     quarterly_projection: list[QuarterlyProjection] = Field(default_factory=list)
     comparison: list[DistrictComparison] = Field(default_factory=list)
     overall_legal_risk: str | None = None

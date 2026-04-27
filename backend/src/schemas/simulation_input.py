@@ -23,9 +23,7 @@ class SimulationInput(BaseModel):
         default_factory=list, description="사용자가 선택한 후보 행정동 목록 (복수 선택 지원)"
     )
     existing_stores: list[ExistingStoreInput] = Field(default_factory=list, description="기존 매장 목록")
-    initial_investment: int = Field(default=150_000_000, description="초기 투자금 (원)")
     monthly_rent: int = Field(default=0, description="월 임대료 (원, 0이면 자동 추정)")
-    simulation_months: int = Field(default=12, description="시뮬레이션 기간 (개월)")
     scenarios: list[str] = Field(default_factory=lambda: ["base"], description="시나리오 목록")
 
     # 사용자 입력 확장 파라미터

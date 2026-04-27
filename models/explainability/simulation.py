@@ -5,8 +5,8 @@ models/interface.py의 ModelOutput.generate() 결과(bep, quarterly_predictions)
 프론트엔드가 소비할 수 있는 형태로 변환한다.
 
 [중요] bep["quarterly_simulation"] 실제 구조:
-  interface.py의 _run_bep()는 simulate_quarterly()를 N분기(최대 20분기)로 호출한다.
-  simulation_quarters = min(bep_quarters + 1, 20) 또는 bep_quarters == -1이면 12.
+  interface.py의 _run_bep()는 simulate_quarterly()를 N분기(최대 40분기)로 호출한다.
+  simulation_quarters = min(bep_quarters + 1, 40) 또는 bep_quarters == -1이면 40.
   각 원소: quarter(1~N), revenue, cost, profit, cumulative_profit, bep_reached.
 
 주요 역할:
@@ -40,6 +40,7 @@ def build_quarterly_projection(
     bep_quarterly_simulation: list[dict],
     quarterly_predictions: list[dict],
     confidence: str = "base",
+    is_mock: bool = False,
 ) -> list[dict]:
     """
     BEP 분기 시뮬레이션(N개)과 TCN 분기 예측 신뢰구간을 결합하여 N개 분기 결과를 반환한다.
@@ -57,6 +58,7 @@ def build_quarterly_projection(
                                 4개 dict, 각 원소: quarter_offset(1~4), predicted_sales,
                                 confidence_lower, confidence_upper
         confidence:             "base" | "optimistic" | "pessimistic" (기본값: "base")
+        is_mock:                TCN 모델 mock 여부 (기본값: False)
 
     Returns:
         list[dict] N개 — 분기 수는 bep_quarterly_simulation 길이와 동일
@@ -66,6 +68,7 @@ def build_quarterly_projection(
             "cumulative_profit": int,  # 해당 분기 누적수익 BEP에서 추출 (float → int)
             "confidence_lower": int,   # TCN 95% 신뢰구간 하한 (float → int)
             "confidence_upper": int,   # TCN 95% 신뢰구간 상한 (float → int)
+            "is_mock": bool,           # TCN mock 여부
         }
     """
     if confidence not in _VALID_CONFIDENCE:
@@ -112,6 +115,7 @@ def build_quarterly_projection(
                 "cumulative_profit": cumulative_profit,
                 "confidence_lower": confidence_lower,
                 "confidence_upper": confidence_upper,
+                "is_mock": is_mock,
             }
         )
 

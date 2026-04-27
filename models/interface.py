@@ -209,9 +209,9 @@ def _run_bep(
 
     raw_bep = bep_result["bep_quarters"]
     if raw_bep == -1:
-        simulation_quarters = 12  # 도달 불가 → 3년 표시
+        simulation_quarters = 40  # 도달 불가 → 10년 표시
     else:
-        simulation_quarters = min(raw_bep + 1, 20)  # BEP+1분기 버퍼, 최대 5년
+        simulation_quarters = min(raw_bep + 1, 40)  # BEP+1분기 버퍼, 최대 10년
 
     base_revenues = [p["predicted_sales"] / store_count for p in quarterly_predictions]
     quarterly_revenues_list = [base_revenues[i % len(base_revenues)] for i in range(simulation_quarters)]
@@ -426,7 +426,7 @@ class ModelOutput:
             "lstm": _run_lstm_forecast,
             "tcn": _run_tcn_forecast,
             "gru": _run_gru_forecast,
-        }.get(model, _run_lstm_forecast)
+        }.get(model, _run_tcn_forecast)
 
         try:
             revenue_forecast = forecast_fn(dong_code, industry_code)

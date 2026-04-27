@@ -1323,9 +1323,7 @@ function SimulatorDashboard({
         target_district: selectedDongs[0] || '서교동',
         target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
         existing_stores: [],
-        initial_investment: initialCapital * 10000, // 만원 → 원
         monthly_rent: budget * 10000, // 만원 → 원
-        simulation_months: 12,
         scenarios: [],
         // 신규 7 필드
         store_area: storeArea,
