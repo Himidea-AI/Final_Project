@@ -64,7 +64,6 @@ import { SaveButton } from './components/SimulationHistory/SaveButton';
 import { SaveDialog } from './components/SimulationHistory/SaveDialog';
 import { useSaveSimulation } from './hooks/useSaveSimulation';
 import { formatDocumentId } from './types/simulationHistory';
-// import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
 import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
 import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
@@ -1201,6 +1200,7 @@ function SimulatorDashboard({
     popData,
     sortedCannRows,
     sortedNeighborhoodRows,
+    savedHistoryId, // line 1114에서 formatDocumentId(savedHistoryId) 사용 — 시뮬 저장 직후 stale closure 방지
   ]);
 
   const toggleOperatingHour = useCallback((hour: string) => {
@@ -1377,6 +1377,7 @@ function SimulatorDashboard({
     budget,
     businessType,
     user?.company_name,
+    brand?.brand_name, // line 1322 brand_name 폴백 — 로그아웃 후 재로그인 시 새 brand 반영
     storeArea,
     targetPrice,
     operatingHours,
@@ -1389,6 +1390,7 @@ function SimulatorDashboard({
     targetTimeSlots,
     targetDayType,
     targetMonthlySales,
+    saveSim, // line 1359 saveSim.reset() 호출 — useSaveSimulation 인스턴스 변경 추적
   ]);
 
   // [IM3-205] 로딩 진행률을 simulationStore에서 미러 — store가 500ms 타이머 보유
@@ -4024,9 +4026,13 @@ function SimulatorDashboard({
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-6 bg-[#171717] custom-scrollbar">
-            <Suspense fallback={null}>
-              <SpotterAgentWorkflow />
-            </Suspense>
+            {/* drawer 닫혀있으면 unmount — lazy chunk fetch 지연 + 내부 setTimeout 3개가
+                보이지 않을 때 시작되는 것을 방지 (code-review #4) */}
+            {isWorkflowOpen && (
+              <Suspense fallback={null}>
+                <SpotterAgentWorkflow />
+              </Suspense>
+            )}
           </div>
         </div>
       </>
