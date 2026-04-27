@@ -226,9 +226,14 @@ def _collect_actual_data(brand_name: str, category: str, multi_quarter_avg: int)
             district_count[key] = float(r["quarterly_count_avg"] or 0)
 
     # per_store_avg — sales_imp_mapo.csv 의 monthly_sales / store_count
-    csv_path = Path("data/processed/sales_imp_mapo.csv")
+    # 절대 경로 (CWD 의존성 회피, validation/ 의 부모 = 프로젝트 root).
+    csv_path = Path(__file__).resolve().parent.parent / "data" / "processed" / "sales_imp_mapo.csv"
     per_store_avg: dict[tuple, float] = {}
-    if csv_path.exists():
+    if not csv_path.exists():
+        logger.warning(
+            f"[validator] sales_imp_mapo.csv 미존재 ({csv_path}) — V1c per_store_avg 빈 dict, incomplete 가능"
+        )
+    else:
         df = pd.read_csv(csv_path)
         # 최근 분기 N개 평균
         recent_quarters = sorted(df["quarter"].unique())[-multi_quarter_avg:]
@@ -267,7 +272,7 @@ def _run_validation_simulations(brand_name: str, category: str, days: int, n_see
     """
     from statistics import mean
 
-    from src.services.brand_menu_loader import load_brand_menu_items
+    from src.services.brand_menu_loader import BrandMenuEmptyError, load_brand_menu_items
     from src.simulation.config import ModelConfig, PopulationMix, TierDistribution
     from src.simulation.runner import run_simulation
     from src.simulation.vacancy_pse import evaluate_vacancy_pse
@@ -323,7 +328,13 @@ def _run_validation_simulations(brand_name: str, category: str, days: int, n_see
 
     # ② 단일 vacancy V2 시뮬 — 대표 위치
     spot = _pick_representative_spot(brand_name, category)
-    menu_items = load_brand_menu_items(brand_name)
+    # BrandMenuEmptyError fallback (vacancy_evaluation_service 와 동일 패턴):
+    # 메뉴 부재 시 추상 매출로 fallback 후 V2 측정 진행.
+    try:
+        menu_items = load_brand_menu_items(brand_name)
+    except BrandMenuEmptyError:
+        logger.warning(f"[validator] '{brand_name}' 메뉴 없음 — 추상 매출 fallback")
+        menu_items = None
     pse_result = evaluate_vacancy_pse(
         vacancy_spot=spot,
         category=category,
@@ -345,8 +356,12 @@ def _run_validation_simulations(brand_name: str, category: str, days: int, n_see
     }
 
 
-def _pick_representative_spot(brand_name: str, category: str) -> dict[str, Any]:
-    """V2 시뮬용 단일 spot — 마포 브랜드 매장 좌표 중심점에 가장 가까운 실제 매장."""
+def _pick_representative_spot(brand_name: str, category: str) -> dict[str, Any]:  # noqa: ARG001
+    """V2 시뮬용 단일 spot — 마포 브랜드 매장 좌표 중심점에 가장 가까운 실제 매장.
+
+    `category` 인자: 시그니처 일관성 위해 받지만 현재 미사용.
+    향후 동일 브랜드의 다중 업종 (예: 카페+베이커리) 지원 시 필터링 확장 reserved.
+    """
     from statistics import mean as _mean
 
     from src.services.brand_mapping_resolver import get_all_mapo_stores_by_brand
