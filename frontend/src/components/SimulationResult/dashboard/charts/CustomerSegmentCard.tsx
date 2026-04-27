@@ -98,6 +98,18 @@ export function CustomerSegmentCard({ segment }: Props) {
           </div>
         </div>
       )}
+
+      {/* 한계 disclaimer — BEP 인건비 면책 패턴(api-contract §3.7).
+          customer_revenue MLPPredictor 모델 자체 제약을 결과와 함께 명시. */}
+      <div className="pt-4 border-t border-stone-800/50 space-y-1">
+        <p className="text-[10px] text-stone-600 leading-relaxed">
+          ※ 4차원(연령·성별·시간대·요일) 독립 가정(곱셈)으로 산출됩니다 — 실제 분포와 차이 가능,
+          유동인구 실측치로 일부 보정.
+        </p>
+        <p className="text-[10px] text-stone-600 leading-relaxed">
+          ※ 학습 데이터는 마포구 16동 × 10업종 · 2019~2024 4분기 기준. 다른 조합/연도는 외삽 결과.
+        </p>
+      </div>
     </div>
   );
 }
