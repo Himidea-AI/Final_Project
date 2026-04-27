@@ -49,11 +49,19 @@ INDUSTRIES_10 = [
 
 
 def load_data(scope: str) -> pd.DataFrame:
-    """scope = 'mapo' or 'seoul_10ind'."""
+    """scope = 'mapo' or 'seoul_10ind'.
+
+    마포(store_quarterly): 16동, 3840행
+    서울25구(seoul_district_stores): 425동, 100,587행 — seoul_district_sales LEFT JOIN 시 87,938 alive
+    """
     engine = _get_engine()
     if scope == "mapo":
+        # 마포구 전용: store_quarterly (마포만 적재)
+        store_table = "store_quarterly"
         where = "q.dong_code LIKE '11440%'"
     else:
+        # 서울 25구: seoul_district_stores (store_quarterly 의 서울 전체 버전)
+        store_table = "seoul_district_stores"
         ind_list = "', '".join(INDUSTRIES_10)
         where = f"q.industry_code IN ('{ind_list}')"
 
@@ -61,7 +69,7 @@ def load_data(scope: str) -> pd.DataFrame:
         SELECT q.quarter, q.dong_code, q.industry_code,
                s.monthly_sales, q.store_count, q.open_count, q.close_count,
                q.closure_rate, q.franchise_count
-        FROM store_quarterly q
+        FROM {store_table} q
         LEFT JOIN seoul_district_sales s
           ON q.quarter = s.quarter AND q.dong_code = s.dong_code
          AND q.industry_code = s.industry_code
