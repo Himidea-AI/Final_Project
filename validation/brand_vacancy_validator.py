@@ -195,6 +195,9 @@ def _collect_actual_data(brand_name: str, category: str, multi_quarter_avg: int)
 
     실제 구현은 SQL/CSV 호출. 본 spec 의 spec 6.2 Step A 참조.
     Mock-friendly 인터페이스 (테스트에서 patch).
+
+    industry_name → 시뮬 카테고리 mapping (V1a/V1b/V1c cell key 일치).
+    `world_loader._load_dong_industry_weight` 와 같은 패턴.
     """
     import os
 
@@ -204,7 +207,24 @@ def _collect_actual_data(brand_name: str, category: str, multi_quarter_avg: int)
 
     engine = get_sync_engine(os.environ["POSTGRES_URL"])
 
-    # district_sales — 마포 64-cell 분기 매출 + 건수, multi-quarter 평균
+    # 시뮬 카테고리 (5종) ↔ 실측 industry_name (10+종) 일치용 mapping.
+    # world_loader._load_dong_industry_weight 와 일관.
+    cat_map = {
+        "커피-음료": "카페",
+        "제과점": "카페",
+        "한식음식점": "음식점",
+        "중식음식점": "음식점",
+        "일식음식점": "음식점",
+        "양식음식점": "음식점",
+        "패스트푸드점": "음식점",
+        "분식전문점": "음식점",
+        "치킨전문점": "음식점",
+        "호프-간이주점": "주점",
+        "편의점": "편의점",
+    }
+
+    # district_sales — 마포 분기 매출 + 건수, multi-quarter 평균
+    # cat_map 적용해 (dong, 시뮬 카테고리) 단위로 집계.
     sql_district = text("""
         SELECT dong_name, industry_name,
                AVG(monthly_sales)::bigint AS quarterly_sales_avg,
@@ -222,9 +242,12 @@ def _collect_actual_data(brand_name: str, category: str, multi_quarter_avg: int)
     district_count: dict[tuple, float] = {}
     with engine.connect() as conn:
         for r in conn.execute(sql_district, {"n": multi_quarter_avg}).mappings():
-            key = (r["dong_name"], r["industry_name"])
-            district_sales[key] = float(r["quarterly_sales_avg"] or 0)
-            district_count[key] = float(r["quarterly_count_avg"] or 0)
+            cat = cat_map.get(r["industry_name"])
+            if cat is None:
+                continue
+            key = (r["dong_name"], cat)
+            district_sales[key] = district_sales.get(key, 0.0) + float(r["quarterly_sales_avg"] or 0)
+            district_count[key] = district_count.get(key, 0.0) + float(r["quarterly_count_avg"] or 0)
 
     # per_store_avg — sales_imp_mapo.csv 의 monthly_sales / store_count
     # 절대 경로 (CWD 의존성 회피, validation/ 의 부모 = 프로젝트 root).
@@ -241,7 +264,10 @@ def _collect_actual_data(brand_name: str, category: str, multi_quarter_avg: int)
         df = df[df["quarter"].isin(recent_quarters)]
         df = df[df["store_count"] > 0]
         df["per_store"] = df["monthly_sales"] / df["store_count"]
-        agg = df.groupby(["dong_name", "industry_name"])["per_store"].mean()
+        # cat_map 적용 (시뮬 카테고리 단위 평균)
+        df["sim_category"] = df["industry_name"].map(cat_map)
+        df = df[df["sim_category"].notna()]
+        agg = df.groupby(["dong_name", "sim_category"])["per_store"].mean()
         per_store_avg = {idx: float(v) for idx, v in agg.items()}
 
     # ftc — brand 연 평균 매출 (천원 → 원)
