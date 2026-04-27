@@ -80,7 +80,8 @@ export function DistrictRankings({ simResult }: Props) {
                     {r.score.toFixed(1)}
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-stone-300">
-                    {(r.sales_growth * 100).toFixed(1)}%
+                    {/* backend qoq_growth는 이미 percent 단위 (tools.py:300 *100 적용). 추가 ×100 금지 */}
+                    {r.sales_growth.toFixed(1)}%
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-rose-400">
                     {r.closure_rate != null ? `${(r.closure_rate * 100).toFixed(1)}%` : '—'}
