@@ -407,7 +407,7 @@ class ModelOutput:
                     "closure_risk": { risk_score, risk_level, top_signals, model, is_mock },
                     "bep": { bep_months, monthly_profit, total_initial_investment,
                              annual_roi, quarterly_simulation },
-                    "segment_analysis": { segment_ratio, segment_sales, profile_summary,
+                    "customer_segment": { segment_ratio, segment_sales, profile_summary,
                                           dimension_ratios } | None,
                     "metadata": { model_version, generated_at, data_period },
                 }
@@ -562,7 +562,9 @@ class ModelOutput:
             "closure_rate": closure_rate_result,
             "closure_risk": closure_risk_result,
             "bep": bep,
-            "segment_analysis": segment_analysis,
+            # [C] 타겟 고객 매출 분석 (customer_revenue MLP). dict | None
+            # 키 이름 customer_segment로 통일 — frontend SimulationOutput.customer_segment, main.py 응답 dict와 일치
+            "customer_segment": segment_analysis,
             # [D] 유동인구 피크 시간 예측 (TCN). dict | None
             "living_pop_forecast": living_pop_result,
             # [E] 신흥 상권 조기 감지 (LSTM Autoencoder). dict | None
