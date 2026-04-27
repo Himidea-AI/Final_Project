@@ -121,6 +121,7 @@ def load_sales_data(
     db_url: str = DB_URL,
     csv_path: str | Path | None = None,
     dong_prefix: str | None = None,
+    sales_csv_override: str | Path | None = None,
 ) -> pd.DataFrame:
     """district_sales 데이터를 로드한다.
 
@@ -132,6 +133,8 @@ def load_sales_data(
         CSV 파일 경로 (DB 접속 불가 시 fallback).
     dong_prefix : str, optional
         행정동 코드 접두사 필터 (예: '11440' = 마포구).
+    sales_csv_override : str or Path, optional
+        지정 시 DB를 무시하고 이 CSV를 우선 로드 (imputation 비교 학습용).
 
     Returns
     -------
@@ -139,6 +142,17 @@ def load_sales_data(
         분기별 매출 데이터.
     """
     df = None
+
+    # 0) sales_csv_override 우선 — DB 시도 자체를 skip
+    if sales_csv_override is not None:
+        ov_path = Path(sales_csv_override)
+        if not ov_path.exists():
+            raise FileNotFoundError(f"sales_csv_override CSV가 존재하지 않습니다: {ov_path}")
+        df = pd.read_csv(ov_path, dtype={"dong_code": str})
+        logger.info("sales_csv_override 로드: %s (%d rows)", ov_path, len(df))
+        if dong_prefix and "dong_code" in df.columns:
+            df = df[df["dong_code"].astype(str).str.startswith(dong_prefix)]
+        return df
 
     # 1) DB에서 로드 시도
     try:
@@ -734,6 +748,10 @@ def prepare_dataloaders(
         - csv_path : str
         - target_col : str (default: 'monthly_sales')
         - feature_cols : list[str]
+        - sales_csv_override : str or Path
+            지정 시 DB 무시하고 이 CSV를 매출 소스로 사용 (imputation 비교용).
+        - train_cutoff_quarter : int, optional
+            지정 시 quarter >= cutoff인 row를 학습/검증에서 제외 (데이터 누수 방어).
 
     Returns
     -------
@@ -752,10 +770,38 @@ def prepare_dataloaders(
     target_col = config.get("target_col", "monthly_sales")
     feature_cols = config.get("feature_cols", None)
     csv_path = config.get("csv_path", None)
+    sales_csv_override = config.get("sales_csv_override", None)
 
     # 데이터 로드
-    sales_df = load_sales_data(db_url=db_url, csv_path=csv_path, dong_prefix=dong_prefix)
+    sales_df = load_sales_data(
+        db_url=db_url,
+        csv_path=csv_path,
+        dong_prefix=dong_prefix,
+        sales_csv_override=sales_csv_override,
+    )
     store_df = load_store_data(db_url=db_url, dong_prefix=dong_prefix)
+
+    # train_cutoff_quarter 적용 — 데이터 누수 방어 (백테스트 평가 연도 차단)
+    train_cutoff_quarter = config.get("train_cutoff_quarter", None)
+    if train_cutoff_quarter is not None and "quarter" in sales_df.columns:
+        cutoff = int(train_cutoff_quarter)
+        before_sales = len(sales_df)
+        sales_df = sales_df[sales_df["quarter"] < cutoff].copy()
+        logger.info(
+            "train_cutoff_quarter=%s 적용 (sales_df): %d → %d rows",
+            cutoff,
+            before_sales,
+            len(sales_df),
+        )
+        if "quarter" in store_df.columns:
+            before_store = len(store_df)
+            store_df = store_df[store_df["quarter"] < cutoff].copy()
+            logger.info(
+                "train_cutoff_quarter=%s 적용 (store_df): %d → %d rows",
+                cutoff,
+                before_store,
+                len(store_df),
+            )
 
     # 시계열 구성
     ts = build_timeseries(sales_df, store_df, feature_cols)

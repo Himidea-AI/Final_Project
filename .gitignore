@@ -80,6 +80,15 @@ backend/scripts/verify/_*.txt
 data/processed/sim_policy_*.json
 data/processed/policy_cache_*.json
 validation/results/imputed_seoul_sales_63ind.csv
+validation/results/imputed_seoul_sales_63ind_v4.csv
+
+# Phase B v4 미완성 산출물
+validation/phase_b_v4.py
+validation/results/phase_b_v4_metrics.json
+
+# 대용량 imputed 매출 (GitHub 100MB 제한 초과)
+data/processed/sales_imp_seoul.csv
+data/processed/seoul_migration_mapo_202601.csv
 
 # 대용량 데이터/임시 산출물 (push 거부 또는 repo 비대화 방지)
 data/processed/processed.zip
