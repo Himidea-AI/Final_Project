@@ -318,12 +318,14 @@ export type AgentId =
   | 'population_analyst'
   | 'legal'
   | 'district_ranking'
+  | 'operational_fit'
   | 'synthesis'
   | 'demographic_depth'
   | 'trend_forecaster'
   | 'competitor_intel';
 
 export type AgentKind = 'LLM' | 'Python' | 'Hybrid' | 'RAG';
+export type AgentStatus = 'success' | 'partial' | 'pending' | 'error' | 'skipped';
 
 export interface AgentAttribution {
   id: AgentId;
@@ -333,6 +335,7 @@ export interface AgentAttribution {
   verdict: string;
   reasoning: string;
   confidence?: number;
+  status?: AgentStatus;
 }
 
 export interface ReportSection {

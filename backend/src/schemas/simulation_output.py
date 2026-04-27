@@ -13,6 +13,10 @@ class QuarterlyProjection(BaseModel):
     cumulative_profit: int = 0
     confidence_lower: int = 0
     confidence_upper: int = 0
+    ci_80_lower: int | None = None
+    ci_80_upper: int | None = None
+    ci_95_lower: int | None = None
+    ci_95_upper: int | None = None
 
 
 # 하위 호환성 유지
@@ -23,11 +27,11 @@ class DistrictComparison(BaseModel):
     """동별 비교 결과"""
 
     district: str
-    score: float = 0.0
-    revenue: int = 0
-    bep: int = 0
-    survival: float = 0.0
-    cannibalization: float = 0.0
+    score: float | None = None
+    revenue: int | None = None
+    bep: int | None = None
+    survival: float | None = None
+    cannibalization: float | None = None
 
 
 class LegalRiskArticle(BaseModel):
@@ -43,6 +47,8 @@ class LegalRisk(BaseModel):
     detail: str
     recommendation: str = ""
     articles: list[LegalRiskArticle] = Field(default_factory=list)
+    checklist: list[dict] = Field(default_factory=list)
+    is_fallback: bool = False
 
 
 class MapCenter(BaseModel):
@@ -66,13 +72,14 @@ class MapData(BaseModel):
 class MarketReport(BaseModel):
     """프론트엔드 차트용 7개 정규화 지표 (0~100)"""
 
-    floating_population: int = 0
-    rent_index: int = 50
-    competition_intensity: int = 0
-    estimated_revenue: int = 60
-    survival_rate: int = 30
-    growth_potential: int = 0
-    accessibility: int = 75
+    floating_population: int | None = None
+    rent_index: int | None = None
+    competition_intensity: int | None = None
+    estimated_revenue: int | None = None
+    survival_rate: int | None = None
+    closure_rate: float | None = None
+    growth_potential: int | None = None
+    accessibility: int | None = None
 
 
 class DistrictRanking(BaseModel):
@@ -88,6 +95,7 @@ class DistrictRanking(BaseModel):
     pop_score: float = 0.0
     rent_score: float = 0.0
     vacancy_rate: float = 0.0
+    zoning_risk: str | None = None
     bep_quarters: int | None = None
     closure_rate: float | None = None
 
@@ -110,6 +118,7 @@ class ShapResult(BaseModel):
     base_value: float  # SHAP expected_value (기준 예측값)
     predicted_value: float  # 모델 예측 매출액
     predicted_value_unit: str = "원"  # 단위 (생존률 모델과 구별)
+    summary: list[str] = Field(default_factory=list)
     is_mock: bool  # mock 데이터 여부
 
 
@@ -118,10 +127,12 @@ class SimulationOutput(BaseModel):
 
     request_id: str
     target_district: str
+    target_districts: list[str] = Field(default_factory=list)
     simulation_months: int = 12
+    simulation_quarters: int | None = None
     quarterly_projection: list[QuarterlyProjection] = Field(default_factory=list)
     comparison: list[DistrictComparison] = Field(default_factory=list)
-    overall_legal_risk: str = "safe"
+    overall_legal_risk: str | None = None
     legal_risks: list[LegalRisk] = Field(default_factory=list)
     analysis_report: str = ""
     analysis_metrics: dict = Field(default_factory=dict)
@@ -129,11 +140,21 @@ class SimulationOutput(BaseModel):
     financial_report: dict = Field(default_factory=dict)
     ai_recommendation: str = ""
     market_report: MarketReport | None = None
-    winner_district: str = ""
+    winner_district: str | None = None
     top_3_candidates: list[str] = Field(default_factory=list)
     district_rankings: list[DistrictRanking] = Field(default_factory=list)
+    vacancy_applied: bool = False
+    vacancy_spots: list[dict] = Field(default_factory=list)
     # TCN SHAP 분석 결과 (없으면 None)
     shap_result: ShapResult | None = None
+    scenarios: dict | None = None
+    closure_risk: dict | None = None
+    competitor_intel: dict | None = None
+    trend_forecast: dict | None = None
+    demographic_report: dict | None = None
+    agent_attributions: list[dict] = Field(default_factory=list)
+    all_competitor_locations: list[dict] = Field(default_factory=list)
     # [customer_revenue P1-C] 타겟 고객 매출 분석 — dict | None (predict.py 반환값 그대로)
     # 키: segment_ratio, segment_sales, identified_sales, total_sales_ref, profile_summary, dimension_ratios
     customer_segment: dict | None = None
+    final_report: dict | None = None

@@ -25,9 +25,11 @@ class ProfitSimulation(BaseModel):
     """수익 시뮬레이션 지표"""
 
     monthly_revenue: int = Field(..., description="월 예상 매출액")
+    monthly_cost: Optional[int] = Field(default=None, description="월 예상 운영비. 미산정 시 None.")
     net_profit: int = Field(..., description="월 예상 순이익")
     margin_rate: float = Field(..., description="수익률 (%)")
-    bep_months: Optional[int] = Field(default=None, description="손익분기점 도달 개월 수 (TCN 예측값)")
+    bep_months: Optional[float] = Field(default=None, description="손익분기점 도달 개월 수 (TCN 예측값)")
+    includes_labor_cost: Optional[bool] = Field(default=None, description="인건비 포함 여부. 미산정 시 None.")
 
 
 class CompetitorAnalysis(BaseModel):
@@ -116,6 +118,7 @@ AgentIdLiteral = Literal[
 ]
 
 AgentKindLiteral = Literal["LLM", "Python", "Hybrid", "RAG"]
+AgentStatusLiteral = Literal["success", "partial", "pending", "error", "skipped"]
 
 
 class AgentAttribution(BaseModel):
@@ -132,3 +135,7 @@ class AgentAttribution(BaseModel):
     verdict: str = Field(description="한 줄 판단 (80자 내)")
     reasoning: str = Field(description="2-3 문장 설명")
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: AgentStatusLiteral = Field(
+        default="success",
+        description="에이전트 실행 상태. 부분 실패/미실행 구분용.",
+    )
