@@ -1,6 +1,7 @@
 import { BrainCircuit, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface DetailModalContent {
   title: string;
@@ -28,7 +29,11 @@ export function DetailModal({ modalContent, onClose }: DetailModalProps) {
     };
   }, [modalContent, onClose]);
 
-  return (
+  // SimulatorDashboard 컨테이너(absolute inset-0 z-40)가 자체 stacking context를 만들어,
+  // 그 안의 z-[100]도 외부 z-50(글로벌 header)을 못 이김. document.body로 portal하여
+  // DOM 트리상 SimulatorDashboard 밖으로 빠져나와 글로벌 header와 형제 stacking.
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <AnimatePresence>
       {modalContent && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-black/60">
@@ -70,6 +75,7 @@ export function DetailModal({ modalContent, onClose }: DetailModalProps) {
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
