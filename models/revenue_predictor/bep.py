@@ -119,6 +119,7 @@ class BEPCalculator:
             "quarterly_variable_cost": quarterly_variable,
             "total_initial_investment": total_initial,
             "annual_roi": round(annual_roi, 2),
+            "is_mock": False,
         }
 
     def simulate_quarterly(self, quarterly_revenues: list[float]) -> list[dict]:
@@ -165,6 +166,7 @@ class BEPCalculator:
                     "quarterly_profit": profit,
                     "cumulative_profit": cumulative_profit,
                     "bep_reached": reached_this_quarter,
+                    "is_mock": False,
                 }
             )
 

@@ -97,6 +97,15 @@ EXCLUDE_COMBOS: set[tuple[str, str]] = {
 }
 
 
+class ExcludedComboError(Exception):
+    """학습 데이터 부족으로 예측을 제공하지 않는 동×업종 조합.
+
+    EXCLUDE_COMBOS에 등록된 조합에 대해 모델 predict() 진입 시 raise된다.
+    interface.py에서 re-raise → B1(graph.py/main.py)에서 HTTP 400 변환 예정.
+    ValueError를 상속하지 않으므로 기존 except ValueError 블록에 잡히지 않는다.
+    """
+
+
 # ---------------------------------------------------------------------------
 # 데이터 로드
 # ---------------------------------------------------------------------------

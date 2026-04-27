@@ -25,6 +25,8 @@ import torch
 from models.lstm_forecast.data_prep import (
     ALL_FEATURES,
     DB_URL,
+    EXCLUDE_COMBOS,
+    ExcludedComboError,
     build_timeseries,
     load_sales_data,
     load_store_data,
@@ -64,7 +66,7 @@ DEFAULT_PREDICT_CONFIG: dict = {
 def predict(
     dong_code: str,
     industry_code: str,
-    n_months: int = 4,
+    n_quarters: int = 4,
     config: dict | None = None,
 ) -> list[dict]:
     """특정 동x업종의 향후 n분기 매출을 자기회귀 방식으로 예측한다.
@@ -80,8 +82,8 @@ def predict(
         행정동 코드 (예: '11440555').
     industry_code : str
         업종 코드 (예: 'CS100001').
-    n_months : int
-        예측할 분기 수 (기본 8 = 2년).
+    n_quarters : int
+        예측할 분기 수 (기본 4 = 1년).
     config : dict, optional
         설정 오버라이드.
 
@@ -96,6 +98,14 @@ def predict(
         }
     """
     cfg = {**DEFAULT_PREDICT_CONFIG, **(config or {})}
+
+    # EXCLUDE_COMBOS 차단 — 학습 제외 조합은 추론도 제공하지 않음
+    if (dong_code, industry_code) in EXCLUDE_COMBOS:
+        raise ExcludedComboError(
+            f"해당 조합은 데이터 부족으로 예측을 제공하지 않습니다: "
+            f"dong_code={dong_code}, industry_code={industry_code}"
+        )
+
     device = torch.device("cpu")  # 추론은 CPU에서 수행
 
     weights_path = Path(cfg["weights_path"])
@@ -176,7 +186,7 @@ def predict(
         # 초기 입력 시퀀스: (1, window_size, input_size)
         current_seq = torch.from_numpy(seq).unsqueeze(0).to(device)
 
-        for _ in range(n_months):
+        for _ in range(n_quarters):
             # TCN 순전파 → 스케일된 예측값
             pred_scaled = model(current_seq)  # (1, 1)
             pred_val = pred_scaled.cpu().numpy().flatten()[0]

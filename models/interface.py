@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.lstm_forecast.data_prep import EXCLUDE_COMBOS, ExcludedComboError
+
 logger = logging.getLogger(__name__)
 
 MODEL_VERSION = "0.1.0"
@@ -50,6 +52,7 @@ def _mock_revenue_forecast() -> dict:
     return {
         "quarterly_avg": round(quarterly_avg),
         "quarterly_predictions": quarterly_predictions,
+        "is_mock": True,
     }
 
 
@@ -60,8 +63,9 @@ def _mock_closure_rate() -> dict:
     raw = _closure_mock()
     return {
         "closure_rate": raw["closure_rate"],
-        "risk_level": raw["closure_risk_level"],
+        "risk_level": raw["closure_rate_level"],
         "monthly_closure_rates": raw["monthly_closure_rates"],
+        "is_mock": True,
     }
 
 
@@ -96,6 +100,7 @@ def _mock_bep(industry_name: str) -> dict:
         "annual_roi": bep_result["annual_roi"],
         "quarterly_simulation": simulation,
         "simulation_quarters": simulation_quarters,
+        "is_mock": True,
     }
 
 
@@ -124,7 +129,7 @@ def _run_tcn_forecast(dong_code: str, industry_code: str) -> dict:
     """TCN 매출 예측 모델 호출 → 분기별 결과 반환."""
     from models.tcn_forecast.predict import predict as tcn_predict
 
-    quarterly_results = tcn_predict(dong_code, industry_code, n_months=4)
+    quarterly_results = tcn_predict(dong_code, industry_code, n_quarters=4)
 
     quarterly_avg = (
         sum(qr["predicted_sales"] for qr in quarterly_results) / len(quarterly_results) if quarterly_results else 0.0
@@ -133,6 +138,7 @@ def _run_tcn_forecast(dong_code: str, industry_code: str) -> dict:
     return {
         "quarterly_avg": round(quarterly_avg),
         "quarterly_predictions": quarterly_results,
+        "is_mock": False,
     }
 
 
@@ -179,8 +185,9 @@ def _run_closure_rate(dong_code: str, industry_code: str) -> dict:
     result = closure_predict(dong_code, industry_code)
     return {
         "closure_rate": result["closure_rate"],
-        "risk_level": result["closure_risk_level"],
+        "risk_level": result["closure_rate_level"],
         "monthly_closure_rates": result["monthly_closure_rates"],
+        "is_mock": result.get("is_mock", False),
     }
 
 
@@ -230,6 +237,7 @@ def _run_bep(
         "annual_roi": bep_result["annual_roi"],
         "quarterly_simulation": simulation,
         "simulation_quarters": simulation_quarters,
+        "is_mock": False,
     }
 
 
@@ -406,6 +414,13 @@ class ModelOutput:
         """
         use_mock = False
 
+        # EXCLUDE_COMBOS 차단 — 모델 실행 전 선제 차단
+        if (dong_code, industry_code) in EXCLUDE_COMBOS:
+            raise ExcludedComboError(
+                f"해당 조합은 데이터 부족으로 예측을 제공하지 않습니다: "
+                f"dong_code={dong_code}, industry_code={industry_code}"
+            )
+
         # ---- 1) 매출 예측 (모델 선택: lstm / tcn / gru) ----
         forecast_fn = {
             "lstm": _run_lstm_forecast,
@@ -416,6 +431,8 @@ class ModelOutput:
         try:
             revenue_forecast = forecast_fn(dong_code, industry_code)
             logger.info("%s 매출 예측 완료", model.upper())
+        except ExcludedComboError:
+            raise  # 차단 예외는 mock fallback 없이 상위로 전파
         except Exception as exc:
             logger.warning("%s 매출 예측 실패 (mock 사용): %s", model.upper(), exc)
             revenue_forecast = _mock_revenue_forecast()
@@ -425,6 +442,8 @@ class ModelOutput:
         try:
             closure_rate_result = _run_closure_rate(dong_code, industry_code)
             logger.info("폐업률 예측 완료")
+        except ExcludedComboError:
+            raise  # 차단 예외는 mock fallback 없이 상위로 전파
         except Exception as exc:
             logger.warning("폐업률 예측 실패 (mock 사용): %s", exc)
             closure_rate_result = _mock_closure_rate()
@@ -436,6 +455,8 @@ class ModelOutput:
 
             closure_risk_result = closure_risk_predict(dong_code, industry_code)
             logger.info("폐업위험도 예측 완료 (score=%.3f)", closure_risk_result["risk_score"])
+        except ExcludedComboError:
+            raise  # 차단 예외는 mock fallback 없이 상위로 전파
         except Exception as exc:
             logger.warning("폐업위험도 예측 실패 (mock 사용): %s", exc)
             from models.closure_risk.predict import _mock_result
