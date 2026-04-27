@@ -1,0 +1,157 @@
+/**
+ * PeakHourCard — [D] living_pop_forecast 시각화
+ *
+ * predict_peak(dong_name, n_quarters=4)의 첫 분기(q1) 24시간 예측을 막대로 표시.
+ * 피크 시간대는 인디고 강조, 나머지는 stone.
+ *
+ * 데이터 흐름:
+ *   models/living_pop_forecast/predict.predict_peak
+ *     → models/interface.py generate (dict 래핑)
+ *     → backend/src/main.py response_data.living_pop_forecast
+ *     → DemographicTab → PeakHourCard
+ */
+
+import { Activity, Clock } from 'lucide-react';
+import type { LivingPopForecast } from '../../../../types';
+
+interface Props {
+  data: LivingPopForecast | null | undefined;
+}
+
+function formatTimeZone(tz: number): string {
+  const start = tz.toString().padStart(2, '0');
+  const end = ((tz + 1) % 24).toString().padStart(2, '0');
+  return `${start}–${end}시`;
+}
+
+function formatPop(pop: number): string {
+  if (pop >= 10000) return `${(pop / 10000).toFixed(1)}만`;
+  if (pop >= 1000) return `${(pop / 1000).toFixed(1)}천`;
+  return Math.round(pop).toLocaleString('ko-KR');
+}
+
+export function PeakHourCard({ data }: Props) {
+  if (!data || !Array.isArray(data.quarters) || data.quarters.length === 0) {
+    return (
+      <div className="rounded-3xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center">
+        <Activity className="mx-auto text-stone-600 mb-2" size={22} />
+        <p className="text-xs text-stone-500">유동인구 피크 시간 예측 데이터 없음</p>
+        <p className="mt-1 text-[10px] text-stone-600">
+          living_pop_forecast (TCN) 모델 호출 실패 시 표시됩니다
+        </p>
+      </div>
+    );
+  }
+
+  // 첫 분기(q1) 24시간 예측. all_hours 배열에서 일부 시간대가 빠질 수 있어 time_zone 키 기준 정렬.
+  const q1 = data.quarters[0];
+  const hourly = [...(q1.all_hours ?? [])].sort((a, b) => a.time_zone - b.time_zone);
+  const maxPop = Math.max(1, ...hourly.map((h) => h.predicted_pop));
+  const peakTz = q1.peak_time_zone;
+  const peakPop = q1.peak_pop;
+
+  return (
+    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8 space-y-6">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
+          <Activity size={16} className="text-indigo-400" /> 유동인구 피크 시간 예측
+          <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal">
+            living_pop_forecast · TCN
+          </span>
+        </h4>
+        <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[11px] font-black text-indigo-400 tabular-nums flex items-center gap-1.5">
+          <Clock size={11} />
+          피크 {formatTimeZone(peakTz)} · {formatPop(peakPop)}명
+        </div>
+      </div>
+
+      {/* 자연어 요약 */}
+      <p className="text-[13px] text-stone-300 leading-relaxed">
+        {data.dong_name} 다음 분기 시간대별 유동인구 예측. 피크는 {formatTimeZone(peakTz)}에 약{' '}
+        {formatPop(peakPop)}명으로 집중되며, 운영 인력·재고 배치의 기준 시간대로 활용 가능합니다.
+      </p>
+
+      {/* 24시간 막대 차트 */}
+      <div>
+        <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-3">
+          24시간 예측 ({q1.quarter_offset}분기 후)
+        </div>
+        <div className="flex items-end gap-[2px] h-[140px]">
+          {hourly.map((h) => {
+            const height = Math.max(4, (h.predicted_pop / maxPop) * 100);
+            const isPeak = h.time_zone === peakTz;
+            return (
+              <div
+                key={h.time_zone}
+                className="flex-1 flex flex-col items-center gap-1 group relative"
+                title={`${formatTimeZone(h.time_zone)} · ${formatPop(h.predicted_pop)}명`}
+              >
+                <div
+                  className={`w-full rounded-sm transition-all ${
+                    isPeak
+                      ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.4)]'
+                      : 'bg-stone-700 group-hover:bg-stone-600'
+                  }`}
+                  style={{ height: `${height}%` }}
+                />
+                {/* 시간대 라벨 — 짝수 시간만 표시 (가독성) */}
+                <div
+                  className={`text-[8px] font-bold tabular-nums ${
+                    isPeak ? 'text-indigo-400' : 'text-stone-600'
+                  }`}
+                >
+                  {h.time_zone % 3 === 0 ? h.time_zone : ''}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-between text-[9px] font-bold text-stone-600 tabular-nums mt-1">
+          <span>0시</span>
+          <span>6시</span>
+          <span>12시</span>
+          <span>18시</span>
+          <span>23시</span>
+        </div>
+      </div>
+
+      {/* 분기별 피크 요약 (q1~qn) */}
+      {data.quarters.length > 1 && (
+        <div>
+          <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-3">
+            분기별 피크 시간 추이
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {data.quarters.map((q) => (
+              <div
+                key={q.quarter_offset}
+                className="bg-stone-950/40 border border-stone-800 rounded-xl p-3 text-left"
+              >
+                <div className="text-[9px] font-black text-stone-500 uppercase tracking-widest">
+                  +{q.quarter_offset}분기
+                </div>
+                <div className="text-base font-black text-stone-100 tabular-nums tracking-tighter mt-1">
+                  {formatTimeZone(q.peak_time_zone)}
+                </div>
+                <div className="text-[10px] font-bold text-indigo-400 tabular-nums mt-0.5">
+                  {formatPop(q.peak_pop)}명
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Disclaimer */}
+      <div className="pt-4 border-t border-stone-800/50 space-y-1">
+        <p className="text-[10px] text-stone-600 leading-relaxed">
+          ※ TCN 모델 — 코로나 시기(2020~2021) 가중치 0.5 보정 적용.
+        </p>
+        <p className="text-[10px] text-stone-600 leading-relaxed">
+          ※ 마포구 16동 × 24시간대 단일 학습. 다른 조합/시간대는 외삽 결과로 신뢰도 하락 가능.
+        </p>
+      </div>
+    </div>
+  );
+}
