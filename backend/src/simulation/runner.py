@@ -118,6 +118,34 @@ def _load_holidays() -> dict[str, dict]:
     return out
 
 
+def _swap_dong_hour_boost_for_day(
+    living_pop_daily_boost: dict,
+    fallback_boost: dict,
+    day_idx: int,
+    weekday: int,
+) -> dict:
+    """매일 boost dict 갱신 — living_pop 우선, 없으면 fallback.
+
+    Args:
+        living_pop_daily_boost: {(dong, hour, day_idx): ratio} (옵션 B).
+        fallback_boost: 기존 분기 평균 boost {(dong, hour, weekday): ratio}.
+        day_idx: 현재 시뮬 day index (0 ~ days-1).
+        weekday: 0(월) ~ 6(일).
+
+    Returns:
+        새 boost dict {(dong, hour, weekday): ratio} — score_store 가 사용하는 형식.
+        living_pop_daily_boost 가 빈 dict 면 fallback_boost 객체 그대로 반환 (회귀 보호).
+    """
+    if not living_pop_daily_boost:
+        return fallback_boost
+    # living_pop 의 day_idx 매칭하는 (dong, hour) 만 갱신
+    out = dict(fallback_boost)  # fallback 복사
+    for (dong, hour, didx), ratio in living_pop_daily_boost.items():
+        if didx == day_idx:
+            out[(dong, hour, weekday)] = ratio
+    return out
+
+
 def _dump_trajectory(path: str | Path, rows: list[dict]) -> None:
     import json as _json
 
@@ -513,6 +541,16 @@ def run_simulation(
         world.is_weekend = scenario.weekend_force or hol.get("is_weekend", (day_idx % 7) in (6, 0))
         world.is_holiday = hol.get("is_holiday", False)
         world.holiday_name = hol.get("holiday_name")
+
+        # 옵션 B: living_pop_daily_boost 활성 시 매일 갱신
+        # warmup 단계는 skip (warmup 끝난 후 측정 days 만 적용).
+        if not is_warmup and world.living_pop_daily_boost:
+            world.adstrd_flpop_boost = _swap_dong_hour_boost_for_day(
+                world.living_pop_daily_boost,
+                world.adstrd_flpop_boost,
+                day_idx=day - 1,  # day=1 → day_idx=0
+                weekday=world.weekday,
+            )
 
         if verbose:
             tag = ("WARMUP " if is_warmup else "") + ("주말" if world.is_weekend else "평일")
