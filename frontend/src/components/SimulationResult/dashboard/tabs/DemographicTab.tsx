@@ -17,6 +17,7 @@ import { formatPeakHours } from '../utils/formatters';
 import { CoreDemographicDonut } from '../charts/CoreDemographicDonut';
 import { WeekdayWeekendBar } from '../charts/WeekdayWeekendBar';
 import { StackedAgeBar } from '../charts/StackedAgeBar';
+import { CustomerSegmentCard } from '../charts/CustomerSegmentCard';
 
 interface Props {
   simResult: SimulationOutput;
@@ -45,7 +46,10 @@ export function DemographicTab({ simResult }: Props) {
 
   const hasPeakMatrix = Array.isArray(demo?.peak_hour_matrix) && demo.peak_hour_matrix.length === 7;
 
-  if (!hasAnyComposition && !hasReport) {
+  const customerSegment = simResult.customer_segment ?? null;
+  const hasCustomerSegment = Boolean(customerSegment);
+
+  if (!hasAnyComposition && !hasReport && !hasCustomerSegment) {
     return (
       <div className="bg-stone-900/30 border border-dashed border-stone-800 rounded-3xl p-10 text-center">
         <Users className="mx-auto mb-3 text-stone-600" size={22} />
@@ -129,6 +133,9 @@ export function DemographicTab({ simResult }: Props) {
           )}
         </div>
       )}
+
+      {/* [customer_revenue P1-C] 타겟 고객 매출 기여 카드 */}
+      <CustomerSegmentCard segment={customerSegment} />
     </div>
   );
 }
