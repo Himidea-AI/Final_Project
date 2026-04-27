@@ -51,9 +51,18 @@ DEFAULT_PREDICT_CONFIG: dict = {
 }
 
 
+# 모듈 레벨 캐시 — predict_peak가 24×n_quarters forward pass라 시뮬마다 모델
+# 새로 로딩하면 latency 크게 누적됨. weights_path 기반 키로 캐시. 가중치 파일 변경 시 서버 재시작 필요.
+_MODEL_CACHE: dict[str, tuple[TCNForecaster, object, object]] = {}
+
+
 def _load_model_and_scalers(cfg: dict) -> tuple[TCNForecaster, object, object]:
     weights_path = Path(cfg["weights_path"])
     scalers_path = Path(cfg["scalers_path"])
+
+    cache_key = f"{weights_path}::{scalers_path}"
+    if cache_key in _MODEL_CACHE:
+        return _MODEL_CACHE[cache_key]
 
     if not weights_path.exists():
         raise FileNotFoundError(
@@ -74,7 +83,9 @@ def _load_model_and_scalers(cfg: dict) -> tuple[TCNForecaster, object, object]:
     )
     model.load_weights(weights_path)
     model.eval()
-    return model, feat_scaler, tgt_scaler
+
+    _MODEL_CACHE[cache_key] = (model, feat_scaler, tgt_scaler)
+    return _MODEL_CACHE[cache_key]
 
 
 def _autoregressive_predict(
