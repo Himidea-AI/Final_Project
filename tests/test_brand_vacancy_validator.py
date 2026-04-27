@@ -1,5 +1,7 @@
 """brand_vacancy_validator 트랙 단위 함수 테스트."""
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 
@@ -9,6 +11,8 @@ from validation.brand_vacancy_validator import (
     _track_v1b,
     _track_v1c,
     _track_v2,
+    diagnose_failure,
+    run_5track_validation,
 )
 
 
@@ -108,3 +112,81 @@ class TestTrackCi:
         result = _track_ci(pse)
         assert result["status"] == "incomplete"
         assert result["pass"] is False
+
+
+class TestDiagnoseFailure:
+    def test_v1a_fail_message(self):
+        tracks = {
+            "v1a": {"status": "ok", "pearson_r": 0.5, "mape": 0.4, "pass": False},
+            "v1b": {"status": "ok", "pass": True},
+            "v1c": {"status": "ok", "pass": True},
+            "v2": {"status": "ok", "pass": True},
+            "ci": {"status": "ok", "pass": True},
+        }
+        diagnoses = diagnose_failure(tracks)
+        assert any("V1a fail" in d for d in diagnoses)
+
+    def test_v1c_high_ratio_message(self):
+        tracks = {
+            "v1a": {"status": "ok", "pass": True},
+            "v1b": {"status": "ok", "pass": True},
+            "v1c": {"status": "ok", "mean_ratio": 2.5, "pass": False},
+            "v2": {"status": "ok", "pass": True},
+            "ci": {"status": "ok", "pass": True},
+        }
+        diagnoses = diagnose_failure(tracks)
+        assert any("V1c fail" in d and "150" in d for d in diagnoses)
+
+    def test_all_pass_no_diagnoses(self):
+        tracks = {k: {"status": "ok", "pass": True} for k in ["v1a", "v1b", "v1c", "v2", "ci"]}
+        assert diagnose_failure(tracks) == []
+
+
+class TestRun5TrackValidation:
+    @patch("validation.brand_vacancy_validator._collect_actual_data")
+    @patch("validation.brand_vacancy_validator._run_validation_simulations")
+    @patch("validation.brand_vacancy_validator._dump_report")
+    def test_all_pass_production_ready(self, mock_dump, mock_sim, mock_actual):
+        # 모두 통과하는 가짜 데이터 (varying per cell for non-zero variance in V1a/V1b)
+        actual_sales = {(f"d{i}", "카페"): 1.0e9 * (1 + i * 0.1) for i in range(20)}
+        actual_count = {(f"d{i}", "카페"): 1.0e6 * (1 + i * 0.1) for i in range(20)}
+        actual_per_store = {(f"d{i}", "카페"): 1.0e7 * (1 + i * 0.05) for i in range(20)}
+        mock_actual.return_value = {
+            "district_sales": actual_sales,
+            "district_count": actual_count,
+            "per_store_avg": actual_per_store,
+            "ftc_avg": 100_000_000,
+        }
+        mock_sim.return_value = {
+            "dong_industry_revenue": {k: v * 1.05 for k, v in actual_sales.items()},
+            "dong_industry_visits": {k: v * 1.05 for k, v in actual_count.items()},
+            "per_store_revenue": {k: v * 1.1 for k, v in actual_per_store.items()},
+            "vacancy_yearly_rev": 110_000_000,
+            "pse_summary": {"revenue_per_day": {"mean": 100, "ci95": 5}},
+        }
+        report = run_5track_validation("이디야", "카페", days=90, n_seeds=3)
+        assert report["production_ready"] is True
+        for t in ["v1a", "v1b", "v1c", "v2", "ci"]:
+            assert report["tracks"][t]["pass"] is True
+
+    @patch("validation.brand_vacancy_validator._collect_actual_data")
+    @patch("validation.brand_vacancy_validator._run_validation_simulations")
+    @patch("validation.brand_vacancy_validator._dump_report")
+    def test_v2_skipped_auto_fail(self, mock_dump, mock_sim, mock_actual):
+        cells = {(f"d{i}", "카페"): 1.0e9 for i in range(20)}
+        mock_actual.return_value = {
+            "district_sales": cells,
+            "district_count": {k: 1.0e6 for k in cells},
+            "per_store_avg": {k: 1.0e7 for k in cells},
+            "ftc_avg": None,  # 누락
+        }
+        mock_sim.return_value = {
+            "dong_industry_revenue": {k: 1.0e9 * 1.05 for k in cells},
+            "dong_industry_visits": {k: 1.0e6 * 1.05 for k in cells},
+            "per_store_revenue": {k: 1.0e7 * 1.1 for k in cells},
+            "vacancy_yearly_rev": 110_000_000,
+            "pse_summary": {"revenue_per_day": {"mean": 100, "ci95": 5}},
+        }
+        report = run_5track_validation("이디야", "카페")
+        assert report["tracks"]["v2"]["status"] == "skipped"
+        assert report["production_ready"] is False
