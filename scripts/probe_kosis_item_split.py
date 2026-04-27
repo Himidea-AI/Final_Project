@@ -69,6 +69,8 @@ def normalize_quarters(df: pd.DataFrame) -> pd.DataFrame:
     """KOSIS 응답 → quarter (YYYYQ) + value 컬럼 정규화."""
     val_col = next((c for c in df.columns if c in ("수치값", "DT", "value")), None)
     per_col = next((c for c in df.columns if c in ("수록시점", "PRD_DE", "period_value")), None)
+    if val_col is None or per_col is None:
+        raise ValueError(f"normalize_quarters: expected value/period columns not found. Got: {list(df.columns)}")
     df = df[[per_col, val_col]].copy()
     df[val_col] = pd.to_numeric(df[val_col], errors="coerce")
 
@@ -128,6 +130,8 @@ if __name__ == "__main__":
     anchors = {
         "current": normalize_quarters(df_current),
         "constant": normalize_quarters(df_constant),
+        # NOTE: mixed = mean(경상, 불변) — 단위 다른 두 지수의 산술 평균.
+        # 의미론적 비교 anchor 가 아니라 "분리 효과 측정용" baseline 으로만 사용.
         "mixed": normalize_quarters(pd.concat([df_current, df_constant])),
     }
 
@@ -136,7 +140,12 @@ if __name__ == "__main__":
         m = measure_r(anchor, mapo)
         m["name"] = name
         results.append(m)
-        print(f"  {name:10s}: r = {m['pearson_r']:.4f} (n={m['n_quarters']})")
+        r_str = f"{m['pearson_r']:.4f}" if m["pearson_r"] is not None else "N/A"
+        print(f"  {name:10s}: r = {r_str} (n={m['n_quarters']})")
+
+    # CSV note 컬럼: mixed 는 단위 다른 두 지수의 산술 평균(baseline) 임을 명시
+    for r in results:
+        r["note"] = "baseline (mean of T1+T2, semantic mixing)" if r["name"] == "mixed" else "single index"
 
     out_df = pd.DataFrame(results)
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
@@ -144,9 +153,18 @@ if __name__ == "__main__":
     print(f"[saved] {OUT_CSV}")
 
     # 합격 판정
-    r_mixed = next(r["pearson_r"] for r in results if r["name"] == "mixed")
-    best = max([r for r in results if r["name"] != "mixed"], key=lambda x: x["pearson_r"])
-    delta = best["pearson_r"] - r_mixed
-    chosen = best["name"] if delta >= THRESHOLD_DELTA else "mixed"
-    print(f"\n[합격선] best ({best['name']}) − mixed = {delta:+.4f}")
-    print(f"[채택] anchor = '{chosen}'  ({'분리 채택' if chosen != 'mixed' else '혼합 유지'})")
+    valid = [r for r in results if r["name"] != "mixed" and r["pearson_r"] is not None]
+    if not valid:
+        print("⚠️  분리 anchor 모두 측정 실패 — 혼합 유지")
+        chosen = "mixed"
+    else:
+        best = max(valid, key=lambda x: x["pearson_r"])
+        r_mixed = next((r["pearson_r"] for r in results if r["name"] == "mixed"), None)
+        if r_mixed is None:
+            print("⚠️  mixed anchor 측정 실패 — best 단독 채택")
+            chosen = best["name"]
+        else:
+            delta = best["pearson_r"] - r_mixed
+            chosen = best["name"] if delta >= THRESHOLD_DELTA else "mixed"
+            print(f"\n[합격선] best ({best['name']}) − mixed = {delta:+.4f}")
+            print(f"[채택] anchor = '{chosen}'  ({'분리 채택' if chosen != 'mixed' else '혼합 유지'})")
