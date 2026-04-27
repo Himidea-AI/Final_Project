@@ -271,6 +271,7 @@ def _run_validation_simulations(
     days: int,
     n_seeds: int,
     start_date: _dt.date | None = None,
+    sample_to_pop_factor: float = 380.0,
 ) -> dict[str, Any]:
     """시뮬 데이터 수집 — 동×업종 매트릭스 + V2 단일 vacancy.
 
@@ -282,6 +283,12 @@ def _run_validation_simulations(
     (일별 boost) 가 작동. 미설정 시 today() default — living_population 부재 시
     옵션 B fallback (정적 boost) 자동 적용. V2 시뮬은 vacancy_pse 호출이라
     start_date 인자 미적용 (sim 자체가 ratio 기반이라 시점 무관).
+
+    `sample_to_pop_factor` (옵션 F): 시뮬 1000ag → 마포 유효 인구 비례 scale up.
+    default 380.0 (= 380000/1000, 마포 등록 인구 추정). Cochran 1977
+    sample-to-population scaling 학계 표준. Pearson r 은 scale invariant —
+    그러나 MAPE/ratio 는 단위 일치 후 의미. factor=1.0 시 scale 미적용
+    (시뮬 native 단위 그대로, 회귀 호환성).
     """
     from statistics import mean
 
@@ -368,6 +375,16 @@ def _run_validation_simulations(
     # → 연 환산 = rev_per_day * 365.
     rev_per_day = pse_result["pse_summary"]["revenue_per_day"]["mean"]
     vacancy_yearly_rev = rev_per_day * 365
+
+    # ─── 옵션 F: sample → population scale up ───
+    # 시뮬 1000ag 부분 표본 → 마포 유효 인구 (~38만) 비례 scale.
+    # 모든 트랙의 absolute value 단위를 실측 (전수) 와 일치시킴.
+    if sample_to_pop_factor != 1.0:
+        revenue_avg = {k: v * sample_to_pop_factor for k, v in revenue_avg.items()}
+        visits_avg = {k: v * sample_to_pop_factor for k, v in visits_avg.items()}
+        per_store_avg = {k: v * sample_to_pop_factor for k, v in per_store_avg.items()}
+        vacancy_yearly_rev = vacancy_yearly_rev * sample_to_pop_factor
+        logger.info(f"[validator] scale up x{sample_to_pop_factor} (option F sample to population)")
 
     return {
         "dong_industry_revenue": revenue_avg,
@@ -471,6 +488,7 @@ def run_5track_validation(
     output_dir: Path | str = Path("validation/results/"),
     verbose: bool = True,
     start_date: _dt.date | None = None,
+    sample_to_pop_factor: float = 380.0,
 ) -> dict[str, Any]:
     """5트랙 검증 protocol 1회 실행.
 
@@ -493,7 +511,14 @@ def run_5track_validation(
     if verbose:
         logger.info(f"[validator] '{brand_name}' 5트랙 검증 시작")
     actual = _collect_actual_data(brand_name, category, multi_quarter_avg)
-    sim = _run_validation_simulations(brand_name, category, days, n_seeds, start_date=start_date)
+    sim = _run_validation_simulations(
+        brand_name,
+        category,
+        days,
+        n_seeds,
+        start_date=start_date,
+        sample_to_pop_factor=sample_to_pop_factor,
+    )
 
     tracks = {
         "v1a": _track_v1a(sim["dong_industry_revenue"], actual["district_sales"]),
@@ -514,6 +539,7 @@ def run_5track_validation(
             "n_seeds": n_seeds,
             "multi_quarter_avg": multi_quarter_avg,
             "start_date": start_date.isoformat() if start_date is not None else "today",
+            "sample_to_pop_factor": sample_to_pop_factor,
         },
         "tracks": tracks,
         "production_ready": production_ready,
@@ -522,6 +548,8 @@ def run_5track_validation(
             "정적 시뮬 환경 — 90일 동안 같은 날씨/같은 월 (브레인스토밍 옵션 3 future spec).",
             "매장 단위 실측 매출 부재 — 동×업종 평균으로 V1c 측정.",
             "검증은 mock 강제 — Mode C/D LLM 활성 시 결정 분포 약간 변화 가능 (margin ~3%).",
+            f"옵션 F (sample x{sample_to_pop_factor}) — 시뮬 1000ag 결과를 마포 유효 인구 비례 scale up. "
+            f"factor 380 = 등록 인구 추정 (Cochran 1977). sensitivity 분석 (380 vs 440 vs 1.0) 은 별도 spec.",
         ],
         "timestamp": datetime.now(UTC).isoformat(),
     }
@@ -568,6 +596,16 @@ def _main() -> None:
             "to activate option B (e.g. 2025-12-01 -> 90 days = 2026-02-28)."
         ),
     )
+    parser.add_argument(
+        "--sample-pop-factor",
+        type=float,
+        default=380.0,
+        help=(
+            "Sample-to-population scaling factor (default 380 = 380000 / 1000ag). "
+            "Cochran 1977 standard. Sensitivity check: 380 (registered pop) vs "
+            "440 (registered + floating) vs 1.0 (sim native, no scaling)."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.brand and not args.brands:
@@ -591,6 +629,7 @@ def _main() -> None:
                 output_dir=args.output_dir,
                 verbose=True,
                 start_date=start_date,
+                sample_to_pop_factor=args.sample_pop_factor,
             )
             summary.append(
                 {

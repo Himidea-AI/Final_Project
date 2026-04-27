@@ -37,7 +37,7 @@ def load_joined() -> pd.DataFrame:
                s.monthly_sales, q.store_count, q.open_count, q.close_count,
                q.closure_rate, q.franchise_count
         FROM store_quarterly q
-        LEFT JOIN district_sales s
+        LEFT JOIN seoul_district_sales s
           ON q.quarter = s.quarter AND q.dong_code = s.dong_code
          AND q.industry_code = s.industry_code
         WHERE q.dong_code LIKE '11440%'
@@ -52,8 +52,8 @@ def load_joined() -> pd.DataFrame:
     return df
 
 
-def build_features_with_leak(df: pd.DataFrame) -> pd.DataFrame:
-    """v3 의 leak 있는 피처 생성 (전체 데이터로 dong_avg 계산)."""
+def build_features_with_leak(df: pd.DataFrame, exclude_idx: pd.Index | None = None) -> pd.DataFrame:
+    """v3 의 leak 있는 피처 생성 (전체 데이터로 dong_avg 계산). exclude_idx 는 무시."""
     X = pd.DataFrame(index=df.index)
     X["store_count"] = df["store_count"].fillna(df["store_count"].median())
     X["log_store_count"] = np.log1p(X["store_count"])
@@ -117,8 +117,8 @@ def mnar_mimic_cv(df: pd.DataFrame, build_X_fn, n_folds: int = 5, seed: int = 42
     for te_idx in folds:
         tr_mask = alive_mask & (~df.index.isin(te_idx))
         tr_idx = df[tr_mask].index.values
-        # build_X_fn 이 LOO 면 te_idx 제외하고 dong_avg 계산
-        X = build_X_fn(df, pd.Index(te_idx)) if build_X_fn.__name__ == "build_features_loo" else build_X_fn(df)
+        # 통일 시그니처: (df, exclude_idx) — leak 버전은 exclude_idx 무시
+        X = build_X_fn(df, pd.Index(te_idx))
 
         gbm = ExtraTreesRegressor(
             n_estimators=300, max_depth=35, min_samples_leaf=1, bootstrap=False, random_state=42, n_jobs=-1
