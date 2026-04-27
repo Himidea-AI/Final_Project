@@ -810,6 +810,16 @@ Phase 2 완료 후:
 - chats 데이터 frontend 노출 (`/vacancy-evaluation/{job_id}/chats` endpoint)
 - 비용: 운영 $6/평가, 검증 $672/회 — 사용자 비용 합격선 결정 필요
 
+**living_population ingest pipeline — 별도 spec 권장 (Task 11 사전 검증에서 발견)**:
+
+- `living_population` 의 마포 데이터 max date = **2026-02-28** (DB 기준), 시뮬 default `sim_start = today()` 와 mismatch → 옵션 B (일별 boost) 가 미래 시점 시뮬에서는 fallback 정적.
+- 본 spec 의 Task 11 은 **`--start-date 2025-12-01`** 같이 living_population 가용 범위 안 일자 사용 (옵션 A 우회). 학술 검증으로 충분 (과거 시점 시뮬 vs 같은 시점 실측 = 시점 일치 가능).
+- 운영 시점 실시간 옵션 B 를 위해서는 ingest pipeline 필요:
+  - `SeoulOpendataClient.get_living_population` (단일 동·단일 날짜) 외 bulk CSV 다운로드 검토
+  - 16동 × 24h × N일 row INSERT (rate limit + 중복 처리 + 멱등성)
+  - cron 정기 갱신 + 모니터링
+  - 별도 spec scope (~1~3일 작업)
+
 **시각화 frontend 페이지 — 별도 spec**:
 
 본 spec 의 `collect_trajectory` / `dump_visits` 인터페이스 위에:

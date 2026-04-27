@@ -2527,9 +2527,22 @@ psql $POSTGRES_URL -c "SELECT MIN(date), MAX(date), COUNT(DISTINCT date) AS day_
 
 - [ ] **Step 11.5: 1회 실제 검증 실행 (사용자 환경, ~10시간, 옵션 B 적용)**
 
+> **사전 검증 결과** (Step 11.1~11.4 완료, controller 측정 2026-04-27):
+> - `kakao_store_menu`: top 브랜드 메뉴 풍부 (MEGA 6479, 빽다방 4273, 이디야 2741 등). ✅
+> - `ftc.avrgSlsAmt` (2025년): 이디야 1.9억/년, MEGA 3.9억, 컴포즈 2.7억, 빽다방 8.3억. 스타벅스 ftc 미등록. ✅ (4 브랜드 V2 가능)
+> - `sales_imp_mapo`: 최근 4Q (2024Q1~Q4) 160 cell, store_count NaN/0 = 0%. ✅
+> - `living_population`: 2019-02-01 ~ **2026-02-28** 가용, 384 rows/day. 시뮬 sim_start 가 이 범위 안이어야 옵션 B 동적 boost 작동. **`--start-date 2025-12-01`** 권장 (90일 = 2026-02-28).
+> - **별도 spec future work**: living_population ingest pipeline (서울 API → DB 정기 갱신).
+
 ```bash
 # 권장: nohup 또는 tmux 안에서 실행
-python -m validation.brand_vacancy_validator --brand 이디야 --category 카페 --days 90 --n-seeds 3 --multi-quarter-avg 4 2>&1 | tee validation/results/이디야_run.log
+# .env 의 POSTGRES_URL 로드 후 실행
+source .env
+python -m validation.brand_vacancy_validator \
+    --brand 이디야 --category 카페 \
+    --days 90 --n-seeds 3 --multi-quarter-avg 4 \
+    --start-date 2025-12-01 \
+    2>&1 | tee validation/results/이디야_run.log
 ```
 
 Expected outputs:

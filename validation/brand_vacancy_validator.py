@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import logging
 from datetime import UTC, datetime
@@ -264,17 +265,29 @@ def _collect_actual_data(brand_name: str, category: str, multi_quarter_avg: int)
     }
 
 
-def _run_validation_simulations(brand_name: str, category: str, days: int, n_seeds: int) -> dict[str, Any]:
+def _run_validation_simulations(
+    brand_name: str,
+    category: str,
+    days: int,
+    n_seeds: int,
+    start_date: _dt.date | None = None,
+) -> dict[str, Any]:
     """시뮬 데이터 수집 — 동×업종 매트릭스 + V2 단일 vacancy.
 
     실제 시뮬 호출 — ~9시간 소요 (days=90 × n_seeds × 2 시뮬).
     Mock-friendly 인터페이스 (테스트에서 patch).
+
+    `start_date`: V1a/V1b/V1c 매트릭스 시뮬의 sim_start 일자 (default today).
+    living_population 가용 범위 (max=2026-02-28) 안의 과거 일자를 사용해야 옵션 B
+    (일별 boost) 가 작동. 미설정 시 today() default — living_population 부재 시
+    옵션 B fallback (정적 boost) 자동 적용. V2 시뮬은 vacancy_pse 호출이라
+    start_date 인자 미적용 (sim 자체가 ratio 기반이라 시점 무관).
     """
     from statistics import mean
 
     from src.services.brand_menu_loader import BrandMenuEmptyError, load_brand_menu_items
     from src.simulation.config import ModelConfig, PopulationMix, TierDistribution
-    from src.simulation.runner import run_simulation
+    from src.simulation.runner import Scenario, run_simulation
     from src.simulation.vacancy_pse import evaluate_vacancy_pse
     from src.simulation.world_loader import load_world_from_rds
 
@@ -282,6 +295,12 @@ def _run_validation_simulations(brand_name: str, category: str, days: int, n_see
     cfg = ModelConfig()
     cfg.tier_s_provider = "mock"  # 검증은 항상 mock 강제
     cfg.tier_a_provider = "mock"
+
+    # 옵션 A: start_date 지정 시 Scenario.date_override 로 sim_start 강제.
+    matrix_scenario: Scenario | None = None
+    if start_date is not None:
+        matrix_scenario = Scenario(date_override=start_date.isoformat())
+        logger.info(f"[validator] sim_start={start_date.isoformat()} (옵션 A start-date)")
 
     # ① 동×업종 매트릭스 (vacancy 미주입, 일반 시뮬, days × N=n_seeds)
     matrix_revenues: list[dict[tuple, float]] = []
@@ -301,6 +320,7 @@ def _run_validation_simulations(brand_name: str, category: str, days: int, n_see
             use_profiles=True,
             use_policy=True,
             collect_trajectory=False,
+            scenario=matrix_scenario,
             seed=s,
             verbose=False,
             seed_memory=True,
@@ -448,6 +468,7 @@ def run_5track_validation(
     multi_quarter_avg: int = 4,
     output_dir: Path | str = Path("validation/results/"),
     verbose: bool = True,
+    start_date: _dt.date | None = None,
 ) -> dict[str, Any]:
     """5트랙 검증 protocol 1회 실행.
 
@@ -459,6 +480,10 @@ def run_5track_validation(
         multi_quarter_avg: 실측 ground truth 평균 분기 수 (default 4 = 1년).
         output_dir: report dump 디렉토리.
         verbose: 진행 로그.
+        start_date: 매트릭스 시뮬 sim_start 일자 (옵션 A). default None=today.
+            living_population 가용 범위 (~2026-02-28) 안 일자 권장 — 옵션 B 동적
+            boost 활성화. 미설정 시 today() default → living_population 부재로
+            옵션 B fallback (정적 boost).
 
     Returns:
         report dict — tracks, production_ready, diagnoses, limitations.
@@ -466,7 +491,7 @@ def run_5track_validation(
     if verbose:
         logger.info(f"[validator] '{brand_name}' 5트랙 검증 시작")
     actual = _collect_actual_data(brand_name, category, multi_quarter_avg)
-    sim = _run_validation_simulations(brand_name, category, days, n_seeds)
+    sim = _run_validation_simulations(brand_name, category, days, n_seeds, start_date=start_date)
 
     tracks = {
         "v1a": _track_v1a(sim["dong_industry_revenue"], actual["district_sales"]),
@@ -482,7 +507,12 @@ def run_5track_validation(
     report = {
         "brand_name": brand_name,
         "category": category,
-        "config": {"days": days, "n_seeds": n_seeds, "multi_quarter_avg": multi_quarter_avg},
+        "config": {
+            "days": days,
+            "n_seeds": n_seeds,
+            "multi_quarter_avg": multi_quarter_avg,
+            "start_date": start_date.isoformat() if start_date is not None else "today",
+        },
         "tracks": tracks,
         "production_ready": production_ready,
         "diagnoses": diagnoses,
@@ -527,10 +557,23 @@ def _main() -> None:
         default="validation/results/",
         help="report 디렉토리",
     )
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help=(
+            "sim start date (YYYY-MM-DD, option A). default today; "
+            "use a date inside living_population range (max ~2026-02-28) "
+            "to activate option B (e.g. 2025-12-01 -> 90 days = 2026-02-28)."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.brand and not args.brands:
         parser.error("--brand 또는 --brands 중 하나 필수")
+
+    import datetime as _dt
+
+    start_date = _dt.date.fromisoformat(args.start_date) if args.start_date else None
 
     brand_list = [args.brand] if args.brand else [b.strip() for b in args.brands.split(",")]
 
@@ -545,6 +588,7 @@ def _main() -> None:
                 multi_quarter_avg=args.multi_quarter_avg,
                 output_dir=args.output_dir,
                 verbose=True,
+                start_date=start_date,
             )
             summary.append(
                 {
