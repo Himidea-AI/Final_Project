@@ -96,7 +96,7 @@ export function HybridSliderInput({
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
-            className="w-16 bg-transparent text-right text-xs font-black text-[#818cf8] focus:outline-none placeholder-[#404040]"
+            className="w-16 bg-transparent text-right text-xs font-mono tabular-nums font-black text-[#818cf8] focus:outline-none placeholder-[#404040]"
             placeholder={String(min)}
           />
           <span className="text-[10px] text-[#9ca3af] ml-1 font-bold">{unit}</span>
@@ -120,7 +120,7 @@ export function HybridSliderInput({
         />
       </div>
 
-      <div className="flex justify-between text-[10px] text-[#6b7280] font-mono">
+      <div className="flex justify-between text-[10px] text-[#6b7280] font-mono tabular-nums">
         <span>{renderMin}</span>
         <span>{renderMax}</span>
       </div>

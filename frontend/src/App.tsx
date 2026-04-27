@@ -778,7 +778,7 @@ function RechartsDarkTooltip(props: any) {
               <div className="w-2 h-2 rounded-full" style={{ background: p.stroke }} />
               <span className="text-[#9ca3af]">{isRevenue ? '예상 매출' : '유동인구'}</span>
             </div>
-            <span className="text-white font-bold">
+            <span className="text-white font-bold font-mono tabular-nums">
               {isRevenue
                 ? `₩ ${(p.value * 10000).toLocaleString()}`
                 : `${(p.value * 100).toLocaleString()} 명`}
@@ -1438,7 +1438,7 @@ function SimulatorDashboard({
           <div className="space-y-10">
             {/* ─────── 섹션 1: Core Parameters (위계 강조) ─────── */}
             <div>
-              <SectionLabel icon={MapPin} title="Core Parameters" sub="필수 분석 대상" />
+              <SectionLabel icon={MapPin} title="핵심 파라미터" sub="Core Parameters · 필수 항목" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 분석 대상 박스 — 강조 */}
                 <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
@@ -1448,7 +1448,7 @@ function SimulatorDashboard({
                   </div>
 
                   {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
-                  <div className="mb-2 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/50 flex items-center justify-between">
+                  <div className="mb-2 px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18]/50 flex items-center justify-between">
                     <span className="text-sm text-[#e2e8f0]">{selectedGu}</span>
                     <span className="text-[10px] text-[#9ca3af] uppercase tracking-wider opacity-70">
                       선택됨
@@ -1462,7 +1462,7 @@ function SimulatorDashboard({
                         setDongDropdownOpen(!dongDropdownOpen);
                         setBusinessTypeOpen(false);
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
                     >
                       <span className="truncate">
                         {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
@@ -1536,7 +1536,7 @@ function SimulatorDashboard({
                         setBusinessTypeOpen(!businessTypeOpen);
                         setDongDropdownOpen(false);
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
                     >
                       <span>{businessType}</span>
                       <ChevronRight
@@ -1575,8 +1575,8 @@ function SimulatorDashboard({
             <div>
               <SectionLabel
                 icon={Sliders}
-                title="Operating Constraints"
-                sub="입지·운영·재무 조건"
+                title="운영 조건"
+                sub="Operating Constraints · 입지·재무"
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. 상권 반경 */}
@@ -1632,12 +1632,12 @@ function SimulatorDashboard({
                   className="mb-0"
                 />
 
-                {/* 5. 목표 객단가 — col-span-1 */}
-                <div>
-                  <label className={`block text-xs font-medium mb-2 ${textSecondary}`}>
+                {/* 5. 목표 객단가 — col-span-1 (P3: 박스 wrap) */}
+                <div className="px-4 py-3 rounded-lg border border-white/5 bg-[#1e1b18]/40">
+                  <label className={`block text-xs font-medium ${textSecondary}`}>
                     목표 객단가
                   </label>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5 mt-2">
                     {PRICE_RANGES.map((range) => {
                       const active = targetPrice === range.value;
                       return (
@@ -1647,7 +1647,7 @@ function SimulatorDashboard({
                           className={`px-2 py-2 rounded-lg text-[11px] font-medium border transition-all ${
                             active
                               ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                              : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
                           }`}
                         >
                           {range.label}
@@ -1657,13 +1657,13 @@ function SimulatorDashboard({
                   </div>
                 </div>
 
-                {/* 6. 주 타겟 시간대 — col-span-1 */}
-                <div>
-                  <div className="flex items-baseline justify-between mb-2">
+                {/* 6. 주 타겟 시간대 — col-span-1 (P3: 박스 wrap) */}
+                <div className="px-4 py-3 rounded-lg border border-white/5 bg-[#1e1b18]/40">
+                  <div className="flex items-baseline justify-between">
                     <label className={`text-xs font-medium ${textSecondary}`}>주 타겟 시간대</label>
                     <span className="text-[10px] text-[#9ca3af] opacity-60">복수 선택</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-4 gap-1.5 mt-2">
                     {OPERATING_HOURS_OPTIONS.map((hour) => {
                       const active = operatingHours.includes(hour);
                       return (
@@ -1673,7 +1673,7 @@ function SimulatorDashboard({
                           className={`py-2 rounded-lg text-[11px] font-medium border transition-all ${
                             active
                               ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                              : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
                           }`}
                         >
                           {hour}
@@ -1684,7 +1684,7 @@ function SimulatorDashboard({
                 </div>
 
                 {/* 7. 유동인구 가중치 토글 — col-span-2 */}
-                <div className="md:col-span-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/40">
+                <div className="md:col-span-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18]/40">
                   <label
                     className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
                   >
@@ -1712,7 +1712,7 @@ function SimulatorDashboard({
                 </div>
               </div>
               <p
-                className={`text-[10px] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}
+                className={`text-[10px] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-white/5`}
               >
                 * 권리금/보증금 제외, 인테리어·초기 운영비 기준
               </p>
@@ -1720,7 +1720,7 @@ function SimulatorDashboard({
 
             {/* ─────── 섹션 3: Target Audience ─────── */}
             <div>
-              <SectionLabel icon={UserCheck} title="Target Audience" sub="타겟 고객 프로필" />
+              <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
               <div>
                 <div className="flex items-baseline justify-end mb-3">
                   <span className="text-[10px] text-[#9ca3af] opacity-60">
@@ -1749,7 +1749,7 @@ function SimulatorDashboard({
                             className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
                               active
                                 ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                                : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
                             }`}
                           >
                             {opt.l}
@@ -1779,7 +1779,7 @@ function SimulatorDashboard({
                             className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
                               active
                                 ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                                : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
                             }`}
                           >
                             {opt.l}
@@ -1812,7 +1812,7 @@ function SimulatorDashboard({
                             className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
                               active
                                 ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                                : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
                             }`}
                           >
                             {opt.l}
@@ -1866,7 +1866,7 @@ function SimulatorDashboard({
                       targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
                     }
                     onChange={(e) => handleMonthlySalesChange(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg text-xs bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg text-xs font-mono tabular-nums bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
                   />
                   <p className="mt-1 text-[10px] text-[#9ca3af]/50">
                     입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
@@ -1978,7 +1978,7 @@ function SimulatorDashboard({
                   <div className="absolute inset-2 border-4 border-[#3a3633] border-b-[#818cf8] rounded-full animate-[spin_3s_linear_infinite_reverse]" />
                   {/* Center percentage */}
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-lg font-black font-mono text-[#818cf8]">
+                    <span className="text-lg font-black font-mono tabular-nums text-[#818cf8]">
                       {Math.round(loadingProgress)}%
                     </span>
                   </div>
@@ -2000,7 +2000,7 @@ function SimulatorDashboard({
                       />
                     </div>
                     <div className="flex justify-between mt-1.5">
-                      <span className="text-[9px] font-mono text-[#818cf8]">
+                      <span className="text-[9px] font-mono tabular-nums text-[#818cf8]">
                         {Math.round(loadingProgress)}%
                       </span>
                       <span className="text-[9px] font-mono text-[#9ca3af]">
@@ -2698,7 +2698,7 @@ function SimulatorDashboard({
                                       <div className="mt-3 flex items-baseline gap-3 flex-wrap">
                                         {score != null && (
                                           <>
-                                            <span className="text-4xl font-bold text-[#e2e8f0]">
+                                            <span className="text-4xl font-bold font-mono tabular-nums text-[#e2e8f0]">
                                               {Math.round(score)}
                                             </span>
                                             <span className="text-sm text-[#9ca3af]">/100</span>
@@ -3351,7 +3351,7 @@ function SimulatorDashboard({
                                           <span className="text-[10px] text-[#9ca3af]">
                                             위험 점수
                                           </span>
-                                          <span className="text-lg font-bold text-white font-mono">
+                                          <span className="text-lg font-bold text-white font-mono tabular-nums">
                                             {pct}
                                             <span className="text-[11px] text-[#9ca3af] ml-0.5">
                                               /100
@@ -3393,7 +3393,7 @@ function SimulatorDashboard({
                                                       />
                                                     </div>
                                                     <span
-                                                      className={`w-12 text-right font-mono ${positive ? 'text-rose-300' : 'text-emerald-300'}`}
+                                                      className={`w-12 text-right font-mono tabular-nums ${positive ? 'text-rose-300' : 'text-emerald-300'}`}
                                                     >
                                                       {positive ? '+' : ''}
                                                       {s.contribution.toFixed(2)}
@@ -3429,7 +3429,7 @@ function SimulatorDashboard({
                                                       />
                                                     </div>
                                                     <span
-                                                      className={`w-12 text-right font-mono ${positive ? 'text-cyan-300' : 'text-emerald-300'}`}
+                                                      className={`w-12 text-right font-mono tabular-nums ${positive ? 'text-cyan-300' : 'text-emerald-300'}`}
                                                     >
                                                       {positive ? '+' : ''}
                                                       {s.contribution.toFixed(2)}
@@ -3486,7 +3486,7 @@ function SimulatorDashboard({
                                         </h3>
                                       </div>
                                       {d.elderly_ratio != null && (
-                                        <span className="text-xs text-[#9ca3af]">
+                                        <span className="text-xs font-mono tabular-nums text-[#9ca3af]">
                                           고령: {d.elderly_ratio.toFixed(1)}%
                                         </span>
                                       )}
@@ -3532,7 +3532,7 @@ function SimulatorDashboard({
                                                 }}
                                               />
                                             </div>
-                                            <span className="w-12 text-right text-[#9ca3af]">
+                                            <span className="w-12 text-right font-mono tabular-nums text-[#9ca3af]">
                                               {(a.share * 100).toFixed(1)}%
                                             </span>
                                           </div>
@@ -3549,7 +3549,7 @@ function SimulatorDashboard({
                                       </div>
                                       <div className="rounded-lg bg-[#1e1b18]/50 p-2">
                                         <div className="text-[#9ca3af]">평/주말</div>
-                                        <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                        <div className="mt-1 font-semibold font-mono tabular-nums text-[#e2e8f0]">
                                           {typeof d.weekday_weekend_ratio === 'number'
                                             ? d.weekday_weekend_ratio.toFixed(2)
                                             : 'N/A'}
@@ -3579,7 +3579,7 @@ function SimulatorDashboard({
                                           <span className="text-xs uppercase tracking-wider text-amber-300">
                                             브랜드 타겟 매칭
                                           </span>
-                                          <span className="text-lg font-bold text-amber-200">
+                                          <span className="text-lg font-bold font-mono tabular-nums text-amber-200">
                                             {d.brand_target_match_score.toFixed(0)}/100
                                           </span>
                                         </div>
@@ -4742,7 +4742,7 @@ export default function App() {
                         className="absolute flex flex-col items-center justify-center pointer-events-none"
                         style={{ animation: 'energy-pulse 2s ease-in-out infinite' }}
                       >
-                        <span className="font-black text-6xl md:text-8xl text-indigo-400 tracking-tighter leading-none">
+                        <span className="font-black font-mono tabular-nums text-6xl md:text-8xl text-indigo-400 tracking-tighter leading-none">
                           {loadProgress}
                           <span className="text-3xl md:text-4xl text-indigo-400/60 ml-1">%</span>
                         </span>
