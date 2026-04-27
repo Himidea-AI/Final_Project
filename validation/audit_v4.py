@@ -24,9 +24,9 @@ for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
 from validation.reverse_engineer_sales_v4 import (  # noqa: E402
     BEST_PARAMS,
     SEEDS,
-    build_features_v4,
     load_joined_with_all_cols,
 )
+from validation.reverse_engineer_sales_v4 import build_features_v5_loo as build_features_v4  # noqa: E402
 
 OUT_MD = REPO_ROOT / "docs" / "sales-imputation" / "audit_v4_report.md"
 

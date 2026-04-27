@@ -132,6 +132,78 @@ def build_features_v4(df: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
+def build_features_v5_loo(
+    df: pd.DataFrame,
+    n_folds: int = 5,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """K-fold cross-fitting target encoding for dong_avg / combo_avg.
+
+    각 fold 학습 시 그 fold 외부의 alive 데이터로만 통계 계산.
+    Missing 셀은 모든 alive 데이터로 통계 계산 (정상 경로).
+    """
+    X = pd.DataFrame(index=df.index)
+    X["store_count"] = df["store_count"].fillna(df["store_count"].median())
+    X["log_store_count"] = np.log1p(X["store_count"])
+    X["kosis_index"] = df["kosis_index"]
+    X["log_kosis"] = np.log(df["kosis_index"])
+    X["franchise_ratio"] = df["franchise_count"].fillna(0) / df["store_count"].clip(lower=1)
+    X["open_ratio"] = df["open_count"].fillna(0) / df["store_count"].clip(lower=1)
+    X["closure_rate"] = df["closure_rate"].fillna(0)
+    X["q_of_year"] = df["quarter"] % 10
+    X["year"] = df["quarter"] // 10
+    for ind in df["industry_code"].unique():
+        X[f"ind_{ind}"] = (df["industry_code"] == ind).astype(int)
+
+    # K-fold cross-fitting for dong_avg, combo_avg
+    alive_mask = df["monthly_sales"].notna()
+    alive_idx = df[alive_mask].index.values
+    rng = np.random.default_rng(random_state)
+    fold_assign = rng.integers(0, n_folds, len(alive_idx))
+
+    dong_avg_arr = np.full(len(df), np.nan)
+    combo_avg_arr = np.full(len(df), np.nan)
+
+    for fold in range(n_folds):
+        # train: alive AND not in this fold
+        in_fold_idx = alive_idx[fold_assign == fold]
+        train_mask = alive_mask.copy()
+        train_mask.loc[in_fold_idx] = False
+
+        df_train = df[train_mask]
+        if len(df_train) == 0:
+            continue
+        dong_size = df_train.groupby("dong_code")["store_count"].mean()
+        combo_size = df_train.groupby(["dong_code", "industry_code"])["store_count"].mean()
+        global_dong = float(dong_size.mean()) if len(dong_size) > 0 else 0.0
+        global_combo = float(combo_size.mean()) if len(combo_size) > 0 else 0.0
+
+        # 적용: 이 fold 의 alive 셀
+        for idx in in_fold_idx:
+            d = df.at[idx, "dong_code"]
+            i = df.at[idx, "industry_code"]
+            dong_avg_arr[df.index.get_loc(idx)] = dong_size.get(d, global_dong)
+            combo_avg_arr[df.index.get_loc(idx)] = combo_size.get((d, i), global_combo)
+
+    # Missing 셀: 모든 alive 데이터로 통계 (정상 경로)
+    df_alive = df[alive_mask]
+    full_dong = df_alive.groupby("dong_code")["store_count"].mean()
+    full_combo = df_alive.groupby(["dong_code", "industry_code"])["store_count"].mean()
+    full_global_dong = float(full_dong.mean())
+    full_global_combo = float(full_combo.mean())
+
+    missing_idx = df[~alive_mask].index
+    for idx in missing_idx:
+        d = df.at[idx, "dong_code"]
+        i = df.at[idx, "industry_code"]
+        dong_avg_arr[df.index.get_loc(idx)] = full_dong.get(d, full_global_dong)
+        combo_avg_arr[df.index.get_loc(idx)] = full_combo.get((d, i), full_global_combo)
+
+    X["dong_avg_store"] = dong_avg_arr
+    X["combo_avg_store"] = combo_avg_arr
+    return X
+
+
 def fit_seed_ensemble_multi(
     X: pd.DataFrame,
     Y: pd.DataFrame,
@@ -231,7 +303,7 @@ def main():
     df = load_joined_with_all_cols()
     print(f"[data] total={len(df)} alive={df['monthly_sales'].notna().sum()}")
 
-    X = build_features_v4(df)
+    X = build_features_v5_loo(df)
     alive_mask = df["monthly_sales"].notna()
     missing_mask = ~alive_mask
     df_alive = df[alive_mask].copy()
