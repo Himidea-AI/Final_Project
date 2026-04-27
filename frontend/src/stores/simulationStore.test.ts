@@ -9,9 +9,7 @@ const MOCK_INPUT: SimulationInput = {
   brand_name: 'Test',
   target_district: '서교동',
   existing_stores: [],
-  initial_investment: 0,
   monthly_rent: 1000000,
-  simulation_months: 12,
   scenarios: [],
 };
 
@@ -25,7 +23,6 @@ const MOCK_OUTPUT = {
     competition_score: 0,
     rent_affordability: 'SAFE',
   },
-  simulation_months: 12,
   quarterly_projection: [],
   comparison: [],
   legal_risks: [],

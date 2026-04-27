@@ -98,9 +98,7 @@ Frontend type: `frontend/src/types/index.ts` `SimulationInput`
   "existing_stores": [
     { "district": "공덕동", "address": "공덕동 123-4", "monthly_revenue": 32000000 }
   ],
-  "initial_investment": 150000000,
   "monthly_rent": 3500000,
-  "simulation_months": 12,
   "scenarios": ["base"],
   "store_area": 15.0,
   "target_price_range": "5to10k",
@@ -127,8 +125,8 @@ These keys must exist even when values are empty.
 | `target_district` | string | required | selected/analysis district |
 | `analysis_report` | string | `""` allowed | markdown/string report |
 | `analysis_metrics` | object | `{}` allowed | dashboard summary metrics |
-| `simulation_months` | int | required | usually 12 |
-| `quarterly_projection` | array | `[]` allowed | no mock values |
+| `simulation_quarters` | int/null | null allowed | BEP 기준 분기 수 (최대 40) |
+| `quarterly_projection` | array | `[]` allowed | mock 시 각 항목 `is_mock: true` 표시 |
 | `comparison` | array | `[]` allowed | no mock row |
 | `legal_risks` | array | `[]` allowed | empty means no risks or unavailable depending status |
 

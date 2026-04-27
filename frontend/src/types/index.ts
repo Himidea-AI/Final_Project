@@ -9,9 +9,7 @@ export interface SimulationInput {
   brand_name: string;
   target_district: string;
   existing_stores: ExistingStore[];
-  initial_investment: number;
   monthly_rent: number;
-  simulation_months: number;
   scenarios: string[];
   // New fields (백엔드 SimulationInput 스키마와 필드명 일치)
   store_area?: number;
@@ -58,6 +56,7 @@ export interface QuarterlyProjection {
   ci_80_upper?: number | null;
   ci_95_lower?: number | null;
   ci_95_upper?: number | null;
+  is_mock?: boolean;
 }
 
 /** @deprecated monthly→quarterly 전환됨. QuarterlyProjection 사용 */
@@ -203,7 +202,8 @@ export interface SimulationOutput {
   target_districts?: string[];
   analysis_report: string; // 줄글 리포트
   analysis_metrics: AnalysisMetrics; // 차트용 정량 데이터
-  simulation_months: number;
+  simulation_quarters?: number | null;
+  is_excluded_combo?: boolean;
   quarterly_projection: QuarterlyProjection[];
   comparison: DistrictComparison[];
   legal_risks: LegalRisk[];

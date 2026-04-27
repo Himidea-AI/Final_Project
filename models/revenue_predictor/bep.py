@@ -126,7 +126,7 @@ class BEPCalculator:
         """N분기 매출 리스트를 받아 분기별 손익 시뮬레이션
 
         Args:
-            quarterly_revenues: 분기별 예상 매출 리스트 (N개, 최대 20분기)
+            quarterly_revenues: 분기별 예상 매출 리스트 (N개, 최대 40분기)
 
         Returns:
             list of dict — 각 항목은:

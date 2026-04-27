@@ -9,9 +9,7 @@ def test_final_verification():
         "brand_name": "메가커피",
         "target_district": "서교동",
         "existing_stores": [],
-        "initial_investment": 150000000,
         "monthly_rent": 3500000,
-        "simulation_months": 12,
         "scenarios": ["standard"]
     }
     
