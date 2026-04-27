@@ -364,8 +364,10 @@ def _run_validation_simulations(
         cfg=cfg,
         menu_items=menu_items,
     )
+    # vacancy_pse 의 revenue_per_day 는 이미 일평균 (총매출 / days). days 분모 X.
+    # → 연 환산 = rev_per_day * 365.
     rev_per_day = pse_result["pse_summary"]["revenue_per_day"]["mean"]
-    vacancy_yearly_rev = (rev_per_day / max(days, 1)) * 365 if days >= 30 else rev_per_day * 365 / days
+    vacancy_yearly_rev = rev_per_day * 365
 
     return {
         "dong_industry_revenue": revenue_avg,
