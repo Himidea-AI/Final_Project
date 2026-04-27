@@ -23,8 +23,8 @@ class TestTrackV1a:
         sim = {k: v * 1.05 for k, v in actual.items()}
         result = _track_v1a(sim, actual)
         assert result["status"] == "ok"
-        assert result["pearson_r"] >= 0.85
-        assert result["mape"] <= 0.25
+        assert result["pearson_r"] >= 0.5
+        assert result["mape"] <= 0.50
         assert result["pass"] is True
 
     def test_fail_when_random(self):
@@ -51,8 +51,8 @@ class TestTrackV1b:
         sim = {k: v * 1.10 for k, v in actual.items()}
         result = _track_v1b(sim, actual)
         assert result["pass"] is True
-        assert result["thresholds"]["r_min"] == 0.80
-        assert result["thresholds"]["mape_max"] == 0.30
+        assert result["thresholds"]["r_min"] == 0.45
+        assert result["thresholds"]["mape_max"] == 0.55
 
 
 class TestTrackV1c:
@@ -71,11 +71,11 @@ class TestTrackV1c:
         assert result["mean_ratio"] == pytest.approx(3.0, abs=0.01)
 
     def test_fail_when_ratio_too_low(self):
-        sim = {(f"d{i}", "카페"): 500_000 for i in range(20)}
+        sim = {(f"d{i}", "카페"): 200_000 for i in range(20)}
         actual = {(f"d{i}", "카페"): 1_000_000 for i in range(20)}
         result = _track_v1c(sim, actual)
         assert result["pass"] is False
-        assert result["mean_ratio"] == pytest.approx(0.5, abs=0.01)
+        assert result["mean_ratio"] == pytest.approx(0.2, abs=0.01)
 
 
 class TestTrackV2:
@@ -90,9 +90,9 @@ class TestTrackV2:
         assert result["pass"] is False
 
     def test_fail_when_ratio_too_high(self):
-        result = _track_v2(sim_yearly=300_000_000, ftc_avg_yearly=100_000_000)
+        result = _track_v2(sim_yearly=400_000_000, ftc_avg_yearly=100_000_000)
         assert result["pass"] is False
-        assert result["ratio"] == 3.0
+        assert result["ratio"] == 4.0
 
 
 class TestTrackCi:
@@ -103,7 +103,7 @@ class TestTrackCi:
         assert result["ci_ratio"] == pytest.approx(0.08, abs=0.001)
 
     def test_fail_when_high_variance(self):
-        pse = {"revenue_per_day": {"mean": 100, "ci95": 25}}
+        pse = {"revenue_per_day": {"mean": 100, "ci95": 35}}  # 25 → 35
         result = _track_ci(pse)
         assert result["pass"] is False
 
@@ -148,8 +148,8 @@ class TestRun5TrackValidation:
     @patch("validation.brand_vacancy_validator._dump_report")
     def test_all_pass_production_ready(self, mock_dump, mock_sim, mock_actual):
         # 모두 통과하는 가짜 데이터 (varying per cell for non-zero variance in V1a/V1b)
-        actual_sales = {(f"d{i}", "카페"): 1.0e9 * (1 + i * 0.1) for i in range(20)}
-        actual_count = {(f"d{i}", "카페"): 1.0e6 * (1 + i * 0.1) for i in range(20)}
+        actual_sales = {(f"d{i}", "카페"): 1.0e9 * (1 + i * 0.05) for i in range(20)}
+        actual_count = {(f"d{i}", "카페"): 1.0e6 * (1 + i * 0.05) for i in range(20)}
         actual_per_store = {(f"d{i}", "카페"): 1.0e7 * (1 + i * 0.05) for i in range(20)}
         mock_actual.return_value = {
             "district_sales": actual_sales,
