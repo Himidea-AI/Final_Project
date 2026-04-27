@@ -14,6 +14,9 @@ import { DistrictRankings } from '../../sections/DistrictRankings';
 import { calcHHI, hhiToDiversity, formatScore } from '../utils/formatters';
 import { interpretHHI, SATURATION_MAP, safeMap } from '../utils/mappings';
 import { FlowVsRevenueScatter } from '../charts/FlowVsRevenueScatter';
+import { DifferentiationCard } from '../charts/DifferentiationCard';
+import { CannibalizationDistanceChart } from '../charts/CannibalizationDistanceChart';
+import { IndustryClosureTrendCard } from '../charts/IndustryClosureTrendCard';
 
 interface Props {
   simResult: SimulationOutput;
@@ -140,6 +143,39 @@ export function MarketTab({ simResult }: Props) {
           winnerDistrict={simResult.winner_district}
         />
       </div>
+
+      {/* ═══ Competitor Intel: 차별화 포지션 + 카니발 거리 분포 + 동 업종 폐업률 추세 ═══ */}
+      <DifferentiationCard
+        differentiation={ci?.differentiation_position as string | null | undefined}
+        opportunities={ci?.key_opportunities as string[] | undefined}
+        risks={ci?.key_risks as string[] | undefined}
+      />
+
+      {(ci?.cannibalization || ci?.industry_closure_trend) && (
+        <div className="grid grid-cols-2 gap-6">
+          {ci?.cannibalization && (
+            <CannibalizationDistanceChart
+              bins={
+                (ci.cannibalization as Record<string, any>)?.distance_bins as Record<
+                  string,
+                  number
+                > | null
+              }
+              closestM={
+                (ci.cannibalization as Record<string, any>)?.closest_distance_m as number | null
+              }
+              impactPct={
+                (ci.cannibalization as Record<string, any>)?.estimated_revenue_impact_pct as
+                  | number
+                  | null
+              }
+            />
+          )}
+          {ci?.industry_closure_trend && (
+            <IndustryClosureTrendCard trend={ci.industry_closure_trend as Record<string, any>} />
+          )}
+        </div>
+      )}
 
       {/* ═══ HHI 경쟁 집중도 카드 (실데이터 기반) ═══ */}
       {samples.length > 0 && (

@@ -120,6 +120,16 @@ export interface ClosureRiskSignal {
 }
 
 /**
+ * 과거 폐업률 추이 (B2 수지니, models/revenue_predictor)
+ * 예측이 아닌 실측 누적 — closure_risk(LightGBM+TCN 예측)와 명확히 구분.
+ */
+export interface ClosureRate {
+  closure_rate: number | null; // 최근 4분기 평균 (0~1)
+  risk_level: 'safe' | 'caution' | 'danger' | 'unknown';
+  monthly_closure_rates: number[]; // 12개월 월별 누적 폐업률 (실패 시 빈 배열)
+}
+
+/**
  * 폐업 위험도 결과 (B2 수지니)
  * 2026-04-27 변경: top_signals/summary → top_signals_lgbm/summary_lgbm 으로 분리되고
  * top_signals_tcn/summary_tcn 신설. UI에서 LightGBM(과거 패턴)과 TCN(시계열 흐름)
@@ -142,10 +152,31 @@ export interface TrendForecast {
     direction?: string; // growth | stable | decline
     confidence?: string; // high | medium | low
     narrative?: string;
+    key_drivers?: string[];
+    risks?: string[];
+    horizon_months?: number;
   };
-  industry_trend?: { direction?: string }; // up | flat | down
-  change_ix?: { change_ix_label?: string }; // 상권확장 | 상권유지 | 상권축소 | 상권쇠퇴
-  macro?: Record<string, unknown>;
+  industry_trend?: {
+    industry?: string;
+    direction?: string;
+    current_ratio?: number | null;
+    yoy_change_pct?: number | null;
+    samples?: number[]; // 월별 0~100 (최대 12)
+  };
+  dong_trend?: {
+    dong_name?: string;
+    recent_score?: number | null;
+    slope_pct?: number | null;
+    samples?: number[]; // 분기별 점수
+    data_staleness_note?: string;
+  };
+  change_ix?: { change_ix_label?: string };
+  macro?: {
+    current_base_rate?: number | null;
+    base_rate_trend?: string;
+    samples?: number[]; // 12개월
+    [k: string]: unknown;
+  };
 }
 
 /** 인구통계 심층 분석 (demographic_depth 에이전트) */
@@ -209,7 +240,9 @@ export interface SimulationOutput {
     base: { quarter: number; revenue: number }[];
     pessimistic: { quarter: number; revenue: number }[];
   } | null;
-  // [B2 수지니] 폐업 위험도 분석 결과
+  // [B2 수지니] 과거 12개월 폐업률 추이 (실측, 예측 아님)
+  closure_rate?: ClosureRate | null;
+  // [B2 수지니] 폐업 위험도 분석 결과 (LightGBM + TCN 앙상블 예측)
   closure_risk?: ClosureRisk | null;
   // [PR #72] 경쟁 매장 인텔리전스 (500m 반경 카니발/포화도/차별화)
   competitor_intel?: Record<string, unknown> | null;

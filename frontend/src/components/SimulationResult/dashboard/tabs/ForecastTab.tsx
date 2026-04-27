@@ -1,36 +1,28 @@
 /**
  * ForecastTab — 매출 예측 탭
  * 1) TCN-v2 분기별 매출 예측 (Confidence Band P10-P90)
- * 2) SHAP 피처 기여도 분석 (Waterfall — 가이드 #1)
+ * 2) BEP 누적이익 회수 곡선
+ * 3) 시나리오 비교 (낙관/기본/비관)
+ * 4) SHAP 피처 기여도 — 텍스트 인사이트 카드
+ * 5) 거시·트렌드 환경 (samples 3종 + drivers/risks + narrative 모달)
  *
  * 이관됨: 폐업 위험도 Bullet → FinancialTab
  */
 
-import { TrendingUp, Zap, Maximize2 } from 'lucide-react';
-import type { SimulationOutput, ShapResult } from '../../../../types';
+import { TrendingUp, Zap, Maximize2, GitCompareArrows, Globe2 } from 'lucide-react';
+import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { QuarterlyProjectionChart } from '../../QuarterlyProjectionChart';
 import { formatScore } from '../utils/formatters';
-import { WaterfallChart, type WaterfallStep } from '../charts/WaterfallChart';
+import { ShapInsightCard } from '../charts/ShapInsightCard';
+import { BepCumulativeProfitChart } from '../charts/BepCumulativeProfitChart';
+import { ScenariosComparisonChart } from '../charts/ScenariosComparisonChart';
+import { TrendSparklinesPanel } from '../charts/TrendSparklinesPanel';
+import { TrendDriversRisks } from '../charts/TrendDriversRisks';
 
 interface Props {
   simResult: SimulationOutput;
   openModal: (content: DetailModalContent) => void;
-}
-
-function shapToWaterfall(shap: ShapResult | null | undefined): WaterfallStep[] {
-  if (!shap) return [];
-  const top = (shap.feature_importance ?? []).slice(0, 6);
-  const steps: WaterfallStep[] = [{ label: 'Base', value: shap.base_value, kind: 'base' }];
-  top.forEach((f) => {
-    steps.push({
-      label: f.feature_ko || f.feature,
-      value: f.shap_value,
-      kind: 'contribution',
-    });
-  });
-  steps.push({ label: 'Final', value: shap.predicted_value, kind: 'final' });
-  return steps;
 }
 
 export function ForecastTab({ simResult, openModal }: Props) {
@@ -39,8 +31,21 @@ export function ForecastTab({ simResult, openModal }: Props) {
   const trendScore = simResult.trend_forecast?.forecast?.score;
   const trendDir = simResult.trend_forecast?.forecast?.direction;
   const trendNarrative = simResult.trend_forecast?.forecast?.narrative;
+  const trendDrivers = simResult.trend_forecast?.forecast?.key_drivers;
+  const trendRisks = simResult.trend_forecast?.forecast?.risks;
+  const scenarios = simResult.scenarios;
+  const industryTrend = simResult.trend_forecast?.industry_trend;
+  const dongTrend = simResult.trend_forecast?.dong_trend;
+  const macro = simResult.trend_forecast?.macro;
 
   const dirLabel = trendDir === 'growth' ? '성장' : trendDir === 'decline' ? '하락' : '유지';
+  const hasTrendBlock =
+    (industryTrend?.samples && industryTrend.samples.length > 0) ||
+    (dongTrend?.samples && dongTrend.samples.length > 0) ||
+    (macro?.samples && macro.samples.length > 0) ||
+    (trendDrivers && trendDrivers.length > 0) ||
+    (trendRisks && trendRisks.length > 0);
+  const hasScenarios = scenarios?.base && scenarios.base.length > 0;
 
   return (
     <div className="space-y-6">
@@ -105,11 +110,14 @@ export function ForecastTab({ simResult, openModal }: Props) {
           )}
         </div>
 
-        {/* SHAP Waterfall */}
+        {/* SHAP 피처 기여도 — 텍스트 인사이트 (2026-04-27 Waterfall 제거) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-stone-800 pb-3">
             <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2 italic">
-              <Zap className="text-amber-400" size={14} /> 피처 기여도 분석 (SHAP Waterfall)
+              <Zap className="text-amber-400" size={14} /> 매출 기여 요인 분석
+              <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal not-italic">
+                shap_result
+              </span>
             </h4>
             {shap && (
               <button
@@ -127,19 +135,97 @@ export function ForecastTab({ simResult, openModal }: Props) {
             )}
           </div>
 
-          {shap ? (
-            <WaterfallChart
-              steps={shapToWaterfall(shap)}
-              formatY={(n) => `${(n / 10000).toFixed(0)}만`}
-              height={320}
-            />
-          ) : (
-            <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-8 text-center text-xs text-stone-500">
-              SHAP 해석 데이터 없음 — 모델 예측 신뢰도가 확정되면 표시됩니다
+          <ShapInsightCard shap={shap} />
+        </div>
+
+        {/* BEP 투자 회수 곡선 */}
+        {qp.length > 0 && (
+          <div className="space-y-4 mt-8">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2 italic">
+                <TrendingUp className="text-emerald-400" size={14} /> 투자 회수 곡선
+                <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal not-italic">
+                  cumulative_profit
+                </span>
+              </h4>
             </div>
+            <BepCumulativeProfitChart data={qp} />
+          </div>
+        )}
+      </div>
+
+      {/* 시나리오 비교 패널 */}
+      {hasScenarios && (
+        <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+          <div className="flex items-start justify-between mb-6 gap-6">
+            <div>
+              <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
+                <GitCompareArrows className="text-indigo-400" size={20} /> 시나리오 비교
+              </h3>
+              <p className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+                낙관 · 기본 · 비관 · 4분기 매출 envelope
+              </p>
+            </div>
+            <div className="flex gap-4 items-center bg-stone-950/50 px-4 py-3 rounded-2xl border border-stone-800/60 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-[2px] bg-emerald-400 rounded-full" />
+                <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+                  낙관
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-[2px] bg-indigo-400 rounded-full shadow-[0_0_4px_rgba(129,140,248,0.6)]" />
+                <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+                  기본
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-[2px] bg-rose-400 rounded-full" />
+                <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+                  비관
+                </span>
+              </div>
+            </div>
+          </div>
+          <ScenariosComparisonChart scenarios={scenarios} />
+        </div>
+      )}
+
+      {/* 거시·트렌드 환경 패널 */}
+      {hasTrendBlock && (
+        <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8 space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
+                <Globe2 className="text-cyan-400" size={20} /> 거시·트렌드 환경
+              </h3>
+              <p className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+                업종 · 지역 · 거시 12개월 시계열 + LLM 요약
+              </p>
+            </div>
+            {trendNarrative && (
+              <button
+                type="button"
+                onClick={() =>
+                  openModal({
+                    title: `트렌드 분석 상세 (${dirLabel} · ${formatScore(trendScore ?? 0)})`,
+                    content: trendNarrative,
+                  })
+                }
+                className="text-[10px] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1 transition-colors shrink-0"
+              >
+                <Maximize2 size={12} /> 전체 해석
+              </button>
+            )}
+          </div>
+
+          <TrendSparklinesPanel industryTrend={industryTrend} dongTrend={dongTrend} macro={macro} />
+
+          {(trendDrivers || trendRisks) && (
+            <TrendDriversRisks drivers={trendDrivers} risks={trendRisks} />
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
