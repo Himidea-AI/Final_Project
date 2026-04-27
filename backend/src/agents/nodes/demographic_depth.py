@@ -298,6 +298,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
             verdict="매출 데이터 없음 · 분석 제한",
             reasoning=f"{dong_code} 매출 레코드 부재로 데모그래픽 심층 분석 제한.",
             confidence=0.3,
+            status="skipped",
         )
         analysis["demographic_depth_result"] = {"agent_attribution": empty_demo_attr}
         return {
