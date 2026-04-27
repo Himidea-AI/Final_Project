@@ -347,3 +347,60 @@ def store_open_at(
     if not arr:
         return True
     return arr[weekday].bits[hour % 24]
+
+
+# ---------------------------------------------------------------
+# 옵션 B (2026-04-27): living_population 일별 boost loader
+# ---------------------------------------------------------------
+from datetime import date as _date, timedelta as _timedelta  # noqa: E402
+
+from src.database.sync_engine import get_sync_engine  # noqa: E402
+
+
+def _load_living_population_daily(
+    start_date: _date,
+    days: int,
+) -> dict[tuple[str, int, int], float]:
+    """living_population 테이블에서 (dong, hour, day_idx) → boost 로드.
+
+    boost = total_pop / (dong 의 분기 평균 total_pop). 1.0 = 평균.
+
+    Args:
+        start_date: 시뮬 첫 일자.
+        days: 시뮬 일수 (90 분기 권장).
+
+    Returns:
+        {(dong_name, hour, day_idx): float}.
+        DB 데이터 부재 시 빈 dict (시뮬은 정적 boost fallback).
+    """
+    sql = text("""
+        WITH avg_pop AS (
+            SELECT dong_name, AVG(total_pop) AS dong_avg
+              FROM living_population
+             WHERE dong_code LIKE '114%'
+               AND date >= :start_date
+               AND date < :end_date
+             GROUP BY dong_name
+        )
+        SELECT lp.dong_name, lp.time_zone,
+               (lp.date - :start_date) AS day_idx,
+               lp.total_pop, ap.dong_avg
+          FROM living_population lp
+          JOIN avg_pop ap ON ap.dong_name = lp.dong_name
+         WHERE lp.dong_code LIKE '114%'
+           AND lp.date >= :start_date
+           AND lp.date < :end_date
+    """)
+    end_date = start_date + _timedelta(days=days)
+    out: dict[tuple[str, int, int], float] = {}
+    engine = get_sync_engine(os.environ["POSTGRES_URL"])
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {"start_date": start_date, "end_date": end_date}).mappings()
+        for r in rows:
+            avg = float(r["dong_avg"] or 0)
+            if avg <= 0:
+                continue
+            ratio = float(r["total_pop"] or 0) / avg
+            ratio = max(0.5, min(ratio, 2.0))  # clamp 0.5~2.0
+            out[(r["dong_name"], int(r["time_zone"]), int(r["day_idx"]))] = ratio
+    return out
