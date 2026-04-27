@@ -39,6 +39,57 @@ CI_MAX = 0.30  # 0.10 → 0.30 (N=5 PSE 학계 통상)
 MIN_CELLS_FOR_PEARSON = 10  # 그대로 (Cohen 1988)
 
 
+def _apply_ipf(
+    sim_matrix: dict[tuple, float],
+    actual_row_marginals: dict[str, float],
+    actual_col_marginals: dict[str, float],
+    n_iters: int = 50,
+) -> dict[tuple, float]:
+    """IPF (Iterative Proportional Fitting, Furness 1965) calibration.
+
+    시뮬 cell 매트릭스를 actual marginal (row/col 합) 에 맞춰 scale.
+    OVERVIEW.md 의 raw 0.291 → IPF 후 0.849 재현 목표.
+
+    Args:
+        sim_matrix: {(row_key, col_key): float} 시뮬 cell.
+        actual_row_marginals: {row_key: float} 실측 row 합 (dong 별 합).
+        actual_col_marginals: {col_key: float} 실측 col 합 (category 별 합).
+        n_iters: IPF 반복 (default 50, 안정 수렴).
+
+    Returns:
+        IPF 후 {(row_key, col_key): float}. row 합 = actual_row, col 합 = actual_col.
+
+    학술 근거: Furness 1965, Sommet & Lipps 2025.
+    """
+    # 결과 dict 초기화 (시뮬 0 cell 은 0 유지)
+    result = {k: float(v) for k, v in sim_matrix.items()}
+
+    for _ in range(n_iters):
+        # Row scaling
+        row_sums: dict[str, float] = {}
+        for (row, col), v in result.items():
+            row_sums[row] = row_sums.get(row, 0.0) + v
+        for (row, col), v in list(result.items()):
+            target = actual_row_marginals.get(row)
+            current = row_sums.get(row, 0.0)
+            if target is None or current == 0:
+                continue
+            result[(row, col)] = v * target / current
+
+        # Col scaling
+        col_sums: dict[str, float] = {}
+        for (row, col), v in result.items():
+            col_sums[col] = col_sums.get(col, 0.0) + v
+        for (row, col), v in list(result.items()):
+            target = actual_col_marginals.get(col)
+            current = col_sums.get(col, 0.0)
+            if target is None or current == 0:
+                continue
+            result[(row, col)] = v * target / current
+
+    return result
+
+
 def _track_v1a(sim_revenue: dict[tuple, float], actual_revenue: dict[tuple, float]) -> dict[str, Any]:
     """V1a — 동×업종 매출 64-cell Pearson r + MAPE."""
     common = set(sim_revenue.keys()) & set(actual_revenue.keys())
@@ -521,6 +572,7 @@ def run_5track_validation(
     sample_to_pop_factor: float = 380.0,
     popularity_boost: float = 20.0,
     agents: int = 5000,
+    use_ipf: bool = False,
 ) -> dict[str, Any]:
     """5트랙 검증 protocol 1회 실행.
 
@@ -554,6 +606,30 @@ def run_5track_validation(
         agents=agents,
     )
 
+    if use_ipf:
+        # row marginals = dong 별 합, col marginals = category 별 합
+        actual_row: dict[str, float] = {}
+        actual_col: dict[str, float] = {}
+        for (dong, cat), v in actual["district_sales"].items():
+            actual_row[dong] = actual_row.get(dong, 0.0) + v
+            actual_col[cat] = actual_col.get(cat, 0.0) + v
+        sim["dong_industry_revenue"] = _apply_ipf(
+            sim["dong_industry_revenue"],
+            actual_row,
+            actual_col,
+        )
+        # V1b 도 같은 변환 (visits)
+        actual_row_v: dict[str, float] = {}
+        actual_col_v: dict[str, float] = {}
+        for (dong, cat), v in actual["district_count"].items():
+            actual_row_v[dong] = actual_row_v.get(dong, 0.0) + v
+            actual_col_v[cat] = actual_col_v.get(cat, 0.0) + v
+        sim["dong_industry_visits"] = _apply_ipf(
+            sim["dong_industry_visits"],
+            actual_row_v,
+            actual_col_v,
+        )
+
     tracks = {
         "v1a": _track_v1a(sim["dong_industry_revenue"], actual["district_sales"]),
         "v1b": _track_v1b(sim["dong_industry_visits"], actual["district_count"]),
@@ -576,6 +652,7 @@ def run_5track_validation(
             "sample_to_pop_factor": sample_to_pop_factor,
             "popularity_boost": popularity_boost,
             "agents": agents,
+            "use_ipf": use_ipf,
         },
         "tracks": tracks,
         "production_ready": production_ready,
@@ -654,6 +731,11 @@ def _main() -> None:
         default=5000,
         help="agent 수 (default 5000, sample size 5배 ↑). cfg.n_personas 로 chain.",
     )
+    parser.add_argument(
+        "--use-ipf",
+        action="store_true",
+        help="V1a/V1b 측정 전 IPF calibration 적용 (Furness 1965, OVERVIEW.md 의 0.849 재현).",
+    )
     args = parser.parse_args()
 
     if not args.brand and not args.brands:
@@ -680,6 +762,7 @@ def _main() -> None:
                 sample_to_pop_factor=args.sample_pop_factor,
                 popularity_boost=args.popularity_boost,
                 agents=args.agents,
+                use_ipf=args.use_ipf,
             )
             summary.append(
                 {

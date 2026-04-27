@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from validation.brand_vacancy_validator import (
+    _apply_ipf,
     _track_ci,
     _track_v1a,
     _track_v1b,
@@ -190,3 +191,81 @@ class TestRun5TrackValidation:
         report = run_5track_validation("이디야", "카페")
         assert report["tracks"]["v2"]["status"] == "skipped"
         assert report["production_ready"] is False
+
+
+class TestApplyIpf:
+    def test_ipf_preserves_row_marginals(self):
+        """IPF 후 row 합 (dong 별 합) 이 actual marginal 과 일치."""
+        sim = {
+            ("d1", "카페"): 100.0,
+            ("d1", "음식점"): 200.0,
+            ("d2", "카페"): 150.0,
+            ("d2", "음식점"): 250.0,
+        }
+        actual_row = {"d1": 600.0, "d2": 1200.0}  # d1 = 600, d2 = 1200
+        actual_col = {"카페": 500.0, "음식점": 1300.0}  # 카페 = 500, 음식점 = 1300
+
+        result = _apply_ipf(sim, actual_row, actual_col, n_iters=50)
+
+        d1_sum = result[("d1", "카페")] + result[("d1", "음식점")]
+        d2_sum = result[("d2", "카페")] + result[("d2", "음식점")]
+        assert abs(d1_sum - 600.0) < 1.0
+        assert abs(d2_sum - 1200.0) < 1.0
+
+    def test_ipf_preserves_col_marginals(self):
+        """IPF 후 col 합 (category 별 합) 이 actual marginal 과 일치."""
+        sim = {
+            ("d1", "카페"): 100.0,
+            ("d1", "음식점"): 200.0,
+            ("d2", "카페"): 150.0,
+            ("d2", "음식점"): 250.0,
+        }
+        actual_row = {"d1": 600.0, "d2": 1200.0}
+        actual_col = {"카페": 500.0, "음식점": 1300.0}
+
+        result = _apply_ipf(sim, actual_row, actual_col, n_iters=50)
+
+        cafe_sum = result[("d1", "카페")] + result[("d2", "카페")]
+        rest_sum = result[("d1", "음식점")] + result[("d2", "음식점")]
+        assert abs(cafe_sum - 500.0) < 1.0
+        assert abs(rest_sum - 1300.0) < 1.0
+
+    def test_ipf_zero_sim_returns_zero(self):
+        """시뮬 0 인 cell → IPF 후도 0 (zero-fill 회피)."""
+        sim = {("d1", "카페"): 0.0, ("d1", "음식점"): 100.0}
+        actual_row = {"d1": 500.0}
+        actual_col = {"카페": 300.0, "음식점": 200.0}
+
+        result = _apply_ipf(sim, actual_row, actual_col, n_iters=20)
+        assert result[("d1", "카페")] == 0.0  # 시뮬 0 → IPF 후도 0
+
+    def test_ipf_pearson_improves(self):
+        """IPF 적용 후 Pearson r 향상 — OVERVIEW.md 의 0.291 → 0.849 재현."""
+        # 시뮬은 actual 의 약한 양의 상관 + 단위 mismatch
+        sim = {(f"d{i}", "카페"): float(i + 1) for i in range(20)}  # 1~20
+        actual = {(f"d{i}", "카페"): float((i + 1) * 100) for i in range(20)}  # 100~2000
+
+        # IPF 적용 X r
+        from scipy.stats import pearsonr
+
+        r_before, _ = pearsonr([sim[k] for k in sim], [actual[k] for k in sim])
+
+        # IPF 적용
+        actual_row = {f"d{i}": float((i + 1) * 100) for i in range(20)}
+        actual_col = {"카페": sum(actual.values())}
+        result = _apply_ipf(sim, actual_row, actual_col, n_iters=30)
+        r_after, _ = pearsonr([result[k] for k in sim], [actual[k] for k in sim])
+
+        # IPF 후 r 같거나 향상 (이 케이스는 처음부터 perfect linear → r=1.0)
+        assert r_after >= r_before - 0.01
+
+    def test_ipf_default_iters(self):
+        """default n_iters=50 으로 안정 수렴."""
+        sim = {("d1", "카페"): 100.0, ("d2", "카페"): 200.0}
+        actual_row = {"d1": 300.0, "d2": 600.0}
+        actual_col = {"카페": 900.0}
+        result = _apply_ipf(sim, actual_row, actual_col)  # default
+        d1 = result[("d1", "카페")]
+        d2 = result[("d2", "카페")]
+        assert abs(d1 - 300.0) < 1.0
+        assert abs(d2 - 600.0) < 1.0
