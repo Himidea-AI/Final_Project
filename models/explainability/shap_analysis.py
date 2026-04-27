@@ -81,7 +81,8 @@ def _mock_shap_values(feature_cols: list[str]) -> dict:
     return {
         "feature_importance": feature_importance,
         "base_value": 0.5,
-        "predicted_value": 0.5,
+        "predicted_value": 0.0,
+        "summary": [],
         "is_mock": True,
     }
 
@@ -302,6 +303,7 @@ def explain_tcn_prediction(
         result = _mock_shap_values(list(ALL_FEATURES))
         result["predicted_value_unit"] = "원"
         result["predicted_value"] = 15_000_000.0  # mock 매출 기본값 (원)
+        result["summary"] = []
         return result
 
     # ---- 2) 스케일러 로드 → input_size 결정 ----
@@ -314,6 +316,7 @@ def explain_tcn_prediction(
         result = _mock_shap_values(list(ALL_FEATURES))
         result["predicted_value_unit"] = "원"
         result["predicted_value"] = 15_000_000.0
+        result["summary"] = []
         return result
 
     # ---- 3) TCN 모델 로드 ----
@@ -333,6 +336,7 @@ def explain_tcn_prediction(
         result = _mock_shap_values(list(ALL_FEATURES))
         result["predicted_value_unit"] = "원"
         result["predicted_value"] = 15_000_000.0
+        result["summary"] = []
         return result
 
     # ---- 4) 입력 텐서 준비 — predict.py와 동일 로직 재사용 ----
@@ -416,6 +420,7 @@ def explain_tcn_prediction(
             result = _mock_shap_values(feature_cols)
             result["predicted_value_unit"] = "원"
             result["predicted_value"] = predicted_value
+            result["summary"] = []
             return result
 
     # ---- 7) SHAP 값 후처리: (..., window_size, input_size) → 시간축 평균 → (input_size,) ----
@@ -446,6 +451,7 @@ def explain_tcn_prediction(
         result = _mock_shap_values(feature_cols)
         result["predicted_value_unit"] = "원"
         result["predicted_value"] = predicted_value
+        result["summary"] = []
         return result
 
     # 피처 수 불일치 시 맞춰서 잘라냄
@@ -518,7 +524,7 @@ def plot_shap_summary(
 
     data = [
         {
-            "feature_ko": _FEATURE_KO.get(feat, feat),
+            "feature_ko": _TCN_FEATURE_KO.get(feat, feat),
             "feature_en": feat,
             "shap_value": round(float(val), 6),
             "direction": "positive" if val >= 0 else "negative",
@@ -530,8 +536,8 @@ def plot_shap_summary(
 
     return {
         "chart_type": "bar",
-        "title": "피처별 SHAP 기여도 (생존률 예측)",
+        "title": "피처별 SHAP 기여도 (매출 예측)",
         "data": data,
-        "x_label": "SHAP 값 (생존률 기여도)",
+        "x_label": "SHAP 값 (매출 기여도)",
         "y_label": "입력 피처",
     }

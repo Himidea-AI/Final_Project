@@ -1,10 +1,10 @@
-import logging
-import sys
-from pathlib import Path
-import os
-import uuid
 import asyncio
-from typing import Any, Dict
+import logging
+import os
+import sys
+import uuid
+from pathlib import Path
+from typing import Any
 
 # Windows cp949 콘솔 인코딩 이슈 방지 — ABM simulation 이모지/em-dash 출력 crash 회피
 if sys.platform == "win32":
@@ -29,15 +29,15 @@ if _project_root not in sys.path:
 logger = logging.getLogger(__name__)
 
 import redis.asyncio as aioredis
+
+# LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
+# (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
-# LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
-# (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
-from dotenv import load_dotenv
 
 # cwd가 backend/든 repo root든 repo root의 .env를 찾도록 명시.
 # biz_mapper.DB_URL 등은 import 시점에 os.environ을 읽어 localhost fallback을 확정하므로
@@ -56,20 +56,20 @@ if _lc_api_key:
     os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGCHAIN_PROJECT", "mapo-franchise-simulator"))
 
 from langchain_core.messages import HumanMessage
+from src.agents.graph import compile_workflow
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.config.settings import settings
 from src.schemas.simulation_input import SimulationInput
-from src.agents.graph import compile_workflow
-from src.services.biz_mapper import BizMapper
 from src.services.auth import AuthService
+from src.services.biz_mapper import BizMapper
 
-from models.interface import ModelOutput
+from models.explainability.shap_analysis import explain_tcn_prediction
 from models.explainability.simulation import (
     build_quarterly_projection,
     build_scenarios,
 )
-from models.explainability.shap_analysis import explain_tcn_prediction
+from models.interface import ModelOutput
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -154,7 +154,7 @@ DEFAULT_LAT = 37.5663
 DEFAULT_LNG = 126.9015
 
 # 동일 파라미터 동시 요청 중복 실행 방지 (simulate + analyze 동시 호출 시 파이프라인 공유)
-_pending_pipelines: Dict[str, "asyncio.Task[Any]"] = {}
+_pending_pipelines: dict[str, "asyncio.Task[Any]"] = {}
 
 
 def _pipeline_key(input_data: Any) -> str:
@@ -165,7 +165,7 @@ def _pipeline_key(input_data: Any) -> str:
     return f"{input_data.target_district}:{input_data.business_type}:{input_data.brand_name}:{rent}:{area}:{radius}:{pop_w}"
 
 
-_BIZ_TYPE_NORMALIZE: Dict[str, str] = {
+_BIZ_TYPE_NORMALIZE: dict[str, str] = {
     "cafe": "카페",
     "coffee": "카페",
     "restaurant": "한식",
@@ -177,16 +177,15 @@ _BIZ_TYPE_NORMALIZE: Dict[str, str] = {
 
 # 마포구 행정동명 → 행정동 코드 매핑은 dong_resolver 단일 소스 사용
 # (기존 main.py 내 하드코딩 매핑은 dong_resolver와 15/16개 불일치로 TCN에 잘못된 코드 전달 버그 유발)
-from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
-from src.services.commercial_intelligence import analyze_competition as _analyze_competition
-
 # 업종명(한국어) → 골목상권 업종코드: tools.py MarketDataTool._SALES_CODE_MAP 재사용
 from src.agents.tools import MarketDataTool as _MarketDataTool
+from src.services.commercial_intelligence import analyze_competition as _analyze_competition
+from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
 
-_BIZ_TO_INDUSTRY_CODE: Dict[str, str] = _MarketDataTool._SALES_CODE_MAP
+_BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 업종 → kakao 검색 키워드 매핑
-_BIZ_TO_KAKAO_KW: Dict[str, str] = {
+_BIZ_TO_KAKAO_KW: dict[str, str] = {
     "치킨전문점": "치킨",
     "커피-음료": "커피",
     "한식음식점": "한식",
@@ -267,7 +266,7 @@ async def _collect_all_competitor_locations(
     return results
 
 
-async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
+async def _run_pipeline(input_data: Any) -> dict[str, Any]:
     """파이프라인 실행. 동일 키로 이미 실행 중인 Task가 있으면 공유하여 대기."""
     key = _pipeline_key(input_data)
 
@@ -318,7 +317,7 @@ async def _run_pipeline(input_data: Any) -> Dict[str, Any]:
         _pending_pipelines.pop(key, None)
 
 
-def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Dict[str, Any]:
+def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> dict[str, Any]:
     """
     LangGraph AgentState를 프론트엔드 SimulationOutput 스키마로 변환
     [B1 고도화] 분석 리포트와 정량 지표(metrics)를 분리하여 반환
@@ -469,6 +468,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         )
     except Exception as _sim_err:
         print(f"[SIM] quarterly 빌드 실패 (mock 사용): {_sim_err}")
+        _sim_q = (sim_result.get("bep") or {}).get("simulation_quarters", 4)
         quarterly = [
             {
                 "quarter": q,
@@ -477,7 +477,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 "confidence_lower": 25_000_000,
                 "confidence_upper": 35_000_000,
             }
-            for q in range(1, 5)
+            for q in range(1, _sim_q + 1)
         ]
 
     # SHAP 분석 — Phase 2.5에서 이미 계산된 값을 state에서 읽음 (중복 실행 방지)
@@ -493,17 +493,17 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
             shap_result = None
 
     _sim_closure_rate = (sim_result.get("closure_rate") or {}).get("closure_rate")
-    _sim_bep_months = (sim_result.get("bep") or {}).get("bep_months")
+    _sim_bep_quarters = (sim_result.get("bep") or {}).get("bep_quarters")
 
     # market_report에 모델 기반 폐업률 추가 (0~1 소수)
     market_report["closure_rate"] = _sim_closure_rate
 
-    # 타겟 동의 bep_months, closure_rate를 district_rankings에 주입
+    # 타겟 동의 bep_quarters, closure_rate를 district_rankings에 주입
     district_rankings = [
         {
             **r,
             **(
-                {"bep_months": _sim_bep_months, "closure_rate": _sim_closure_rate}
+                {"bep_quarters": _sim_bep_quarters, "closure_rate": _sim_closure_rate}
                 if r.get("district") == target_dist
                 else {}
             ),
@@ -531,7 +531,7 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
         "market_report": market_report,
         "analysis_report": analysis.get("market_summary", ""),
         "analysis_metrics": metrics,
-        "simulation_months": 12,
+        "simulation_quarters": (sim_result.get("bep") or {}).get("simulation_quarters", 4),
         "quarterly_projection": quarterly,
         "scenarios": scenarios,
         "comparison": [
@@ -540,11 +540,11 @@ def map_state_to_simulation_output(state: Dict[str, Any], request_id: str) -> Di
                 "score": district_score,
                 # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
                 "revenue": (md.get("avg_revenue") or 30000000) // 10000,
-                "bep": int(
-                    metrics.get("bep_months")
-                    or (final_report.get("profit_simulation") or {}).get("bep_months")
-                    or _sim_bep_months
-                    or 14
+                "bep": (
+                    metrics.get("bep_quarters")
+                    or (final_report.get("profit_simulation") or {}).get("bep_quarters")
+                    or _sim_bep_quarters
+                    or None
                 ),
                 "survival": float(market_report["survival_rate"]),
                 "cannibalization": float(metrics.get("cannibalization_impact") or 4),
@@ -1064,7 +1064,7 @@ def _mock_simulation_response(target_district: str, request_id: str) -> dict:
         "comparison": [],
         "legal_risks": [],
         "overall_legal_risk": "safe",
-        "simulation_months": 12,
+        "simulation_quarters": 0,
         "quarterly_projection": [],
         "analysis_metrics": {"main_target_age": "30대", "peak_time": "점심"},
         "grade": "CAUTION",
@@ -1109,7 +1109,7 @@ async def run_simulation(input_data: SimulationInput):
             "comparison": [],
             "legal_risks": [],
             "overall_legal_risk": "safe",
-            "simulation_months": 12,
+            "simulation_quarters": 0,
             "quarterly_projection": [],
             "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",
             "analysis_metrics": {},
@@ -1151,7 +1151,7 @@ class AbmSimulationRequest(BaseModel):
     target_district: str
     business_type: str
     brand_name: str
-    langgraph_result: Dict[str, Any]
+    langgraph_result: dict[str, Any]
     # 시뮬 규모
     n_agents: int = 100  # 100 | 1000
     days: int = 1
@@ -1170,13 +1170,13 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     기존 분석 결과(analysis_report, analysis_metrics 등)는 절대 수정하지 않는다.
     """
     try:
-        from src.simulation.runner import run_simulation as abm_run
         from src.simulation.config import (
-            Scenario,
             ModelConfig,
             PopulationMix,
+            Scenario,
             TierDistribution,
         )
+        from src.simulation.runner import run_simulation as abm_run
     except ImportError:
         return JSONResponse(
             status_code=503,

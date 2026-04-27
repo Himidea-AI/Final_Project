@@ -88,6 +88,8 @@ class DistrictRanking(BaseModel):
     pop_score: float = 0.0
     rent_score: float = 0.0
     vacancy_rate: float = 0.0
+    bep_quarters: int | None = None
+    closure_rate: float | None = None
 
 
 class ShapFeatureItem(BaseModel):
