@@ -67,6 +67,12 @@ class World:
     # {(dong, hour): {"board": x, "alight": y, "net_inflow": z}}
     subway_inflow: dict = field(default_factory=dict)
 
+    # operational_fit_score (외부 모듈 산출) — {dong_name: 10~100 점수}
+    # 외부 inflow potential + destination 자산 종합. score_store 에서
+    # ext_commuter/ext_visitor 매장 선호 boost 로 사용 (Option E).
+    # 비어있으면 boost 미적용 (1.0 multiplier) — 기존 동작 보존.
+    ofs_dong_score: dict[str, float] = field(default_factory=dict)
+
     # Policy Generator 캐시 — {policy_id: PersonaPolicy}
     # 활성 시 use_policy=True → agents.decide() 가 policy_executor.policy_decide 호출
     policy_cache: dict = field(default_factory=dict)
