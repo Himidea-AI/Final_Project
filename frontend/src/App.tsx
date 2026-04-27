@@ -78,6 +78,7 @@ import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
+import { getLivePopulation } from './api/client';
 
 import {
   ChevronRight,
@@ -2101,7 +2102,8 @@ function SimulatorDashboard({
     const fetchPop = async () => {
       setPopLoading(true);
       try {
-        const { getLivePopulation } = await import('./api/client');
+        // 정적 import로 통일 — client.ts는 hooks/stores 등에서도 정적 import되어
+        // 동적 import 효과가 무력화되며 vite 경고 발생. 실효 없음.
         const data = await getLivePopulation(selectedDongs);
         if (!cancelled) setPopData(data);
       } catch (e) {
