@@ -1785,16 +1785,23 @@ function MyPageView() {
           setPasswordError(data.message || '변경 실패. 다시 시도해주세요.');
         }
       } else {
-        // 탈퇴 — 백엔드 DELETE 엔드포인트 미구현. 현재는 placeholder
-        showToast(
-          'info',
-          '탈퇴 요청이 접수되었습니다. (백엔드 구현 대기 중 — IM3 Jira로 전달 예정)',
-        );
-        setShowPasswordModal(false);
-        setTimeout(() => {
-          logout();
-          nav('/');
-        }, 1200);
+        // 탈퇴 — 소프트 삭제 (is_active=false, 소속 매니저·초대코드 일괄 비활성화)
+        const res = await fetch(`/api/auth/user/${user.id}/deactivate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: passwordInput }),
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast('success', data.message || '탈퇴가 완료되었습니다.');
+          setShowPasswordModal(false);
+          setTimeout(() => {
+            logout();
+            nav('/');
+          }, 1200);
+        } else {
+          setPasswordError(data.message || '탈퇴 처리에 실패했습니다.');
+        }
       }
     } catch {
       setPasswordError('서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');

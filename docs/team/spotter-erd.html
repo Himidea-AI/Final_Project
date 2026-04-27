@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SPOTTER DB ERD</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 24px; }
+h1 { text-align: center; margin-bottom: 8px; color: #fff; font-size: 28px; }
+.subtitle { text-align: center; color: #888; margin-bottom: 24px; font-size: 14px; }
+.category { margin-bottom: 32px; }
+.cat-header {
+    font-size: 18px; font-weight: 700; padding: 10px 16px; border-radius: 8px 8px 0 0;
+    display: flex; align-items: center; gap: 8px;
+}
+.cat-header .dot { width: 12px; height: 12px; border-radius: 50%; }
+.cat-body { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; background: #16213e; border-radius: 0 0 8px 8px; }
+.table-card {
+    background: #0f3460; border: 1px solid #333; border-radius: 8px;
+    min-width: 260px; max-width: 340px; flex: 1; font-size: 12px; overflow: hidden;
+}
+.table-card.backup { opacity: 0.5; }
+.table-card.empty-tbl { opacity: 0.4; }
+.table-name {
+    padding: 8px 12px; font-weight: 700; font-size: 13px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.table-name .rows { font-weight: 400; font-size: 11px; color: #aaa; }
+.badge { font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px; }
+.badge-backup { background: #ff9800; color: #000; }
+.badge-empty { background: #f44336; color: #fff; }
+.badge-dup { background: #e91e63; color: #fff; }
+.cols { padding: 4px 0; }
+.col-row {
+    padding: 3px 12px; display: flex; justify-content: space-between;
+    border-top: 1px solid #1a1a3e;
+}
+.col-row:hover { background: #1a3a6e; }
+.col-name { color: #e0e0e0; }
+.col-name.pk { color: #FFD700; font-weight: 700; }
+.col-name.pk::before { content: "\01F511 "; font-size: 10px; }
+.col-name.fk { color: #FF9800; }
+.col-name.fk::after { content: " \2192"; font-size: 10px; color: #FF9800; }
+.col-type { color: #888; font-size: 11px; }
+.fk-section { margin-top: 24px; padding: 16px; background: #16213e; border-radius: 8px; }
+.fk-section h2 { margin-bottom: 12px; font-size: 16px; }
+.fk-row { padding: 6px 0; font-size: 13px; color: #ccc; }
+.fk-row span { color: #FFD700; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #aaa; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.stats { text-align: center; color: #666; font-size: 12px; margin-bottom: 20px; }
+.issue-section { margin-top: 24px; padding: 16px; background: #2a1a1e; border: 1px solid #5a2a2e; border-radius: 8px; }
+.issue-section h2 { margin-bottom: 12px; font-size: 16px; color: #F44336; }
+.issue-row { padding: 4px 0; font-size: 13px; }
+.issue-row .tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-right: 8px; font-weight: 600; }
+.tag-empty { background: #f44336; color: #fff; }
+.tag-backup { background: #ff9800; color: #000; }
+.tag-dup { background: #e91e63; color: #fff; }
+</style>
+</head>
+<body>
+<h1>SPOTTER Database ERD</h1>
+<div class="subtitle">mapo-simulator RDS PostgreSQL &mdash; 76 Tables, 4.7 GB</div>
+<div class="stats">총 76개 테이블 &middot; 18,074,520행 &middot; FK 관계 5개</div>
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:#4CAF50"></div>매출·상권 (18)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#2196F3"></div>인구 (14)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#FF9800"></div>교통·접근성 (2)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#9C27B0"></div>집객시설 (3)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#795548"></div>부동산 (3)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#00BCD4"></div>트렌드·변화 (9)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#F44336"></div>법률 RAG (4)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#E91E63"></div>브랜드·프랜차이즈 (3)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#607D8B"></div>공실 (2)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#FFEB3B"></div>외식·카카오 (5)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#3F51B5"></div>경제지표 (3)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#8BC34A"></div>날씨 (2)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#FF5722"></div>사용자·시뮬레이션 (6)</div>
+<div class="legend-item"><div class="legend-dot" style="background:#9E9E9E"></div>매핑·기타 (2)</div>
+</div>
+<div class="category">
+<div class="cat-header" style="background:#4CAF5022; border-left: 4px solid #4CAF50;"><div class="dot" style="background:#4CAF50"></div>매출·상권 (18)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">district_sales<span class="badge badge-dup">중복?</span><span class="rows">3,703행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">industry_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">monthly_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">monthly_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">weekday_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekend_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">mon_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">tue_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">wed_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">thu_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">fri_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sat_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sun_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_00_06_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_06_11_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_11_14_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_14_17_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_17_21_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_21_24_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">male_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">female_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_10_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_20_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_30_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_40_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_50_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_60_above_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekday_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">weekend_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mon_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">tue_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">wed_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">thu_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">fri_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sat_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sun_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_00_06_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_06_11_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_11_14_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_14_17_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_17_21_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_21_24_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">male_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">female_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_10_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_20_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_30_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_40_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_50_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_60_above_count</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">seoul_district_sales<span class="rows">87,938행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">monthly_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">monthly_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekday_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekend_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">mon_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">tue_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">wed_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">thu_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">fri_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sat_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sun_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_00_06_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_06_11_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_11_14_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_14_17_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_17_21_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_21_24_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">male_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">female_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_10_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_20_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_30_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_40_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_50_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_60_above_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekday_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekend_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">mon_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">tue_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">wed_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">thu_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">fri_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sat_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sun_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_00_06_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_06_11_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_11_14_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_14_17_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_17_21_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_21_24_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">male_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">female_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_10_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_20_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_30_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_40_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_50_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_60_above_count</span><span class="col-type">bigint</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">district_sales_seoul<span class="rows">475,334행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">monthly_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">monthly_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">raw_json</span><span class="col-type">jsonb</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">golmok_sales<span class="rows">9,599행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">trdar_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">monthly_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">monthly_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekday_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekend_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">mon_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">tue_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">wed_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">thu_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">fri_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sat_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sun_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_00_06_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_06_11_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_11_14_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_14_17_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_17_21_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_21_24_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">male_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">female_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_10_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_20_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_30_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_40_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_50_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_60_above_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekday_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekend_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">mon_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">tue_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">wed_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">thu_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">fri_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sat_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sun_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_00_06_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_06_11_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_11_14_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_14_17_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_17_21_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">time_21_24_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">male_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">female_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_10_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_20_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_30_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_40_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_50_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">age_60_above_count</span><span class="col-type">bigint</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">golmok_stores<span class="rows">15,800행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">trdar_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">store_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">similar_store_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">open_rate</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">open_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">close_rate</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">close_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">franchise_count</span><span class="col-type">bigint</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">golmok_commercial<span class="rows">178,840행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">trdar_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">data_type</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">metrics</span><span class="col-type">jsonb</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">golmok_rent<span class="rows">472행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">year</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">gubun</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">rent_1f</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">rent_other</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">rent_total</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">seoul_golmok_rent<span class="rows">11,900행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">year</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">gubun</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">rent_1f</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">rent_other</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">rent_total</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">quarter_code</span><span class="col-type">bigint</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">seoul_adstrd_stor<span class="rows">849,552행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name pk">industry_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">store_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">similar_store_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">open_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">open_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">close_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">close_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">franchise_count</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">seoul_signgu_selng<span class="rows">43,043행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">signgu_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">signgu_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name pk">industry_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">monthly_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">monthly_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekday_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">weekend_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">mon_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">tue_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">wed_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">thu_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">fri_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sat_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sun_sales</span><span class="col-type">bigint</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">seoul_signgu_stor<span class="rows">69,704행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">signgu_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">signgu_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name pk">industry_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">store_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">similar_store_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">open_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">open_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">close_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">close_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">franchise_count</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">seoul_district_stores<span class="rows">100,587행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">store_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">similar_store_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">open_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">close_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">franchise_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">closure_rate</span><span class="col-type">bigint</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">store_info<span class="rows">30,488행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">store_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">store_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">address</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">road_address</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">lat</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">lon</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">industry_l_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_l</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_m_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_m</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_s_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_s</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">building_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">floor_info</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">store_quarterly<span class="rows">3,840행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">industry_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">store_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">open_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">close_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">closure_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">franchise_count</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">small_store_rent_q<span class="rows">10,020행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">cls_id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">cls_full_nm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">cls_nm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">region</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">year</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">rent</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">statbl_id</span><span class="col-type">text</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">rent_cost<span class="rows">248행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">data_type</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">area_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">year</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name">rent</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">vacancy_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">investment_return</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">income_return</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">capital_return</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">transaction_date</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">price</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">floor_area</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">floor</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">source</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">rent_cost_summary_2025<span class="rows">148행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">region1</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">region2</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">rent_1000won_sqm</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">vacancy_rate_pct</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">investment_return_pct</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">income_return_pct</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">capital_return_pct</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">source_file</span><span class="col-type">text</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#4CAF5033; border-bottom: 2px solid #4CAF50;">seoul_training_dataset<span class="rows">87,938행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">industry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">monthly_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">monthly_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">store_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">open_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">close_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">total_pop</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">cpi_index</span><span class="col-type">float8</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#2196F322; border-left: 4px solid #2196F3;"><div class="dot" style="background:#2196F3"></div>인구 (14)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">living_population<span class="rows">968,064행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name pk">time_zone</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">total_pop</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_0_9</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_10_14</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_15_19</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_20_24</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_25_29</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_30_34</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_35_39</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_40_44</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_45_49</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_50_54</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_55_59</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_60_64</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_65_69</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_70_74</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_70_plus</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_0_9</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_10_14</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_15_19</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_20_24</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_25_29</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_30_34</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_35_39</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_40_44</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_45_49</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_50_54</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_55_59</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_60_64</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_65_69</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_70_74</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_70_plus</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">living_population_grid<span class="rows">10,543,528행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">ymd</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name pk">tt</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">cell_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">spop</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_0_9</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_10_14</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_15_19</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_20_24</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_25_29</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_30_34</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_35_39</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_40_44</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_45_49</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_50_54</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_55_59</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_60_64</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_65_69</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">m_70_plus</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_0_9</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_10_14</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_15_19</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_20_24</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_25_29</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_30_34</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_35_39</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_40_44</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_45_49</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_50_54</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_55_59</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_60_64</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_65_69</span><span class="col-type">numeric</span></div>
+<div class="col-row"><span class="col-name">f_70_plus</span><span class="col-type">numeric</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">mapo_resident_pop<span class="badge badge-dup">중복?</span><span class="rows">408행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">resident_pop</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">resident_pop_monthly<span class="rows">1,479행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">region_full</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">region_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">ym</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">total_pop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">households</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">pop_per_household</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">male_pop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">female_pop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">male_female_ratio</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">seoul_population_quarterly<span class="rows">10,176행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">total_pop</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">seoul_resident_pop_quarterly<span class="rows">13,508행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">resident_pop</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">seoul_adstrd_flpop<span class="rows">11,900행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">total_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">male_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">female_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_10</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_20</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_30</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_40</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_50</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_60_above</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_00_06</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_06_11</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_11_14</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_14_17</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_17_21</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_21_24</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mon</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">tue</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">wed</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">thu</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">fri</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sat</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sun</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card backup">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">seoul_adstrd_flpop_backup_20260421<span class="badge badge-backup">BACKUP</span><span class="rows">448행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">total_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">male_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">female_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_10</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_20</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_30</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_40</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_50</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_60_above</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_00_06</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_06_11</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_11_14</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_14_17</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_17_21</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_21_24</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mon</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">tue</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">wed</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">thu</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">fri</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sat</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sun</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">seoul_signgu_flpop<span class="rows">700행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">signgu_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">signgu_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">total_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">male_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">female_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_10</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_20</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_30</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_40</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_50</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_60_above</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_00_06</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_06_11</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_11_14</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_14_17</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_17_21</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_21_24</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mon</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">tue</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">wed</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">thu</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">fri</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sat</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sun</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">seoul_trdar_flpop<span class="rows">1,932행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">trdar_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trdar_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">trdar_se</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trdar_se_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">total_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">male_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">female_flpop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_10</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_20</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_30</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_40</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_50</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">age_60_above</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_00_06</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_06_11</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_11_14</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_14_17</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_17_21</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">time_21_24</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mon</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">tue</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">wed</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">thu</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">fri</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sat</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">sun</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">sgis_population<span class="rows">224,517행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">year</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name pk">area_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">indicator</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">value</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">sgis_household<span class="rows">25,550행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">year</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name pk">area_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">indicator</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">value</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">sgis_business<span class="rows">137,356행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">year</span><span class="col-type">smallint</span></div>
+<div class="col-row"><span class="col-name pk">area_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">indicator</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">value</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#2196F333; border-bottom: 2px solid #2196F3;">elderly_ratio_region<span class="rows">1,566행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">region</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">ym</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">elderly_ratio</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">elderly_pop</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">total_pop</span><span class="col-type">bigint</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#FF980022; border-left: 4px solid #FF9800;"><div class="dot" style="background:#FF9800"></div>교통·접근성 (2)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#FF980033; border-bottom: 2px solid #FF9800;">dong_subway_access<span class="rows">424행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">center_lat</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">center_lon</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">nearest_subway</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">subway_distance_m</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">subway_count_1km</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FF980033; border-bottom: 2px solid #FF9800;">bus_boarding_daily<span class="rows">3,710,007행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">use_date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">route_no</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">route_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">ars_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">station_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">boarding_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">alighting_count</span><span class="col-type">int</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#9C27B022; border-left: 4px solid #9C27B0;"><div class="dot" style="background:#9C27B0"></div>집객시설 (3)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#9C27B033; border-bottom: 2px solid #9C27B0;">seoul_adstrd_fclty<span class="rows">336행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">viatr_fclty_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">pblofc_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bank_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">gehspt_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">gnrl_hsptl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">parmacy_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">kndrgr_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">elesch_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mskul_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">hgschl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">univ_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">drts_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">supmk_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">theat_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">stayng_fclty_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">arprt_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">rlroad_statn_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bus_trminl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">subway_statn_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bus_sttn_co</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#9C27B033; border-bottom: 2px solid #9C27B0;">seoul_signgu_fclty<span class="rows">525행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">signgu_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">signgu_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">viatr_fclty_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">pblofc_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bank_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">gehspt_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">gnrl_hsptl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">parmacy_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">kndrgr_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">elesch_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mskul_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">hgschl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">univ_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">drts_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">supmk_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">theat_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">stayng_fclty_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">arprt_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">rlroad_statn_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bus_trminl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">subway_statn_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bus_sttn_co</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#9C27B033; border-bottom: 2px solid #9C27B0;">seoul_trdar_fclty<span class="rows">1,365행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">trdar_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trdar_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">trdar_se</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trdar_se_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">viatr_fclty_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">pblofc_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bank_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">gehspt_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">gnrl_hsptl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">parmacy_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">kndrgr_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">elesch_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mskul_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">hgschl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">univ_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">drts_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">supmk_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">theat_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">stayng_fclty_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">arprt_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">rlroad_statn_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bus_trminl_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">subway_statn_co</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bus_sttn_co</span><span class="col-type">int</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#79554822; border-left: 4px solid #795548;"><div class="dot" style="background:#795548"></div>부동산 (3)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#79554833; border-bottom: 2px solid #795548;">apt_trade_real<span class="rows">8,578행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">sigungu</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">jibun_addr</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">bon_beon</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">bu_beon</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">apt_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">area_sqm</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">deal_ym</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">deal_day</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">price_won</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">cancel_date</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">floor</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">seller</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">buyer</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">build_year</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">road_addr</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">realty_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">deal_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">region_full</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">cancel_reason</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">property_type</span><span class="col-type">text</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#79554833; border-bottom: 2px solid #795548;">jeonse_monthly_rent<span class="rows">168,342행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">rcpt_year</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">gu_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">gu_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">jibun_type</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">jibun_type_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">bon_beon</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">bu_beon</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">floor</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">contract_date</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">trade_type</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">area_sqm</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">deposit_manwon</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">monthly_rent_manwon</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">building_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">build_year</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">building_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">contract_period</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">new_renew</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">renew_right_used</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">prev_deposit</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">prev_monthly_rent</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#79554833; border-bottom: 2px solid #795548;">molit_nrg_trade<span class="rows">8,731행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">lawd_cd</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">gu_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">deal_ym</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">deal_day</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">deal_amount</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">building_use</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">building_ar</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">plottage_ar</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">building_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">realty_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">floor</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">build_year</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">sgg_nm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">umd_nm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">jibun</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">cdeal_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">cdeal_day</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dealing_gbn</span><span class="col-type">text</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#00BCD422; border-left: 4px solid #00BCD4;"><div class="dot" style="background:#00BCD4"></div>트렌드·변화 (9)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">naver_trend_monthly<span class="rows">33,985행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">keyword</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">period</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">ratio</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">scope</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">naver_trend_quarterly<span class="rows">9,205행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trend_score</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">scope</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">naver_trend_industry<span class="rows">319행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">industry</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">period</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">ratio</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">seoul_adstrd_change_ix<span class="rows">11,900행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">change_ix</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">change_ix_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">opr_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">cls_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">su_opr_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">su_cls_sale_mt_avg</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">seoul_signgu_change_ix<span class="rows">700행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">signgu_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">signgu_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">change_ix</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">change_ix_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">opr_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">cls_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">su_opr_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">su_cls_sale_mt_avg</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">seoul_trdar_change_ix<span class="rows">1,932행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name pk">trdar_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trdar_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">trdar_se</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trdar_se_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">change_ix</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">change_ix_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">opr_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">cls_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">su_opr_sale_mt_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">su_cls_sale_mt_avg</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">cpi_dining_quarterly<span class="rows">24행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">cpi_index</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card backup">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">naver_trend_monthly_backup_20260420<span class="badge badge-backup">BACKUP</span><span class="rows">28,570행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">keyword</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">period</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">ratio</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">scope</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card backup">
+<div class="table-name" style="background:#00BCD433; border-bottom: 2px solid #00BCD4;">naver_trend_quarterly_backup_20260420<span class="badge badge-backup">BACKUP</span><span class="rows">7,653행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">quarter</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trend_score</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">scope</span><span class="col-type">varchar</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#F4433622; border-left: 4px solid #F44336;"><div class="dot" style="background:#F44336"></div>법률 RAG (4)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#F4433633; border-bottom: 2px solid #F44336;">langchain_pg_collection<span class="rows">1행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">uuid</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name">name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">cmetadata</span><span class="col-type">json</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#F4433633; border-bottom: 2px solid #F44336;">langchain_pg_embedding<span class="rows">23,096행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name fk">collection_id</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name">embedding</span><span class="col-type">USER-DEFINED</span></div>
+<div class="col-row"><span class="col-name">document</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">cmetadata</span><span class="col-type">jsonb</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#F4433633; border-bottom: 2px solid #F44336;">law_legislations<span class="rows">51행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">item_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">title</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">law_short_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">promulgation_date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">enforce_date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">promulgation_no</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">ministry_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">law_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">law_revision_type</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">detail_link</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">raw_json</span><span class="col-type">jsonb</span></div>
+<div class="col-row"><span class="col-name">queries</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#F4433633; border-bottom: 2px solid #F44336;">law_precedents<span class="rows">222행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">item_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">case_number</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">case_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">case_type_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">case_type_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">sentence</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">sentence_date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">court_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">judgment_type</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">detail_link</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">data_source</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">raw_json</span><span class="col-type">jsonb</span></div>
+<div class="col-row"><span class="col-name">queries</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#E91E6322; border-left: 4px solid #E91E63;"><div class="dot" style="background:#E91E63"></div>브랜드·프랜차이즈 (3)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#E91E6333; border-bottom: 2px solid #E91E63;">ftc_brand_franchise<span class="rows">34,725행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">yr</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">corpNm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">brandNm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">indutyLclasNm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">indutyMlsfcNm</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">frcsCnt</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">newFrcsRgsCnt</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">ctrtEndCnt</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">ctrtCncltnCnt</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">nmChgCnt</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">avrgSlsAmt</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">arUnitAvrgSlsAmt</span><span class="col-type">bigint</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#E91E6333; border-bottom: 2px solid #E91E63;">brand_logo<span class="rows">94행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">brand_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">domain</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">logo_url</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">logo_source</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#E91E6333; border-bottom: 2px solid #E91E63;">biz_brand_mapping<span class="rows">1행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">biz_number</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">company_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">brand_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_large</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">industry_medium</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">franchise_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">avg_sales</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">mapo_store_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">created_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#607D8B22; border-left: 4px solid #607D8B;"><div class="dot" style="background:#607D8B"></div>공실 (2)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#607D8B33; border-bottom: 2px solid #607D8B;">naver_vacancy<span class="rows">1,341행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">trade_type</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">trade_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">lat</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">lon</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">listing_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">lgeo</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#607D8B33; border-bottom: 2px solid #607D8B;">vacancy_enriched<span class="rows">111행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">lat</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">lon</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">nearest_subway</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">subway_distance</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">restaurant_500m</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">cafe_500m</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">mart_500m</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">address</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">road_address</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">building_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">listing_count</span><span class="col-type">int</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#FFEB3B22; border-left: 4px solid #FFEB3B;"><div class="dot" style="background:#FFEB3B"></div>외식·카카오 (5)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#FFEB3B33; border-bottom: 2px solid #FFEB3B;">kakao_store<span class="rows">4,446행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">kakao_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">place_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">brand_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">category</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">category_detail</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">address</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">road_address</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">lat</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">lon</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">phone</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">place_url</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+<div class="col-row"><span class="col-name">is_franchise</span><span class="col-type">bool</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FFEB3B33; border-bottom: 2px solid #FFEB3B;">kakao_store_hours<span class="rows">4,026행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">kakao_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">headline_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">headline_text</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">mon_hours</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">tue_hours</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">wed_hours</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">thu_hours</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">fri_hours</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">sat_hours</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">sun_hours</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">hours_json</span><span class="col-type">jsonb</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FFEB3B33; border-bottom: 2px solid #FFEB3B;">kakao_store_menu<span class="rows">81,313행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name fk">kakao_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">product_id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">menu_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">price</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">description</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">photo_url</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">mod_at</span><span class="col-type">timestamp</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FFEB3B33; border-bottom: 2px solid #FFEB3B;">mapo_sns_sentiment<span class="rows">377행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">place_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">positive_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">negative_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">neutral_count</span><span class="col-type">int</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FFEB3B33; border-bottom: 2px solid #FFEB3B;">seoul_realtime_hotspots<span class="rows">1,842행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">area_cd</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">area_nm</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+<div class="col-row"><span class="col-name">congest_level</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">congest_msg</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">pop_min</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">pop_max</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">male_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">female_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_0_10</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_10s</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_20s</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_30s</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_40s</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_50s</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_60s</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">age_70_plus</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">resident_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">visitor_rate</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">cmrc_total_level</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">cmrc_payment_cnt</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">cmrc_payment_amt_min</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">cmrc_payment_amt_max</span><span class="col-type">varchar</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#3F51B522; border-left: 4px solid #3F51B5;"><div class="dot" style="background:#3F51B5"></div>경제지표 (3)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#3F51B533; border-bottom: 2px solid #3F51B5;">ecos_key_statistics<span class="rows">101행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name">class_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name pk">keystat_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">data_value</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name pk">cycle</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">unit_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">collected_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#3F51B533; border-bottom: 2px solid #3F51B5;">ecos_timeseries<span class="rows">2,783행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">stat_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">stat_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name pk">item_code1</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">item_name1</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name pk">item_code2</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">item_name2</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">cycle</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name pk">period</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">data_value</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">unit_name</span><span class="col-type">text</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#3F51B533; border-bottom: 2px solid #3F51B5;">kosis_regional_income<span class="rows">1,116행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">tbl_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">tbl_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">region_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">region_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">item_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">item_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">unit</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">period_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">period_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">period_value</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">value_num</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">src_last_chn_de</span><span class="col-type">date</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#8BC34A22; border-left: 4px solid #8BC34A;"><div class="dot" style="background:#8BC34A"></div>날씨 (2)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#8BC34A33; border-bottom: 2px solid #8BC34A;">weather_daily<span class="rows">2,665행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name pk">stn</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">stn_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">wind_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">wind_max</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">temp_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">temp_max</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">temp_min</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">humidity_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">humidity_min</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">pressure_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">cloud_avg</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">sunshine_hours</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">insolation</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">rain_day</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">rain_60m_max</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">snow_new</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">snow_max</span><span class="col-type">float8</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#8BC34A33; border-bottom: 2px solid #8BC34A;">holiday_calendar<span class="rows">3,287행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">date</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">year</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">month</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">day</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dow</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">dow_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">is_weekend</span><span class="col-type">bool</span></div>
+<div class="col-row"><span class="col-name">is_holiday</span><span class="col-type">bool</span></div>
+<div class="col-row"><span class="col-name">holiday_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">is_substitute</span><span class="col-type">bool</span></div>
+<div class="col-row"><span class="col-name">day_type</span><span class="col-type">varchar</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#FF572222; border-left: 4px solid #FF5722;"><div class="dot" style="background:#FF5722"></div>사용자·시뮬레이션 (6)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#FF572233; border-bottom: 2px solid #FF5722;">users<span class="rows">12행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name">company_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">biz_number</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">contact_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">position</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">email</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">phone</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">store_count</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">password_hash</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">plan</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">agree_terms</span><span class="col-type">bool</span></div>
+<div class="col-row"><span class="col-name">created_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card empty-tbl">
+<div class="table-name" style="background:#FF572233; border-bottom: 2px solid #FF5722;">customers<span class="badge badge-empty">EMPTY</span><span class="rows">0행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">customer_id</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">customer_name</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">visit_date</span><span class="col-type">date</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FF572233; border-bottom: 2px solid #FF5722;">simulation_history<span class="rows">3행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">bigint</span></div>
+<div class="col-row"><span class="col-name">manager_id</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name">client_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">district</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">brand_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">business_type</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">scenario</span><span class="col-type">jsonb</span></div>
+<div class="col-row"><span class="col-name">simulation_result</span><span class="col-type">jsonb</span></div>
+<div class="col-row"><span class="col-name">ai_verdict_summary</span><span class="col-type">text</span></div>
+<div class="col-row"><span class="col-name">market_entry_signal</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">created_at</span><span class="col-type">timestamptz</span></div>
+<div class="col-row"><span class="col-name">updated_at</span><span class="col-type">timestamptz</span></div>
+<div class="col-row"><span class="col-name">user_type</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card empty-tbl">
+<div class="table-name" style="background:#FF572233; border-bottom: 2px solid #FF5722;">simulation_result<span class="badge badge-empty">EMPTY</span><span class="rows">0행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">request_id</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name">created_at</span><span class="col-type">date</span></div>
+<div class="col-row"><span class="col-name">input_params</span><span class="col-type">jsonb</span></div>
+<div class="col-row"><span class="col-name">output_result</span><span class="col-type">jsonb</span></div>
+<div class="col-row"><span class="col-name">status</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">workspace_id</span><span class="col-type">varchar</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FF572233; border-bottom: 2px solid #FF5722;">invite_codes<span class="rows">4행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name fk">owner_id</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name">max_uses</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">used_count</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">is_active</span><span class="col-type">bool</span></div>
+<div class="col-row"><span class="col-name">created_at</span><span class="col-type">timestamptz</span></div>
+<div class="col-row"><span class="col-name">expires_at</span><span class="col-type">timestamptz</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#FF572233; border-bottom: 2px solid #FF5722;">manager_users<span class="rows">4행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">id</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name fk">owner_id</span><span class="col-type">uuid</span></div>
+<div class="col-row"><span class="col-name fk">invite_code_id</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">contact_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">position</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">email</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">phone</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">password_hash</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">is_active</span><span class="col-type">bool</span></div>
+<div class="col-row"><span class="col-name">created_at</span><span class="col-type">timestamptz</span></div>
+<div class="col-row"><span class="col-name">is_approved</span><span class="col-type">bool</span></div>
+<div class="col-row"><span class="col-name">assigned_gu</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">assigned_dongs</span><span class="col-type">json</span></div>
+</div></div>
+</div></div>
+<div class="category">
+<div class="cat-header" style="background:#9E9E9E22; border-left: 4px solid #9E9E9E;"><div class="dot" style="background:#9E9E9E"></div>매핑·기타 (2)</div>
+<div class="cat-body">
+<div class="table-card">
+<div class="table-name" style="background:#9E9E9E33; border-bottom: 2px solid #9E9E9E;">dong_mapping<span class="rows">16행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">dong_code</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">dong_name</span><span class="col-type">varchar</span></div>
+<div class="col-row"><span class="col-name">resident_pop</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">floating_pop</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">avg_age</span><span class="col-type">float8</span></div>
+<div class="col-row"><span class="col-name">total_households</span><span class="col-type">int</span></div>
+<div class="col-row"><span class="col-name">trdar_codes</span><span class="col-type">jsonb</span></div>
+</div></div>
+<div class="table-card">
+<div class="table-name" style="background:#9E9E9E33; border-bottom: 2px solid #9E9E9E;">alembic_version<span class="rows">1행</span></div>
+<div class="cols">
+<div class="col-row"><span class="col-name pk">version_num</span><span class="col-type">varchar</span></div>
+</div></div>
+</div></div>
+<div class="issue-section">
+<h2>DB 정리 필요 항목</h2>
+<div class="issue-row"><span class="tag tag-empty">EMPTY</span>customers &mdash; 0행, 삭제 검토</div>
+<div class="issue-row"><span class="tag tag-empty">EMPTY</span>simulation_result &mdash; 0행, 삭제 검토</div>
+<div class="issue-row"><span class="tag tag-backup">BACKUP</span>naver_trend_monthly_backup_20260420 &mdash; 원본 존재, 삭제 검토</div>
+<div class="issue-row"><span class="tag tag-backup">BACKUP</span>naver_trend_quarterly_backup_20260420 &mdash; 원본 존재, 삭제 검토</div>
+<div class="issue-row"><span class="tag tag-backup">BACKUP</span>seoul_adstrd_flpop_backup_20260421 &mdash; 원본 존재, 삭제 검토</div>
+<div class="issue-row"><span class="tag tag-dup">DUP</span>district_sales &mdash; 서울 전역 테이블에서 필터 가능, 통합 검토</div>
+<div class="issue-row"><span class="tag tag-dup">DUP</span>mapo_resident_pop &mdash; 서울 전역 테이블에서 필터 가능, 통합 검토</div>
+</div>
+<div class="fk-section">
+<h2>Foreign Key 관계</h2>
+<div class="fk-row"><span>invite_codes</span>.owner_id &rarr; <span>users</span>.id</div>
+<div class="fk-row"><span>manager_users</span>.invite_code_id &rarr; <span>invite_codes</span>.id</div>
+<div class="fk-row"><span>manager_users</span>.owner_id &rarr; <span>users</span>.id</div>
+<div class="fk-row"><span>kakao_store_menu</span>.kakao_id &rarr; <span>kakao_store</span>.kakao_id</div>
+<div class="fk-row"><span>langchain_pg_embedding</span>.collection_id &rarr; <span>langchain_pg_collection</span>.uuid</div>
+</div>
+</body></html>
