@@ -130,11 +130,13 @@ import {
   Map as MapIcon,
   Lightbulb,
   ClipboardList,
+  UserCheck,
 } from 'lucide-react';
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
 import AbmPersonaMap from './components/AbmPersonaMap';
 import HybridSliderInput from './components/ui/HybridSliderInput';
+import { SectionLabel } from './components/ui/SectionLabel';
 import { ManagerListProvider } from './hooks/useManagerList';
 import {
   AreaChart,
@@ -1432,141 +1434,152 @@ function SimulatorDashboard({
             SIMULATION CONTROLS
           </h3>
 
-          {/* 2-col cockpit grid: 좌 BASIC / 우 ADVANCED */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* ─────────── BASIC column ─────────── */}
+          {/* Plan A+B 재구성: 3개 의미 섹션 — Core / Operating / Target */}
+          <div className="space-y-10">
+            {/* ─────── 섹션 1: Core Parameters (위계 강조) ─────── */}
             <div>
-              {/* ─────────── BASIC: 분석 대상 (지역) ─────────── */}
-              <div className="mb-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <MapPin size={13} className={accent} />
-                  <label className={`text-xs font-medium ${textSecondary}`}>분석 대상</label>
-                </div>
+              <SectionLabel icon={MapPin} title="Core Parameters" sub="필수 분석 대상" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 분석 대상 박스 — 강조 */}
+                <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MapPin size={13} className={accent} />
+                    <label className={`text-xs font-medium ${textSecondary}`}>분석 대상</label>
+                  </div>
 
-                {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
-                <div className="mb-2 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/50 flex items-center justify-between">
-                  <span className="text-sm text-[#e2e8f0]">{selectedGu}</span>
-                  <span className="text-[10px] text-[#9ca3af] uppercase tracking-wider opacity-70">
-                    선택됨
-                  </span>
-                </div>
-
-                {/* 행정동 선택 드롭다운 */}
-                <div className="relative">
-                  <button
-                    onClick={() => {
-                      setDongDropdownOpen(!dongDropdownOpen);
-                      setBusinessTypeOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
-                  >
-                    <span className="truncate">
-                      {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
+                  {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
+                  <div className="mb-2 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/50 flex items-center justify-between">
+                    <span className="text-sm text-[#e2e8f0]">{selectedGu}</span>
+                    <span className="text-[10px] text-[#9ca3af] uppercase tracking-wider opacity-70">
+                      선택됨
                     </span>
-                    <ChevronRight
-                      size={14}
-                      className={`text-[#9ca3af] transition-transform duration-200 shrink-0 ${
-                        dongDropdownOpen ? 'rotate-90' : ''
-                      }`}
-                    />
-                  </button>
-                  {dongDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
-                      <button
-                        onClick={toggleAllDongs}
-                        className="w-full text-left px-3 py-2 text-xs font-medium border-b border-[#3a3633] transition-colors text-[#818cf8] hover:bg-[#818cf8]/10"
-                      >
-                        {selectedDongs.length >= MAX_DONGS
-                          ? `전체 해제 (1개만 유지)`
-                          : `최대 ${MAX_DONGS}개 채우기`}
-                      </button>
-                      {DONG_DATA[selectedGu].map((dong) => {
-                        const checked = selectedDongs.includes(dong);
-                        return (
-                          <button
-                            key={dong}
-                            onClick={() => toggleDong(dong)}
-                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                              checked
-                                ? 'text-[#e2e8f0] hover:bg-[#3a3633]'
-                                : 'text-[#666666] hover:bg-[#3a3633] hover:text-[#9ca3af]'
-                            }`}
-                          >
-                            <div
-                              className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                  </div>
+
+                  {/* 행정동 선택 드롭다운 */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setDongDropdownOpen(!dongDropdownOpen);
+                        setBusinessTypeOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                    >
+                      <span className="truncate">
+                        {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
+                      </span>
+                      <ChevronRight
+                        size={14}
+                        className={`text-[#9ca3af] transition-transform duration-200 shrink-0 ${
+                          dongDropdownOpen ? 'rotate-90' : ''
+                        }`}
+                      />
+                    </button>
+                    {dongDropdownOpen && (
+                      <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                        <button
+                          onClick={toggleAllDongs}
+                          className="w-full text-left px-3 py-2 text-xs font-medium border-b border-[#3a3633] transition-colors text-[#818cf8] hover:bg-[#818cf8]/10"
+                        >
+                          {selectedDongs.length >= MAX_DONGS
+                            ? `전체 해제 (1개만 유지)`
+                            : `최대 ${MAX_DONGS}개 채우기`}
+                        </button>
+                        {DONG_DATA[selectedGu].map((dong) => {
+                          const checked = selectedDongs.includes(dong);
+                          return (
+                            <button
+                              key={dong}
+                              onClick={() => toggleDong(dong)}
+                              className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
                                 checked
-                                  ? 'bg-[#818cf8] border-[#818cf8]'
-                                  : 'border-[#3a3633] bg-transparent'
+                                  ? 'text-[#e2e8f0] hover:bg-[#3a3633]'
+                                  : 'text-[#666666] hover:bg-[#3a3633] hover:text-[#9ca3af]'
                               }`}
                             >
-                              {checked && (
-                                <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                                  <path
-                                    d="M1.5 4L3 5.5L6.5 2"
-                                    stroke="white"
-                                    strokeWidth="1.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              )}
-                            </div>
-                            {dong}
+                              <div
+                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                  checked
+                                    ? 'bg-[#818cf8] border-[#818cf8]'
+                                    : 'border-[#3a3633] bg-transparent'
+                                }`}
+                              >
+                                {checked && (
+                                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                    <path
+                                      d="M1.5 4L3 5.5L6.5 2"
+                                      stroke="white"
+                                      strokeWidth="1.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                )}
+                              </div>
+                              {dong}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 업종 박스 — 강조 동일 */}
+                <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Store size={13} className={accent} />
+                    <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setBusinessTypeOpen(!businessTypeOpen);
+                        setDongDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                    >
+                      <span>{businessType}</span>
+                      <ChevronRight
+                        size={14}
+                        className={`text-[#9ca3af] transition-transform duration-200 ${
+                          businessTypeOpen ? 'rotate-90' : ''
+                        }`}
+                      />
+                    </button>
+                    {businessTypeOpen && (
+                      <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                        {BUSINESS_TYPES.map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => {
+                              setBusinessType(type);
+                              setBusinessTypeOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                              type === businessType
+                                ? 'text-[#818cf8] bg-[#818cf8]/10'
+                                : 'text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]'
+                            }`}
+                          >
+                            {type}
                           </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+            </div>
 
-              {/* ─────────── BASIC: 업종 ─────────── */}
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <Store size={13} className={accent} />
-                  <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
-                </div>
-                <div className="relative">
-                  <button
-                    onClick={() => {
-                      setBusinessTypeOpen(!businessTypeOpen);
-                      setDongDropdownOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
-                  >
-                    <span>{businessType}</span>
-                    <ChevronRight
-                      size={14}
-                      className={`text-[#9ca3af] transition-transform duration-200 ${
-                        businessTypeOpen ? 'rotate-90' : ''
-                      }`}
-                    />
-                  </button>
-                  {businessTypeOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
-                      {BUSINESS_TYPES.map((type) => (
-                        <button
-                          key={type}
-                          onClick={() => {
-                            setBusinessType(type);
-                            setBusinessTypeOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                            type === businessType
-                              ? 'text-[#818cf8] bg-[#818cf8]/10'
-                              : 'text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]'
-                          }`}
-                        >
-                          {type}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* ─────────── 분석 조건 (Hybrid Slider + Input) ─────────── */}
-              <div className="pt-5 border-t border-[#3a3633]">
+            {/* ─────── 섹션 2: 운영 조건 (Operating Constraints) ─────── */}
+            <div>
+              <SectionLabel
+                icon={Sliders}
+                title="Operating Constraints"
+                sub="입지·운영·재무 조건"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. 상권 반경 */}
                 <HybridSliderInput
                   label="상권 반경"
                   value={radius}
@@ -1576,8 +1589,10 @@ function SimulatorDashboard({
                   step={50}
                   unit="m"
                   infoText="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장"
+                  className="mb-0"
                 />
 
+                {/* 2. 임대료 예산 */}
                 <HybridSliderInput
                   label="임대료 예산"
                   value={budget}
@@ -1587,10 +1602,89 @@ function SimulatorDashboard({
                   step={10}
                   unit="만원"
                   infoText="월 임대료 예산. 마포구 평균 1층 기준 200~400만원"
+                  className="mb-0"
                 />
 
-                {/* Toggle switch — 별도 박스로 분리하여 슬라이더 항목과 시각 구분 */}
-                <div className="mb-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/40">
+                {/* 3. 매장 면적 */}
+                <HybridSliderInput
+                  label="매장 면적"
+                  value={storeArea}
+                  onChange={setStoreArea}
+                  min={5}
+                  max={100}
+                  step={1}
+                  unit="평"
+                  infoText="공간 기반 수익성(평당 매출) 계산에 사용됩니다."
+                  className="mb-0"
+                />
+
+                {/* 4. 초기 자본금 */}
+                <HybridSliderInput
+                  label="초기 자본금"
+                  value={initialCapital}
+                  onChange={setInitialCapital}
+                  min={1000}
+                  max={50000}
+                  step={100}
+                  unit="만원"
+                  infoText="권리금/보증금 제외, 인테리어 및 초기 운영비 기준입니다."
+                  minLabel="1천만"
+                  className="mb-0"
+                />
+
+                {/* 5. 목표 객단가 — col-span-1 */}
+                <div>
+                  <label className={`block text-xs font-medium mb-2 ${textSecondary}`}>
+                    목표 객단가
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {PRICE_RANGES.map((range) => {
+                      const active = targetPrice === range.value;
+                      return (
+                        <button
+                          key={range.value}
+                          onClick={() => setTargetPrice(range.value)}
+                          className={`px-2 py-2 rounded-lg text-[11px] font-medium border transition-all ${
+                            active
+                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                          }`}
+                        >
+                          {range.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 6. 주 타겟 시간대 — col-span-1 */}
+                <div>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <label className={`text-xs font-medium ${textSecondary}`}>주 타겟 시간대</label>
+                    <span className="text-[10px] text-[#9ca3af] opacity-60">복수 선택</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {OPERATING_HOURS_OPTIONS.map((hour) => {
+                      const active = operatingHours.includes(hour);
+                      return (
+                        <button
+                          key={hour}
+                          onClick={() => toggleOperatingHour(hour)}
+                          className={`py-2 rounded-lg text-[11px] font-medium border transition-all ${
+                            active
+                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                          }`}
+                        >
+                          {hour}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 7. 유동인구 가중치 토글 — col-span-2 */}
+                <div className="md:col-span-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[#3a3633] bg-[#1e1b18]/40">
                   <label
                     className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
                   >
@@ -1617,245 +1711,167 @@ function SimulatorDashboard({
                   </button>
                 </div>
               </div>
-            </div>
-            {/* ─────────── ADVANCED column ─────────── */}
-            {/* 검은 박스 wrapper(bg-[#1e1b18]/50 + border) 제거 — 좌(BASIC) 톤과 통일하여
-                ADVANCED column이 시각적으로 더 짧아 보이게(좌우 column 균형) */}
-            <div className="space-y-6">
-              {/* 1. 매장 면적 */}
-              <HybridSliderInput
-                label="매장 면적"
-                value={storeArea}
-                onChange={setStoreArea}
-                min={5}
-                max={100}
-                step={1}
-                unit="평"
-                infoText="공간 기반 수익성(평당 매출) 계산에 사용됩니다."
-                className="mb-0"
-              />
-
-              {/* 2. 목표 객단가 */}
-              <div>
-                <label className={`block text-xs font-medium mb-2 ${textSecondary}`}>
-                  목표 객단가
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {PRICE_RANGES.map((range) => {
-                    const active = targetPrice === range.value;
-                    return (
-                      <button
-                        key={range.value}
-                        onClick={() => setTargetPrice(range.value)}
-                        className={`px-2 py-2 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                        }`}
-                      >
-                        {range.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 3. 운영 시간대 (멀티 선택) */}
-              <div>
-                <div className="flex items-baseline justify-between mb-2">
-                  <label className={`text-xs font-medium ${textSecondary}`}>주 타겟 시간대</label>
-                  <span className="text-[10px] text-[#9ca3af] opacity-60">복수 선택 가능</span>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {OPERATING_HOURS_OPTIONS.map((hour) => {
-                    const active = operatingHours.includes(hour);
-                    return (
-                      <button
-                        key={hour}
-                        onClick={() => toggleOperatingHour(hour)}
-                        className={`py-2 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                        }`}
-                      >
-                        {hour}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 4. 초기 자본금 */}
-              <HybridSliderInput
-                label="초기 자본금"
-                value={initialCapital}
-                onChange={setInitialCapital}
-                min={1000}
-                max={50000}
-                step={100}
-                unit="만원"
-                infoText="권리금/보증금 제외, 인테리어 및 초기 운영비 기준입니다."
-                minLabel="1천만"
-                className="mb-0"
-              />
-
               <p
-                className={`text-[10px] ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}
+                className={`text-[10px] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}
               >
                 * 권리금/보증금 제외, 인테리어·초기 운영비 기준
               </p>
             </div>
 
-            {/* 타겟 고객 프로필 (col-span-2 full-width) */}
-            <div className="md:col-span-2 pt-6 mt-2 border-t border-[#3a3633]">
-              <div className="flex items-baseline justify-between mb-3">
-                <label className={`text-xs font-medium ${textSecondary}`}>타겟 고객 프로필</label>
-                <span className="text-[10px] text-[#9ca3af] opacity-60">
-                  미선택 시 전체 고객 기준
-                </span>
-              </div>
-
-              {/* 연령대 — 복수 선택 */}
-              <div className="mb-3">
-                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { v: '10대', l: '10대' },
-                    { v: '20대', l: '20대' },
-                    { v: '30대', l: '30대' },
-                    { v: '40대', l: '40대' },
-                    { v: '50대', l: '50대' },
-                    { v: '60대이상', l: '60대+' },
-                  ].map((opt) => {
-                    const active = targetAgeGroups.includes(opt.v);
-                    return (
-                      <button
-                        key={opt.v}
-                        type="button"
-                        onClick={() => toggleTargetAge(opt.v)}
-                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                        }`}
-                      >
-                        {opt.l}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 성별 — 단일 선택 (null = 전체) */}
-              <div className="mb-3">
-                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(
-                    [
-                      { v: null, l: '전체' },
-                      { v: 'male', l: '남성' },
-                      { v: 'female', l: '여성' },
-                    ] as const
-                  ).map((opt) => {
-                    const active = targetGender === opt.v;
-                    return (
-                      <button
-                        key={opt.l}
-                        type="button"
-                        onClick={() => setTargetGender(opt.v)}
-                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                        }`}
-                      >
-                        {opt.l}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 방문 시간대 — 복수 선택 */}
-              <div className="mb-3">
-                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>방문 시간대</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { v: 'time_00_06', l: '심야' },
-                    { v: 'time_06_11', l: '오전' },
-                    { v: 'time_11_14', l: '점심' },
-                    { v: 'time_14_17', l: '오후' },
-                    { v: 'time_17_21', l: '저녁' },
-                    { v: 'time_21_24', l: '야간' },
-                  ].map((opt) => {
-                    const active = targetTimeSlots.includes(opt.v);
-                    return (
-                      <button
-                        key={opt.v}
-                        type="button"
-                        onClick={() => toggleTargetTime(opt.v)}
-                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                        }`}
-                      >
-                        {opt.l}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 요일 — 단일 선택 */}
-              <div className="mb-3">
-                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(
-                    [
-                      { v: null, l: '전체' },
-                      { v: 'weekday', l: '평일' },
-                      { v: 'weekend', l: '주말' },
-                    ] as const
-                  ).map((opt) => {
-                    const active = targetDayType === opt.v;
-                    return (
-                      <button
-                        key={opt.l}
-                        type="button"
-                        onClick={() => setTargetDayType(opt.v)}
-                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                          active
-                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                        }`}
-                      >
-                        {opt.l}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 예상 월매출 — 빈 값 = null (비율만 반환) */}
+            {/* ─────── 섹션 3: Target Audience ─────── */}
+            <div>
+              <SectionLabel icon={UserCheck} title="Target Audience" sub="타겟 고객 프로필" />
               <div>
-                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
-                  예상 월매출 (선택)
+                <div className="flex items-baseline justify-end mb-3">
+                  <span className="text-[10px] text-[#9ca3af] opacity-60">
+                    미선택 시 전체 고객 기준
+                  </span>
                 </div>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="예: 23150000 (원)"
-                  value={
-                    targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
-                  }
-                  onChange={(e) => handleMonthlySalesChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-xs bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
-                />
-                <p className="mt-1 text-[10px] text-[#9ca3af]/50">
-                  입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
-                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* 연령대 — 복수 선택 */}
+                  <div>
+                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { v: '10대', l: '10대' },
+                        { v: '20대', l: '20대' },
+                        { v: '30대', l: '30대' },
+                        { v: '40대', l: '40대' },
+                        { v: '50대', l: '50대' },
+                        { v: '60대이상', l: '60대+' },
+                      ].map((opt) => {
+                        const active = targetAgeGroups.includes(opt.v);
+                        return (
+                          <button
+                            key={opt.v}
+                            type="button"
+                            onClick={() => toggleTargetAge(opt.v)}
+                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                              active
+                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                            }`}
+                          >
+                            {opt.l}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 성별 — 단일 선택 (null = 전체) */}
+                  <div>
+                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          { v: null, l: '전체' },
+                          { v: 'male', l: '남성' },
+                          { v: 'female', l: '여성' },
+                        ] as const
+                      ).map((opt) => {
+                        const active = targetGender === opt.v;
+                        return (
+                          <button
+                            key={opt.l}
+                            type="button"
+                            onClick={() => setTargetGender(opt.v)}
+                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                              active
+                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                            }`}
+                          >
+                            {opt.l}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 방문 시간대 — 복수 선택 */}
+                  <div>
+                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
+                      방문 시간대
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { v: 'time_00_06', l: '심야' },
+                        { v: 'time_06_11', l: '오전' },
+                        { v: 'time_11_14', l: '점심' },
+                        { v: 'time_14_17', l: '오후' },
+                        { v: 'time_17_21', l: '저녁' },
+                        { v: 'time_21_24', l: '야간' },
+                      ].map((opt) => {
+                        const active = targetTimeSlots.includes(opt.v);
+                        return (
+                          <button
+                            key={opt.v}
+                            type="button"
+                            onClick={() => toggleTargetTime(opt.v)}
+                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                              active
+                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                            }`}
+                          >
+                            {opt.l}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 요일 — 단일 선택 */}
+                  <div>
+                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          { v: null, l: '전체' },
+                          { v: 'weekday', l: '평일' },
+                          { v: 'weekend', l: '주말' },
+                        ] as const
+                      ).map((opt) => {
+                        const active = targetDayType === opt.v;
+                        return (
+                          <button
+                            key={opt.l}
+                            type="button"
+                            onClick={() => setTargetDayType(opt.v)}
+                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                              active
+                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                            }`}
+                          >
+                            {opt.l}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 예상 월매출 — full-width */}
+                <div className="mt-4">
+                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
+                    예상 월매출 (선택)
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="예: 23150000 (원)"
+                    value={
+                      targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
+                    }
+                    onChange={(e) => handleMonthlySalesChange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg text-xs bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
+                  />
+                  <p className="mt-1 text-[10px] text-[#9ca3af]/50">
+                    입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
+                  </p>
+                </div>
               </div>
             </div>
           </div>
