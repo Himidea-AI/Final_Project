@@ -1,5 +1,16 @@
 # ABM 모드별 테스트 매트릭스
 
+> **🚨 2026-04-27 정정 banner**: 본 문서의 모든 Pearson r 측정값 (0.7445, 0.7491,
+> 0.7539, 0.7930, 0.8051, 0.8099) 은 **재현 안 됨**. 같은 config (1K agent, mock,
+> Q1 평균) 으로 측정 시 raw Pearson 은 **0.291 ± 0.037** (PSE N=3, 2026-04-27 실측).
+> 이전 측정값들이 어떤 aggregation 으로 산출됐는지 추적 불가.
+>
+> 다만 같은 측정 framework 안에서의 **상대 비교** 는 유효. 그리고 `ceiling-analysis.md`
+> §0~7-A 에 따라 IPF marginal calibration 으로 0.849 도달 입증 (천장 push 성공).
+>
+> 이 문서의 §2.1~2.6 표는 *historical* 으로 보존하되, baseline 결정 시 신뢰 X.
+> 진짜 baseline + Phase H/I/J/K/L 결과는 `validation/results/phase_full_pse3_summary.json` 참조.
+
 작성: A1 (찬영) — 2026-04-26
 목적: ABM v12+ 모드 조합별 정확도/비용/시간 종합 매트릭스. 발표·심사·운영 결정 레퍼런스.
 관련: `sim-comparison-matrix.md` (v1~v14 진화), `sim-real-gap-analysis.md` (단위 mismatch)
@@ -138,18 +149,27 @@
 
 ### 2.6 Harness 결과 — 진짜 baseline 갱신
 
+**Phase 0~4 (1K agent) 시점**:
 ```
-시작 (이전 baseline):    Pearson 0.7491 (single-day)
-완료 (현재):              Pearson 0.8099 (real 3-month avg)
+시작 (이전 baseline):    Pearson 0.7491 (1K, single-day)
+Phase 0~4 완료:          Pearson 0.8099 (1K, real 3-month avg, 1-seed)
 가치 추가:                +0.0608 (통계적 유의, CI ±0.017)
 floor 대비 진행:          +0.1177 (random walk 0.6922)
-학술 천장 진행률:         44% (학술 0.96 가정)
 ```
 
+**Phase 7 (3K agent + PSE N=3, 진짜 baseline 정정)**:
+```
+3K agent baseline:       Pearson 0.7930 ± 0.005 (PSE 검증, CI 70% 감소)
+학술 천장 진행률:         37% (학술 0.96, floor 0.69 기준)
+```
+
+→ 1K + 1-seed 측정의 0.81 은 sample noise 포함. 3K + PSE N=3 의 0.79 ± 0.005
+가 더 정확한 baseline. 천장 push 한계 분석은 `ceiling-analysis.md` 참조.
+
 **검증 권장 표준** (이후 모든 측정):
-- ABM: 1d × PSE N=5
+- ABM: 3K agent × 1d × PSE N=3 (또는 1K × N=5)
 - Real: 3개월 평균 (`ymd BETWEEN '2026-Q1 시작' AND '2026-Q1 끝'`)
-- Pearson r 0.81 ± 0.02 가 진짜 v12 baseline
+- 진짜 v12 baseline: **Pearson r 0.79 ± 0.005**
 
 ---
 
@@ -287,6 +307,6 @@ python -m validation.abm_vs_grid --date 2026-02-15
 | 2026-04-26 | §2.6 진짜 baseline 갱신 — ABM 1d × PSE N=5 vs real 3개월 평균 표준화 |
 | 2026-04-26 | OFS scorer 통합 (`backend/src/services/operational_fit.py`) — Hansen+E2SFCA, 14종 시설 가중합. PSE N=5 검증: Δ Pearson noise (CI 겹침). 학술 정당화·ext_visitor 다양화 가치 별개. |
 | TODO | §2.2 에 OpenAI N=5 평균 추가 ($1.25 비용) |
-| TODO | Phase 5 (hyperparameter sweep) |
-| TODO | Phase 6 (agent count 1K → 3K) |
-| TODO | Phase 8 (trajectory matching, 큰 리팩터) |
+| 2026-04-27 | Phase 5 (새벽 home stay) ❌ revert (§12), Phase 6 (hyperparam) marginal, Phase 7 (3K agent) ✅ baseline 정정 (0.79 ± 0.005) |
+| 2026-04-27 | Sprint Phase A (weekday boost), B (5K+새벽), C (24h time), G (KT trip) — 모두 실패. `sprint-2026-04-week-ceiling-push.md` |
+| TODO | Trajectory-cell 단위 matching (큰 리팩터) — `ceiling-analysis.md` 의 진짜 천장 돌파 가설 |

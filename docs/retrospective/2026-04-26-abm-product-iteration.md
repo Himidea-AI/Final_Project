@@ -1,5 +1,18 @@
 # 2026-04-26 회고 — ABM Product 반복 개발 + Harness Engineering
 
+> **🚨 2026-04-27 정정 banner**: 본 회고의 §2.2/§3/§5/§12/§14 모든 Pearson 0.79,
+> 0.81, 0.7491, 0.7930, 0.8099 등은 **재현 안 됨**. 같은 config 측정 시 raw
+> Pearson = **0.291 ± 0.037** (PSE N=3, 2026-04-27 실측).
+>
+> ⚠️ 9 phases 천장 push 가 모두 잘못된 baseline 위에서 측정됐음. 이전 결론
+> "0.79 가 천장" 은 **틀림**. §15 (Phase H/I/J/K/L 결과) + `ceiling-analysis.md`
+> 가 정정된 진실:
+> - 진짜 baseline: 0.291 ± 0.037
+> - Phase I (KT residence 차감): 0.658 (+0.367 stat-sig)
+> - Phase L (IPF calibration): 0.849 (+0.558, ✅ 천장 돌파, Brussels 0.96 격차 -0.11)
+>
+> 본 회고의 historical 측정값은 보존하되 baseline 결정 신뢰 X.
+
 작성: A1 (찬영) — 2026-04-26
 브랜치: `IM3-243-dong-fk-followup`
 관련 문서:
@@ -104,14 +117,19 @@ da622d4  feat(A1): seoul_realtime_hotspots 실시간 적재 인프라 (cron)
 
 ## 3. Harness Engineering Phase 0~4 종합
 
-### 진행
+### 진행 (Phase 0~4 완료 시점, 1K agent / single-day vs real 3m)
+
 ```
-시작 (이전 baseline):    Pearson 0.7491 (single-day)
-완료 (현재):              Pearson 0.8099 ± 0.017 (real 3-month avg)
+시작 (이전 baseline):    Pearson 0.7491 (1K, single-day)
+Phase 0~4 완료:          Pearson 0.8099 ± 0.017 (1K, real 3-month avg)
 가치 추가:                +0.0608 (통계적 유의)
 floor 대비:               +0.1177 (random walk 0.6922)
-학술 천장 진행률:         44% (학술 0.96 가정)
 ```
+
+> ⚠️ **이 0.8099 는 1K agent + 1-seed 측정**. Phase 7 (3K agent + PSE N=3) 에서
+> 0.7930 ± 0.005 로 정정됨 — 진짜 baseline 은 §12/§14 참조 (0.79 ± 0.005).
+> 여기 0.81 은 Phase 4 시점의 잠정 측정값이고, 학술 천장 진행률 등 최종
+> 평가는 §14 의 0.79 / 37% 를 사용할 것.
 
 ### Phase별 결과
 
@@ -172,7 +190,7 @@ print(result['narrative'])
 
 | 차원 | 우리 (PSE 검증) | 학계 평균 | 평가 |
 |---|---|---|---|
-| Pearson r (vs presence) | **0.81 ± 0.017** | 0.5~0.9 | 평균 상위 |
+| Pearson r (vs presence, 3K PSE N=5) | **0.79 ± 0.005** | 0.5~0.9 | 평균 상위 |
 | Pearson r (telecom-aligned, Brussels) | — | 0.96 | 우리 unit mismatch 한계 |
 | 객관 metric 사용 (5종) | ✅ | 17/35 만 | **상위 50%** |
 | 비용 효율 | $0.001/run | (보고 드묾) | **압도적 효율** |
@@ -447,7 +465,7 @@ Floor (random): 0.6922 ± 0.0117
 
 | Phase | 가설 | 실측 Pearson | Δ | 판정 |
 |---|---|---|---|---|
-| A | weekday boost 강화 (0.9+0.1 → 0.5+0.5) | 0.7788 (DOW metric) | -0.007 | ❌ revert |
+| A | weekday boost 강화 (0.9+0.1 → 0.5+0.5) | 0.7788 (DOW metric) | -0.014 vs Start (DOW 부분 -0.007) | ❌ revert |
 | B | 5K agent + 새벽 home stay 동시 | 0.7676 | -0.025 | ❌ revert |
 | C | TimeConfig 24h (start_hour=0) | 0.8072 | +0.014 | ⚠️ marginal (CI 큼) |
 | **G** | **KT 생활이동 OD 데이터 다운로드 + 단위 변경** | **0.4985** | **-0.295** | ❌ **본질 mismatch 입증** |
@@ -498,7 +516,7 @@ KT trip 데이터  : 실제 trip (visit + 통과 + 환승 + ...)
 
 | 시도 | 결과 |
 |---|---|
-| **천장 push (Pearson 0.79 → 0.85+)** | ❌ **8 phases (1+5+10+A+B+C+G) 모두 실패 또는 noise** |
+| **천장 push (Pearson 0.79 → 0.85+)** | ❌ **9 phases 모두 실패 또는 noise**: §3 Phase 1·4 (unit alignment, ABM multi-day) + §12 Phase 5·6·7 (새벽, hyperparam, 3K) + §13 Phase A·B·C·G (weekday, 5K+새벽, 24h time, KT trip) |
 | **본질 한계 객관 입증** | ✅ Stock vs Flow + Visit vs Trip 두 단계 mismatch |
 | **vacancy_pse 분기/연 단위** | ✅ 진짜 product 가치 강화 |
 | **KT 생활이동 데이터 자산** | ✅ 향후 trip-modeling ABM 만들 때 활용 |
@@ -565,3 +583,44 @@ arXiv 2512.24145 (PSE), Brussels ABM Tandfonline 2024.
 - Test 4 가설 정정 (포화도 변수 추가, Kendall τ 0.5+ 도전)
 - vacancy 자동 카테고리 결정 (DONG_CHARACTER + competitor 기반)
 - 카니발 N=20+ 측정 (개별 매장 단위)
+
+### 천장 한계 자세한 분석
+
+별도 문서로 분리: **`docs/abm-simulation/ceiling-analysis.md`** — Stock vs Flow,
+self-fitting, sample noise, score multiplicative crowding, Brussels 격차,
+trajectory-cell matching 옵션 등 9 phases 실패 원인을 학술/공학 양면에서 정량 설명.
+
+### Phase H/I/J/K/L 종합 실측 — 천장 push 성공 (2026-04-27)
+
+ceiling-analysis §7-A 미시도 수학적 도구 5개 PSE N=3 실측 결과:
+
+| Phase | 작업 | Pearson | Δ vs V1 | 판정 |
+|---|---|---|---|---|
+| V1 | raw baseline (현재 main 실측) | 0.291 ± 0.037 | — | — |
+| H | Little's Law dwell weighting | 0.366 ± 0.128 | +0.075 | ❌ noise |
+| **I** | **KT residence baseline 차감** | **0.658 ± 0.018** | **+0.367** | ✅ |
+| **I+H** | residence 차감 + dwell weighting | 0.746 ± 0.074 | +0.455 | ✅ |
+| J | best lag (Δt=-3h, peak) | 0.371 ± 0.033 | +0.079 | ✅ small |
+| **🎯 L** | **IPF marginal calibration** | **0.849 ± 0.022** | **+0.558** | ✅ **천장 돌파** |
+
+**🚨 중대 발견**:
+1. **V1 raw baseline = 0.291 ± 0.037** — 이전 doc 의 0.79 와 큰 격차. doc 의
+   "0.79 baseline" 자체가 미실측 또는 잘못된 측정이었음. 9 phases 천장 push 가
+   다 잘못된 baseline 위에서 측정됐음.
+2. **IPF (Phase L) = 0.849 ± 0.022** — Brussels 0.96 격차 -0.11 까지 축소. 학술
+   천장에 매우 근접.
+3. **Phase J 의 Δt=-3h peak** — ABM trajectory 가 KT 보다 3시간 앞섬. TimeConfig
+   start_hour=6 의 hour 매핑 mismatch 의심 (별도 조사 필요).
+
+**해석**:
+- 9 phases 가 모두 ABM *입력* 만 정교화 시도 → 모두 marginal/실패
+- 진짜 정답은 ABM *출력 변환* + 비교 metric 변경
+- IPF 는 calibration 이라 보고 시 'IPF marginal calibration 후 0.849' 명시 필수
+- I 단독 (+0.367) 이 가장 정직한 lift (변환 X, baseline 차감만)
+
+저장: `validation/results/phase_full_pse3_summary.json`
+스크립트:
+- `validation/abm_vs_grid_full_phase.py` (Phase H/I/J/K/L 종합)
+- `validation/abm_vs_grid_decomposed.py` (V1~V6 metric 변형)
+- `validation/abm_vs_grid_pse3.py` (V1 vs V2 PSE)
+- `validation/abm_vs_grid_investigate.py` (9 aggregation 시도)

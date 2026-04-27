@@ -175,7 +175,8 @@ vid = inject_vacancy_as_store(
     world,
     vacancy_spot={"dong": "서교동", "lat": 37.5544, "lon": 126.9220},
     category="카페",
-    popularity_boost=1.2,  # 적당한 마케팅 가정
+    # popularity_boost 생략 시 DEFAULT_POPULARITY_BOOST=5.0 사용 (마케팅 가정).
+    # 1.0~1.2 는 1000ag × 1d 시뮬에서 visits=0 dominant — §6.1 참조.
 )
 result = run_simulation(world, n_agents=1000, days=7)
 print(evaluate_vacancy_store(world, vid, days_simulated=7))
@@ -255,6 +256,8 @@ async def simulate_vacancy_batch(req: VacancyBatchRequest):
 
 ### 6.2 가정 / 미모델링
 
+1. **`popularity_boost` default 5.0 가정** — 신규 매장 마케팅 효과의 임의 상수.
+   실제 인지도는 운영 1~3개월 누적 후 결정되므로 상한 가정 (§6.1 참조).
 2. **`rating` 4.0 가정** — 임의값. 동일 동·업종 평균을 사용하면 더 정확.
 3. **0일차 cold start** — Layer 2 기억 누적 안 됨. `warmup_days` 옵션으로 완화 가능.
 4. **인지·탐색 가정** — 모든 agent 가 즉시 신규 매장을 "안다고 가정". 정보 확산 시간 미반영.
@@ -305,10 +308,13 @@ result = evaluate_vacancy_pse(
 ```
 
 **검증된 측정값 (서교동 카페, PSE N=10)**:
-- visits/day: **9.7 ± 1.3** (95% CI tight)
+- visits/day: **10.0 ± 1.43** (95% CI tight)
 - revenue/day: 11 ± 1 만원
 - 동 평균 대비: 48.1 ± 6.6 배
 - **dong_net_growth_pct: +1.41 ± 3.51%** (vacancy ≈ zero-sum, 학술 발견)
+
+> 참고: PSE N=3 측정 (`vacancy_pse_seogyo_cafe_n10.json` 이전 run) 은
+> visits/day **9.7 ± 1.3** 로 나옴. N 증가 시 mean ~10 으로 수렴.
 
 ### 8.2 `vacancy_evaluation_service.py` — LangGraph 통합 + 순위
 

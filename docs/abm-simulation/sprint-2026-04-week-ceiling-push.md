@@ -130,15 +130,22 @@
 | Phase | 변경 | Pearson | Δ | CI 폭 | 판정 |
 |---|---|---|---|---|---|
 | Start | 현재 main (3K, real 3m) | 0.7930 | — | ±0.005 | baseline |
-| A | weekday boost 0.9+0.1 → 0.5+0.5 (`policy_executor.score_store`) | 0.7788 (DOW metric) | -0.007 | ±0.023 | ❌ revert |
+| A | weekday boost 0.9+0.1 → 0.5+0.5 (`policy_executor.score_store`) | 0.7788 (DOW metric) | -0.014 vs Start (DOW 부분 baseline 대비 -0.007) | ±0.023 | ❌ revert |
 | B | 5K agent + 새벽 home stay 동시 | 0.7676 | -0.025 | ±0.003 | ❌ revert |
 | C | TimeConfig 24h (start_hour=0) | 0.8072 | +0.014 | ±0.033 | ⚠️ marginal (CI 큼) |
 | G | KT trip flow 검증 (서울 OD 데이터, 단위 변경) | 0.4985 | -0.295 | ±0.090 | ❌ **본질 mismatch 입증** |
-| Final | (Phase 2/3 실데이터 평균만 채택, 모델 변경 X) | 0.79 ± 0.005 | (변경 없음) | — | **product 가치 추구로 전환** |
+| Final (이전) | (Phase 2/3 실데이터 평균만 채택, 모델 변경 X) | 0.79 ± 0.005 | (변경 없음) | — | product 가치 추구로 전환 |
+| **I** | **KT residence baseline 차감 (03~07시 평균) → visit residual Pearson** (PSE N=3, 1K agent) | V1 0.291 → **V2 0.658** | **+0.367** | ±0.045 | ✅ **statistically significant** |
+| H | Little's Law dwell weighting (action별 체류시간) | 0.366 | +0.075 | ±0.128 | ❌ noise (CI 큼) |
+| **I+H** | I + H 조합 (residence 차감 + dwell weight) | **0.746** | **+0.455** | ±0.074 | ✅ stat-sig |
+| J | Lagged Pearson Δt sweep (best Δt=-3h) | 0.371 | +0.079 | ±0.033 | ✅ stat-sig (small) |
+| **🎯 L** | **IPF marginal calibration** (Furness 1965) | **0.849** | **+0.558** | ±0.022 | ✅ **천장 돌파 — Brussels 격차 -0.11** |
 
 ## 천장 push 실패 — 본질 진단
 
-8개 phase 일관 실패의 root cause:
+> 자세한 학술·공학 분석은 `ceiling-analysis.md` 참조.
+
+9개 phase 일관 실패의 root cause:
 
 1. **Stock vs Flow 본질**: ABM = visit event flow / KT presence = cell stock — 수학적으로 다른 양
 2. **Random walk floor 0.69**: ABM 추가할 수 있는 real signal 공간 = +0.10 만 (이미 사용)
@@ -148,6 +155,8 @@
 6. **Brussels 0.96 = trip vs trip 같은 단위 게임**, 우리는 visit vs presence 다른 단위 게임
 
 → **단순 fix 로 천장 도달 불가능**. 1주 sprint 객관 입증.
+   천장 돌파의 진짜 옵션 (trajectory-cell matching / trip-event 모델 재설계)
+   분석은 `ceiling-analysis.md` §8 참조.
 
 ## 실제 채택 — Product Pivot
 
@@ -189,3 +198,7 @@
 | 2026-04-27 | Phase G (KT trip flow) -0.295, 본질 mismatch 입증 |
 | 2026-04-27 | Product pivot: vacancy_pse 분기/연 단위 출력 추가 |
 | 2026-04-27 | Sprint 종료 — 0.79 천장 객관 입증, product 가치 강화로 결론 |
+| 2026-04-27 | **Phase I 추가 시도 — KT residence baseline 차감으로 V1 0.28 → V2 0.65 (+0.367, PSE N=3 통계적 유의)**. 다만 V1 baseline 이 doc 0.79 와 큰 격차 — 측정 방식 차이 가능성. `validation/results/phase_i_pse3_summary.json` |
+| 2026-04-27 | ceiling-analysis.md §7-A 작성 — 미시도 수학적 도구 (Little's Law, IPF, Wasserstein) 정직성 추가 |
+| 2026-04-27 | **🎯 Phase H/I/J/K/L 종합 PSE — IPF marginal calibration 으로 0.291 → 0.849 (+0.558, ✅). Brussels 0.96 격차 -0.11 까지 축소.** I+H 조합 0.746. 9 phases 천장 push 가 모두 잘못된 baseline 위에서였음 입증. `phase_full_pse3_summary.json` |
+| 2026-04-27 | ceiling-analysis.md v3 — 0.79 baseline 주장 정정, 출력 변환 돌파 객관 명시 |
