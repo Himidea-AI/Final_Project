@@ -243,6 +243,54 @@ export interface DemographicReport {
   peak_hour_matrix?: number[][] | null;
 }
 
+/**
+ * [D — living_pop_forecast] 유동인구 피크 시간 예측 (TCN)
+ *
+ * predict_peak(dong_name, n_quarters=4) 반환을 backend models/interface.py가
+ * dict로 한번 더 감싼 형태:
+ *   { dong_code, dong_name, n_quarters, quarters: [...], is_mock }
+ *
+ * quarters[i].all_hours[j] — 24시간대 모두 반환 (학습 데이터에 누락 시간이
+ * 있을 경우 일부 시간대가 빠질 수 있음).
+ */
+export interface LivingPopHourPrediction {
+  time_zone: number; // 0~23
+  predicted_pop: number;
+  confidence_lower: number;
+  confidence_upper: number;
+}
+
+export interface LivingPopQuarterPrediction {
+  quarter_offset: number; // 1~n
+  peak_time_zone: number; // 0~23
+  peak_pop: number;
+  all_hours: LivingPopHourPrediction[];
+}
+
+export interface LivingPopForecast {
+  dong_code: string;
+  dong_name: string;
+  n_quarters: number;
+  quarters: LivingPopQuarterPrediction[];
+  is_mock?: boolean;
+}
+
+/**
+ * [E — emerging_district] 신흥 상권 조기 감지 (LSTM Autoencoder)
+ *
+ * predict(dong_code, industry_code) 반환 EmergingResult dict.
+ * threshold p95 = 0.041380 기준 anomaly_score 0~1 정규화.
+ */
+export interface EmergingSignal {
+  dong_code: string;
+  industry_code: string;
+  anomaly_score: number; // 0~1 (1에 가까울수록 이상)
+  signal: 'emerging' | 'declining' | 'normal';
+  consecutive_anomaly_quarters: number;
+  summary: string;
+  is_mock?: boolean;
+}
+
 /** 시뮬레이션 결과 출력 */
 export interface SimulationOutput {
   request_id: string;
@@ -313,6 +361,10 @@ export interface SimulationOutput {
   }>;
   // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
   customer_segment?: CustomerSegment | null;
+  // [D — living_pop_forecast] 유동인구 피크 시간 예측 (TCN)
+  living_pop_forecast?: LivingPopForecast | null;
+  // [E — emerging_district] 신흥 상권 조기 감지 (LSTM Autoencoder)
+  emerging_signal?: EmergingSignal | null;
   // [synthesis.FinalStrategyResult] 종합 전략 리포트 — profit_simulation 포함
   final_report?: {
     summary?: string;

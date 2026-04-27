@@ -608,6 +608,13 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "closure_rate": sim_result.get("closure_rate") if "sim_result" in locals() else None,
         # 폐업위험도 (LightGBM + TCN 앙상블) — 모델 호출 실패 시 None
         "closure_risk": sim_result.get("closure_risk") if "sim_result" in locals() else None,
+        # [C] 타겟 고객 매출 분석 (customer_revenue MLP) — 모델 호출 실패 시 None
+        # (c822f98에서 매핑 누락된 회귀 — D/E 활성화와 함께 수정)
+        "customer_segment": sim_result.get("customer_segment") if "sim_result" in locals() else None,
+        # [D] 유동인구 피크 시간 예측 (TCN) — 모델 호출 실패 시 None
+        "living_pop_forecast": sim_result.get("living_pop_forecast") if "sim_result" in locals() else None,
+        # [E] 신흥 상권 조기 감지 (LSTM Autoencoder) — 모델 호출 실패 시 None
+        "emerging_signal": sim_result.get("emerging_signal") if "sim_result" in locals() else None,
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
         "competitor_intel": _sanitize(competitor_intel) if competitor_intel else None,
         # 8 에이전트 판단 근거 (AgentAttribution)
@@ -1149,6 +1156,8 @@ async def run_simulation(input_data: SimulationInput):
             "competitor_intel": None,
             "agent_attributions": [],
             "customer_segment": None,
+            "living_pop_forecast": None,
+            "emerging_signal": None,
         }
 
 

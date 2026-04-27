@@ -511,6 +511,46 @@ class ModelOutput:
         # ---- dong_name 조회 ----
         dong_name = _resolve_dong_name(dong_code) if not use_mock else dong_code
 
+        # ---- 6) [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN) ----
+        # predict_peak(dong_name, n_quarters) 사용 — 24시간대 × 분기별 피크 시간 산출.
+        # 가중치/스케일러 부재 또는 데이터 부족 시 graceful degradation (None).
+        living_pop_result: dict | None = None
+        try:
+            from models.living_pop_forecast.predict import (
+                predict_peak as _predict_peak,
+            )
+
+            quarters_pred = _predict_peak(dong_name, n_quarters=4)
+            living_pop_result = {
+                "dong_code": dong_code,
+                "dong_name": dong_name,
+                "n_quarters": len(quarters_pred),
+                "quarters": quarters_pred,  # [{quarter_offset, peak_time_zone, peak_pop, all_hours}]
+                "is_mock": False,
+            }
+            logger.info(
+                "유동인구 피크 예측 완료 — q1 peak_tz=%s",
+                quarters_pred[0]["peak_time_zone"] if quarters_pred else "N/A",
+            )
+        except Exception as exc:
+            logger.warning("유동인구 피크 예측 실패 (건너뜀): %s", exc)
+            living_pop_result = None
+
+        # ---- 7) [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder) ----
+        emerging_result: dict | None = None
+        try:
+            from models.emerging_district.predict import predict as _predict_emerging
+
+            emerging_result = dict(_predict_emerging(dong_code, industry_code))
+            logger.info(
+                "신흥 상권 감지 완료 — signal=%s anomaly=%.3f",
+                emerging_result.get("signal"),
+                emerging_result.get("anomaly_score", 0.0),
+            )
+        except Exception as exc:
+            logger.warning("신흥 상권 감지 실패 (건너뜀): %s", exc)
+            emerging_result = None
+
         return {
             "input": {
                 "dong_code": dong_code,
@@ -523,6 +563,10 @@ class ModelOutput:
             "closure_risk": closure_risk_result,
             "bep": bep,
             "segment_analysis": segment_analysis,
+            # [D] 유동인구 피크 시간 예측 (TCN). dict | None
+            "living_pop_forecast": living_pop_result,
+            # [E] 신흥 상권 조기 감지 (LSTM Autoencoder). dict | None
+            "emerging_signal": emerging_result,
             "metadata": {
                 "model_version": MODEL_VERSION,
                 "generated_at": datetime.now(tz=UTC).isoformat(),
