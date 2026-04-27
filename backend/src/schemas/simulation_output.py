@@ -148,6 +148,8 @@ class SimulationOutput(BaseModel):
     # TCN SHAP 분석 결과 (없으면 None)
     shap_result: ShapResult | None = None
     scenarios: dict | None = None
+    # 과거 12개월 폐업률 추이 (예측 아님 — 실측 누적). 키: closure_rate, risk_level, monthly_closure_rates
+    closure_rate: dict | None = None
     closure_risk: dict | None = None
     competitor_intel: dict | None = None
     trend_forecast: dict | None = None
