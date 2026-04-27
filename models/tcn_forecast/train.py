@@ -527,6 +527,18 @@ def main() -> None:
         default=None,
         help="재현성을 위한 랜덤 시드 (미설정 시 비결정적 학습)",
     )
+    parser.add_argument(
+        "--sales-csv",
+        type=str,
+        default=None,
+        help="매출 소스 CSV override 경로 (DB 무시하고 이 파일을 사용; imputation 비교 학습용)",
+    )
+    parser.add_argument(
+        "--train-cutoff-quarter",
+        type=int,
+        default=None,
+        help="이 분기 코드 이상의 데이터를 학습에서 제외 (예: 20241 → 2024 Q1 이상 차단)",
+    )
     args = parser.parse_args()
 
     # 시드 설정 (재현성) — --seed 지정 시에만 실행, 미지정 시 기존과 동일하게 동작
@@ -556,6 +568,10 @@ def main() -> None:
         overrides["patience"] = args.patience
     if args.window_size:
         overrides["window_size"] = args.window_size
+    if args.sales_csv:
+        overrides["sales_csv_override"] = args.sales_csv
+    if args.train_cutoff_quarter:
+        overrides["train_cutoff_quarter"] = args.train_cutoff_quarter
 
     # --save-suffix 처리: suffix가 있으면 가중치 저장 경로를 suffix 포함 경로로 교체
     # suffix 없으면 overrides에 save_path 미포함 → DEFAULT_*_CONFIG 기본값 그대로 사용

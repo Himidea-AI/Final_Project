@@ -390,6 +390,25 @@ def run_simulation(
     except Exception as e:
         print(f"  [warn] time_age_boost 로드 실패: {e}")
 
+    # 2.5+ seoul_adstrd_flpop 분기 안정 평균 boost (16동 전체 커버, time_age_boost 보완)
+    try:
+        if "_pb" not in dir() or _pb is None:
+            from .profile_builder import ProfileBuilder
+
+            _pb = ProfileBuilder(seed=seed)
+        world.adstrd_flpop_boost = _pb.load_adstrd_flpop_boost()
+    except Exception as e:
+        print(f"  [warn] adstrd_flpop_boost 로드 실패: {e}")
+
+    # 2.5++ OFS (Operational Fit Score) — 동 단위 입지 매력도 (Hansen+E2SFCA)
+    # ext_visitor / ext_commuter 매장 선호 boost 로 활용 (Option E, role 차등)
+    try:
+        from src.services.operational_fit import attach_ofs_to_world
+
+        attach_ofs_to_world(world, verbose=verbose)
+    except Exception as e:
+        print(f"  [warn] OFS 로드 실패: {e}")
+
     # 2.6 [v12] Memory Seeding — 격자 데이터 기반 가상 visit_history 주입 (Cold Start 완화)
     if seed_memory:
         try:
@@ -799,6 +818,10 @@ def run_simulation(
                 "estimated_impact_pct": 5.0,  # 간이 추정 (추후 반경 기반 정밀 계산)
                 "affected_stores": len(world.stores_by_dong.get(target_dong, [])),
             }
+
+    # 새벽 home stay trajectory 시도들 — 모두 실패로 revert.
+    # Phase 5 (1K 단독): Δ -0.032. Phase B (5K + 새벽): Δ -0.025.
+    # 결론: 새벽 trajectory 추가 자체가 KT 분포와 불일치 (KT는 cell stock 측정).
 
     # narrator_summary — 간단한 자연어 요약
     narrator_summary_val = (

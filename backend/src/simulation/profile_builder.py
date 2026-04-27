@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import random
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -66,6 +67,11 @@ class AgentProfile:
     exercise_habit: float = 0.3  # 0(안함)~1(매일) — 시간대 이동 패턴 영향
     car_ownership: bool = False
     archetype: str = "balanced_commuter"  # archetypes.py 의 키 (role 별 샘플)
+
+    # Nemotron-Personas-Korea (NVIDIA, CC BY 4.0) 차용 필드 — Argyle 2023 joint distribution 개선용
+    nemotron_occupation: str | None = None  # 통계청 기반 실제 직업 분포
+    nemotron_family_type: str | None = None  # 39종 가구형태
+    nemotron_persona: str | None = None  # 500토큰 자연어 서사 (Tier S 프롬프트용)
 
     def category_weights(self) -> dict[str, float]:
         return {
@@ -410,7 +416,7 @@ class ProfileBuilder:
 
         archetype = sample_archetype(role.value, self.rng, age=age, income_level=income_level)
 
-        return AgentProfile(
+        profile = AgentProfile(
             age=age,
             gender=gender,
             home_dong=home_dong,
@@ -434,6 +440,9 @@ class ProfileBuilder:
             car_ownership=car_ownership,
             archetype=archetype,
         )
+        # Nemotron feature 주입 (cache 있으면 보정, 없으면 no-op)
+        self._attach_nemotron_features(profile)
+        return profile
 
     def sample_many(self, counts: dict[Role, int]) -> list[AgentProfile]:
         """role별 count만큼 sample."""
@@ -442,6 +451,120 @@ class ProfileBuilder:
             for _ in range(n):
                 out.append(self.sample_profile(role))
         return out
+
+    # -----------------------------------------------------------
+    # Nemotron-Personas-Korea (NVIDIA, CC BY 4.0) feature 보정
+    # -----------------------------------------------------------
+    def load_nemotron(self):
+        """마포구 Nemotron parquet 로드 (캐시).
+
+        없으면 None 반환 → _attach_nemotron_features() 는 no-op.
+        scripts/load_nemotron_personas.py 로 선행 다운로드 필요.
+        """
+        if "nemotron" in self._cache:
+            return self._cache["nemotron"]
+        path = Path(__file__).resolve().parents[3] / "data/processed/nemotron_personas_mapo.parquet"
+        if not path.exists():
+            self._cache["nemotron"] = None
+            return None
+        try:
+            import pandas as pd
+
+            df = pd.read_parquet(path)
+            self._cache["nemotron"] = df
+            print(f"[loader] Nemotron 마포구 persona {len(df):,}건 로드 ({path.name})")
+            return df
+        except Exception as e:
+            print(f"[loader] Nemotron 로드 실패 — fallback: {e}")
+            self._cache["nemotron"] = None
+            return None
+
+    def _attach_nemotron_features(self, profile: "AgentProfile") -> None:
+        """Nemotron 레코드에서 feature 추출해 profile 보정.
+
+        매핑 규칙:
+        - family_type (39종) → family_size, has_kids
+        - occupation → nemotron_occupation 기록 (통계청 기반)
+        - hobbies_and_interests_list → pref_cafe/pref_pub/exercise_habit 조정 (keyword boost)
+        - education_level × occupation → income_level 재평가
+        - housing_type → car_ownership 보정
+        - persona (500토큰) → nemotron_persona (Tier S 프롬프트용)
+
+        학술 근거:
+        - Argyle et al. (2023) Political Analysis — 합성 persona joint distribution 개선
+        - Park et al. (2023) UIST — 자연어 배경이 LLM 에이전트 리얼리즘 향상
+        """
+        df = self.load_nemotron()
+        if df is None or len(df) == 0:
+            return
+        gender_kr = "남자" if profile.gender == "M" else "여자"
+        mask = (
+            (df["age"] >= max(19, profile.age - 3)) & (df["age"] <= min(99, profile.age + 3)) & (df["sex"] == gender_kr)
+        )
+        candidates = df[mask]
+        if len(candidates) == 0:
+            return
+        record = candidates.sample(1, random_state=self.rng.randint(0, 10**9)).iloc[0]
+
+        # family_type → family_size, has_kids (39종 joint distribution)
+        ft = str(record.get("family_type") or "")
+        if "배우자·자녀" in ft:
+            profile.family_size = 3 + (1 if "3세대" in ft else 0)
+            profile.has_kids = True
+        elif "자녀와 거주" in ft:
+            profile.family_size = 2
+            profile.has_kids = True
+        elif "혼자 거주" in ft:
+            profile.family_size = 1
+            profile.has_kids = False
+        elif "배우자와 거주" in ft:
+            profile.family_size = 2
+            profile.has_kids = False
+
+        # occupation 기록 (로컬 occupation 은 그대로 유지, 참조용 필드에 저장)
+        profile.nemotron_occupation = str(record.get("occupation") or "") or None
+        profile.nemotron_family_type = ft or None
+
+        # hobbies → pref_* 조정 (keyword hit per hobby)
+        hobbies_raw = record.get("hobbies_and_interests_list")
+        hobbies: list[str] = []
+        if hobbies_raw is not None:
+            try:
+                hobbies = list(hobbies_raw)
+            except TypeError:
+                hobbies = []
+        hobbies_str = " ".join(str(h) for h in hobbies)
+        cafe_kw = ["카페", "커피", "브런치", "베이커리", "독서", "디저트"]
+        pub_kw = ["맥주", "와인", "술", "펍", "칵테일", "위스키"]
+        exer_kw = ["운동", "헬스", "등산", "러닝", "요가", "수영", "자전거"]
+        cafe_hits = sum(1 for k in cafe_kw if k in hobbies_str)
+        pub_hits = sum(1 for k in pub_kw if k in hobbies_str)
+        exer_hits = sum(1 for k in exer_kw if k in hobbies_str)
+        profile.pref_cafe = round(max(0.0, min(1.0, profile.pref_cafe + 0.08 * cafe_hits)), 3)
+        profile.pref_pub = round(max(0.0, min(1.0, profile.pref_pub + 0.08 * pub_hits)), 3)
+        profile.exercise_habit = round(max(0.0, min(1.0, profile.exercise_habit + 0.1 * exer_hits)), 3)
+
+        # education × occupation → income_level 재평가 (Nemotron 이 통계청 기반이라 신뢰도 높음)
+        edu = str(record.get("education_level") or "")
+        occ = str(record.get("occupation") or "")
+        if edu == "대학원" or "박사" in edu:
+            profile.income_level = 3
+        elif "대학교" in edu and "컨설턴트" in occ or "전문가" in occ:
+            profile.income_level = max(profile.income_level, 3)
+        elif edu == "초등학교" or occ == "무직":
+            profile.income_level = 1
+
+        # housing_type → car 보정
+        housing = str(record.get("housing_type") or "")
+        if "아파트" in housing and self.rng.random() < 0.4:
+            profile.car_ownership = True
+        elif "단독" in housing and self.rng.random() < 0.3:
+            profile.car_ownership = True
+
+        # 자연어 persona 저장 (Tier S LLM 프롬프트용, 500자 제한)
+        persona_text = str(record.get("persona") or "")
+        if persona_text:
+            profile.nemotron_persona = persona_text[:500]
 
     # -----------------------------------------------------------
     # 실데이터 기반 시간×동×연령×요일 가중치
@@ -608,6 +731,77 @@ class ProfileBuilder:
             # PostgreSQL DOW (일=0) → ABM py_weekday (월=0): py = (dow - 1) % 7, 일요일 dow=0 → py=6
             py_weekday = 6 if dow == 0 else dow - 1
             boost[(g, d, tt, py_weekday)] = round(ratio, 3)
+        return boost
+
+    # -----------------------------------------------------------
+    # seoul_adstrd_flpop 기반 동×시간×요일 안정 평균 boost
+    # (분기 단위 안정 데이터, 16동 전체 커버, time_age_boost 보완용)
+    # -----------------------------------------------------------
+    def load_adstrd_flpop_boost(self) -> dict:
+        """seoul_adstrd_flpop 최신 quarter → (dong_name, hour, weekday) → ratio.
+
+        시간 6구간 (00-06, 06-11, 11-14, 14-17, 17-21, 21-24) × 요일 7개.
+        각 hour 는 자기 구간의 동별 ratio (동 평균 대비) 로 매핑됨.
+        반환 ratio 는 0.5~2.0 클램프, 동별 평균=1.0.
+
+        Returns:
+            {(dong_name, hour, weekday): ratio float}
+        """
+        if "adstrd_flpop_boost" in self._cache:
+            return self._cache["adstrd_flpop_boost"]
+
+        sql = text("""
+            SELECT dong_name,
+                   time_00_06, time_06_11, time_11_14, time_14_17, time_17_21, time_21_24,
+                   mon, tue, wed, thu, fri, sat, sun
+            FROM seoul_adstrd_flpop
+            WHERE dong_code LIKE '1144%'
+              AND quarter = (SELECT MAX(quarter) FROM seoul_adstrd_flpop)
+        """)
+        with self.engine.connect() as c:
+            rows = list(c.execute(sql).mappings())
+
+        if not rows:
+            self._cache["adstrd_flpop_boost"] = {}
+            return {}
+
+        # 시간 구간 → hour 매핑
+        time_hours = {
+            "time_00_06": list(range(0, 6)),
+            "time_06_11": list(range(6, 11)),
+            "time_11_14": list(range(11, 14)),
+            "time_14_17": list(range(14, 17)),
+            "time_17_21": list(range(17, 21)),
+            "time_21_24": list(range(21, 24)),
+        }
+        weekday_cols = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+        boost: dict = {}
+        for r in rows:
+            dong = r["dong_name"]
+            # 시간 구간 ratio (동별 평균 대비)
+            time_vals = [float(r[k] or 0) for k in time_hours]
+            t_mean = sum(time_vals) / max(len(time_vals), 1)
+            # 요일 ratio
+            wd_vals = [float(r[k] or 0) for k in weekday_cols]
+            w_mean = sum(wd_vals) / max(len(wd_vals), 1)
+
+            for tk_idx, (tk, hours) in enumerate(time_hours.items()):
+                tval = float(r[tk] or 0)
+                tr = tval / t_mean if t_mean > 0 else 1.0
+                tr = max(0.5, min(2.0, tr))
+                for h in hours:
+                    for wd_idx, wd_col in enumerate(weekday_cols):
+                        wval = float(r[wd_col] or 0)
+                        wr = wval / w_mean if w_mean > 0 else 1.0
+                        wr = max(0.5, min(2.0, wr))
+                        # time × weekday 결합 (기하평균으로 절제 — 둘 다 영향받지만 폭발 방지)
+                        combined = (tr * wr) ** 0.5
+                        combined = max(0.5, min(2.0, combined))
+                        boost[(dong, h, wd_idx)] = round(combined, 3)
+
+        self._cache["adstrd_flpop_boost"] = boost
+        print(f"[loader] adstrd_flpop_boost {len(boost):,}개 항목 (16동 × 24h × 7요일, 분기 안정 평균)")
         return boost
 
 

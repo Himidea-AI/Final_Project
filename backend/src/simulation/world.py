@@ -73,6 +73,11 @@ class World:
     # 비어있으면 boost 미적용 (1.0 multiplier) — 기존 동작 보존.
     ofs_dong_score: dict[str, float] = field(default_factory=dict)
 
+    # seoul_adstrd_flpop 기반 동×시간×요일 안정 평균 boost (분기 단위)
+    # {(dong_name, hour, weekday): ratio 0.5~2.0} — 동 평균=1.0
+    # time_age_boost (grid 기반) 와 별개로 score_store 에서 곱셈 결합.
+    adstrd_flpop_boost: dict = field(default_factory=dict)
+
     # Policy Generator 캐시 — {policy_id: PersonaPolicy}
     # 활성 시 use_policy=True → agents.decide() 가 policy_executor.policy_decide 호출
     policy_cache: dict = field(default_factory=dict)
