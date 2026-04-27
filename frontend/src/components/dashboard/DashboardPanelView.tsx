@@ -388,7 +388,11 @@ function DashboardPanelView({
   const dongComparison = simResult?.comparison?.find((c) => c.district === dongName);
   const hasRealData = !!dongRanking || !!dongComparison;
 
-  // Revenue — comparison.revenue (만원 단위) 우선, 없으면 '—'
+  // Revenue — comparison.revenue
+  // 현재: 만원 단위 (×10000으로 원 변환 후 표시)
+  // 변경 예정 (B2 예진 작업): 백엔드 원 단위로 통일 → ×10000 제거 + formatKrw(...) 사용으로 한 줄 변경
+  // 변경 시점 fix:
+  //   const revenue = revenueNum != null ? `₩ ${formatKrw(revenueNum)}` : ...
   const revenueNum = dongComparison?.revenue;
   const revenue =
     typeof revenueNum === 'number'

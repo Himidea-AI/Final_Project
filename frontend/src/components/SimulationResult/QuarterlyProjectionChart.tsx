@@ -160,7 +160,7 @@ export function QuarterlyProjectionChart({ data }: Props) {
                 isAnimationActive={false}
                 dot={false}
                 activeDot={false}
-                name="신뢰구간 하한"
+                name="예상 매출 범위 하한"
               />
               <Area
                 type="monotone"
@@ -168,7 +168,7 @@ export function QuarterlyProjectionChart({ data }: Props) {
                 stroke="none"
                 fill="#818cf8"
                 fillOpacity={0.1}
-                name="신뢰구간 상한"
+                name="예상 매출 범위 상한"
                 legendType="square"
                 isAnimationActive={false}
                 dot={false}
