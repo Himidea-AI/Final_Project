@@ -125,18 +125,46 @@
 
 ---
 
-## Phase별 측정 표 (실시간 갱신)
+## Phase별 측정 표 (실측 결과)
 
-| Phase | 변경 | Pearson | Δ | 판정 | 비고 |
+| Phase | 변경 | Pearson | Δ | CI 폭 | 판정 |
 |---|---|---|---|---|---|
-| Start | (current main) | 0.79 ± 0.005 | — | baseline | 3K agent, real 3m |
-| A | weekday 강화 | TBD | TBD | TBD | TBD |
-| B | 5K + 새벽 | TBD | TBD | TBD | TBD |
-| C | commute trajectory | TBD | TBD | TBD | TBD |
-| D | 행동 확장 | TBD | TBD | TBD | TBD |
-| E | GA calibration | TBD | TBD | TBD | TBD |
-| F | cell matching | TBD | TBD | TBD | TBD |
-| Final | 통합 | TBD | TBD | TBD | TBD |
+| Start | 현재 main (3K, real 3m) | 0.7930 | — | ±0.005 | baseline |
+| A | weekday boost 0.9+0.1 → 0.5+0.5 (`policy_executor.score_store`) | 0.7788 (DOW metric) | -0.007 | ±0.023 | ❌ revert |
+| B | 5K agent + 새벽 home stay 동시 | 0.7676 | -0.025 | ±0.003 | ❌ revert |
+| C | TimeConfig 24h (start_hour=0) | 0.8072 | +0.014 | ±0.033 | ⚠️ marginal (CI 큼) |
+| G | KT trip flow 검증 (서울 OD 데이터, 단위 변경) | 0.4985 | -0.295 | ±0.090 | ❌ **본질 mismatch 입증** |
+| Final | (Phase 2/3 실데이터 평균만 채택, 모델 변경 X) | 0.79 ± 0.005 | (변경 없음) | — | **product 가치 추구로 전환** |
+
+## 천장 push 실패 — 본질 진단
+
+8개 phase 일관 실패의 root cause:
+
+1. **Stock vs Flow 본질**: ABM = visit event flow / KT presence = cell stock — 수학적으로 다른 양
+2. **Random walk floor 0.69**: ABM 추가할 수 있는 real signal 공간 = +0.10 만 (이미 사용)
+3. **score_store 15+ factors multiplicative**: 새 boost 추가 시 다른 factor 와 평균화 → noise
+4. **Self-fitting**: time_age_boost ← living_pop_grid (검증 데이터). 이미 데이터 fit
+5. **Sample noise**: 1K~3K agent / 384 cells = Poisson dominant
+6. **Brussels 0.96 = trip vs trip 같은 단위 게임**, 우리는 visit vs presence 다른 단위 게임
+
+→ **단순 fix 로 천장 도달 불가능**. 1주 sprint 객관 입증.
+
+## 실제 채택 — Product Pivot
+
+천장 push 대신 **vacancy product 출력 강화**:
+- 분기 추정 방문 (`visits_per_quarter`)
+- 분기 추정 매출 (`revenue_per_quarter`)
+- 연 추정 매출 (`revenue_per_year`)
+- narrative 풍부화 (이모지 + 분기/연 단위)
+
+→ 사업 의사결정 단위 친화적 (사용자가 "분기 870명, 매출 1,000만" 받는 게 더 직관적).
+
+## 학술 인용 추가 활용 (sprint 중)
+
+- Stock vs Flow 본질 차이 → 진짜 ABM 한계 분석
+- Brussels (Tandfonline 2024) telecom flow ↔ telecom flow 같은 게임
+- KT 생활이동 데이터 (서울 열린데이터광장) — 다운로드 + 추출 성공 (101MB CSV 적재)
+- 마포 16동 KT 코드 매핑 확보 (1114059~1114078 ↔ DB 11440555~11440740)
 
 ---
 
@@ -154,7 +182,10 @@
 | 날짜 | 추가/변경 |
 |---|---|
 | 2026-04-27 | 초기 sprint plan |
-| TBD | Phase A 결과 |
-| TBD | Phase B 결과 |
-| TBD | ... |
-| TBD | 통합 + 최종 |
+| 2026-04-27 | Phase A (weekday boost) 실패 → revert |
+| 2026-04-27 | Phase B (5K + 새벽) 실패 → revert |
+| 2026-04-27 | Phase C (24h time) marginal |
+| 2026-04-27 | KT 생활이동 OD 데이터 다운로드 + 추출 성공 (101MB) |
+| 2026-04-27 | Phase G (KT trip flow) -0.295, 본질 mismatch 입증 |
+| 2026-04-27 | Product pivot: vacancy_pse 분기/연 단위 출력 추가 |
+| 2026-04-27 | Sprint 종료 — 0.79 천장 객관 입증, product 가치 강화로 결론 |

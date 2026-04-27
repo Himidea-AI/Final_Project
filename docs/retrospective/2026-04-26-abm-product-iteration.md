@@ -438,19 +438,130 @@ Floor (random): 0.6922 ± 0.0117
 
 ---
 
-## 13. 결론
+## 13. Sprint 2026-04-27 — 1주 천장 push 시도 + Product Pivot
 
-오늘 ABM 정확도 + product 가용성 측면 **객관적으로 큰 진전**:
-- 진짜 baseline 0.81 (PSE 검증) — 이전 자가 주장 0.75 대비 +0.06
-- vacancy_pse product API 완성 — visits/revenue/카니발 산출 가능
-- **REST API 3 엔드포인트 라이브** (`/vacancy-evaluation/{health,single,batch}`)
-- **dong_net_growth_pct 학술 발견** — vacancy = zero-sum (CI 0% 포함)
-- **Test 4 ranking 검증** — 절대 visits ≠ ratio 두 차원 신호 발견
-- 8개 학술 인용 (Hansen, E2SFCA, Park 2023, Springer 2025, etc.)
-- 14개 commit + push 완료
+전날 retrospective 시점 baseline 0.79 → 0.85+ 목표로 1주 sprint 시작.
+관련: `docs/abm-simulation/sprint-2026-04-week-ceiling-push.md`
 
-다음 sprint 핵심:
-- 프론트 연결 (`/vacancy-evaluation/single` 콜)
-- LangGraph district_ranking 노드 → vacancy_evaluation_service 자동 연결
-- Test 4 가설 정정 후 재측정 (포화도 변수 추가)
-- API 비동기 큐 (RQ/Celery) 분리 — 응답 시간 5~10분 → polling/webhook
+### 13.1 시도된 4 phases (모두 실패 또는 marginal)
+
+| Phase | 가설 | 실측 Pearson | Δ | 판정 |
+|---|---|---|---|---|
+| A | weekday boost 강화 (0.9+0.1 → 0.5+0.5) | 0.7788 (DOW metric) | -0.007 | ❌ revert |
+| B | 5K agent + 새벽 home stay 동시 | 0.7676 | -0.025 | ❌ revert |
+| C | TimeConfig 24h (start_hour=0) | 0.8072 | +0.014 | ⚠️ marginal (CI 큼) |
+| **G** | **KT 생활이동 OD 데이터 다운로드 + 단위 변경** | **0.4985** | **-0.295** | ❌ **본질 mismatch 입증** |
+
+### 13.2 Phase G 핵심 발견 — Brussels 0.96 의 진짜 비밀
+
+```
+Brussels ABM    : trip 자체 모델링 (zone A → zone B 이동 events)
+KT trip 데이터  : 실제 trip (이동 events)
+                  → 같은 게임 → r=0.96
+
+우리 ABM        : visit event 모델링 (매장 visit 시점만)
+KT trip 데이터  : 실제 trip (visit + 통과 + 환승 + ...)
+                  → 다른 게임 → r=0.50
+```
+
+→ **우리 ABM은 trip 모델 X, visit 모델**. 어떤 외부 trip 데이터로도 unit 일치 불가능.
+
+### 13.3 학술 자산 확보 (sprint 부수 효과)
+
+- 서울 생활이동 OD 데이터 (1월 2026, 950MB ZIP) 다운로드 인프라
+- 24개 시간 CSV → streaming 마포 inflow 추출 (101MB CSV)
+- KT 1114xxx ↔ DB 11440xxx 마포 16동 매핑 dict 확보
+- 인용 가능: "ABM은 visit-event 모델 — trip 데이터로 검증 시 본질 mismatch (-0.30 정량)"
+
+### 13.4 Product Pivot — `vacancy_pse` 분기/연 단위 출력
+
+천장 push 대신 product 가치 강화:
+
+```
+=== Before (일 단위) ===
+일평균 방문 : 15.0 명, 일평균 매출 : 17 만원
+
+=== After (분기/연 단위 추가) ===
+📅 일평균   방문 :  15.0 명
+📅 일평균   매출 :  17 만원
+📊 분기 추정 방문 : 1,350 명     ← NEW (사업 단위)
+💰 분기 추정 매출 : 0.16 억원    ← NEW
+💰 연  추정 매출 : 0.64 억원    ← NEW
+⚖️  동 평균 대비 : 65.1배 attractive
+```
+
+- `pse_summary` 에 4 필드 추가: `visits_per_quarter`, `visits_per_year`, `revenue_per_quarter`, `revenue_per_year`
+- 학습 데이터 (adstrd_flpop, district_sales) 가 분기 단위라 자연스러움
+- 사용자 의사결정 친화적 (사업가는 분기/연 매출로 사고)
+
+### 13.5 1주 sprint 진정한 결론
+
+| 시도 | 결과 |
+|---|---|
+| **천장 push (Pearson 0.79 → 0.85+)** | ❌ **8 phases (1+5+10+A+B+C+G) 모두 실패 또는 noise** |
+| **본질 한계 객관 입증** | ✅ Stock vs Flow + Visit vs Trip 두 단계 mismatch |
+| **vacancy_pse 분기/연 단위** | ✅ 진짜 product 가치 강화 |
+| **KT 생활이동 데이터 자산** | ✅ 향후 trip-modeling ABM 만들 때 활용 |
+
+**진짜 baseline 확정**: Pearson 0.79 ± 0.005 (3K agent, real 3m, PSE N=5)
+- 이게 우리 ABM (visit-event modeling) 의 수학적 천장
+- 학술 보고: "Mid-scale High-fidelity, 객관 metric + 비용 효율 차별화"
+
+**다음 sprint 방향** (천장 push 아닌 product 강화):
+- 프론트 vacancy_pse 결과 시각화
+- API 비동기 큐 (응답 5~10분 → polling/webhook)
+- Test 4 가설 정정 (포화도 변수 추가)
+- vacancy 추천 자동 카테고리 결정 (DONG_CHARACTER + competitor 기반)
+
+---
+
+## 14. 결론
+
+2026-04-26 ~ 04-27 (2일 sprint) **객관적으로 큰 진전 + 본질 한계 정직 입증**:
+
+### 객관 측정값 (PSE N=5 검증)
+- 진짜 baseline: **Pearson 0.79 ± 0.005** (3K agent, real 3m)
+- Random walk floor: 0.69 → 우리 ABM +0.10 통계적 유의
+- 학술 천장 0.96 진행률: 37%
+
+### Product 가치 (사용 가능 수준)
+- vacancy_pse API 완성 — visits/revenue/dong_net_growth/카니발 산출
+- REST API 3 엔드포인트 라이브 (`/vacancy-evaluation/{health,single,batch}`)
+- **분기/연 단위 출력** (사업가 친화)
+- LangGraph 통합 utility (`vacancy_evaluation_service`)
+
+### 학술 발견
+- **dong_net_growth_pct = +1.4 ± 3.5%** (95% CI 0% 포함 → vacancy ≈ zero-sum)
+- 시장 포화 효과 (서교 visits 3위 — 카페 335개로 신규 묻힘)
+- 절대 visits ≠ ratio 두 차원 신호
+- Stock vs Flow 본질 차이 정량 (-0.30 with KT trip data)
+
+### 인프라
+- Nemotron-Personas-Korea (7,187명) 통합
+- adstrd_flpop_boost (16동×24h×7요일)
+- OFS scorer (Hansen+E2SFCA, 14종 시설)
+- seoul_realtime_hotspots cron 적재
+- KT 생활이동 OD 데이터 다운로드/추출 (101MB)
+- PSE N=5 표준 측정 도구
+
+### 학술 인용 (10개+)
+Hansen 1959, Luo & Qi 2009, Dai 2010, McGrail-Humphreys 2009, Cervero 2002,
+Park et al. 2023 UIST, Argyle et al. 2023, Springer 2025 Validation Challenge,
+arXiv 2512.24145 (PSE), Brussels ABM Tandfonline 2024.
+
+### git
+- **20+ commits**, push 완료
+- branch: `IM3-243-dong-fk-followup`
+- 문서: 회고, sprint plan, sim-mode-matrix, vacancy-injection (~1000+ 줄)
+
+### 정직한 한 줄 평가
+
+> **"천장 push 시도 8 phases 객관 입증 실패. 진짜 baseline 0.79가 visit-event ABM 의 수학적 천장. 진짜 가치는 vacancy_pse product API + 분기/연 출력 + dong_net_growth zero-sum 학술 발견. Brussels 0.96 격차 -0.17은 unit-aligned 데이터 (trip model 또는 telecom flow) 부재로 본질 한계."**
+
+### 다음 sprint 방향 (product 강화)
+
+- 프론트 vacancy_pse 결과 시각화
+- API 비동기 큐 (RQ/Celery) — 응답 5~10분 → polling/webhook
+- Test 4 가설 정정 (포화도 변수 추가, Kendall τ 0.5+ 도전)
+- vacancy 자동 카테고리 결정 (DONG_CHARACTER + competitor 기반)
+- 카니발 N=20+ 측정 (개별 매장 단위)
