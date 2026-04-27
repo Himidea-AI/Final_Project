@@ -100,7 +100,7 @@ def _track_v1c(sim_per_store: dict[tuple, float], actual_per_store: dict[tuple, 
         "n_cells": len(common),
         "mean_ratio": round(mean_ratio, 3),
         "median_ratio": round(median_ratio, 3),
-        "pass": V1C_RATIO_MIN <= mean_ratio <= V1C_RATIO_MAX,
+        "pass": bool(V1C_RATIO_MIN <= mean_ratio <= V1C_RATIO_MAX),
         "thresholds": {"ratio_min": V1C_RATIO_MIN, "ratio_max": V1C_RATIO_MAX},
     }
 
@@ -115,7 +115,7 @@ def _track_v2(sim_yearly: float, ftc_avg_yearly: int | None) -> dict[str, Any]:
         "ratio": round(float(ratio), 3),
         "sim_yearly_won": int(sim_yearly),
         "ftc_yearly_won": int(ftc_avg_yearly),
-        "pass": V2_RATIO_MIN <= ratio <= V2_RATIO_MAX,
+        "pass": bool(V2_RATIO_MIN <= ratio <= V2_RATIO_MAX),
         "thresholds": {"ratio_min": V2_RATIO_MIN, "ratio_max": V2_RATIO_MAX},
     }
 
@@ -131,6 +131,6 @@ def _track_ci(pse_summary: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": "ok",
         "ci_ratio": round(float(ci_ratio), 4),
-        "pass": ci_ratio <= CI_MAX,
+        "pass": bool(ci_ratio <= CI_MAX),
         "thresholds": {"ci_max": CI_MAX},
     }

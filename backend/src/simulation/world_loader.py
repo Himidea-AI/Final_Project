@@ -393,7 +393,10 @@ def _load_living_population_daily(
     """)
     end_date = start_date + _timedelta(days=days)
     out: dict[tuple[str, int, int], float] = {}
-    engine = get_sync_engine(os.environ["POSTGRES_URL"])
+    db_url = os.environ.get("POSTGRES_URL")
+    if not db_url:
+        return out
+    engine = get_sync_engine(db_url)
     with engine.connect() as conn:
         rows = conn.execute(sql, {"start_date": start_date, "end_date": end_date}).mappings()
         for r in rows:

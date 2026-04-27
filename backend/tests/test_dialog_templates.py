@@ -2,7 +2,6 @@
 
 import random
 
-
 from src.simulation.dialog_templates import TEMPLATES, pick_dialog
 
 
