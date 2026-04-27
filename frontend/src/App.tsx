@@ -43,7 +43,7 @@
  *   - C2: Docker 배포 시 nginx.conf의 /api 프록시가 백엔드를 가리켜야 함
  */
 
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { TransitionContext } from './contexts/TransitionContext';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
@@ -69,7 +69,8 @@ import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
-import { getLivePopulation } from './api/client';
+import { getLivePopulation, type CustomerSegmentRequest } from './api/client';
+import { useCustomerSegmentPreview } from './hooks/useCustomerSegmentPreview';
 import NetworkBackground from './components/NetworkBackground';
 // Phase C Round 2 — PDF 묶음 + Dashboard 묶음 추출 (정적 import 유지)
 import {
@@ -131,6 +132,7 @@ import {
   Lightbulb,
   ClipboardList,
   UserCheck,
+  Loader2,
 } from 'lucide-react';
 
 import AgentMapVisualizer from './components/AgentMapVisualizer';
@@ -853,6 +855,34 @@ function SimulatorDashboard({
   const [targetTimeSlots, setTargetTimeSlots] = useState<string[]>([]);
   const [targetDayType, setTargetDayType] = useState<'weekday' | 'weekend' | null>(null);
   const [targetMonthlySales, setTargetMonthlySales] = useState<number | null>(null);
+
+  // [customer_segment 미리보기] 좌측 패널 입력 변경 시 ~100ms MLP 호출.
+  // /simulate (10분 LLM 파이프라인)와 무관 — RUN 누르기 전 즉시 피드백.
+  const previewReq = useMemo<CustomerSegmentRequest | null>(() => {
+    if (!selectedDongs[0]) return null;
+    return {
+      target_district: selectedDongs[0],
+      business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
+      target_age_groups: targetAgeGroups,
+      target_gender: targetGender,
+      target_time_slots: targetTimeSlots,
+      target_day_type: targetDayType,
+      target_monthly_sales: targetMonthlySales,
+    };
+  }, [
+    selectedDongs,
+    businessType,
+    targetAgeGroups,
+    targetGender,
+    targetTimeSlots,
+    targetDayType,
+    targetMonthlySales,
+  ]);
+  const {
+    data: previewSegment,
+    isLoading: isPreviewLoading,
+    error: previewError,
+  } = useCustomerSegmentPreview(previewReq);
 
   // [A1] 유동인구 실시간 데이터
   const [popData, setPopData] = useState<any>(null);
@@ -1870,6 +1900,36 @@ function SimulatorDashboard({
                     입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
                   </p>
                 </div>
+
+                {/* [customer_segment 미리보기] RUN 누르기 전 ~100ms MLP 결과 표시 */}
+                {previewSegment && (
+                  <div className="mt-4 px-4 py-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">
+                        실시간 미리보기 · {(previewSegment.segment_ratio * 100).toFixed(1)}% 기여
+                      </span>
+                      {isPreviewLoading && (
+                        <Loader2 size={12} className="animate-spin text-indigo-400" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-stone-300 leading-relaxed">
+                      {previewSegment.profile_summary}
+                    </p>
+                    {previewSegment.segment_sales != null && (
+                      <p className="text-[10px] text-stone-500 tabular-nums">
+                        세그먼트 매출 추정: ₩{previewSegment.segment_sales.toLocaleString('ko-KR')}
+                      </p>
+                    )}
+                    <p className="text-[9px] text-stone-600 italic">
+                      * 동·업종 단위 MLP 추정 — RUN SIMULATION 후 종합 결과로 검증
+                    </p>
+                  </div>
+                )}
+                {previewError && !isPreviewLoading && (
+                  <div className="mt-4 px-4 py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-[11px] text-rose-300">
+                    미리보기 실패: {previewError}
+                  </div>
+                )}
               </div>
             </div>
           </div>

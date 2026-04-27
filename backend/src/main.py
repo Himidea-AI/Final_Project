@@ -128,6 +128,11 @@ from src.api.vacancy_evaluation import router as _vacancy_eval_router  # noqa: E
 
 app.include_router(_vacancy_eval_router)
 
+# --- customer_segment REST (MLP 단발 호출, frontend 실시간 미리보기용) ---
+from src.api.customer_segment import router as _customer_segment_router  # noqa: E402
+
+app.include_router(_customer_segment_router)
+
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
