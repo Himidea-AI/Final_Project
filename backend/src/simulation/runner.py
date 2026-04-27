@@ -544,12 +544,13 @@ def run_simulation(
 
         # 옵션 B: living_pop_daily_boost 활성 시 매일 갱신
         # warmup 단계는 skip (warmup 끝난 후 측정 days 만 적용).
+        # weekday: real_date.weekday() (날짜 기반 확정값, world.weekday 의 stale 위험 회피).
         if not is_warmup and world.living_pop_daily_boost:
             world.adstrd_flpop_boost = _swap_dong_hour_boost_for_day(
                 world.living_pop_daily_boost,
                 world.adstrd_flpop_boost,
                 day_idx=day - 1,  # day=1 → day_idx=0
-                weekday=world.weekday,
+                weekday=real_date.weekday(),
             )
 
         if verbose:

@@ -49,29 +49,56 @@ def test_pse_with_collect_trajectory_returns_data():
     assert isinstance(result.get("trajectory"), list)
 
 
-def test_pse_existing_signature_still_works(monkeypatch):
-    """기존 인자 시그니처 그대로 호출 → 기존 결과 구조 보존 (회귀 X).
+def test_pse_existing_signature_preserves_old_kwargs():
+    """기존 인자 (menu_items 등 새 인자 없이) 가 시그니처에 그대로 받아들여지는지 검증.
 
-    실제 시뮬은 시간 부담이라 mock 으로 빠르게 검증.
+    inspect 로 시그니처를 확인 — TypeError 회귀를 빠르게 잡음.
+    실제 시뮬 호출은 slow 테스트 (test_pse_with_menu_items_uses_menu_prices) 가 cover.
     """
-    # mock 으로 시뮬 시간 절약 — 호출 자체만 검증
-    fake = {
-        "vacancy_spot": SPOT,
-        "category": "카페",
-        "n_seeds": 1,
-        "days": 1,
-        "popularity_boost": 5.0,
-        "with_cannibalization": False,
-        "per_seed": [],
-        "pse_summary": {
-            "visits_per_day": {"mean": 0, "std": 0, "ci95": 0, "min": 0, "max": 0, "n": 0},
-            "revenue_per_day": {"mean": 0, "std": 0, "ci95": 0, "min": 0, "max": 0, "n": 0},
-        },
-        "narrative": "...",
-    }
-    from src.simulation import vacancy_pse as vp
+    import inspect
 
-    monkeypatch.setattr(vp, "evaluate_vacancy_pse", lambda *a, **kw: fake)
-    out = vp.evaluate_vacancy_pse(SPOT, "카페", n_seeds=1, days=1)
-    assert "pse_summary" in out
-    assert "narrative" in out
+    sig = inspect.signature(evaluate_vacancy_pse)
+    params = sig.parameters
+
+    # 기존 파라미터 보존
+    for old in [
+        "vacancy_spot",
+        "category",
+        "n_seeds",
+        "days",
+        "popularity_boost",
+        "with_cannibalization",
+        "pop_mix",
+        "tier_dist",
+        "cfg",
+        "seeds",
+        "verbose",
+    ]:
+        assert old in params, f"기존 파라미터 '{old}' 누락 — 회귀 의심"
+
+    # 새 파라미터 추가 확인 (Task 4)
+    for new in [
+        "menu_items",
+        "collect_trajectory",
+        "trajectory_sample_size",
+        "dump_visits",
+        "use_dialog_templates",
+        "enable_llm",
+        "llm_tier_policy",
+        "llm_max_tokens",
+        "llm_call_interval",
+    ]:
+        assert new in params, f"새 파라미터 '{new}' 누락"
+
+    # 새 파라미터 모두 default 가 있어야 (하위 호환성)
+    for new in [
+        "menu_items",
+        "collect_trajectory",
+        "trajectory_sample_size",
+        "dump_visits",
+        "use_dialog_templates",
+        "enable_llm",
+    ]:
+        assert params[new].default is not inspect.Parameter.empty, (
+            f"파라미터 '{new}' 가 default 없음 — 하위 호환성 깨짐"
+        )
