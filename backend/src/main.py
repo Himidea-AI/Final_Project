@@ -134,6 +134,19 @@ from src.api.customer_segment import router as _customer_segment_router  # noqa:
 app.include_router(_customer_segment_router)
 
 
+# customer_revenue MLP 모델 startup 시 워밍업 — 첫 미리보기 호출 latency 0.5~1초 → ~100ms.
+# 가중치 부재 환경에선 silent skip (배포 서버 분리 케이스 보호).
+@app.on_event("startup")
+def _warmup_customer_revenue() -> None:
+    try:
+        from models.interface import _run_customer_revenue
+
+        _run_customer_revenue("11440680", "CS100010", profile_dict=None)
+        print("[STARTUP] customer_revenue MLP 워밍업 완료")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[STARTUP] customer_revenue 워밍업 skip: {exc}")
+
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     """IP당 시간당 RATE_LIMIT_MAX회로 LLM 파이프라인 엔드포인트를 보호합니다."""

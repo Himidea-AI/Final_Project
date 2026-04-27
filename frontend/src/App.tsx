@@ -870,7 +870,8 @@ function SimulatorDashboard({
       target_monthly_sales: targetMonthlySales,
     };
   }, [
-    selectedDongs,
+    // selectedDongs 배열 reference 대신 [0]만 — 새 배열 reference로 setState 시 useMemo 재계산 회피
+    selectedDongs[0],
     businessType,
     targetAgeGroups,
     targetGender,
