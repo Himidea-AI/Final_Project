@@ -1,8 +1,11 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, RotateCw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, FileDown, Loader2, RotateCw } from 'lucide-react';
 import { useSimulationDetail } from '../hooks/useSimulationDetail';
-import { IntegratedReport } from '../components/SimulationResult/IntegratedReport';
+import { TabbedDashboard } from '../components/SimulationResult/dashboard/TabbedDashboard';
 import { formatDocumentId } from '../types/simulationHistory';
+import { HiddenPDFTemplate } from '../App';
+import { buildPdfPropsFromSimulation } from '../utils/pdfPropsBuilder';
 
 function formatWhen(iso: string): string {
   try {
@@ -15,8 +18,66 @@ function formatWhen(iso: string): string {
 export default function SimulationHistoryDetail() {
   const { id: raw } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const id = raw ? Number(raw) : null;
   const { data, isLoading, error, notFound } = useSimulationDetail(Number.isFinite(id) ? id : null);
+
+  const pdfTemplateRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  const pdfProps = data
+    ? buildPdfPropsFromSimulation({
+        simResult: data.simulation_result,
+        businessType: data.business_type ?? null,
+        savedHistoryId: data.id,
+      })
+    : null;
+
+  const handleDownloadPDF = useCallback(async () => {
+    if (!pdfTemplateRef.current || !data) return;
+    setIsGeneratingPDF(true);
+    try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+      ]);
+      const template = pdfTemplateRef.current;
+      const pages = Array.from(template.children) as HTMLElement[];
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      for (let i = 0; i < pages.length; i++) {
+        const canvas = await html2canvas(pages[i], {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+        });
+        const imgData = canvas.toDataURL('image/png');
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      }
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const districtName = data.district || '마포구';
+      pdf.save(`SPOTTER_${districtName}_${formatDocumentId(data.id)}_${stamp}.pdf`);
+    } catch (err) {
+      console.error('[history detail] PDF export failed', err);
+      window.alert('PDF 생성 중 오류가 발생했습니다. 콘솔을 확인해주세요.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  }, [data]);
+
+  // HistoryCard에서 ?autopdf=1로 진입 시 자동 다운로드 (data 로드 후 1회)
+  useEffect(() => {
+    if (!data || isGeneratingPDF) return;
+    if (searchParams.get('autopdf') !== '1') return;
+    void handleDownloadPDF();
+    // 1회 실행 후 파라미터 제거 (재실행 방지)
+    const next = new URLSearchParams(searchParams);
+    next.delete('autopdf');
+    setSearchParams(next, { replace: true });
+  }, [data, isGeneratingPDF, searchParams, setSearchParams, handleDownloadPDF]);
 
   if (!id || !Number.isFinite(id)) {
     return (
@@ -27,8 +88,8 @@ export default function SimulationHistoryDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1e1b18] pb-16 text-stone-100">
-      <div className="mx-auto max-w-7xl px-6 pt-20">
+    <div className="min-h-screen bg-[#0C0B0A] pb-16 text-stone-100">
+      <div className="mx-auto max-w-[1600px] px-6 pt-20">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -68,26 +129,33 @@ export default function SimulationHistoryDetail() {
                 // 우선 시뮬레이터로 이동. Phase 2에서 sessionStorage 경유 재실행 자동 주입.
                 navigate('/simulator');
               }}
+              onDownloadPDF={handleDownloadPDF}
+              isGeneratingPDF={isGeneratingPDF}
             />
             <div className="mt-6">
-              <IntegratedReport
+              <TabbedDashboard
                 simResult={data.simulation_result}
-                onExportPdf={() => {
-                  // 상세 뷰는 읽기 전용 — PDF 내보내기는 원 화면에서 이미 가능하므로 안내.
-                  window.alert(
-                    '이 페이지는 읽기 전용입니다. PDF 다운로드는 시뮬레이터 화면에서 이용해주세요.',
-                  );
-                }}
-                onExportXlsx={() => {
-                  window.alert(
-                    '이 페이지는 읽기 전용입니다. XLSX 다운로드는 시뮬레이터 화면에서 이용해주세요.',
-                  );
-                }}
-                compareMode={false}
-                onToggleCompare={() => {}}
+                savedHistoryId={data.id}
+                brandName={data.brand_name}
+                businessType={data.business_type}
               />
             </div>
           </>
+        )}
+
+        {/* A4 PDF 템플릿 — 화면 밖 렌더, html2canvas 캡처용 */}
+        {pdfProps && (
+          <HiddenPDFTemplate
+            ref={pdfTemplateRef}
+            districtFull={pdfProps.districtFull}
+            stats={pdfProps.stats}
+            cannibalizationRows={pdfProps.cannibalizationRows}
+            neighborhoodRows={pdfProps.neighborhoodRows}
+            insights={pdfProps.insights}
+            reportDate={pdfProps.reportDate}
+            savedHistoryId={pdfProps.savedHistoryId}
+            customerSegment={pdfProps.customerSegment}
+          />
         )}
       </div>
     </div>
@@ -101,6 +169,8 @@ interface DetailHeaderProps {
   district: string;
   createdAt: string;
   onRerun: () => void;
+  onDownloadPDF: () => void;
+  isGeneratingPDF: boolean;
 }
 
 function DetailHeader({
@@ -110,6 +180,8 @@ function DetailHeader({
   district,
   createdAt,
   onRerun,
+  onDownloadPDF,
+  isGeneratingPDF,
 }: DetailHeaderProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
@@ -125,14 +197,29 @@ function DetailHeader({
         </h1>
         <div className="mt-1 font-mono text-xs text-stone-500">저장 {formatWhen(createdAt)}</div>
       </div>
-      <button
-        type="button"
-        onClick={onRerun}
-        className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-amber-400"
-      >
-        <RotateCw className="h-4 w-4" />
-        시뮬레이터로 이동
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onDownloadPDF}
+          disabled={isGeneratingPDF}
+          className="inline-flex items-center gap-2 rounded-md border border-indigo-500/60 bg-indigo-500/10 px-3 py-2 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isGeneratingPDF ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FileDown className="h-4 w-4" />
+          )}
+          {isGeneratingPDF ? 'PDF 생성 중…' : 'PDF 다운로드'}
+        </button>
+        <button
+          type="button"
+          onClick={onRerun}
+          className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-amber-400"
+        >
+          <RotateCw className="h-4 w-4" />
+          시뮬레이터로 이동
+        </button>
+      </div>
     </div>
   );
 }

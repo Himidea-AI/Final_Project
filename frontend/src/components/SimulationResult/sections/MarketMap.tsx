@@ -232,10 +232,12 @@ export function MarketMap({
         geo.features.forEach((f) => {
           const dong = f.properties.dong_name;
           const ranking = rankingMap.get(dong);
-          const score = ranking?.score ?? 50;
+          const score = ranking?.score;
+          const hasScore = typeof score === 'number';
           const isWinner = dong === winnerDistrict;
-          const fillColor = isWinner ? '#f59e0b' : rankingColor(score);
-          const fillOpacity = isWinner ? 0.35 : rankingOpacity(score);
+          // 실데이터 원칙: 랭킹 점수 없으면 빗금/투명 중립색 (기존 50 기본값 제거 — 점수 50 동과 구분)
+          const fillColor = isWinner ? '#f59e0b' : hasScore ? rankingColor(score) : '#27272a';
+          const fillOpacity = isWinner ? 0.35 : hasScore ? rankingOpacity(score) : 0.08;
           const polygons: number[][][] =
             f.geometry.type === 'MultiPolygon'
               ? (f.geometry.coordinates as number[][][][]).flatMap((p) => p)

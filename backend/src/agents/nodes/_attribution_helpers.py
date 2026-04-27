@@ -13,6 +13,7 @@ def build_attribution(
     verdict: str,
     reasoning: str,
     confidence: Optional[float] = None,
+    status: str = "success",
 ) -> dict:
     """AgentAttribution을 dict로 반환. 노드 return dict에 'agent_attribution' 키로 넣음."""
     attr = AgentAttribution(
@@ -23,5 +24,6 @@ def build_attribution(
         verdict=verdict[:80],  # 80자 제한
         reasoning=reasoning[:400],  # 안전 제한
         confidence=confidence,
+        status=status,  # type: ignore[arg-type]
     )
     return attr.model_dump()

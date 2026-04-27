@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>A2 브리핑 — 봉환 (2026-04-24)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "맑은 고딕", "Malgun Gothic", sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #222;
+    background: #fafafa;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 30px 40px;
+  }
+  h1 {
+    font-size: 20px;
+    border-bottom: 2px solid #333;
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+  }
+  h2 {
+    font-size: 15px;
+    background: #333;
+    color: #fff;
+    padding: 6px 12px;
+    margin-top: 28px;
+    margin-bottom: 12px;
+  }
+  h3 {
+    font-size: 13px;
+    color: #555;
+    margin-top: 16px;
+    margin-bottom: 6px;
+    border-left: 3px solid #666;
+    padding-left: 8px;
+  }
+  .meta {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 20px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0 16px 0;
+    table-layout: fixed;
+    word-break: break-word;
+  }
+  th, td {
+    border: 1px solid #888;
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f0f0f0;
+    font-weight: bold;
+  }
+  ul {
+    margin: 6px 0 12px 0;
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 3px;
+  }
+  code {
+    font-family: Consolas, "D2Coding", monospace;
+    background: #eee;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .pipeline {
+    font-family: Consolas, "D2Coding", monospace;
+    background: #2b2b2b;
+    color: #e8e8e8;
+    padding: 14px 18px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.7;
+    margin: 10px 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .metric-box {
+    display: inline-block;
+    background: #fff;
+    border: 1px solid #888;
+    padding: 10px 16px;
+    margin: 4px 6px 4px 0;
+    min-width: 170px;
+  }
+  .metric-box .label {
+    font-size: 11px;
+    color: #666;
+    display: block;
+  }
+  .metric-box .value {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1a5490;
+  }
+  .metric-box .delta {
+    font-size: 11px;
+    color: #c54;
+    margin-left: 4px;
+  }
+  .good { color: #2a7a2a; font-weight: bold; }
+  .bad { color: #b33; }
+  .highlight {
+    background: #fff5b1;
+    padding: 1px 4px;
+  }
+  .section-time {
+    font-size: 11px;
+    color: #888;
+    font-weight: normal;
+    float: right;
+  }
+  .closing {
+    background: #f5f0e0;
+    border-left: 4px solid #c49a1a;
+    padding: 12px 16px;
+    margin-top: 20px;
+    font-size: 13px;
+  }
+  .closing strong {
+    color: #8a6a0a;
+  }
+  .footer {
+    margin-top: 30px;
+    padding-top: 12px;
+    border-top: 1px solid #ccc;
+    font-size: 11px;
+    color: #777;
+  }
+  .footer code { background: #f5f5f5; }
+</style>
+</head>
+<body>
+
+<h1>A2 — RAG + 법률 에이전트 브리핑</h1>
+<div class="meta">2026-04-24 | 담당: 봉환 (A2) | 발표시간: 5분</div>
+
+<!-- ============ 담당 영역 ============ -->
+<h2>1. 담당 영역<span class="section-time">30초</span></h2>
+<ul>
+  <li>법률 문서 RAG 검색 파이프라인 — <code>backend/src/chains/</code></li>
+  <li>법률 에이전트 노드 — <code>backend/src/agents/nodes/legal.py</code></li>
+  <li>벡터 DB + 데이터 인제스트 — pgvector, <code>parse_pdfs.py</code></li>
+  <li>FTC 가맹사업 API 연동 — <code>ftc_franchise.py</code></li>
+  <li>14개 법률 타입: 가맹 / 임대차 / 식품 / 건축 / 소방 / 근로 / 세법 / 개인정보 / 장애인편의 / 하수도 / 공정거래 등</li>
+</ul>
+
+<!-- ============ RAG 파이프라인 ============ -->
+<h2>2. RAG 검색 파이프라인<span class="section-time">1분</span></h2>
+
+<h3>아키텍처 — 하이브리드 4단계</h3>
+<div class="pipeline">쿼리
+ → [0] HyDE 동의어 확장 (70개 법률 용어 사전)
+ → [1] 벡터 유사도 검색 (pgvector, 다국어 임베딩)
+ → [2] BM25 키워드 검색 (메모리 역인덱스)
+ → [3] RRF 결합 (벡터 50% + BM25 50%)
+ → top_k 반환 + 벌칙 조문 자동 첨부</div>
+
+<h3>주요 실험 & 결정</h3>
+<table>
+  <colgroup>
+    <col style="width: 10%"><col style="width: 25%"><col style="width: 65%">
+  </colgroup>
+  <thead>
+    <tr><th>판정</th><th>시도</th><th>결과</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="good">채택</td><td>하이브리드 검색</td><td>벡터 단독 대비 +8.6%p</td></tr>
+    <tr><td class="bad">기각</td><td>Cross-encoder Reranker</td><td>응답 16s → 122ms로 악화</td></tr>
+    <tr><td class="bad">기각</td><td>ko-sroberta 임베딩</td><td>성능 21%p 하락</td></tr>
+    <tr><td class="bad">기각</td><td>쿼리 전체 재작성</td><td>30~42%p 하락</td></tr>
+  </tbody>
+</table>
+<p style="color:#666; font-size:12px;">→ 실패 시도까지 벤치마크 문서에 투명하게 기록</p>
+
+<!-- ============ 법률 에이전트 ============ -->
+<h2>3. 법률 에이전트 노드<span class="section-time">1분</span></h2>
+
+<h3>동작 방식</h3>
+<ul>
+  <li>14개 법률 타입에 대해 쿼리 <strong>병렬 실행</strong></li>
+  <li>RAG 검색 → LLM 요약 → 창업 체크리스트 생성</li>
+  <li>업종/지역별 맞춤 프롬프트 (cafe / restaurant / 편의점)</li>
+  <li>의무 조문 → 벌칙 조문 자동 매핑 (28개, <strong>토큰 비용 0</strong>)</li>
+</ul>
+
+<h3>UI / UX 개선</h3>
+<ul>
+  <li>법률 드로어: 조문 요약 + 창업 체크리스트 동시 표시</li>
+  <li>리스크 등급: <strong>필수이행 / 확인필요 / 참고사항</strong> 3단계 통일</li>
+  <li>의무법률(식품위생·소방시설 등)은 자동 <code>danger</code> 강제</li>
+  <li>KPI 안전도 지표 개선</li>
+  <li>UI 전체 한글화</li>
+</ul>
+
+<!-- ============ v3 → v4 개선 ============ -->
+<h2>4. v3 → v4 주요 개선<span class="section-time">1분 30초</span></h2>
+
+<h3>A. 평가 체계 고도화</h3>
+<ul>
+  <li><strong>F1-score</strong> 정량 평가 도입 (Precision / Recall / F1)</li>
+  <li>Golden Dataset 근본 전환:
+    <ul>
+      <li>v3: Claude 임의 생성 33개</li>
+      <li>v4: <span class="highlight">법률 원문 리서치 → 창업자 의무/금지 조항 매핑</span> 29쿼리 × 63조문</li>
+    </ul>
+  </li>
+  <li>LLM-judge 프롬프트 엄격화 (few-shot + NO 규칙)</li>
+  <li>Known-answer Test 도입으로 FPR <strong>80% → 50%</strong> 개선</li>
+</ul>
+
+<h3>B. 인제스트 품질 개선</h3>
+<ul>
+  <li>Semantic Chunking: 조 → 항(①②③) → 문장 계층 분할</li>
+  <li><code>[제N조]</code> 접두사로 하위 청크 검색 매칭률 ↑</li>
+  <li>파서 버그 수정: 타법 참조 유령 조문 <strong>112개 제거</strong></li>
+  <li>HyDE 법률 용어 사전: 37 → <strong>70개</strong></li>
+</ul>
+
+<h3>C. 벌칙 조문 자동 매핑 (v4 신규)</h3>
+<ul>
+  <li>의무 조문 찾으면 → 과태료/벌금 조문 본문 자동 첨부</li>
+  <li>9개 법률 <strong>28개 매핑</strong>, law.go.kr 현행법 대조</li>
+  <li>RAG 추가 호출 없음 (토큰 비용 0)</li>
+  <li>예: 식품위생법 영업신고 → <span class="highlight">3년 이하 징역 또는 3천만원 이하 벌금</span></li>
+</ul>
+
+<!-- ============ 최종 지표 ============ -->
+<h2>5. 최종 지표<span class="section-time">45초</span></h2>
+
+<h3>검색 품질</h3>
+<div>
+  <div class="metric-box">
+    <span class="label">F1-score</span>
+    <span class="value">0.272</span>
+    <span class="delta">신규 도입</span>
+  </div>
+  <div class="metric-box">
+    <span class="label">LLM-judge</span>
+    <span class="value">87.6%</span>
+    <span class="delta">+15.6%p</span>
+  </div>
+  <div class="metric-box">
+    <span class="label">Known-answer</span>
+    <span class="value">75%</span>
+  </div>
+</div>
+
+<h3>성능</h3>
+<div>
+  <div class="metric-box">
+    <span class="label">평균 응답</span>
+    <span class="value">138ms</span>
+    <span class="delta">130배↑</span>
+  </div>
+  <div class="metric-box">
+    <span class="label">청크 수</span>
+    <span class="value">5,272</span>
+  </div>
+  <div class="metric-box">
+    <span class="label">통합검증</span>
+    <span class="value">3/3</span>
+    <span class="delta">14/14 법률</span>
+  </div>
+</div>
+
+<h3>신뢰성</h3>
+<div>
+  <div class="metric-box">
+    <span class="label">안정성 σ</span>
+    <span class="value">2.77</span>
+    <span class="delta">5회 반복</span>
+  </div>
+  <div class="metric-box">
+    <span class="label">FPR</span>
+    <span class="value">50%</span>
+    <span class="delta">자인</span>
+  </div>
+  <div class="metric-box">
+    <span class="label">실제 관련성</span>
+    <span class="value">70~80%</span>
+    <span class="delta">추정</span>
+  </div>
+</div>
+
+<!-- ============ 차별점 ============ -->
+<h2>6. 차별점<span class="section-time">30초</span></h2>
+<ol>
+  <li><strong>3중 검증 구조</strong> — F1-score + LLM-judge + Known-answer Test</li>
+  <li><strong>실패까지 기록하는 투명성</strong> — ko-sroberta, Reranker, 쿼리 재작성 실패 데이터 有</li>
+  <li><strong>벌칙 매핑</strong>으로 "무엇을 어기면 얼마 과태료인지" 창업자에게 직접 안내 (단순 조문 나열이 아님)</li>
+</ol>
+
+<!-- ============ 남은 과제 ============ -->
+<h2>7. 남은 과제<span class="section-time">15초</span></h2>
+<ul>
+  <li>F1=0 잔여 8쿼리 개선 (임베딩 모델 fine-tuning 검토)</li>
+  <li>실판정 사람 검수 — Human Agreement 지표 추가</li>
+  <li>발표 슬라이드 다이어그램 작성</li>
+</ul>
+
+<!-- ============ 클로징 ============ -->
+<div class="closing">
+  <strong>클로징 한 줄</strong><br>
+  "RAG 검색을 F1-score로 정량 평가하고, LLM-judge의 신뢰성까지 Known-answer Test로 교차 검증하여 FPR 50%를 확인했습니다.
+  지표의 <strong>신뢰 범위까지 투명하게 공개</strong>한 것이 이 벤치마크의 차별점입니다."
+</div>
+
+<div class="footer">
+  <strong>참고 자료</strong><br>
+  상세 리포트: <code>docs/a2-legal-benchmark.md</code><br>
+  핵심 코드:
+  <code>backend/src/chains/retriever.py</code> ·
+  <code>backend/src/agents/nodes/legal.py</code> ·
+  <code>backend/data/legal/parse_pdfs.py</code>
+</div>
+
+</body>
+</html>
