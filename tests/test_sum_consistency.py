@@ -82,6 +82,44 @@ def test_enforce_sum_consistency_idempotent(imperfect_pred):
     pd.testing.assert_frame_equal(once, twice, atol=0.01)
 
 
+def test_total_col_nan_does_not_propagate():
+    """monthly_sales 가 NaN 인 row 는 sub_cols 변경 없이 유지."""
+    df = pd.DataFrame(
+        [
+            {
+                "monthly_sales": float("nan"),
+                "weekday_sales": 60,
+                "weekend_sales": 50,
+                "mon_sales": 14,
+                "tue_sales": 14,
+                "wed_sales": 14,
+                "thu_sales": 14,
+                "fri_sales": 14,
+                "sat_sales": 14,
+                "sun_sales": 14,
+                "time_00_06_sales": 16,
+                "time_06_11_sales": 16,
+                "time_11_14_sales": 16,
+                "time_14_17_sales": 16,
+                "time_17_21_sales": 16,
+                "time_21_24_sales": 16,
+                "male_sales": 60,
+                "female_sales": 50,
+                "age_10_sales": 16,
+                "age_20_sales": 16,
+                "age_30_sales": 16,
+                "age_40_sales": 16,
+                "age_50_sales": 16,
+                "age_60_above_sales": 16,
+            },
+        ]
+    )
+    out = enforce_sum_consistency(df, SUM_CONSTRAINTS_SALES)
+    # NaN total_col 행은 sub_cols 가 그대로 (NaN 으로 오염되지 않음)
+    assert out["weekday_sales"].iloc[0] == 60
+    assert out["weekend_sales"].iloc[0] == 50
+
+
 def test_zero_sub_sum_does_not_crash():
     """sub_sum = 0 (모든 sub_col 이 0) 인 경우 division-by-zero 방지."""
     df = pd.DataFrame(

@@ -20,19 +20,18 @@ if _backend_path not in sys.path:
     sys.path.insert(0, _backend_path)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
-    if "=" in line and not line.startswith("#"):
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
-
-engine = create_engine(os.environ["POSTGRES_URL"])
 OUT_MD = REPO_ROOT / "docs" / "sales-imputation" / "sensitivity_v4_report.md"
+
+
+def _get_engine():
+    return create_engine(os.environ["POSTGRES_URL"])
+
 
 THRESHOLD_SENSITIVITY = 0.08
 THRESHOLD_EXTRAP_IMPACT = 0.07
 
 
-def collect_popularity_via_loader():
+def collect_popularity_via_loader(engine):
     """world_loader._load_dong_industry_weight() 호출 결과."""
     from backend.src.simulation.world_loader import _load_dong_industry_weight
 
@@ -41,10 +40,22 @@ def collect_popularity_via_loader():
 
 def main():
     print("=== Phase 4: Sensitivity v4 ABM ===")
+    # WARNING: 이 스크립트는 v4 테이블을 일시적으로 비우고 다시 채운다.
+    # 운영 DB 에서 실행 시 다른 세션이 그 짧은 순간 popularity=0 을 볼 위험.
+    # 스테이징 DB 에서만 실행해야 한다.
+    db_url = os.environ.get("POSTGRES_URL", "")
+    if "prod" in db_url.lower() and not os.environ.get("ALLOW_PROD_SENSITIVITY"):
+        raise RuntimeError(
+            "sensitivity_v4_abm 은 운영 DB 에서 실행 금지 (DELETE 중 popularity=0 노출 위험). "
+            "스테이징 DB 사용 또는 ALLOW_PROD_SENSITIVITY=1 환경변수 설정."
+        )
+    print(f"[DB] {db_url[:30]}... (운영 아닌지 확인됨)")
+
+    engine = _get_engine()
 
     # 1) v4 사용 (현 상태)
     print("[1/2] v4 적용 popularity ...")
-    pop_v4 = collect_popularity_via_loader()
+    pop_v4 = collect_popularity_via_loader(engine)
     print(f"  cells: {len(pop_v4)}, mean: {np.mean(list(pop_v4.values())):.3f}")
 
     # 2) v4 비움 — 임시
@@ -53,7 +64,7 @@ def main():
         conn.execute(text("CREATE TEMP TABLE v4_backup_sens AS SELECT * FROM seoul_district_sales_imputed_v4"))
         conn.execute(text("DELETE FROM seoul_district_sales_imputed_v4"))
     try:
-        pop_baseline = collect_popularity_via_loader()
+        pop_baseline = collect_popularity_via_loader(engine)
         print(f"  cells: {len(pop_baseline)}, mean: {np.mean(list(pop_baseline.values())):.3f}")
     finally:
         with engine.begin() as conn:
@@ -106,4 +117,9 @@ def main():
 
 
 if __name__ == "__main__":
+    for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
     main()

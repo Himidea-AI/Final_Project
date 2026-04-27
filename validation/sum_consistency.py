@@ -38,8 +38,8 @@ def enforce_sum_consistency(
     df = pred_df.copy()
     for sub_cols, total_col in constraints:
         sub_sum = df[sub_cols].sum(axis=1)
-        # sub_sum > 0 인 row 만 raking 적용
-        mask = sub_sum > 0
+        # sub_sum > 0 AND total_col 이 NaN 이 아닌 row 만 raking 적용
+        mask = (sub_sum > 0) & df[total_col].notna()
         scale = pd.Series(1.0, index=df.index)
         scale.loc[mask] = df.loc[mask, total_col] / sub_sum.loc[mask]
         for col in sub_cols:

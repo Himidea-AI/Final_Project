@@ -20,13 +20,15 @@ from sqlalchemy import create_engine, text
 sys.stdout.reconfigure(encoding="utf-8")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
-    if "=" in line and not line.startswith("#"):
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
 
-engine = create_engine(os.environ["POSTGRES_URL"])
-api = Kosis(os.environ["KOSIS_API_KEY"])
+
+def _get_engine():
+    return create_engine(os.environ["POSTGRES_URL"])
+
+
+def _get_kosis_api():
+    return Kosis(os.environ["KOSIS_API_KEY"])
+
 
 OUT_CSV = REPO_ROOT / "validation" / "results" / "kosis_item_split_result.csv"
 
@@ -43,6 +45,7 @@ _API_ITM_MAP = {
 
 def fetch_anchor(itm_id: str) -> pd.DataFrame:
     """KOSIS DT_1KC2023 서울 숙박·음식점업 분기 지수."""
+    api = _get_kosis_api()
     api_itm = _API_ITM_MAP.get(itm_id, itm_id)
     for attempt in range(3):
         try:
@@ -90,9 +93,10 @@ def normalize_quarters(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_mapo_total_sales() -> pd.DataFrame:
     """마포 alive 셀 분기 총매출."""
+    engine = _get_engine()
     sql = text("""
         SELECT quarter, SUM(monthly_sales)::bigint AS total_sales
-        FROM district_sales
+        FROM seoul_district_sales
         WHERE dong_code LIKE '11440%' AND monthly_sales IS NOT NULL
         GROUP BY quarter
         ORDER BY quarter
@@ -110,6 +114,11 @@ def measure_r(anchor: pd.DataFrame, mapo: pd.DataFrame) -> dict:
 
 
 if __name__ == "__main__":
+    for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
     print("=== Phase 0-1: KOSIS Item Split ===")
     print("[1/4] Fetching current (T1)...")
     df_current = fetch_anchor(ITM_CURRENT)

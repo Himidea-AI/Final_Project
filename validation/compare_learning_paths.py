@@ -22,14 +22,13 @@ from sqlalchemy import create_engine, text
 sys.stdout.reconfigure(encoding="utf-8")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
-    if "=" in line and not line.startswith("#"):
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
-
-engine = create_engine(os.environ["POSTGRES_URL"])
 ANCHOR_CSV = REPO_ROOT / "validation" / "results" / "phase1b_anchor_series.csv"
 OUT_CSV = REPO_ROOT / "validation" / "results" / "learning_paths_comparison.csv"
+
+
+def _get_engine():
+    return create_engine(os.environ["POSTGRES_URL"])
+
 
 SEEDS = [42, 2026, 7, 13, 99, 1234]
 THRESHOLD_IMPROVEMENT_PP = 1.5  # 합격선 0-3
@@ -51,6 +50,7 @@ INDUSTRIES_10 = [
 
 def load_data(scope: str) -> pd.DataFrame:
     """scope = 'mapo' or 'seoul_10ind'."""
+    engine = _get_engine()
     if scope == "mapo":
         where = "q.dong_code LIKE '11440%'"
     else:
@@ -62,7 +62,7 @@ def load_data(scope: str) -> pd.DataFrame:
                s.monthly_sales, q.store_count, q.open_count, q.close_count,
                q.closure_rate, q.franchise_count
         FROM store_quarterly q
-        LEFT JOIN district_sales s
+        LEFT JOIN seoul_district_sales s
           ON q.quarter = s.quarter AND q.dong_code = s.dong_code
          AND q.industry_code = s.industry_code
         WHERE {where}
@@ -150,6 +150,11 @@ def mnar_mimic_cv_path(
 
 
 if __name__ == "__main__":
+    for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
     print("=== Phase 0-3: Learning Path Comparison ===")
     print("[1/2] Loading mapo + seoul_10ind...")
     df_mapo = load_data("mapo")

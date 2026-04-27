@@ -240,7 +240,12 @@ def predict_with_ci_multi(
     X_missing: pd.DataFrame,
     store_count: np.ndarray,
 ) -> dict[str, pd.DataFrame]:
-    """6 seed × 48 컬럼 → mean / std / lower_95 / upper_95 / ci_width_ratio."""
+    """6 seed 예측 → mean/std/lower_95/upper_95/ci_width_ratio.
+
+    NOTE: store_count 는 SALES 와 COUNT 컬럼 모두에 곱해진다.
+    호출자는 sales 만 곱셈을 원할 경우 store_count=np.ones(N) 로 호출하고,
+    main() 처럼 별도로 SALES_COLS 만 store_count 곱셈을 수행해야 한다.
+    """
     preds_log = np.array([m.predict(X_missing) for m in models])  # (6, N, 48)
     sc_b = np.maximum(store_count, 1)[None, :, None]  # (1, N, 1)
     preds = np.expm1(preds_log) * sc_b
@@ -325,11 +330,11 @@ def main():
     models = fit_seed_ensemble_multi(X_alive, Y_alive, SEEDS, BEST_PARAMS)
 
     print(f"[predict] {len(df_missing)} 결측 셀 × 48 컬럼 ...")
-    # store_count 곱셈은 predict_with_ci_multi 내부에서 수행 (log1p 역변환 × store_count)
-    # count 컬럼은 store_count 곱셈 X → ones 전달 후 sales 만 별도 스케일
+    # NOTE: predict_with_ci_multi 는 모든 48 컬럼에 store_count 곱셈을 수행하므로,
+    # count 컬럼이 이중 스케일되지 않도록 ones(N) 전달.
     preds = predict_with_ci_multi(models, X.loc[missing_mask], np.ones(len(df_missing)))
 
-    # SALES 컬럼만 store_count 곱셈 (count 컬럼은 이미 개수 단위)
+    # 그 다음 SALES_COLS 만 sc_missing 곱셈 (위에서 ones 로 곱했으므로 사실상 첫 곱셈)
     sc_missing = df_missing["store_count"].fillna(1).astype(float).values
     for col in SALES_COLS:
         for k in ["mean", "std", "lower_95", "upper_95"]:

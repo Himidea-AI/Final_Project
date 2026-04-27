@@ -19,19 +19,19 @@ from sqlalchemy import create_engine, text
 sys.stdout.reconfigure(encoding="utf-8")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
-    if "=" in line and not line.startswith("#"):
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
-
-engine = create_engine(os.environ["POSTGRES_URL"])
 ANCHOR_CSV = REPO_ROOT / "validation" / "results" / "phase1b_anchor_series.csv"
 OUT_CSV = REPO_ROOT / "validation" / "results" / "dong_avg_leak_audit.csv"
+
+
+def _get_engine():
+    return create_engine(os.environ["POSTGRES_URL"])
+
 
 THRESHOLD_DELTA_WAPE_PP = 3.0  # 합격선 0-2: ≤ 3%p
 
 
 def load_joined() -> pd.DataFrame:
+    engine = _get_engine()
     sql = text("""
         SELECT q.quarter, q.dong_code, q.dong_name, q.industry_code, q.industry_name,
                s.monthly_sales, q.store_count, q.open_count, q.close_count,
@@ -134,6 +134,11 @@ def mnar_mimic_cv(df: pd.DataFrame, build_X_fn, n_folds: int = 5, seed: int = 42
 
 
 if __name__ == "__main__":
+    for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
     print("=== Phase 0-2: dong_avg LOO Leak Audit ===")
     df = load_joined()
     print(f"[data] total={len(df)} alive={df['monthly_sales'].notna().sum()}")

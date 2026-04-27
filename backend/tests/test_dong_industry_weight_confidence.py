@@ -9,10 +9,17 @@ import pytest
 from sqlalchemy import create_engine, text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-for line in (REPO_ROOT / ".env").read_text(encoding="utf-8").splitlines():
-    if "=" in line and not line.startswith("#"):
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
+ENV_PATH = REPO_ROOT / ".env"
+if ENV_PATH.exists():
+    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+else:
+    pytest.skip("`.env` 파일 없음 — DB 테스트 skip", allow_module_level=True)
+
+if "POSTGRES_URL" not in os.environ:
+    pytest.skip("POSTGRES_URL 미설정 — DB 테스트 skip", allow_module_level=True)
 
 from backend.src.simulation.world_loader import _load_dong_industry_weight  # noqa: E402
 

@@ -218,6 +218,7 @@ def diagnose_failure(audit):
 def main():
     print("=== Phase 2: Audit v4 ===")
     df = load_joined_with_all_cols()
+    df = df.reset_index(drop=True)  # KFold 정수 인덱스 안전성
     X = build_features_v4(df)
     print(f"[data] alive={df['monthly_sales'].notna().sum()} features={X.shape[1]}")
 
