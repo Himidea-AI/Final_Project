@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     app_mode: str = os.getenv("APP_MODE", "PROD")  # "DEV" | "PROD"
     demo_mode: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
 
+    # HyDE (Hypothetical Document Embeddings) — LLM 기반 쿼리 확장
+    hyde_enabled: bool = os.getenv("HYDE_ENABLED", "false").lower() == "true"
+
+    # NTS (국세청)
+    nts_api_key: str = os.getenv("NTS_API_KEY", "")
+
     # JWT — dev fallback 제공, 운영에선 반드시 .env의 강력한 secret으로 덮어쓰기
     jwt_secret_key: str = os.getenv(
         "JWT_SECRET_KEY", "dev-only-not-secret-replace-in-prod"
