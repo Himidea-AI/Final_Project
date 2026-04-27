@@ -10,7 +10,7 @@ import { Eye, EyeOff, Loader2, ChevronRight, AlertCircle } from 'lucide-react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth, loginWithFallback } from '../auth/AuthContext';
 import { useToast } from '../components/Toast';
-import { useTransition } from '../App';
+import { useTransition } from '../contexts/TransitionContext';
 
 // 외부 redirect 주입 방지 — 내부 경로(/로 시작, //로 시작은 프로토콜-상대 URL이라 거부)만 허용.
 function safeRedirect(raw: string | null): string | null {

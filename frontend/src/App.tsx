@@ -43,17 +43,9 @@
  *   - C2: Docker 배포 시 nginx.conf의 /api 프록시가 백엔드를 가리켜야 함
  */
 
-import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  createContext,
-  useContext,
-  lazy,
-  Suspense,
-} from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { TransitionContext } from './contexts/TransitionContext';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
 import ManagerDetail from './pages/ManagerDetail';
@@ -63,7 +55,7 @@ import LoginPage from './pages/LoginPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import { ToastProvider, useToast } from './components/Toast';
-import type { LegalRisk, SimulationOutput } from './types';
+import type { SimulationOutput } from './types';
 import { type SimResult, toSimResultViewModel } from './viewmodels/simResult';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
@@ -73,7 +65,6 @@ import { SaveDialog } from './components/SimulationHistory/SaveDialog';
 import { useSaveSimulation } from './hooks/useSaveSimulation';
 import { formatDocumentId } from './types/simulationHistory';
 // import AnalysisDashboard from "./pages/AnalysisDashboard"; // 팀원 파일 — JSX 에러 있어 비활성
-import React from 'react';
 import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
 import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
@@ -100,23 +91,25 @@ const AccordionGallery = lazy(() => import('./pages/landing/AccordionGallery'));
 const AboutPage = lazy(() => import('./pages/landing/AboutPage'));
 const ContactPage = lazy(() => import('./pages/landing/ContactPage'));
 
+// Phase C Round 3 — 보조 컴포넌트 5종 추출 (GlobalNav 정적 / 나머지 3종 lazy)
+import GlobalLimelightNav, { LogoutButton } from './components/GlobalNav';
+import type { DrawerKey } from './components/DetailDrawer';
+const DetailDrawer = lazy(() => import('./components/DetailDrawer'));
+const SpotterAgentWorkflow = lazy(() => import('./components/simulation/SpotterAgentWorkflow'));
+const CommandPalette = lazy(() => import('./components/CommandPalette'));
+
 import {
   ChevronRight,
   ChevronLeft,
   Sliders,
   Activity,
   MapPin,
-  Mail,
   Users,
   TrendingUp,
   Play,
   ChevronDown,
-  User,
-  Bell,
   Settings,
   X,
-  Folder,
-  LogOut,
   ShieldAlert,
   CheckCircle2,
   Zap,
@@ -130,17 +123,11 @@ import {
   Scale,
   Store,
   Columns,
-  Search,
   Rows3,
   AlignJustify,
   List,
-  LayoutDashboard,
-  Building2,
-  ArrowRight,
   Terminal,
   Network,
-  Circle,
-  CircleDotDashed,
   BarChartBig,
   Map as MapIcon,
   Lightbulb,
@@ -150,7 +137,7 @@ import {
 import AgentMapVisualizer from './components/AgentMapVisualizer';
 import AbmPersonaMap from './components/AbmPersonaMap';
 import HybridSliderInput from './components/ui/HybridSliderInput';
-import { useManagerList, formatRelativeTime, ManagerListProvider } from './hooks/useManagerList';
+import { ManagerListProvider } from './hooks/useManagerList';
 import {
   AreaChart,
   Area,
@@ -162,7 +149,7 @@ import {
 /* ═══════════════════════════════════════════════════════
    DATA
    ═══════════════════════════════════════════════════════ */
-import { LayoutGroup, motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const DONG_DATA: Record<string, string[]> = {
   강남구: [
@@ -739,41 +726,8 @@ function sortRows<T extends Record<string, string>>(
 }
 
 /* ═══════════════════════════════════════════════════════
-   DRILL-DOWN DRAWER — 지표별 상세 데이터 스키마
-   ⚠️ 백엔드 `/api/details/:category` 엔드포인트 대기 중.
-       실데이터 없으면 drawer 내부에 "구현 예정" empty state 노출.
+   DRILL-DOWN DRAWER — DrawerKey 타입은 ./components/DetailDrawer 로 이동 (Phase C Round 3)
    ═══════════════════════════════════════════════════════ */
-type DrawerKey =
-  | 'revenue'
-  | 'attractiveness'
-  | 'traffic'
-  | 'cannibalization'
-  | 'insight_legal'
-  | 'insight_traffic'
-  | 'insight_target'
-  | null;
-
-interface DetailDataEntry {
-  title: string;
-  aiReasoning?: string;
-  confidence?: string;
-  rank?: string;
-  trend?: string;
-  peakTime?: string;
-  mainTarget?: string;
-  warning?: string;
-}
-
-// 각 drawer key 의 타이틀만 유지 — 본문 내용은 실제 응답/진행중 메시지로 채움
-const DRAWER_TITLES: Record<Exclude<DrawerKey, null>, string> = {
-  revenue: '예상 월 매출 상세',
-  attractiveness: '상권 종합 매력도 상세',
-  traffic: '일일 유동인구 상세',
-  cannibalization: '카니발리제이션 위험 상세',
-  insight_legal: '법률 리스크 상세 분석',
-  insight_traffic: '피크 시간대 매출 집중 분석',
-  insight_target: '주요 타겟 고객층 분석',
-};
 
 /* ═══════════════════════════════════════════════════════
    Scene 3: Simulator Dashboard — 시뮬레이션 대시보드
@@ -4070,24 +4024,28 @@ function SimulatorDashboard({
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-6 bg-[#171717] custom-scrollbar">
-            <SpotterAgentWorkflow />
+            <Suspense fallback={null}>
+              <SpotterAgentWorkflow />
+            </Suspense>
           </div>
         </div>
       </>
 
       {/* [v8.0] Drill-down Drawer — KPI/차트 클릭 시 우측에서 슬라이드 인 */}
-      <DetailDrawer
-        isOpen={!!activeDrawer}
-        onClose={() => {
-          setActiveDrawer(null);
-          setSelectedLegalType(null);
-        }}
-        drawerKey={activeDrawer}
-        popData={popData}
-        analysisMetrics={simResult?.analysis_metrics}
-        legalRisks={simResult?.legalRisks}
-        selectedLegalType={selectedLegalType}
-      />
+      <Suspense fallback={null}>
+        <DetailDrawer
+          isOpen={!!activeDrawer}
+          onClose={() => {
+            setActiveDrawer(null);
+            setSelectedLegalType(null);
+          }}
+          drawerKey={activeDrawer}
+          popData={popData}
+          analysisMetrics={simResult?.analysis_metrics}
+          legalRisks={simResult?.legalRisks}
+          selectedLegalType={selectedLegalType}
+        />
+      </Suspense>
 
       {/* 시뮬 이력 저장 다이얼로그 */}
       <SaveDialog
@@ -4249,636 +4207,13 @@ function SimulatorDashboard({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Dashboard Sub-Components (결과 대시보드 전용)
-   ═══════════════════════════════════════════════════════
-   - StatCard: 스파크라인 + 트렌드 표시 카드
-   - TableRow: 상태 뱃지 포함 테이블 행
-   - InsightCard: AI 인사이트 카드
-   ※ SkyThemeToggle, GlobalLimelightNav는 글로벌 헤더 전용
-*/
-
-function LogoutButton() {
-  const { isLoggedIn, logout } = useAuth();
-  const nav = useTransition();
-
-  if (!isLoggedIn) return null;
-
-  return (
-    <button
-      onClick={() => {
-        logout();
-        nav('/login');
-      }}
-      className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-[#9ca3af] hover:text-rose-400 hover:bg-rose-500/10 rounded-full text-xs font-medium transition-colors border border-transparent hover:border-rose-500/30"
-      title="로그아웃"
-    >
-      <LogOut className="w-3.5 h-3.5" />
-      <span>로그아웃</span>
-    </button>
-  );
-}
-
-/**
- * Notification Mock Items — 도메인 특화 샘플 3종
- * (실제 API 연동 전 demo 용도. 승인 대기는 실 데이터로 별도 렌더)
- */
-const NOTIFICATION_MOCK_ITEMS = [
-  {
-    id: 'mock-legal',
-    type: 'critical' as const,
-    iconType: 'legal' as const,
-    title: '[권리금 경고] 연남동 B권역, 최근 3년 상가임대차 갱신 거절 분쟁 급증 (Legal Agent)',
-    time: '1시간 전',
-    action: '법률 리스크 상세 리포트는 준비 중입니다.',
-  },
-  {
-    id: 'mock-cannibal',
-    type: 'warning' as const,
-    iconType: 'cannibal' as const,
-    title: '[간섭도 주의] 서교동 신규 출점 시 기존 3호점(홍대점) 예상 매출 -18% 타격 감지',
-    time: '2시간 전',
-    action: '카니발리제이션 분석 대시보드는 준비 중입니다.',
-  },
-  {
-    id: 'mock-sim',
-    type: 'success' as const,
-    iconType: 'sim' as const,
-    title: '[분석 완료] 마포구 망원동 112-4 일대 시뮬레이션 완료 및 보관함 저장됨',
-    time: '5시간 전',
-    action: '보관함 파이프라인은 준비 중입니다.',
-  },
-];
-
-function GlobalLimelightNav() {
-  const nav = useTransition();
-  const { isLoggedIn, user } = useAuth();
-  const { showToast } = useToast();
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
-  const [openDropdown, setOpenDropdown] = useState<'bell' | null>(null);
-  const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
-  const { pending: pendingManagers } = useManagerList();
-  const isMaster = isLoggedIn && user?.role !== 'manager';
-  // 마스터만 mock 알림 노출 (매니저는 승인 대기 없음 + 도메인 알림 관련 없음)
-  const mockItems = isMaster ? NOTIFICATION_MOCK_ITEMS : [];
-  const totalUnread = pendingManagers.length + mockItems.length;
-
-  type NavItemType = 'folder' | 'bell' | 'settings' | 'user';
-  const navItems: {
-    type: NavItemType;
-    icon: React.ReactElement;
-    label: string;
-    hasNoti?: boolean;
-  }[] = [
-    { type: 'folder', icon: <Folder />, label: '출점 파이프라인' },
-    { type: 'user', icon: <User />, label: '내 시뮬 이력' },
-    { type: 'settings', icon: <Settings />, label: '내 정보 관리' },
-    { type: 'bell', icon: <Bell />, label: '알림', hasNoti: totalUnread > 0 },
-  ];
-
-  const targetIndex = hoverIndex !== null ? hoverIndex : activeIndex;
-
-  useEffect(() => {
-    if (targetIndex !== null) {
-      const el = navRefs.current[targetIndex];
-      if (el) setIndicatorStyle({ left: el.offsetLeft + el.offsetWidth / 2, opacity: 1 });
-    } else {
-      setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
-    }
-  }, [targetIndex]);
-
-  const handleItemClick = (index: number, type: NavItemType) => {
-    // 비로그인 시 로그인 페이지로
-    if (!isLoggedIn) {
-      nav('/login');
-      return;
-    }
-
-    setActiveIndex(index);
-
-    if (type === 'folder') {
-      setOpenDropdown(null);
-      nav('/hq?tab=pipeline');
-    } else if (type === 'settings') {
-      setOpenDropdown(null);
-      nav('/hq?tab=mypage');
-    } else if (type === 'bell') {
-      setOpenDropdown(openDropdown === 'bell' ? null : 'bell');
-    } else if (type === 'user') {
-      // [UX] 드롭다운 대신 /hq 내 이력 탭으로 직행 — /simulator 헤더 "내 이력" 버튼 대체
-      setOpenDropdown(null);
-      nav('/hq?tab=history');
-    }
-  };
-
-  return (
-    <div className="relative hidden md:flex">
-      {/* 아이콘 바 — overflow-hidden으로 빔 클리핑 */}
-      <div
-        className="relative flex items-center bg-[#2c2825] border border-[#3a3633] rounded-full h-10 px-2 shadow-sm overflow-hidden"
-        onMouseLeave={() => setHoverIndex(null)}
-      >
-        {/* 호버 조명 효과 */}
-        <div
-          className="absolute top-0 z-10 pointer-events-none flex flex-col items-center transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
-          style={{
-            left: `${indicatorStyle.left}px`,
-            transform: 'translateX(-50%)',
-            opacity: indicatorStyle.opacity,
-          }}
-        >
-          <div className="w-6 h-[2px] bg-[#818cf8] rounded-b-full shadow-[0_0_8px_#818cf8]" />
-          <div
-            className="w-12 h-10 bg-[#818cf8]/20"
-            style={{ clipPath: 'polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)' }}
-          />
-        </div>
-
-        {/* 아이콘 리스트 */}
-        {navItems.map((item, index) => (
-          <button
-            key={index}
-            ref={(el) => {
-              navRefs.current[index] = el;
-            }}
-            onClick={() => handleItemClick(index, item.type)}
-            onMouseEnter={() => setHoverIndex(index)}
-            className="relative z-20 flex items-center justify-center h-full px-3 text-[#9ca3af] hover:text-[#e2e8f0] transition-colors group"
-            title={item.label}
-          >
-            {React.cloneElement(item.icon, {
-              className: `w-4 h-4 transition-all duration-300 ${
-                targetIndex === index
-                  ? 'text-[#818cf8] scale-110 drop-shadow-[0_0_5px_rgba(129,140,248,0.5)]'
-                  : 'scale-100 group-hover:scale-110'
-              }`,
-            } as React.HTMLAttributes<HTMLElement>)}
-
-            {item.hasNoti && (
-              <span className="absolute top-2 right-2 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* 드롭다운 — overflow-hidden 바깥에서 렌더링 */}
-
-      {/* 🔔 알림 드롭다운 (Bell) — 실 승인 대기 + 도메인 특화 mock 혼합 (v11.3) */}
-      {openDropdown === 'bell' && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
-          <div className="absolute top-12 right-0 w-80 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-[#3a3633] flex justify-between items-center bg-[#2c2825]/50">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[#e2e8f0]">최근 알림</span>
-                {totalUnread > 0 && (
-                  <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-500 text-[9px] font-black rounded-full">
-                    {totalUnread}
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  showToast('info', '모든 알림을 읽음 처리했습니다.');
-                  setOpenDropdown(null);
-                }}
-                className="text-[10px] text-[#818cf8] font-bold hover:text-[#6366f1] transition-colors"
-              >
-                모두 읽음
-              </button>
-            </div>
-
-            {/* Notification List */}
-            <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
-              {totalUnread === 0 ? (
-                <div className="px-4 py-10 text-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-2 opacity-60" />
-                  <p className="text-[11px] text-[#9ca3af]">새 알림이 없습니다</p>
-                </div>
-              ) : (
-                <>
-                  {/* 실 데이터 — 매니저 승인 대기 */}
-                  {pendingManagers.map((m) => (
-                    <div
-                      key={m.id}
-                      onClick={() => {
-                        setOpenDropdown(null);
-                        nav('/hq?tab=team');
-                      }}
-                      className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] flex gap-3 group"
-                    >
-                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40 transition-colors">
-                        <ShieldAlert className="w-4 h-4 text-rose-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#e2e8f0] leading-snug group-hover:text-white transition-colors">
-                          <strong className="font-bold text-white mr-1">[권한 승인]</strong>
-                          새로운 매니저 워크스페이스 승인 대기 ({m.contact_name} 님)
-                        </p>
-                        <p className="text-[10px] text-[#9ca3af] mt-1.5 font-mono">
-                          {formatRelativeTime(m.created_at)} · {m.email}
-                        </p>
-                      </div>
-                      <div className="shrink-0 flex items-center justify-center w-2">
-                        <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Mock 3종 — 법률/카니발/완료 */}
-                  {mockItems.map((item) => {
-                    const tag = item.title.split(']')[0] + ']';
-                    const body = item.title.split(']').slice(1).join(']').trim();
-                    const bgCls =
-                      item.type === 'critical'
-                        ? 'bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40'
-                        : item.type === 'warning'
-                          ? 'bg-amber-500/10 border-amber-500/20 group-hover:border-amber-500/40'
-                          : 'bg-emerald-500/10 border-emerald-500/20 group-hover:border-emerald-500/40';
-                    const Icon =
-                      item.iconType === 'legal'
-                        ? Scale
-                        : item.iconType === 'cannibal'
-                          ? AlertTriangle
-                          : CheckCircle2;
-                    const iconColor =
-                      item.type === 'critical'
-                        ? 'text-rose-500'
-                        : item.type === 'warning'
-                          ? 'text-amber-500'
-                          : 'text-emerald-500';
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          showToast('info', item.action);
-                          setOpenDropdown(null);
-                        }}
-                        className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] last:border-b-0 flex gap-3 group"
-                      >
-                        <div
-                          className={`shrink-0 mt-0.5 p-1.5 rounded-lg border transition-colors ${bgCls}`}
-                        >
-                          <Icon className={`w-4 h-4 ${iconColor}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[#e2e8f0] leading-snug group-hover:text-white transition-colors">
-                            <strong className="font-bold text-white mr-1">{tag}</strong>
-                            {body}
-                          </p>
-                          <p className="text-[10px] text-[#9ca3af] mt-1.5 font-mono">{item.time}</p>
-                        </div>
-                        <div className="shrink-0 flex items-center justify-center w-2">
-                          <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-2 border-t border-[#3a3633]">
-              <button
-                onClick={() => {
-                  showToast('info', '전체 알림 센터는 준비 중입니다.');
-                  setOpenDropdown(null);
-                }}
-                className="w-full py-2 text-[10px] font-bold text-[#9ca3af] hover:text-white hover:bg-[#2c2825] rounded-lg transition-colors"
-              >
-                알림 센터 전체 보기
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/*
-        User 드롭다운 제거됨 — User 아이콘이 `/hq?tab=history` 로 직행으로 바뀌면서
-        openDropdown==='user' 조건이 트리거되지 않음.
-        팀/결제 관리는 /hq 사이드바 메뉴에서, 로그아웃은 글로벌 헤더 LogoutButton 에서 접근.
-      */}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   DetailDrawer (v8.0) — KPI/차트 클릭 시 우측에서 슬라이드 인
+   Phase C Round 3 — 5개 보조 컴포넌트 추출 완료:
+   - GlobalNav (LogoutButton + GlobalLimelightNav) → ./components/GlobalNav
+   - DetailDrawer → ./components/DetailDrawer (lazy)
+   - SpotterAgentWorkflow → ./components/simulation/SpotterAgentWorkflow (lazy)
+   - CommandPalette → ./components/CommandPalette (lazy)
+   - TransitionContext + useTransition → ./contexts/TransitionContext
    ═══════════════════════════════════════════════════════ */
-const LEGAL_TYPE_LABEL: Record<string, string> = {
-  franchise_law: '가맹사업법',
-  commercial_lease_law: '상가임대차보호법',
-  zoning_regulation: '용도지역 규제',
-  food_hygiene: '식품위생법',
-  safety_regulation: '안전규정',
-  building_law: '건축법',
-  fire_safety_law: '소방안전법',
-  labor_law: '근로기준법',
-  vat_law: '부가가치세법',
-  privacy_law: '개인정보보호법',
-  accessibility_law: '장애인편의법',
-  sewage_law: '하수도법',
-  fair_trade_law: '공정거래법',
-  ftc_franchise: '공정위 정보공개서',
-};
-
-function DetailDrawer({
-  isOpen,
-  onClose,
-  drawerKey,
-  popData,
-  analysisMetrics,
-  legalRisks,
-  selectedLegalType,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  drawerKey: DrawerKey;
-  popData?: any;
-  analysisMetrics?: { main_target_age?: string; peak_time?: string };
-  legalRisks?: LegalRisk[];
-  selectedLegalType?: string | null;
-}) {
-  const drawerTitle = drawerKey ? DRAWER_TITLES[drawerKey] : '';
-  const selectedRisk =
-    drawerKey === 'insight_legal' && selectedLegalType
-      ? (legalRisks ?? []).find((r) => r.type === selectedLegalType)
-      : undefined;
-  // 실 데이터만 사용. 없으면 null → drawer 내부에 "구현 예정" empty state 표시.
-  const data: DetailDataEntry | null =
-    drawerKey === 'insight_target' && analysisMetrics?.main_target_age
-      ? {
-          title: `${analysisMetrics.main_target_age} 타겟 권역 분석`,
-          aiReasoning: `유동인구 분석 결과 주요 타겟층: ${analysisMetrics.main_target_age}. 피크 타임대 체류 인구 기반으로 메뉴·마케팅 전략을 해당 층에 집중하면 객단가 및 재방문율 향상이 기대됩니다.`,
-          mainTarget: analysisMetrics.main_target_age,
-          peakTime: analysisMetrics.peak_time,
-        }
-      : drawerKey === 'traffic' && popData
-        ? {
-            title: '일일 유동인구 상세',
-            aiReasoning: `${popData.dong_name ?? ''} 실측 유동인구 데이터 기반. 일평균 ${(popData.daily_average ?? 0).toLocaleString()}명, 피크 ${analysisMetrics?.peak_time ?? '미정'}.`,
-            peakTime: analysisMetrics?.peak_time,
-            mainTarget: analysisMetrics?.main_target_age,
-          }
-        : drawerKey === 'insight_traffic' && analysisMetrics?.peak_time
-          ? {
-              title: `${analysisMetrics.peak_time} 피크 시간대 분석`,
-              aiReasoning: `${analysisMetrics.peak_time} 피크 집중 상권. 주 소비층: ${analysisMetrics.main_target_age ?? '분석 결과 참조'}.`,
-              peakTime: analysisMetrics.peak_time,
-              mainTarget: analysisMetrics.main_target_age,
-            }
-          : drawerKey === 'insight_legal' && selectedRisk
-            ? {
-                title: `${LEGAL_TYPE_LABEL[selectedRisk.type] || selectedRisk.type} 상세 분석`,
-                aiReasoning: selectedRisk.detail,
-              }
-            : null;
-
-  return (
-    <>
-      {/* Backdrop Overlay */}
-      <div
-        className={`fixed inset-0 z-[100] bg-[#1e1b18]/60 backdrop-blur-sm transition-opacity duration-500 ${
-          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-        onClick={onClose}
-      />
-
-      {/* Drawer Panel */}
-      <div
-        className={`fixed top-0 right-0 w-full md:w-[480px] h-full bg-[#2c2825] border-l border-[#3a3633] z-[101] shadow-2xl flex flex-col transition-transform duration-[800ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        {!data && drawerKey && (
-          <>
-            <div className="flex justify-between items-center p-6 border-b border-[#3a3633] shrink-0">
-              <h2 className="text-xl font-bold text-[#e2e8f0]">{drawerTitle}</h2>
-              <button
-                onClick={onClose}
-                className="p-2 text-[#9ca3af] hover:text-[#818cf8] hover:bg-[#818cf8]/10 rounded-lg transition-colors"
-                aria-label="Close drawer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-6 flex-1 flex items-center justify-center">
-              <div className="rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/50 p-10 text-center max-w-sm">
-                <div className="mx-auto mb-3 h-8 w-8 animate-pulse rounded-full bg-[#3a3633]" />
-                <div className="text-sm font-semibold text-[#e2e8f0]">구현 예정</div>
-                <div className="mt-2 text-xs text-[#9ca3af] leading-relaxed">
-                  지표별 drill-down 상세 분석은 백엔드 API (`/api/details`) 연동 후 제공됩니다.
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {data && (
-          <>
-            {/* Header */}
-            <div className="flex justify-between items-center p-6 border-b border-[#3a3633] shrink-0">
-              <h2 className="text-xl font-bold text-[#e2e8f0]">{data.title}</h2>
-              <button
-                onClick={onClose}
-                className="p-2 text-[#9ca3af] hover:text-[#818cf8] hover:bg-[#818cf8]/10 rounded-lg transition-colors"
-                aria-label="Close drawer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 text-[#e2e8f0]">
-              {/* AI 산출 근거 */}
-              <div className="bg-[#1e1b18] p-5 rounded-xl border border-[#3a3633] mb-4">
-                <h3 className="text-xs font-bold text-[#818cf8] tracking-widest uppercase mb-2">
-                  AI 산출 근거
-                </h3>
-                <p className="text-xs text-[#9ca3af] leading-relaxed">
-                  {data.aiReasoning || '해당 지표에 대한 상세 분석 알고리즘 로그입니다.'}
-                </p>
-              </div>
-
-              {/* 메타 데이터 */}
-              {(data.confidence ||
-                data.rank ||
-                data.trend ||
-                data.peakTime ||
-                data.mainTarget ||
-                data.warning) && (
-                <div className="bg-[#1e1b18] p-5 rounded-xl border border-[#3a3633] mb-4 space-y-3">
-                  <h3 className="text-xs font-bold text-[#818cf8] tracking-widest uppercase mb-3">
-                    핵심 지표
-                  </h3>
-                  {data.confidence && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-[#9ca3af]">신뢰도</span>
-                      <span className="text-sm font-bold text-[#e2e8f0] font-mono">
-                        {data.confidence}
-                      </span>
-                    </div>
-                  )}
-                  {data.rank && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-[#9ca3af]">순위</span>
-                      <span className="text-sm font-bold text-[#e2e8f0]">{data.rank}</span>
-                    </div>
-                  )}
-                  {data.trend && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-[#9ca3af]">추세</span>
-                      <span className="text-sm font-bold text-emerald-400">{data.trend}</span>
-                    </div>
-                  )}
-                  {data.peakTime && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-[#9ca3af]">피크 타임</span>
-                      <span className="text-sm font-bold text-[#e2e8f0] font-mono">
-                        {data.peakTime}
-                      </span>
-                    </div>
-                  )}
-                  {data.mainTarget && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-[#9ca3af]">주 타겟층</span>
-                      <span className="text-sm font-bold text-[#e2e8f0]">{data.mainTarget}</span>
-                    </div>
-                  )}
-                  {data.warning && (
-                    <div className="pt-3 border-t border-[#3a3633]">
-                      <span className="text-xs text-rose-400 leading-relaxed block">
-                        {data.warning}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 근거 조항 — 법률 리스크 drawer 전용 (선택된 법률 1건만) */}
-              {drawerKey === 'insight_legal' &&
-                (() => {
-                  const risk = (legalRisks ?? []).find((r) => r.type === selectedLegalType);
-                  if (!risk) return null;
-                  const lv = (risk.risk_level || '').toLowerCase();
-                  const isCritical = lv === 'danger' || lv === 'high';
-                  // 문자열/객체 방어 렌더 — 백엔드 구버전 응답(list[str]) 시에도 조문 번호는 표시
-                  const normalizedArticles = (risk.articles ?? []).map((a) =>
-                    typeof a === 'string'
-                      ? { article_ref: a, content: '' }
-                      : { article_ref: a.article_ref ?? '', content: a.content ?? '' },
-                  );
-                  return (
-                    <div className="bg-[#1e1b18] p-5 rounded-xl border border-[#3a3633] mb-4 space-y-4">
-                      {/* 창업 체크리스트 — 상단 배치 */}
-                      {risk.recommendation && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-3">
-                            <h3 className="text-xs font-bold text-[#818cf8] tracking-widest uppercase">
-                              창업 체크리스트
-                            </h3>
-                            <span
-                              className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                                isCritical
-                                  ? 'bg-rose-500/20 text-rose-400'
-                                  : 'bg-amber-400/20 text-amber-400'
-                              }`}
-                            >
-                              {isCritical ? '필수이행' : '확인필요'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-[#cbd5e1] leading-relaxed whitespace-pre-wrap">
-                            {risk.recommendation}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* 핵심 조항 — 하단 배치 */}
-                      {normalizedArticles.length > 0 && (
-                        <div className="pt-3 border-t border-[#3a3633]">
-                          <h3 className="text-xs font-bold text-[#818cf8] tracking-widest uppercase mb-3">
-                            핵심 조항
-                          </h3>
-                          <ul className="space-y-2">
-                            {normalizedArticles.map((a, ai) => (
-                              <li
-                                key={ai}
-                                className="rounded border border-[#3a3633] bg-[#171717]/60 p-3"
-                              >
-                                <div className="text-xs font-bold text-cyan-300 mb-1 font-mono">
-                                  {a.article_ref || '조문 번호 없음'}
-                                </div>
-                                <div className="text-xs text-[#cbd5e1] leading-relaxed">
-                                  {a.content || (
-                                    <span className="text-[#6b7280] italic">데이터 없음</span>
-                                  )}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-              {/* Detailed Chart — 유동인구 동별 상세 (traffic drawer) */}
-              {drawerKey === 'traffic' && popData?.dong_details ? (
-                <div className="bg-[#1e1b18] p-5 rounded-xl border border-[#3a3633]">
-                  <h3 className="text-xs font-bold text-[#818cf8] tracking-widest uppercase mb-3">
-                    동별 유동인구 ({popData.date})
-                  </h3>
-                  <div className="space-y-2">
-                    {popData.dong_details.map((d: any) => {
-                      const maxPop = popData.dong_details[0]?.daily_total || 1;
-                      const pct = Math.round((d.daily_total / maxPop) * 100);
-                      return (
-                        <div key={d.dong_name} className="flex items-center gap-3">
-                          <span className="text-[11px] text-[#9ca3af] w-16 shrink-0">
-                            {d.dong_name}
-                          </span>
-                          <div className="flex-1 bg-[#2c2825] rounded-full h-4 overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-700"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className="text-[11px] text-white font-mono w-20 text-right">
-                            {d.daily_total.toLocaleString()}
-                          </span>
-                          <span className="text-[9px] text-[#9ca3af] w-10">
-                            피크 {d.peak_hour}시
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[9px] text-[#9ca3af] mt-3">
-                    ※ 서울시 생활인구 데이터 (KT 통신 기반) | {popData.data_delay_note}
-                  </p>
-                </div>
-              ) : drawerKey !== 'insight_legal' ? (
-                <div className="w-full h-48 bg-[#1e1b18] border border-[#3a3633] rounded-xl flex items-center justify-center">
-                  <span className="text-[#3a3633] font-mono text-xs tracking-[0.3em]">
-                    DETAILED CHART AREA
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          </>
-        )}
-      </div>
-    </>
-  );
-}
 
 /* ═══════════════════════════════════════════════════════
    App — Root (전체 앱 진입점)
@@ -4897,520 +4232,6 @@ function DetailDrawer({
    - 앱 최초 진입 시 3초간 5축 자이로스코프 홀로그램
    - 100% → warp-out 트랜지션 → main-scene-in → isAppLoaded=true → DOM 제거
 */
-
-/* ═══════════════════════════════════════════════════════
-   SpotterAgentWorkflow — AI 에이전트 파이프라인 시각화
-   LangGraph 5-노드 워크플로우를 Drawer 안에서 표시
-   ═══════════════════════════════════════════════════════ */
-// 🌟 백엔드 아키텍처 변경(Parallel Analysis) 완벽 반영
-// - Supervisor LLM 제거 → 하드코딩 parallel_analysis 라우터로 교체
-// - Market / Population / Legal 3개 에이전트 동시(Parallel) 실행
-const spotterAgentTasks = [
-  {
-    id: '1',
-    title: 'Parallel Analysis Node (병렬 라우터)',
-    description:
-      'LLM 개입 없이 하드코딩된 코드로 3개의 전문 에이전트를 동시에(Parallel) 병렬 호출하여 속도를 극대화합니다.',
-    status: 'completed' as const,
-    priority: 'high',
-    dependencies: [] as string[],
-    subtasks: [
-      {
-        id: '1.1',
-        title: '파라미터 추출 및 쿼리 최적화',
-        description: '사용자 입력값 파싱 및 DB 쿼리 파라미터 생성',
-        status: 'completed' as const,
-        tools: ['Python', 'Regex'],
-      },
-      {
-        id: '1.2',
-        title: '하위 에이전트 병렬 분배 (Simultaneous Dispatch)',
-        description: 'Market, Population, Legal 에이전트 동시 실행 트리거',
-        status: 'completed' as const,
-        tools: ['LangGraph Parallel'],
-      },
-    ],
-  },
-  {
-    id: '2',
-    title: 'Market Analyst (상권 & 경쟁 분석)',
-    description: 'pgvector DB에서 상권의 매출 현황과 카니발리제이션 위험도를 계산합니다.',
-    status: 'in-progress' as const,
-    priority: 'high',
-    dependencies: ['1'],
-    subtasks: [
-      {
-        id: '2.1',
-        title: '경쟁점 반경 검색 (Vector Search)',
-        description: 'HNSW 인덱스를 활용한 500m 내 동종 업계 검색',
-        status: 'completed' as const,
-        tools: ['pgvector', 'PostgreSQL'],
-      },
-      {
-        id: '2.2',
-        title: '예상 매출 LSTM 추론',
-        description: '최근 3년 매출 데이터를 기반으로 향후 12개월 매출 예측',
-        status: 'in-progress' as const,
-        tools: ['LSTM Model', 'TensorFlow'],
-      },
-      {
-        id: '2.3',
-        title: '카니발리제이션 타격률 계산',
-        description: '인접 가맹점 간의 상권 중첩도 기반 매출 하락률 도출',
-        status: 'pending' as const,
-        tools: ['Cannibalization Engine'],
-      },
-    ],
-  },
-  {
-    id: '3',
-    title: 'Population Analyst (유동인구 분석)',
-    description: 'KT 통신망 데이터를 기반으로 시간대별, 성별/연령별 유동인구를 군집화합니다.',
-    status: 'in-progress' as const,
-    priority: 'medium',
-    dependencies: ['1'],
-    subtasks: [
-      {
-        id: '3.1',
-        title: '시간대별 유동인구 집계',
-        description: '06시~02시까지의 시간대별 트래픽 분포 계산',
-        status: 'completed' as const,
-        tools: ['KT API'],
-      },
-      {
-        id: '3.2',
-        title: '핵심 타겟(Primary Target) 매칭',
-        description: '브랜드 타겟층(2030 여성)과 해당 상권 유동인구 비율 대조',
-        status: 'in-progress' as const,
-        tools: ['Demographic Scraper'],
-      },
-    ],
-  },
-  {
-    id: '4',
-    title: 'Legal Analyst (법률 리스크 RAG)',
-    description:
-      '상가임대차보호법 및 지역 규제 데이터를 검색하여 권리금/임대료 리스크를 판단합니다.',
-    status: 'in-progress' as const,
-    priority: 'high',
-    dependencies: ['1'],
-    subtasks: [
-      {
-        id: '4.1',
-        title: '문서 청크 검색 (Similarity Search)',
-        description: '관련 법률 문서 및 최근 판례 RAG 검색',
-        status: 'in-progress' as const,
-        tools: ['Sentence-Transformers', 'Vector DB'],
-      },
-      {
-        id: '4.2',
-        title: '리스크 요약 및 경고 생성',
-        description: '검색된 판례를 바탕으로 LLM 기반 위험 요소 3줄 요약',
-        status: 'pending' as const,
-        tools: ['Gemini 1.5 Pro'],
-      },
-    ],
-  },
-  {
-    id: '5',
-    title: 'Strategy Synthesizer (최종 종합)',
-    description:
-      '병렬 실행된 3개 에이전트의 결과를 취합하여 7대 지표를 정규화하고 최종 인사이트를 작성합니다.',
-    status: 'pending' as const,
-    priority: 'high',
-    dependencies: ['2', '3', '4'],
-    subtasks: [
-      {
-        id: '5.1',
-        title: '0~100점 정규화 (Normalization)',
-        description: '7개 주요 메트릭을 레이더 차트용 점수로 변환',
-        status: 'pending' as const,
-        tools: ['Math Module'],
-      },
-      {
-        id: '5.2',
-        title: '종합 매력도 및 BEP 산출',
-        description: '투자금 대비 손익분기점(BEP) 도달 개월 수 계산',
-        status: 'pending' as const,
-        tools: ['ROI Calculator'],
-      },
-    ],
-  },
-];
-
-type TaskStatus = 'completed' | 'in-progress' | 'pending';
-type AgentTask = {
-  id: string;
-  title: string;
-  description: string;
-  status: TaskStatus;
-  priority: string;
-  dependencies: string[];
-  subtasks: {
-    id: string;
-    title: string;
-    description: string;
-    status: TaskStatus;
-    tools: string[];
-  }[];
-};
-
-function SpotterAgentWorkflow() {
-  const [tasks, setTasks] = useState<AgentTask[]>(spotterAgentTasks as AgentTask[]);
-  // 병렬 실행 중인 3개 (Market/Population/Legal) 모두 펼쳐두어 동시성 시각화
-  const [expandedTasks, setExpandedTasks] = useState<string[]>(['2', '3', '4']);
-  const [expandedSubtasks, setExpandedSubtasks] = useState<Record<string, boolean>>({});
-
-  // 병렬(Parallel) 처리 시뮬레이션 — 3개 에이전트가 약간의 시차로 동시 완료
-  useEffect(() => {
-    const t1 = setTimeout(() => toggleSubtaskStatus('2', '2.2'), 2000);
-    const t2 = setTimeout(() => toggleSubtaskStatus('3', '3.2'), 2500);
-    const t3 = setTimeout(() => toggleSubtaskStatus('4', '4.1'), 3000);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const toggleTaskExpansion = (taskId: string) => {
-    setExpandedTasks((prev) =>
-      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId],
-    );
-  };
-  const toggleSubtaskExpansion = (taskId: string, subtaskId: string) => {
-    const key = `${taskId}-${subtaskId}`;
-    setExpandedSubtasks((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const toggleSubtaskStatus = (taskId: string, subtaskId: string) => {
-    setTasks((prev) =>
-      prev.map((task) => {
-        if (task.id === taskId) {
-          const updatedSubtasks = task.subtasks.map((subtask) => {
-            if (subtask.id === subtaskId)
-              return {
-                ...subtask,
-                status: (subtask.status === 'completed' ? 'pending' : 'completed') as TaskStatus,
-              };
-            return subtask;
-          });
-          const allCompleted = updatedSubtasks.every((s) => s.status === 'completed');
-          return {
-            ...task,
-            subtasks: updatedSubtasks,
-            status: (allCompleted ? 'completed' : 'in-progress') as TaskStatus,
-          };
-        }
-        return task;
-      }),
-    );
-  };
-
-  const variants = {
-    hidden: { opacity: 0, y: -5 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { type: 'spring' as const, stiffness: 500, damping: 30 },
-    },
-    listVisible: {
-      opacity: 1,
-      height: 'auto',
-      transition: { duration: 0.25, staggerChildren: 0.05, when: 'beforeChildren' as const },
-    },
-    listHidden: {
-      opacity: 0,
-      height: 0,
-      overflow: 'hidden' as const,
-      transition: { duration: 0.2 },
-    },
-  };
-
-  return (
-    <div className="w-full font-sans text-[#e2e8f0]">
-      <LayoutGroup>
-        <ul className="space-y-1">
-          {tasks.map((task, index) => {
-            const isExpanded = expandedTasks.includes(task.id);
-            const isCompleted = task.status === 'completed';
-            return (
-              <motion.li
-                key={task.id}
-                className={index !== 0 ? 'mt-2 pt-2 border-t border-[#3a3633]' : ''}
-                initial="hidden"
-                animate="visible"
-                variants={variants}
-              >
-                <motion.div
-                  className="group flex items-center px-3 py-2.5 rounded-lg hover:bg-[#2c2825] transition-colors cursor-pointer"
-                  onClick={() => toggleTaskExpansion(task.id)}
-                >
-                  <div className="mr-3 shrink-0">
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={task.status}
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                      >
-                        {task.status === 'completed' ? (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                        ) : task.status === 'in-progress' ? (
-                          <CircleDotDashed className="w-5 h-5 text-[#818cf8] animate-spin-slow" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-[#404040]" />
-                        )}
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-                  <div className="flex-1 flex justify-between items-center min-w-0">
-                    <div className="truncate pr-4">
-                      <span
-                        className={`text-sm font-bold ${isCompleted ? 'text-[#9ca3af] line-through decoration-[#3a3633]' : 'text-[#e2e8f0]'}`}
-                      >
-                        {task.title}
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 gap-2 items-center">
-                      {task.dependencies.length > 0 && (
-                        <div className="hidden sm:flex gap-1 mr-2">
-                          {task.dependencies.map((dep) => (
-                            <span
-                              key={dep}
-                              className="px-1.5 py-0.5 rounded bg-[#2c2825] border border-[#3a3633] text-[9px] font-mono text-[#9ca3af]"
-                            >
-                              Step {dep} 완료 후
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <span
-                        className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${isCompleted ? 'bg-emerald-500/10 text-emerald-500' : task.status === 'in-progress' ? 'bg-[#818cf8]/10 text-[#818cf8]' : 'bg-[#3a3633] text-[#9ca3af]'}`}
-                      >
-                        {task.status.replace('-', ' ')}
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
-                <AnimatePresence mode="wait">
-                  {isExpanded && task.subtasks.length > 0 && (
-                    <motion.div
-                      className="relative overflow-hidden ml-[22px] pl-4 border-l-2 border-dashed border-[#3a3633] mt-2 mb-3"
-                      variants={variants}
-                      initial="listHidden"
-                      animate="listVisible"
-                      exit="listHidden"
-                      layout
-                    >
-                      <ul className="space-y-1">
-                        {task.subtasks.map((subtask) => {
-                          const subtaskKey = `${task.id}-${subtask.id}`;
-                          const isSubExp = expandedSubtasks[subtaskKey];
-                          return (
-                            <motion.li
-                              key={subtask.id}
-                              className="flex flex-col"
-                              variants={variants}
-                              layout
-                            >
-                              <div
-                                className="flex items-center p-1.5 rounded-md hover:bg-[#2c2825] cursor-pointer transition-colors"
-                                onClick={() => toggleSubtaskExpansion(task.id, subtask.id)}
-                              >
-                                <div
-                                  className="mr-2"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleSubtaskStatus(task.id, subtask.id);
-                                  }}
-                                >
-                                  {subtask.status === 'completed' ? (
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                  ) : subtask.status === 'in-progress' ? (
-                                    <CircleDotDashed className="w-4 h-4 text-[#818cf8] animate-spin-slow" />
-                                  ) : (
-                                    <Circle className="w-4 h-4 text-[#404040]" />
-                                  )}
-                                </div>
-                                <span
-                                  className={`text-xs ${subtask.status === 'completed' ? 'text-[#6b7280] line-through' : 'text-[#d1d5db]'}`}
-                                >
-                                  {subtask.title}
-                                </span>
-                              </div>
-                              <AnimatePresence mode="wait">
-                                {isSubExp && (
-                                  <motion.div
-                                    className="ml-6 pl-3 border-l border-dashed border-[#404040] py-2"
-                                    variants={variants}
-                                    initial="listHidden"
-                                    animate="listVisible"
-                                    exit="listHidden"
-                                    layout
-                                  >
-                                    <p className="text-[11px] text-[#9ca3af] mb-2 leading-relaxed">
-                                      {subtask.description}
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <span className="text-[9px] font-mono text-[#6b7280] uppercase">
-                                        Tools:
-                                      </span>
-                                      {subtask.tools.map((tool) => (
-                                        <span
-                                          key={tool}
-                                          className="px-1.5 py-0.5 rounded bg-[#1e1b18] border border-[#3a3633] text-[9px] font-mono text-[#818cf8]"
-                                        >
-                                          {tool}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </motion.li>
-                          );
-                        })}
-                      </ul>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.li>
-            );
-          })}
-        </ul>
-      </LayoutGroup>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   CommandPalette — Cmd+K 전역 커맨드 팔레트
-   ═══════════════════════════════════════════════════════ */
-function CommandPalette({
-  isOpen,
-  onClose,
-  onNavigate,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onNavigate: (path: string) => void;
-}) {
-  const { showToast } = useToast();
-  if (!isOpen) return null;
-
-  const handleAction = (action: () => void) => {
-    action();
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-[99999] flex items-start justify-center pt-[15vh] sm:pt-[20vh] px-4">
-      <div className="absolute inset-0 bg-[#050505]/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl bg-[#1e1b18] border border-[#3a3633] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Search Input */}
-        <div className="flex items-center px-4 border-b border-[#3a3633]">
-          <Search className="w-5 h-5 text-[#818cf8]" />
-          <input
-            autoFocus
-            type="text"
-            placeholder="Type a command or search..."
-            className="w-full bg-transparent border-none px-4 py-5 text-sm text-[#e2e8f0] placeholder-[#9ca3af] focus:outline-none"
-          />
-          <kbd className="px-2 py-1 bg-[#2c2825] border border-[#3a3633] rounded text-[10px] font-mono text-[#9ca3af]">
-            ESC
-          </kbd>
-        </div>
-        {/* Commands */}
-        <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
-          <div className="px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">
-            Navigation
-          </div>
-          <button
-            onClick={() => handleAction(() => onNavigate('accordion'))}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <LayoutDashboard className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" />
-              <span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">
-                시뮬레이터 대시보드
-              </span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
-          </button>
-          <button
-            onClick={() => handleAction(() => onNavigate('hq'))}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Building2 className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" />
-              <span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">
-                HQ 커맨드 센터
-              </span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
-          </button>
-          <button
-            onClick={() => handleAction(() => onNavigate('about'))}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <FileText className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" />
-              <span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">
-                About SPOTTER
-              </span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
-          </button>
-          <button
-            onClick={() => handleAction(() => onNavigate('contact'))}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Mail className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" />
-              <span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">
-                Contact
-              </span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
-          </button>
-
-          <div className="px-3 py-2 mt-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">
-            Quick Actions
-          </div>
-          <button
-            onClick={() => handleAction(() => showToast('info', '테마 전환 기능은 준비 중입니다.'))}
-            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-[#2c2825] group transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Settings className="w-4 h-4 text-[#9ca3af] group-hover:text-[#818cf8]" />
-              <span className="text-sm font-medium text-[#d1d5db] group-hover:text-white">
-                다크/라이트 테마 전환
-              </span>
-            </div>
-          </button>
-          <button
-            onClick={() =>
-              handleAction(() => showToast('info', '로그아웃은 우측 상단 메뉴를 이용해주세요.'))
-            }
-            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-rose-500/10 group transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <LogOut className="w-4 h-4 text-[#9ca3af] group-hover:text-rose-500" />
-              <span className="text-sm font-medium text-[#d1d5db] group-hover:text-rose-500">
-                로그아웃
-              </span>
-            </div>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** 암전 트랜지션 네비게이션 Context — 모든 하위 컴포넌트에서 사용 가능 */
-const TransitionContext = createContext<(path: string) => void>(() => {});
-export const useTransition = () => useContext(TransitionContext);
 
 /** 현재 경로 → scene 이름 매핑 */
 function pathToScene(
@@ -5702,14 +4523,16 @@ export default function App() {
               )}
 
               {/* Command Palette (Cmd+K / Ctrl+K) */}
-              <CommandPalette
-                isOpen={isCommandOpen}
-                onClose={() => setIsCommandOpen(false)}
-                onNavigate={(target) => {
-                  setIsCommandOpen(false);
-                  transitionTo(target as any);
-                }}
-              />
+              <Suspense fallback={null}>
+                <CommandPalette
+                  isOpen={isCommandOpen}
+                  onClose={() => setIsCommandOpen(false)}
+                  onNavigate={(target) => {
+                    setIsCommandOpen(false);
+                    transitionTo(target as any);
+                  }}
+                />
+              </Suspense>
 
               {/* Transition overlay */}
               <div
