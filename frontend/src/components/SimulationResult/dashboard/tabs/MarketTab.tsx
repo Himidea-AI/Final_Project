@@ -24,12 +24,13 @@ interface Props {
 }
 
 export function MarketTab({ simResult }: Props) {
-  const ci = simResult.competitor_intel as Record<string, any> | null | undefined;
-  const samples = (ci?.competition_500m?.samples as Array<MarketCompetitorSample>) ?? [];
+  // Medium #5 — competitor_intel을 강타입(CompetitorIntel)으로 받음. 기존 Record<string, any> 캐스팅 제거.
+  const ci = simResult.competitor_intel ?? null;
+  const samples = ci?.competition_500m?.samples ?? [];
   const hhi = calcHHI(samples);
   const diversity = hhiToDiversity(hhi);
   const hhiInfo = interpretHHI(hhi);
-  const saturationRaw = ci?.competition_500m?.saturation_level as string | undefined;
+  const saturationRaw = ci?.competition_500m?.saturation_level;
   const saturationLabel = saturationRaw
     ? safeMap(SATURATION_MAP, saturationRaw, SATURATION_MAP.medium)
     : '—';
@@ -43,7 +44,7 @@ export function MarketTab({ simResult }: Props) {
   // - 경쟁/임대 인덱스: market_report 0~100 정규화 값
   const sameIndustryCount =
     typeof ci?.competition_500m?.count === 'number'
-      ? (ci?.competition_500m?.count as number)
+      ? ci.competition_500m.count
       : samples.length > 0
         ? samples.length
         : null;
@@ -146,33 +147,22 @@ export function MarketTab({ simResult }: Props) {
 
       {/* ═══ Competitor Intel: 차별화 포지션 + 카니발 거리 분포 + 동 업종 폐업률 추세 ═══ */}
       <DifferentiationCard
-        differentiation={ci?.differentiation_position as string | null | undefined}
-        opportunities={ci?.key_opportunities as string[] | undefined}
-        risks={ci?.key_risks as string[] | undefined}
+        differentiation={ci?.differentiation_position ?? null}
+        opportunities={ci?.key_opportunities}
+        risks={ci?.key_risks}
       />
 
       {(ci?.cannibalization || ci?.industry_closure_trend) && (
         <div className="grid grid-cols-2 gap-6">
           {ci?.cannibalization && (
             <CannibalizationDistanceChart
-              bins={
-                (ci.cannibalization as Record<string, any>)?.distance_bins as Record<
-                  string,
-                  number
-                > | null
-              }
-              closestM={
-                (ci.cannibalization as Record<string, any>)?.closest_distance_m as number | null
-              }
-              impactPct={
-                (ci.cannibalization as Record<string, any>)?.estimated_revenue_impact_pct as
-                  | number
-                  | null
-              }
+              bins={ci.cannibalization.distance_bins ?? null}
+              closestM={ci.cannibalization.closest_distance_m ?? null}
+              impactPct={ci.cannibalization.estimated_revenue_impact_pct ?? null}
             />
           )}
           {ci?.industry_closure_trend && (
-            <IndustryClosureTrendCard trend={ci.industry_closure_trend as Record<string, any>} />
+            <IndustryClosureTrendCard trend={ci.industry_closure_trend} />
           )}
         </div>
       )}

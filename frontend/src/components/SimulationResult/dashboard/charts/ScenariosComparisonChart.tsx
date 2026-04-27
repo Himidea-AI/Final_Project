@@ -115,7 +115,11 @@ export function ScenariosComparisonChart({ scenarios, height = 240 }: Props) {
                   : v
           }
         />
-        {/* Envelope (낙관-비관) */}
+        {/* Envelope (낙관-비관)
+            ⚠️ Medium #8 — 배경색 트릭(rangeMin을 부모 bg #0a0a0a로 덮어쓰기)으로 envelope 모양 흉내냄.
+               부모 컨테이너 bg가 #0a0a0a 외 다른 색으로 바뀌면 envelope이 깨짐.
+               정식 패턴: rangeMax-rangeMin diff를 stack Area로 그리거나 SVG path로 직접 그리기.
+               리팩터 시 ForecastTab/SummaryTab 둘 다 동일 시각 유지하는지 확인 필요. */}
         <Area
           type="monotone"
           dataKey="rangeMax"

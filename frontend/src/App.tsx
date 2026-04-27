@@ -3323,7 +3323,11 @@ function SimulatorDashboard({
                                     0.0001,
                                   );
                                   return (
-                                    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col gap-3">
+                                    <div
+                                      className={`bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col gap-3 ${
+                                        cr.is_mock ? 'opacity-60' : ''
+                                      }`}
+                                    >
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                           <h2 className="text-sm font-bold text-white">

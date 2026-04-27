@@ -178,6 +178,54 @@ export interface TrendForecast {
   };
 }
 
+/**
+ * 경쟁 매장 인텔리전스 (competitor_intel 에이전트)
+ *
+ * 2026-04-27: code-reviewer Medium #5 — `Record<string, unknown>` → 강타입화.
+ * MarketTab/사이드바 등 사용처에서 dot access로 안전하게 접근 가능.
+ * 백엔드가 추가 필드를 보내도 인터페이스 미정의 필드는 단순히 무시되므로 호환 유지.
+ */
+export interface CompetitorIntel {
+  competition_500m?: {
+    count?: number;
+    /** 백엔드 v2: count의 별칭(레거시). main.py에서 둘 다 채울 수 있음. */
+    total_competitors?: number;
+    franchise_count?: number;
+    independent_count?: number;
+    saturation_level?: 'low' | 'medium' | 'high' | string;
+    saturation_score?: number;
+    brand_distribution?: Record<string, number>;
+    samples?: Array<{
+      place_name?: string | null;
+      brand_name?: string | null;
+      distance_m?: number | null;
+      category?: string | null;
+    }>;
+  };
+  cannibalization?: {
+    estimated_revenue_impact_pct?: number | null;
+    distance_bins?: Record<string, number> | null;
+    closest_distance_m?: number | null;
+  };
+  market_entry_signal?: 'green' | 'yellow' | 'red' | string;
+  differentiation_position?: string | null;
+  industry_closure_trend?: {
+    trend?: string;
+    samples?: Array<{
+      quarter?: string | number;
+      closure_rate?: number | null;
+      [k: string]: unknown;
+    }>;
+    current_closure_rate?: number | null;
+    historical_avg?: number | null;
+    [k: string]: unknown;
+  } | null;
+  key_opportunities?: string[];
+  key_risks?: string[];
+  recommended_actions?: string[];
+  narrative?: string;
+}
+
 /** 인구통계 심층 분석 (demographic_depth 에이전트) */
 export interface DemographicReport {
   core_demographic: { age: string; gender: string; share: number };
@@ -245,7 +293,7 @@ export interface SimulationOutput {
   // [B2 수지니] 폐업 위험도 분석 결과 (LightGBM + TCN 앙상블 예측)
   closure_risk?: ClosureRisk | null;
   // [PR #72] 경쟁 매장 인텔리전스 (500m 반경 카니발/포화도/차별화)
-  competitor_intel?: Record<string, unknown> | null;
+  competitor_intel?: CompetitorIntel | null;
   // [PR #71] 트렌드 전망 (trend_forecaster 에이전트)
   trend_forecast?: TrendForecast | null;
   // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)

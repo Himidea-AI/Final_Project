@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 
 export type TrendDirection = 'up' | 'down' | 'flat';
@@ -20,19 +21,23 @@ const TREND_COLOR: Record<TrendDirection, string> = {
 };
 
 interface Props {
-  data: number[];
+  /** 너비 미지정 시 부모 컨테이너 100% 사용 (ResponsiveContainer에 위임) */
   width?: number;
   height?: number;
+  data: number[];
 }
 
-export function Sparkline({ data, width = 80, height = 24 }: Props) {
+export function Sparkline({ data, width, height = 24 }: Props) {
   if (!data || data.length === 0) {
     return <span className="text-[10px] text-stone-500">—</span>;
   }
   const dir = computeTrendDirection(data);
   const points = data.map((v, i) => ({ i, v }));
+  // width 미지정이면 부모 100%로 늘어남 (caller가 height만 주는 카드 레이아웃 대응)
+  const containerStyle: CSSProperties =
+    width != null ? { width, height } : { width: '100%', height };
   return (
-    <div style={{ width, height }}>
+    <div style={containerStyle}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={points} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
           <Line

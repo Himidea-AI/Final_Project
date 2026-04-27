@@ -54,12 +54,22 @@ export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
           </div>
         </div>
       </div>
-      {sPct != null && cPct != null && (
-        <div className="mt-3 h-1.5 w-full rounded-full bg-stone-800 overflow-hidden flex">
-          <div className="h-full bg-emerald-500/70" style={{ width: `${sPct}%` }} />
-          <div className="h-full bg-rose-500/70" style={{ width: `${cPct}%` }} />
-        </div>
-      )}
+      {sPct != null &&
+        cPct != null &&
+        (() => {
+          // High #3 — 합 100% 보장 안 됨 (단순 누적은 105% 되어 시각 깨짐).
+          // total>0이면 share로 정규화 후 width로만 사용. 표시 텍스트는 원본 그대로.
+          const total = sPct + cPct;
+          if (total <= 0) return null;
+          const sShare = (sPct / total) * 100;
+          const cShare = (cPct / total) * 100;
+          return (
+            <div className="mt-3 h-1.5 w-full rounded-full bg-stone-800 overflow-hidden flex">
+              <div className="h-full bg-emerald-500/70" style={{ width: `${sShare}%` }} />
+              <div className="h-full bg-rose-500/70" style={{ width: `${cShare}%` }} />
+            </div>
+          );
+        })()}
       <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
         market_report 정규화 지표. 100을 합한 비율 시각화.
       </p>
