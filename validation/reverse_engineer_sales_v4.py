@@ -132,7 +132,13 @@ def build_features_v4(df: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
-def fit_seed_ensemble_multi(X, Y, seeds, best_params, ckpt_dir=None):
+def fit_seed_ensemble_multi(
+    X: pd.DataFrame,
+    Y: pd.DataFrame,
+    seeds: list[int],
+    best_params: dict,
+    ckpt_dir: Path | None = None,
+) -> list[MultiOutputRegressor]:
     """6 seed × MultiOutputRegressor(ExtraTrees) — 48 컬럼 동시 학습.
 
     checkpoint: 각 seed 완료 시 디스크 저장 → 중단 시 재개.
@@ -157,7 +163,11 @@ def fit_seed_ensemble_multi(X, Y, seeds, best_params, ckpt_dir=None):
     return models
 
 
-def predict_with_ci_multi(models, X_missing, store_count):
+def predict_with_ci_multi(
+    models: list[MultiOutputRegressor],
+    X_missing: pd.DataFrame,
+    store_count: np.ndarray,
+) -> dict[str, pd.DataFrame]:
     """6 seed × 48 컬럼 → mean / std / lower_95 / upper_95 / ci_width_ratio."""
     preds_log = np.array([m.predict(X_missing) for m in models])  # (6, N, 48)
     sc_b = np.maximum(store_count, 1)[None, :, None]  # (1, N, 1)
@@ -176,7 +186,11 @@ def predict_with_ci_multi(models, X_missing, store_count):
     }
 
 
-def detect_extrapolation_cells(df_missing, pred_dict, threshold_ratio=1.8):
+def detect_extrapolation_cells(
+    df_missing: pd.DataFrame,
+    pred_dict: dict[str, pd.DataFrame],
+    threshold_ratio: float = 1.8,
+) -> np.ndarray:
     """외삽 셀 = (24Q 전체 결측) OR (monthly_sales std / median_std ≥ 1.8)."""
     n = len(df_missing)
     mask = np.zeros(n, dtype=bool)
@@ -198,7 +212,11 @@ def detect_extrapolation_cells(df_missing, pred_dict, threshold_ratio=1.8):
     return mask
 
 
-def calculate_confidence(pred_dict, extrap_mask, audit_metrics):
+def calculate_confidence(
+    pred_dict: dict[str, pd.DataFrame],
+    extrap_mask: np.ndarray,
+    audit_metrics: dict,
+) -> np.ndarray:
     """confidence = base × ci_penalty × extrapolation_penalty (monthly 기준 1개)."""
     base = max(0.60, 1.0 - audit_metrics.get("mnar_wape", 25.0) / 100.0)
     ci = pred_dict["ci_width_ratio"]["monthly_sales"].values
@@ -220,15 +238,15 @@ def main():
     df_missing = df[missing_mask].copy()
 
     # Y: 48 컬럼 log1p 변환
-    # NaN guard: TARGET_COLS 중 모두 NaN 인 행 제거 (Task 5 reviewer MEDIUM #1)
-    Y_raw = df_alive[TARGET_COLS].apply(lambda s: s.fillna(0).astype(float))
-    valid_rows = ~Y_raw.isna().any(axis=1)
-    Y_alive = Y_raw.loc[valid_rows].apply(np.log1p)
-    X_alive = X.loc[alive_mask].loc[valid_rows]
-
-    dropped = (~valid_rows).sum()
-    if dropped > 0:
-        print(f"[NaN guard] {dropped} 행 제거 (TARGET_COLS 내 NaN 존재)")
+    # NaN guard: TARGET_COLS 전체가 NaN 인 행 제거 (fillna 전에 먼저 체크)
+    valid_rows = ~df_alive[TARGET_COLS].isna().all(axis=1)
+    n_dropped = (~valid_rows).sum()
+    if n_dropped > 0:
+        print(f"[warn] dropped {n_dropped} rows with all-NaN target cols")
+    df_alive_clean = df_alive[valid_rows].copy()
+    Y_raw = df_alive_clean[TARGET_COLS].fillna(0).astype(float)
+    Y_alive = Y_raw.apply(np.log1p)
+    X_alive = X.loc[df_alive_clean.index]
 
     print(f"[fit] 6 seed × ExtraTrees Multi-Output ({len(TARGET_COLS)} 컬럼)...")
     print(f"      학습 샘플: {len(X_alive)}, 결측 셀: {len(df_missing)}")
@@ -266,8 +284,16 @@ def main():
 
     # raking — sales + count
     print("[raking] sum constraint × 5 종 × {sales, count}")
+    mean_pre_raking = preds["mean"].copy()
     preds["mean"] = enforce_sum_consistency(preds["mean"], SUM_CONSTRAINTS_SALES)
     preds["mean"] = enforce_sum_consistency(preds["mean"], SUM_CONSTRAINTS_COUNT)
+
+    # CI 동기화: raking scale 을 std / lower_95 / upper_95 에도 반영
+    scale = preds["mean"] / mean_pre_raking.replace(0, 1)
+    preds["std"] = preds["std"] * scale
+    preds["lower_95"] = (preds["mean"] - 1.96 * preds["std"]).clip(lower=0)
+    preds["upper_95"] = preds["mean"] + 1.96 * preds["std"]
+    preds["ci_width_ratio"] = (preds["upper_95"] - preds["lower_95"]) / preds["mean"].clip(lower=1)
 
     # extrapolation
     extrap_mask = detect_extrapolation_cells(df_missing.reset_index(drop=True), preds, 1.8)
