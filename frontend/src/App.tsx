@@ -1701,165 +1701,163 @@ function SimulatorDashboard({
                 className="mb-0"
               />
 
-              {/* 5. 타겟 고객 프로필 (customer_revenue P1-C) — 미선택 = 전체 고객 */}
-              <div className="pt-4 border-t border-[#3a3633]/50">
-                <div className="flex items-baseline justify-between mb-3">
-                  <label className={`text-xs font-medium ${textSecondary}`}>타겟 고객 프로필</label>
-                  <span className="text-[10px] text-[#9ca3af] opacity-60">
-                    미선택 시 전체 고객 기준
-                  </span>
-                </div>
-
-                {/* 연령대 — 복수 선택 */}
-                <div className="mb-3">
-                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { v: '10대', l: '10대' },
-                      { v: '20대', l: '20대' },
-                      { v: '30대', l: '30대' },
-                      { v: '40대', l: '40대' },
-                      { v: '50대', l: '50대' },
-                      { v: '60대이상', l: '60대+' },
-                    ].map((opt) => {
-                      const active = targetAgeGroups.includes(opt.v);
-                      return (
-                        <button
-                          key={opt.v}
-                          type="button"
-                          onClick={() => toggleTargetAge(opt.v)}
-                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                            active
-                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                          }`}
-                        >
-                          {opt.l}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 성별 — 단일 선택 (null = 전체) */}
-                <div className="mb-3">
-                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(
-                      [
-                        { v: null, l: '전체' },
-                        { v: 'male', l: '남성' },
-                        { v: 'female', l: '여성' },
-                      ] as const
-                    ).map((opt) => {
-                      const active = targetGender === opt.v;
-                      return (
-                        <button
-                          key={opt.l}
-                          type="button"
-                          onClick={() => setTargetGender(opt.v)}
-                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                            active
-                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                          }`}
-                        >
-                          {opt.l}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 방문 시간대 — 복수 선택 */}
-                <div className="mb-3">
-                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
-                    방문 시간대
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { v: 'time_00_06', l: '심야' },
-                      { v: 'time_06_11', l: '오전' },
-                      { v: 'time_11_14', l: '점심' },
-                      { v: 'time_14_17', l: '오후' },
-                      { v: 'time_17_21', l: '저녁' },
-                      { v: 'time_21_24', l: '야간' },
-                    ].map((opt) => {
-                      const active = targetTimeSlots.includes(opt.v);
-                      return (
-                        <button
-                          key={opt.v}
-                          type="button"
-                          onClick={() => toggleTargetTime(opt.v)}
-                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                            active
-                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                          }`}
-                        >
-                          {opt.l}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 요일 — 단일 선택 */}
-                <div className="mb-3">
-                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(
-                      [
-                        { v: null, l: '전체' },
-                        { v: 'weekday', l: '평일' },
-                        { v: 'weekend', l: '주말' },
-                      ] as const
-                    ).map((opt) => {
-                      const active = targetDayType === opt.v;
-                      return (
-                        <button
-                          key={opt.l}
-                          type="button"
-                          onClick={() => setTargetDayType(opt.v)}
-                          className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
-                            active
-                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
-                          }`}
-                        >
-                          {opt.l}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 예상 월매출 — 빈 값 = null (비율만 반환) */}
-                <div>
-                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
-                    예상 월매출 (선택)
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="예: 23150000 (원)"
-                    value={
-                      targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
-                    }
-                    onChange={(e) => handleMonthlySalesChange(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg text-xs bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
-                  />
-                  <p className="mt-1 text-[10px] text-[#9ca3af]/50">
-                    입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
-                  </p>
-                </div>
-              </div>
-
               <p
                 className={`text-[10px] ${textSecondary} opacity-50 italic pt-2 border-t border-[#3a3633]/50`}
               >
                 * 권리금/보증금 제외, 인테리어·초기 운영비 기준
               </p>
+            </div>
+
+            {/* 타겟 고객 프로필 (col-span-2 full-width) */}
+            <div className="md:col-span-2 pt-6 mt-2 border-t border-[#3a3633]">
+              <div className="flex items-baseline justify-between mb-3">
+                <label className={`text-xs font-medium ${textSecondary}`}>타겟 고객 프로필</label>
+                <span className="text-[10px] text-[#9ca3af] opacity-60">
+                  미선택 시 전체 고객 기준
+                </span>
+              </div>
+
+              {/* 연령대 — 복수 선택 */}
+              <div className="mb-3">
+                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { v: '10대', l: '10대' },
+                    { v: '20대', l: '20대' },
+                    { v: '30대', l: '30대' },
+                    { v: '40대', l: '40대' },
+                    { v: '50대', l: '50대' },
+                    { v: '60대이상', l: '60대+' },
+                  ].map((opt) => {
+                    const active = targetAgeGroups.includes(opt.v);
+                    return (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => toggleTargetAge(opt.v)}
+                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                          active
+                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                        }`}
+                      >
+                        {opt.l}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 성별 — 단일 선택 (null = 전체) */}
+              <div className="mb-3">
+                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      { v: null, l: '전체' },
+                      { v: 'male', l: '남성' },
+                      { v: 'female', l: '여성' },
+                    ] as const
+                  ).map((opt) => {
+                    const active = targetGender === opt.v;
+                    return (
+                      <button
+                        key={opt.l}
+                        type="button"
+                        onClick={() => setTargetGender(opt.v)}
+                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                          active
+                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                        }`}
+                      >
+                        {opt.l}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 방문 시간대 — 복수 선택 */}
+              <div className="mb-3">
+                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>방문 시간대</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { v: 'time_00_06', l: '심야' },
+                    { v: 'time_06_11', l: '오전' },
+                    { v: 'time_11_14', l: '점심' },
+                    { v: 'time_14_17', l: '오후' },
+                    { v: 'time_17_21', l: '저녁' },
+                    { v: 'time_21_24', l: '야간' },
+                  ].map((opt) => {
+                    const active = targetTimeSlots.includes(opt.v);
+                    return (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => toggleTargetTime(opt.v)}
+                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                          active
+                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                        }`}
+                      >
+                        {opt.l}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 요일 — 단일 선택 */}
+              <div className="mb-3">
+                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      { v: null, l: '전체' },
+                      { v: 'weekday', l: '평일' },
+                      { v: 'weekend', l: '주말' },
+                    ] as const
+                  ).map((opt) => {
+                    const active = targetDayType === opt.v;
+                    return (
+                      <button
+                        key={opt.l}
+                        type="button"
+                        onClick={() => setTargetDayType(opt.v)}
+                        className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                          active
+                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
+                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                        }`}
+                      >
+                        {opt.l}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 예상 월매출 — 빈 값 = null (비율만 반환) */}
+              <div>
+                <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
+                  예상 월매출 (선택)
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="예: 23150000 (원)"
+                  value={
+                    targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
+                  }
+                  onChange={(e) => handleMonthlySalesChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-xs bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
+                />
+                <p className="mt-1 text-[10px] text-[#9ca3af]/50">
+                  입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
+                </p>
+              </div>
             </div>
           </div>
         </div>
