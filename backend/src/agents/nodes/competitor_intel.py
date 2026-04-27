@@ -238,7 +238,12 @@ async def competitor_intel_node(state: AgentState) -> dict:
     logger.info(f"[competitor_intel] 시작 — {target_district} / {brand_name}")
     print(f"--- [COMPETITOR_INTEL] {target_district} / {brand_name} 분석 시작 ---")
 
-    def _make_competitor_attr(verdict: str, reasoning: str, confidence: float = 0.7) -> dict:
+    def _make_competitor_attr(
+        verdict: str,
+        reasoning: str,
+        confidence: float = 0.7,
+        status: str = "success",
+    ) -> dict:
         return build_attribution(
             agent_id="competitor_intel",
             display_name="경쟁 인텔리전스",
@@ -247,6 +252,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
             verdict=verdict,
             reasoning=reasoning,
             confidence=confidence,
+            status=status,
         )
 
     # brand_name 필수
@@ -255,6 +261,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
             "브랜드명 미입력 · 분석 제한",
             "브랜드명이 없어 카니발리제이션·벤치마크 비교 불가.",
             0.2,
+            status="skipped",
         )
         return {
             "competitor_intel_result": {
@@ -273,6 +280,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
             "행정동 식별 실패 · 분석 제한",
             f"{target_district} dong_code를 찾지 못해 반경 분석 불가.",
             0.2,
+            status="error",
         )
         return {
             "competitor_intel_result": {
@@ -291,6 +299,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
             "업종 매핑 실패 · 분석 제한",
             f"브랜드/업종 매핑 실패: {brand_name}/{business_type}",
             0.2,
+            status="error",
         )
         return {
             "competitor_intel_result": {
@@ -334,6 +343,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
             "서비스 호출 실패 · 분석 제한",
             f"경쟁 데이터 수집 오류: {type(e).__name__}",
             0.2,
+            status="error",
         )
         return {
             "competitor_intel_result": {
@@ -359,16 +369,18 @@ async def competitor_intel_node(state: AgentState) -> dict:
     try:
         llm_out: CompetitorIntelOutput = await structured_llm.ainvoke(messages)
         llm_parsed = llm_out.model_dump() if hasattr(llm_out, "model_dump") else dict(llm_out)
+        llm_status = "success"
     except Exception as e:
         logger.exception(f"[competitor_intel] LLM 호출 실패: {e}")
         llm_parsed = {
-            "market_entry_signal": "yellow",
+            "market_entry_signal": None,
             "differentiation_position": "LLM 해석 실패 — 데이터만 반환",
             "key_opportunities": [],
             "key_risks": [f"LLM 오류: {type(e).__name__}"],
             "recommended_actions": [],
             "narrative": "경쟁 데이터는 수집됐으나 LLM 종합 해석에 실패했습니다.",
         }
+        llm_status = "partial"
 
     # 최종 payload
     result: dict = {
@@ -393,6 +405,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
         str(llm_parsed.get("narrative") or "")[:300]
         or "경쟁 인텔 종합 (Pancras 2013 distance-decay 기반 카니발 보정).",
         0.8,
+        status=llm_status,
     )
     result["agent_attribution"] = competitor_attr
 
