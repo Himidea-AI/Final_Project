@@ -6,7 +6,7 @@
  */
 
 import type { SimulationOutput } from '../types';
-import type { CannRow, NeighborhoodRow } from '../App';
+import type { CannRow, NeighborhoodRow } from '../components/PDF/HiddenPDFTemplate';
 
 interface BuilderInput {
   simResult: SimulationOutput;
