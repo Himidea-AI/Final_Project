@@ -303,7 +303,7 @@ def main():
     df = load_joined_with_all_cols()
     print(f"[data] total={len(df)} alive={df['monthly_sales'].notna().sum()}")
 
-    X = build_features_v5_loo(df)
+    X = build_features_v4(df)
     alive_mask = df["monthly_sales"].notna()
     missing_mask = ~alive_mask
     df_alive = df[alive_mask].copy()
