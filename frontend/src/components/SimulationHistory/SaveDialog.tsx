@@ -64,16 +64,12 @@ export function SaveDialog({
   return (
     <AnimatePresence>
       {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-            onClick={() => {
-              if (!isSaving) onClose();
-            }}
-          />
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
+          onClick={() => {
+            if (!isSaving) onClose();
+          }}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -82,7 +78,8 @@ export function SaveDialog({
             role="dialog"
             aria-modal="true"
             aria-labelledby="save-dialog-title"
-            className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-stone-700 bg-stone-900 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            className="w-[min(92vw,440px)] rounded-xl border border-stone-700 bg-stone-900 p-6 shadow-2xl"
           >
             <div className="flex items-start justify-between">
               <div>
@@ -169,7 +166,7 @@ export function SaveDialog({
               </button>
             </div>
           </motion.div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   );

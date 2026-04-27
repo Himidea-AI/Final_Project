@@ -53,6 +53,11 @@ export interface QuarterlyProjection {
   cumulative_profit: number;
   confidence_lower: number;
   confidence_upper: number;
+  // Track B #107 — 백엔드 2단계 CI 밴드 구현 시 자동 활성화
+  ci_80_lower?: number | null;
+  ci_80_upper?: number | null;
+  ci_95_lower?: number | null;
+  ci_95_upper?: number | null;
 }
 
 /** @deprecated monthly→quarterly 전환됨. QuarterlyProjection 사용 */
@@ -81,10 +86,12 @@ export interface ShapResult {
 /** 동별 비교 결과 */
 export interface DistrictComparison {
   district: string;
-  score: number;
+  // 2026-04-27: scouting_results 미실행 시 backend가 score/survival를 null로 보냄 (거짓 양성 회피).
+  // bep/cannibalization도 동일 정신으로 nullable 유지.
+  score: number | null;
   revenue: number;
-  bep: number;
-  survival: number;
+  bep: number | null;
+  survival: number | null;
   cannibalization: number;
 }
 
@@ -105,18 +112,26 @@ export interface LegalRisk {
   is_fallback?: boolean;
 }
 
-/** 폐업 위험도 기여 피처 */
+/** 폐업 위험도 기여 피처 (LightGBM·TCN 공통 구조) */
 export interface ClosureRiskSignal {
   feature: string;
+  feature_key?: string;
   contribution: number;
 }
 
-/** 폐업 위험도 결과 (B2 수지니) */
+/**
+ * 폐업 위험도 결과 (B2 수지니)
+ * 2026-04-27 변경: top_signals/summary → top_signals_lgbm/summary_lgbm 으로 분리되고
+ * top_signals_tcn/summary_tcn 신설. UI에서 LightGBM(과거 패턴)과 TCN(시계열 흐름)
+ * 두 관점을 별도 노출.
+ */
 export interface ClosureRisk {
   risk_score: number;
   risk_level: 'safe' | 'caution' | 'danger';
-  top_signals: ClosureRiskSignal[];
-  summary?: string[]; // 자연어 요약 문장 목록
+  top_signals_lgbm: ClosureRiskSignal[];
+  summary_lgbm?: string[];
+  top_signals_tcn: ClosureRiskSignal[]; // TCN SHAP 실패 시 빈 배열
+  summary_tcn?: string[];
   is_mock: boolean;
 }
 
@@ -146,6 +161,8 @@ export interface DemographicReport {
   brand_target_match_score: number | null;
   match_rationale: string | null;
   narrative: string;
+  // Track B #106 — 백엔드 peak_hour_matrix [7][24] 제공 시 자동 활성화
+  peak_hour_matrix?: number[][] | null;
 }
 
 /** 시뮬레이션 결과 출력 */
@@ -162,15 +179,18 @@ export interface SimulationOutput {
   ai_recommendation?: string; // 기존 호환성 유지
   map_data?: any;
   // /simulate 응답에 포함되는 chartData용 7개 정규화 지표 (0~100)
+  // 2026-04-27: scouting_results 미실행 시 LLM 등급 임의 매핑(SAFE:80, GOOD:75 등)으로
+  //   거짓 양성을 만들던 backend fallback을 제거 — null 또는 필드 omit으로 합의 (api-contract-frontend-input.md §3.7).
+  //   프론트는 이미 null → '—' 표시 처리되어 있어 그대로 안전.
   market_report?: {
-    floating_population: number;
-    rent_index: number;
-    competition_intensity: number;
-    estimated_revenue: number;
-    survival_rate: number;
+    floating_population: number | null;
+    rent_index: number | null;
+    competition_intensity: number | null;
+    estimated_revenue: number | null;
+    survival_rate: number | null;
     closure_rate: number | null;
-    growth_potential: number;
-    accessibility: number;
+    growth_potential: number | null;
+    accessibility: number | null;
   };
   // [B1 입지 랭킹] backend main.py:301 response_data 4필드 반영
   winner_district?: string;
@@ -212,6 +232,25 @@ export interface SimulationOutput {
   }>;
   // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
   customer_segment?: CustomerSegment | null;
+  // [synthesis.FinalStrategyResult] 종합 전략 리포트 — profit_simulation 포함
+  final_report?: {
+    summary?: string;
+    is_direct?: boolean;
+    brand_category?: string;
+    overall_legal_risk?: string;
+    final_recommendation?: string;
+    profit_simulation?: {
+      monthly_revenue?: number;
+      monthly_cost?: number;
+      net_profit?: number;
+      margin_rate?: number;
+      bep_months?: number;
+    };
+    competitor_analysis?: {
+      count?: number;
+      density?: string;
+    };
+  } | null;
 }
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
@@ -227,7 +266,8 @@ export interface DistrictRanking {
   rent_score: number;
   vacancy_rate: number;
   zoning_risk: 'safe' | 'caution' | 'danger';
-  bep_months?: number | null;
+  /** 2026-04-27 변경: bep_months → bep_quarters (분기 단위) */
+  bep_quarters?: number | null;
   closure_rate?: number | null;
   [key: string]: unknown;
 }
@@ -278,12 +318,14 @@ export type AgentId =
   | 'population_analyst'
   | 'legal'
   | 'district_ranking'
+  | 'operational_fit'
   | 'synthesis'
   | 'demographic_depth'
   | 'trend_forecaster'
   | 'competitor_intel';
 
 export type AgentKind = 'LLM' | 'Python' | 'Hybrid' | 'RAG';
+export type AgentStatus = 'success' | 'partial' | 'pending' | 'error' | 'skipped';
 
 export interface AgentAttribution {
   id: AgentId;
@@ -293,6 +335,7 @@ export interface AgentAttribution {
   verdict: string;
   reasoning: string;
   confidence?: number;
+  status?: AgentStatus;
 }
 
 export interface ReportSection {

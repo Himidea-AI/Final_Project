@@ -1,0 +1,75 @@
+import { BrainCircuit, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect } from 'react';
+
+export interface DetailModalContent {
+  title: string;
+  content: string;
+}
+
+interface DetailModalProps {
+  modalContent: DetailModalContent | null;
+  onClose: () => void;
+}
+
+/**
+ * 전역 상세 모달 — 에이전트 원본 narrative, 법률 조문, 방법론 설명 등
+ * AnimatePresence 로 등장/퇴장 애니메이션. ESC 닫기 지원.
+ */
+export function DetailModal({ modalContent, onClose }: DetailModalProps) {
+  useEffect(() => {
+    if (!modalContent) return;
+    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onEsc);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onEsc);
+      document.body.style.overflow = '';
+    };
+  }, [modalContent, onClose]);
+
+  return (
+    <AnimatePresence>
+      {modalContent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-black/60">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-stone-900 border border-stone-700 w-full max-w-3xl rounded-3xl overflow-hidden shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="p-6 border-b border-stone-800 flex justify-between items-center bg-stone-950/50">
+              <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 text-left">
+                <BrainCircuit className="text-indigo-400" size={20} /> {modalContent.title}
+              </h3>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="닫기"
+                className="p-2 hover:bg-stone-800 rounded-full transition-colors"
+              >
+                <X size={20} className="text-stone-500" />
+              </button>
+            </div>
+            <div className="p-8 max-h-[70vh] overflow-y-auto text-stone-300 leading-relaxed space-y-4 font-medium text-left">
+              {modalContent.content.split('\n').map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
+            <div className="p-6 bg-stone-950/50 border-t border-stone-800 flex justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 bg-stone-800 text-white font-bold rounded-xl hover:bg-stone-700 transition-colors"
+              >
+                닫기
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}

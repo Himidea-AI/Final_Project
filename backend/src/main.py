@@ -69,7 +69,6 @@ from models.explainability.simulation import (
     build_quarterly_projection,
     build_scenarios,
 )
-from models.interface import ModelOutput
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -302,7 +301,7 @@ async def _run_pipeline(input_data: Any) -> dict[str, Any]:
         "brand_analysis": {},
         "analysis_results": {},
         "analysis_metrics": {},
-        "overall_legal_risk": "safe",
+        "overall_legal_risk": None,
         "current_agent": "start",
         "next_step": "",
         "errors": [],
@@ -355,6 +354,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
             "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
+            "checklist": r.get("checklist", []),
             "is_fallback": r.get("is_fallback", False),
         }
         for r in legal_risks_raw
@@ -406,20 +406,25 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         _survival_r = max(int(_overall_sc * 0.9), 30)
         _growth_r = min(int(abs(growth_rate) * 5) + int(_sales_sc * 0.2), 100)
     else:
-        # fallback: LLM 등급 기반 이산 버케팅
-        _rent_index_r = {"SAFE": 80, "CAUTION": 50, "DANGER": 25, "상": 25, "중": 50, "하": 80}.get(rent_raw, 50)
-        _estimated_rev_r = {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
-        _floating_pop_r = min(int(pop_score * 10), 100)
-        _competition_r = min(int(competition_score * 100), 100)
-        _survival_r = max(100 - _competition_r, 30)
-        _growth_r = min(int(abs(growth_rate) * 5), 100)
+        # 2026-04-27: scouting_results 부재 시 LLM 등급 매핑(SAFE→80, EXCELLENT→90 등)으로
+        # 7지표를 채워 보내던 fallback 제거. 임의값이 UI에서 실데이터처럼 보여
+        # 거짓 양성 판정을 만들었음 (api-contract-frontend-input.md §3.7 위반).
+        # → None으로 흘려보내 프론트가 '—' 또는 차트 비활성으로 정직하게 처리.
+        _rent_index_r = None
+        _estimated_rev_r = None
+        _floating_pop_r = None
+        _competition_r = None
+        _survival_r = None
+        _growth_r = None
 
     competition_intensity = _competition_r
-    district_score = float(
-        _target_row.get("score")
-        if _target_row
-        else {"EXCELLENT": 90, "GOOD": 75, "NORMAL": 60, "RISKY": 40}.get(grade, 60)
-    )
+    # district_score도 동일 정신 — _target_row 없으면 None.
+    # comparison[].score를 받는 프론트 DistrictComparison.score는 nullable로 동기화 완료.
+    district_score = float(_target_row.get("score") or 0) if _target_row else None
+
+    accessibility_raw = metrics.get("operational_fit_score")
+    if accessibility_raw is None:
+        accessibility_raw = metrics.get("accessibility_score")
 
     market_report = {
         "floating_population": _floating_pop_r,
@@ -428,7 +433,13 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "estimated_revenue": _estimated_rev_r,
         "survival_rate": _survival_r,
         "growth_potential": _growth_r,
-        "accessibility": min(int(float(metrics.get("accessibility_score") or 75)), 100),
+        # operational_fit_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백.
+        # 값이 없으면 임의 기본값(예: 75)을 만들지 않고 None으로 내려보낸다.
+        "accessibility": (
+            min(int(float(accessibility_raw)), 100)
+            if accessibility_raw is not None
+            else None
+        ),
     }
 
     # [Phase 2.5] graph.py ml_prediction_phase_node에서 실행된 TCN 결과를 state에서 읽음
@@ -442,16 +453,6 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
     _industry_code = _BIZ_TO_INDUSTRY_CODE.get(state.get("business_type", "카페"), "CS100010")
     sim_result = state.get("tcn_sim_result") or {}
 
-    # TCN 결과가 없으면(Phase 2.5 실패) 직접 실행 fallback
-    if not sim_result:
-        try:
-            sim_result = ModelOutput.generate(
-                _dong_code, _industry_code, state.get("business_type", "카페"), model="tcn"
-            )
-        except Exception as _sim_err:
-            print(f"[SIM] ModelOutput fallback 실패: {_sim_err}")
-            sim_result = {}
-
     scenarios = None
     try:
         quarterly = build_quarterly_projection(
@@ -463,18 +464,8 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
         )
     except Exception as _sim_err:
-        print(f"[SIM] quarterly 빌드 실패 (mock 사용): {_sim_err}")
-        _sim_q = (sim_result.get("bep") or {}).get("simulation_quarters", 4)
-        quarterly = [
-            {
-                "quarter": q,
-                "revenue": 30_000_000,
-                "cumulative_profit": -150_000_000 + q * 30_000_000,
-                "confidence_lower": 25_000_000,
-                "confidence_upper": 35_000_000,
-            }
-            for q in range(1, _sim_q + 1)
-        ]
+        print(f"[SIM] quarterly 빌드 실패 (empty 사용): {_sim_err}")
+        quarterly = []
 
     # SHAP 분석 — Phase 2.5에서 이미 계산된 값을 state에서 읽음 (중복 실행 방지)
     shap_result = state.get("shap_result") or None
@@ -515,6 +506,44 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
     )
 
     # [B1 고도화] 응답 구조 재설계
+    _avg_revenue = md.get("avg_revenue")
+    comparison = []
+    if any(
+        v is not None
+        for v in (
+            district_score,
+            _avg_revenue,
+            _sim_bep_quarters,
+            market_report.get("survival_rate"),
+            metrics.get("cannibalization_impact"),
+        )
+    ):
+        comparison.append(
+            {
+                "district": target_dist,
+                "score": district_score,
+                # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산.
+                # 값이 없으면 None으로 내려보낸다.
+                "revenue": (_avg_revenue // 10000) if _avg_revenue is not None else None,
+                "bep": (
+                    metrics.get("bep_quarters")
+                    or (final_report.get("profit_simulation") or {}).get("bep_quarters")
+                    or _sim_bep_quarters
+                    or None
+                ),
+                "survival": (
+                    float(market_report["survival_rate"]) if market_report.get("survival_rate") is not None else None
+                ),
+                "cannibalization": (
+                    float(metrics["cannibalization_impact"])
+                    if metrics.get("cannibalization_impact") is not None
+                    else None
+                ),
+            }
+        )
+
+    competitor_intel = state.get("competitor_intel_result")
+
     response_data = {
         "request_id": request_id,
         "target_district": target_dist,
@@ -527,26 +556,11 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "market_report": market_report,
         "analysis_report": analysis.get("market_summary", ""),
         "analysis_metrics": metrics,
-        "simulation_quarters": (sim_result.get("bep") or {}).get("simulation_quarters", 4),
+        "simulation_quarters": (sim_result.get("bep") or {}).get("simulation_quarters"),
         "quarterly_projection": quarterly,
         "scenarios": scenarios,
-        "comparison": [
-            {
-                "district": target_dist,
-                "score": district_score,
-                # avg_revenue는 원(₩) 단위 — 프론트가 ×10000 표시하므로 만원으로 환산
-                "revenue": (md.get("avg_revenue") or 30000000) // 10000,
-                "bep": (
-                    metrics.get("bep_quarters")
-                    or (final_report.get("profit_simulation") or {}).get("bep_quarters")
-                    or _sim_bep_quarters
-                    or None
-                ),
-                "survival": float(market_report["survival_rate"]),
-                "cannibalization": float(metrics.get("cannibalization_impact") or 4),
-            }
-        ],
-        "overall_legal_risk": analysis.get("overall_legal_risk", "safe"),
+        "comparison": comparison,
+        "overall_legal_risk": analysis.get("overall_legal_risk"),
         "legal_risks": legal_risks,
         "demographic_report": analysis.get("demographic_report"),
         "trend_forecast": analysis.get("trend_forecast"),
@@ -581,7 +595,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         # 폐업위험도 (LightGBM + TCN 앙상블) — 모델 호출 실패 시 None
         "closure_risk": sim_result.get("closure_risk") if "sim_result" in locals() else None,
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
-        "competitor_intel": _sanitize(state.get("competitor_intel_result") or {}),
+        "competitor_intel": _sanitize(competitor_intel) if competitor_intel else None,
         # 8 에이전트 판단 근거 (AgentAttribution)
         "agent_attributions": _sanitize(analysis.get("agent_attributions") or state.get("agent_attributions") or []),
     }
@@ -904,6 +918,26 @@ async def reject_manager(manager_id: str, body: ManagerApprovalBody):
 
 
 # ---------------------------------------------------------------------------
+# 회원 탈퇴 API
+# ---------------------------------------------------------------------------
+
+
+class DeactivateBody(BaseModel):
+    password: str
+
+
+@app.post("/auth/user/{user_id}/deactivate")
+async def deactivate_user(user_id: str, body: DeactivateBody):
+    """팀장 회원 탈퇴 (소프트 삭제 — is_active=false, 소속 매니저·초대코드 일괄 비활성화)"""
+    auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
+    try:
+        result = await run_in_threadpool(auth.deactivate_user, user_id, body.password)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # 마이페이지 API
 # ---------------------------------------------------------------------------
 
@@ -1032,21 +1066,16 @@ def _mock_simulation_response(target_district: str, request_id: str) -> dict:
         "request_id": request_id,
         "target_district": target_district,
         "ai_recommendation": f"[테스트 모드] {target_district} — LLM 분석 비활성, ABM만 사용하세요.",
-        "market_report": {
-            "estimated_revenue": 30000000,
-            "competition_intensity": "mid",
-            "target_age": "30대",
-        },
+        "market_report": None,
         "comparison": [],
         "legal_risks": [],
-        "overall_legal_risk": "safe",
+        "overall_legal_risk": None,
         "simulation_quarters": 0,
         "quarterly_projection": [],
-        "analysis_metrics": {"main_target_age": "30대", "peak_time": "점심"},
-        "grade": "CAUTION",
-        "score": 60,
+        "analysis_metrics": {},
         "status": "ok",
         "test_mode": True,
+        "data_source": "mock",
     }
 
 
@@ -1084,7 +1113,7 @@ async def run_simulation(input_data: SimulationInput):
             "market_report": None,
             "comparison": [],
             "legal_risks": [],
-            "overall_legal_risk": "safe",
+            "overall_legal_risk": None,
             "simulation_quarters": 0,
             "quarterly_projection": [],
             "analysis_report": f"분석 중 오류가 발생했습니다: {str(e)}",

@@ -1,0 +1,69 @@
+/**
+ * LegalTab — 법률·규제 전용 탭
+ *
+ * MarketTab에서 법률 섹션 이관. 가맹사업법·임대차보호법 등 규제 리스크를
+ * 전용 공간에서 드릴다운할 수 있도록 분리. 본부 영업팀 법무 확인용.
+ *
+ * 구성:
+ * 1) 상단: 등급 분포 막대 (HIGH/MEDIUM/LOW 한눈에)
+ * 2) 하단: InsightsGrid legalOnly — 표 + LegalDrawer 상세
+ */
+
+import { AlertTriangle, Maximize2 } from 'lucide-react';
+import type { SimulationOutput } from '../../../../types';
+import type { DetailModalContent } from '../shared/DetailModal';
+import { InsightsGrid } from '../../sections/InsightsGrid';
+import { LegalDistributionBar } from '../charts/LegalDistributionBar';
+
+interface Props {
+  simResult: SimulationOutput;
+  openModal: (content: DetailModalContent) => void;
+}
+
+export function LegalTab({ simResult, openModal }: Props) {
+  const risks = simResult.legal_risks ?? [];
+  const totalCount = risks.length;
+
+  return (
+    <div className="bg-stone-900/40 border border-stone-800/60 p-8 rounded-3xl">
+      <div className="flex justify-between items-center mb-6">
+        <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
+          <AlertTriangle size={16} className="text-rose-400" /> 법률·규제 검토
+          <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal">
+            ({totalCount}건)
+          </span>
+        </h4>
+        {totalCount > 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              openModal({
+                title: '법률 리스크 종합 검토',
+                content: risks
+                  .map(
+                    (r, i) =>
+                      `${i + 1}. [${r.risk_level}] ${r.type}\n   ${r.detail || r.recommendation || ''}`,
+                  )
+                  .join('\n\n'),
+              })
+            }
+            className="text-[10px] font-black text-stone-500 hover:text-indigo-400 flex items-center gap-1 uppercase transition-colors"
+          >
+            <Maximize2 size={12} /> 전체 리포트 보기
+          </button>
+        )}
+      </div>
+
+      {/* 등급 분포 막대 */}
+      <div className="bg-stone-950/40 border border-stone-800/60 rounded-2xl p-6 mb-4">
+        <h5 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-3">
+          법률 리스크 등급 분포
+        </h5>
+        <LegalDistributionBar risks={risks} />
+      </div>
+
+      {/* 상세 테이블 + Drawer */}
+      <InsightsGrid simResult={simResult} legalOnly />
+    </div>
+  );
+}

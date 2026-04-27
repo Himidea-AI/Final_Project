@@ -28,10 +28,10 @@ const LEGAL_TYPE_LABEL: Record<string, string> = {
   ftc_franchise: '공정위 정보공개서',
 };
 
-const LEVEL_CLS: Record<string, { border: string; text: string; label: string }> = {
-  HIGH: { border: 'border-l-4 border-rose-500', text: 'text-rose-400', label: '필수이행' },
-  MEDIUM: { border: 'border-l-4 border-yellow-500', text: 'text-yellow-400', label: '확인필요' },
-  LOW: { border: 'border-l-4 border-emerald-500', text: 'text-emerald-400', label: '참고사항' },
+const LEVEL_CLS: Record<string, { strip: string; text: string; label: string }> = {
+  HIGH: { strip: 'bg-rose-500', text: 'text-rose-400', label: '필수이행' },
+  MEDIUM: { strip: 'bg-yellow-500', text: 'text-yellow-400', label: '확인필요' },
+  LOW: { strip: 'bg-emerald-500', text: 'text-emerald-400', label: '참고사항' },
 };
 
 function normalizeLevel(level: string): 'HIGH' | 'MEDIUM' | 'LOW' {
@@ -119,9 +119,16 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
                     <tr
                       key={`${r.type}-${i}`}
                       onClick={() => setSelected(r)}
-                      className={`cursor-pointer border-b border-stone-700/50 last:border-b-0 hover:bg-stone-700/50 ${cls.border}`}
+                      className="cursor-pointer border-b border-stone-700/50 last:border-b-0 hover:bg-stone-700/40"
                     >
-                      <td className="p-3 font-mono text-xs text-stone-400">{i + 1}</td>
+                      {/* 위험도 색 띠 — HTML 표준 tr border 렌더 불안정 회피, absolute로 첫 td 좌측에 3px */}
+                      <td className="relative p-3 pl-4 font-mono text-xs text-stone-400">
+                        <span
+                          className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-r ${cls.strip}`}
+                          aria-hidden="true"
+                        />
+                        {i + 1}
+                      </td>
                       <td className="p-3 text-sm font-semibold text-stone-100">
                         {LEGAL_TYPE_LABEL[r.type] || r.type}
                       </td>

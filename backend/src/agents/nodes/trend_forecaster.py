@@ -120,6 +120,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
             verdict="DB 수집 실패 · 분석 제한",
             reasoning=f"{target_district} {industry} 전망 데이터 수집 실패: {str(e)[:200]}",
             confidence=0.2,
+            status="error",
         )
         return {
             "analysis_results": {
