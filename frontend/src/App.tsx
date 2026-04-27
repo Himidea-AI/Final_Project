@@ -51,6 +51,8 @@ import {
   forwardRef,
   createContext,
   useContext,
+  lazy,
+  Suspense,
 } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
@@ -79,6 +81,13 @@ import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
 import { getLivePopulation } from './api/client';
+import NetworkBackground from './components/NetworkBackground';
+
+// Phase C Round 1 — 마케팅 페이지 4종 lazy 분리 (App.tsx에서 추출)
+const IntroScene = lazy(() => import('./pages/landing/IntroScene'));
+const AccordionGallery = lazy(() => import('./pages/landing/AccordionGallery'));
+const AboutPage = lazy(() => import('./pages/landing/AboutPage'));
+const ContactPage = lazy(() => import('./pages/landing/ContactPage'));
 
 import {
   ChevronRight,
@@ -86,10 +95,7 @@ import {
   Sliders,
   Activity,
   MapPin,
-  ExternalLink,
   Mail,
-  Phone,
-  GitFork,
   Users,
   TrendingUp,
   Play,
@@ -131,7 +137,6 @@ import {
   CircleDotDashed,
   BarChartBig,
   Map as MapIcon,
-  LogIn,
   Lightbulb,
   ClipboardList,
 } from 'lucide-react';
@@ -152,38 +157,6 @@ import {
    DATA
    ═══════════════════════════════════════════════════════ */
 import { LayoutGroup, motion, AnimatePresence } from 'framer-motion';
-
-const DISTRICTS = [
-  { name: '강남구', eng: 'GANGNAM', img: '/images/Gangnam-gu.svg' },
-  { name: '강동구', eng: 'GANGDONG', img: '/images/Gangdong-gu.svg' },
-  { name: '강북구', eng: 'GANGBUK', img: '/images/Gangbuk-gu.svg' },
-  { name: '강서구', eng: 'GANGSEO', img: '/images/Gangseo-gu.svg' },
-  { name: '관악구', eng: 'GWANAK', img: '/images/Gwanak-gu.svg' },
-  { name: '광진구', eng: 'GWANGJIN', img: '/images/Gwangjin-gu.svg' },
-  { name: '구로구', eng: 'GURO', img: '/images/Guro-gu.svg' },
-  { name: '금천구', eng: 'GEUMCHEON', img: '/images/Geumcheon-gu.svg' },
-  { name: '노원구', eng: 'NOWON', img: '/images/Nowon-gu.svg' },
-  { name: '도봉구', eng: 'DOBONG', img: '/images/Dobong-gu.svg' },
-  { name: '동대문구', eng: 'DONGDAEMUN', img: '/images/Dongdaemun-gu.svg' },
-  { name: '동작구', eng: 'DONGJAK', img: '/images/Dongjak-gu.svg' },
-  { name: '마포구', eng: 'MAPO', img: '/images/Mapo-gu.svg' },
-  { name: '서대문구', eng: 'SEODAEMUN', img: '/images/Seodaemun-gu.svg' },
-  { name: '서초구', eng: 'SEOCHO', img: '/images/Seocho-gu.svg' },
-  { name: '성동구', eng: 'SEONGDONG', img: '/images/Seongdong-gu.svg' },
-  { name: '성북구', eng: 'SEONGBUK', img: '/images/Seongbuk-gu.svg' },
-  { name: '송파구', eng: 'SONGPA', img: '/images/Songpa-gu.svg' },
-  { name: '양천구', eng: 'YANGCHEON', img: '/images/Yangcheon-gu.svg' },
-  { name: '영등포구', eng: 'YEONGDEUNGPO', img: '/images/Yeongdeungpo-gu.svg' },
-  { name: '용산구', eng: 'YONGSAN', img: '/images/Yongsan-gu.svg' },
-  { name: '은평구', eng: 'EUNPYEONG', img: '/images/Eunpyeong-gu.svg' },
-  { name: '종로구', eng: 'JONGNO', img: '/images/Jongno-gu.svg' },
-  { name: '중구', eng: 'JUNG', img: '/images/Jung-gu.svg' },
-  { name: '중랑구', eng: 'JUNGNANG', img: '/images/Jungnang-gu.svg' },
-];
-
-const MAPO_IDX = DISTRICTS.findIndex((d) => d.name === '마포구');
-
-const MENU_ITEMS = ['ABOUT SPOTTER', 'SIMULATOR', 'CONTACT'];
 
 const DONG_DATA: Record<string, string[]> = {
   강남구: [
@@ -808,1152 +781,6 @@ const DRAWER_TITLES: Record<Exclude<DrawerKey, null>, string> = {
   insight_traffic: '피크 시간대 매출 집중 분석',
   insight_target: '주요 타겟 고객층 분석',
 };
-
-/* ═══════════════════════════════════════════════════════
-   NetworkBackground — Canvas 파티클 네트워크 배경
-   ═══════════════════════════════════════════════════════
-   - 화면 크기 비례 파티클 생성 (최대 350개)
-   - 파티클 간 150px 이내 연결선 드로잉
-   - scene === "intro" 일 때만 마우스 인터랙션 활성화:
-     - 마그네틱 끌림 (반경 200px, 속도 0.02)
-     - 마우스↔파티클 연결선 (반경 250px)
-     - 클릭 시 레이더 핑 이펙트
-   - isTransitioning 시 5배 가속, simulator 씬에서 0.2배 감속
-*/
-
-function NetworkBackground({
-  isTransitioning,
-  scene,
-  theme,
-}: {
-  isTransitioning: boolean;
-  scene: string;
-  theme: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particlesRef = useRef<{ x: number; y: number; vx: number; vy: number }[]>([]);
-  const animRef = useRef<number>(0);
-  const mouseRef = useRef<{ x: number; y: number }>({ x: -9999, y: -9999 });
-  const pingRef = useRef<{ x: number; y: number; t: number }[]>([]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    const onMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
-    };
-    const onClick = (e: MouseEvent) => {
-      pingRef.current.push({ x: e.clientX, y: e.clientY, t: 0 });
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('click', onClick);
-
-    // Init particles — responsive count based on screen area
-    if (particlesRef.current.length === 0) {
-      const particleCount = Math.min(350, Math.floor((canvas.width * canvas.height) / 8000));
-      for (let i = 0; i < particleCount; i++) {
-        particlesRef.current.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 0.6,
-          vy: (Math.random() - 0.5) * 0.6,
-        });
-      }
-    }
-
-    const animate = () => {
-      if (!ctx || !canvas) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const particles = particlesRef.current;
-      let speedMult = 1;
-      if (isTransitioning) speedMult = 5;
-      else if (scene === 'simulator') speedMult = 0.2;
-
-      const isLight = scene === 'simulator' && theme === 'light';
-      const r = isLight ? 99 : 129;
-      const g = isLight ? 102 : 140;
-      const b = isLight ? 241 : 248;
-
-      const isIntro = scene === 'intro';
-      const mx = mouseRef.current.x;
-      const my = mouseRef.current.y;
-
-      // Update & draw particles
-      for (const p of particles) {
-        // Intro only: magnetic pull toward mouse
-        if (isIntro) {
-          const dmx = mx - p.x;
-          const dmy = my - p.y;
-          const md = Math.sqrt(dmx * dmx + dmy * dmy);
-          if (md < 200 && md > 1) {
-            const force = ((200 - md) / 200) * 0.015;
-            p.vx += (dmx / md) * force;
-            p.vy += (dmy / md) * force;
-          }
-        }
-
-        p.x += p.vx * speedMult;
-        p.y += p.vy * speedMult;
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${r},${g},${b},0.5)`;
-        ctx.fill();
-      }
-
-      // Draw connections
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 150) {
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(${r},${g},${b},${0.15 * (1 - dist / 150)})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Intro only: mouse connection lines (radius 250, high visibility)
-      if (isIntro && mx > 0) {
-        for (const p of particles) {
-          const dmx = mx - p.x;
-          const dmy = my - p.y;
-          const md = Math.sqrt(dmx * dmx + dmy * dmy);
-          if (md < 250) {
-            ctx.beginPath();
-            ctx.moveTo(mx, my);
-            ctx.lineTo(p.x, p.y);
-            ctx.strokeStyle = `rgba(${r},${g},${b},${(1 - md / 250) * 0.8})`;
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-          }
-        }
-
-        // Radar ping effect
-        const pings = pingRef.current;
-        for (let i = pings.length - 1; i >= 0; i--) {
-          const ping = pings[i];
-          ping.t += 2;
-          if (ping.t > 150) {
-            pings.splice(i, 1);
-            continue;
-          }
-          const alpha = 1 - ping.t / 150;
-          ctx.beginPath();
-          ctx.arc(ping.x, ping.y, ping.t, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.3})`;
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        }
-      }
-
-      animRef.current = requestAnimationFrame(animate);
-    };
-
-    animRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      cancelAnimationFrame(animRef.current);
-      window.removeEventListener('resize', resize);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('click', onClick);
-    };
-  }, [isTransitioning, scene, theme]);
-
-  const simClass = scene === 'simulator' ? 'scale-110 opacity-40' : 'scale-100 opacity-100';
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className={`fixed inset-0 z-0 transition-all duration-1000 ${simClass}`}
-    />
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   Scene 1: Intro — 메인 진입 화면
-   ═══════════════════════════════════════════════════════
-   - 좌측: OHZI 스타일 타이포그래피 메뉴 (4개: About, Join Us, Simulator, Contact)
-   - 우측: 로고 플로팅 + 앰버 글로우
-   - 메뉴 클릭 시 transitionTo()로 해당 씬 이동 (암전 트랜지션)
-*/
-
-function IntroScene({
-  activeMenuIndex,
-  setActiveMenuIndex,
-  onAboutClick,
-  onLoginClick,
-  onSimulatorClick,
-  onContactClick,
-}: {
-  activeMenuIndex: number;
-  setActiveMenuIndex: (i: number) => void;
-  onAboutClick: () => void;
-  onLoginClick: () => void;
-  onSimulatorClick: () => void;
-  onContactClick: () => void;
-}) {
-  const { isLoggedIn, user, brand } = useAuth();
-  const nav = useNavigate();
-  // 환영 메시지: "(회사명) 담당자명 직급님 환영합니다"
-  // 직급은 사용자 입력(position) 우선, 없으면 role 기반 기본값(master→팀장, manager→매니저)
-  const brandName = brand?.brand_name || user?.company_name || '';
-  const personName = user?.contact_name || '';
-  const roleTitle = user?.position || (user?.role === 'master' ? '팀장' : '매니저');
-  const showWelcome = isLoggedIn && (brandName || personName);
-  const handleWelcomeClick = () => {
-    nav(user?.role === 'master' ? '/hq' : '/simulator');
-  };
-
-  return (
-    <div className="relative z-10 h-full w-full overflow-hidden">
-      {/* 🔐 Top-right — 비로그인 시 Login 버튼, 로그인 시 환영 메시지 (클릭 시 역할별 홈) */}
-      {showWelcome ? (
-        <button
-          onClick={handleWelcomeClick}
-          className="absolute top-6 right-6 z-40 flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#e2e8f0] hover:text-[#818cf8]"
-          title={`${user?.role === 'master' ? 'HQ 지휘소' : '시뮬레이터'}로 이동`}
-        >
-          <span className="text-[11px] font-medium tracking-wide">
-            {brandName && <span className="text-[#818cf8]">{brandName}</span>}
-            {brandName && personName && <span className="text-[#9ca3af]"> · </span>}
-            {personName && (
-              <span>
-                {personName} {roleTitle}
-              </span>
-            )}
-            <span className="text-[#9ca3af]">님 환영합니다</span>
-          </span>
-        </button>
-      ) : (
-        <button
-          onClick={onLoginClick}
-          className="absolute top-6 right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#9ca3af] hover:text-[#818cf8]"
-          title="Login"
-        >
-          <LogIn className="w-3 h-3" />
-          <span className="text-[11px] font-bold tracking-wider uppercase">Login</span>
-        </button>
-      )}
-
-      {/* Background Watermark Logo (idea 5) — 화면을 가로지르는 거대한 반투명 로고 */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-        <img src="/logo.svg" alt="" className="w-[90vw] max-w-[1400px] h-auto opacity-[0.018]" />
-      </div>
-
-      {/* Right section — Floating Logo with Glow (원래 위치 복원) */}
-      <div className="absolute right-[10%] top-1/2 -translate-y-1/2 p-10 cursor-pointer group hidden md:flex flex-col items-center pointer-events-auto z-30">
-        <div className="relative animate-float-logo">
-          <div className="absolute inset-0 bg-[#818cf8] blur-[50px] opacity-0 group-hover:opacity-30 transition-all duration-700 ease-out scale-75 group-hover:scale-125" />
-          <img
-            src="/logo.svg"
-            alt="SPOTTER"
-            className="w-48 h-auto relative z-10 opacity-90 transition-all duration-500 group-hover:scale-105 group-hover:drop-shadow-[0_0_30px_rgba(99,102,241,0.6)]"
-          />
-        </div>
-        <div className="mt-8 text-center transition-all duration-500 group-hover:scale-105">
-          <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] text-[#e2e8f0]">
-            SPOTTER
-          </h1>
-          <p className="text-[#818cf8] font-mono text-xs tracking-widest mt-3 uppercase opacity-60 transition-opacity duration-500 group-hover:opacity-100">
-            AI Franchise Simulator
-          </p>
-        </div>
-      </div>
-
-      {/* Left section — Typography menu (uniform single column) */}
-      <div className="relative z-20 h-full flex flex-col justify-center pl-12 md:pl-20 lg:pl-32 pt-[18vh] pb-20">
-        {/* Sub-copy */}
-        <div className="flex items-center gap-4 mb-10 text-xs tracking-[0.3em] text-gray-500 uppercase">
-          <div className="w-px h-4 bg-gray-600" />
-          <span>
-            0{activeMenuIndex + 1} / 0{MENU_ITEMS.length} — GET TO KNOW
-          </span>
-        </div>
-
-        {/* Menu — SIMULATOR가 핵심이라 1단계 더 큼, 나머지는 보조 사이즈 */}
-        <nav className="flex flex-col gap-3">
-          {MENU_ITEMS.map((item, i) => {
-            const isActive = activeMenuIndex === i;
-            const isSimulator = i === 1;
-            const sizeClasses = isSimulator
-              ? 'text-3xl sm:text-5xl md:text-6xl lg:text-7xl'
-              : 'text-2xl sm:text-4xl md:text-5xl lg:text-6xl';
-            return (
-              <button
-                key={item}
-                className="relative text-left group self-start whitespace-nowrap"
-                style={{ width: 'fit-content', maxWidth: 'fit-content' }}
-                onMouseEnter={() => setActiveMenuIndex(i)}
-                onClick={() => {
-                  if (i === 0) onAboutClick();
-                  if (i === 1) onSimulatorClick();
-                  if (i === 2) onContactClick();
-                }}
-              >
-                {/* Indicator bar */}
-                <div
-                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
-                    isActive ? 'scale-x-100' : 'scale-x-0'
-                  }`}
-                />
-                <span
-                  className={`inline-block ${sizeClasses} font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                    isActive
-                      ? 'text-[#e2e8f0] translate-x-0'
-                      : 'text-[#3a3633] -translate-x-2 group-hover:text-[#9ca3af]'
-                  }`}
-                >
-                  {item}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      {/* Bottom Marquee Strip (idea 4) — 화면 하단 가로 스크롤 데이터 띠 */}
-      <div className="absolute bottom-0 left-0 w-full overflow-hidden border-t border-[#3a3633]/40 py-3 pointer-events-none z-20 bg-[#1e1b18]/50 backdrop-blur-sm">
-        <div className="flex animate-marquee whitespace-nowrap">
-          {[...Array(2)].map((_, k) => (
-            <div
-              key={k}
-              className="flex items-center gap-12 px-6 font-mono text-[10px] uppercase tracking-[0.3em] shrink-0"
-            >
-              <span className="text-[#9ca3af]">AI Market Intelligence</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#818cf8]">Mapo-Gu MVP</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">Cannibalization Analysis</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">12-Month Forecast</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#818cf8]">Live Data · 19 Sources</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">25 Districts</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">LangGraph Multi-Agent</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#818cf8]">Project SPOTTER v3.8</span>
-              <span className="text-[#3a3633]">●</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   Scene 2: Accordion Gallery — 25개 구 선택 갤러리
-   ═══════════════════════════════════════════════════════
-   - 수평 스크롤 갤러리 (휠→가로 변환, Edge Panning, 드래그 스크롤)
-   - 패널 호버 시 확장 + SVG 휘장 표시 + Staggered 글자 애니메이션
-   - 상단 3열 헤더: 로고+BACK | 인디케이터 눈금 | SCROLL TO EXPLORE
-   - 마포구 클릭 시 → /simulator로 이동
-   - 자체 헤더를 갖고 있어 글로벌 헤더와 별도 (accordion 씬 자체 관리)
-*/
-
-function AccordionGallery({
-  hoveredIdx,
-  setHoveredIdx,
-  onMapoClick,
-  onLogoClick,
-}: {
-  hoveredIdx: number | null;
-  setHoveredIdx: (i: number | null) => void;
-  onMapoClick: () => void;
-  onLogoClick: () => void;
-}) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const edgeScrollRef = useRef<number>(0);
-  const edgeSpeedRef = useRef(0);
-
-  // Drag scroll state
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartX = useRef(0);
-  const dragScrollLeft = useRef(0);
-
-  // Wheel → horizontal scroll
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      track.scrollLeft += e.deltaY * 1.5;
-    };
-    track.addEventListener('wheel', handler, { passive: false });
-    return () => track.removeEventListener('wheel', handler);
-  }, []);
-
-  // Edge panning — rAF loop
-  useEffect(() => {
-    const tick = () => {
-      const track = trackRef.current;
-      if (track && edgeSpeedRef.current !== 0) {
-        track.scrollLeft += edgeSpeedRef.current;
-      }
-      edgeScrollRef.current = requestAnimationFrame(tick);
-    };
-    edgeScrollRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(edgeScrollRef.current);
-  }, []);
-
-  // Mouse move → edge panning detection
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      const w = window.innerWidth;
-      const x = e.clientX;
-      const edgeZone = w * 0.15;
-
-      if (x < edgeZone) {
-        // Left edge — closer to edge = faster
-        edgeSpeedRef.current = -((edgeZone - x) / edgeZone) * 12;
-      } else if (x > w - edgeZone) {
-        // Right edge
-        edgeSpeedRef.current = ((x - (w - edgeZone)) / edgeZone) * 12;
-      } else {
-        edgeSpeedRef.current = 0;
-      }
-
-      // Drag scroll
-      if (isDragging && trackRef.current) {
-        const dx = e.clientX - dragStartX.current;
-        trackRef.current.scrollLeft = dragScrollLeft.current - dx;
-      }
-    },
-    [isDragging],
-  );
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true);
-    dragStartX.current = e.clientX;
-    dragScrollLeft.current = trackRef.current?.scrollLeft ?? 0;
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-
-  const handleMouseLeaveTrack = useCallback(() => {
-    setIsDragging(false);
-    edgeSpeedRef.current = 0;
-  }, []);
-
-  return (
-    <div
-      className="relative z-10 flex flex-col h-full w-full"
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeaveTrack}
-    >
-      {/* Top bar — 3-column: Logo+Back | Indicator | Guide */}
-      <div className="w-full h-24 border-b border-[#3a3633]/50 flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/80 backdrop-blur-md z-50 shrink-0">
-        {/* Left — Logo + Back */}
-        <div className="flex items-center gap-3 min-w-[180px]">
-          <button
-            onClick={onLogoClick}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
-          >
-            <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">SPOTTER</span>
-          </button>
-          <span className="text-[#3a3633]">/</span>
-          <button
-            onClick={onLogoClick}
-            className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-white transition-colors duration-300"
-          >
-            <ChevronRight size={14} className="rotate-180" />
-            BACK
-          </button>
-        </div>
-
-        {/* Center — Indicator */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-[3px]">
-            {DISTRICTS.map((d, i) => (
-              <div
-                key={d.eng}
-                className={`w-1 h-3 rounded-full transition-all duration-300 ${
-                  hoveredIdx === i
-                    ? 'bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]'
-                    : 'bg-white/20'
-                }`}
-              />
-            ))}
-          </div>
-          <span className="ml-3 text-xs text-gray-400 font-mono tabular-nums min-w-[80px]">
-            {hoveredIdx !== null
-              ? `${DISTRICTS[hoveredIdx].name} ${hoveredIdx + 1}`
-              : '25 Districts'}{' '}
-            / 25
-          </span>
-        </div>
-
-        {/* Right — Guide text */}
-        <div className="min-w-[180px] text-right">
-          <span className="text-xs text-gray-600 tracking-widest">SCROLL TO EXPLORE</span>
-        </div>
-      </div>
-
-      {/* Gallery track */}
-      <div
-        ref={trackRef}
-        className={`flex-1 flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide px-4 ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
-        onMouseDown={handleMouseDown}
-      >
-        {DISTRICTS.map((d, i) => {
-          const isHovered = hoveredIdx === i;
-          const isMapo = i === MAPO_IDX;
-
-          return (
-            <div
-              key={d.eng}
-              className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                isMapo ? 'cursor-pointer' : 'cursor-not-allowed'
-              } ${
-                isHovered
-                  ? 'w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(129,140,248,0.3)]'
-                  : 'w-[70px] md:w-[80px] z-0'
-              }`}
-              onMouseEnter={() => setHoveredIdx(i)}
-              onMouseLeave={() => setHoveredIdx(null)}
-              onClick={() => {
-                if (isMapo && !isDragging) onMapoClick();
-              }}
-            >
-              {/* Parallax background image */}
-              <div
-                className={`absolute inset-0 w-full h-full bg-contain bg-center bg-no-repeat transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                  isHovered
-                    ? 'scale-100 opacity-80 grayscale-0'
-                    : 'scale-[0.9] opacity-30 grayscale-0'
-                }`}
-                style={{ backgroundImage: `url(${d.img})` }}
-              />
-
-              {/* Gradient mask */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18] via-[#1e1b18]/60 to-transparent opacity-90 transition-opacity duration-1000" />
-
-              {/* English name (shown on hover) */}
-              <div
-                className={`absolute top-12 left-6 right-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                  isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                }`}
-              >
-                <span className="text-xs tracking-[0.3em] text-gray-400 font-light uppercase">
-                  {d.eng}-GU
-                </span>
-              </div>
-
-              {/* Mapo badge (shown on hover) */}
-              {isMapo && (
-                <div
-                  className={`absolute top-24 left-6 transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                    isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                  }`}
-                >
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
-                    <Activity size={12} />
-                    분석 가능
-                  </span>
-                </div>
-              )}
-
-              {/* ★ Staggered Letter Animation ★ */}
-              <div className="absolute inset-0 pointer-events-none p-4 md:p-8">
-                <div className="relative w-full h-full">
-                  {/* Hover: horizontal staggered text */}
-                  <h2 className="absolute left-6 md:left-8 bottom-24 md:bottom-20 flex gap-[2px]">
-                    {d.name.split('').map((char, ci) => (
-                      <span
-                        key={ci}
-                        className={`font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-[#a3a3a3] transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                          isHovered
-                            ? 'text-4xl md:text-5xl opacity-100 translate-y-0 blur-0'
-                            : 'text-4xl md:text-5xl opacity-0 translate-y-10 blur-[4px]'
-                        }`}
-                        style={{
-                          transitionDelay: isHovered ? `${ci * 40 + 100}ms` : '0ms',
-                        }}
-                      >
-                        {char}
-                      </span>
-                    ))}
-                  </h2>
-
-                  {/* Default: vertical stacked staggered text */}
-                  <h2 className="absolute left-1/2 -translate-x-1/2 bottom-10 md:bottom-12 flex flex-col items-center gap-1">
-                    {d.name.split('').map((char, ci) => (
-                      <span
-                        key={ci}
-                        className={`font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-[#a3a3a3] leading-none transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                          isHovered
-                            ? 'text-2xl md:text-3xl opacity-0 -translate-y-10 blur-[4px]'
-                            : 'text-2xl md:text-3xl opacity-60 translate-y-0 blur-0'
-                        }`}
-                        style={{
-                          transitionDelay: isHovered ? '0ms' : `${ci * 40 + 100}ms`,
-                        }}
-                      >
-                        {char}
-                      </span>
-                    ))}
-                  </h2>
-
-                  {/* Bottom info */}
-                  <div
-                    className={`absolute left-0 bottom-0 flex flex-col items-start transition-all duration-[1000ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
-                      isHovered
-                        ? 'opacity-100 translate-y-0 delay-[300ms]'
-                        : 'opacity-0 translate-y-4 pointer-events-none'
-                    }`}
-                  >
-                    {isMapo ? (
-                      <div className="flex items-center gap-2 text-indigo-300 text-sm">
-                        <Play size={14} />
-                        <span>클릭하여 시뮬레이션 시작</span>
-                      </div>
-                    ) : (
-                      <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-bold tracking-wider">
-                        서비스 준비 중
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   About Page — 프로젝트 소개 에디토리얼 랜딩
-   ═══════════════════════════════════════════════════════
-   - Section 1: Hero (문제 정의 + "SPOTTER는 여기서 시작합니다")
-   - Section 2: 5가지 차별점 (워터마크 넘버링)
-   - Section 3: 기존 서비스 비교표 (취소선 vs 앰버 강조)
-   - Section 4: 7개 공공데이터 배지 + NOW/NEXT/FUTURE 로드맵
-*/
-
-const FEATURES = [
-  {
-    num: '01',
-    title: '카니발리제이션(자기잠식) 분석',
-    desc: '같은 브랜드 기존 매장과의 영향권 중첩을 계산하여 매출 잠식률을 산출합니다. "3호점을 내면 1호점 매출이 얼마나 깎이는가?"에 대한 정량적 답을 제시합니다.',
-  },
-  {
-    num: '02',
-    title: '간접 경쟁(대체재) 분석',
-    desc: '치킨집의 경쟁상대는 옆 치킨집만이 아닙니다. 피자·족발·배달 야식 등 소비 카테고리 전체의 경쟁 강도를 가중치 기반으로 반영합니다.',
-  },
-  {
-    num: '03',
-    title: 'What-if 시나리오 시뮬레이션',
-    desc: '경쟁 매장 진입, 최저임금 변화, 임대료 상승 등 조건을 변경하면 즉시 재시뮬레이션합니다. 미래의 불확실성을 데이터로 대비하세요.',
-  },
-  {
-    num: '04',
-    title: '12개월 시간 축 예측',
-    desc: '단순 스냅샷이 아닌, 12개월간의 매출 추이·경쟁 반응·생존 확률을 시계열로 예측합니다.',
-  },
-  {
-    num: '05',
-    title: '법률 리스크 AI 검토 (RAG)',
-    desc: '가맹사업법 영업지역 보호, 상가임대차보호법 위반 여부를 AI가 자동으로 검토하여 법적 리스크를 사전에 차단합니다.',
-  },
-];
-
-const COMPARISONS = [
-  { old: '현재 상권 스냅샷만 제공', arrow: '→', now: '12개월 미래 예측 시뮬레이션' },
-  { old: '같은 업종 경쟁만 분석', arrow: '→', now: '간접 경쟁(대체재)까지 반영' },
-  { old: '자기잠식 분석 불가', arrow: '→', now: '카니발리제이션 정량 산출' },
-  { old: '컨설팅 비용 수천만 원', arrow: '→', now: 'AI 기반 즉시 분석' },
-  { old: '정적 리포트 1회 제공', arrow: '→', now: 'What-if 무제한 재시뮬레이션' },
-  { old: '법률 리스크 수동 검토', arrow: '→', now: 'RAG 기반 자동 법률 검토' },
-];
-
-const DATA_SOURCES = [
-  '소상공인시장진흥공단',
-  '서울 생활인구 (KT)',
-  '통계청 SGIS',
-  '국토부 실거래가',
-  '공정위 정보공개서',
-  '서울 상권분석 (golmok)',
-  'Naver DataLab',
-];
-
-const ROADMAP = [
-  { phase: 'NOW', label: '서울시 마포구 16개 행정동 분석 지원' },
-  { phase: 'NEXT', label: '서울 전체 25개 구 확장 + 프랜차이즈 브랜드 DB 고도화' },
-  { phase: 'FUTURE', label: '전국 단위 확장 + 실시간 매출 데이터 연동 + B2B SaaS 출시' },
-];
-
-function AboutPage({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#1e1b18]/95 backdrop-blur-sm text-[#e2e8f0] pb-32 custom-scrollbar">
-      {/* Header */}
-      <div className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633]/50 flex items-center px-8 md:px-16 bg-[#1e1b18]/80 backdrop-blur-md z-50">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
-          >
-            <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">SPOTTER</span>
-          </button>
-          <span className="text-[#3a3633]">/</span>
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-white transition-colors duration-300"
-          >
-            <ChevronRight size={14} className="rotate-180" />
-            BACK
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-8 md:px-16 pt-24">
-        {/* ── Section 1: Hero ── */}
-        <section className="min-h-[80vh] flex flex-col justify-center animate-[fadeSlideIn_1s_ease-out]">
-          <p className="text-lg md:text-xl text-[#9ca3af] mb-6 tracking-wide">
-            기존 상권분석 도구는{' '}
-            <span className="text-[#818cf8] font-bold text-2xl md:text-3xl">'지금'</span>만
-            보여줍니다.
-          </p>
-
-          <div className="flex flex-col gap-4 my-10">
-            {[
-              '이 자리에 매장을 내면, 1년 뒤 매출은 얼마일까?',
-              '같은 브랜드 3호점이 1호점 매출을 얼마나 잡아먹을까?',
-              '옆에 경쟁 매장이 들어오면, 내 생존 확률은?',
-            ].map((q, i) => (
-              <div
-                key={i}
-                className="border-l-2 border-indigo-500 pl-6 py-2"
-                style={{ animationDelay: `${i * 150 + 300}ms` }}
-              >
-                <p className="text-xl md:text-2xl font-medium text-[#e2e8f0]/80 italic">"{q}"</p>
-              </div>
-            ))}
-          </div>
-
-          <h2 className="text-3xl md:text-5xl font-black mt-10 tracking-tight leading-tight">
-            <span className="text-[#818cf8]">SPOTTER</span>는
-            <br />
-            여기서 시작합니다.
-          </h2>
-        </section>
-
-        {/* ── Section 2: What We Do Differently ── */}
-        <section className="py-24">
-          <div className="flex items-center gap-4 mb-16">
-            <div className="w-12 h-px bg-[#818cf8]" />
-            <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
-              What We Do Differently
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-            {FEATURES.map((f) => (
-              <div key={f.num} className="relative pl-2 pt-6">
-                <span className="font-mono text-5xl md:text-7xl font-black text-[#3a3633] absolute -top-6 -left-4 opacity-50 z-0 select-none">
-                  {f.num}
-                </span>
-                <h4 className="text-xl font-bold text-[#e2e8f0] mb-3 relative z-10">{f.title}</h4>
-                <p className="text-[#9ca3af] leading-relaxed relative z-10">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── Section 3: Comparison ── */}
-        <section className="py-24">
-          <div className="flex items-center gap-4 mb-16">
-            <div className="w-12 h-px bg-[#818cf8]" />
-            <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
-              Compared to Existing Solutions
-            </h3>
-          </div>
-
-          <div className="flex flex-col">
-            {COMPARISONS.map((c, i) => (
-              <div
-                key={i}
-                className="flex justify-between items-center py-4 border-b border-[#3a3633]/50"
-              >
-                <span className="text-[#d1d5db] line-through decoration-[#3a3633] flex-1 text-sm">
-                  {c.old}
-                </span>
-                <span className="text-[#3a3633] font-mono mx-6 shrink-0">{c.arrow}</span>
-                <span className="text-indigo-400 font-bold text-lg flex-1 text-right">{c.now}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── Section 4: Data & Roadmap ── */}
-        <section className="py-24">
-          {/* Data sources */}
-          <div className="mb-20">
-            <div className="flex items-center gap-4 mb-10">
-              <div className="w-12 h-px bg-[#818cf8]" />
-              <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
-                Data &amp; Trust
-              </h3>
-            </div>
-            <p className="text-[#9ca3af] mb-6 text-sm">
-              7개 공공데이터 API 기반 — 신뢰할 수 있는 데이터만 사용합니다.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {DATA_SOURCES.map((src) => (
-                <span
-                  key={src}
-                  className="px-4 py-2 rounded-full border border-[#3a3633] bg-[#2c2825] text-sm text-[#9ca3af] hover:border-indigo-500/50 hover:text-[#e2e8f0] transition-colors cursor-default"
-                >
-                  {src}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Roadmap */}
-          <div>
-            <div className="flex items-center gap-4 mb-10">
-              <div className="w-12 h-px bg-[#818cf8]" />
-              <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
-                Roadmap
-              </h3>
-            </div>
-            <div className="flex flex-col gap-8">
-              {ROADMAP.map((r, i) => (
-                <div key={i} className="flex items-start gap-6">
-                  <span className="font-mono text-indigo-400 w-24 shrink-0 text-sm font-bold pt-0.5">
-                    {r.phase}
-                  </span>
-                  <div className="flex items-start gap-4">
-                    <div className="mt-2 w-2 h-2 rounded-full bg-[#818cf8] shrink-0" />
-                    <p className="text-[#e2e8f0] leading-relaxed">{r.label}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   Contact Page — 벤토 박스 디지털 명함
-   ═══════════════════════════════════════════════════════
-   - 좌측: Mega Typography (GET IN TOUCH.)
-   - 우측: Bento Grid (Workspace 4링크, Team, Location, Direct Inquiry)
-   - 100vh One-page Fit (스크롤 없음)
-*/
-
-function ContactPage({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-[#1e1b18]/95 backdrop-blur-sm text-[#e2e8f0] pb-10">
-      {/* Header */}
-      <div className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633]/50 flex items-center px-8 md:px-16 bg-[#1e1b18]/80 backdrop-blur-md z-50">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
-          >
-            <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">SPOTTER</span>
-          </button>
-          <span className="text-[#3a3633]">/</span>
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-white transition-colors duration-300"
-          >
-            <ChevronRight size={14} className="rotate-180" />
-            BACK
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 flex flex-col justify-center pt-24 px-8 md:px-16 overflow-hidden">
-        <div className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left — Mega Typography */}
-          <div
-            className="lg:col-span-5 flex flex-col justify-center"
-            style={{ animation: 'fadeSlideIn 1s ease-out' }}
-          >
-            <span className="font-mono text-indigo-400 tracking-widest mb-4 text-xs">
-              PROJECT SPOTTER
-            </span>
-            <h1 className="text-5xl lg:text-7xl xl:text-8xl font-black uppercase leading-none mb-8">
-              GET IN
-              <br />
-              <span className="text-[#818cf8]">TOUCH.</span>
-            </h1>
-            <p className="text-[#d1d5db] leading-relaxed text-sm max-w-sm">
-              AI 기반 프랜차이즈 상권분석 시뮬레이터 프로젝트에 대한 상세한 코드와 기획 문서는 아래
-              워크스페이스에서 확인하실 수 있습니다.
-            </p>
-          </div>
-
-          {/* Right — Bento Box */}
-          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Card 1: Workspace — full width */}
-            <div
-              className="group/card md:col-span-2 relative rounded-2xl overflow-hidden p-[2px]"
-              style={{ animation: 'fadeSlideIn 1s ease-out 100ms both' }}
-            >
-              <div
-                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
-                style={{
-                  background:
-                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                }}
-              />
-              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
-                  Workspace
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                    <div
-                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                      style={{
-                        background:
-                          'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                      }}
-                    />
-                    <a
-                      href="https://github.com/Himidea-AI/Final_Project"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                    >
-                      <div className="flex items-center gap-3">
-                        <GitFork
-                          size={18}
-                          className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors"
-                        />
-                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">
-                          GitHub
-                        </span>
-                      </div>
-                      <ExternalLink
-                        size={14}
-                        className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors"
-                      />
-                    </a>
-                  </div>
-                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                    <div
-                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                      style={{
-                        background:
-                          'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                      }}
-                    />
-                    <a
-                      href="https://www.notion.so/333ac2a0181b802b807cf7de2447b890"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                    >
-                      <div className="flex items-center gap-3">
-                        <ExternalLink
-                          size={18}
-                          className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors"
-                        />
-                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">
-                          Notion
-                        </span>
-                      </div>
-                      <ExternalLink
-                        size={14}
-                        className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors"
-                      />
-                    </a>
-                  </div>
-                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                    <div
-                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                      style={{
-                        background:
-                          'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                      }}
-                    />
-                    <a
-                      href="https://www.figma.com/board/lkjvfmKP4FU5XWBAyWR52a/%EC%A0%9C%EB%AA%A9-%EC%97%86%EC%9D%8C?node-id=0-1&p=f&t=ZITF88ooGHZ2rrHV-0"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                    >
-                      <div className="flex items-center gap-3">
-                        <ExternalLink
-                          size={18}
-                          className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors"
-                        />
-                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">
-                          Figma
-                        </span>
-                      </div>
-                      <ExternalLink
-                        size={14}
-                        className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors"
-                      />
-                    </a>
-                  </div>
-                  <div className="group/btn relative rounded-xl overflow-hidden p-[2px]">
-                    <div
-                      className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500"
-                      style={{
-                        background:
-                          'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                      }}
-                    />
-                    <a
-                      href="https://bat981120.atlassian.net/jira/software/projects/IM3/boards/2"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative z-10 bg-[#1e1b18] group-hover/btn:bg-[#818cf8] rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
-                    >
-                      <div className="flex items-center gap-3">
-                        <ExternalLink
-                          size={18}
-                          className="text-[#9ca3af] group-hover/btn:text-[#1e1b18] transition-colors"
-                        />
-                        <span className="font-bold text-[#e2e8f0] group-hover/btn:text-[#1e1b18] text-sm transition-colors">
-                          Jira
-                        </span>
-                      </div>
-                      <ExternalLink
-                        size={14}
-                        className="text-[#3a3633] group-hover/btn:text-[#1e1b18] transition-colors"
-                      />
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Team Info */}
-            <div
-              className="group/card relative rounded-2xl overflow-hidden p-[2px]"
-              style={{ animation: 'fadeSlideIn 1s ease-out 200ms both' }}
-            >
-              <div
-                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
-                style={{
-                  background:
-                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                }}
-              />
-              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-2 block">
-                  Team
-                </span>
-                <p className="text-lg font-bold text-white mb-4">
-                  AI 심화과정 6인 팀 프로젝트 (3조)
-                </p>
-                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-2 block">
-                  Mentor
-                </span>
-                <p className="text-lg font-bold text-white">황태림</p>
-              </div>
-            </div>
-
-            {/* Card 3: Location */}
-            <div
-              className="group/card relative rounded-2xl overflow-hidden p-[2px]"
-              style={{ animation: 'fadeSlideIn 1s ease-out 300ms both' }}
-            >
-              <div
-                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
-                style={{
-                  background:
-                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                }}
-              />
-              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
-                  Location
-                </span>
-                <div className="flex items-center gap-3">
-                  <MapPin className="text-indigo-400 w-6 h-6 shrink-0" />
-                  <span className="text-lg font-bold text-white leading-tight">
-                    강남 하이미디어
-                    <br />
-                    아카데미
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 4: Direct Inquiry — full width */}
-            <div
-              className="group/card md:col-span-2 relative rounded-2xl overflow-hidden p-[2px]"
-              style={{ animation: 'fadeSlideIn 1s ease-out 400ms both' }}
-            >
-              <div
-                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover/card:opacity-100 transition-opacity duration-500"
-                style={{
-                  background:
-                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-                }}
-              />
-              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
-                <span className="font-mono text-xs text-[#9ca3af] uppercase tracking-widest mb-4 block">
-                  Direct Inquiry
-                </span>
-                <div className="flex flex-wrap gap-8">
-                  <a
-                    href="mailto:bat981120@gmail.com"
-                    className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
-                  >
-                    <Mail className="w-5 h-5 text-[#9ca3af] shrink-0" />
-                    bat981120@gmail.com
-                  </a>
-                  <a
-                    href="tel:01067790080"
-                    className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
-                  >
-                    <Phone className="w-5 h-5 text-[#9ca3af] shrink-0" />
-                    010.6779.0080
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ═══════════════════════════════════════════════════════
    Scene 3: Simulator Dashboard — 시뮬레이션 대시보드
@@ -7956,91 +6783,96 @@ export default function App() {
               <NetworkBackground isTransitioning={isTransitioning} scene={scene} theme="dark" />
 
               {/* Route-based scenes */}
-              <Routes>
-                <Route
-                  path="/"
-                  element={
-                    <IntroScene
-                      activeMenuIndex={activeMenuIndex}
-                      setActiveMenuIndex={setActiveMenuIndex}
-                      onAboutClick={() => transitionTo('about')}
-                      onLoginClick={() => transitionTo('login')}
-                      onSimulatorClick={() => transitionTo('accordion')}
-                      onContactClick={() => transitionTo('contact')}
-                    />
-                  }
-                />
-                <Route path="/about" element={<AboutPage onBack={() => transitionTo('intro')} />} />
-                <Route
-                  path="/joinus"
-                  element={<JoinUsPage onBack={() => transitionTo('intro')} />}
-                />
-                <Route
-                  path="/explore"
-                  element={
-                    <AccordionGallery
-                      hoveredIdx={hoveredDistrictIdx}
-                      setHoveredIdx={setHoveredDistrictIdx}
-                      onMapoClick={() => transitionTo('simulator')}
-                      onLogoClick={() => transitionTo('intro')}
-                    />
-                  }
-                />
-                <Route
-                  path="/contact"
-                  element={<ContactPage onBack={() => transitionTo('intro')} />}
-                />
-                <Route
-                  path="/simulator"
-                  element={
-                    <ProtectedRoute>
-                      <SimulatorDashboard
-                        reportState={reportState}
-                        setReportState={setReportState}
+              <Suspense fallback={null}>
+                <Routes>
+                  <Route
+                    path="/"
+                    element={
+                      <IntroScene
+                        activeMenuIndex={activeMenuIndex}
+                        setActiveMenuIndex={setActiveMenuIndex}
+                        onAboutClick={() => transitionTo('about')}
+                        onLoginClick={() => transitionTo('login')}
+                        onSimulatorClick={() => transitionTo('accordion')}
+                        onContactClick={() => transitionTo('contact')}
                       />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/hq"
-                  element={
-                    <ProtectedRoute requireRole="master">
-                      <HQCommandCenter />
-                    </ProtectedRoute>
-                  }
-                />
-                {/* ManagerDetail — 본인 또는 master 접근 가능 (내부 분기). Phase 1: self-view 중심 */}
-                <Route
-                  path="/hq/managers/:id"
-                  element={
-                    <ProtectedRoute>
-                      <ManagerDetail />
-                    </ProtectedRoute>
-                  }
-                />
-                {/* 저장된 시뮬 이력 재현 — 본인 이력만 조회 가능 (백엔드 권한 검증) */}
-                <Route
-                  path="/dashboard/history/:id"
-                  element={
-                    <ProtectedRoute>
-                      <SimulationHistoryDetail />
-                    </ProtectedRoute>
-                  }
-                />
-                {/* 시뮬 이력 최대 4건 비교 + PDF export */}
-                <Route
-                  path="/dashboard/compare"
-                  element={
-                    <ProtectedRoute>
-                      <SimulationCompare />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/login"
-                  element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
-                />
-              </Routes>
+                    }
+                  />
+                  <Route
+                    path="/about"
+                    element={<AboutPage onBack={() => transitionTo('intro')} />}
+                  />
+                  <Route
+                    path="/joinus"
+                    element={<JoinUsPage onBack={() => transitionTo('intro')} />}
+                  />
+                  <Route
+                    path="/explore"
+                    element={
+                      <AccordionGallery
+                        hoveredIdx={hoveredDistrictIdx}
+                        setHoveredIdx={setHoveredDistrictIdx}
+                        onMapoClick={() => transitionTo('simulator')}
+                        onLogoClick={() => transitionTo('intro')}
+                      />
+                    }
+                  />
+                  <Route
+                    path="/contact"
+                    element={<ContactPage onBack={() => transitionTo('intro')} />}
+                  />
+                  <Route
+                    path="/simulator"
+                    element={
+                      <ProtectedRoute>
+                        <SimulatorDashboard
+                          reportState={reportState}
+                          setReportState={setReportState}
+                        />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/hq"
+                    element={
+                      <ProtectedRoute requireRole="master">
+                        <HQCommandCenter />
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* ManagerDetail — 본인 또는 master 접근 가능 (내부 분기). Phase 1: self-view 중심 */}
+                  <Route
+                    path="/hq/managers/:id"
+                    element={
+                      <ProtectedRoute>
+                        <ManagerDetail />
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* 저장된 시뮬 이력 재현 — 본인 이력만 조회 가능 (백엔드 권한 검증) */}
+                  <Route
+                    path="/dashboard/history/:id"
+                    element={
+                      <ProtectedRoute>
+                        <SimulationHistoryDetail />
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* 시뮬 이력 최대 4건 비교 + PDF export */}
+                  <Route
+                    path="/dashboard/compare"
+                    element={
+                      <ProtectedRoute>
+                        <SimulationCompare />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/login"
+                    element={<LoginPage onLogoClick={() => transitionTo('intro')} />}
+                  />
+                </Routes>
+              </Suspense>
 
               {/* IM3-205: 시뮬레이션 백그라운드 추적 — 라우팅 바깥에 마운트 */}
               <SimulationFloatingWidget />
