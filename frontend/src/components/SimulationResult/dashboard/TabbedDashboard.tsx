@@ -74,6 +74,8 @@ interface AgentDef {
   color: string;
   /** 컨테이너 보더 색 (아이콘 컬러에 맞춘 정적 Tailwind 클래스). 시인성 강조용. */
   borderCls: string;
+  /** 아이콘 박스 배경 (정적 Tailwind 클래스 — JIT가 빌드에 포함시키도록 동적 보간 금지). */
+  iconBgCls: string;
   desc: string;
 }
 
@@ -84,6 +86,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: BarChart3,
     color: 'text-blue-400',
     borderCls: 'border-blue-500/30 hover:border-blue-500/70',
+    iconBgCls: 'bg-blue-500/10 border-blue-500/30',
     desc: 'market_analyst',
   },
   {
@@ -92,6 +95,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: Users,
     color: 'text-emerald-400',
     borderCls: 'border-emerald-500/30 hover:border-emerald-500/70',
+    iconBgCls: 'bg-emerald-500/10 border-emerald-500/30',
     desc: 'population_analyst',
   },
   {
@@ -100,6 +104,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: PieChart,
     color: 'text-indigo-400',
     borderCls: 'border-indigo-500/30 hover:border-indigo-500/70',
+    iconBgCls: 'bg-indigo-500/10 border-indigo-500/30',
     desc: 'demographic_depth',
   },
   {
@@ -108,6 +113,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: ShieldAlert,
     color: 'text-amber-400',
     borderCls: 'border-amber-500/30 hover:border-amber-500/70',
+    iconBgCls: 'bg-amber-500/10 border-amber-500/30',
     desc: 'competitor_intel',
   },
   {
@@ -116,6 +122,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: AlertTriangle,
     color: 'text-rose-400',
     borderCls: 'border-rose-500/30 hover:border-rose-500/70',
+    iconBgCls: 'bg-rose-500/10 border-rose-500/30',
     desc: 'legal_agent',
   },
   {
@@ -124,6 +131,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: TrendingUp,
     color: 'text-cyan-400',
     borderCls: 'border-cyan-500/30 hover:border-cyan-500/70',
+    iconBgCls: 'bg-cyan-500/10 border-cyan-500/30',
     desc: 'trend_forecaster',
   },
   {
@@ -132,6 +140,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: Layers,
     color: 'text-violet-400',
     borderCls: 'border-violet-500/30 hover:border-violet-500/70',
+    iconBgCls: 'bg-violet-500/10 border-violet-500/30',
     desc: 'district_ranking',
   },
   {
@@ -140,6 +149,7 @@ export const AGENTS_LIST: AgentDef[] = [
     icon: BrainCircuit,
     color: 'text-white',
     borderCls: 'border-stone-400/40 hover:border-stone-200/80',
+    iconBgCls: 'bg-stone-200/5 border-stone-400/40',
     desc: 'synthesis_agent',
   },
 ];
@@ -272,6 +282,8 @@ export function TabbedDashboard({
             ? `${formatScore(simResult.market_report.floating_population)}/100`
             : '—',
         sub: `${winnerDistrict} · 동 기준`,
+        // 0~100 정규화된 floating_population을 그대로 progress bar에 사용. tagColor 미지정 → cyan
+        score: simResult.market_report?.floating_population ?? null,
         bullet: {
           actual: simResult.market_report?.floating_population ?? null,
           target: 70,
@@ -300,6 +312,7 @@ export function TabbedDashboard({
                 ? ('amber' as const)
                 : ('emerald' as const),
         sub: comp500 != null ? `500m 내 ${comp500}개` : undefined,
+        score: compIntensity ?? null,
       },
       {
         label: '법률 리스크',
@@ -312,6 +325,11 @@ export function TabbedDashboard({
             ? ('rose' as const)
             : ('emerald' as const),
         sub: legalAnalyzed ? `${totalLegal}항목 중` : 'legal agent 대기',
+        // 위험 비율 — 분석 안 됐거나 항목 0개면 null (0/0 = NaN 회피)
+        score:
+          !legalAnalyzed || totalLegal === 0
+            ? null
+            : Math.round((dangerLegalCount / totalLegal) * 100),
       },
     ];
   })();

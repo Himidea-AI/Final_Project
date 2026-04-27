@@ -26,6 +26,12 @@ export interface KpiItem {
     max?: number;
     thresholds?: [number, number];
   };
+  /**
+   * 0~100 normalized score → 카드 하단 progress bar.
+   * 색상은 tagColor를 그대로 따라감 (없으면 cyan).
+   * 데이터 없을 땐 omit — 가짜 50 채우지 말 것 (실데이터 원칙).
+   */
+  score?: number | null;
 }
 
 interface KpiMiniGridProps {
@@ -38,6 +44,15 @@ const TAG_CLS: Record<NonNullable<KpiItem['tagColor']>, string> = {
   rose: 'text-rose-400',
   stone: 'text-stone-400',
 };
+
+/** progress bar 색 — tagColor 트리거. 없으면 cyan(중립 강조색) */
+const SCORE_BAR_HEX: Record<NonNullable<KpiItem['tagColor']>, string> = {
+  emerald: '#34d399',
+  amber: '#fbbf24',
+  rose: '#fb7185',
+  stone: '#78716c',
+};
+const DEFAULT_SCORE_HEX = '#22d3ee'; // cyan-400
 
 export function KpiMiniGrid({ items }: KpiMiniGridProps) {
   return (
@@ -66,6 +81,26 @@ export function KpiMiniGrid({ items }: KpiMiniGridProps) {
               </div>
             )}
           </div>
+          {kpi.score != null && (
+            <div
+              className="relative w-full h-1 bg-stone-800/60 rounded-full overflow-hidden mt-2 shadow-inner"
+              role="progressbar"
+              aria-valuenow={Math.round(kpi.score)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="absolute left-0 top-0 bottom-0 transition-all duration-700 ease-out rounded-full"
+                style={{
+                  width: `${Math.min(100, Math.max(0, kpi.score))}%`,
+                  backgroundColor: SCORE_BAR_HEX[kpi.tagColor ?? 'stone'] ?? DEFAULT_SCORE_HEX,
+                  boxShadow: `0 0 6px ${
+                    SCORE_BAR_HEX[kpi.tagColor ?? 'stone'] ?? DEFAULT_SCORE_HEX
+                  }80`,
+                }}
+              />
+            </div>
+          )}
           {kpi.sub && <div className="text-[9px] text-stone-600 mt-1 font-bold">{kpi.sub}</div>}
           {kpi.spark && kpi.spark.length > 0 && (
             <div className="mt-2">

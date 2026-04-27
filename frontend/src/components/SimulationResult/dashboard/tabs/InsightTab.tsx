@@ -68,12 +68,16 @@ export function InsightTab({ simResult, openModal }: Props) {
               key={agent.id}
               className={`border p-6 rounded-3xl h-full flex flex-col transition-all text-left group ${
                 hasData
-                  ? 'bg-stone-900/40 border-stone-800/60 hover:border-stone-700'
+                  ? `bg-stone-900/40 ${agent.borderCls}`
                   : 'bg-stone-900/20 border-dashed border-stone-800 opacity-60'
               }`}
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-stone-800 rounded-xl shadow-inner group-hover:scale-110 transition-transform">
+                <div
+                  className={`p-2 rounded-xl border shadow-inner group-hover:scale-110 transition-transform ${
+                    hasData ? agent.iconBgCls : 'bg-stone-800 border-stone-700/50'
+                  }`}
+                >
                   <AgentIcon size={18} className={agent.color} />
                 </div>
                 <div className="flex-1 min-w-0">
