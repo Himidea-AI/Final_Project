@@ -1,0 +1,57 @@
+{
+  "experiment": "Phase I — KT presence residence baseline 차감 + visit residual Pearson",
+  "date": "2026-04-27",
+  "rationale": "ceiling-analysis.md §7-A.2 — KT presence 의 75% residence baseline 이 Pearson 분모 noise dominant. baseline 차감 시 visit 신호만 남아 ABM 과 align 가능 가설.",
+  "config": {
+    "abm": "1K agent / 1d / mock LLM / use_policy=True",
+    "kt": "living_population_grid 2026-Q1 평균 (90일)",
+    "metric": "Pearson r on (dong_code × tt) 384 cells",
+    "pse_n": 3,
+    "seeds": [42, 123, 7777]
+  },
+  "results": {
+    "V1_raw": {
+      "mean": 0.2819,
+      "ci95": 0.0411,
+      "min": 0.2483,
+      "max": 0.3204,
+      "description": "raw Pearson on (KT presence, ABM count). 현재 main, baseline."
+    },
+    "V2_kt_residence_subtracted": {
+      "mean": 0.6493,
+      "ci95": 0.0179,
+      "min": 0.6360,
+      "max": 0.6668,
+      "description": "KT presence 에서 동별 03~07시 평균 (residence baseline) 차감 후 Pearson."
+    },
+    "delta": {
+      "value": 0.3674,
+      "combined_ci": 0.0448,
+      "verdict": "✅ statistically significant lift (Δ > combined CI)"
+    }
+  },
+  "discrepancy_note": "V1 baseline 0.28 은 sim-mode-matrix.md 가 보고한 0.79 와 큰 격차. 측정 방식 (aggregation, normalization, ABM config) 차이 가능성. 이 실험은 V1 ↔ V2 같은 metric/config 의 차분이 의미 있다는 것을 입증.",
+  "interpretation": [
+    "KT presence 의 75% 는 시간 무관 residence stock (마포 24h diurnal range 945~1192 per cell, 변동 폭 26%)",
+    "ABM 1K agent 는 visit 동선 위주 모델 (외부 commuter + visitor 50%)",
+    "raw Pearson 비교 시 ABM 의 visit 신호가 KT residence noise 에 묻힘",
+    "residence baseline 차감 후 (visit residual) ABM 과 같은 양 비교 → +0.37 lift",
+    "이는 ceiling-analysis §7-A.2 의 +0.07~0.12 가설을 크게 초과 (가설 너무 보수적)"
+  ],
+  "limitations": [
+    "residence baseline 정의 임의 (03~07시 평균) — 실제 KT 자료에 거주/방문 라벨 없음",
+    "ABM 출력은 baseline 차감 안 함 (V3 시도 시 -lift). V2 가 가장 정직한 비교",
+    "sample size 1K, PSE N=3 — V1 자체는 noise 가능, V2 차분이 핵심"
+  ],
+  "next": [
+    "3K agent + PSE N=5 로 V2 재검증 (예상 V2 0.7+)",
+    "Phase J: lagged Pearson (단일 seed sweep -2~+3h, peak Δt=-2h 0.38)",
+    "Phase K: per-dong z-score normalization (negative result - skip)",
+    "ABM output 에 residence baseline 명시화 (PopulationMix.residents 가중)"
+  ],
+  "artifacts": [
+    "validation/abm_vs_grid_decomposed.py (6 metric variant)",
+    "validation/abm_vs_grid_pse3.py (PSE N=3 V1 vs V2 비교)",
+    "validation/results/phase_i_pse3_results.txt"
+  ]
+}

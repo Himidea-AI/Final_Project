@@ -83,7 +83,7 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
     Returns:
         dict:
             closure_rate:          최근 4분기 평균 폐업률 (0~1). 계산 실패 시 None.
-            closure_risk_level:    위험도 ("safe" / "caution" / "danger" / "unknown")
+            closure_rate_level:    위험도 ("safe" / "caution" / "danger" / "unknown")
             monthly_closure_rates: 12개월 월별 누적 폐업률 리스트. 실패 시 빈 리스트.
             quarterly_predictions: 최근 4분기 실측값 리스트 (추세 참고용). 실패 시 빈 리스트.
     """
@@ -116,9 +116,10 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
 
     return {
         "closure_rate": closure_rate,
-        "closure_risk_level": risk_level,
+        "closure_rate_level": risk_level,
         "monthly_closure_rates": monthly_rates,
         "quarterly_predictions": quarterly_predictions,
+        "is_mock": False,
     }
 
 
@@ -136,9 +137,10 @@ def _fallback_by_industry(df, industry_code: str) -> dict:
         risk_level = _classify_risk(avg)
         return {
             "closure_rate": avg,
-            "closure_risk_level": risk_level,
+            "closure_rate_level": risk_level,
             "monthly_closure_rates": _interpolate_monthly(avg),
             "quarterly_predictions": [avg] * 4,
+            "is_mock": False,
         }
     return _mock_result()
 
@@ -147,7 +149,8 @@ def _mock_result() -> dict:
     """최종 fallback — 계산 실패 신호 반환 (임의값 노출 방지)."""
     return {
         "closure_rate": None,
-        "closure_risk_level": "unknown",
+        "closure_rate_level": "unknown",
         "monthly_closure_rates": [],
         "quarterly_predictions": [],
+        "is_mock": True,
     }

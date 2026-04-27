@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from models.closure_risk.model import WEIGHTS_DIR, TCNClassifier
-from models.lstm_forecast.data_prep import ALL_FEATURES, DB_URL, build_timeseries, load_sales_data, load_store_data
+from models.lstm_forecast.data_prep import ALL_FEATURES, DB_URL, EXCLUDE_COMBOS, ExcludedComboError, build_timeseries, load_sales_data, load_store_data
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +316,14 @@ def predict(
         }
     """
     cfg = config or {}
+
+    # EXCLUDE_COMBOS 차단 — 학습 제외 조합은 추론도 제공하지 않음
+    if (dong_code, industry_code) in EXCLUDE_COMBOS:
+        raise ExcludedComboError(
+            f"해당 조합은 데이터 부족으로 예측을 제공하지 않습니다: "
+            f"dong_code={dong_code}, industry_code={industry_code}"
+        )
+
     db_url = cfg.get("db_url", DB_URL)
     window_size = 4
 

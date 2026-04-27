@@ -71,7 +71,7 @@ def _predict_closure(dong_code: str, industry_code: str) -> dict | None:
     Returns:
         dict | None:
             폐업률 예측 결과 dict. 가중치 파일 없거나 예측 실패 시 None 반환.
-            dict 구조: {closure_rate, closure_risk_level,
+            dict 구조: {closure_rate, closure_rate_level,
                        monthly_closure_rates, quarterly_predictions}
     """
     try:
@@ -218,7 +218,7 @@ def run_backtest(test_year: int = 2024) -> dict:
                 "industry_name": str(row.get("industry_name", industry_code)),
                 "actual_closure_rate": round(actual_closure_rate, 4),
                 "predicted_closure_rate": predicted_closure_rate,
-                "closure_risk_level": pred["closure_risk_level"],
+                "closure_rate_level": pred["closure_rate_level"],
             }
         )
 
