@@ -255,3 +255,4 @@ LangGraph / 운영 vacancy_pse API 영향 X.
 | 날짜 | 작성자 | 변경 |
 |---|---|---|
 | 2026-04-27 | A1 (찬영) | 초기 design (spec #2 — production-ready 합격 추구). 옵션 C (5000ag) + 학계 평균 합격선 + IPF + boost 20 + N=5. |
+| 2026-04-28 | A1 (찬영) | Full run v3 결과 — production-ready: ❌ NO. **but V1A r=0.9543, V1B r=0.953 — Brussels 학계 천장 0.96 의 99% 도달** (IPF 효과 명확, OVERVIEW.md 의 0.849 도 초과). MAPE/V2/CI 는 sample size + 단위 mismatch 본질 한계. "공간 분포 합격, 절대값 미달" 분리 보고. |
