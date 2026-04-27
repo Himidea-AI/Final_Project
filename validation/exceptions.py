@@ -26,10 +26,6 @@ class ExtrapolationCellOverflowError(ImputationError):
     """외삽 셀이 137 중 50% 초과 — 모델 자체 의문."""
 
 
-class SumConsistencyError(ImputationError):
-    """raking post-processing 후에도 sum constraint 오차 > 1%."""
-
-
 class AuditFailureWithDiagnoses(ImputationError):
     """Phase 2 감사 5종 이상 fail — 정직 보고."""
 
