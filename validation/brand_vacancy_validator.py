@@ -483,3 +483,70 @@ def run_5track_validation(
         status = "✅ production-ready" if production_ready else "❌ production-not-ready"
         logger.info(f"[validator] '{brand_name}' 검증 완료 — {status}")
     return report
+
+
+def _main() -> None:
+    """CLI entry point."""
+    import argparse
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    parser = argparse.ArgumentParser(description="Brand vacancy 5트랙 검증")
+    parser.add_argument("--brand", help="단일 브랜드명 (예: 이디야)")
+    parser.add_argument("--brands", help="쉼표 구분 여러 브랜드 (예: 이디야,MEGA,빽다방)")
+    parser.add_argument("--category", default="카페", help="업종 (default: 카페)")
+    parser.add_argument("--days", type=int, default=90, help="시뮬 일수 (default: 90 = 분기)")
+    parser.add_argument("--n-seeds", type=int, default=3, help="PSE N (default: 3)")
+    parser.add_argument(
+        "--multi-quarter-avg",
+        type=int,
+        default=4,
+        help="실측 평균 분기 수 (default: 4)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="validation/results/",
+        help="report 디렉토리",
+    )
+    args = parser.parse_args()
+
+    if not args.brand and not args.brands:
+        parser.error("--brand 또는 --brands 중 하나 필수")
+
+    brand_list = [args.brand] if args.brand else [b.strip() for b in args.brands.split(",")]
+
+    summary: list[dict] = []
+    for brand in brand_list:
+        try:
+            report = run_5track_validation(
+                brand_name=brand,
+                category=args.category,
+                days=args.days,
+                n_seeds=args.n_seeds,
+                multi_quarter_avg=args.multi_quarter_avg,
+                output_dir=args.output_dir,
+                verbose=True,
+            )
+            summary.append(
+                {
+                    "brand": brand,
+                    "production_ready": report["production_ready"],
+                    "fail_tracks": [k for k, v in report["tracks"].items() if not v.get("pass")],
+                }
+            )
+        except Exception as e:
+            logger.exception(f"[validator] '{brand}' 검증 실패: {e}")
+            summary.append({"brand": brand, "production_ready": False, "error": str(e)})
+
+    print("\n=== 검증 일괄 결과 ===")
+    for s in summary:
+        status = "✅" if s.get("production_ready") else "❌"
+        print(f"{status} {s['brand']}: fail_tracks={s.get('fail_tracks', s.get('error'))}")
+
+
+if __name__ == "__main__":
+    _main()
