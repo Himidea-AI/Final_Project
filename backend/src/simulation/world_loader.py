@@ -207,6 +207,7 @@ def _load_dong_industry_weight(engine) -> dict[tuple[str, str], float]:
          AND s.dong_code = v.dong_code
          AND s.industry_code = v.industry_code
         WHERE s.quarter >= (SELECT MAX(quarter) - 1 FROM district_sales_seoul)
+           OR s.quarter >= COALESCE((SELECT MAX(quarter) - 1 FROM seoul_district_sales_imputed_v4), 999999)
     """)
     raw: dict[tuple[str, str], dict] = {}
     with engine.connect() as conn:
