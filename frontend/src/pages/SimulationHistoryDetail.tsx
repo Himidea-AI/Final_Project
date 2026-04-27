@@ -4,7 +4,7 @@ import { ArrowLeft, FileDown, Loader2, RotateCw } from 'lucide-react';
 import { useSimulationDetail } from '../hooks/useSimulationDetail';
 import { TabbedDashboard } from '../components/SimulationResult/dashboard/TabbedDashboard';
 import { formatDocumentId } from '../types/simulationHistory';
-import { HiddenPDFTemplate } from '../App';
+import { HiddenPDFTemplate } from '../components/PDF/HiddenPDFTemplate';
 import { buildPdfPropsFromSimulation } from '../utils/pdfPropsBuilder';
 
 function formatWhen(iso: string): string {
