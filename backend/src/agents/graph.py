@@ -10,7 +10,6 @@ from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.synthesis import synthesis_node
 from src.agents.nodes.trend_forecaster import trend_forecaster_node
-from src.agents.nodes.competitor_intel import competitor_intel_node
 from src.agents.nodes.operational_fit import operational_fit_node
 from src.agents.tools import MarketDataTool as _MarketDataTool
 from src.schemas.state import AgentState
@@ -197,7 +196,28 @@ async def ml_prediction_phase_node(state: AgentState) -> dict:
             monthly_rent=state.get("monthly_rent_budget", 2_000_000),
         )
 
-        sim_result = ModelOutput.generate(dong_code, industry_code, biz, model="tcn", cost_config=cost_config)
+        # [customer_revenue P1-C] 사용자 타겟 입력 → SegmentProfile dict 변환
+        target_age = state.get("target_age_groups") or []
+        target_gender = state.get("target_gender")
+        target_time = state.get("target_time_slots") or []
+        target_day = state.get("target_day_type")
+        segment_profile: dict | None = None
+        if target_age or target_gender or target_time or target_day:
+            segment_profile = {
+                "age_groups": target_age,
+                "gender": target_gender,
+                "time_slots": target_time,
+                "day_type": target_day,
+            }
+
+        sim_result = ModelOutput.generate(
+            dong_code,
+            industry_code,
+            biz,
+            model="tcn",
+            cost_config=cost_config,
+            segment_profile=segment_profile,
+        )
         elapsed = time.perf_counter() - t_start
         monthly_rev = sim_result.get("revenue_forecast", {}).get("quarterly_avg", 0)
         bep = sim_result.get("bep", {}).get("bep_quarters", "?")

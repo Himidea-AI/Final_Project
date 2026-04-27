@@ -311,6 +311,12 @@ async def _run_pipeline(input_data: Any) -> dict[str, Any]:
         "next_step": "",
         "errors": [],
         "competitor_intel_result": {},
+        # [customer_revenue P1-C] 사용자 타겟 입력 → state 주입
+        "target_age_groups": input_data.target_age_groups or [],
+        "target_gender": input_data.target_gender,
+        "target_time_slots": input_data.target_time_slots or [],
+        "target_day_type": input_data.target_day_type,
+        "target_monthly_sales": input_data.target_monthly_sales,
     }
 
     task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=600.0))
