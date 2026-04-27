@@ -354,8 +354,11 @@ export function TabbedDashboard({
         }}
       />
       {/* ════════════════ STICKY HEADER (v4.3 리디자인) ════════════════ */}
+      {/* top-24 md:top-28: 글로벌 header(App.tsx:4490, fixed top-0 h-24, z-50) 바로 아래에 붙도록 보정.
+           top-0이면 글로벌 header에 위쪽 96px이 가려지고, 두 header 배경(반투명)의 색차로
+           "틈"이 보였음. SimulatorDashboard 컨테이너 padding-top과도 일관(pt-24 md:pt-28). */}
       <header
-        className={`sticky top-0 z-40 bg-[#0C0B0A]/90 backdrop-blur-2xl border-b border-stone-800/40 transition-all duration-500 ${
+        className={`sticky top-24 md:top-28 z-40 bg-[#0C0B0A]/90 backdrop-blur-2xl border-b border-stone-800/40 transition-all duration-500 ${
           isScrolled ? 'py-3 shadow-2xl' : 'py-8'
         }`}
       >

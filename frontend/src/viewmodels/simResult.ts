@@ -48,13 +48,14 @@ export interface SimResult {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   districtRankings?: { district: string; score: number; [k: string]: any }[];
   // [C1] DistrictComparison — DashboardPanelView 실데이터 렌더용 (backend SimulationOutput.comparison)
+  // 2026-04-27: backend가 폴백 시 5필드 모두 None을 보냄 — 거짓 양성 회피.
   comparison?: {
     district: string;
     score: number | null;
-    revenue: number;
+    revenue: number | null;
     bep: number | null;
     survival: number | null;
-    cannibalization: number;
+    cannibalization: number | null;
   }[];
   winnerDistrict?: string;
   topCandidates?: string[];

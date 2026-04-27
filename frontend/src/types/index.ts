@@ -86,13 +86,13 @@ export interface ShapResult {
 /** 동별 비교 결과 */
 export interface DistrictComparison {
   district: string;
-  // 2026-04-27: scouting_results 미실행 시 backend가 score/survival를 null로 보냄 (거짓 양성 회피).
-  // bep/cannibalization도 동일 정신으로 nullable 유지.
+  // 2026-04-27: scouting_results 미실행 시 backend가 score/revenue/bep/survival/cannibalization
+  // 모두 None으로 보냄 (거짓 양성 회피). 5필드 전부 nullable.
   score: number | null;
-  revenue: number;
+  revenue: number | null;
   bep: number | null;
   survival: number | null;
-  cannibalization: number;
+  cannibalization: number | null;
 }
 
 /** 법률 리스크 — 근거 조항 (가맹사업법 등) */
