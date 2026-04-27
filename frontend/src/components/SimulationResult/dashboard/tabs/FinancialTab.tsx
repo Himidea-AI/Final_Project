@@ -6,10 +6,13 @@
  * 매출 예측 그래프는 ForecastTab에 그대로 남김 (예측 vs 현재 재무 관점 구분).
  */
 
-import { Activity, Gauge } from 'lucide-react';
-import type { SimulationOutput, ClosureRisk } from '../../../../types';
+import { Activity, Gauge, History } from 'lucide-react';
+import type { SimulationOutput, ClosureRisk, ClosureRate } from '../../../../types';
 import { formatKrw, formatPct, quarterlyToMonthly } from '../utils/formatters';
 import { BulletChart } from '../charts/BulletChart';
+import { ClosureSignalsBar } from '../charts/ClosureSignalsBar';
+import { ClosureRateHistoryChart } from '../charts/ClosureRateHistoryChart';
+import { SurvivalRateKpi } from '../charts/SurvivalRateKpi';
 
 interface Props {
   simResult: SimulationOutput;
@@ -39,7 +42,43 @@ export function FinancialTab({ simResult }: Props) {
         confidencePct={confidencePct}
       />
 
+      <SurvivalRateKpi
+        survivalRate={simResult.market_report?.survival_rate}
+        closureRate={simResult.market_report?.closure_rate}
+      />
+
+      <ClosureRatePanel rate={simResult.closure_rate} />
+
       <ClosureRiskPanel closure={simResult.closure_risk} />
+    </div>
+  );
+}
+
+export function ClosureRatePanel({ rate }: { rate: ClosureRate | null | undefined }) {
+  if (!rate || !rate.monthly_closure_rates || rate.monthly_closure_rates.length === 0) {
+    return null;
+  }
+  const avgPct = rate.closure_rate != null ? (rate.closure_rate * 100).toFixed(1) : '—';
+  return (
+    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
+          <History size={14} className="text-stone-400" /> 과거 폐업률 추이
+          <span className="text-[10px] font-black text-stone-600 normal-case tracking-normal">
+            closure_rate · 실측
+          </span>
+        </h4>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-black text-stone-500 tabular-nums">
+            최근 4분기 평균 {avgPct}%
+          </span>
+        </div>
+      </div>
+      <ClosureRateHistoryChart rates={rate.monthly_closure_rates} />
+      <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+        ※ 이 차트는 과거 데이터 기반 실측 폐업률입니다. 예측은 아래 LightGBM + TCN 폐업위험도 패널을
+        참고하세요.
+      </p>
     </div>
   );
 }
@@ -200,8 +239,13 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
           <p className="text-[11px] text-stone-300 leading-relaxed">{closure.summary_lgbm[0]}</p>
         </div>
       )}
+      <ClosureSignalsBar
+        signals={closure.top_signals_lgbm}
+        title="LightGBM 기여 피처 (과거 패턴)"
+        accent="indigo"
+      />
       {closure.summary_tcn && closure.summary_tcn.length > 0 && (
-        <div className="mt-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
+        <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
           <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-cyan-400 mb-1">
             <span className="w-1 h-1 rounded-full bg-cyan-400" />
             TCN · 시계열 흐름
@@ -209,8 +253,15 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
           <p className="text-[11px] text-stone-300 leading-relaxed">{closure.summary_tcn[0]}</p>
         </div>
       )}
+      <ClosureSignalsBar
+        signals={closure.top_signals_tcn}
+        title="TCN 기여 피처 (시계열 흐름)"
+        accent="cyan"
+      />
       {(!closure.summary_lgbm || closure.summary_lgbm.length === 0) &&
-        (!closure.summary_tcn || closure.summary_tcn.length === 0) && (
+        (!closure.summary_tcn || closure.summary_tcn.length === 0) &&
+        (!closure.top_signals_lgbm || closure.top_signals_lgbm.length === 0) &&
+        (!closure.top_signals_tcn || closure.top_signals_tcn.length === 0) && (
           <p className="mt-3 text-[11px] text-stone-500 leading-relaxed">
             폐업 위험도 모델 요약 미생성
           </p>

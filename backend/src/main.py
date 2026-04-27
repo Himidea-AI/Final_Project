@@ -440,11 +440,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "growth_potential": _growth_r,
         # operational_fit_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백.
         # 값이 없으면 임의 기본값(예: 75)을 만들지 않고 None으로 내려보낸다.
-        "accessibility": (
-            min(int(float(accessibility_raw)), 100)
-            if accessibility_raw is not None
-            else None
-        ),
+        "accessibility": (min(int(float(accessibility_raw)), 100) if accessibility_raw is not None else None),
     }
 
     # [Phase 2.5] graph.py ml_prediction_phase_node에서 실행된 TCN 결과를 state에서 읽음
@@ -597,6 +593,8 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "financial_report": md.get("financial_metrics", {}),
         # TCN SHAP 분석 결과 (실패 시 None)
         "shap_result": shap_result,
+        # 과거 12개월 폐업률 추이 — 실측 누적 (예측 아님)
+        "closure_rate": sim_result.get("closure_rate") if "sim_result" in locals() else None,
         # 폐업위험도 (LightGBM + TCN 앙상블) — 모델 호출 실패 시 None
         "closure_risk": sim_result.get("closure_risk") if "sim_result" in locals() else None,
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
@@ -1135,6 +1133,7 @@ async def run_simulation(input_data: SimulationInput):
             "vacancy_spots": [],
             "shap_result": None,
             "scenarios": None,
+            "closure_rate": None,
             "closure_risk": None,
             "competitor_intel": None,
             "agent_attributions": [],

@@ -354,8 +354,13 @@ export function TabbedDashboard({
         }}
       />
       {/* ════════════════ STICKY HEADER (v4.3 리디자인) ════════════════ */}
+      {/* 위치: top-24 md:top-28 — 글로벌 header(App.tsx:4490, fixed top-0 h-24, z-50) 바로 아래.
+           SimulatorDashboard 컨테이너 padding-top과 일관(pt-24 md:pt-28).
+         배경: 불투명 solid (#0C0B0A) — 반투명/blur면 스크롤 시 하단 콘텐츠(지도·차트)가
+           sticky 뒤로 비치는 "레이어 누수" 발생. solid로 차단.
+         z-50: 글로벌 header와 같은 레벨. SimulatorDashboard 컨테이너(z-40) 위. */}
       <header
-        className={`sticky top-0 z-40 bg-[#0C0B0A]/90 backdrop-blur-2xl border-b border-stone-800/40 transition-all duration-500 ${
+        className={`sticky top-24 md:top-28 z-50 bg-[#0C0B0A] border-b border-stone-800/40 transition-all duration-500 ${
           isScrolled ? 'py-3 shadow-2xl' : 'py-8'
         }`}
       >

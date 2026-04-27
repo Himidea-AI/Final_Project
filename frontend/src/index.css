@@ -213,6 +213,11 @@
     filter: blur(0px);
   }
 }
+/* fadeSlideIn: 진입 애니메이션.
+   끝 keyframe을 translateY(0) 대신 'none'으로 둬야 애니메이션 종료 후 ancestor에
+   잔류 transform이 남지 않음. 잔류 transform은 자식 fixed/sticky의 containing block을
+   해당 ancestor로 한정시켜 sticky top-* 값이 viewport가 아닌 ancestor 기준으로 동작
+   → 대시보드 sticky header가 화면 중간에 떠다니는 현상 발생. */
 @keyframes fadeSlideIn {
   from {
     opacity: 0;
@@ -220,6 +225,6 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }

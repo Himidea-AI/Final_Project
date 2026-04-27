@@ -16,7 +16,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../auth/AuthContext';
-import { useTransition } from '../App';
+import { useTransition } from '../contexts/TransitionContext';
 import { BrandLogo } from '../components/BrandLogo';
 import { SEOUL_REGIONS } from '../data/seoulRegions';
 import {
