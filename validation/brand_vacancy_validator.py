@@ -513,7 +513,7 @@ def run_5track_validation(
     brand_name: str,
     category: str = "카페",
     days: int = 90,
-    n_seeds: int = 3,
+    n_seeds: int = 5,
     multi_quarter_avg: int = 4,
     output_dir: Path | str = Path("validation/results/"),
     verbose: bool = True,
@@ -528,7 +528,7 @@ def run_5track_validation(
         brand_name: 평가 브랜드 (예: "이디야"). 마포 매장 0 시 BrandNotFoundError.
         category: 업종 (default "카페").
         days: 시뮬 일수 (default 90 = 분기).
-        n_seeds: PSE N (default 3).
+        n_seeds: PSE N (default 5, 학계 통상).
         multi_quarter_avg: 실측 ground truth 평균 분기 수 (default 4 = 1년).
         output_dir: report dump 디렉토리.
         verbose: 진행 로그.
@@ -611,7 +611,7 @@ def _main() -> None:
     parser.add_argument("--brands", help="쉼표 구분 여러 브랜드 (예: 이디야,MEGA,빽다방)")
     parser.add_argument("--category", default="카페", help="업종 (default: 카페)")
     parser.add_argument("--days", type=int, default=90, help="시뮬 일수 (default: 90 = 분기)")
-    parser.add_argument("--n-seeds", type=int, default=3, help="PSE N (default: 3)")
+    parser.add_argument("--n-seeds", type=int, default=5, help="PSE N (default 5, 학계 통상)")
     parser.add_argument(
         "--multi-quarter-avg",
         type=int,
