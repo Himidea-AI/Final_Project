@@ -111,7 +111,7 @@ export function IndustryClosureTrendCard({ trend }: Props) {
 
       <div className="h-12">
         {numericSamples.length > 1 ? (
-          <Sparkline data={numericSamples} width={undefined as unknown as number} height={48} />
+          <Sparkline data={numericSamples} height={48} />
         ) : (
           <span className="text-[9px] text-stone-600">시계열 데이터 부족</span>
         )}

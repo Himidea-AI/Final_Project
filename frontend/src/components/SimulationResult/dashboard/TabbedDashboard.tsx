@@ -234,7 +234,7 @@ export function TabbedDashboard({
   const openModal = (content: DetailModalContent) => setModalContent(content);
 
   // 실데이터 기반 헤더 정보 조립
-  const ci = simResult?.competitor_intel as Record<string, any> | null | undefined;
+  const ci = simResult?.competitor_intel ?? null;
   const winnerDistrict = simResult?.winner_district || simResult?.target_district || '—';
   const documentId = formatDocumentId(savedHistoryId);
 
@@ -353,6 +353,23 @@ export function TabbedDashboard({
           backgroundSize: '24px 24px',
         }}
       />
+      {/* ════════════════ EXCLUDED COMBO MOCK BANNER (Critical #1) ════════════════
+           api-contract §3.7 — 본부 영업팀이 mock을 실데이터로 오인하면 법적·신뢰 리스크.
+           sticky 밖에 배치 → 페이지 진입 시 1회 인지, 스크롤하면 자연스레 사라짐. */}
+      {simResult?.is_excluded_combo === true && (
+        <div className="mx-auto max-w-[1728px] px-8 pt-4">
+          <div
+            role="alert"
+            className="bg-rose-500/10 border border-rose-500/30 text-rose-300 px-4 py-2 rounded-lg flex items-center gap-2 text-xs font-medium"
+          >
+            <AlertTriangle size={14} className="shrink-0" />
+            <span>
+              이 업종/지역 조합은 학습 데이터 부족으로 mock 결과가 반환됩니다. 실데이터 분석은 다른
+              조합으로 시도해주세요.
+            </span>
+          </div>
+        </div>
+      )}
       {/* ════════════════ STICKY HEADER (v4.3 리디자인) ════════════════ */}
       {/* 위치: top-24 md:top-28 — 글로벌 header(App.tsx:4490, fixed top-0 h-24, z-50) 바로 아래.
            SimulatorDashboard 컨테이너 padding-top과 일관(pt-24 md:pt-28).

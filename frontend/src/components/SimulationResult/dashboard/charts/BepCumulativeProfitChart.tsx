@@ -46,18 +46,27 @@ export function BepCumulativeProfitChart({ data, height = 200 }: Props) {
     cumulative: d.cumulative_profit,
     positive: d.cumulative_profit >= 0 ? d.cumulative_profit : 0,
     negative: d.cumulative_profit < 0 ? d.cumulative_profit : 0,
+    is_mock: d.is_mock === true,
   }));
 
   const bep = data.find((d) => d.cumulative_profit >= 0);
+  // Critical #2 — 일부 분기 is_mock 시 헤더 배지로 인지 보강
+  const hasMockQuarters = data.some((d) => d.is_mock === true);
 
   return (
     <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[10px] font-black uppercase tracking-widest text-stone-500">
-          분기별 투자 회수 곡선
-          <span className="ml-2 text-[9px] font-bold text-stone-600 normal-case tracking-normal">
+        <div className="text-[10px] font-black uppercase tracking-widest text-stone-500 flex items-center gap-2">
+          <span>분기별 투자 회수 곡선</span>
+          <span className="text-[9px] font-bold text-stone-600 normal-case tracking-normal">
             cumulative_profit · BEP 도달 시점 강조
           </span>
+          {hasMockQuarters && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold normal-case tracking-normal text-amber-300">
+              <span className="h-1 w-1 rounded-full bg-amber-400" />
+              일부 분기 mock
+            </span>
+          )}
         </div>
         {bep && (
           <span className="text-[10px] font-black tabular-nums text-emerald-400">
@@ -107,6 +116,28 @@ export function BepCumulativeProfitChart({ data, height = 200 }: Props) {
             strokeWidth={2}
             fill="url(#cum-pos)"
             isAnimationActive={false}
+            // is_mock 분기에는 amber dot + opacity 0.4
+            dot={(props: {
+              cx?: number;
+              cy?: number;
+              payload?: { is_mock?: boolean };
+              index?: number;
+            }) => {
+              const { cx, cy, payload, index } = props;
+              if (cx == null || cy == null || !payload?.is_mock) {
+                return <g key={`bep-pos-dot-${index ?? 0}`} />;
+              }
+              return (
+                <circle
+                  key={`bep-pos-dot-${index ?? 0}`}
+                  cx={cx}
+                  cy={cy}
+                  r={3}
+                  fill="#f59e0b"
+                  fillOpacity={0.4}
+                />
+              );
+            }}
           />
           <Area
             type="monotone"
@@ -115,6 +146,27 @@ export function BepCumulativeProfitChart({ data, height = 200 }: Props) {
             strokeWidth={2}
             fill="url(#cum-neg)"
             isAnimationActive={false}
+            dot={(props: {
+              cx?: number;
+              cy?: number;
+              payload?: { is_mock?: boolean };
+              index?: number;
+            }) => {
+              const { cx, cy, payload, index } = props;
+              if (cx == null || cy == null || !payload?.is_mock) {
+                return <g key={`bep-neg-dot-${index ?? 0}`} />;
+              }
+              return (
+                <circle
+                  key={`bep-neg-dot-${index ?? 0}`}
+                  cx={cx}
+                  cy={cy}
+                  r={3}
+                  fill="#f59e0b"
+                  fillOpacity={0.4}
+                />
+              );
+            }}
           />
         </AreaChart>
       </ResponsiveContainer>
