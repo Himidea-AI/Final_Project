@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { runSimulation } from '../api/client';
 import type { SimulationInput, SimulationOutput } from '../types';
 
@@ -74,122 +75,145 @@ function stageFor(progress: number): string {
   return current;
 }
 
-export const useSimulationStore = create<SimulationState>((set, get) => ({
-  ...INITIAL_STATE,
+// sessionStorage persist — F5 새로고침 시 result 복원, 탭 닫으면 자연 휘발(DRAFT 의도 유지).
+// status='running'/'error' 상태는 idle로 강제 복원 — 진행 중이던 timer/abortController는
+// in-memory 전용이라 복원 시 가짜 진행률에 멈춤. result만 살아있는 'done' 케이스만 복원 의미가 있다.
+export const useSimulationStore = create<SimulationState>()(
+  persist(
+    (set, get) => ({
+      ...INITIAL_STATE,
 
-  startSimulation: async (params) => {
-    // Replacement policy: if running, cancel first.
-    const { _abortController: prevAbort, _progressTimer: prevTimer } = get();
-    prevAbort?.abort();
-    if (prevTimer) clearInterval(prevTimer);
+      startSimulation: async (params) => {
+        // Replacement policy: if running, cancel first.
+        const { _abortController: prevAbort, _progressTimer: prevTimer } = get();
+        prevAbort?.abort();
+        if (prevTimer) clearInterval(prevTimer);
 
-    const abortController = new AbortController();
-    const startedAt = nextStartedAt();
+        const abortController = new AbortController();
+        const startedAt = nextStartedAt();
 
-    set({
-      status: 'running',
-      progress: 0,
-      stage: 'INITIALIZING AI ENGINE',
-      result: null,
-      error: null,
-      params,
-      startedAt,
-      savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
-      _abortController: abortController,
-      _progressTimer: null,
-    });
+        set({
+          status: 'running',
+          progress: 0,
+          stage: 'INITIALIZING AI ENGINE',
+          result: null,
+          error: null,
+          params,
+          startedAt,
+          savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
+          _abortController: abortController,
+          _progressTimer: null,
+        });
 
-    // Fake-progress ticker: climbs to 90% over ~100s so the user feels motion
-    // while the real request is in flight. Capped at 90 so the jump to 100
-    // on success remains perceptible.
-    const timer = setInterval(() => {
-      const elapsed = (Date.now() - startedAt) / 1000;
-      const p = Math.min(90, elapsed * 0.9);
-      set({ progress: p, stage: stageFor(p) });
-    }, 500);
-    set({ _progressTimer: timer });
+        // Fake-progress ticker: climbs to 90% over ~100s so the user feels motion
+        // while the real request is in flight. Capped at 90 so the jump to 100
+        // on success remains perceptible.
+        const timer = setInterval(() => {
+          const elapsed = (Date.now() - startedAt) / 1000;
+          const p = Math.min(90, elapsed * 0.9);
+          set({ progress: p, stage: stageFor(p) });
+        }, 500);
+        set({ _progressTimer: timer });
 
-    try {
-      const result = await runSimulation(params, abortController.signal);
+        try {
+          const result = await runSimulation(params, abortController.signal);
 
-      // Stale response guard — if a newer start has replaced us, abandon.
-      if (get().startedAt !== startedAt) return;
+          // Stale response guard — if a newer start has replaced us, abandon.
+          if (get().startedAt !== startedAt) return;
 
-      const { _progressTimer } = get();
-      if (_progressTimer) clearInterval(_progressTimer);
+          const { _progressTimer } = get();
+          if (_progressTimer) clearInterval(_progressTimer);
 
-      set({
-        status: 'done',
-        progress: 100,
-        stage: 'COMPLETE',
-        result,
-        _abortController: null,
-        _progressTimer: null,
-      });
-    } catch (err: unknown) {
-      // Stale check — if replaced, don't touch state
-      if (get().startedAt !== startedAt) return;
+          set({
+            status: 'done',
+            progress: 100,
+            stage: 'COMPLETE',
+            result,
+            _abortController: null,
+            _progressTimer: null,
+          });
+        } catch (err: unknown) {
+          // Stale check — if replaced, don't touch state
+          if (get().startedAt !== startedAt) return;
 
-      const isAbort =
-        (err as { name?: string })?.name === 'CanceledError' ||
-        (err as { name?: string })?.name === 'AbortError' ||
-        axios.isCancel(err);
+          const isAbort =
+            (err as { name?: string })?.name === 'CanceledError' ||
+            (err as { name?: string })?.name === 'AbortError' ||
+            axios.isCancel(err);
 
-      if (isAbort) {
-        // cancelSimulation already cleaned state; nothing to do here
-        return;
-      }
+          if (isAbort) {
+            // cancelSimulation already cleaned state; nothing to do here
+            return;
+          }
 
-      const { _progressTimer } = get();
-      if (_progressTimer) clearInterval(_progressTimer);
+          const { _progressTimer } = get();
+          if (_progressTimer) clearInterval(_progressTimer);
 
-      const message =
-        err instanceof Error ? err.message : typeof err === 'string' ? err : '알 수 없는 오류';
-      set({
-        status: 'error',
-        error: message,
-        _abortController: null,
-        _progressTimer: null,
-      });
-    }
-  },
-  cancelSimulation: () => {
-    const { status, _abortController, _progressTimer } = get();
-    if (status !== 'running') return;
-    _abortController?.abort();
-    if (_progressTimer) clearInterval(_progressTimer);
-    set({
-      status: 'idle',
-      progress: 0,
-      stage: '',
-      result: null,
-      error: null,
-      params: null,
-      startedAt: null,
-      savedHistoryId: null,
-      _abortController: null,
-      _progressTimer: null,
-    });
-  },
-  dismissResult: () => {
-    const { status } = get();
-    if (status !== 'done' && status !== 'error') return;
-    set({
-      status: 'idle',
-      progress: 0,
-      stage: '',
-      result: null,
-      error: null,
-      params: null,
-      startedAt: null,
-      savedHistoryId: null,
-    });
-  },
-  setSavedHistoryId: (id) => set({ savedHistoryId: id }),
-  reset: () => {
-    const { _abortController, _progressTimer } = get();
-    _abortController?.abort();
-    if (_progressTimer) clearInterval(_progressTimer);
-    set(INITIAL_STATE);
-  },
-}));
+          const message =
+            err instanceof Error ? err.message : typeof err === 'string' ? err : '알 수 없는 오류';
+          set({
+            status: 'error',
+            error: message,
+            _abortController: null,
+            _progressTimer: null,
+          });
+        }
+      },
+      cancelSimulation: () => {
+        const { status, _abortController, _progressTimer } = get();
+        if (status !== 'running') return;
+        _abortController?.abort();
+        if (_progressTimer) clearInterval(_progressTimer);
+        set({
+          status: 'idle',
+          progress: 0,
+          stage: '',
+          result: null,
+          error: null,
+          params: null,
+          startedAt: null,
+          savedHistoryId: null,
+          _abortController: null,
+          _progressTimer: null,
+        });
+      },
+      dismissResult: () => {
+        const { status } = get();
+        if (status !== 'done' && status !== 'error') return;
+        set({
+          status: 'idle',
+          progress: 0,
+          stage: '',
+          result: null,
+          error: null,
+          params: null,
+          startedAt: null,
+          savedHistoryId: null,
+        });
+      },
+      setSavedHistoryId: (id) => set({ savedHistoryId: id }),
+      reset: () => {
+        const { _abortController, _progressTimer } = get();
+        _abortController?.abort();
+        if (_progressTimer) clearInterval(_progressTimer);
+        set(INITIAL_STATE);
+      },
+    }),
+    {
+      name: 'mapo-simulation-store',
+      storage: createJSONStorage(() => sessionStorage),
+      // 'done' 상태에서 result/params/savedHistoryId만 직렬화. running/error는 idle로 강제.
+      // _abortController, _progressTimer는 비-직렬화 (반환에서 자동 제외).
+      partialize: (state) => ({
+        status: state.status === 'done' ? ('done' as const) : ('idle' as const),
+        result: state.status === 'done' ? state.result : null,
+        params: state.status === 'done' ? state.params : null,
+        savedHistoryId: state.status === 'done' ? state.savedHistoryId : null,
+        startedAt: state.status === 'done' ? state.startedAt : null,
+        stage: state.status === 'done' ? state.stage : '',
+        progress: state.status === 'done' ? 100 : 0,
+        error: null,
+      }),
+    },
+  ),
+);

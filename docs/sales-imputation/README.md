@@ -1,9 +1,73 @@
 # seoul_district_sales 결측값 역추적 프로젝트
 
-**기간:** 2026-04-22 ~ 2026-04-24
+**기간:** 2026-04-22 ~ 2026-04-24 (v3) / 2026-04-27 ~ 2026-04-28 (v4)
 **작업자:** 찬영 (A1) + Claude Code
 **대상:** 공공데이터포털 행정동·업종별 추정매출 3.6% 결측 (137개 조합) 복원
-**최종 결과:** **ExtraTrees (Optuna 200 trials 튜닝) MNAR WAPE 13.35% (Lewis Reasonable) / confidence 0.87**
+**최종 결과 (v3):** ExtraTrees (Optuna 200 trials 튜닝) MNAR WAPE 13.35% (Lewis Reasonable) / confidence 0.87
+**최종 결과 (v4):** Multi-Output ExtraTrees + 6 seed 앙상블 + raking / 17/21 합격선 PASS (81%)
+
+---
+
+## 🆕 v4 재설계 (2026-04-27 ~ 2026-04-28)
+
+v3 의 모델/검증 한계를 해결하기 위해 10 sprint 진행:
+- 48 컬럼 전체 복원 (Multi-Output ExtraTrees + 6 seed)
+- 일반/외삽 셀 분리 표시
+- 17/21 합격선 PASS (81%)
+
+상세:
+- spec: `docs/superpowers/specs/2026-04-27-imputed-v4-redesign-design.md`
+- plan: `docs/superpowers/plans/2026-04-27-imputed-v4-redesign-plan.md`
+- retrospective: `docs/retrospective/2026-04-28.md`
+- 핵심 결과: `audit_v4_report.md`, `v4_split_report.md`
+
+### v3 → v4 정확도 비교
+
+| 지표 | v3 (이전) | Sprint 1 v4 | Sprint 10 최종 (v4) |
+|---|---|---|---|
+| MNAR WAPE | 13.35% | 21.23% | **14.67%** ✅ |
+| Q1 WAPE | 24.7% | 21.14% | **15.59%** ✅ |
+| OoM (2배 이내) | 95.3% | 96.71% | **97.84%** ✅ |
+| Pearson r | 0.99 | 0.9957 | **0.9961** ✅ |
+| F1 (4-tier) | 0.819 | 0.8697 | **0.9156** ✅ |
+| 일반 셀 confidence | — | 0.666 | **0.853** ✅ |
+
+### 합격선 진전
+
+| 단계 | PASS | FAIL | N/A |
+|---|---|---|---|
+| Sprint 1 (초기) | 6 | 14 | 4 |
+| Sprint 7 (코드 리뷰 후) | 14 | 7 | 3 |
+| Sprint 10 (최종) | **17** | **4** | **3** |
+
+### 다운스트림 사용 가이드 (v4)
+
+v4 imputed 데이터를 사용할 때 일반 셀(87개)과 외삽 셀(50개)을 분리하여 활용할 것을 권장합니다.
+
+```python
+import pandas as pd
+
+# v4 상세 데이터 로드
+df = pd.read_csv("imputed_mapo_v4_detail.csv")
+
+# 일반 셀 (confidence 높음, 권장)
+df_regular = df[df["extrapolation_flag"] == 0]
+
+# 외삽 셀 (데이터 부재 영역, 신중 사용)
+df_extrap = df[df["extrapolation_flag"] == 1]
+
+# extrapolation_flag 컬럼:
+#   0 = 일반 (충분한 학습 데이터 존재, confidence ≥ 0.85 기대)
+#   1 = 외삽 (학습 범위 밖, confidence cap 0.4 적용)
+
+# 95% CI 활용
+print(df_regular[["dong_name", "industry", "quarter", "sales_pred", "ci_lower_95", "ci_upper_95"]].head())
+```
+
+**권장 사용 원칙:**
+- 매출 규모 추정: 일반 셀만 사용 (confidence ≥ 0.85)
+- 트렌드 분석: 일반 셀 위주, 외삽은 참고용
+- 시뮬레이션 입력: extrapolation_flag 컬럼을 UI 에 노출하여 사용자 인지
 
 ---
 

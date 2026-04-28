@@ -310,6 +310,28 @@ def _resolve_dong_name(dong_code: str) -> str:
     return dong_code
 
 
+# backend/src/agents/tools.py::_SALES_CODE_MAP의 역매핑(코드→한글). 양방향 매핑이라
+# 단일 source of truth로 묶고 싶지만 backend 모듈에 의존 시 순환 import 위험이 있어
+# models/ 레이어에는 정매핑을 별도로 둔다. 코드 추가 시 양쪽 동기화 필요.
+_INDUSTRY_NAME_MAP: dict[str, str] = {
+    "CS100001": "한식음식점",
+    "CS100002": "중식음식점",
+    "CS100003": "일식음식점",
+    "CS100004": "양식음식점",
+    "CS100005": "제과점",
+    "CS100006": "패스트푸드점",
+    "CS100007": "치킨전문점",
+    "CS100008": "분식전문점",
+    "CS100009": "호프-간이주점",
+    "CS100010": "커피-음료",
+}
+
+
+def _resolve_industry_name(industry_code: str) -> str:
+    """industry_code → 업종 한글명 변환. 매핑 실패 시 코드 그대로 반환."""
+    return _INDUSTRY_NAME_MAP.get(industry_code, industry_code)
+
+
 # ---------------------------------------------------------------------------
 # 통합 출력 클래스
 # ---------------------------------------------------------------------------
@@ -407,7 +429,7 @@ class ModelOutput:
                     "closure_risk": { risk_score, risk_level, top_signals, model, is_mock },
                     "bep": { bep_months, monthly_profit, total_initial_investment,
                              annual_roi, quarterly_simulation },
-                    "segment_analysis": { segment_ratio, segment_sales, profile_summary,
+                    "customer_segment": { segment_ratio, segment_sales, profile_summary,
                                           dimension_ratios } | None,
                     "metadata": { model_version, generated_at, data_period },
                 }
@@ -511,6 +533,46 @@ class ModelOutput:
         # ---- dong_name 조회 ----
         dong_name = _resolve_dong_name(dong_code) if not use_mock else dong_code
 
+        # ---- 6) [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN) ----
+        # predict_peak(dong_name, n_quarters) 사용 — 24시간대 × 분기별 피크 시간 산출.
+        # 가중치/스케일러 부재 또는 데이터 부족 시 graceful degradation (None).
+        living_pop_result: dict | None = None
+        try:
+            from models.living_pop_forecast.predict import (
+                predict_peak as _predict_peak,
+            )
+
+            quarters_pred = _predict_peak(dong_name, n_quarters=4)
+            living_pop_result = {
+                "dong_code": dong_code,
+                "dong_name": dong_name,
+                "n_quarters": len(quarters_pred),
+                "quarters": quarters_pred,  # [{quarter_offset, peak_time_zone, peak_pop, all_hours}]
+                "is_mock": False,
+            }
+            logger.info(
+                "유동인구 피크 예측 완료 — q1 peak_tz=%s",
+                quarters_pred[0]["peak_time_zone"] if quarters_pred else "N/A",
+            )
+        except Exception as exc:
+            logger.warning("유동인구 피크 예측 실패 (건너뜀): %s", exc)
+            living_pop_result = None
+
+        # ---- 7) [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder) ----
+        emerging_result: dict | None = None
+        try:
+            from models.emerging_district.predict import predict as _predict_emerging
+
+            emerging_result = dict(_predict_emerging(dong_code, industry_code))
+            logger.info(
+                "신흥 상권 감지 완료 — signal=%s anomaly=%.3f",
+                emerging_result.get("signal"),
+                emerging_result.get("anomaly_score", 0.0),
+            )
+        except Exception as exc:
+            logger.warning("신흥 상권 감지 실패 (건너뜀): %s", exc)
+            emerging_result = None
+
         return {
             "input": {
                 "dong_code": dong_code,
@@ -522,7 +584,13 @@ class ModelOutput:
             "closure_rate": closure_rate_result,
             "closure_risk": closure_risk_result,
             "bep": bep,
-            "segment_analysis": segment_analysis,
+            # [C] 타겟 고객 매출 분석 (customer_revenue MLP). dict | None
+            # 키 이름 customer_segment로 통일 — frontend SimulationOutput.customer_segment, main.py 응답 dict와 일치
+            "customer_segment": segment_analysis,
+            # [D] 유동인구 피크 시간 예측 (TCN). dict | None
+            "living_pop_forecast": living_pop_result,
+            # [E] 신흥 상권 조기 감지 (LSTM Autoencoder). dict | None
+            "emerging_signal": emerging_result,
             "metadata": {
                 "model_version": MODEL_VERSION,
                 "generated_at": datetime.now(tz=UTC).isoformat(),

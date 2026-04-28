@@ -57,6 +57,7 @@ def inject_vacancy_as_store(
     rating: float = DEFAULT_RATING,
     price_level: int = DEFAULT_PRICE_LEVEL,
     popularity_boost: float = DEFAULT_POPULARITY_BOOST,
+    menu_items: list[dict] | None = None,
 ) -> str:
     """공실 1개 → 가상 Store 로 주입. world.add_store() 만 하면 시뮬 자동 적용.
 
@@ -69,6 +70,10 @@ def inject_vacancy_as_store(
         rating: 평점 (신규라 중립 4.0 권장)
         price_level: 가격대 1~3 (저~고)
         popularity_boost: 신규 매장 인지도 (1.0 = 중립, > 1.0 = 마케팅 효과)
+        menu_items: list[{"name": str, "price": int}] | None.
+            None (기본값) → Store.menu_items 빈 list (기존 호환).
+            제공 시 → 그 매장 메뉴/가격으로 spend 계산 (agents.py:413 분기 활성).
+            services/brand_menu_loader.load_brand_menu_items() 가 source.
 
     Returns:
         주입된 매장의 store_id (string, 기존 매장과 충돌 없음)
@@ -105,6 +110,7 @@ def inject_vacancy_as_store(
         lon=float(lon),
         is_open_now=True,
         popularity_boost=popularity_boost,
+        menu_items=list(menu_items) if menu_items else [],
     )
     world.add_store(store)
     return vid

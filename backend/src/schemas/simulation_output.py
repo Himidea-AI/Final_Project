@@ -160,4 +160,25 @@ class SimulationOutput(BaseModel):
     # [customer_revenue P1-C] 타겟 고객 매출 분석 — dict | None (predict.py 반환값 그대로)
     # 키: segment_ratio, segment_sales, identified_sales, total_sales_ref, profile_summary, dimension_ratios
     customer_segment: dict | None = None
+    # [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN). dict | None
+    # 키: dong_code, dong_name, n_quarters, quarters[{quarter_offset, peak_time_zone, peak_pop, all_hours}], is_mock
+    living_pop_forecast: dict | None = None
+    # [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder). dict | None
+    # 키: dong_code, industry_code, anomaly_score, signal('emerging'|'declining'|'normal'), consecutive_anomaly_quarters, summary, is_mock
+    emerging_signal: dict | None = None
     final_report: dict | None = None
+
+
+class DistrictPredictionResult(BaseModel):
+    """동별 ML 예측 결과 (/predict 엔드포인트 응답 단위)"""
+
+    district: str
+    dong_code: str | None = None
+    is_excluded_combo: bool = False
+    is_mock: bool = False
+    quarterly_projection: list[QuarterlyProjection] = Field(default_factory=list)
+    scenarios: dict | None = None
+    bep: dict | None = None
+    closure_rate: dict | None = None
+    closure_risk: dict | None = None
+    shap_result: ShapResult | None = None

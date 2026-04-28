@@ -5,18 +5,20 @@
  * 3) 하단 풀와이드: 법률 리스크 (InsightsGrid legalOnly)
  */
 
-import { AlertTriangle, Layers, MapPin, BarChart3, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Layers, MapPin, BarChart3, ShieldAlert, Brain } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { MapSection } from '../../sections/MapSection';
 import { IndicatorGrid } from '../../sections/IndicatorGrid';
 import { DistrictRankings } from '../../sections/DistrictRankings';
+import { AgentCard } from '../../shared/AgentCard';
 import { calcHHI, hhiToDiversity, formatScore } from '../utils/formatters';
 import { interpretHHI, SATURATION_MAP, safeMap } from '../utils/mappings';
 import { FlowVsRevenueScatter } from '../charts/FlowVsRevenueScatter';
 import { DifferentiationCard } from '../charts/DifferentiationCard';
 import { CannibalizationDistanceChart } from '../charts/CannibalizationDistanceChart';
 import { IndustryClosureTrendCard } from '../charts/IndustryClosureTrendCard';
+import { EmergingSignalCard } from '../charts/EmergingSignalCard';
 
 interface Props {
   simResult: SimulationOutput;
@@ -24,12 +26,13 @@ interface Props {
 }
 
 export function MarketTab({ simResult }: Props) {
-  const ci = simResult.competitor_intel as Record<string, any> | null | undefined;
-  const samples = (ci?.competition_500m?.samples as Array<MarketCompetitorSample>) ?? [];
+  // Medium #5 — competitor_intel을 강타입(CompetitorIntel)으로 받음. 기존 Record<string, any> 캐스팅 제거.
+  const ci = simResult.competitor_intel ?? null;
+  const samples = ci?.competition_500m?.samples ?? [];
   const hhi = calcHHI(samples);
   const diversity = hhiToDiversity(hhi);
   const hhiInfo = interpretHHI(hhi);
-  const saturationRaw = ci?.competition_500m?.saturation_level as string | undefined;
+  const saturationRaw = ci?.competition_500m?.saturation_level;
   const saturationLabel = saturationRaw
     ? safeMap(SATURATION_MAP, saturationRaw, SATURATION_MAP.medium)
     : '—';
@@ -43,7 +46,7 @@ export function MarketTab({ simResult }: Props) {
   // - 경쟁/임대 인덱스: market_report 0~100 정규화 값
   const sameIndustryCount =
     typeof ci?.competition_500m?.count === 'number'
-      ? (ci?.competition_500m?.count as number)
+      ? ci.competition_500m.count
       : samples.length > 0
         ? samples.length
         : null;
@@ -133,6 +136,32 @@ export function MarketTab({ simResult }: Props) {
         </div>
       </div>
 
+      {/* ═══ 에이전트 분석 요약 — 시장/인구/랭킹 (full-width 3-col) ═══
+          IndicatorGrid 내부 좁은 컬럼에서 size="full" 카드 깨지던 것을 분리해 가로 정렬로 해소. */}
+      {(() => {
+        const attrs = simResult.agent_attributions ?? [];
+        const market = attrs.find((a) => a.id === 'market_analyst');
+        const population = attrs.find((a) => a.id === 'population_analyst');
+        const ranking = attrs.find((a) => a.id === 'district_ranking');
+        if (!market && !population && !ranking) return null;
+        return (
+          <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+            <h4 className="text-sm font-black text-stone-100 mb-6 flex items-center gap-2 uppercase tracking-tight">
+              <Brain size={16} className="text-indigo-400" /> 에이전트 분석 요약
+            </h4>
+            {/* 3 카드 세로 stack — 한 줄에 한 에이전트씩 풀폭 사용해 verdict/reasoning 가독성 확보 */}
+            <div className="flex flex-col gap-3">
+              {market && <AgentCard attribution={market} size="full" />}
+              {population && <AgentCard attribution={population} size="full" />}
+              {ranking && <AgentCard attribution={ranking} size="full" />}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ═══ [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder) ═══ */}
+      <EmergingSignalCard signal={simResult.emerging_signal ?? null} />
+
       {/* ═══ Scatter: 유동인구 × 매출 상관 (가이드 #8) ═══ */}
       <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
         <h4 className="text-sm font-black text-stone-100 mb-6 flex items-center gap-2 uppercase tracking-tight">
@@ -146,33 +175,22 @@ export function MarketTab({ simResult }: Props) {
 
       {/* ═══ Competitor Intel: 차별화 포지션 + 카니발 거리 분포 + 동 업종 폐업률 추세 ═══ */}
       <DifferentiationCard
-        differentiation={ci?.differentiation_position as string | null | undefined}
-        opportunities={ci?.key_opportunities as string[] | undefined}
-        risks={ci?.key_risks as string[] | undefined}
+        differentiation={ci?.differentiation_position ?? null}
+        opportunities={ci?.key_opportunities}
+        risks={ci?.key_risks}
       />
 
       {(ci?.cannibalization || ci?.industry_closure_trend) && (
         <div className="grid grid-cols-2 gap-6">
           {ci?.cannibalization && (
             <CannibalizationDistanceChart
-              bins={
-                (ci.cannibalization as Record<string, any>)?.distance_bins as Record<
-                  string,
-                  number
-                > | null
-              }
-              closestM={
-                (ci.cannibalization as Record<string, any>)?.closest_distance_m as number | null
-              }
-              impactPct={
-                (ci.cannibalization as Record<string, any>)?.estimated_revenue_impact_pct as
-                  | number
-                  | null
-              }
+              bins={ci.cannibalization.distance_bins ?? null}
+              closestM={ci.cannibalization.closest_distance_m ?? null}
+              impactPct={ci.cannibalization.estimated_revenue_impact_pct ?? null}
             />
           )}
           {ci?.industry_closure_trend && (
-            <IndustryClosureTrendCard trend={ci.industry_closure_trend as Record<string, any>} />
+            <IndustryClosureTrendCard trend={ci.industry_closure_trend} />
           )}
         </div>
       )}

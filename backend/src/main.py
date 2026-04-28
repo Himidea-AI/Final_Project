@@ -69,6 +69,9 @@ from models.explainability.simulation import (
     build_quarterly_projection,
     build_scenarios,
 )
+from models.lstm_forecast.data_prep import ExcludedComboError
+from models.revenue_predictor.bep import BEPCalculator
+from src.schemas.simulation_output import DistrictPredictionResult
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -127,6 +130,24 @@ app.include_router(_sim_history_router)
 from src.api.vacancy_evaluation import router as _vacancy_eval_router  # noqa: E402
 
 app.include_router(_vacancy_eval_router)
+
+# --- customer_segment REST (MLP 단발 호출, frontend 실시간 미리보기용) ---
+from src.api.customer_segment import router as _customer_segment_router  # noqa: E402
+
+app.include_router(_customer_segment_router)
+
+
+# customer_revenue MLP 모델 startup 시 워밍업 — 첫 미리보기 호출 latency 0.5~1초 → ~100ms.
+# 가중치 부재 환경에선 silent skip (배포 서버 분리 케이스 보호).
+@app.on_event("startup")
+def _warmup_customer_revenue() -> None:
+    try:
+        from models.interface import _run_customer_revenue
+
+        _run_customer_revenue("11440680", "CS100010", profile_dict=None)
+        print("[STARTUP] customer_revenue MLP 워밍업 완료")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[STARTUP] customer_revenue 워밍업 skip: {exc}")
 
 
 @app.middleware("http")
@@ -311,6 +332,12 @@ async def _run_pipeline(input_data: Any) -> dict[str, Any]:
         "next_step": "",
         "errors": [],
         "competitor_intel_result": {},
+        # [customer_revenue P1-C] 사용자 타겟 입력 → state 주입
+        "target_age_groups": input_data.target_age_groups or [],
+        "target_gender": input_data.target_gender,
+        "target_time_slots": input_data.target_time_slots or [],
+        "target_day_type": input_data.target_day_type,
+        "target_monthly_sales": input_data.target_monthly_sales,
     }
 
     task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=600.0))
@@ -319,6 +346,77 @@ async def _run_pipeline(input_data: Any) -> dict[str, Any]:
         return await task
     finally:
         _pending_pipelines.pop(key, None)
+
+
+async def _predict_single_district(
+    dong_name: str,
+    industry_code: str,
+    industry_name: str,
+    cost_config: dict,
+) -> DistrictPredictionResult:
+    """단일 동 ML 예측 실행 (/predict 병렬 호출용)"""
+    from models.interface import ModelOutput
+
+    dong_code = _resolve_dong_code(dong_name)
+    if not dong_code:
+        return DistrictPredictionResult(district=dong_name)
+
+    try:
+        sim_result = await run_in_threadpool(
+            ModelOutput.generate,
+            dong_code,
+            industry_code,
+            industry_name,
+            cost_config,
+            "tcn",
+        )
+    except ExcludedComboError:
+        return DistrictPredictionResult(district=dong_name, dong_code=dong_code, is_excluded_combo=True)
+    except Exception as e:
+        print(f"[PREDICT] {dong_name} ML 실패: {e}")
+        return DistrictPredictionResult(district=dong_name, dong_code=dong_code)
+
+    # quarterly_projection + 시나리오 빌드
+    quarterly: list = []
+    scenarios_result = None
+    try:
+        store_count = sim_result["revenue_forecast"].get("store_count", 1)
+        quarterly = build_quarterly_projection(
+            bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+            confidence="base",
+            is_mock=sim_result["revenue_forecast"].get("is_mock", False),
+            store_count=store_count,
+        )
+        scenarios_result = build_scenarios(
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+            store_count=store_count,
+        )
+    except Exception as e:
+        print(f"[PREDICT] {dong_name} projection 빌드 실패: {e}")
+
+    # SHAP 빌드
+    shap_result = None
+    try:
+        shap_raw = await run_in_threadpool(explain_tcn_prediction, dong_code, industry_code)
+        shap_result = shap_raw if shap_raw else None
+    except Exception as e:
+        print(f"[PREDICT] {dong_name} SHAP 실패 (무시): {e}")
+
+    is_mock = sim_result["revenue_forecast"].get("is_mock", False)
+
+    return DistrictPredictionResult(
+        district=dong_name,
+        dong_code=dong_code,
+        is_excluded_combo=False,
+        is_mock=is_mock,
+        quarterly_projection=quarterly,
+        scenarios=scenarios_result,
+        bep=sim_result.get("bep"),
+        closure_rate=sim_result.get("closure_rate"),
+        closure_risk=sim_result.get("closure_risk"),
+        shap_result=shap_result,
+    )
 
 
 def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> dict[str, Any]:
@@ -600,6 +698,13 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "closure_rate": sim_result.get("closure_rate") if "sim_result" in locals() else None,
         # 폐업위험도 (LightGBM + TCN 앙상블) — 모델 호출 실패 시 None
         "closure_risk": sim_result.get("closure_risk") if "sim_result" in locals() else None,
+        # [C] 타겟 고객 매출 분석 (customer_revenue MLP) — 모델 호출 실패 시 None
+        # (c822f98에서 매핑 누락된 회귀 — D/E 활성화와 함께 수정)
+        "customer_segment": sim_result.get("customer_segment") if "sim_result" in locals() else None,
+        # [D] 유동인구 피크 시간 예측 (TCN) — 모델 호출 실패 시 None
+        "living_pop_forecast": sim_result.get("living_pop_forecast") if "sim_result" in locals() else None,
+        # [E] 신흥 상권 조기 감지 (LSTM Autoencoder) — 모델 호출 실패 시 None
+        "emerging_signal": sim_result.get("emerging_signal") if "sim_result" in locals() else None,
         # competitor_intel 하이브리드 에이전트 결과 (경쟁 지형·카니발·차별화)
         "competitor_intel": _sanitize(competitor_intel) if competitor_intel else None,
         # 8 에이전트 판단 근거 (AgentAttribution)
@@ -804,10 +909,19 @@ class SignupRequest(BaseModel):
 
 @app.post("/auth/signup")
 async def signup(req: SignupRequest):
-    """회원가입 — 사업자 검증 + 브랜드 매핑 + DB 저장"""
+    """회원가입 — 사업자 검증 + 브랜드 매핑 + DB 저장 + JWT 발급."""
+    from src.services.jwt_auth import create_access_token  # 지역 import (login 패턴 동일)
+
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await auth.signup(req.model_dump())
+        if result.get("status") == "success" and result.get("user"):
+            u = result["user"]
+            result["access_token"] = create_access_token(
+                user_id=str(u["id"]),
+                role="master",
+                email=u.get("email", req.email),
+            )
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -895,7 +1009,11 @@ class ManagerSignupRequest(BaseModel):
 
 @app.post("/auth/manager/signup")
 async def manager_signup(req: ManagerSignupRequest):
-    """매니저 회원가입 — 초대코드로 팀장 기업정보 자동 상속"""
+    """매니저 회원가입 — 초대코드로 팀장 기업정보 자동 상속.
+
+    [보안] is_approved=false 로 INSERT 되므로 access_token 발급 금지.
+    팀장 승인 후 /auth/manager/login 으로만 로그인 가능. (manager_login 은 is_approved 검증 보유)
+    """
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await run_in_threadpool(auth.manager_signup, req.model_dump())
@@ -1128,6 +1246,48 @@ def _mock_simulation_response(target_district: str, request_id: str) -> dict:
     }
 
 
+@app.post("/predict")
+async def predict_districts(input_data: SimulationInput):
+    """
+    선택 동 1~4개 ML 예측 전용 엔드포인트 (LangGraph 미사용)
+
+    - district_ranking, winner 로직 없음
+    - target_districts 전체에 대해 TCN/BEP/폐업률/폐업위험도/SHAP 병렬 실행
+    - 응답: 동별 예측 결과 리스트 (프론트 멀티라인 차트용)
+    """
+    from src.config.constants import MAPO_DISTRICTS
+
+    target_districts = getattr(input_data, "target_districts", None) or [input_data.target_district]
+    target_districts = [d for d in target_districts if d in MAPO_DISTRICTS][:4]
+
+    if not target_districts:
+        return {"status": "error", "message": "유효한 마포구 행정동이 없습니다."}
+
+    normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
+    industry_code = _BIZ_TO_INDUSTRY_CODE.get(normalized_biz, "CS100010")
+
+    cost_config = BEPCalculator.get_default_costs(
+        normalized_biz,
+        initial_capital=getattr(input_data, "initial_capital", 50_000_000),
+        monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
+    )
+
+    print(f"--- [/predict] {target_districts} / {normalized_biz} 병렬 ML 예측 시작 ---")
+
+    results: list[DistrictPredictionResult] = list(
+        await asyncio.gather(
+            *[_predict_single_district(dong, industry_code, normalized_biz, cost_config) for dong in target_districts]
+        )
+    )
+
+    print(f"--- [/predict] 완료 ({len(results)}개 동) ---")
+
+    return {
+        "status": "success",
+        "data": [r.model_dump() for r in results],
+    }
+
+
 @app.post("/simulate")
 async def run_simulation(input_data: SimulationInput):
     """기본 시뮬레이션 엔드포인트"""
@@ -1184,6 +1344,8 @@ async def run_simulation(input_data: SimulationInput):
             "competitor_intel": None,
             "agent_attributions": [],
             "customer_segment": None,
+            "living_pop_forecast": None,
+            "emerging_signal": None,
         }
 
 

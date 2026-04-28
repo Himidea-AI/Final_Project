@@ -7,9 +7,9 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { createElement } from "react";
-import { useAuth } from "../auth/AuthContext";
+} from 'react';
+import { createElement } from 'react';
+import { useAuth } from '../auth/AuthContext';
 
 /**
  * 매니저 타입 — HQCommandCenter와 일치 (중복 정의지만 순환 import 회피)
@@ -32,10 +32,10 @@ export interface Manager {
  */
 export function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "—";
+  if (isNaN(date.getTime())) return '—';
   const diff = Date.now() - date.getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "방금 전";
+  if (minutes < 1) return '방금 전';
   if (minutes < 60) return `${minutes}분 전`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}시간 전`;
@@ -91,7 +91,7 @@ export function ManagerListProvider({ children }: { children: ReactNode }) {
 
   const refetch = useCallback(async () => {
     const uid = userIdRef.current;
-    if (!uid || !isLoggedIn || user?.role === "manager") {
+    if (!uid || !isLoggedIn || user?.role === 'manager') {
       setManagers([]);
       return;
     }
@@ -99,18 +99,18 @@ export function ManagerListProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch(`/api/auth/managers?owner_id=${encodeURIComponent(uid)}`);
       const data = await res.json();
-      if (data.status === "success" && Array.isArray(data.managers)) {
+      if (data.status === 'success' && Array.isArray(data.managers)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const normalized: Manager[] = data.managers.map((m: any) => {
           let dongs: string[] | null = null;
           const raw = m.assigned_dongs;
           if (Array.isArray(raw)) {
-            dongs = raw.filter((d) => typeof d === "string");
-          } else if (typeof raw === "string" && raw.trim().length > 0) {
+            dongs = raw.filter((d) => typeof d === 'string');
+          } else if (typeof raw === 'string' && raw.trim().length > 0) {
             try {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed)) {
-                dongs = parsed.filter((d) => typeof d === "string");
+                dongs = parsed.filter((d) => typeof d === 'string');
               }
             } catch {
               dongs = null;
@@ -129,7 +129,7 @@ export function ManagerListProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // 비로그인/매니저면 폴링 전체 중지
-    if (!isLoggedIn || user?.role === "manager") {
+    if (!isLoggedIn || user?.role === 'manager') {
       setManagers([]);
       return;
     }
@@ -165,11 +165,11 @@ export function ManagerListProvider({ children }: { children: ReactNode }) {
       startPolling();
     }
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       stopPolling();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isLoggedIn, user?.role, refetch]);
 

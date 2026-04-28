@@ -16,6 +16,7 @@
 
 import type {
   ClosureRisk,
+  CompetitorIntel,
   DemographicReport,
   QuarterlyProjection,
   ShapResult,
@@ -89,28 +90,8 @@ export interface SimResult {
   // [B2 수지니] 폐업 위험도
   closureRisk?: ClosureRisk | null;
   // [PR #72] 경쟁 매장 인텔리전스 (500m 반경)
-  competitorIntel?: {
-    competition_500m?: {
-      total_competitors: number;
-      franchise_count?: number;
-      independent_count?: number;
-      saturation_level: string;
-      saturation_score?: number;
-      brand_distribution?: Record<string, number>;
-      samples: Array<{
-        place_name: string;
-        distance_m: number;
-        category?: string;
-      }>;
-    };
-    cannibalization?: { estimated_revenue_impact_pct: number };
-    market_entry_signal?: 'green' | 'yellow' | 'red';
-    differentiation_position?: string;
-    key_opportunities?: string[];
-    key_risks?: string[];
-    recommended_actions?: string[];
-    narrative?: string;
-  } | null;
+  // 2026-04-27 Medium #5 — types/index.ts CompetitorIntel 강타입으로 통일
+  competitorIntel?: CompetitorIntel | null;
   // [PR #71] 트렌드 전망 (trend_forecaster 에이전트)
   trendForecast?: TrendForecast | null;
   // [PR #75] 인구통계 심층 분석 (demographic_depth 에이전트)

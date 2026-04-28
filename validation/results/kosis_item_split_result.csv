@@ -1,0 +1,4 @@
+﻿n_quarters,pearson_r,name,note
+24,0.9291,current,single index
+24,0.8816,constant,single index
+24,0.9175,mixed,"baseline (mean of T1+T2, semantic mixing)"

@@ -181,7 +181,8 @@ def _load_menu_map(engine) -> dict[str, list[dict]]:
 def _load_dong_industry_weight(engine) -> dict[tuple[str, str], float]:
     """(dong, category) → 매출 index 0.5~1.5 (최신 분기).
 
-    district_sales_seoul의 industry_name을 우리 카테고리(카페/음식점/주점/편의점)로 매핑.
+    v4: LEFT JOIN seoul_district_sales_imputed_v4 + COALESCE.
+    confidence 가중 평균: weighted_avg = Σ(sales × conf) / Σ(conf).
     """
     cat_map = {
         "커피-음료": "카페",
@@ -197,22 +198,35 @@ def _load_dong_industry_weight(engine) -> dict[tuple[str, str], float]:
         "편의점": "편의점",
     }
     sql = text("""
-        SELECT dong_name, industry_name, AVG(monthly_sales)::double precision avg_sales
-        FROM district_sales_seoul
-        WHERE quarter >= (SELECT MAX(quarter) - 1 FROM district_sales_seoul)
-        GROUP BY 1, 2
+        SELECT s.dong_name, s.industry_name,
+               COALESCE(v.monthly_sales, s.monthly_sales)::double precision AS avg_sales,
+               COALESCE(v.confidence, 1.0)::double precision AS avg_conf
+        FROM district_sales_seoul s
+        LEFT JOIN seoul_district_sales_imputed_v4 v
+          ON s.quarter = v.quarter
+         AND s.dong_code = v.dong_code
+         AND s.industry_code = v.industry_code
+        WHERE s.quarter >= (SELECT MAX(quarter) - 1 FROM district_sales_seoul)
+           OR s.quarter >= COALESCE((SELECT MAX(quarter) - 1 FROM seoul_district_sales_imputed_v4), 999999)
     """)
-    raw: dict[tuple[str, str], float] = {}
+    raw: dict[tuple[str, str], dict] = {}
     with engine.connect() as conn:
         for row in conn.execute(sql):
-            d, i, v = row[0], row[1], row[2]
+            d, i, v_sales, v_conf = row[0], row[1], row[2], row[3]
             cat = cat_map.get(i)
-            if cat and v and v > 0:
-                raw[(d, cat)] = max(raw.get((d, cat), 0), float(v))
+            if cat and v_sales and v_sales > 0:
+                key = (d, cat)
+                if key not in raw:
+                    raw[key] = {"sum_wv": 0.0, "sum_w": 0.0}
+                raw[key]["sum_wv"] += v_sales * (v_conf or 0.0)
+                raw[key]["sum_w"] += v_conf or 0.0
     if not raw:
         return {}
-    mx = max(raw.values()) or 1.0
-    return {k: round(0.5 + (v / mx), 3) for k, v in raw.items()}
+    weighted = {k: r["sum_wv"] / r["sum_w"] for k, r in raw.items() if r["sum_w"] > 0}
+    if not weighted:
+        return {}
+    mx = max(weighted.values()) or 1.0
+    return {k: round(0.5 + (v / mx), 3) for k, v in weighted.items()}
 
 
 def _load_sentiment_map(engine) -> dict[str, float]:
@@ -347,3 +361,63 @@ def store_open_at(
     if not arr:
         return True
     return arr[weekday].bits[hour % 24]
+
+
+# ---------------------------------------------------------------
+# 옵션 B (2026-04-27): living_population 일별 boost loader
+# ---------------------------------------------------------------
+from datetime import date as _date, timedelta as _timedelta  # noqa: E402
+
+from src.database.sync_engine import get_sync_engine  # noqa: E402
+
+
+def _load_living_population_daily(
+    start_date: _date,
+    days: int,
+) -> dict[tuple[str, int, int], float]:
+    """living_population 테이블에서 (dong, hour, day_idx) → boost 로드.
+
+    boost = total_pop / (dong 의 분기 평균 total_pop). 1.0 = 평균.
+
+    Args:
+        start_date: 시뮬 첫 일자.
+        days: 시뮬 일수 (90 분기 권장).
+
+    Returns:
+        {(dong_name, hour, day_idx): float}.
+        DB 데이터 부재 시 빈 dict (시뮬은 정적 boost fallback).
+    """
+    sql = text("""
+        WITH avg_pop AS (
+            SELECT dong_name, AVG(total_pop) AS dong_avg
+              FROM living_population
+             WHERE dong_code LIKE '114%'
+               AND date >= :start_date
+               AND date < :end_date
+             GROUP BY dong_name
+        )
+        SELECT lp.dong_name, lp.time_zone,
+               (lp.date - :start_date) AS day_idx,
+               lp.total_pop, ap.dong_avg
+          FROM living_population lp
+          JOIN avg_pop ap ON ap.dong_name = lp.dong_name
+         WHERE lp.dong_code LIKE '114%'
+           AND lp.date >= :start_date
+           AND lp.date < :end_date
+    """)
+    end_date = start_date + _timedelta(days=days)
+    out: dict[tuple[str, int, int], float] = {}
+    db_url = os.environ.get("POSTGRES_URL")
+    if not db_url:
+        return out
+    engine = get_sync_engine(db_url)
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {"start_date": start_date, "end_date": end_date}).mappings()
+        for r in rows:
+            avg = float(r["dong_avg"] or 0)
+            if avg <= 0:
+                continue
+            ratio = float(r["total_pop"] or 0) / avg
+            ratio = max(0.5, min(ratio, 2.0))  # clamp 0.5~2.0
+            out[(r["dong_name"], int(r["time_zone"]), int(r["day_idx"]))] = ratio
+    return out

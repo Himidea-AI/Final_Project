@@ -78,6 +78,14 @@ class World:
     # time_age_boost (grid 기반) 와 별개로 score_store 에서 곱셈 결합.
     adstrd_flpop_boost: dict = field(default_factory=dict)
 
+    # ---------------------------
+    # 옵션 B (2026-04-27): living_population 기반 일별 boost
+    # ---------------------------
+    # {(dong_name, hour, day_idx): ratio 0.5~2.0} — 매일 다른 boost (90일 분량).
+    # day_idx = 0 (시뮬 첫째 날) ~ days-1.
+    # 빈 dict 면 기존 정적 adstrd_flpop_boost fallback (하위 호환성).
+    living_pop_daily_boost: dict = field(default_factory=dict)
+
     # Policy Generator 캐시 — {policy_id: PersonaPolicy}
     # 활성 시 use_policy=True → agents.decide() 가 policy_executor.policy_decide 호출
     policy_cache: dict = field(default_factory=dict)

@@ -83,7 +83,7 @@ function TrendCell({ icon, label, subLabel, value, unit, delta, deltaUnit, sampl
       </div>
       <div className="mt-1 -mx-1 h-7">
         {samples && samples.length > 1 ? (
-          <Sparkline data={samples} width={undefined as unknown as number} height={28} />
+          <Sparkline data={samples} height={28} />
         ) : (
           <span className="text-[9px] text-stone-600">시계열 데이터 부족</span>
         )}

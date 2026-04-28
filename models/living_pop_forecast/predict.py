@@ -51,9 +51,32 @@ DEFAULT_PREDICT_CONFIG: dict = {
 }
 
 
+# 모듈 레벨 캐시 — predict_peak가 24×n_quarters forward pass라 시뮬마다 모델
+# 새로 로딩하면 latency 크게 누적됨. weights_path 기반 키로 캐시. 가중치 파일 변경 시 서버 재시작 필요.
+_MODEL_CACHE: dict[str, tuple[TCNForecaster, object, object]] = {}
+
+# DataFrame 캐시 — predict/predict_peak가 매번 living_population 풀스캔(마포 16동 × 24h × N분기)으로 DB I/O 누적.
+# db_url 키로 결과 캐시. DB 데이터 변경 시 서버 재시작 필요.
+_DF_CACHE: dict[str, "pd.DataFrame"] = {}
+
+
+def _cached_load_living_pop(db_url: str, csv_path: str | None = None) -> "pd.DataFrame":
+    """load_living_population 결과를 모듈 레벨에 캐시. 두 번째 호출부터 0ms (DB I/O 없음)."""
+    cache_key = f"{db_url}::{csv_path or ''}"
+    if cache_key in _DF_CACHE:
+        return _DF_CACHE[cache_key]
+    df = load_living_population(db_url=db_url, csv_path=csv_path)
+    _DF_CACHE[cache_key] = df
+    return df
+
+
 def _load_model_and_scalers(cfg: dict) -> tuple[TCNForecaster, object, object]:
     weights_path = Path(cfg["weights_path"])
     scalers_path = Path(cfg["scalers_path"])
+
+    cache_key = f"{weights_path}::{scalers_path}"
+    if cache_key in _MODEL_CACHE:
+        return _MODEL_CACHE[cache_key]
 
     if not weights_path.exists():
         raise FileNotFoundError(
@@ -74,7 +97,9 @@ def _load_model_and_scalers(cfg: dict) -> tuple[TCNForecaster, object, object]:
     )
     model.load_weights(weights_path)
     model.eval()
-    return model, feat_scaler, tgt_scaler
+
+    _MODEL_CACHE[cache_key] = (model, feat_scaler, tgt_scaler)
+    return _MODEL_CACHE[cache_key]
 
 
 def _autoregressive_predict(
@@ -157,7 +182,7 @@ def predict(
     model, feat_scaler, tgt_scaler = _load_model_and_scalers(cfg)
     model.to(device)
 
-    df = load_living_population(db_url=cfg["db_url"], csv_path=cfg.get("csv_path"))
+    df = _cached_load_living_pop(cfg["db_url"], cfg.get("csv_path"))
     df = build_timeseries(df)
 
     feature_cols = cfg.get("feature_cols") or [c for c in POP_FEATURES if c in df.columns]
@@ -224,7 +249,7 @@ def predict_peak(
     model, feat_scaler, tgt_scaler = _load_model_and_scalers(cfg)
     model.to(device)
 
-    df = load_living_population(db_url=cfg["db_url"], csv_path=cfg.get("csv_path"))
+    df = _cached_load_living_pop(cfg["db_url"], cfg.get("csv_path"))
     df = build_timeseries(df)
 
     feature_cols = cfg.get("feature_cols") or [c for c in POP_FEATURES if c in df.columns]

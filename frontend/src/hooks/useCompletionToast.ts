@@ -19,7 +19,7 @@ export function useCompletionToast() {
         variant: 'success',
         title: 'ANALYSIS COMPLETE',
         description: '시뮬레이션 결과가 준비됐습니다.',
-        action: { label: '결과 보기', onClick: () => navigate('/simulator') },
+        action: { label: '결과 보기', onClick: () => navigate('/dashboard') },
       });
     } else if (prev === 'running' && status === 'error') {
       push({

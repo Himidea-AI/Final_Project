@@ -1,9 +1,6 @@
-import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSimulationStore } from '../../stores/simulationStore';
-import { X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-
-const DONE_AUTO_DISMISS_MS = 3000;
+import { X, AlertCircle, Loader2 } from 'lucide-react';
 
 export function SimulationFloatingWidget() {
   const status = useSimulationStore((s) => s.status);
@@ -16,16 +13,11 @@ export function SimulationFloatingWidget() {
   const start = useSimulationStore((s) => s.startSimulation);
   const navigate = useNavigate();
 
-  // 결과 토스트는 3초 후 자동 사라짐 — 하단 섹션 가리는 문제 해결
-  useEffect(() => {
-    if (status !== 'done') return;
-    const timer = setTimeout(() => dismiss(), DONE_AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
-  }, [status, dismiss]);
+  // [H4] status='done' 자동 dismiss 제거 — Hub Redesign 흐름에서 store.result 가 /dashboard
+  // 가드 통과 키이므로 dismiss 하면 옛 화면으로 redirect 됨. done 알림은 useCompletionToast 담당.
+  if (status === 'idle' || status === 'done') return null;
 
-  if (status === 'idle') return null;
-
-  const goToSimulator = () => navigate('/simulator');
+  const goToSimulator = () => navigate('/dashboard');
 
   const etaSec = startedAt ? Math.max(0, Math.round((90 - progress) / 0.9)) : 0;
 
@@ -70,30 +62,6 @@ export function SimulationFloatingWidget() {
           className="mt-1 self-start text-xs font-medium text-cyan-300 hover:text-cyan-200"
         >
           시뮬레이터로 이동 →
-        </button>
-      </div>
-    );
-  }
-
-  if (status === 'done') {
-    return (
-      <div className={`${baseClasses} ring-cyan-400/60`}>
-        <div className="flex items-center gap-2">
-          <CheckCircle2 className="h-5 w-5 text-cyan-400" />
-          <div className="flex-1 text-sm font-semibold text-slate-100">ANALYSIS COMPLETE</div>
-          <button
-            onClick={dismiss}
-            className="text-slate-400 hover:text-slate-200"
-            aria-label="닫기"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <button
-          onClick={goToSimulator}
-          className="rounded-md bg-cyan-500/20 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-500/30"
-        >
-          결과 보기 →
         </button>
       </div>
     );

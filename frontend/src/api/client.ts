@@ -14,7 +14,13 @@
  * - 타입 정의는 src/types/index.ts 참고
  */
 import axios from 'axios';
-import type { SimulationInput, SimulationOutput, JobStatus, AnalysisResult } from '../types';
+import type {
+  SimulationInput,
+  SimulationOutput,
+  JobStatus,
+  AnalysisResult,
+  CustomerSegment,
+} from '../types';
 import type {
   HistoryFilterParams,
   HistoryListResponse,
@@ -152,6 +158,30 @@ export async function getStatus(jobId: string): Promise<JobStatus> {
 export async function getLivePopulation(dongs?: string[]): Promise<any> {
   const params = dongs ? `?dongs=${encodeURIComponent(dongs.join(','))}` : '';
   const response = await apiClient.get(`/population/live${params}`);
+  return response.data;
+}
+
+// ─────────────────────────────────────────────────────────
+// customer_segment — /simulate와 무관한 독립 호출 (~100ms MLP 미리보기)
+// ─────────────────────────────────────────────────────────
+
+export interface CustomerSegmentRequest {
+  target_district: string;
+  business_type: string;
+  target_age_groups: string[];
+  target_gender: 'male' | 'female' | null;
+  target_time_slots: string[];
+  target_day_type: 'weekday' | 'weekend' | null;
+  target_monthly_sales: number | null;
+  quarter_num?: number;
+}
+
+/** customer_revenue MLP 직접 호출 — /simulate와 무관, ~100ms */
+export async function fetchCustomerSegment(
+  req: CustomerSegmentRequest,
+  signal?: AbortSignal,
+): Promise<CustomerSegment> {
+  const response = await apiClient.post('/customer-segment', req, { signal });
   return response.data;
 }
 

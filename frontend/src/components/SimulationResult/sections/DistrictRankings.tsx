@@ -17,13 +17,23 @@ const ZONING_KO: Record<string, string> = {
 };
 
 export function DistrictRankings({ simResult }: Props) {
-  const rankings = simResult.district_rankings ?? [];
+  const allRankings = simResult.district_rankings ?? [];
   const winner = simResult.winner_district;
+  const selectedDongs = simResult.target_districts ?? [];
+
+  // 사용자가 선택한 동(최대 4개)만 필터 + score 내림차순 + 자체 1~N위 재매김.
+  // target_districts 비면 전체 표시 (안전 폴백).
+  const rankings =
+    selectedDongs.length > 0
+      ? allRankings
+          .filter((r) => selectedDongs.includes(r.district))
+          .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      : allRankings;
 
   if (rankings.length === 0) {
     return (
       <section>
-        <SectionLabel label="DISTRICT RANKINGS" subtitle="마포 16동 입지 순위" />
+        <SectionLabel label="DISTRICT RANKINGS" subtitle="선택 동 입지 순위" />
         <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 text-center text-sm text-stone-400">
           입지 랭킹 데이터가 없습니다
         </div>
@@ -31,9 +41,14 @@ export function DistrictRankings({ simResult }: Props) {
     );
   }
 
+  const subtitle =
+    selectedDongs.length > 0
+      ? `선택한 ${rankings.length}개 동 자체 순위`
+      : `마포 ${rankings.length}동 입지 순위`;
+
   return (
     <section>
-      <SectionLabel label="DISTRICT RANKINGS" subtitle={`마포 ${rankings.length}동 입지 순위`} />
+      <SectionLabel label="DISTRICT RANKINGS" subtitle={subtitle} />
       <div className="overflow-x-auto rounded-lg border border-stone-700 bg-stone-800">
         <table className="w-full min-w-[640px]">
           <thead className="border-b border-stone-700 bg-stone-900/60">
@@ -67,7 +82,15 @@ export function DistrictRankings({ simResult }: Props) {
                   key={r.district}
                   className={`border-b border-stone-700/50 last:border-b-0 ${rowCls}`}
                 >
-                  <td className="p-3 font-mono text-sm text-stone-100">{r.rank ?? i + 1}</td>
+                  <td className="p-3 font-mono text-sm text-stone-100">
+                    {/* 자체 1~N위 (정렬 후 인덱스). 전체 마포 16동 중 순위는 작게 보조 표시. */}
+                    {i + 1}
+                    {selectedDongs.length > 0 && r.rank != null && r.rank !== i + 1 && (
+                      <span className="ml-1 text-[9px] font-normal text-stone-500">
+                        (전체 {r.rank}위)
+                      </span>
+                    )}
+                  </td>
                   <td className="p-3 text-sm font-semibold text-stone-100">
                     {r.district}
                     {isWinner && (
@@ -80,7 +103,8 @@ export function DistrictRankings({ simResult }: Props) {
                     {r.score.toFixed(1)}
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-stone-300">
-                    {(r.sales_growth * 100).toFixed(1)}%
+                    {/* backend qoq_growth는 이미 percent 단위 (tools.py:300 *100 적용). 추가 ×100 금지 */}
+                    {r.sales_growth.toFixed(1)}%
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-rose-400">
                     {r.closure_rate != null ? `${(r.closure_rate * 100).toFixed(1)}%` : '—'}
