@@ -69,6 +69,9 @@ from models.explainability.simulation import (
     build_quarterly_projection,
     build_scenarios,
 )
+from models.lstm_forecast.data_prep import ExcludedComboError
+from models.revenue_predictor.bep import BEPCalculator
+from src.schemas.simulation_output import DistrictPredictionResult
 
 # ---------------------------------------------------------------------------
 # Rate Limiting 설정
@@ -319,6 +322,77 @@ async def _run_pipeline(input_data: Any) -> dict[str, Any]:
         return await task
     finally:
         _pending_pipelines.pop(key, None)
+
+
+async def _predict_single_district(
+    dong_name: str,
+    industry_code: str,
+    industry_name: str,
+    cost_config: dict,
+) -> DistrictPredictionResult:
+    """단일 동 ML 예측 실행 (/predict 병렬 호출용)"""
+    from models.interface import ModelOutput
+
+    dong_code = _resolve_dong_code(dong_name)
+    if not dong_code:
+        return DistrictPredictionResult(district=dong_name)
+
+    try:
+        sim_result = await run_in_threadpool(
+            ModelOutput.generate,
+            dong_code,
+            industry_code,
+            industry_name,
+            cost_config,
+            "tcn",
+        )
+    except ExcludedComboError:
+        return DistrictPredictionResult(district=dong_name, dong_code=dong_code, is_excluded_combo=True)
+    except Exception as e:
+        print(f"[PREDICT] {dong_name} ML 실패: {e}")
+        return DistrictPredictionResult(district=dong_name, dong_code=dong_code)
+
+    # quarterly_projection + 시나리오 빌드
+    quarterly: list = []
+    scenarios_result = None
+    try:
+        store_count = sim_result["revenue_forecast"].get("store_count", 1)
+        quarterly = build_quarterly_projection(
+            bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+            confidence="base",
+            is_mock=sim_result["revenue_forecast"].get("is_mock", False),
+            store_count=store_count,
+        )
+        scenarios_result = build_scenarios(
+            quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+            store_count=store_count,
+        )
+    except Exception as e:
+        print(f"[PREDICT] {dong_name} projection 빌드 실패: {e}")
+
+    # SHAP 빌드
+    shap_result = None
+    try:
+        shap_raw = await run_in_threadpool(explain_tcn_prediction, dong_code, industry_code)
+        shap_result = shap_raw if shap_raw else None
+    except Exception as e:
+        print(f"[PREDICT] {dong_name} SHAP 실패 (무시): {e}")
+
+    is_mock = sim_result["revenue_forecast"].get("is_mock", False)
+
+    return DistrictPredictionResult(
+        district=dong_name,
+        dong_code=dong_code,
+        is_excluded_combo=False,
+        is_mock=is_mock,
+        quarterly_projection=quarterly,
+        scenarios=scenarios_result,
+        bep=sim_result.get("bep"),
+        closure_rate=sim_result.get("closure_rate"),
+        closure_risk=sim_result.get("closure_risk"),
+        shap_result=shap_result,
+    )
 
 
 def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> dict[str, Any]:
@@ -1082,6 +1156,48 @@ def _mock_simulation_response(target_district: str, request_id: str) -> dict:
         "status": "ok",
         "test_mode": True,
         "data_source": "mock",
+    }
+
+
+@app.post("/predict")
+async def predict_districts(input_data: SimulationInput):
+    """
+    선택 동 1~4개 ML 예측 전용 엔드포인트 (LangGraph 미사용)
+
+    - district_ranking, winner 로직 없음
+    - target_districts 전체에 대해 TCN/BEP/폐업률/폐업위험도/SHAP 병렬 실행
+    - 응답: 동별 예측 결과 리스트 (프론트 멀티라인 차트용)
+    """
+    from src.config.constants import MAPO_DISTRICTS
+
+    target_districts = getattr(input_data, "target_districts", None) or [input_data.target_district]
+    target_districts = [d for d in target_districts if d in MAPO_DISTRICTS][:4]
+
+    if not target_districts:
+        return {"status": "error", "message": "유효한 마포구 행정동이 없습니다."}
+
+    normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
+    industry_code = _BIZ_TO_INDUSTRY_CODE.get(normalized_biz, "CS100010")
+
+    cost_config = BEPCalculator.get_default_costs(
+        normalized_biz,
+        initial_capital=getattr(input_data, "initial_capital", 50_000_000),
+        monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
+    )
+
+    print(f"--- [/predict] {target_districts} / {normalized_biz} 병렬 ML 예측 시작 ---")
+
+    results: list[DistrictPredictionResult] = list(
+        await asyncio.gather(
+            *[_predict_single_district(dong, industry_code, normalized_biz, cost_config) for dong in target_districts]
+        )
+    )
+
+    print(f"--- [/predict] 완료 ({len(results)}개 동) ---")
+
+    return {
+        "status": "success",
+        "data": [r.model_dump() for r in results],
     }
 
 
