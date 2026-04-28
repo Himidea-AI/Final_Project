@@ -168,6 +168,99 @@ def evaluate_top_vacancies(
     return rankings
 
 
+import threading  # noqa: E402
+import time  # noqa: E402
+import uuid  # noqa: E402
+
+# In-memory cache (TTL 1시간)
+vacancy_pse_cache: dict[str, dict] = {}
+_cache_lock = threading.Lock()
+
+
+def run_vacancy_pse_async(
+    spot: dict,
+    category: str,
+    brand_name: str | None = None,
+    n_seeds: int = 1,  # 시각화는 단일 시뮬 (검증은 N=5)
+    days: int = 1,
+    with_cannibalization: bool = False,
+    popularity_boost: float = 20.0,  # plan #2 일관 (V1A r=0.95 환경)
+    agents: int = 5000,  # plan #2 일관 (5000ag default)
+    use_ipf: bool = False,  # 시뮬 결과 자체 - frontend 후처리 X
+    collect_trajectory: bool = False,
+    dump_visits: bool = False,
+    use_dialog_templates: bool = True,
+) -> str:
+    """vacancy_pse 비동기 실행. job_id 즉시 반환, 결과는 cache 에 저장.
+
+    Returns:
+        uuid4 형식의 job_id. status/trajectory/visits/stores/chats 조회 시 사용.
+    """
+    job_id = str(uuid.uuid4())
+    with _cache_lock:
+        vacancy_pse_cache[job_id] = {
+            "status": "running",
+            "started_at": time.time(),
+            "result": None,
+            "error": None,
+        }
+
+    def _run():
+        try:
+            menu_items = None
+            if brand_name:
+                try:
+                    menu_items = brand_menu_loader.load_brand_menu_items(brand_name)
+                except (BrandNotFoundError, BrandMenuEmptyError) as e:
+                    logger.warning(f"[async] brand menu fallback: {e}")
+
+            from src.simulation.config import ModelConfig
+
+            cfg = ModelConfig()
+            cfg.tier_s_provider = "mock"
+            cfg.tier_a_provider = "mock"
+            cfg.n_personas = agents  # plan #2 일관 — 5000ag default
+
+            result = evaluate_vacancy_pse(
+                vacancy_spot=spot,
+                category=category,
+                n_seeds=n_seeds,
+                days=days,
+                with_cannibalization=with_cannibalization,
+                popularity_boost=popularity_boost,
+                collect_trajectory=collect_trajectory,
+                dump_visits=dump_visits,
+                use_dialog_templates=use_dialog_templates,
+                menu_items=menu_items,
+                cfg=cfg,
+            )
+            with _cache_lock:
+                vacancy_pse_cache[job_id]["status"] = "done"
+                vacancy_pse_cache[job_id]["result"] = result
+        except Exception as e:
+            logger.exception(f"[async] vacancy_pse failed: job_id={job_id}")
+            with _cache_lock:
+                vacancy_pse_cache[job_id]["status"] = "failed"
+                vacancy_pse_cache[job_id]["error"] = str(e)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return job_id
+
+
+def cleanup_expired_cache(ttl_seconds: int = 3600) -> int:
+    """만료된 job (TTL 초과) 제거. 주기적 호출 권장.
+
+    Returns:
+        제거된 job 수.
+    """
+    now = time.time()
+    with _cache_lock:
+        expired = [k for k, v in vacancy_pse_cache.items() if now - v["started_at"] > ttl_seconds]
+        for k in expired:
+            del vacancy_pse_cache[k]
+    return len(expired)
+
+
 def format_rankings_text(rankings: list[dict[str, Any]]) -> str:
     """순위 결과를 사람이 읽기 쉬운 텍스트로."""
     if not rankings:
