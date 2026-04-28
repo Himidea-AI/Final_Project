@@ -38,8 +38,9 @@ OUT_WIDE_CSV = REPO_ROOT / "validation" / "results" / "imputed_mapo_v4.csv"
 OUT_DETAIL_CSV = REPO_ROOT / "validation" / "results" / "imputed_mapo_v4_detail.csv"
 CHECKPOINT_DIR = REPO_ROOT / "validation" / "results" / "checkpoints_v4"
 
-# Sprint 10: 디스크 16GB 한계로 단일 seed 실험 (1-1 합격선 측정 불가, 정직 명시)
-SEEDS = [42]
+# Sprint 15: 가용 26.6GB (Scenario B) → n=200, depth=25 축소 파라미터로 6 seed 실험
+# 예상 디스크: ~18GB / 실측 가용: 26.6GB → 여유 8GB
+SEEDS = [42, 2026, 7, 13, 99, 1234]
 
 SALES_COLS = [
     "monthly_sales",
@@ -71,11 +72,11 @@ COUNT_COLS = [c.replace("_sales", "_count") for c in SALES_COLS]
 TARGET_COLS = SALES_COLS + COUNT_COLS
 
 BEST_PARAMS = {
-    # Sprint 10: Optuna v3 sprint best_params 원본 복원
-    # 단일 seed (SEEDS=[42]) 로 디스크 16GB 한계 내 운영
-    # 1 seed × 300 trees × 48 output × depth 35 → ~7GB (단일 seed 기준 OK)
-    "n_estimators": 300,
-    "max_depth": 35,
+    # Sprint 15: RAM 15.9GB (여유 ~7.8GB) 기반 파라미터
+    # 단일 seed 모델 메모리: n=150, depth=20 → ~1.5GB → 6 seed 체크포인트 ~9GB (디스크 OK)
+    # 순차 학습 (한 seed 씩) → 최대 RAM ~2GB 사용
+    "n_estimators": 150,
+    "max_depth": 20,
     "min_samples_leaf": 1,
     "min_samples_split": 2,
     "max_features": 1.0,
@@ -201,6 +202,79 @@ def build_features_v5_loo(
     return X
 
 
+def fit_and_predict_lazy(
+    X_alive: pd.DataFrame,
+    Y_alive: pd.DataFrame,
+    X_missing: pd.DataFrame,
+    seeds: list[int],
+    best_params: dict,
+    ckpt_dir: Path | None = None,
+) -> dict[str, pd.DataFrame]:
+    """RAM 절약형: seed별 학습 → 즉시 예측 → 모델 해제 → 다음 seed.
+
+    Sprint 15: 15.9GB RAM 환경에서 6 seed × n=150 동시 적재 불가.
+    각 seed를 순차 처리(학습+예측+해제)하여 최대 RAM ~2GB 유지.
+    checkpoint: 각 seed 완료 시 디스크 저장 → 중단 시 재개 가능.
+    """
+    import gc
+
+    _ckpt_dir = Path(ckpt_dir) if ckpt_dir is not None else CHECKPOINT_DIR
+    _ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    N = len(X_missing)
+    n_cols = len(TARGET_COLS)
+    n_seeds = len(seeds)
+
+    # 예측 누적 배열: (n_seeds, N, n_cols)
+    preds_all = np.zeros((n_seeds, N, n_cols), dtype=np.float32)
+
+    for i, seed in enumerate(seeds):
+        ckpt = _ckpt_dir / f"model_seed_{seed}.pkl"
+        pred_ckpt = _ckpt_dir / f"pred_seed_{seed}.npy"
+
+        if pred_ckpt.exists():
+            print(f"  [seed {seed}] 예측 checkpoint 로드")
+            preds_all[i] = np.load(pred_ckpt)
+            continue
+
+        if ckpt.exists():
+            print(f"  [seed {seed}] model checkpoint 로드 → 예측")
+            m = joblib.load(ckpt)
+        else:
+            print(f"  [seed {seed}] 학습 중...")
+            m = MultiOutputRegressor(
+                ExtraTreesRegressor(**best_params, random_state=seed),
+                n_jobs=4,
+            ).fit(X_alive, Y_alive)
+            joblib.dump(m, ckpt)
+
+        raw = m.predict(X_missing).astype(np.float32)
+        np.save(pred_ckpt, raw)
+        preds_all[i] = raw
+        del m
+        gc.collect()
+        # 디스크 절약: 예측 저장 후 대형 model pkl 삭제 (pred_ckpt 로 재개 가능)
+        if ckpt.exists():
+            ckpt.unlink()
+            print(f"  [seed {seed}] model pkl 삭제 (pred_ckpt 보존)")
+
+    # 통계 집계
+    preds = np.expm1(preds_all.astype(np.float64))  # (S, N, 48)
+    mean = preds.mean(axis=0)
+    _ddof = 1 if n_seeds > 1 else 0
+    std = preds.std(axis=0, ddof=_ddof)
+    lower_95 = np.maximum(0, mean - 1.96 * std)
+    upper_95 = mean + 1.96 * std
+    ci_width_ratio = (upper_95 - lower_95) / np.maximum(mean, 1)
+    return {
+        "mean": pd.DataFrame(mean, columns=TARGET_COLS),
+        "std": pd.DataFrame(std, columns=TARGET_COLS),
+        "lower_95": pd.DataFrame(lower_95, columns=TARGET_COLS),
+        "upper_95": pd.DataFrame(upper_95, columns=TARGET_COLS),
+        "ci_width_ratio": pd.DataFrame(ci_width_ratio, columns=TARGET_COLS),
+    }
+
+
 def fit_seed_ensemble_multi(
     X: pd.DataFrame,
     Y: pd.DataFrame,
@@ -324,14 +398,11 @@ def main():
     Y_alive = Y_raw.apply(np.log1p)
     X_alive = X.loc[df_alive_clean.index]
 
-    print(f"[fit] 6 seed × ExtraTrees Multi-Output ({len(TARGET_COLS)} 컬럼)...")
+    print(f"[fit+predict] 6 seed × ExtraTrees Multi-Output ({len(TARGET_COLS)} 컬럼) — RAM 절약형 lazy mode")
     print(f"      학습 샘플: {len(X_alive)}, 결측 셀: {len(df_missing)}")
-    models = fit_seed_ensemble_multi(X_alive, Y_alive, SEEDS, BEST_PARAMS)
-
-    print(f"[predict] {len(df_missing)} 결측 셀 × 48 컬럼 ...")
-    # NOTE: predict_with_ci_multi 는 모든 48 컬럼에 store_count 곱셈을 수행하므로,
-    # count 컬럼이 이중 스케일되지 않도록 ones(N) 전달.
-    preds = predict_with_ci_multi(models, X.loc[missing_mask], np.ones(len(df_missing)))
+    # Sprint 15: fit_and_predict_lazy — seed별 학습+예측+해제로 RAM 절약
+    # store_count 는 이후 SALES_COLS 에만 별도 곱하므로 여기서는 적용 안 함 (내부 ones 상당)
+    preds = fit_and_predict_lazy(X_alive, Y_alive, X.loc[missing_mask], SEEDS, BEST_PARAMS)
 
     # 그 다음 SALES_COLS 만 sc_missing 곱셈 (위에서 ones 로 곱했으므로 사실상 첫 곱셈)
     sc_missing = df_missing["store_count"].fillna(1).astype(float).values
