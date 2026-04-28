@@ -100,7 +100,6 @@ const CommandPalette = lazy(() => import('./components/CommandPalette'));
 
 import {
   ChevronRight,
-  ChevronLeft,
   Sliders,
   Activity,
   MapPin,
@@ -807,8 +806,8 @@ function SimulatorDashboard({
   const [radius, setRadius] = useState(500);
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
-  const [loadingText, setLoadingText] = useState('INITIALIZING AI ENGINE...');
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  // loadingText/loadingProgress state는 로딩 UI 제거(2026-04-28)와 함께 dead.
+  // SimulationFloatingWidget이 store status를 직접 구독해 진행 표시.
   const { showToast } = useToast();
   const { user, brand } = useAuth();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
@@ -1431,14 +1430,8 @@ function SimulatorDashboard({
     saveSim, // line 1359 saveSim.reset() 호출 — useSaveSimulation 인스턴스 변경 추적
   ]);
 
-  // [IM3-205] 로딩 진행률을 simulationStore에서 미러 — store가 500ms 타이머 보유
-  // 기존 로컬 타이머 useEffect는 store로 이관됨
-  const _storeProgress = useSimulationStore((s) => s.progress);
-  const _storeStage = useSimulationStore((s) => s.stage);
-  useEffect(() => {
-    setLoadingProgress(_storeProgress);
-    if (_storeStage) setLoadingText(`${_storeStage}...`);
-  }, [_storeProgress, _storeStage]);
+  // 로딩 UI 제거(2026-04-28)와 함께 store progress/stage 미러 useEffect도 dead → 제거.
+  // SimulationFloatingWidget이 store를 직접 구독해 진행 상태 표시.
 
   // Dark theme only
   const textPrimary = 'text-[#e2e8f0]';
@@ -1463,7 +1456,7 @@ function SimulatorDashboard({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-8 max-w-[1650px] mx-auto">
         {/* Left panel — Controls (result 상태일 땐 숨김 → 우측 리포트가 full-width로 확장) */}
         <div
-          className={`lg:col-span-5 rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === 'result' ? 'hidden' : ''}`}
+          className={`lg:col-span-12 rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === 'result' ? 'hidden' : ''}`}
         >
           <h3
             className={`flex items-center gap-2 text-sm font-bold tracking-wider mb-6 ${textPrimary}`}
@@ -1945,154 +1938,22 @@ function SimulatorDashboard({
           </div>
         </div>
 
-        {/* Right panel wrapper — visualization 위 + RUN 아래 */}
+        {/* Right panel wrapper — result 시에만 노출. idle/loading 시 hidden(좌측 풀폭).
+            로딩 화면은 가짜 progress/ETA가 §3.7 거짓 신호 + 좌측 옵션 패널 가독성 저하라 제거.
+            진행 표시는 SimulationFloatingWidget(우측 하단)이 담당, 결과 도착 시 자동 전환. */}
         <div
-          className={`lg:col-span-7 flex flex-col gap-6 ${reportState === 'result' ? 'lg:col-span-12' : ''}`}
+          className={`lg:col-span-12 flex flex-col gap-6 ${reportState !== 'result' ? 'hidden' : ''}`}
         >
           {/* Right panel — Visualization */}
           <div
             className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel}`}
           >
-            {/* --- Idle State (Empty State with Blurred Silhouette) --- */}
-            {reportState === 'idle' && (
-              <div className="relative flex-1 flex flex-col items-center justify-center w-full h-full min-h-[600px] animate-in fade-in zoom-in-95 duration-500 bg-card/5 border border-border/50 rounded-2xl overflow-hidden">
-                {/* 1. 배경: 블러 처리된 가짜(Mock) 대시보드 실루엣 */}
-                <div className="absolute inset-0 w-full h-full p-8 opacity-20 blur-[8px] pointer-events-none flex flex-col gap-4">
-                  {/* 가짜 헤더 영역 */}
-                  <div className="h-10 w-1/3 bg-secondary rounded-lg mb-4" />
-                  {/* 가짜 4 KPI 카드 */}
-                  <div className="grid grid-cols-4 gap-4">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="h-24 bg-card border border-border rounded-xl" />
-                    ))}
-                  </div>
-                  {/* 가짜 메인 바디 */}
-                  <div className="flex flex-1 gap-4 mt-2">
-                    <div className="flex-[2] flex flex-col gap-4">
-                      <div className="flex-1 bg-card border border-border rounded-xl" />
-                      <div className="flex-1 bg-card border border-border rounded-xl" />
-                    </div>
-                    <div className="flex-[1] bg-card border border-border rounded-xl" />
-                  </div>
-                </div>
+            {/* idle UI(블러 대시보드 실루엣 + 3-step 가이드) 제거 — 좌측 옵션 패널이
+                풀폭으로 노출되어 가이드 역할 자체가 의미 없어짐(2026-04-28). */}
 
-                {/* 2. 중앙 CTA (Call to Action) 가이드 박스 */}
-                <div className="relative z-10 flex flex-col items-center max-w-md text-center bg-card/80 backdrop-blur-xl border border-border/50 p-10 rounded-3xl shadow-2xl">
-                  <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
-                    <MapPin className="w-8 h-8 text-primary animate-bounce" />
-                  </div>
-
-                  <h2 className="text-2xl font-black text-foreground mb-3 tracking-tight">
-                    첫 번째 시뮬레이션을 시작하세요
-                  </h2>
-
-                  <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-                    좌측 패널에서 분석을 원하는 <strong className="text-primary">행정동</strong>과{' '}
-                    <strong className="text-primary">업종</strong>을 선택한 후,
-                    <br />
-                    하단의 RUN 버튼을 눌러 AI 예측 엔진을 가동하십시오.
-                  </p>
-
-                  {/* 좌측 패널을 가리키는 시각적 힌트 */}
-                  <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground bg-background px-4 py-2 rounded-full border border-border">
-                    <span className="flex items-center gap-1 text-primary">
-                      <ChevronLeft className="w-4 h-4 animate-pulse" />
-                      SELECT PARAMETERS
-                    </span>
-                    <span className="w-1 h-1 bg-border rounded-full" />
-                    <span>PRESS RUN</span>
-                  </div>
-
-                  {/* [I-2] 3-step 시작 가이드 — 처음 방문자의 진입장벽 낮춤 */}
-                  <div className="mt-6 grid gap-3 max-w-sm mx-auto text-left">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
-                        1
-                      </div>
-                      <p className="text-xs text-[#9ca3af] leading-relaxed">
-                        좌측{' '}
-                        <span className="text-[#818cf8] font-semibold">SIMULATION CONTROLS</span>
-                        에서 행정동·업종·조건 선택
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
-                        2
-                      </div>
-                      <p className="text-xs text-[#9ca3af] leading-relaxed">
-                        좌측 하단{' '}
-                        <span className="text-[#818cf8] font-semibold">RUN SIMULATION</span> 클릭
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
-                        3
-                      </div>
-                      <p className="text-xs text-[#9ca3af] leading-relaxed">
-                        AI 분석 결과 약 <span className="text-[#e2e8f0] font-semibold">20초</span>{' '}
-                        후 표시
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {reportState === 'loading' && (
-              <div className="h-full flex flex-col items-center justify-center">
-                <div className="relative w-24 h-24 mb-8">
-                  {/* Double spinner */}
-                  <div className="absolute inset-0 border-4 border-[#3a3633] border-t-[#818cf8] rounded-full animate-[spin_2s_linear_infinite]" />
-                  <div className="absolute inset-2 border-4 border-[#3a3633] border-b-[#818cf8] rounded-full animate-[spin_3s_linear_infinite_reverse]" />
-                  {/* Center percentage */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-lg font-black font-mono tabular-nums text-[#818cf8]">
-                      {Math.round(loadingProgress)}%
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center gap-4 w-full max-w-md">
-                  <p
-                    className={`font-mono text-xl font-black tracking-[0.2em] uppercase ${accent}`}
-                  >
-                    PROCESSING DATA
-                  </p>
-
-                  {/* Progress Bar */}
-                  <div className="w-full relative">
-                    <div className="w-full h-2 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#6366f1] to-[#818cf8] rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${loadingProgress}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between mt-1.5">
-                      <span className="text-[9px] font-mono tabular-nums text-[#818cf8]">
-                        {Math.round(loadingProgress)}%
-                      </span>
-                      <span className="text-[9px] font-mono text-[#9ca3af]">
-                        ~{Math.max(0, Math.round((90 - loadingProgress) / 0.9))}초 남음
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Current step */}
-                  <div className="px-4 py-2 bg-black/10 rounded-md border border-[#3a3633]/30 backdrop-blur-sm flex items-center gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                    <p className={`font-mono text-xs tracking-widest ${textSecondary}`}>
-                      [ {loadingText} ]
-                    </p>
-                  </div>
-
-                  {/* [C-3] 페이지 이동 허용 힌트 — simulationStore 덕분에 탭 이동해도 진행됨 */}
-                  <p className="mt-2 text-[10px] text-[#9ca3af] leading-relaxed text-center max-w-xs">
-                    페이지를 이동하셔도 시뮬레이션은 계속 실행됩니다. 우측 하단 위젯에서 진행 상태를
-                    확인할 수 있어요.
-                  </p>
-                </div>
-              </div>
-            )}
+            {/* loading UI(가짜 progress + ETA + 단계 ticker) 제거 — §3.7 거짓 신호 +
+                좌측 옵션 패널 풀폭 가독성 ↑. 백그라운드 진행은 SimulationFloatingWidget 담당.
+                결과 도착 시 runSim 함수가 setReportState('result')로 자동 전환. */}
 
             {reportState === 'result' && (
               <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-24 md:pt-28 overflow-y-auto custom-scrollbar flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
