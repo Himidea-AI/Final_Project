@@ -11,7 +11,7 @@ Predecessors:
 
 ## 1. 개요 (한 줄 요약)
 
-본 plan #1 의 vacancy_pse `collect_trajectory`/`dump_visits` 인터페이스 + dev 브랜치의 `AbmPersonaMap.tsx` 기존 인프라를 통합 — **사용자가 공실 spot 클릭 → 1000ag 가 마포 지도 위 dot 으로 움직이며 spot 방문 흐름 시각화 + 시간 슬라이더 + 매출/방문 통계** 까지 도달.
+본 plan #1 의 vacancy_pse `collect_trajectory`/`dump_visits` 인터페이스 + dev 브랜치의 `AbmPersonaMap.tsx` 기존 인프라를 통합 — **사용자가 공실 spot 클릭 → 5000ag 가 마포 지도 위 dot 으로 움직이며 spot 방문 흐름 시각화 + 시간 슬라이더 + 매출/방문 통계** 까지 도달.
 
 ## 2. 사용자 Vision (직전 brainstorm 명시)
 
@@ -28,14 +28,14 @@ Predecessors:
 
 ### 3.2 Frontend (dev 브랜치, origin/dev 25 commit ahead)
 
-- `frontend/src/components/AbmPersonaMap.tsx` — **1000ag persona 시각화 (visit 빨강/move 파랑/work 녹색/rest 회색, Tier S/A/B + waypoints, 카카오맵 SDK)**
+- `frontend/src/components/AbmPersonaMap.tsx` — **5000ag persona 시각화 (visit 빨강/move 파랑/work 녹색/rest 회색, Tier S/A/B + waypoints, 카카오맵 SDK)**
 - `frontend/src/components/AgentMapVisualizer.tsx` — 카카오맵 + spot/competitor pin
 - `frontend/src/assets/mapo_geo.json` — 마포 GeoJSON
 - `frontend/src/components/simulation/SpotterAgentWorkflow.tsx` — LangGraph 5-노드 워크플로우 시각화
 
 ### 3.3 사용자 vision 의 95% 가 이미 인프라에 존재
 
-- 1000ag dot 시각화 ✅
+- 5000ag dot 시각화 ✅
 - visit/move/work/rest 색깔 ✅
 - 카카오맵 + 마포 GeoJSON ✅
 - 자연어 대화 (Mode B template, `dialog_templates.py`) ✅
@@ -52,6 +52,10 @@ Predecessors:
 | AbmPersonaMap 수정 | **`mode` prop 추가** (`"general"` \| `"vacancy"`) | 기존 컴포넌트 확장만, 신규 작성 X |
 | 비동기 처리 | **간단한 background 큐** (Python threading) | vacancy_pse 5~10분 → polling. 운영 큐 (Celery 등) 는 future |
 | 자연어 대화 | **Mode B template (한국어 600 문장)** 그대로 활용 | LLM 비용 0, 본 plan #1 의 dialog_templates 재사용 |
+| **agent 수** | **5000ag default** (plan #2 결정 일관) | V1A r=0.95 학계 천장 도달 환경. 시뮬 5~10분. 사용자 빠른 시각화 옵션 (1000ag) 도 가능 |
+| **popularity_boost** | **20.0 default** (plan #2 일관) | V2 ratio 0.046 → 0.12 향상 환경 |
+| **IPF calibration** | **활성 default** (plan #2 일관) | r=0.95 환경 일관, 시각화 결과 신뢰도 ↑ |
+| **N PSE seeds** | **1 (시각화 default)** | 시각화는 단일 시뮬 결과 표시 (검증과 다름). 5트랙 검증은 plan #2 그대로 N=5 |
 | 시간 슬라이더 | **7시~24시 18 step** | vacancy_pse 의 days=1 default + collect_trajectory 시 시간대별 dump |
 | 사용자 작업 영역 | **A1 단독 (backend + frontend 모두)** | AGENTS.md 의 frontend = C1 강민 but 사용자 본인 작업 OK 명시 |
 
@@ -71,7 +75,7 @@ POST /vacancy-evaluation/single
 GET /vacancy-evaluation/{job_id}/status → "running" / "done" / "failed"
         │
         ▼ ("done" 시 4 endpoint 호출)
-GET .../trajectory  → 1000ag × 시간대별 위치 (dump_size 조절 가능)
+GET .../trajectory  → 5000ag × 시간대별 위치 (dump_size 조절 가능)
 GET .../visits      → vacancy 매장 visit 이벤트
 GET .../stores      → 마포 매장 좌표 + 매출
 GET .../chats       → archetype 별 한국어 대화 (Mode B template)
@@ -79,7 +83,7 @@ GET .../chats       → archetype 별 한국어 대화 (Mode B template)
         ▼
 [AbmPersonaMap mode="vacancy"]
   - 카카오맵 + 마포 GeoJSON
-  - 1000ag dot (visit/move/work/rest 색깔)
+  - 5000ag dot (visit/move/work/rest 색깔)
   - vacancy spot 강조 (빨간 펄스)
   - 시간 슬라이더 7~24시
   - 사이드 패널: 매출/방문 통계 + 동 평균 대비 + 카니발
@@ -179,7 +183,7 @@ def cleanup_expired_cache(ttl_seconds: int = 3600) -> None:
         {"agent_id": 1, "hour": 7, "lat": 37.55, "lon": 126.92, "dong": "서교동", "tier": "S", "action": "move"},
         ...
     ],
-    "n_agents": 1000,
+    "n_agents": 5000,
     "n_hours": 18,
 }
 
@@ -231,7 +235,7 @@ def cleanup_expired_cache(ttl_seconds: int = 3600) -> None:
 [Step 4] AbmPersonaMap (mode="vacancy") 렌더
    - 카카오맵 + 마포 GeoJSON
    - vacancy spot 빨간 펄스 마커 (반경 500m 원)
-   - 1000ag dot 시간대별 (visit/move/work/rest 색깔)
+   - 5000ag dot 시간대별 (visit/move/work/rest 색깔)
    - 시간 슬라이더 7시 (default)
 
 [Step 5] 시간 진행 (auto play 또는 manual)
@@ -280,7 +284,7 @@ def cleanup_expired_cache(ttl_seconds: int = 3600) -> None:
 1. **In-memory cache** — 단일 process 만, multi-worker 운영 시 cache miss 가능. 운영은 Redis 도입 필요 (future spec).
 2. **threading 비동기** — 정식 task queue (Celery/RQ) X. 안정성 한계.
 3. **Mode B template 자연어** — 600 문장 반복. 다양성 제한 (LLM 미활성).
-4. **trajectory dump size** — 1000ag × 18시간 = 18,000 row/시뮬. payload 크기 ~5MB (gzip 후 ~500KB). pagination 미적용.
+4. **trajectory dump size** — 5000ag × 18시간 = 18,000 row/시뮬. payload 크기 ~5MB (gzip 후 ~500KB). pagination 미적용.
 5. **시간 단위 1시간** — 더 세밀한 단위 (15분, 5분) 미지원.
 
 ### 11.2 Future Work (별도 spec)
@@ -326,7 +330,7 @@ DB 변경: **없음**. 새 테이블/컬럼 X.
 ## 15. 합격 기준 (본 spec 의 done 정의)
 
 - 사용자가 brand 선택 + 공실 spot 클릭 → 5~10분 후 시각화 표시
-- 1000ag 시간대별 동선 + 색깔 구분
+- 5000ag 시간대별 동선 + 색깔 구분
 - vacancy spot 강조 + 매출/방문 통계 사이드 패널
 - 시간 슬라이더 7시→24시 자유 진행
 - 클릭 한 ag 의 자연어 대화 말풍선 (Mode B template)

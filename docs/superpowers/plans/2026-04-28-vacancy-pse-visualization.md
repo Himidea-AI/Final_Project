@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** vacancy_pse 의 trajectory + visits + chats 데이터를 frontend AbmPersonaMap (dev 브랜치) 에 연결 — 사용자가 공실 spot 클릭 시 1000ag 마포 시각화 도달.
+**Goal:** vacancy_pse 의 trajectory + visits + chats 데이터를 frontend AbmPersonaMap (dev 브랜치) 에 연결 — 사용자가 공실 spot 클릭 시 5000ag (plan #2 일관) 마포 시각화 도달.
 
 **Architecture:** backend 4 endpoint 신규 (job_id cache + threading 비동기 + polling) + frontend AbmPersonaMap 의 `mode="vacancy"` prop 추가 (기존 컴포넌트 확장). dev 인프라 (`AbmPersonaMap.tsx` 2146 줄, `mapo_geo.json`, 카카오맵 SDK) 활용.
 
@@ -159,10 +159,12 @@ def run_vacancy_pse_async(
     spot: dict,
     category: str,
     brand_name: str | None = None,
-    n_seeds: int = 5,
+    n_seeds: int = 1,                # 시각화는 단일 시뮬 (검증은 N=5)
     days: int = 1,
     with_cannibalization: bool = False,
-    popularity_boost: float | None = None,
+    popularity_boost: float = 20.0,  # plan #2 일관 (V1A r=0.95 환경)
+    agents: int = 5000,              # plan #2 일관 (5000ag default)
+    use_ipf: bool = False,           # 시뮬 결과 자체 - frontend 후처리 X
     collect_trajectory: bool = False,
     dump_visits: bool = False,
     use_dialog_templates: bool = True,
@@ -193,17 +195,24 @@ def run_vacancy_pse_async(
                 except (brand_menu_loader.BrandNotFoundError, brand_menu_loader.BrandMenuEmptyError) as e:
                     logger.warning(f"[async] brand menu fallback: {e}")
 
+            from src.simulation.config import ModelConfig
+            cfg = ModelConfig()
+            cfg.tier_s_provider = "mock"
+            cfg.tier_a_provider = "mock"
+            cfg.n_personas = agents   # plan #2 일관 — 5000ag default
+
             result = evaluate_vacancy_pse(
                 vacancy_spot=spot,
                 category=category,
                 n_seeds=n_seeds,
                 days=days,
                 with_cannibalization=with_cannibalization,
-                popularity_boost=popularity_boost or 5.0,
+                popularity_boost=popularity_boost,
                 collect_trajectory=collect_trajectory,
                 dump_visits=dump_visits,
                 use_dialog_templates=use_dialog_templates,
                 menu_items=menu_items,
+                cfg=cfg,
             )
             with _cache_lock:
                 vacancy_pse_cache[job_id]["status"] = "done"
@@ -458,6 +467,7 @@ class VacancyEvaluateRequest(BaseModel):
     collect_trajectory: bool = False    # ← 추가
     dump_visits: bool = False            # ← 추가
     async_mode: bool = False             # ← 추가, True 시 즉시 job_id 반환
+    agents: int = 5000                   # ← plan #2 일관 (5000ag default)
 ```
 
 `/single` POST handler 의 `async_mode=True` 시 `run_vacancy_pse_async` 호출 + job_id 반환:
@@ -473,7 +483,8 @@ def evaluate_single(req: VacancyEvaluateRequest):
             n_seeds=req.n_seeds,
             days=req.days,
             with_cannibalization=req.with_cannibalization,
-            popularity_boost=req.popularity_boost,
+            popularity_boost=req.popularity_boost or 20.0,  # plan #2 default
+            agents=req.agents,
             collect_trajectory=req.collect_trajectory,
             dump_visits=req.dump_visits,
         )
@@ -879,7 +890,7 @@ curl http://localhost:8001/vacancy-evaluation/{job_id}/status
 브라우저에서 `http://localhost:5173/?vacancyJobId={job_id}` 같은 query param 또는 컴포넌트 prop 으로 시각화 페이지 진입.
 
 확인 사항:
-- 1000ag dot 시간대별 표시
+- 5000ag dot 시간대별 표시 (plan #2 일관)
 - vacancy spot 빨간 펄스 마커 + 반경 500m 원
 - 시간 슬라이더 7시→24시 진행
 - VacancyStatsPanel 의 매출/방문 통계 표시
