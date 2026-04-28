@@ -166,7 +166,7 @@ def _build_prompt(
     return "".join(parts)
 
 
-def _make_empty_report(dong_code: str, brand_name: str | None) -> dict:
+def _make_empty_report(dong_name: str, brand_name: str | None) -> dict:
     return DemographicReport(
         core_demographic=CoreDemographic(age="unknown", gender="mixed", share=0.0),
         top_3_age_groups=[],
@@ -178,7 +178,7 @@ def _make_empty_report(dong_code: str, brand_name: str | None) -> dict:
         elderly_ratio=None,
         brand_target_match_score=None,
         match_rationale=None,
-        narrative=f"{dong_code}: 매출 데이터 부족으로 분석 제한",
+        narrative=f"{dong_name}: 매출 데이터 부족으로 분석 제한",
     ).model_dump()
 
 
@@ -277,7 +277,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
 
     # 그래도 데이터 없으면 기본 리포트
     if sales.get("error") or (sales.get("monthly_sales", 0) or 0) == 0:
-        report = _make_empty_report(dong_code, brand_name)
+        report = _make_empty_report(target, brand_name)
         analysis = dict(state.get("analysis_results", {}) or {})
         analysis["demographic_report"] = report
         if _redis is not None:
@@ -296,7 +296,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
                 "elderly_ratio_region",
             ],
             verdict="매출 데이터 없음 · 분석 제한",
-            reasoning=f"{dong_code} 매출 레코드 부재로 데모그래픽 심층 분석 제한.",
+            reasoning=f"{target} 매출 레코드 부재로 데모그래픽 심층 분석 제한.",
             confidence=0.3,
             status="skipped",
         )
@@ -351,7 +351,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
         logger.warning("demographic_depth LLM failed: %s", e)
         analysis_out = DemographicAnalysis(
             narrative=(
-                f"{dong_code} 분석: 주 소비층 {core.age} {core.gender} "
+                f"{target} 분석: 주 소비층 {core.age} {core.gender} "
                 f"(매출 점유 {core.share * 100:.1f}%). 피크 {', '.join(peak)}. "
                 f"평일/주말 매출비 {wd_we}."
             ),
