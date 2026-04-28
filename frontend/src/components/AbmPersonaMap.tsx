@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Activity, Play } from 'lucide-react';
 import VacancySpotMarker from './VacancySpotMarker';
+import VacancyStatsPanel from './VacancyStatsPanel';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -594,6 +595,17 @@ export default function AbmPersonaMap({
           setVacancyVisits(visits?.visits_events ?? []);
           setVacancyStores(stores?.stores ?? []);
           setVacancyChats(chats?.chats ?? []);
+          // pse_summary 가 endpoint 응답에 실려 오면 자동 동기화 (외부 prop 미주입 시).
+          // 응답 위치는 backend 설계에 따라 stores/visits/trajectory 어느 쪽이든 가능 → 우선순위 폴백.
+          const inferredSummary: VacancyPseSummary | null =
+            stores?.pse_summary ??
+            stores?.vacancy_spot?.pse_summary ??
+            visits?.pse_summary ??
+            traj?.pse_summary ??
+            null;
+          if (inferredSummary && !vacancyPseSummary) {
+            setVacancySummary(inferredSummary);
+          }
           setVacancyFetching(false);
         })
         .catch((e: Error) => {
@@ -1751,6 +1763,17 @@ export default function AbmPersonaMap({
               lat={vacancySpot.lat}
               lng={vacancySpot.lng}
             />
+          )}
+
+          {/* mode='vacancy' — 우측 상단 사이드 패널 (매출/방문 통계) */}
+          {mode === 'vacancy' && vacancySpot && (
+            <div className="absolute top-4 right-4 z-20">
+              <VacancyStatsPanel
+                summary={vacancySummary}
+                vacancySpot={vacancySpot}
+                loading={vacancyFetching || (!vacancySummary && !vacancyFetchError)}
+              />
+            </div>
           )}
 
           {/* 하단 — 결과 통계 or 실행 버튼 */}
