@@ -108,3 +108,20 @@ export function shortRequestId(id: string | null | undefined): string {
   if (!id) return '—';
   return id.slice(0, 8);
 }
+
+// LLM 응답에 들어가는 영문 등급 코드 → 한글. 본부 영업팀 페르소나(메모리) 기준 일관 어휘.
+const GRADE_KO: Record<string, string> = {
+  RISKY: '주의',
+  SAFE: '안전',
+  CAUTION: '주의',
+  GOOD: '양호',
+  HIGH: '높음',
+  MEDIUM: '보통',
+  LOW: '낮음',
+};
+
+/** verdict/reasoning 텍스트 안의 RISKY/SAFE/CAUTION 등 영문 등급 코드를 한글로 치환. */
+export function humanizeGrade(text: string | null | undefined): string {
+  if (!text) return '';
+  return text.replace(/\b(RISKY|SAFE|CAUTION|GOOD|HIGH|MEDIUM|LOW)\b/g, (m) => GRADE_KO[m] ?? m);
+}

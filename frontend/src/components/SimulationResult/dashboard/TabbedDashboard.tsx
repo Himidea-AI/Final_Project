@@ -205,8 +205,13 @@ export function TabbedDashboard({
   // Compact Sticky Header — 스크롤 감지
   // SimulatorDashboard는 window가 아니라 내부 overflow-y-auto 컨테이너(dashboardRef)에서 스크롤.
   // 루트 ref 기준으로 스크롤 부모를 자동 탐색해 그 element의 scroll event 구독.
+  // isScrolled: 50px 초과 시 헤더 축소 (py-8 → py-3, 타이틀 text-4xl → text-xl).
+  // isHidden: 200px 초과 + 아래 방향 스크롤 시 헤더 자체를 위로 슬라이드 (콘텐츠 가림 해소).
+  //          위로 스크롤 시 즉시 복귀.
   const rootRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
+  const lastScrollTop = useRef(0);
   useEffect(() => {
     const findScrollParent = (el: HTMLElement | null): HTMLElement | Window => {
       let cur = el?.parentElement ?? null;
@@ -220,7 +225,20 @@ export function TabbedDashboard({
     const scrollSrc = findScrollParent(rootRef.current);
     const getScrollTop = () =>
       scrollSrc === window ? window.scrollY : (scrollSrc as HTMLElement).scrollTop;
-    const onScroll = () => setIsScrolled(getScrollTop() > 50);
+    const onScroll = () => {
+      const top = getScrollTop();
+      setIsScrolled(top > 50);
+      // hysteresis: HIDE_AT(200) 초과 + 아래로 → hide. SHOW_AT(50) 미만 도달 시에만 show.
+      // 중간 영역에서 위로 올려도 hidden 유지 → 사용자가 "맨 꼭대기"까지 가야 다시 등장.
+      const HIDE_AT = 200;
+      const SHOW_AT = 50;
+      if (top > HIDE_AT && top > lastScrollTop.current) {
+        setIsHidden(true);
+      } else if (top < SHOW_AT) {
+        setIsHidden(false);
+      }
+      lastScrollTop.current = top;
+    };
     // 초기 상태 체크 — 히스토리 복귀 시 이미 스크롤된 상태일 수 있음
     onScroll();
     (scrollSrc as HTMLElement | Window).addEventListener('scroll', onScroll, { passive: true });
@@ -377,9 +395,21 @@ export function TabbedDashboard({
            sticky 뒤로 비치는 "레이어 누수" 발생. solid로 차단.
          z-50: 글로벌 header와 같은 레벨. SimulatorDashboard 컨테이너(z-40) 위. */}
       <header
-        className={`sticky top-24 md:top-28 z-50 bg-[#0C0B0A] border-b border-stone-800/40 transition-all duration-500 ${
+        className={`sticky top-24 md:top-28 z-50 bg-[#0C0B0A] border-b border-stone-800/40 ${
           isScrolled ? 'py-3 shadow-2xl' : 'py-8'
         }`}
+        style={{
+          // transform/opacity는 스크롤 따라가는 fast path (180/150ms),
+          // padding/box-shadow는 isScrolled 축소 모션 그대로 (500ms 우아).
+          transform: isHidden ? 'translateY(-100%)' : 'translateY(0)',
+          opacity: isHidden ? 0 : 1,
+          pointerEvents: isHidden ? 'none' : 'auto',
+          transition:
+            'transform 180ms cubic-bezier(0.4, 0, 0.2, 1), ' +
+            'opacity 150ms cubic-bezier(0.4, 0, 0.2, 1), ' +
+            'padding 500ms cubic-bezier(0.4, 0, 0.2, 1), ' +
+            'box-shadow 500ms cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
       >
         <div className="mx-auto max-w-[1728px] px-8">
           {/* ── 상단: 타이틀 + GRADE 카드 ── */}

@@ -5,12 +5,13 @@
  * 3) 하단 풀와이드: 법률 리스크 (InsightsGrid legalOnly)
  */
 
-import { AlertTriangle, Layers, MapPin, BarChart3, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Layers, MapPin, BarChart3, ShieldAlert, Brain } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { MapSection } from '../../sections/MapSection';
 import { IndicatorGrid } from '../../sections/IndicatorGrid';
 import { DistrictRankings } from '../../sections/DistrictRankings';
+import { AgentCard } from '../../shared/AgentCard';
 import { calcHHI, hhiToDiversity, formatScore } from '../utils/formatters';
 import { interpretHHI, SATURATION_MAP, safeMap } from '../utils/mappings';
 import { FlowVsRevenueScatter } from '../charts/FlowVsRevenueScatter';
@@ -134,6 +135,29 @@ export function MarketTab({ simResult }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ═══ 에이전트 분석 요약 — 시장/인구/랭킹 (full-width 3-col) ═══
+          IndicatorGrid 내부 좁은 컬럼에서 size="full" 카드 깨지던 것을 분리해 가로 정렬로 해소. */}
+      {(() => {
+        const attrs = simResult.agent_attributions ?? [];
+        const market = attrs.find((a) => a.id === 'market_analyst');
+        const population = attrs.find((a) => a.id === 'population_analyst');
+        const ranking = attrs.find((a) => a.id === 'district_ranking');
+        if (!market && !population && !ranking) return null;
+        return (
+          <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+            <h4 className="text-sm font-black text-stone-100 mb-6 flex items-center gap-2 uppercase tracking-tight">
+              <Brain size={16} className="text-indigo-400" /> 에이전트 분석 요약
+            </h4>
+            {/* 3 카드 세로 stack — 한 줄에 한 에이전트씩 풀폭 사용해 verdict/reasoning 가독성 확보 */}
+            <div className="flex flex-col gap-3">
+              {market && <AgentCard attribution={market} size="full" />}
+              {population && <AgentCard attribution={population} size="full" />}
+              {ranking && <AgentCard attribution={ranking} size="full" />}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ═══ [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder) ═══ */}
       <EmergingSignalCard signal={simResult.emerging_signal ?? null} />

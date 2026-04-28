@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { AgentAttribution, AgentId, AgentKind } from '../../../types';
+import { humanizeGrade } from '../dashboard/utils/formatters';
 
 const AGENT_ICONS: Record<AgentId, LucideIcon> = {
   market_analyst: TrendingUp,
@@ -73,7 +74,7 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
               {attribution.kind}
             </span>
           </div>
-          <p className="text-xs text-stone-400 truncate">{attribution.verdict}</p>
+          <p className="text-xs text-stone-400 truncate">{humanizeGrade(attribution.verdict)}</p>
         </div>
       </button>
     );
@@ -93,9 +94,11 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
             </span>
           </div>
           <p className="mt-2 text-sm font-semibold text-stone-100 leading-snug">
-            {attribution.verdict}
+            {humanizeGrade(attribution.verdict)}
           </p>
-          <p className="mt-2 text-xs text-stone-400 leading-relaxed">{attribution.reasoning}</p>
+          <p className="mt-2 text-xs text-stone-400 leading-relaxed">
+            {humanizeGrade(attribution.reasoning)}
+          </p>
         </div>
       </div>
       {attribution.sources.length > 0 && (
