@@ -49,17 +49,18 @@ def _load_models() -> tuple:
     global _cache  # noqa: PLW0603
 
     if _cache:
-        return _cache["lgbm"], _cache["tcn"], _cache["weights"]
+        return _cache["lgbm"], _cache["tcn"], _cache["weights"], _cache["scaler"]
 
     lgbm_path = WEIGHTS_DIR / "closure_risk_lgbm.pkl"
     tcn_path = WEIGHTS_DIR / "closure_risk_tcn.pt"
     ew_path = WEIGHTS_DIR / "ensemble_weights.pkl"
+    scaler_path = WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"
 
-    if not lgbm_path.exists() or not tcn_path.exists():
+    if not lgbm_path.exists() or not tcn_path.exists() or not scaler_path.exists():
         raise FileNotFoundError(
             f"폐업위험도 모델 가중치를 찾을 수 없습니다.\n"
             f"먼저 학습을 실행하세요: python -m models.closure_risk.train\n"
-            f"LightGBM: {lgbm_path}\nTCN: {tcn_path}"
+            f"LightGBM: {lgbm_path}\nTCN: {tcn_path}\nScaler: {scaler_path}"
         )
 
     with open(lgbm_path, "rb") as f:
@@ -76,12 +77,9 @@ def _load_models() -> tuple:
     tcn.load_weights(tcn_path)
     tcn.eval()
 
-    # TCN 스케일러 — 학습 시 저장된 스케일러 로드 (없으면 None)
-    scaler_path = WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"
-    tcn_scaler = None
-    if scaler_path.exists():
-        with open(scaler_path, "rb") as f:
-            tcn_scaler = pickle.load(f)  # noqa: S301
+    # TCN 스케일러 — 학습 시 저장된 스케일러 로드 (위에서 존재 보장됨)
+    with open(scaler_path, "rb") as f:
+        tcn_scaler = pickle.load(f)  # noqa: S301
 
     _cache.update({"lgbm": lgbm, "tcn": tcn, "weights": ensemble_w, "scaler": tcn_scaler})
     return lgbm, tcn, ensemble_w, tcn_scaler
@@ -373,14 +371,7 @@ def predict(
             group[col] = 0.0
 
     recent = group[tcn_features].values.astype(np.float32)
-    if tcn_scaler is not None:
-        # 학습 시 저장된 스케일러 사용 — 학습·추론 스케일 일치 보장
-        seq = tcn_scaler.transform(recent[-window_size:])
-    else:
-        # 스케일러 파일 없는 경우 fallback (구버전 호환)
-        from sklearn.preprocessing import MinMaxScaler
-
-        seq = MinMaxScaler().fit_transform(recent[-window_size:])
+    seq = tcn_scaler.transform(recent[-window_size:])
 
     tcn_model.eval()
     x_tcn = torch.from_numpy(seq).unsqueeze(0)  # (1, 4, features)

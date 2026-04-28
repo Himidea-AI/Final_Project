@@ -454,7 +454,10 @@ class ModelOutput:
             from models.closure_risk.predict import predict as closure_risk_predict
 
             closure_risk_result = closure_risk_predict(dong_code, industry_code)
-            logger.info("폐업위험도 예측 완료 (score=%.3f)", closure_risk_result["risk_score"])
+            if closure_risk_result.get("is_mock"):
+                logger.warning("폐업위험도 예측 실패 — mock 반환")
+            else:
+                logger.info("폐업위험도 예측 완료 (score=%.3f)", closure_risk_result["risk_score"])
         except ExcludedComboError:
             raise  # 차단 예외는 mock fallback 없이 상위로 전파
         except Exception as exc:
