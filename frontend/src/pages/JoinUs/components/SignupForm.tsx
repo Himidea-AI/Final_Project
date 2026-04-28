@@ -82,10 +82,11 @@ export default function SignupForm({ planName, onSuccess }: Props) {
     setBizError('');
   };
 
-  // 사업자번호 + 기업명 둘 다 있으면 /biz/lookup 호출 (어느 필드에서 blur해도 동작)
+  // 사업자번호 10자리 입력 후 blur → DB에서 기업명+브랜드 자동 조회
+  // 기업명까지 입력된 경우 기업명도 함께 전송하여 FTC 매칭 정확도 향상
   const tryBizLookup = async () => {
     const digits = form.bizNumber.replace(/\D/g, '');
-    if (digits.length !== 10 || !form.companyName.trim() || bizLoading) return;
+    if (digits.length !== 10 || bizLoading) return;
 
     setBizLoading(true);
     setBizError('');
@@ -110,16 +111,16 @@ export default function SignupForm({ planName, onSuccess }: Props) {
 
       if (data.status === 'success' && data.data?.brands?.length > 0) {
         const brand = data.data.brands[0];
-        // 브랜드 매칭 성공 → 기업명 자동 교정 + 가맹점 수 자동 입력
+        // 브랜드 매칭 성공 → 기업명 자동 입력 + 가맹점 수 자동 입력
         if (brand.corp_name) set('companyName', brand.corp_name);
         if (brand.franchise_count) set('storeCount', String(brand.franchise_count));
         setBizVerified(true);
         setBizError('');
       } else {
-        // 사업자번호는 유효하지만 프랜차이즈 DB에 매칭되는 브랜드 없음
+        // DB에 매칭되는 브랜드 없음 — 기업명 직접 입력 유도
         setBizVerified(false);
         setBizError(
-          '해당 사업자번호로 등록된 프랜차이즈 브랜드를 찾을 수 없습니다. 기업명을 확인해주세요.',
+          '등록된 브랜드를 찾을 수 없습니다. 기업명을 직접 입력해주세요.',
         );
       }
     } catch {

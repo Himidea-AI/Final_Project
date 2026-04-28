@@ -24,6 +24,8 @@ interface User {
 
 interface Brand {
   brand_name: string;
+  industry_large?: string;
+  industry_medium?: string;
   franchise_count: number;
   avg_sales: number;
   mapo_store_count: number;
