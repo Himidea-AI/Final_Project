@@ -70,6 +70,15 @@ def evaluate_vacancy_pse(
     cfg: ModelConfig | None = None,
     seeds: list[int] | None = None,
     verbose: bool = False,
+    menu_items: list[dict] | None = None,
+    collect_trajectory: bool = False,
+    trajectory_sample_size: int = 300,
+    dump_visits: bool = False,
+    use_dialog_templates: bool = True,
+    enable_llm: bool = False,
+    llm_tier_policy: str = "S_only",
+    llm_max_tokens: int = 30,
+    llm_call_interval: int = 4,
 ) -> dict[str, Any]:
     """Vacancy 평가를 PSE N=n_seeds 로 측정 → 신뢰구간 산출.
 
@@ -83,6 +92,15 @@ def evaluate_vacancy_pse(
         pop_mix / tier_dist / cfg: 시뮬 설정 (생략 시 기본값)
         seeds: 명시 seed 리스트 (생략 시 DEFAULT_SEEDS [:n_seeds])
         verbose: 진행 로그
+        menu_items: 가상 vacancy 매장의 메뉴/가격. None=빈 list (기존 추상 fallback).
+            services/brand_menu_loader.load_brand_menu_items() 가 source.
+        collect_trajectory / trajectory_sample_size / dump_visits:
+            시각화 데이터 출력. False (기본) = 출력 X (응답 작음).
+        use_dialog_templates: Mode B — Pure Policy + Template 자연어. default True.
+        enable_llm: Mode C placeholder — 본 spec 에서는 인터페이스만 정의,
+            실제 LLM 호출 인프라는 future spec (Phase 2 비동기 인프라).
+            현재 enable_llm=True 도 내부적으로 mock 강제 (cfg.tier_*_provider="mock").
+        llm_tier_policy / llm_max_tokens / llm_call_interval: Mode C 인자.
 
     Returns:
         {
@@ -97,7 +115,9 @@ def evaluate_vacancy_pse(
                 "cannibalization_pct": {...},   # with_cannibalization=True 시
                 "synergy_pct": {...},
             },
-            "narrative": "서교동 카페 vacancy 일평균 X명 ± Y..."
+            "narrative": "서교동 카페 vacancy 일평균 X명 ± Y...",
+            "trajectory": list | None,        # collect_trajectory=True 시 list
+            "visits_events": list | None,     # dump_visits=True 시 list
         }
     """
     seeds = (seeds or DEFAULT_SEEDS)[:n_seeds]
@@ -109,7 +129,21 @@ def evaluate_vacancy_pse(
     pop_mix = pop_mix or PopulationMix()
     tier_dist = tier_dist or TierDistribution()
 
+    # Mode C placeholder: 현재 spec 은 mock 강제. Phase 2 spec 에서 진짜 활성.
+    # enable_llm=True 도 안전하게 mock 으로 fallback (사용자가 Mode C 시 명시적
+    # llm_tier_policy 등 인자를 전달해도 비용 0 보장).
+    # → cfg.tier_s_provider/tier_a_provider 그대로 두면 OK (위 mock 자동 fallback)
+    _ = (
+        enable_llm,
+        llm_tier_policy,
+        llm_max_tokens,
+        llm_call_interval,
+        use_dialog_templates,
+    )  # 인터페이스 reserved
+
     per_seed: list[dict[str, Any]] = []
+    trajectory_collected: list[dict] | None = [] if collect_trajectory else None
+    visits_events: list[dict] | None = [] if dump_visits else None
 
     for s in seeds:
         if verbose:
@@ -117,8 +151,14 @@ def evaluate_vacancy_pse(
 
         # with-vacancy 시뮬
         world_w, hm_w = load_world_from_rds()
-        vid = inject_vacancy_as_store(world_w, vacancy_spot, category, popularity_boost=popularity_boost)
-        run_simulation(
+        vid = inject_vacancy_as_store(
+            world_w,
+            vacancy_spot,
+            category,
+            popularity_boost=popularity_boost,
+            menu_items=menu_items,
+        )
+        sim_result = run_simulation(
             days=days,
             cfg=cfg,
             pop=pop_mix,
@@ -128,12 +168,26 @@ def evaluate_vacancy_pse(
             use_rds=False,
             use_profiles=True,
             use_policy=True,
-            collect_trajectory=False,
+            collect_trajectory=collect_trajectory,
+            trajectory_sample_size=trajectory_sample_size,
             seed=s,
             verbose=False,
             seed_memory=True,
             memory_seed_days=14,
         )
+        if collect_trajectory and sim_result is not None:
+            traj = getattr(sim_result, "trajectory", None) or []
+            trajectory_collected.extend(traj)
+        if dump_visits:
+            for ev in getattr(world_w, "event_log", []):
+                if ev.get("type") == "visit":
+                    visits_events.append(
+                        {
+                            "seed": s,
+                            **{k: v for k, v in ev.items() if k != "type"},
+                        }
+                    )
+
         v_eval = evaluate_vacancy_store(world_w, vid, days_simulated=days)
         cmp = compare_to_dong_average(world_w, vid, days_simulated=days)
 
@@ -265,4 +319,6 @@ def evaluate_vacancy_pse(
         "per_seed": per_seed,
         "pse_summary": pse_summary,
         "narrative": narrative,
+        "trajectory": trajectory_collected,
+        "visits_events": visits_events,
     }

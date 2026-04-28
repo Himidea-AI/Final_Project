@@ -118,6 +118,7 @@ tmp_*.png
 models/**/weights/*.pkl
 validation/results/*.db
 validation/results/imputed_mapo_*.csv
+validation/results/checkpoints_v4/
 
 # Claude Code 로컬 설정 (frontend 하위)
 frontend/.claude/

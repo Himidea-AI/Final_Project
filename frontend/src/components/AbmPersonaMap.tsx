@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Activity, Play } from 'lucide-react';
+import VacancySpotMarker from './VacancySpotMarker';
+import VacancyStatsPanel from './VacancyStatsPanel';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -86,6 +88,23 @@ export interface AgentVacancySpot {
   listing_count?: number;
 }
 
+// vacancy 모드 — pse_summary (vacancy_evaluation /single 결과)
+export interface VacancyPseSummary {
+  visits_per_day?: { mean: number; ci95: number };
+  revenue_per_day?: { mean: number; ci95: number };
+  vacancy_vs_avg_visits_ratio?: { mean: number; ci95: number };
+  cannibalization_pct?: { mean: number; ci95: number };
+  dong_net_growth_pct?: { mean: number; ci95: number };
+}
+
+// vacancy 모드에서 강조 표시할 spot
+export interface VacancySpotHighlight {
+  dong: string;
+  lat: number;
+  lng: number;
+  category?: string;
+}
+
 export interface AbmPersonaMapProps {
   abmResult: any;
   abmLoading: boolean;
@@ -100,6 +119,14 @@ export interface AbmPersonaMapProps {
   onClearResult?: () => void;
   /** 대시보드에서 선택된 스팟 — 있으면 지도에는 이 스팟만 하이라이트, 다른 노드는 agent routine 용으로 숨김. */
   focusSpot?: { lat: number; lon: number; label?: string } | null;
+  /** 'general' (default) — 기존 마포 전체 시뮬 / 'vacancy' — vacancy_pse 시각화 모드 */
+  mode?: 'general' | 'vacancy';
+  /** mode='vacancy' 시 backend job_id (vacancy-evaluation 4 endpoint polling) */
+  vacancyJobId?: string;
+  /** mode='vacancy' 시 강조 표시할 vacancy spot 좌표/카테고리 */
+  vacancySpot?: VacancySpotHighlight;
+  /** mode='vacancy' 시 외부에서 직접 pse_summary 주입 (선택, 미주입 시 vacancyJobId 로 fetch) */
+  vacancyPseSummary?: VacancyPseSummary | null;
 }
 
 function randomBetween(a: number, b: number) {
@@ -424,6 +451,10 @@ export default function AbmPersonaMap({
   onSpotClick,
   onClearResult,
   focusSpot,
+  mode = 'general',
+  vacancyJobId,
+  vacancySpot,
+  vacancyPseSummary = null,
 }: AbmPersonaMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -482,6 +513,15 @@ export default function AbmPersonaMap({
   // abmResult에서 받은 customer_profile_dist를 ref로 유지 (pickType에 전달)
   const customerProfileDistRef = useRef<Record<string, number> | undefined>(undefined);
 
+  // vacancy 모드 — 4 endpoint fetch 결과 (mode='vacancy' 시만 사용)
+  const [vacancyTrajectory, setVacancyTrajectory] = useState<any[]>([]);
+  const [vacancyVisits, setVacancyVisits] = useState<any[]>([]);
+  const [vacancyStores, setVacancyStores] = useState<any[]>([]);
+  const [vacancyChats, setVacancyChats] = useState<any[]>([]);
+  const [vacancySummary, setVacancySummary] = useState<VacancyPseSummary | null>(vacancyPseSummary);
+  const [vacancyFetching, setVacancyFetching] = useState(false);
+  const [vacancyFetchError, setVacancyFetchError] = useState<string | null>(null);
+
   // abmResult.trajectory 파싱 — 시간별 위치 스냅샷 맵 구성 (실제 ABM 결과 오버레이용)
   useEffect(() => {
     const tr = abmResult?.trajectory;
@@ -519,6 +559,66 @@ export default function AbmPersonaMap({
   }, [abmResult]);
 
   useEffect(() => {
+    // mode='vacancy' 분기 — vacancy_pse 4 endpoint 동시 fetch.
+    // 공실 시각화 모드는 마포 16동 전체 spots 로드를 건너뛰고
+    // /vacancy-evaluation/{job_id}/{trajectory,visits,stores,chats} 을 polling.
+    if (mode === 'vacancy') {
+      if (!vacancyJobId) {
+        // job_id 미지정 → 빈 상태 유지 (회귀 X)
+        setVacancyTrajectory([]);
+        setVacancyVisits([]);
+        setVacancyStores([]);
+        setVacancyChats([]);
+        setSpotsLoading(false);
+        return;
+      }
+      let cancelled = false;
+      setVacancyFetching(true);
+      setVacancyFetchError(null);
+      Promise.all([
+        fetch(`/vacancy-evaluation/${vacancyJobId}/trajectory`).then((r) =>
+          r.ok ? r.json() : Promise.reject(new Error(`trajectory ${r.status}`)),
+        ),
+        fetch(`/vacancy-evaluation/${vacancyJobId}/visits`).then((r) =>
+          r.ok ? r.json() : Promise.reject(new Error(`visits ${r.status}`)),
+        ),
+        fetch(`/vacancy-evaluation/${vacancyJobId}/stores`).then((r) =>
+          r.ok ? r.json() : Promise.reject(new Error(`stores ${r.status}`)),
+        ),
+        fetch(`/vacancy-evaluation/${vacancyJobId}/chats`).then((r) =>
+          r.ok ? r.json() : Promise.reject(new Error(`chats ${r.status}`)),
+        ),
+      ])
+        .then(([traj, visits, stores, chats]) => {
+          if (cancelled) return;
+          setVacancyTrajectory(traj?.trajectory ?? []);
+          setVacancyVisits(visits?.visits_events ?? []);
+          setVacancyStores(stores?.stores ?? []);
+          setVacancyChats(chats?.chats ?? []);
+          // pse_summary 가 endpoint 응답에 실려 오면 자동 동기화 (외부 prop 미주입 시).
+          // 응답 위치는 backend 설계에 따라 stores/visits/trajectory 어느 쪽이든 가능 → 우선순위 폴백.
+          const inferredSummary: VacancyPseSummary | null =
+            stores?.pse_summary ??
+            stores?.vacancy_spot?.pse_summary ??
+            visits?.pse_summary ??
+            traj?.pse_summary ??
+            null;
+          if (inferredSummary && !vacancyPseSummary) {
+            setVacancySummary(inferredSummary);
+          }
+          setVacancyFetching(false);
+        })
+        .catch((e: Error) => {
+          if (cancelled) return;
+          setVacancyFetchError(e.message || 'vacancy fetch failed');
+          setVacancyFetching(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // mode='general' (default) — 기존 동작 유지 (회귀 X)
     // 마포구 전체 유동인구 시각화 — 16개 동의 지하철역 + 대표 상점 POI 를 routine 노드로 사용.
     // 공실(vacancySpots) 은 "비어있는 부동산" 이라 에이전트 목적지로 부적절 → focusSpot 으로 별도 표시만.
     let cancelled = false;
@@ -551,7 +651,14 @@ export default function AbmPersonaMap({
     return () => {
       cancelled = true;
     };
-  }, [targetDistrict]);
+  }, [mode, vacancyJobId, targetDistrict]);
+
+  // mode='vacancy' 시 외부에서 prop 으로 주입된 pse_summary 동기화
+  useEffect(() => {
+    if (mode === 'vacancy') {
+      setVacancySummary(vacancyPseSummary);
+    }
+  }, [mode, vacancyPseSummary]);
 
   // 노드 픽셀만 재계산 — 맵 zoom/pan 시마다 호출 (에이전트 유지)
   const recomputeNodePixels = useCallback(() => {
@@ -1565,8 +1672,32 @@ export default function AbmPersonaMap({
                 {routesLoaded ? '도로 경로 OK' : '경로 로딩...'}
               </span>
             )}
+            {mode === 'vacancy' && (
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                  vacancyFetchError
+                    ? 'text-rose-400 border-rose-500/40'
+                    : vacancyFetching
+                      ? 'text-amber-400 border-amber-500/40 animate-pulse'
+                      : 'text-violet-300 border-violet-500/40'
+                }`}
+                title={
+                  vacancyFetchError
+                    ? `vacancy fetch error: ${vacancyFetchError}`
+                    : `vacancy ${vacancyTrajectory.length} traj / ${vacancyVisits.length} visits / ${vacancyStores.length} stores / ${vacancyChats.length} chats${vacancySummary?.visits_per_day ? ' · summary OK' : ''}`
+                }
+              >
+                {vacancyFetchError
+                  ? 'VACANCY ERR'
+                  : vacancyFetching
+                    ? 'VACANCY 로딩...'
+                    : 'VACANCY MODE'}
+              </span>
+            )}
             <span className="text-[10px] text-[#6b7280] font-mono tracking-widest uppercase">
-              MAPO BEHAVIORAL SIM · {targetDistrict}
+              {mode === 'vacancy' && vacancySpot
+                ? `VACANCY PSE · ${vacancySpot.dong}${vacancySpot.category ? ' · ' + vacancySpot.category : ''}`
+                : `MAPO BEHAVIORAL SIM · ${targetDistrict}`}
             </span>
           </div>
         </div>
@@ -1624,6 +1755,26 @@ export default function AbmPersonaMap({
             className="absolute inset-0 w-full h-full"
             style={{ zIndex: 10, pointerEvents: 'none' }}
           />
+
+          {/* mode='vacancy' + vacancySpot — 빨간 펄스 마커 + 반경 500m 원 */}
+          {mode === 'vacancy' && vacancySpot && mapLoaded && mapInstanceRef.current && (
+            <VacancySpotMarker
+              map={mapInstanceRef.current}
+              lat={vacancySpot.lat}
+              lng={vacancySpot.lng}
+            />
+          )}
+
+          {/* mode='vacancy' — 우측 상단 사이드 패널 (매출/방문 통계) */}
+          {mode === 'vacancy' && vacancySpot && (
+            <div className="absolute top-4 right-4 z-20">
+              <VacancyStatsPanel
+                summary={vacancySummary}
+                vacancySpot={vacancySpot}
+                loading={vacancyFetching || (!vacancySummary && !vacancyFetchError)}
+              />
+            </div>
+          )}
 
           {/* 하단 — 결과 통계 or 실행 버튼 */}
           <div className="absolute bottom-4 left-0 right-0 px-4 z-20 flex flex-col items-center gap-3">
