@@ -900,14 +900,17 @@ function SimulatorDashboard({
   } | null>(null);
 
   useEffect(() => {
-    if (reportState !== 'result' || selectedDongs.length === 0) return;
+    if (reportState !== 'result') return;
     let cancelled = false;
     const fetchPop = async () => {
       setPopLoading(true);
       try {
-        // 정적 import로 통일 — client.ts는 hooks/stores 등에서도 정적 import되어
-        // 동적 import 효과가 무력화되며 vite 경고 발생. 실효 없음.
-        const data = await getLivePopulation(selectedDongs);
+        // 마포 16동 전체 fetch — 비교 모드(winnerDistrict + top3 candidates)에서
+        // selectedDongs 외 후보 동의 popData도 매칭 가능하도록. 인자 미지정 시
+        // backend(main.py:1071, population_api.py:91)가 16동 자동 반환.
+        // 이전엔 getLivePopulation(selectedDongs)로 사용자 선택 동만 fetch해
+        // 후보 동들이 dong_details에 빠지고 frontend traffic이 '—' 표시되던 버그.
+        const data = await getLivePopulation();
         if (!cancelled) setPopData(data);
       } catch (e) {
         console.error('유동인구 API 실패:', e);
@@ -919,7 +922,7 @@ function SimulatorDashboard({
     return () => {
       cancelled = true;
     };
-  }, [reportState, selectedDongs]);
+  }, [reportState]);
 
   // [v8.0/v8.1] Drill-down Drawer + 테이블 행 확장 + 정렬 상태
   const [activeDrawer, setActiveDrawer] = useState<DrawerKey>(null);
