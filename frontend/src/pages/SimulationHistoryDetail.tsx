@@ -88,7 +88,7 @@ export default function SimulationHistoryDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0C0B0A] pb-16 text-stone-100">
+    <div className="h-screen overflow-y-auto custom-scrollbar bg-[#0C0B0A] pb-16 text-stone-100">
       <div className="mx-auto max-w-[1600px] px-6 pt-20">
         <button
           type="button"

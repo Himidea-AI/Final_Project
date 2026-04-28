@@ -1555,48 +1555,81 @@ function SimulatorDashboard({
                   </div>
                 </div>
 
-                {/* 업종 박스 — 강조 동일 */}
-                <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Store size={13} className={accent} />
-                    <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
+                {/* 우측 컬럼 — 업종 박스 + 유동인구 가중치 박스 stack.
+                    좌측 분석 대상(구+동) 박스 높이를 두 박스 합으로 매칭, 공백 회피. */}
+                <div className="flex flex-col gap-4">
+                  {/* 업종 박스 — 강조 동일 */}
+                  <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Store size={13} className={accent} />
+                      <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
+                    </div>
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setBusinessTypeOpen(!businessTypeOpen);
+                          setDongDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                      >
+                        <span>{businessType}</span>
+                        <ChevronRight
+                          size={14}
+                          className={`text-[#9ca3af] transition-transform duration-200 ${
+                            businessTypeOpen ? 'rotate-90' : ''
+                          }`}
+                        />
+                      </button>
+                      {businessTypeOpen && (
+                        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                          {BUSINESS_TYPES.map((type) => (
+                            <button
+                              key={type}
+                              onClick={() => {
+                                setBusinessType(type);
+                                setBusinessTypeOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                                type === businessType
+                                  ? 'text-[#818cf8] bg-[#818cf8]/10'
+                                  : 'text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]'
+                              }`}
+                            >
+                              {type}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="relative">
-                    <button
-                      onClick={() => {
-                        setBusinessTypeOpen(!businessTypeOpen);
-                        setDongDropdownOpen(false);
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+
+                  {/* 유동인구 가중치 토글 — 섹션 2에서 옮겨옴. flex-1로 남은 공간 채워
+                      좌측 분석 대상 박스 높이와 자연 매칭. */}
+                  <div className="flex-1 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-white/5 bg-[#1e1b18]/40">
+                    <label
+                      className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
                     >
-                      <span>{businessType}</span>
-                      <ChevronRight
-                        size={14}
-                        className={`text-[#9ca3af] transition-transform duration-200 ${
-                          businessTypeOpen ? 'rotate-90' : ''
+                      유동인구 가중치
+                      <span
+                        className="text-[#818cf8] cursor-help shrink-0"
+                        title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
+                      >
+                        &#9432;
+                      </span>
+                    </label>
+                    <button
+                      onClick={() => setWeighted(!weighted)}
+                      aria-label="유동인구 가중치 토글"
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${
+                        weighted ? accentBg : 'bg-[#3a3633]'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
+                          weighted ? 'translate-x-[22px]' : 'translate-x-0.5'
                         }`}
                       />
                     </button>
-                    {businessTypeOpen && (
-                      <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
-                        {BUSINESS_TYPES.map((type) => (
-                          <button
-                            key={type}
-                            onClick={() => {
-                              setBusinessType(type);
-                              setBusinessTypeOpen(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                              type === businessType
-                                ? 'text-[#818cf8] bg-[#818cf8]/10'
-                                : 'text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]'
-                            }`}
-                          >
-                            {type}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1714,33 +1747,8 @@ function SimulatorDashboard({
                   </div>
                 </div>
 
-                {/* 7. 유동인구 가중치 토글 — col-span-2 */}
-                <div className="md:col-span-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18]/40">
-                  <label
-                    className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
-                  >
-                    유동인구 가중치
-                    <span
-                      className="text-[#818cf8] cursor-help shrink-0"
-                      title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
-                    >
-                      &#9432;
-                    </span>
-                  </label>
-                  <button
-                    onClick={() => setWeighted(!weighted)}
-                    aria-label="유동인구 가중치 토글"
-                    className={`relative w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${
-                      weighted ? accentBg : 'bg-[#3a3633]'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
-                        weighted ? 'translate-x-[22px]' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
-                </div>
+                {/* 유동인구 가중치 토글은 섹션 1(핵심 파라미터)의 업종 박스 아래로 이관 —
+                    좌측 분석 대상 박스 높이 매칭 + 공백 회피(2026-04-28). */}
               </div>
               <p
                 className={`text-[10px] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-white/5`}
@@ -1938,15 +1946,13 @@ function SimulatorDashboard({
           </div>
         </div>
 
-        {/* Right panel wrapper — result 시에만 노출. idle/loading 시 hidden(좌측 풀폭).
-            로딩 화면은 가짜 progress/ETA가 §3.7 거짓 신호 + 좌측 옵션 패널 가독성 저하라 제거.
-            진행 표시는 SimulationFloatingWidget(우측 하단)이 담당, 결과 도착 시 자동 전환. */}
-        <div
-          className={`lg:col-span-12 flex flex-col gap-6 ${reportState !== 'result' ? 'hidden' : ''}`}
-        >
-          {/* Right panel — Visualization */}
+        {/* Right panel wrapper — col-span-12 풀폭. RUN SIMULATION 박스(아래)가 이 wrapper의
+            자식이므로 wrapper 자체에 hidden을 걸면 안 됨. 내부 Visualization 박스만 result 시
+            노출 + RUN 박스는 자체 className으로 result 시 hidden(line 3939). */}
+        <div className="lg:col-span-12 flex flex-col gap-6">
+          {/* Right panel — Visualization (result 시에만 표시. idle/loading 시 hidden) */}
           <div
-            className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel}`}
+            className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel} ${reportState !== 'result' ? 'hidden' : ''}`}
           >
             {/* idle UI(블러 대시보드 실루엣 + 3-step 가이드) 제거 — 좌측 옵션 패널이
                 풀폭으로 노출되어 가이드 역할 자체가 의미 없어짐(2026-04-28). */}
@@ -4476,12 +4482,23 @@ export default function App() {
                     <span className="text-border">/</span>
                     <button
                       onClick={() => {
-                        // 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
-                        // (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
+                        // 1. 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
+                        //    (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
                         if (scene === 'simulator' && reportState === 'result') {
                           window.history.back();
                           return;
                         }
+                        // 2. react-router 페이지(/dashboard/*, /hq, /hq/*) → 직전 페이지로 복귀
+                        //    SimulationHistoryDetail 같은 페이지에서 BACK 시 intro로 튕기던 버그 fix
+                        if (
+                          location.pathname.startsWith('/dashboard/') ||
+                          location.pathname === '/hq' ||
+                          location.pathname.startsWith('/hq/')
+                        ) {
+                          navigate(-1);
+                          return;
+                        }
+                        // 3. scene-based fallback (intro/accordion/login)
                         transitionTo(scene === 'simulator' ? 'accordion' : 'intro');
                       }}
                       className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
