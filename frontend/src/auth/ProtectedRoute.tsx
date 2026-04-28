@@ -7,10 +7,10 @@
  *   - requireRole 미지정    → 로그인만 확인 (기존 동작 유지).
  */
 
-import { Navigate } from "react-router-dom";
-import { useAuth } from "./AuthContext";
+import { Navigate } from 'react-router-dom';
+import { useAuth } from './AuthContext';
 
-type Role = "master" | "manager";
+type Role = 'master' | 'manager';
 
 export default function ProtectedRoute({
   children,
@@ -27,7 +27,7 @@ export default function ProtectedRoute({
 
   if (requireRole && user?.role && user.role !== requireRole) {
     // 역할 불일치 시 각자의 기본 착륙지로
-    const fallback = user.role === "manager" ? "/simulator" : "/hq";
+    const fallback = user.role === 'manager' ? '/simulator' : '/hq';
     return <Navigate to={fallback} replace />;
   }
 

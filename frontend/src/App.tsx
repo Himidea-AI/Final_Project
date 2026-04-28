@@ -44,7 +44,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, Outlet, Navigate } from 'react-router-dom';
 import { TransitionContext } from './contexts/TransitionContext';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
@@ -59,7 +59,16 @@ import type { SimulationOutput } from './types';
 import { type SimResult, toSimResultViewModel } from './viewmodels/simResult';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
-import { TabbedDashboard } from './components/SimulationResult/dashboard/TabbedDashboard';
+// [H4] TabbedDashboard 직접 import 제거 — /dashboard 라우트로 분리 후 미사용.
+// SimulationHistoryDetail 은 여전히 자체 import 로 사용 중 (H7 에서 정리 예정).
+import { DashboardHub } from './components/SimulationResult/dashboard/DashboardHub';
+import {
+  DetailModal,
+  type DetailModalContent,
+} from './components/SimulationResult/dashboard/shared/DetailModal';
+import DashboardPredictPage from './pages/dashboard/DashboardPredictPage';
+import DashboardAnalyzePage from './pages/dashboard/DashboardAnalyzePage';
+import DashboardAbmPage from './pages/dashboard/DashboardAbmPage';
 import { SaveButton } from './components/SimulationHistory/SaveButton';
 import { SaveDialog } from './components/SimulationHistory/SaveDialog';
 import { useSaveSimulation } from './hooks/useSaveSimulation';
@@ -803,6 +812,7 @@ function SimulatorDashboard({
   reportState: string;
   setReportState: (s: 'idle' | 'loading' | 'result') => void;
 }) {
+  const navigate = useNavigate();
   const [radius, setRadius] = useState(500);
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
@@ -1297,20 +1307,28 @@ function SimulatorDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀.
-  // [R5] store 도 dismissResult 로 초기화 — 나갔다 다시 와도 복원되지 않도록 (명시적 종료).
+  // [H4] 옛 popstate 가로채기 effect 제거 — Hub Redesign 으로 시뮬 완료 시 navigate('/dashboard')
+  // 가 react-router history 를 정상 관리. pushState 와 navigate replace 가 race 되어 카드 hub 가
+  // 잠깐 떴다가 popstate listener 가 dismissResult 호출 → /simulator 로 복귀 → 옛 화면 표시.
+  // /dashboard 에서 뒤로가기 시 react-router 가 자연스럽게 /simulator 로 이동 (popstate 가로채기 불필요).
+
+  // [H4] 시뮬 완료 시 /dashboard 로 자동 이동 — TabbedDashboard 직접 렌더 대신 라우트 분리.
+  // navigatedForResultRef: 동일 result 인스턴스에 대해 한 번만 navigate. 사용자가 /dashboard
+  // 에서 뒤로가기 → /simulator 복귀 시 mount-restore 가 다시 rawSimResult 를 채워도 재navigate 안 함.
+  // 새 시뮬 완료 시 setRawSimResult(simRes) 로 reference 가 바뀌면 ref 비교 실패 → navigate 재발동.
+  const navigatedForResultRef = useRef<SimulationOutput | null>(null);
   useEffect(() => {
-    if (reportState !== 'result') return;
-    window.history.pushState({ simResult: true }, '');
-    const handlePopState = () => {
-      setReportState('idle');
-      setSimResult(null);
-      setRawSimResult(null);
-      useSimulationStore.getState().dismissResult();
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [reportState, setReportState]);
+    console.log('[H4-debug] navigate effect', {
+      isSplitMode,
+      hasRawSimResult: !!rawSimResult,
+      refMatchesResult: navigatedForResultRef.current === rawSimResult,
+    });
+    if (!isSplitMode && rawSimResult && navigatedForResultRef.current !== rawSimResult) {
+      navigatedForResultRef.current = rawSimResult;
+      console.log('[H4-debug] -> navigate(/dashboard, replace)');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [rawSimResult, isSplitMode, navigate]);
 
   const MAX_DONGS = 4;
 
@@ -2151,12 +2169,12 @@ function SimulatorDashboard({
                       );
                     })()}
 
+                  {/* [H4] 시뮬 완료 시 /dashboard 로 자동 이동 — useEffect 가 navigate 처리.
+                      교체 직후 한 프레임 동안만 노출되는 placeholder. */}
                   {!isSplitMode && rawSimResult && (
-                    <TabbedDashboard
-                      simResult={rawSimResult}
-                      savedHistoryId={savedHistoryId}
-                      brandName={user?.company_name || ''}
-                    />
+                    <div className="flex items-center justify-center p-8 text-stone-500">
+                      분석 결과로 이동 중...
+                    </div>
                   )}
 
                   {/* Single Mode: 기존 대시보드 */}
@@ -4225,10 +4243,67 @@ function pathToScene(
   if (pathname === '/joinus') return 'joinus';
   if (pathname === '/explore') return 'accordion';
   if (pathname === '/simulator') return 'simulator';
+  if (pathname.startsWith('/dashboard')) return 'simulator';
   if (pathname === '/contact') return 'contact';
   if (pathname === '/hq') return 'hq';
   if (pathname === '/login') return 'login';
   return 'intro';
+}
+
+/**
+ * DashboardOutlet — `/dashboard` nested route 의 layout shell.
+ * - simResult / brandName / businessType / savedHistoryId 를 store + auth 로부터 읽어
+ *   <Outlet context={...}> 로 자식 라우트(Hub/Predict/Analyze/Abm)에 전달.
+ * - simResult 가 없으면 /simulator 로 redirect (시뮬 미실행 시 직접 진입 차단).
+ * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
+ */
+function DashboardOutlet() {
+  const simResult = useSimulationStore((s) => s.result);
+  const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const { user, brand } = useAuth();
+  const brandName = user?.company_name || brand?.brand_name || '';
+  const businessType: string | null = null;
+
+  const [modalContent, setModalContent] = useState<DetailModalContent | null>(null);
+  const openModal = (content: DetailModalContent) => setModalContent(content);
+
+  console.log('[H4-debug-Outlet] render', { hasSimResult: !!simResult });
+  useEffect(() => {
+    console.log('[H4-debug-Outlet] mount');
+    return () => console.log('[H4-debug-Outlet] unmount');
+  }, []);
+
+  if (!simResult) {
+    console.log('[H4-debug-Outlet] -> redirect /simulator (simResult null)');
+    return <Navigate to="/simulator" replace />;
+  }
+
+  return (
+    <div
+      data-dashboard-scroll
+      className="relative h-screen overflow-y-scroll custom-scrollbar bg-[#0C0B0A] pb-16 text-stone-100"
+      style={{ overscrollBehaviorY: 'contain' }}
+    >
+      <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
+      <DetailModal modalContent={modalContent} onClose={() => setModalContent(null)} />
+    </div>
+  );
+}
+
+/** Hub index 라우트 — DashboardOutlet 의 simResult 를 store 에서 다시 읽어 DashboardHub 렌더.
+ *  DashboardOutlet 의 null guard 가 이미 통과한 시점에서만 마운트되므로 simResult 는 항상 non-null. */
+function DashboardHubRouteElement() {
+  const simResult = useSimulationStore((s) => s.result);
+  const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const { user, brand } = useAuth();
+  if (!simResult) return <Navigate to="/simulator" replace />;
+  return (
+    <DashboardHub
+      simResult={simResult}
+      brandName={user?.company_name || brand?.brand_name || ''}
+      savedHistoryId={savedHistoryId}
+    />
+  );
 }
 
 export default function App() {
@@ -4422,6 +4497,21 @@ export default function App() {
                       </ProtectedRoute>
                     }
                   />
+                  {/* /dashboard nested route — 시뮬 완료 후 진입.
+                      DashboardOutlet 이 store.result null guard + DetailModal host. */}
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <DashboardOutlet />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<DashboardHubRouteElement />} />
+                    <Route path="predict" element={<DashboardPredictPage />} />
+                    <Route path="analyze" element={<DashboardAnalyzePage />} />
+                    <Route path="abm" element={<DashboardAbmPage />} />
+                  </Route>
                   <Route
                     path="/hq"
                     element={

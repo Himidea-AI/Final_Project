@@ -6,7 +6,7 @@
 import { BrainCircuit, Maximize2 } from 'lucide-react';
 import type { SimulationOutput, AgentId } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
-import { AGENTS_LIST } from '../TabbedDashboard';
+import { AGENTS_LIST } from '../agents';
 import { AgentConfidenceRadar } from '../charts/AgentConfidenceRadar';
 
 interface Props {

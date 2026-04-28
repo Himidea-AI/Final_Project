@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, FileDown, Loader2, RotateCw } from 'lucide-react';
 import { useSimulationDetail } from '../hooks/useSimulationDetail';
-import { TabbedDashboard } from '../components/SimulationResult/dashboard/TabbedDashboard';
+import { HistoryDashboardView } from './HistoryDashboardView';
 import { formatDocumentId } from '../types/simulationHistory';
 import { HiddenPDFTemplate } from '../components/PDF/HiddenPDFTemplate';
 import { buildPdfPropsFromSimulation } from '../utils/pdfPropsBuilder';
@@ -133,7 +133,7 @@ export default function SimulationHistoryDetail() {
               isGeneratingPDF={isGeneratingPDF}
             />
             <div className="mt-6">
-              <TabbedDashboard
+              <HistoryDashboardView
                 simResult={data.simulation_result}
                 savedHistoryId={data.id}
                 brandName={data.brand_name}
