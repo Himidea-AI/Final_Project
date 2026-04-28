@@ -20,18 +20,30 @@ interface Props {
   openModal: (content: DetailModalContent) => void;
 }
 
+// risk_level 두 패턴 정규화 — InsightsGrid.normalizeLevel 와 동일 매핑
+function isHazard(level: string): boolean {
+  const up = level.toUpperCase();
+  return up === 'HIGH' || up === 'DANGER' || up === 'MEDIUM' || up === 'CAUTION';
+}
+
 export function LegalTab({ simResult, openModal }: Props) {
   const risks = simResult.legal_risks ?? [];
   const totalCount = risks.length;
+  const hazardCount = risks.filter((r) => isHazard(r.risk_level)).length;
+  const safeCount = totalCount - hazardCount;
 
   return (
     <div className="bg-stone-900/40 border border-stone-800/60 p-8 rounded-3xl">
       <div className="flex justify-between items-center mb-6">
         <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
           <AlertTriangle size={16} className="text-rose-400" /> 법률·규제 검토
-          <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal">
-            ({totalCount}건)
-          </span>
+          {totalCount > 0 && (
+            <span className="text-[10px] font-black normal-case tracking-normal">
+              <span className="text-rose-400">위험 {hazardCount}건</span>
+              <span className="text-stone-600 mx-1">·</span>
+              <span className="text-emerald-400/80">안전 {safeCount}건</span>
+            </span>
+          )}
         </h4>
         {totalCount > 0 && (
           <button
