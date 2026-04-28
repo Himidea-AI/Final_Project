@@ -83,7 +83,7 @@ function GlobalLimelightNav() {
 
   // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
   const { pending: pendingManagers } = useManagerList();
-  const isMaster = isLoggedIn && user?.role !== 'manager';
+  const isMaster = isLoggedIn && user?.role === 'master';
   // 마스터만 mock 알림 노출 (매니저는 승인 대기 없음 + 도메인 알림 관련 없음)
   const mockItems = isMaster ? NOTIFICATION_MOCK_ITEMS : [];
   const totalUnread = pendingManagers.length + mockItems.length;

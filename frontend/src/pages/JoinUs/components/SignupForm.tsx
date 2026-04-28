@@ -174,7 +174,8 @@ export default function SignupForm({ planName, onSuccess }: Props) {
       const data = await res.json();
       if (data.status === 'success') {
         if (data.access_token && data.user) {
-          auth.login(data.user, data.brand ?? null, data.access_token);
+          // role 강제 spread — backend 가 role 누락해도 frontend 안전망 (ManagerSignupForm 패턴 일관)
+          auth.login({ ...data.user, role: 'master' }, data.brand ?? null, data.access_token);
         }
         onSuccess();
       } else {
