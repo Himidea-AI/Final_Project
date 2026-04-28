@@ -456,13 +456,16 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
 
     scenarios = None
     try:
+        _store_count = sim_result.get("revenue_forecast", {}).get("store_count", 1)
         quarterly = build_quarterly_projection(
             bep_quarterly_simulation=sim_result["bep"]["quarterly_simulation"],
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
             confidence="base",
+            store_count=_store_count,
         )
         scenarios = build_scenarios(
             quarterly_predictions=sim_result["revenue_forecast"]["quarterly_predictions"],
+            store_count=_store_count,
         )
     except Exception as _sim_err:
         print(f"[SIM] quarterly 빌드 실패 (empty 사용): {_sim_err}")
