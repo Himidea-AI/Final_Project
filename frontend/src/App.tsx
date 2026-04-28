@@ -1145,20 +1145,29 @@ function SimulatorDashboard({
         [],
         ['KPI 요약'],
         ['지표', '값', '트렌드'],
+        // §3.7 — 데이터 없을 때 임의 default 금지. mock 트렌드/등급 모두 '—'로 통일.
         [
           '예상 월 매출 (추정)',
           simResult?.revenue != null
             ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-            : '분석 중',
-          '+12.5%',
+            : '데이터 없음',
+          '—',
         ],
-        ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
+        [
+          '상권 종합 매력도',
+          simResult?.score != null ? `${simResult.score} / 100` : '데이터 없음',
+          '—',
+        ],
         [
           '일일 유동인구',
-          popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '42,105 명',
-          popData?.date ?? '-2.4%',
+          popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '데이터 없음',
+          popData?.date ?? '—',
         ],
-        ['카니발리제이션 위험', `${simResult?.riskLevel ?? 'Low'} (12%)`, '안전 권역'],
+        [
+          '카니발리제이션 위험',
+          simResult?.riskLevel != null ? simResult.riskLevel : '데이터 없음',
+          '—',
+        ],
         [],
         ['7 Core Metrics (레이더 차트)'],
         ['항목', '점수'],
@@ -2430,15 +2439,16 @@ function SimulatorDashboard({
                         <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
                           {/* 4 Stats Cards — data 뷰에서만 표시 */}
                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                            {/* §3.7 — 데이터 없을 때 임의 default 금지. mock trend/등급/인구 모두 '—'. */}
                             <StatCard
                               onClick={() => setActiveDrawer('revenue')}
                               title="예상 월 총매출"
                               value={
                                 simResult?.revenue != null
                                   ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-                                  : '분석 중'
+                                  : '—'
                               }
-                              trend="+12.5%"
+                              trend="—"
                               trendUp={true}
                               icon={<BarChart3 />}
                               sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0"
@@ -2451,8 +2461,8 @@ function SimulatorDashboard({
                             <StatCard
                               onClick={() => setActiveDrawer('attractiveness')}
                               title="상권 종합 매력도"
-                              value={`${simResult?.score ?? 87} / 100`}
-                              trend="+5.2 Pts"
+                              value={simResult?.score != null ? `${simResult.score} / 100` : '—'}
+                              trend="—"
                               trendUp={true}
                               icon={<Crosshair />}
                               sparkline="M 0 25 Q 15 20, 30 10 T 60 15 T 80 5 T 100 0"
@@ -2465,12 +2475,12 @@ function SimulatorDashboard({
                                   ? `${popData.daily_average.toLocaleString()} 명`
                                   : popLoading
                                     ? '로딩중...'
-                                    : '42,105 명'
+                                    : '—'
                               }
                               trend={
                                 popData?.change_pct !== undefined
                                   ? `${popData.change_pct > 0 ? '+' : ''}${popData.change_pct}%`
-                                  : '-2.4%'
+                                  : '—'
                               }
                               trendUp={popData?.change_pct ? popData.change_pct > 0 : false}
                               icon={<Users />}
@@ -2480,8 +2490,8 @@ function SimulatorDashboard({
                             <StatCard
                               onClick={() => setActiveDrawer('cannibalization')}
                               title="카니발리제이션 위험"
-                              value={`${simResult?.riskLevel ?? 'Low'} (12%)`}
-                              trend="안전 권역"
+                              value={simResult?.riskLevel != null ? simResult.riskLevel : '—'}
+                              trend="—"
                               trendUp={true}
                               icon={<AlertTriangle className="text-indigo-400" />}
                               sparkline="M 0 30 Q 20 25, 40 28 T 80 25 T 100 30"
