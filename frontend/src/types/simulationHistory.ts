@@ -5,6 +5,8 @@ export type HistorySort = 'created_at_desc' | 'client_name_asc';
 
 export interface SimulationHistoryItem {
   id: number;
+  manager_id: string; // backend SimulationHistoryListItem.manager_id 와 동기화 — frontend HistoryCard 본인/타인 분기용
+  manager_name?: string | null; // master 시 "by 매니저명" 표시용. 본인 시뮬은 null
   client_name: string;
   district: string;
   brand_name: string;
@@ -15,7 +17,6 @@ export interface SimulationHistoryItem {
 }
 
 export interface SimulationHistoryDetail extends SimulationHistoryItem {
-  manager_id: string;
   scenario: Record<string, unknown> | null;
   simulation_result: SimulationOutput;
   updated_at: string | null;

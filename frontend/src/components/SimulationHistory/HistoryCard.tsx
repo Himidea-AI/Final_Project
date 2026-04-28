@@ -1,6 +1,7 @@
 import { FileDown, Trash2 } from 'lucide-react';
 import type { SimulationHistoryItem } from '../../types/simulationHistory';
 import { formatDocumentId } from '../../types/simulationHistory';
+import { useAuth } from '../../auth/AuthContext';
 
 interface HistoryCardProps {
   item: SimulationHistoryItem;
@@ -54,6 +55,9 @@ export function HistoryCard({
   onDownloadPdf,
   selectable,
 }: HistoryCardProps) {
+  const { user } = useAuth();
+  const isMaster = user?.role === 'master';
+  const showManagerBadge = isMaster && item.manager_name && item.manager_id !== user?.id;
   const signalKey = item.market_entry_signal ?? '';
   const signalCls = SIGNAL_CLS[signalKey] ?? 'bg-stone-700/40 text-stone-300 border-stone-600';
   const signalLbl = SIGNAL_LABEL[signalKey] ?? '—';
@@ -93,6 +97,11 @@ export function HistoryCard({
             <span className="ml-1 rounded bg-stone-900/60 px-1.5 py-0.5 text-[10px] font-mono text-indigo-400">
               {docId}
             </span>
+            {showManagerBadge && (
+              <span className="ml-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                by {item.manager_name}
+              </span>
+            )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-stone-100">👤 {item.client_name}</span>

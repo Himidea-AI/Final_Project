@@ -4425,7 +4425,7 @@ export default function App() {
                   <Route
                     path="/hq"
                     element={
-                      <ProtectedRoute requireRole="master">
+                      <ProtectedRoute>
                         <HQCommandCenter />
                       </ProtectedRoute>
                     }

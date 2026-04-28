@@ -120,10 +120,11 @@ function GlobalLimelightNav() {
     }
 
     setActiveIndex(index);
+    const isManager = user?.role === 'manager';
 
     if (type === 'folder') {
       setOpenDropdown(null);
-      nav('/hq?tab=pipeline');
+      nav(isManager ? '/hq?tab=workspace' : '/hq?tab=pipeline');
     } else if (type === 'settings') {
       setOpenDropdown(null);
       nav('/hq?tab=mypage');
