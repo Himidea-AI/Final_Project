@@ -889,20 +889,14 @@ class ManagerSignupRequest(BaseModel):
 
 @app.post("/auth/manager/signup")
 async def manager_signup(req: ManagerSignupRequest):
-    """매니저 회원가입 — 초대코드로 팀장 기업정보 자동 상속 + JWT 발급."""
-    from src.services.jwt_auth import create_access_token
+    """매니저 회원가입 — 초대코드로 팀장 기업정보 자동 상속.
 
+    [보안] is_approved=false 로 INSERT 되므로 access_token 발급 금지.
+    팀장 승인 후 /auth/manager/login 으로만 로그인 가능. (manager_login 은 is_approved 검증 보유)
+    """
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await run_in_threadpool(auth.manager_signup, req.model_dump())
-        if result.get("status") == "success" and result.get("user"):
-            u = result["user"]
-            result["access_token"] = create_access_token(
-                user_id=str(u["id"]),
-                role="manager",
-                email=u.get("email", req.email),
-                owner_id=str(u.get("owner_id")) if u.get("owner_id") else None,
-            )
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}

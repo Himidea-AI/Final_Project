@@ -145,25 +145,25 @@ def list_history(
 
 
 def get_history_detail(*, history_id: int, manager_id: UUID, role: str = "manager") -> Optional[dict[str, Any]]:
-    """master: 본인+소속 매니저 이력 조회. manager: 본인만."""
+    """master: 본인+소속 매니저 이력 조회. manager: 본인만. master 는 manager_name 까지 노출."""
     if role == "master":
-        access_filter = (
-            "(manager_id = :manager_id OR manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
-        )
+        access_filter = "(sh.manager_id = :manager_id OR sh.manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
     else:
-        access_filter = "manager_id = :manager_id"
+        access_filter = "sh.manager_id = :manager_id"
 
     engine = get_sync_engine(_db_url())
     with engine.connect() as conn:
         row = conn.execute(
             text(
                 f"""
-                SELECT id, manager_id, client_name, district, brand_name, business_type,
-                       scenario, simulation_result,
-                       ai_verdict_summary, market_entry_signal,
-                       created_at, updated_at
-                FROM simulation_history
-                WHERE id = :history_id AND {access_filter}
+                SELECT sh.id, sh.manager_id, sh.client_name, sh.district, sh.brand_name, sh.business_type,
+                       sh.scenario, sh.simulation_result,
+                       sh.ai_verdict_summary, sh.market_entry_signal,
+                       sh.created_at, sh.updated_at,
+                       mu.contact_name AS manager_name
+                FROM simulation_history sh
+                LEFT JOIN manager_users mu ON mu.id = sh.manager_id
+                WHERE sh.id = :history_id AND {access_filter}
                 """
             ),
             {"history_id": history_id, "manager_id": str(manager_id)},

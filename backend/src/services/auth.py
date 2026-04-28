@@ -347,7 +347,7 @@ class AuthService:
                 inv_row = conn.execute(
                     text("""
                         SELECT ic.id, ic.owner_id, ic.max_uses, ic.used_count, ic.is_active, ic.expires_at,
-                               u.company_name, u.biz_number, u.store_count
+                               u.company_name, u.biz_number, u.store_count, u.plan
                         FROM invite_codes ic
                         JOIN users u ON ic.owner_id = u.id
                         WHERE ic.code = :code
@@ -424,6 +424,7 @@ class AuthService:
                         "company_name": inv["company_name"],
                         "biz_number": inv["biz_number"],
                         "store_count": str(inv["store_count"]) if inv["store_count"] is not None else "",
+                        "plan": inv.get("plan") or "",  # owner 의 plan 상속 (manager_login 응답과 일관)
                     },
                 }
         finally:
