@@ -1,7 +1,8 @@
 /**
- * TabbedDashboard — SPOTTER v4.2 대시보드 리디자인
+ * TabbedDashboard — SPOTTER v5 대시보드 (3그룹 IA 재구조)
  *
- * 구조: Compact Sticky Header + 4 탭 (종합 요약 / 상권 분석 / 매출 예측 / AI 분석 근거)
+ * 구조: Compact Sticky Header + 3 그룹 (예측 결과 / AI 분석 / ABM 시뮬레이터)
+ * 각 그룹 wrapper 가 내부에서 ?sub=... 서브탭 라우팅 담당.
  * 원칙: Bento Grid, Contextual AI Attribution, LangGraph 기반 8대 멀티 에이전트 시스템
  */
 
@@ -11,7 +12,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3,
   BrainCircuit,
-  MapPin,
   TrendingUp,
   Users,
   PieChart,
@@ -19,52 +19,27 @@ import {
   AlertTriangle,
   Layers,
   Activity,
-  Scale,
-  Radar,
   type LucideIcon,
 } from 'lucide-react';
-import type { SimulationOutput } from '../../../types';
+import type { SimulationOutput, MainTab } from '../../../types';
 import { formatDocumentId } from '../../../types/simulationHistory';
 import { TabButton } from './shared/TabButton';
 import { DetailModal, type DetailModalContent } from './shared/DetailModal';
 import { GradeCard } from './shared/GradeCard';
 import { KpiMiniGrid, type KpiItem } from './shared/KpiMiniGrid';
 import { NarrativeText } from './shared/NarrativeText';
-import { SummaryTab } from './tabs/SummaryTab';
-import { MarketTab } from './tabs/MarketTab';
-import { AbmTab } from './tabs/AbmTab';
-import { DemographicTab } from './tabs/DemographicTab';
-import { FinancialTab } from './tabs/FinancialTab';
-import { ForecastTab } from './tabs/ForecastTab';
-import { LegalTab } from './tabs/LegalTab';
-import { InsightTab } from './tabs/InsightTab';
+import { PredictGroup } from './groups/PredictGroup';
+import { AnalyzeGroup } from './groups/AnalyzeGroup';
+import { AbmGroup } from './groups/AbmGroup';
 import { getGrade } from '../../../constants/decisionThresholds';
 import { formatKrw, formatScore } from './utils/formatters';
 
-const TABS = {
-  SUMMARY: 'summary',
-  MARKET: 'market',
-  ABM: 'abm',
-  DEMOGRAPHIC: 'demographic',
-  FINANCIAL: 'financial',
-  FORECAST: 'forecast',
-  LEGAL: 'legal',
-  INSIGHT: 'insight',
-} as const;
+const VALID_GROUPS: MainTab[] = ['predict', 'analyze', 'abm'];
 
-type TabKey = (typeof TABS)[keyof typeof TABS];
-
-// 탭 순서 규칙: 첫 = 요약, 끝 = AI 분석근거 (고정). 중간 흐름:
-// 상권(지리) → ABM(공실 시뮬) → 인구(사람) → 재무(돈) → 예측(미래) → 법률(규제)
-const TAB_ORDER: TabKey[] = [
-  TABS.SUMMARY,
-  TABS.MARKET,
-  TABS.ABM,
-  TABS.DEMOGRAPHIC,
-  TABS.FINANCIAL,
-  TABS.FORECAST,
-  TABS.LEGAL,
-  TABS.INSIGHT,
+const GROUP_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
+  { id: 'predict', label: '예측 결과', icon: TrendingUp },
+  { id: 'analyze', label: 'AI 분석', icon: BrainCircuit },
+  { id: 'abm', label: 'ABM 시뮬레이터', icon: Activity },
 ];
 
 interface AgentDef {
@@ -173,34 +148,19 @@ export function TabbedDashboard({
   brandName,
   businessType = null,
 }: TabbedDashboardProps) {
-  // URL ?tab= deep link sync — 새로고침 / 공유 링크 지원
+  // URL ?group= deep link sync — 새로고침 / 공유 링크 지원
+  // 그룹 전환 시 ?sub= 는 초기화 (각 그룹 wrapper 가 자기 default sub 로 fallback).
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = searchParams.get('tab') as TabKey | null;
-  const [activeTab, setActiveTab] = useState<TabKey>(
-    urlTab && TAB_ORDER.includes(urlTab) ? urlTab : TABS.SUMMARY,
-  );
+  const groupFromUrl = searchParams.get('group') as MainTab | null;
+  const activeGroup: MainTab =
+    groupFromUrl && VALID_GROUPS.includes(groupFromUrl) ? groupFromUrl : 'predict';
 
-  const handleTabChange = (id: string) => {
-    const tab = id as TabKey;
-    setActiveTab(tab);
-    // ?tab=forecast 같이 쿼리 업데이트 (history 누적 X)
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.set('tab', tab);
-        return next;
-      },
-      { replace: true },
-    );
+  const setGroup = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('group', id);
+    next.delete('sub'); // 그룹 전환 시 sub 초기화
+    setSearchParams(next, { replace: true });
   };
-
-  // URL 쿼리 외부 변경 감지 (뒤로가기 등)
-  useEffect(() => {
-    if (urlTab && TAB_ORDER.includes(urlTab) && urlTab !== activeTab) {
-      setActiveTab(urlTab);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlTab]);
 
   // Compact Sticky Header — 스크롤 감지
   // SimulatorDashboard는 window가 아니라 내부 overflow-y-auto 컨테이너(dashboardRef)에서 스크롤.
@@ -502,7 +462,13 @@ export function TabbedDashboard({
                       <button
                         key={agent.id}
                         type="button"
-                        onClick={() => handleTabChange(TABS.INSIGHT)}
+                        onClick={() => {
+                          // Agents 배지 클릭 → AI 분석 그룹의 에이전트 근거 서브탭으로 이동
+                          const next = new URLSearchParams(searchParams);
+                          next.set('group', 'analyze');
+                          next.set('sub', 'agent_insight');
+                          setSearchParams(next, { replace: true });
+                        }}
                         title={`${agent.name} · ${agent.desc}`}
                         className={`w-9 h-9 rounded-xl bg-stone-900/60 border-2 ${agent.borderCls} flex items-center justify-center group hover:bg-stone-900 transition-all shrink-0 shadow-inner`}
                       >
@@ -518,64 +484,18 @@ export function TabbedDashboard({
             )}
           </AnimatePresence>
 
-          {/* 탭 네비게이션 (7개) */}
-          <nav className="flex mt-6 border-t border-stone-800/30 pt-2 overflow-x-auto scrollbar-hide">
-            <TabButton
-              id={TABS.SUMMARY}
-              label="요약"
-              icon={BarChart3}
-              active={activeTab === TABS.SUMMARY}
-              onClick={handleTabChange}
-            />
-            <TabButton
-              id={TABS.MARKET}
-              label="상권·위치"
-              icon={MapPin}
-              active={activeTab === TABS.MARKET}
-              onClick={handleTabChange}
-            />
-            <TabButton
-              id={TABS.ABM}
-              label="ABM"
-              icon={Radar}
-              active={activeTab === TABS.ABM}
-              onClick={handleTabChange}
-            />
-            <TabButton
-              id={TABS.DEMOGRAPHIC}
-              label="인구·고객"
-              icon={Users}
-              active={activeTab === TABS.DEMOGRAPHIC}
-              onClick={handleTabChange}
-            />
-            <TabButton
-              id={TABS.FINANCIAL}
-              label="재무·수익성"
-              icon={Activity}
-              active={activeTab === TABS.FINANCIAL}
-              onClick={handleTabChange}
-            />
-            <TabButton
-              id={TABS.FORECAST}
-              label="예측"
-              icon={TrendingUp}
-              active={activeTab === TABS.FORECAST}
-              onClick={handleTabChange}
-            />
-            <TabButton
-              id={TABS.LEGAL}
-              label="법률·규제"
-              icon={Scale}
-              active={activeTab === TABS.LEGAL}
-              onClick={handleTabChange}
-            />
-            <TabButton
-              id={TABS.INSIGHT}
-              label="AI 분석 근거"
-              icon={BrainCircuit}
-              active={activeTab === TABS.INSIGHT}
-              onClick={handleTabChange}
-            />
+          {/* 탭 네비게이션 (3 그룹) */}
+          <nav className="flex gap-3 mt-6 border-t border-stone-800/30 pt-2 overflow-x-auto scrollbar-hide">
+            {GROUP_TABS.map((t) => (
+              <TabButton
+                key={t.id}
+                id={t.id}
+                label={t.label}
+                icon={t.icon}
+                active={activeGroup === t.id}
+                onClick={setGroup}
+              />
+            ))}
           </nav>
         </div>
       </header>
@@ -584,27 +504,20 @@ export function TabbedDashboard({
       <main className="mx-auto max-w-[1728px] px-8 py-8">
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab}
+            key={activeGroup}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === TABS.SUMMARY && (
-              <SummaryTab simResult={simResult} openModal={openModal} />
+            {activeGroup === 'predict' && (
+              <PredictGroup simResult={simResult} openModal={openModal} />
             )}
-            {activeTab === TABS.MARKET && <MarketTab simResult={simResult} openModal={openModal} />}
-            {activeTab === TABS.ABM && (
-              <AbmTab simResult={simResult} brandName={brandName} businessType={businessType} />
+            {activeGroup === 'analyze' && (
+              <AnalyzeGroup simResult={simResult} openModal={openModal} />
             )}
-            {activeTab === TABS.DEMOGRAPHIC && <DemographicTab simResult={simResult} />}
-            {activeTab === TABS.FINANCIAL && <FinancialTab simResult={simResult} />}
-            {activeTab === TABS.FORECAST && (
-              <ForecastTab simResult={simResult} openModal={openModal} />
-            )}
-            {activeTab === TABS.LEGAL && <LegalTab simResult={simResult} openModal={openModal} />}
-            {activeTab === TABS.INSIGHT && (
-              <InsightTab simResult={simResult} openModal={openModal} />
+            {activeGroup === 'abm' && (
+              <AbmGroup simResult={simResult} brandName={brandName} businessType={businessType} />
             )}
           </motion.div>
         </AnimatePresence>
