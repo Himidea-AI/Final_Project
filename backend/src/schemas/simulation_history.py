@@ -33,6 +33,8 @@ class SimulationHistoryListItem(BaseModel):
     """목록 응답 원소 — 전체 simulation_result 제외 (lazy load)."""
 
     id: int
+    manager_id: UUID  # frontend에서 본인/타인 시뮬 카드 분기용
+    manager_name: Optional[str] = None  # master 시 "by 매니저명" 표시용. None이면 본인 시뮬
     client_name: str
     district: str
     brand_name: str
@@ -45,7 +47,6 @@ class SimulationHistoryListItem(BaseModel):
 class SimulationHistoryDetail(SimulationHistoryListItem):
     """단일 조회 — scenario/simulation_result 포함."""
 
-    manager_id: UUID
     scenario: Optional[dict[str, Any]] = None
     simulation_result: dict[str, Any]
     updated_at: Optional[datetime] = None

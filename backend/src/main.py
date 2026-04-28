@@ -789,10 +789,19 @@ class SignupRequest(BaseModel):
 
 @app.post("/auth/signup")
 async def signup(req: SignupRequest):
-    """회원가입 — 사업자 검증 + 브랜드 매핑 + DB 저장"""
+    """회원가입 — 사업자 검증 + 브랜드 매핑 + DB 저장 + JWT 발급."""
+    from src.services.jwt_auth import create_access_token  # 지역 import (login 패턴 동일)
+
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await auth.signup(req.model_dump())
+        if result.get("status") == "success" and result.get("user"):
+            u = result["user"]
+            result["access_token"] = create_access_token(
+                user_id=str(u["id"]),
+                role="master",
+                email=u.get("email", req.email),
+            )
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -880,10 +889,20 @@ class ManagerSignupRequest(BaseModel):
 
 @app.post("/auth/manager/signup")
 async def manager_signup(req: ManagerSignupRequest):
-    """매니저 회원가입 — 초대코드로 팀장 기업정보 자동 상속"""
+    """매니저 회원가입 — 초대코드로 팀장 기업정보 자동 상속 + JWT 발급."""
+    from src.services.jwt_auth import create_access_token
+
     auth = AuthService(nts_api_key=os.environ.get("NTS_API_KEY", ""))
     try:
         result = await run_in_threadpool(auth.manager_signup, req.model_dump())
+        if result.get("status") == "success" and result.get("user"):
+            u = result["user"]
+            result["access_token"] = create_access_token(
+                user_id=str(u["id"]),
+                role="manager",
+                email=u.get("email", req.email),
+                owner_id=str(u.get("owner_id")) if u.get("owner_id") else None,
+            )
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}

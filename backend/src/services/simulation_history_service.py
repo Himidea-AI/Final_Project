@@ -88,27 +88,27 @@ def list_history(
     if role == "master":
         # 팀장 본인 이력 + 소속 매니저 이력
         where = [
-            "(manager_id = :manager_id OR manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
+            "(sh.manager_id = :manager_id OR sh.manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
         ]
     else:
-        where = ["manager_id = :manager_id"]
+        where = ["sh.manager_id = :manager_id"]
     params: dict[str, Any] = {"manager_id": str(manager_id)}
 
     if client_name and client_name.strip():
-        where.append("client_name ILIKE :client_pattern")
+        where.append("sh.client_name ILIKE :client_pattern")
         params["client_pattern"] = f"%{client_name.strip()}%"
 
     if from_date is not None:
-        where.append("created_at >= :from_date")
+        where.append("sh.created_at >= :from_date")
         params["from_date"] = datetime.combine(from_date, datetime.min.time())
 
     if to_date is not None:
         # 포함 끝 — 다음날 00:00 미만
-        where.append("created_at < :to_date_exclusive")
+        where.append("sh.created_at < :to_date_exclusive")
         params["to_date_exclusive"] = datetime.combine(to_date + timedelta(days=1), datetime.min.time())
 
     where_sql = " AND ".join(where)
-    order_sql = "created_at DESC" if sort == "created_at_desc" else "client_name ASC"
+    order_sql = "sh.created_at DESC" if sort == "created_at_desc" else "sh.client_name ASC"
     offset = max(0, (page - 1) * size)
     params["limit"] = size
     params["offset"] = offset
@@ -116,16 +116,18 @@ def list_history(
     engine = get_sync_engine(_db_url())
     with engine.connect() as conn:
         total = conn.execute(
-            text(f"SELECT COUNT(*) FROM simulation_history WHERE {where_sql}"),
+            text(f"SELECT COUNT(*) FROM simulation_history sh WHERE {where_sql}"),
             params,
         ).scalar_one()
 
         rows = conn.execute(
             text(
                 f"""
-                SELECT id, client_name, district, brand_name, business_type,
-                       ai_verdict_summary, market_entry_signal, created_at
-                FROM simulation_history
+                SELECT sh.id, sh.client_name, sh.district, sh.brand_name, sh.business_type,
+                       sh.ai_verdict_summary, sh.market_entry_signal, sh.created_at,
+                       sh.manager_id, mu.contact_name AS manager_name
+                FROM simulation_history sh
+                LEFT JOIN manager_users mu ON mu.id = sh.manager_id
                 WHERE {where_sql}
                 ORDER BY {order_sql}
                 LIMIT :limit OFFSET :offset

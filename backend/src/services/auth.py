@@ -144,6 +144,7 @@ class AuthService:
                 "status": "success",
                 "user": {
                     "id": user_id,
+                    "role": "master",
                     "company_name": data["companyName"],
                     "contact_name": data["contactName"],
                     "email": data["email"],
@@ -415,6 +416,7 @@ class AuthService:
                     "user": {
                         "id": manager_id,
                         "role": "manager",
+                        "owner_id": str(inv["owner_id"]) if inv.get("owner_id") else None,
                         "contact_name": data["contactName"],
                         "email": data["email"],
                         "phone": data["phone"],
