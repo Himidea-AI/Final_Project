@@ -41,6 +41,7 @@ def build_quarterly_projection(
     quarterly_predictions: list[dict],
     confidence: str = "base",
     is_mock: bool = False,
+    store_count: int = 1,
 ) -> list[dict]:
     """
     BEP 분기 시뮬레이션(N개)과 TCN 분기 예측 신뢰구간을 결합하여 N개 분기 결과를 반환한다.
@@ -59,15 +60,16 @@ def build_quarterly_projection(
                                 confidence_lower, confidence_upper
         confidence:             "base" | "optimistic" | "pessimistic" (기본값: "base")
         is_mock:                TCN 모델 mock 여부 (기본값: False)
+        store_count:            점포 수 (기본값: 1) — Q1~Q4 TCN 예측값을 점포 1개 기준으로 환산
 
     Returns:
         list[dict] N개 — 분기 수는 bep_quarterly_simulation 길이와 동일
         {
             "quarter": int,            # 1~N
-            "revenue": int,            # confidence 기준 TCN 매출 (float → int)
+            "revenue": int,            # confidence 기준 TCN 매출, 점포 1개 기준 (float → int)
             "cumulative_profit": int,  # 해당 분기 누적수익 BEP에서 추출 (float → int)
-            "confidence_lower": int,   # TCN 95% 신뢰구간 하한 (float → int)
-            "confidence_upper": int,   # TCN 95% 신뢰구간 상한 (float → int)
+            "confidence_lower": int,   # TCN 95% 신뢰구간 하한, 점포 1개 기준 (float → int)
+            "confidence_upper": int,   # TCN 95% 신뢰구간 상한, 점포 1개 기준 (float → int)
             "is_mock": bool,           # TCN mock 여부
         }
     """
@@ -94,19 +96,20 @@ def build_quarterly_projection(
     for q_idx, bep_row in enumerate(bep_quarterly_simulation, start=1):
         cumulative_profit = int(bep_row.get("cumulative_profit", 0))
 
-        # Q1~Q4: TCN 예측값 사용 (confidence 반영)
-        # Q5+: 시뮬레이션이 실제 쓴 값(Q1~Q4 반복 패턴) 그대로 표시
+        # Q1~Q4: TCN 예측값 사용 (confidence 반영) → 점포 1개 기준으로 환산
+        # Q5+: BEP 시뮬레이션값 그대로 (이미 _run_bep 내부에서 /store_count 처리됨)
+        divisor = max(store_count, 1)
         if q_idx <= 4:
             tcn_row = quarterly_map.get(q_idx, {})
-            revenue = int(tcn_row.get(revenue_key, 0))
+            revenue = int(tcn_row.get(revenue_key, 0) / divisor)
         else:
             revenue = int(bep_row.get("revenue", 0))
 
-        # 신뢰구간은 Q4까지만 존재 — Q5+ 는 Q4 값 재사용
+        # 신뢰구간은 Q4까지만 존재 — Q5+ 는 Q4 값 재사용, 점포 1개 기준으로 환산
         quarter_for_ci = min(q_idx, 4)
         tcn_row = quarterly_map.get(quarter_for_ci, {})
-        confidence_lower = int(tcn_row.get("confidence_lower", 0))
-        confidence_upper = int(tcn_row.get("confidence_upper", 0))
+        confidence_lower = int(tcn_row.get("confidence_lower", 0) / divisor)
+        confidence_upper = int(tcn_row.get("confidence_upper", 0) / divisor)
 
         results.append(
             {
@@ -180,6 +183,7 @@ def build_quarterly_simple(
 
 def build_scenarios(
     quarterly_predictions: list[dict],
+    store_count: int = 1,
 ) -> dict:
     """
     TCN 분기 예측 결과(4개)로 낙관/기본/비관 3가지 시나리오를 생성한다.
@@ -196,6 +200,7 @@ def build_scenarios(
         quarterly_predictions: interface.generate()["revenue_forecast"]["quarterly_predictions"]
                                4개 dict, 각 원소: quarter_offset(1~4), predicted_sales,
                                confidence_lower, confidence_upper
+        store_count:           점포 수 (기본값: 1) — 시나리오 revenue를 점포 1개 기준으로 환산
 
     Returns:
         dict
@@ -207,7 +212,7 @@ def build_scenarios(
         각 list 원소:
         {
             "quarter": int,   # 1~4 (quarter_offset 그대로)
-            "revenue": int,   # 해당 시나리오 기준 분기 매출 (float → int 변환)
+            "revenue": int,   # 해당 시나리오 기준 분기 매출, 점포 1개 기준 (float → int 변환)
         }
     """
     # 시나리오 이름 → TCN 예측 필드 키 매핑
@@ -218,6 +223,7 @@ def build_scenarios(
         "pessimistic": "confidence_lower",
     }
 
+    divisor = max(store_count, 1)
     scenarios: dict[str, list[dict]] = {}
 
     for scenario_name, tcn_key in _scenario_key_map.items():
@@ -227,9 +233,8 @@ def build_scenarios(
             # quarter_offset을 quarter로 그대로 사용 (값 동일: 1~4)
             quarter = int(row["quarter_offset"])
 
-            # float → int 변환 및 음수 방어
-            # — 신뢰구간 하한은 이론상 0 이상이지만 안전을 위해 max(0, ...) 유지
-            revenue = max(0, int(row.get(tcn_key, 0)))
+            # float → int 변환, 점포 1개 기준 환산, 음수 방어
+            revenue = max(0, int(row.get(tcn_key, 0) / divisor))
 
             scenario_rows.append(
                 {
