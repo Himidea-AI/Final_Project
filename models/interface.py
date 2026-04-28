@@ -310,6 +310,28 @@ def _resolve_dong_name(dong_code: str) -> str:
     return dong_code
 
 
+# backend/src/agents/tools.py::_SALES_CODE_MAP의 역매핑(코드→한글). 양방향 매핑이라
+# 단일 source of truth로 묶고 싶지만 backend 모듈에 의존 시 순환 import 위험이 있어
+# models/ 레이어에는 정매핑을 별도로 둔다. 코드 추가 시 양쪽 동기화 필요.
+_INDUSTRY_NAME_MAP: dict[str, str] = {
+    "CS100001": "한식음식점",
+    "CS100002": "중식음식점",
+    "CS100003": "일식음식점",
+    "CS100004": "양식음식점",
+    "CS100005": "제과점",
+    "CS100006": "패스트푸드점",
+    "CS100007": "치킨전문점",
+    "CS100008": "분식전문점",
+    "CS100009": "호프-간이주점",
+    "CS100010": "커피-음료",
+}
+
+
+def _resolve_industry_name(industry_code: str) -> str:
+    """industry_code → 업종 한글명 변환. 매핑 실패 시 코드 그대로 반환."""
+    return _INDUSTRY_NAME_MAP.get(industry_code, industry_code)
+
+
 # ---------------------------------------------------------------------------
 # 통합 출력 클래스
 # ---------------------------------------------------------------------------

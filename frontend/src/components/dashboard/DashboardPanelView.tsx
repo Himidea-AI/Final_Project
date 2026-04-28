@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../Toast';
 import type { SimResult } from '../../viewmodels/simResult';
+import { formatKrw } from '../SimulationResult/dashboard/utils/formatters';
 
 export function StatCard({
   title,
@@ -249,7 +250,8 @@ export function TableRow({
                 </div>
               </div>
 
-              {/* 2. 시간대별 영향도 */}
+              {/* 2. 시간대별 영향도 — 실데이터 필드 미정의 (DistrictComparison/MarketReport에 없음).
+                  mock %값 노출(거짓 양성) 제거하고 모두 '—' 표시. backend 보강 시 실값 매핑. */}
               <div className="flex flex-col gap-2">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-[#9ca3af]">
                   시간대별 영향도
@@ -257,31 +259,31 @@ export function TableRow({
                 <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex flex-col gap-1.5 text-[10px] font-mono">
                   <div className="flex justify-between">
                     <span className="text-[#9ca3af]">오전 (06-11)</span>
-                    <span className="text-emerald-400">-0.4%</span>
+                    <span className="text-[#9ca3af]">—</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#9ca3af]">점심 (11-14)</span>
-                    <span className="text-rose-400">-2.1%</span>
+                    <span className="text-[#9ca3af]">—</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#9ca3af]">저녁 (17-21)</span>
-                    <span className="text-rose-400">-3.4%</span>
+                    <span className="text-[#9ca3af]">—</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#9ca3af]">심야 (21-02)</span>
-                    <span className="text-emerald-400">-0.8%</span>
+                    <span className="text-[#9ca3af]">—</span>
                   </div>
                 </div>
               </div>
 
-              {/* 3. Counterfactual */}
+              {/* 3. Counterfactual — 실데이터 필드 미정의. mock '+18.4%' 제거하고 '—' 표시. */}
               <div className="flex flex-col gap-2">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-[#9ca3af]">
                   Counterfactual
                 </span>
                 <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex-1 flex flex-col justify-center gap-1">
                   <p className="text-[10px] text-[#9ca3af] leading-relaxed">이 매장이 없었다면</p>
-                  <p className="text-lg font-black text-[#818cf8] font-mono leading-none">+18.4%</p>
+                  <p className="text-lg font-black text-[#9ca3af] font-mono leading-none">—</p>
                   <p className="text-[9px] text-[#9ca3af]">월 매출 추가 예상</p>
                 </div>
               </div>
@@ -388,55 +390,31 @@ function DashboardPanelView({
   const dongComparison = simResult?.comparison?.find((c) => c.district === dongName);
   const hasRealData = !!dongRanking || !!dongComparison;
 
-  // Revenue — comparison.revenue
-  // 현재: 만원 단위 (×10000으로 원 변환 후 표시)
-  // 변경 예정 (B2 예진 작업): 백엔드 원 단위로 통일 → ×10000 제거 + formatKrw(...) 사용으로 한 줄 변경
-  // 변경 시점 fix:
-  //   const revenue = revenueNum != null ? `₩ ${formatKrw(revenueNum)}` : ...
-  const revenueNum = dongComparison?.revenue;
-  const revenue =
-    typeof revenueNum === 'number'
-      ? `₩ ${(revenueNum * 10000).toLocaleString()}`
-      : hasRealData
-        ? '—'
-        : isVariantB
-          ? '₩ 28,100,000'
-          : '₩ 32,400,000';
+  // §3.7 (api-contract) 준수 — 실데이터 없으면 '—' 표시. mock fallback 일체 금지.
+  // 비교 모드에서 winner 외 동은 backend ML 결과(closure_rate/bep_quarters/comparison)가
+  // 비어있어 거짓 양성 위험이 컸음 (`'₩ 32,400,000'` 등 hardcoded 노출).
 
-  // Score — districtRankings.score 우선
+  // Revenue — comparison.revenue (만원 단위 → 원 환산 후 formatKrw)
+  const revenueNum = dongComparison?.revenue;
+  const revenue = typeof revenueNum === 'number' ? `₩ ${formatKrw(revenueNum * 10000)}` : '—';
+
+  // Score — districtRankings.score
   const scoreNum =
     typeof dongRanking?.score === 'number' ? Math.round(dongRanking.score as number) : null;
-  const score =
-    scoreNum != null
-      ? `${scoreNum} / 100`
-      : hasRealData
-        ? '—'
-        : isVariantB
-          ? '76 / 100'
-          : '87 / 100';
+  const score = scoreNum != null ? `${scoreNum} / 100` : '—';
 
   const dongPop = popData?.dong_details?.find((d: any) => d.dong_name === dongName);
-  const traffic = dongPop
-    ? `${dongPop.daily_total.toLocaleString()} 명`
-    : isVariantB
-      ? '38,205 명'
-      : '42,105 명';
+  const traffic = dongPop ? `${dongPop.daily_total.toLocaleString()} 명` : '—';
 
-  // Closure rate (폐업률) — districtRankings.closure_rate 우선
+  // Closure rate (폐업률) — districtRankings.closure_rate (0~1 fraction → %)
   const closureRateNum =
     typeof dongRanking?.closure_rate === 'number' ? (dongRanking.closure_rate as number) : null;
-  const risk =
-    closureRateNum != null
-      ? `${(closureRateNum * 100).toFixed(1)}%`
-      : hasRealData
-        ? '—'
-        : isVariantB
-          ? 'MEDIUM (28%)'
-          : 'Low (12%)';
+  const risk = closureRateNum != null ? `${(closureRateNum * 100).toFixed(1)}%` : '—';
 
-  // DistrictComparison 타입엔 명시적 growth/score-trend 필드 없음 → 실데이터 있을 땐 '—'
-  const revenueTrend = hasRealData ? '—' : isVariantB ? '+6.3%' : '+12.5%';
-  const scoreTrend = hasRealData ? '—' : isVariantB ? '-2.1 Pts' : '+5.2 Pts';
+  // DistrictComparison 타입엔 growth/score-trend 명시 필드 없음 → 항상 '—'
+  // (mock 분기 제거 — hasRealData 분기 없이 통일).
+  const revenueTrend = '—';
+  const scoreTrend = '—';
 
   // Radar — winner_district 일치 + market_report 7지표 모두 실값일 때만 그림.
   // 하나라도 null이면 차트 자체 비활성(거짓 0 채움 금지). 백엔드가 scouting_results 미실행 시 null을 보냄.
@@ -530,16 +508,32 @@ function DashboardPanelView({
           },
         ];
 
+  // winner 패널 시각 강조 — DistrictRankings의 indigo 톤(메모리 project_persona_pivot 본부 영업팀)
+  // 톤 재사용. 외곽선/링/glow로 추천 동임을 즉시 인지하게 한다.
+  const winnerWrapCls = isWinner
+    ? 'ring-1 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.15)] rounded-xl'
+    : '';
+  const winnerBadgeCls = isWinner
+    ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+    : badgeColor;
+  const winnerLabel = isWinner ? '추천 1위' : panelLabels[panelIndex];
+
   return (
-    <div className="flex flex-col gap-4 w-full animate-in fade-in zoom-in-95 duration-500">
-      {/* 구역 타이틀 */}
-      <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-3 flex items-center justify-between">
+    <div
+      className={`flex flex-col gap-4 w-full animate-in fade-in zoom-in-95 duration-500 ${winnerWrapCls}`}
+    >
+      {/* 구역 타이틀 — winner면 indigo 외곽선으로 강조 */}
+      <div
+        className={`bg-[#2c2825] rounded-xl p-3 flex items-center justify-between border ${
+          isWinner ? 'border-indigo-500/40' : 'border-[#3a3633]'
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <MapPin className={`w-4 h-4 ${accentColor}`} />
+          <MapPin className={`w-4 h-4 ${isWinner ? 'text-indigo-400' : accentColor}`} />
           <span className="font-bold text-white text-sm">{districtName}</span>
         </div>
-        <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${badgeColor}`}>
-          {panelLabels[panelIndex]}
+        <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${winnerBadgeCls}`}>
+          {winnerLabel}
         </span>
       </div>
 
@@ -548,16 +542,13 @@ function DashboardPanelView({
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
           <p className="text-[10px] text-[#9ca3af] mb-1">예상 월 매출</p>
           <p className="text-lg font-black text-white">{revenue}</p>
-          <p className={`text-[10px] mt-1 ${isVariantB ? 'text-emerald-400' : 'text-indigo-400'}`}>
-            {revenueTrend}
-          </p>
+          {/* trend는 DistrictComparison에 명시 필드 없음 → 항상 '—' + 중립 회색. */}
+          <p className="text-[10px] mt-1 text-[#9ca3af]">{revenueTrend}</p>
         </div>
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
           <p className="text-[10px] text-[#9ca3af] mb-1">상권 매력도</p>
           <p className="text-lg font-black text-white">{score}</p>
-          <p className={`text-[10px] mt-1 ${isVariantB ? 'text-rose-400' : 'text-indigo-400'}`}>
-            {scoreTrend}
-          </p>
+          <p className="text-[10px] mt-1 text-[#9ca3af]">{scoreTrend}</p>
         </div>
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
           <p className="text-[10px] text-[#9ca3af] mb-1">일 유동인구</p>
@@ -569,8 +560,25 @@ function DashboardPanelView({
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
           <p className="text-[10px] text-[#9ca3af] mb-1">카니발리제이션</p>
           <p className="text-lg font-black text-white">{risk}</p>
-          <p className={`text-[10px] mt-1 ${isVariantB ? 'text-amber-400' : 'text-emerald-400'}`}>
-            {isVariantB ? '주의 권역' : '안전 권역'}
+          {/* 위험 등급 — 실데이터(closureRateNum) 기반. mock '주의/안전 권역' 제거. */}
+          <p
+            className={`text-[10px] mt-1 ${
+              closureRateNum == null
+                ? 'text-[#9ca3af]'
+                : closureRateNum > 0.3
+                  ? 'text-rose-400'
+                  : closureRateNum > 0.15
+                    ? 'text-amber-400'
+                    : 'text-emerald-400'
+            }`}
+          >
+            {closureRateNum == null
+              ? '—'
+              : closureRateNum > 0.3
+                ? '높은 리스크'
+                : closureRateNum > 0.15
+                  ? '중간 리스크'
+                  : '낮은 리스크'}
           </p>
         </div>
       </div>

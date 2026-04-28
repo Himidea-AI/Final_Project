@@ -208,13 +208,18 @@ def predict(
     # 연속 이상 분기 수
     consecutive = _count_consecutive_anomalies(group, model, meta, scaler)
 
-    # 자연어 요약
+    # 자연어 요약 — dong_code/industry_code 대신 한글명 사용 (사용자 응답 노출)
+    from models.interface import _resolve_dong_name, _resolve_industry_name
+
+    dong_name = _resolve_dong_name(dong_code)
+    industry_name = _resolve_industry_name(industry_code)
+
     signal_ko = _SIGNAL_KO.get(signal, signal)
     if signal == "normal":
-        summary = f"{dong_code} {industry_code}: 정상 상권 패턴 (이상도 {score:.2f})"
+        summary = f"{dong_name} {industry_name}: 정상 상권 패턴 (이상도 {score:.2f})"
     else:
         q_str = f"최근 {consecutive}분기 연속 이상 감지 " if consecutive > 0 else ""
-        summary = f"{dong_code} {industry_code}: {q_str}(이상도 {score:.2f}) — {signal_ko} 가능성"
+        summary = f"{dong_name} {industry_name}: {q_str}(이상도 {score:.2f}) — {signal_ko} 가능성"
 
     return EmergingResult(
         dong_code=dong_code,
@@ -228,12 +233,16 @@ def predict(
 
 
 def _mock_result(dong_code: str, industry_code: str) -> EmergingResult:
+    from models.interface import _resolve_dong_name, _resolve_industry_name
+
+    dong_name = _resolve_dong_name(dong_code)
+    industry_name = _resolve_industry_name(industry_code)
     return EmergingResult(
         dong_code=dong_code,
         industry_code=industry_code,
         anomaly_score=0.5,
         signal="normal",
         consecutive_anomaly_quarters=0,
-        summary=f"{dong_code} {industry_code}: 모델 미학습 상태 (mock)",
+        summary=f"{dong_name} {industry_name}: 모델 미학습 상태 (mock)",
         is_mock=True,
     )

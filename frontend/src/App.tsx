@@ -44,7 +44,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, Outlet, Navigate } from 'react-router-dom';
 import { TransitionContext } from './contexts/TransitionContext';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
@@ -59,7 +59,16 @@ import type { SimulationOutput } from './types';
 import { type SimResult, toSimResultViewModel } from './viewmodels/simResult';
 import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
 import { ShapChart } from './components/SimulationResult/ShapChart';
-import { TabbedDashboard } from './components/SimulationResult/dashboard/TabbedDashboard';
+// [H4] TabbedDashboard 직접 import 제거 — /dashboard 라우트로 분리 후 미사용.
+// SimulationHistoryDetail 은 여전히 자체 import 로 사용 중 (H7 에서 정리 예정).
+import { DashboardHub } from './components/SimulationResult/dashboard/DashboardHub';
+import {
+  DetailModal,
+  type DetailModalContent,
+} from './components/SimulationResult/dashboard/shared/DetailModal';
+import DashboardPredictPage from './pages/dashboard/DashboardPredictPage';
+import DashboardAnalyzePage from './pages/dashboard/DashboardAnalyzePage';
+import DashboardAbmPage from './pages/dashboard/DashboardAbmPage';
 import { SaveButton } from './components/SimulationHistory/SaveButton';
 import { SaveDialog } from './components/SimulationHistory/SaveDialog';
 import { useSaveSimulation } from './hooks/useSaveSimulation';
@@ -100,7 +109,6 @@ const CommandPalette = lazy(() => import('./components/CommandPalette'));
 
 import {
   ChevronRight,
-  ChevronLeft,
   Sliders,
   Activity,
   MapPin,
@@ -804,11 +812,12 @@ function SimulatorDashboard({
   reportState: string;
   setReportState: (s: 'idle' | 'loading' | 'result') => void;
 }) {
+  const navigate = useNavigate();
   const [radius, setRadius] = useState(500);
   const [budget, setBudget] = useState(200);
   const [weighted, setWeighted] = useState(true);
-  const [loadingText, setLoadingText] = useState('INITIALIZING AI ENGINE...');
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  // loadingText/loadingProgress state는 로딩 UI 제거(2026-04-28)와 함께 dead.
+  // SimulationFloatingWidget이 store status를 직접 구독해 진행 표시.
   const { showToast } = useToast();
   const { user, brand } = useAuth();
   const [simResult, setSimResult] = useState<SimResult | null>(null);
@@ -901,14 +910,17 @@ function SimulatorDashboard({
   } | null>(null);
 
   useEffect(() => {
-    if (reportState !== 'result' || selectedDongs.length === 0) return;
+    if (reportState !== 'result') return;
     let cancelled = false;
     const fetchPop = async () => {
       setPopLoading(true);
       try {
-        // 정적 import로 통일 — client.ts는 hooks/stores 등에서도 정적 import되어
-        // 동적 import 효과가 무력화되며 vite 경고 발생. 실효 없음.
-        const data = await getLivePopulation(selectedDongs);
+        // 마포 16동 전체 fetch — 비교 모드(winnerDistrict + top3 candidates)에서
+        // selectedDongs 외 후보 동의 popData도 매칭 가능하도록. 인자 미지정 시
+        // backend(main.py:1071, population_api.py:91)가 16동 자동 반환.
+        // 이전엔 getLivePopulation(selectedDongs)로 사용자 선택 동만 fetch해
+        // 후보 동들이 dong_details에 빠지고 frontend traffic이 '—' 표시되던 버그.
+        const data = await getLivePopulation();
         if (!cancelled) setPopData(data);
       } catch (e) {
         console.error('유동인구 API 실패:', e);
@@ -920,7 +932,7 @@ function SimulatorDashboard({
     return () => {
       cancelled = true;
     };
-  }, [reportState, selectedDongs]);
+  }, [reportState]);
 
   // [v8.0/v8.1] Drill-down Drawer + 테이블 행 확장 + 정렬 상태
   const [activeDrawer, setActiveDrawer] = useState<DrawerKey>(null);
@@ -1145,20 +1157,29 @@ function SimulatorDashboard({
         [],
         ['KPI 요약'],
         ['지표', '값', '트렌드'],
+        // §3.7 — 데이터 없을 때 임의 default 금지. mock 트렌드/등급 모두 '—'로 통일.
         [
           '예상 월 매출 (추정)',
           simResult?.revenue != null
             ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-            : '분석 중',
-          '+12.5%',
+            : '데이터 없음',
+          '—',
         ],
-        ['상권 종합 매력도', `${simResult?.score ?? 87} / 100`, '+5.2 Pts'],
+        [
+          '상권 종합 매력도',
+          simResult?.score != null ? `${simResult.score} / 100` : '데이터 없음',
+          '—',
+        ],
         [
           '일일 유동인구',
-          popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '42,105 명',
-          popData?.date ?? '-2.4%',
+          popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '데이터 없음',
+          popData?.date ?? '—',
         ],
-        ['카니발리제이션 위험', `${simResult?.riskLevel ?? 'Low'} (12%)`, '안전 권역'],
+        [
+          '카니발리제이션 위험',
+          simResult?.riskLevel != null ? simResult.riskLevel : '데이터 없음',
+          '—',
+        ],
         [],
         ['7 Core Metrics (레이더 차트)'],
         ['항목', '점수'],
@@ -1286,20 +1307,28 @@ function SimulatorDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 브라우저 뒤로가기 가로채기 — result 상태에서 뒤로가기 누르면 페이지 이탈 대신 idle로 복귀.
-  // [R5] store 도 dismissResult 로 초기화 — 나갔다 다시 와도 복원되지 않도록 (명시적 종료).
+  // [H4] 옛 popstate 가로채기 effect 제거 — Hub Redesign 으로 시뮬 완료 시 navigate('/dashboard')
+  // 가 react-router history 를 정상 관리. pushState 와 navigate replace 가 race 되어 카드 hub 가
+  // 잠깐 떴다가 popstate listener 가 dismissResult 호출 → /simulator 로 복귀 → 옛 화면 표시.
+  // /dashboard 에서 뒤로가기 시 react-router 가 자연스럽게 /simulator 로 이동 (popstate 가로채기 불필요).
+
+  // [H4] 시뮬 완료 시 /dashboard 로 자동 이동 — TabbedDashboard 직접 렌더 대신 라우트 분리.
+  // navigatedForResultRef: 동일 result 인스턴스에 대해 한 번만 navigate. 사용자가 /dashboard
+  // 에서 뒤로가기 → /simulator 복귀 시 mount-restore 가 다시 rawSimResult 를 채워도 재navigate 안 함.
+  // 새 시뮬 완료 시 setRawSimResult(simRes) 로 reference 가 바뀌면 ref 비교 실패 → navigate 재발동.
+  const navigatedForResultRef = useRef<SimulationOutput | null>(null);
   useEffect(() => {
-    if (reportState !== 'result') return;
-    window.history.pushState({ simResult: true }, '');
-    const handlePopState = () => {
-      setReportState('idle');
-      setSimResult(null);
-      setRawSimResult(null);
-      useSimulationStore.getState().dismissResult();
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [reportState, setReportState]);
+    console.log('[H4-debug] navigate effect', {
+      isSplitMode,
+      hasRawSimResult: !!rawSimResult,
+      refMatchesResult: navigatedForResultRef.current === rawSimResult,
+    });
+    if (!isSplitMode && rawSimResult && navigatedForResultRef.current !== rawSimResult) {
+      navigatedForResultRef.current = rawSimResult;
+      console.log('[H4-debug] -> navigate(/dashboard, replace)');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [rawSimResult, isSplitMode, navigate]);
 
   const MAX_DONGS = 4;
 
@@ -1422,14 +1451,8 @@ function SimulatorDashboard({
     saveSim, // line 1359 saveSim.reset() 호출 — useSaveSimulation 인스턴스 변경 추적
   ]);
 
-  // [IM3-205] 로딩 진행률을 simulationStore에서 미러 — store가 500ms 타이머 보유
-  // 기존 로컬 타이머 useEffect는 store로 이관됨
-  const _storeProgress = useSimulationStore((s) => s.progress);
-  const _storeStage = useSimulationStore((s) => s.stage);
-  useEffect(() => {
-    setLoadingProgress(_storeProgress);
-    if (_storeStage) setLoadingText(`${_storeStage}...`);
-  }, [_storeProgress, _storeStage]);
+  // 로딩 UI 제거(2026-04-28)와 함께 store progress/stage 미러 useEffect도 dead → 제거.
+  // SimulationFloatingWidget이 store를 직접 구독해 진행 상태 표시.
 
   // Dark theme only
   const textPrimary = 'text-[#e2e8f0]';
@@ -1454,7 +1477,7 @@ function SimulatorDashboard({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-8 max-w-[1650px] mx-auto">
         {/* Left panel — Controls (result 상태일 땐 숨김 → 우측 리포트가 full-width로 확장) */}
         <div
-          className={`lg:col-span-5 rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === 'result' ? 'hidden' : ''}`}
+          className={`lg:col-span-12 rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === 'result' ? 'hidden' : ''}`}
         >
           <h3
             className={`flex items-center gap-2 text-sm font-bold tracking-wider mb-6 ${textPrimary}`}
@@ -1553,48 +1576,81 @@ function SimulatorDashboard({
                   </div>
                 </div>
 
-                {/* 업종 박스 — 강조 동일 */}
-                <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Store size={13} className={accent} />
-                    <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
+                {/* 우측 컬럼 — 업종 박스 + 유동인구 가중치 박스 stack.
+                    좌측 분석 대상(구+동) 박스 높이를 두 박스 합으로 매칭, 공백 회피. */}
+                <div className="flex flex-col gap-4">
+                  {/* 업종 박스 — 강조 동일 */}
+                  <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Store size={13} className={accent} />
+                      <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
+                    </div>
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setBusinessTypeOpen(!businessTypeOpen);
+                          setDongDropdownOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                      >
+                        <span>{businessType}</span>
+                        <ChevronRight
+                          size={14}
+                          className={`text-[#9ca3af] transition-transform duration-200 ${
+                            businessTypeOpen ? 'rotate-90' : ''
+                          }`}
+                        />
+                      </button>
+                      {businessTypeOpen && (
+                        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                          {BUSINESS_TYPES.map((type) => (
+                            <button
+                              key={type}
+                              onClick={() => {
+                                setBusinessType(type);
+                                setBusinessTypeOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                                type === businessType
+                                  ? 'text-[#818cf8] bg-[#818cf8]/10'
+                                  : 'text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]'
+                              }`}
+                            >
+                              {type}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="relative">
-                    <button
-                      onClick={() => {
-                        setBusinessTypeOpen(!businessTypeOpen);
-                        setDongDropdownOpen(false);
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+
+                  {/* 유동인구 가중치 토글 — 섹션 2에서 옮겨옴. flex-1로 남은 공간 채워
+                      좌측 분석 대상 박스 높이와 자연 매칭. */}
+                  <div className="flex-1 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-white/5 bg-[#1e1b18]/40">
+                    <label
+                      className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
                     >
-                      <span>{businessType}</span>
-                      <ChevronRight
-                        size={14}
-                        className={`text-[#9ca3af] transition-transform duration-200 ${
-                          businessTypeOpen ? 'rotate-90' : ''
+                      유동인구 가중치
+                      <span
+                        className="text-[#818cf8] cursor-help shrink-0"
+                        title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
+                      >
+                        &#9432;
+                      </span>
+                    </label>
+                    <button
+                      onClick={() => setWeighted(!weighted)}
+                      aria-label="유동인구 가중치 토글"
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${
+                        weighted ? accentBg : 'bg-[#3a3633]'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
+                          weighted ? 'translate-x-[22px]' : 'translate-x-0.5'
                         }`}
                       />
                     </button>
-                    {businessTypeOpen && (
-                      <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
-                        {BUSINESS_TYPES.map((type) => (
-                          <button
-                            key={type}
-                            onClick={() => {
-                              setBusinessType(type);
-                              setBusinessTypeOpen(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                              type === businessType
-                                ? 'text-[#818cf8] bg-[#818cf8]/10'
-                                : 'text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]'
-                            }`}
-                          >
-                            {type}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1712,33 +1768,8 @@ function SimulatorDashboard({
                   </div>
                 </div>
 
-                {/* 7. 유동인구 가중치 토글 — col-span-2 */}
-                <div className="md:col-span-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18]/40">
-                  <label
-                    className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
-                  >
-                    유동인구 가중치
-                    <span
-                      className="text-[#818cf8] cursor-help shrink-0"
-                      title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
-                    >
-                      &#9432;
-                    </span>
-                  </label>
-                  <button
-                    onClick={() => setWeighted(!weighted)}
-                    aria-label="유동인구 가중치 토글"
-                    className={`relative w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${
-                      weighted ? accentBg : 'bg-[#3a3633]'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
-                        weighted ? 'translate-x-[22px]' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
-                </div>
+                {/* 유동인구 가중치 토글은 섹션 1(핵심 파라미터)의 업종 박스 아래로 이관 —
+                    좌측 분석 대상 박스 높이 매칭 + 공백 회피(2026-04-28). */}
               </div>
               <p
                 className={`text-[10px] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-white/5`}
@@ -1936,154 +1967,20 @@ function SimulatorDashboard({
           </div>
         </div>
 
-        {/* Right panel wrapper — visualization 위 + RUN 아래 */}
-        <div
-          className={`lg:col-span-7 flex flex-col gap-6 ${reportState === 'result' ? 'lg:col-span-12' : ''}`}
-        >
-          {/* Right panel — Visualization */}
+        {/* Right panel wrapper — col-span-12 풀폭. RUN SIMULATION 박스(아래)가 이 wrapper의
+            자식이므로 wrapper 자체에 hidden을 걸면 안 됨. 내부 Visualization 박스만 result 시
+            노출 + RUN 박스는 자체 className으로 result 시 hidden(line 3939). */}
+        <div className="lg:col-span-12 flex flex-col gap-6">
+          {/* Right panel — Visualization (result 시에만 표시. idle/loading 시 hidden) */}
           <div
-            className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel}`}
+            className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel} ${reportState !== 'result' ? 'hidden' : ''}`}
           >
-            {/* --- Idle State (Empty State with Blurred Silhouette) --- */}
-            {reportState === 'idle' && (
-              <div className="relative flex-1 flex flex-col items-center justify-center w-full h-full min-h-[600px] animate-in fade-in zoom-in-95 duration-500 bg-card/5 border border-border/50 rounded-2xl overflow-hidden">
-                {/* 1. 배경: 블러 처리된 가짜(Mock) 대시보드 실루엣 */}
-                <div className="absolute inset-0 w-full h-full p-8 opacity-20 blur-[8px] pointer-events-none flex flex-col gap-4">
-                  {/* 가짜 헤더 영역 */}
-                  <div className="h-10 w-1/3 bg-secondary rounded-lg mb-4" />
-                  {/* 가짜 4 KPI 카드 */}
-                  <div className="grid grid-cols-4 gap-4">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="h-24 bg-card border border-border rounded-xl" />
-                    ))}
-                  </div>
-                  {/* 가짜 메인 바디 */}
-                  <div className="flex flex-1 gap-4 mt-2">
-                    <div className="flex-[2] flex flex-col gap-4">
-                      <div className="flex-1 bg-card border border-border rounded-xl" />
-                      <div className="flex-1 bg-card border border-border rounded-xl" />
-                    </div>
-                    <div className="flex-[1] bg-card border border-border rounded-xl" />
-                  </div>
-                </div>
+            {/* idle UI(블러 대시보드 실루엣 + 3-step 가이드) 제거 — 좌측 옵션 패널이
+                풀폭으로 노출되어 가이드 역할 자체가 의미 없어짐(2026-04-28). */}
 
-                {/* 2. 중앙 CTA (Call to Action) 가이드 박스 */}
-                <div className="relative z-10 flex flex-col items-center max-w-md text-center bg-card/80 backdrop-blur-xl border border-border/50 p-10 rounded-3xl shadow-2xl">
-                  <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
-                    <MapPin className="w-8 h-8 text-primary animate-bounce" />
-                  </div>
-
-                  <h2 className="text-2xl font-black text-foreground mb-3 tracking-tight">
-                    첫 번째 시뮬레이션을 시작하세요
-                  </h2>
-
-                  <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-                    좌측 패널에서 분석을 원하는 <strong className="text-primary">행정동</strong>과{' '}
-                    <strong className="text-primary">업종</strong>을 선택한 후,
-                    <br />
-                    하단의 RUN 버튼을 눌러 AI 예측 엔진을 가동하십시오.
-                  </p>
-
-                  {/* 좌측 패널을 가리키는 시각적 힌트 */}
-                  <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground bg-background px-4 py-2 rounded-full border border-border">
-                    <span className="flex items-center gap-1 text-primary">
-                      <ChevronLeft className="w-4 h-4 animate-pulse" />
-                      SELECT PARAMETERS
-                    </span>
-                    <span className="w-1 h-1 bg-border rounded-full" />
-                    <span>PRESS RUN</span>
-                  </div>
-
-                  {/* [I-2] 3-step 시작 가이드 — 처음 방문자의 진입장벽 낮춤 */}
-                  <div className="mt-6 grid gap-3 max-w-sm mx-auto text-left">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
-                        1
-                      </div>
-                      <p className="text-xs text-[#9ca3af] leading-relaxed">
-                        좌측{' '}
-                        <span className="text-[#818cf8] font-semibold">SIMULATION CONTROLS</span>
-                        에서 행정동·업종·조건 선택
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
-                        2
-                      </div>
-                      <p className="text-xs text-[#9ca3af] leading-relaxed">
-                        좌측 하단{' '}
-                        <span className="text-[#818cf8] font-semibold">RUN SIMULATION</span> 클릭
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#818cf8]/10 text-[11px] font-bold text-[#818cf8]">
-                        3
-                      </div>
-                      <p className="text-xs text-[#9ca3af] leading-relaxed">
-                        AI 분석 결과 약 <span className="text-[#e2e8f0] font-semibold">20초</span>{' '}
-                        후 표시
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {reportState === 'loading' && (
-              <div className="h-full flex flex-col items-center justify-center">
-                <div className="relative w-24 h-24 mb-8">
-                  {/* Double spinner */}
-                  <div className="absolute inset-0 border-4 border-[#3a3633] border-t-[#818cf8] rounded-full animate-[spin_2s_linear_infinite]" />
-                  <div className="absolute inset-2 border-4 border-[#3a3633] border-b-[#818cf8] rounded-full animate-[spin_3s_linear_infinite_reverse]" />
-                  {/* Center percentage */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-lg font-black font-mono tabular-nums text-[#818cf8]">
-                      {Math.round(loadingProgress)}%
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center gap-4 w-full max-w-md">
-                  <p
-                    className={`font-mono text-xl font-black tracking-[0.2em] uppercase ${accent}`}
-                  >
-                    PROCESSING DATA
-                  </p>
-
-                  {/* Progress Bar */}
-                  <div className="w-full relative">
-                    <div className="w-full h-2 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#6366f1] to-[#818cf8] rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${loadingProgress}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between mt-1.5">
-                      <span className="text-[9px] font-mono tabular-nums text-[#818cf8]">
-                        {Math.round(loadingProgress)}%
-                      </span>
-                      <span className="text-[9px] font-mono text-[#9ca3af]">
-                        ~{Math.max(0, Math.round((90 - loadingProgress) / 0.9))}초 남음
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Current step */}
-                  <div className="px-4 py-2 bg-black/10 rounded-md border border-[#3a3633]/30 backdrop-blur-sm flex items-center gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                    <p className={`font-mono text-xs tracking-widest ${textSecondary}`}>
-                      [ {loadingText} ]
-                    </p>
-                  </div>
-
-                  {/* [C-3] 페이지 이동 허용 힌트 — simulationStore 덕분에 탭 이동해도 진행됨 */}
-                  <p className="mt-2 text-[10px] text-[#9ca3af] leading-relaxed text-center max-w-xs">
-                    페이지를 이동하셔도 시뮬레이션은 계속 실행됩니다. 우측 하단 위젯에서 진행 상태를
-                    확인할 수 있어요.
-                  </p>
-                </div>
-              </div>
-            )}
+            {/* loading UI(가짜 progress + ETA + 단계 ticker) 제거 — §3.7 거짓 신호 +
+                좌측 옵션 패널 풀폭 가독성 ↑. 백그라운드 진행은 SimulationFloatingWidget 담당.
+                결과 도착 시 runSim 함수가 setReportState('result')로 자동 전환. */}
 
             {reportState === 'result' && (
               <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-24 md:pt-28 overflow-y-auto custom-scrollbar flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
@@ -2272,12 +2169,12 @@ function SimulatorDashboard({
                       );
                     })()}
 
+                  {/* [H4] 시뮬 완료 시 /dashboard 로 자동 이동 — useEffect 가 navigate 처리.
+                      교체 직후 한 프레임 동안만 노출되는 placeholder. */}
                   {!isSplitMode && rawSimResult && (
-                    <TabbedDashboard
-                      simResult={rawSimResult}
-                      savedHistoryId={savedHistoryId}
-                      brandName={user?.company_name || ''}
-                    />
+                    <div className="flex items-center justify-center p-8 text-stone-500">
+                      분석 결과로 이동 중...
+                    </div>
                   )}
 
                   {/* Single Mode: 기존 대시보드 */}
@@ -2430,15 +2327,16 @@ function SimulatorDashboard({
                         <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
                           {/* 4 Stats Cards — data 뷰에서만 표시 */}
                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                            {/* §3.7 — 데이터 없을 때 임의 default 금지. mock trend/등급/인구 모두 '—'. */}
                             <StatCard
                               onClick={() => setActiveDrawer('revenue')}
                               title="예상 월 총매출"
                               value={
                                 simResult?.revenue != null
                                   ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-                                  : '분석 중'
+                                  : '—'
                               }
-                              trend="+12.5%"
+                              trend="—"
                               trendUp={true}
                               icon={<BarChart3 />}
                               sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0"
@@ -2451,8 +2349,8 @@ function SimulatorDashboard({
                             <StatCard
                               onClick={() => setActiveDrawer('attractiveness')}
                               title="상권 종합 매력도"
-                              value={`${simResult?.score ?? 87} / 100`}
-                              trend="+5.2 Pts"
+                              value={simResult?.score != null ? `${simResult.score} / 100` : '—'}
+                              trend="—"
                               trendUp={true}
                               icon={<Crosshair />}
                               sparkline="M 0 25 Q 15 20, 30 10 T 60 15 T 80 5 T 100 0"
@@ -2465,12 +2363,12 @@ function SimulatorDashboard({
                                   ? `${popData.daily_average.toLocaleString()} 명`
                                   : popLoading
                                     ? '로딩중...'
-                                    : '42,105 명'
+                                    : '—'
                               }
                               trend={
                                 popData?.change_pct !== undefined
                                   ? `${popData.change_pct > 0 ? '+' : ''}${popData.change_pct}%`
-                                  : '-2.4%'
+                                  : '—'
                               }
                               trendUp={popData?.change_pct ? popData.change_pct > 0 : false}
                               icon={<Users />}
@@ -2480,8 +2378,8 @@ function SimulatorDashboard({
                             <StatCard
                               onClick={() => setActiveDrawer('cannibalization')}
                               title="카니발리제이션 위험"
-                              value={`${simResult?.riskLevel ?? 'Low'} (12%)`}
-                              trend="안전 권역"
+                              value={simResult?.riskLevel != null ? simResult.riskLevel : '—'}
+                              trend="—"
                               trendUp={true}
                               icon={<AlertTriangle className="text-indigo-400" />}
                               sparkline="M 0 30 Q 20 25, 40 28 T 80 25 T 100 30"
@@ -4345,10 +4243,67 @@ function pathToScene(
   if (pathname === '/joinus') return 'joinus';
   if (pathname === '/explore') return 'accordion';
   if (pathname === '/simulator') return 'simulator';
+  if (pathname.startsWith('/dashboard')) return 'simulator';
   if (pathname === '/contact') return 'contact';
   if (pathname === '/hq') return 'hq';
   if (pathname === '/login') return 'login';
   return 'intro';
+}
+
+/**
+ * DashboardOutlet — `/dashboard` nested route 의 layout shell.
+ * - simResult / brandName / businessType / savedHistoryId 를 store + auth 로부터 읽어
+ *   <Outlet context={...}> 로 자식 라우트(Hub/Predict/Analyze/Abm)에 전달.
+ * - simResult 가 없으면 /simulator 로 redirect (시뮬 미실행 시 직접 진입 차단).
+ * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
+ */
+function DashboardOutlet() {
+  const simResult = useSimulationStore((s) => s.result);
+  const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const { user, brand } = useAuth();
+  const brandName = user?.company_name || brand?.brand_name || '';
+  const businessType: string | null = null;
+
+  const [modalContent, setModalContent] = useState<DetailModalContent | null>(null);
+  const openModal = (content: DetailModalContent) => setModalContent(content);
+
+  console.log('[H4-debug-Outlet] render', { hasSimResult: !!simResult });
+  useEffect(() => {
+    console.log('[H4-debug-Outlet] mount');
+    return () => console.log('[H4-debug-Outlet] unmount');
+  }, []);
+
+  if (!simResult) {
+    console.log('[H4-debug-Outlet] -> redirect /simulator (simResult null)');
+    return <Navigate to="/simulator" replace />;
+  }
+
+  return (
+    <div
+      data-dashboard-scroll
+      className="relative h-screen overflow-y-scroll custom-scrollbar bg-[#0C0B0A] pb-16 text-stone-100"
+      style={{ overscrollBehaviorY: 'contain' }}
+    >
+      <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
+      <DetailModal modalContent={modalContent} onClose={() => setModalContent(null)} />
+    </div>
+  );
+}
+
+/** Hub index 라우트 — DashboardOutlet 의 simResult 를 store 에서 다시 읽어 DashboardHub 렌더.
+ *  DashboardOutlet 의 null guard 가 이미 통과한 시점에서만 마운트되므로 simResult 는 항상 non-null. */
+function DashboardHubRouteElement() {
+  const simResult = useSimulationStore((s) => s.result);
+  const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const { user, brand } = useAuth();
+  if (!simResult) return <Navigate to="/simulator" replace />;
+  return (
+    <DashboardHub
+      simResult={simResult}
+      brandName={user?.company_name || brand?.brand_name || ''}
+      savedHistoryId={savedHistoryId}
+    />
+  );
 }
 
 export default function App() {
@@ -4542,10 +4497,25 @@ export default function App() {
                       </ProtectedRoute>
                     }
                   />
+                  {/* /dashboard nested route — 시뮬 완료 후 진입.
+                      DashboardOutlet 이 store.result null guard + DetailModal host. */}
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <DashboardOutlet />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<DashboardHubRouteElement />} />
+                    <Route path="predict" element={<DashboardPredictPage />} />
+                    <Route path="analyze" element={<DashboardAnalyzePage />} />
+                    <Route path="abm" element={<DashboardAbmPage />} />
+                  </Route>
                   <Route
                     path="/hq"
                     element={
-                      <ProtectedRoute requireRole="master">
+                      <ProtectedRoute>
                         <HQCommandCenter />
                       </ProtectedRoute>
                     }
@@ -4605,12 +4575,23 @@ export default function App() {
                     <span className="text-border">/</span>
                     <button
                       onClick={() => {
-                        // 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
-                        // (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
+                        // 1. 시뮬레이터 result 상태 → history.back() 호출 → popstate 리스너가 idle로 복귀
+                        //    (브라우저 뒤로가기와 동일한 코드 경로 → 히스토리 정합성 유지)
                         if (scene === 'simulator' && reportState === 'result') {
                           window.history.back();
                           return;
                         }
+                        // 2. react-router 페이지(/dashboard/*, /hq, /hq/*) → 직전 페이지로 복귀
+                        //    SimulationHistoryDetail 같은 페이지에서 BACK 시 intro로 튕기던 버그 fix
+                        if (
+                          location.pathname.startsWith('/dashboard/') ||
+                          location.pathname === '/hq' ||
+                          location.pathname.startsWith('/hq/')
+                        ) {
+                          navigate(-1);
+                          return;
+                        }
+                        // 3. scene-based fallback (intro/accordion/login)
                         transitionTo(scene === 'simulator' ? 'accordion' : 'intro');
                       }}
                       className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"

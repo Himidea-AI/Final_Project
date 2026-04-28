@@ -509,10 +509,13 @@ async def district_ranking_node(state: AgentState) -> dict:
                 and r.get("district") != _cached_winner
                 and r.get("district") in _target_dists_set
             ][:3]
+            # winner_pool[0]은 사용자 선택 동 중 1위 = _cached_winner. 점수도 거기서 가져와야
+            # verdict의 동 이름과 점수가 일치한다. 이전엔 _cached_ranked[0](마포 16동 전체 1위)의
+            # 점수를 사용해 "공덕동 (63.8점)"처럼 다른 동의 점수가 표시되는 거짓 양성이 있었다.
             _cached_winner_score = 0
-            if _cached_ranked:
-                _first = _cached_ranked[0] if isinstance(_cached_ranked[0], dict) else {}
-                _cached_winner_score = _first.get("final_score") or _first.get("score") or 0
+            if _winner_pool:
+                _first = _winner_pool[0] if isinstance(_winner_pool[0], dict) else {}
+                _cached_winner_score = _first.get("score") or 0
             cached_ranking_attr = build_attribution(
                 agent_id="district_ranking",
                 display_name="행정동 랭킹",
@@ -653,10 +656,12 @@ async def district_ranking_node(state: AgentState) -> dict:
             except Exception:
                 pass
 
+    # winner_row는 사용자 선택 동 중 1위 = winner. 점수도 거기서 가져와야 verdict의
+    # 동 이름과 점수가 일치한다. 이전엔 ranked[0](마포 16동 전체 1위) 점수를 사용해
+    # 다른 동의 점수가 표시되는 거짓 양성이 있었다 (캐시 path도 동일 fix).
     _winner_score = 0
-    if ranked:
-        _first_ranked = ranked[0] if isinstance(ranked[0], dict) else {}
-        _winner_score = _first_ranked.get("final_score") or _first_ranked.get("score") or 0
+    if winner_row:
+        _winner_score = winner_row.get("score") or 0
     _sources = ["district_sales", "golmok_rent", "seoul_adstrd_flpop"]
     if operfit_map:
         _sources.extend(["dong_subway_access", "bus_boarding_daily", "seoul_adstrd_fclty"])

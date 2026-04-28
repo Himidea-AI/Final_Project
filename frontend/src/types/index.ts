@@ -487,3 +487,18 @@ export interface LegalChecklistItem {
   text: string;
   isRequired?: boolean;
 }
+
+// ──────────────────────────────────────────────────────────
+// Dashboard 3그룹 IA (2026-04-28) — 출처별 재구조
+// ──────────────────────────────────────────────────────────
+
+export type MainTab = 'predict' | 'analyze' | 'abm';
+
+export type PredictSubTab =
+  | 'summary'
+  | 'sales_forecast'
+  | 'financial_sim'
+  | 'customer_flow'
+  | 'emerging_district';
+
+export type AnalyzeSubTab = 'ai_summary' | 'market' | 'demographic' | 'legal' | 'agent_insight';

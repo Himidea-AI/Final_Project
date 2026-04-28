@@ -1583,11 +1583,11 @@ class SimulationHistory(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     # index=True 는 복합 idx_simhist_manager_created 의 leftmost prefix 와 중복되므로 제거
+    # ForeignKey 제거: alembic a3b4c5d6e7f8 가 FK drop — master 본인 시뮬은 manager_id가 users.id 가리킴 (manager_users 외 ref)
     manager_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("manager_users.id", ondelete="CASCADE"),
         nullable=False,
-        comment="매니저 ID",
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id (user_type 필드로 구분)",
     )
     client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
 

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, CheckCircle, XCircle, Loader2, CheckCircle2, Building2 } from 'lucide-react';
 import { useToast } from '../../../components/Toast';
+import { useAuth } from '../../../auth/AuthContext';
 
 interface Props {
   onSuccess: () => void;
@@ -62,6 +63,7 @@ const errorClass = 'text-[10px] text-red-400 mt-1';
 
 export default function ManagerSignupForm({ onSuccess }: Props) {
   const { showToast } = useToast();
+  const auth = useAuth();
 
   // 1단계: 초대코드 검증
   const [inviteCode, setInviteCode] = useState('');
@@ -149,6 +151,13 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
       });
       const data = await res.json();
       if (data.status === 'success') {
+        if (data.access_token && data.user) {
+          auth.login(
+            { ...data.user, role: 'manager', plan: data.user.plan ?? '' },
+            null,
+            data.access_token,
+          );
+        }
         onSuccess();
       } else {
         setSubmitError(data.message || '가입 중 오류가 발생했습니다.');

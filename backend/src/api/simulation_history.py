@@ -6,9 +6,9 @@
 - GET    /simulation-history/{id}  — 상세
 - DELETE /simulation-history/{id}  — 삭제
 
-권한: 본인(manager_id=토큰 sub) 이력만 R/W.
-role='manager' 또는 role='master' 모두 본인 user_id 범위로 적용.
-(master가 하위 매니저 이력 조회는 Phase 2.)
+권한:
+- master(팀장): 본인 이력 + 소속 매니저 이력 조회/삭제 가능.
+- manager: 본인 이력만 R/W.
 """
 
 from __future__ import annotations
@@ -73,6 +73,8 @@ def list_history(
     manager_uuid = _to_uuid(user.user_id)
     raw = svc.list_history(
         manager_id=manager_uuid,
+        role=user.role,
+        owner_id=user.owner_id,
         client_name=client_name,
         from_date=from_date,
         to_date=to_date,
@@ -89,7 +91,7 @@ def get_history(
     user: UserContext = Depends(get_current_user),
 ) -> SimulationHistoryDetail:
     manager_uuid = _to_uuid(user.user_id)
-    detail = svc.get_history_detail(history_id=history_id, manager_id=manager_uuid)
+    detail = svc.get_history_detail(history_id=history_id, manager_id=manager_uuid, role=user.role)
     if detail is None:
         raise HTTPException(status_code=404, detail="이력을 찾을 수 없거나 접근 권한이 없습니다")
     return SimulationHistoryDetail(**detail)
@@ -101,7 +103,7 @@ def delete_history(
     user: UserContext = Depends(get_current_user),
 ) -> Response:
     manager_uuid = _to_uuid(user.user_id)
-    deleted = svc.delete_history(history_id=history_id, manager_id=manager_uuid)
+    deleted = svc.delete_history(history_id=history_id, manager_id=manager_uuid, role=user.role)
     if not deleted:
         raise HTTPException(status_code=404, detail="이력을 찾을 수 없거나 접근 권한이 없습니다")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

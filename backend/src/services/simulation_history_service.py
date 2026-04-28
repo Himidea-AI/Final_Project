@@ -71,6 +71,8 @@ def create_history(
 def list_history(
     *,
     manager_id: UUID,
+    role: str = "manager",
+    owner_id: Optional[str] = None,
     client_name: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
@@ -78,27 +80,35 @@ def list_history(
     size: int = 20,
     sort: str = "created_at_desc",
 ) -> dict[str, Any]:
-    """필터 조건 AND 결합. 페이지네이션. 본인 manager_id만."""
-    where = ["manager_id = :manager_id"]
+    """필터 조건 AND 결합. 페이지네이션.
+
+    master(팀장): 본인 + 소속 매니저 이력 모두 조회.
+    manager: 본인 이력만.
+    """
+    if role == "master":
+        # 팀장 본인 이력 + 소속 매니저 이력
+        where = [
+            "(sh.manager_id = :manager_id OR sh.manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
+        ]
+    else:
+        where = ["sh.manager_id = :manager_id"]
     params: dict[str, Any] = {"manager_id": str(manager_id)}
 
     if client_name and client_name.strip():
-        where.append("client_name ILIKE :client_pattern")
+        where.append("sh.client_name ILIKE :client_pattern")
         params["client_pattern"] = f"%{client_name.strip()}%"
 
     if from_date is not None:
-        where.append("created_at >= :from_date")
+        where.append("sh.created_at >= :from_date")
         params["from_date"] = datetime.combine(from_date, datetime.min.time())
 
     if to_date is not None:
         # 포함 끝 — 다음날 00:00 미만
-        where.append("created_at < :to_date_exclusive")
-        params["to_date_exclusive"] = datetime.combine(
-            to_date + timedelta(days=1), datetime.min.time()
-        )
+        where.append("sh.created_at < :to_date_exclusive")
+        params["to_date_exclusive"] = datetime.combine(to_date + timedelta(days=1), datetime.min.time())
 
     where_sql = " AND ".join(where)
-    order_sql = "created_at DESC" if sort == "created_at_desc" else "client_name ASC"
+    order_sql = "sh.created_at DESC" if sort == "created_at_desc" else "sh.client_name ASC"
     offset = max(0, (page - 1) * size)
     params["limit"] = size
     params["offset"] = offset
@@ -106,16 +116,18 @@ def list_history(
     engine = get_sync_engine(_db_url())
     with engine.connect() as conn:
         total = conn.execute(
-            text(f"SELECT COUNT(*) FROM simulation_history WHERE {where_sql}"),
+            text(f"SELECT COUNT(*) FROM simulation_history sh WHERE {where_sql}"),
             params,
         ).scalar_one()
 
         rows = conn.execute(
             text(
                 f"""
-                SELECT id, client_name, district, brand_name, business_type,
-                       ai_verdict_summary, market_entry_signal, created_at
-                FROM simulation_history
+                SELECT sh.id, sh.client_name, sh.district, sh.brand_name, sh.business_type,
+                       sh.ai_verdict_summary, sh.market_entry_signal, sh.created_at,
+                       sh.manager_id, mu.contact_name AS manager_name
+                FROM simulation_history sh
+                LEFT JOIN manager_users mu ON mu.id = sh.manager_id
                 WHERE {where_sql}
                 ORDER BY {order_sql}
                 LIMIT :limit OFFSET :offset
@@ -132,19 +144,26 @@ def list_history(
     }
 
 
-def get_history_detail(*, history_id: int, manager_id: UUID) -> Optional[dict[str, Any]]:
-    """본인 이력만. 없거나 타인 소유면 None."""
+def get_history_detail(*, history_id: int, manager_id: UUID, role: str = "manager") -> Optional[dict[str, Any]]:
+    """master: 본인+소속 매니저 이력 조회. manager: 본인만. master 는 manager_name 까지 노출."""
+    if role == "master":
+        access_filter = "(sh.manager_id = :manager_id OR sh.manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
+    else:
+        access_filter = "sh.manager_id = :manager_id"
+
     engine = get_sync_engine(_db_url())
     with engine.connect() as conn:
         row = conn.execute(
             text(
-                """
-                SELECT id, manager_id, client_name, district, brand_name, business_type,
-                       scenario, simulation_result,
-                       ai_verdict_summary, market_entry_signal,
-                       created_at, updated_at
-                FROM simulation_history
-                WHERE id = :history_id AND manager_id = :manager_id
+                f"""
+                SELECT sh.id, sh.manager_id, sh.client_name, sh.district, sh.brand_name, sh.business_type,
+                       sh.scenario, sh.simulation_result,
+                       sh.ai_verdict_summary, sh.market_entry_signal,
+                       sh.created_at, sh.updated_at,
+                       mu.contact_name AS manager_name
+                FROM simulation_history sh
+                LEFT JOIN manager_users mu ON mu.id = sh.manager_id
+                WHERE sh.id = :history_id AND {access_filter}
                 """
             ),
             {"history_id": history_id, "manager_id": str(manager_id)},
@@ -152,15 +171,22 @@ def get_history_detail(*, history_id: int, manager_id: UUID) -> Optional[dict[st
     return dict(row._mapping) if row else None
 
 
-def delete_history(*, history_id: int, manager_id: UUID) -> bool:
-    """본인 이력만 삭제. 삭제 성공 True, 대상 없으면 False."""
+def delete_history(*, history_id: int, manager_id: UUID, role: str = "manager") -> bool:
+    """master: 본인+소속 매니저 이력 삭제 가능. manager: 본인만. 삭제 성공 True."""
+    if role == "master":
+        access_filter = (
+            "(manager_id = :manager_id OR manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
+        )
+    else:
+        access_filter = "manager_id = :manager_id"
+
     engine = get_sync_engine(_db_url())
     with engine.begin() as conn:
         result = conn.execute(
             text(
-                """
+                f"""
                 DELETE FROM simulation_history
-                WHERE id = :history_id AND manager_id = :manager_id
+                WHERE id = :history_id AND {access_filter}
                 """
             ),
             {"history_id": history_id, "manager_id": str(manager_id)},

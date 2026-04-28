@@ -34,18 +34,27 @@ const LEVEL_CLS: Record<string, { strip: string; text: string; label: string }> 
   LOW: { strip: 'bg-emerald-500', text: 'text-emerald-400', label: '참고사항' },
 };
 
+// risk_level 두 패턴 정규화: HIGH/MEDIUM/LOW + danger/caution/safe.
+// safe → LOW (안전군), 기타 fallback → MEDIUM (보수적 처리)
 function normalizeLevel(level: string): 'HIGH' | 'MEDIUM' | 'LOW' {
   const up = level.toUpperCase();
-  if (up === 'HIGH' || up === 'MEDIUM' || up === 'LOW') return up;
+  if (up === 'HIGH' || up === 'DANGER') return 'HIGH';
+  if (up === 'MEDIUM' || up === 'CAUTION') return 'MEDIUM';
+  if (up === 'LOW' || up === 'SAFE') return 'LOW';
   return 'MEDIUM';
 }
 
 export function InsightsGrid({ simResult, legalOnly }: Props) {
   const [tab, setTab] = useState<Tab>('legal');
   const [selected, setSelected] = useState<LegalRisk | null>(null);
+  // 안전 항목 (LOW/safe) 펼침 토글 — 본부 영업팀 빠른 판단을 위한 노이즈 정리
+  const [expandedSafe, setExpandedSafe] = useState(false);
 
   const legalAgent = simResult.agent_attributions?.find((a) => a.id === 'legal');
   const risks = simResult.legal_risks ?? [];
+  // 위험군 (HIGH + MEDIUM) 우선 표시, 안전군 (LOW) 카운트 + expand
+  const hazardRisks = risks.filter((r) => normalizeLevel(r.risk_level) !== 'LOW');
+  const safeRisks = risks.filter((r) => normalizeLevel(r.risk_level) === 'LOW');
   const compIntel = simResult.competitor_intel as Record<string, any> | null | undefined;
   const opportunities = (compIntel?.key_opportunities ?? []) as string[];
   const riskTexts = (compIntel?.key_risks ?? []) as string[];
@@ -112,16 +121,16 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {risks.map((r, i) => {
+                {/* 위험군 (HIGH/MEDIUM) — 항상 디테일 표시 */}
+                {hazardRisks.map((r, i) => {
                   const lvl = normalizeLevel(r.risk_level);
                   const cls = LEVEL_CLS[lvl];
                   return (
                     <tr
-                      key={`${r.type}-${i}`}
+                      key={`hazard-${r.type}-${i}`}
                       onClick={() => setSelected(r)}
-                      className="cursor-pointer border-b border-stone-700/50 last:border-b-0 hover:bg-stone-700/40"
+                      className="cursor-pointer border-b border-stone-700/50 hover:bg-stone-700/40"
                     >
-                      {/* 위험도 색 띠 — HTML 표준 tr border 렌더 불안정 회피, absolute로 첫 td 좌측에 3px */}
                       <td className="relative p-3 pl-4 font-mono text-xs text-stone-400">
                         <span
                           className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-r ${cls.strip}`}
@@ -143,6 +152,62 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
                     </tr>
                   );
                 })}
+
+                {/* 안전군 (LOW) — 카운트 toggle row + expand 시 디테일 */}
+                {safeRisks.length > 0 && (
+                  <tr
+                    onClick={() => setExpandedSafe((v) => !v)}
+                    className="cursor-pointer border-b border-stone-700/50 bg-stone-900/40 hover:bg-stone-800/60"
+                  >
+                    <td className="relative p-3 pl-4 font-mono text-xs text-stone-500">
+                      <span
+                        className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r bg-emerald-500/60"
+                        aria-hidden="true"
+                      />
+                      —
+                    </td>
+                    <td colSpan={4} className="p-3 text-xs font-bold text-emerald-400/80">
+                      안전 항목 {safeRisks.length}건 검토됨
+                      <span className="ml-2 text-stone-500 font-normal">
+                        (참고사항 — 위험군 아님)
+                      </span>
+                    </td>
+                    <td className="p-3 text-right text-stone-400">{expandedSafe ? '▾' : '▸'}</td>
+                  </tr>
+                )}
+
+                {/* 안전군 펼침 시 디테일 (위험군 다음) */}
+                {expandedSafe &&
+                  safeRisks.map((r, i) => {
+                    const lvl = normalizeLevel(r.risk_level);
+                    const cls = LEVEL_CLS[lvl];
+                    return (
+                      <tr
+                        key={`safe-${r.type}-${i}`}
+                        onClick={() => setSelected(r)}
+                        className="cursor-pointer border-b border-stone-700/50 bg-stone-900/20 last:border-b-0 hover:bg-stone-700/40"
+                      >
+                        <td className="relative p-3 pl-4 font-mono text-xs text-stone-500">
+                          <span
+                            className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-r ${cls.strip}`}
+                            aria-hidden="true"
+                          />
+                          {hazardRisks.length + i + 1}
+                        </td>
+                        <td className="p-3 text-sm text-stone-300">
+                          {LEGAL_TYPE_LABEL[r.type] || r.type}
+                        </td>
+                        <td className={`p-3 text-xs font-bold ${cls.text}`}>● {cls.label}</td>
+                        <td className="p-3 text-right text-sm text-stone-400">
+                          {r.articles?.length ?? 0}
+                        </td>
+                        <td className="p-3 text-right text-sm text-stone-400">
+                          {r.checklist?.length ?? 0}
+                        </td>
+                        <td className="p-3 text-right text-stone-500">›</td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           )}

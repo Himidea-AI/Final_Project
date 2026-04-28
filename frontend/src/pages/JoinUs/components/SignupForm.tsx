@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Eye, EyeOff, CheckCircle, XCircle, Loader2, ChevronRight, CreditCard } from 'lucide-react';
 import type { SignupFormData } from '../types';
 import { PLANS } from '../constants/plans';
+import { useAuth } from '../../../auth/AuthContext';
 
 const INITIAL: SignupFormData = {
   companyName: '',
@@ -58,6 +59,7 @@ interface Props {
 }
 
 export default function SignupForm({ planName, onSuccess }: Props) {
+  const auth = useAuth();
   const [form, setForm] = useState(INITIAL);
   const [showPw, setShowPw] = useState(false);
   const [showPwC, setShowPwC] = useState(false);
@@ -171,6 +173,10 @@ export default function SignupForm({ planName, onSuccess }: Props) {
       });
       const data = await res.json();
       if (data.status === 'success') {
+        if (data.access_token && data.user) {
+          // role 강제 spread — backend 가 role 누락해도 frontend 안전망 (ManagerSignupForm 패턴 일관)
+          auth.login({ ...data.user, role: 'master' }, data.brand ?? null, data.access_token);
+        }
         onSuccess();
       } else {
         setSubmitError(data.message || '가입 중 오류가 발생했습니다.');
