@@ -82,21 +82,75 @@ class Persona:
     full_profile: str  # 캐시 대상 (~500 tok)
 
 
+# home_dong 매칭 archetype 우선 비율 — 30% 는 다양성(noise) 보존
+_HOME_MATCH_PROB = 0.7
+
+
+def _pick_archetype_for(home_dong: str | None, rng: random.Random) -> dict:
+    """home_dong 의 preferred_dongs 매칭 archetype 우선 (70%), 다양성 보존 (30%).
+
+    학술 근거: Argyle et al. 2023 — synthetic persona 의 joint distribution 정합성.
+    home_dong 별 archetype 분포가 다르도록 → spatial autocorrelation ↑.
+
+    Args:
+        home_dong: agent.home_dong 값. None/"" 이거나 매칭 동이 없으면 others 풀에서 random.
+        rng: 재현 가능한 random.Random 인스턴스.
+
+    Returns:
+        선택된 archetype dict (f&b_owner 제외).
+    """
+    candidates = ARCHETYPES[:-1]  # f&b_owner 는 OWNER role 전용
+    if not candidates:
+        # 방어 코드: ARCHETYPES 가 1개 (f&b_owner only) 이거나 비어있는 비정상 상황
+        raise ValueError("ARCHETYPES 가 OWNER 외 archetype 을 제공하지 않습니다.")
+
+    # home_dong 정규화 — None/"" 는 매칭 0 으로 처리
+    key = home_dong or ""
+
+    matched: list[dict] = []
+    others: list[dict] = []
+    if key:
+        for arc in candidates:
+            prefs = arc["preferred_dongs"]
+            # 정확 매칭 우선
+            if key in prefs:
+                matched.append(arc)
+                continue
+            # 부분 매칭 — "홍대(서교)" ↔ "서교동" 같은 비표준 표기 허용
+            if any(key in pref or pref in key for pref in prefs):
+                matched.append(arc)
+            else:
+                others.append(arc)
+    else:
+        others = list(candidates)
+
+    if matched and rng.random() < _HOME_MATCH_PROB:
+        return rng.choice(matched)
+    if others:
+        return rng.choice(others)
+    # 모든 archetype 이 matched 면 (희박) — matched 에서 선택
+    return rng.choice(matched)
+
+
 def assign_personas(
     agents: list[Agent],
     seed: int = 42,
 ) -> dict[int, Persona]:
-    """Tier S 에이전트들에게 아키타입 기반 페르소나 부여."""
+    """Tier S 에이전트들에게 아키타입 기반 페르소나 부여.
+
+    home_dong 과 archetype.preferred_dongs 가 매칭되도록 가중 샘플링 (70%/30%).
+    학술 현실성 + thought 자연스러움 ↑ + 같은 home_dong 끼리 cache 효율 ↑.
+    """
     rng = random.Random(seed)
     out: dict[int, Persona] = {}
 
     for a in agents:
         if a.persona_id is None and a.tier.value == "S":
-            # 점주는 owner 아키타입, 나머지는 일반
+            # 점주는 owner 아키타입, 나머지는 home_dong 매칭
             if a.role == Role.OWNER:
                 arc = ARCHETYPES[-1]
             else:
-                arc = rng.choice(ARCHETYPES[:-1])
+                arc = _pick_archetype_for(a.home_dong, rng)
             a.persona_id = arc["id"]
             out[a.agent_id] = Persona(
                 archetype_id=arc["id"],

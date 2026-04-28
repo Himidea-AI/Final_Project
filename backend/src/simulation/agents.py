@@ -106,6 +106,9 @@ class Agent:
     spent_today: float = 0.0
     current_dong: str = ""
     last_action: str = "rest"
+    # 시각화용 — 매 hour decide() 결과를 저장해 trajectory[].action 으로 노출.
+    # frontend AbmPersonaMap 이 rest/visit/work/move 분기 렌더에 사용.
+    current_action: str = "rest"
 
     # Tier S만 사용
     persona_id: str | None = None
@@ -440,6 +443,9 @@ class Agent:
     # -----------------------------------------------------------
     def apply(self, dec: Decision, world: "World") -> None:
         self.last_action = dec.action
+        # 시각화 풍선/dot 분기용 — frontend AbmPersonaMap 이 rest/visit/work/move 로 렌더.
+        # decide() 결과 (Decision.action) 을 hour 루프 trajectory append 가 참조.
+        self.current_action = dec.action
 
         if dec.action == "move" and dec.target_dong:
             self.current_dong = dec.target_dong

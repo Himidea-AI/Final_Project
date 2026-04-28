@@ -37,7 +37,7 @@ def _load_subway_centroids() -> dict[str, dict[str, Any]]:
         for row in csv.DictReader(f):
             try:
                 code = row["dong_code"]
-                if not code.startswith("114"):
+                if not code.startswith("1144"):
                     continue
                 out[row["dong_name"]] = {
                     "center_lat": float(row["center_lat"]),
@@ -132,3 +132,20 @@ def get_dong_spots(dong_name: str, limit: int = 4) -> list[dict[str, Any]]:
         )
 
     return spots[:limit]
+
+
+def get_all_mapo_spots(per_dong: int = 3) -> list[dict[str, Any]]:
+    """마포 16동 전체 spot pool — ABM 시각화의 마포 전체 dot spread 용.
+
+    Args:
+        per_dong: 동 별 spot 수 (default 3, 16동 × 3 = 48 spot).
+
+    Returns:
+        [{id, label, lat, lng, tier}, ...] 마포 16동 전체 합집합.
+        지하철 centroid (S tier) 1개 + 매장 (A/B tier) per_dong-1 개 / 동.
+    """
+    centroids = _load_subway_centroids()
+    all_spots: list[dict[str, Any]] = []
+    for dong_name in centroids.keys():
+        all_spots.extend(get_dong_spots(dong_name, limit=per_dong))
+    return all_spots
