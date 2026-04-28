@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Activity, Play } from 'lucide-react';
+import VacancySpotMarker from './VacancySpotMarker';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -1742,6 +1743,15 @@ export default function AbmPersonaMap({
             className="absolute inset-0 w-full h-full"
             style={{ zIndex: 10, pointerEvents: 'none' }}
           />
+
+          {/* mode='vacancy' + vacancySpot — 빨간 펄스 마커 + 반경 500m 원 */}
+          {mode === 'vacancy' && vacancySpot && mapLoaded && mapInstanceRef.current && (
+            <VacancySpotMarker
+              map={mapInstanceRef.current}
+              lat={vacancySpot.lat}
+              lng={vacancySpot.lng}
+            />
+          )}
 
           {/* 하단 — 결과 통계 or 실행 버튼 */}
           <div className="absolute bottom-4 left-0 right-0 px-4 z-20 flex flex-col items-center gap-3">
