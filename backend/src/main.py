@@ -364,6 +364,7 @@ async def _predict_single_district(
     industry_code: str,
     industry_name: str,
     cost_config: dict,
+    segment_profile: dict | None = None,
 ) -> DistrictPredictionResult:
     """단일 동 ML 예측 실행 (/predict 병렬 호출용)"""
     from models.interface import ModelOutput
@@ -380,6 +381,7 @@ async def _predict_single_district(
             industry_name,
             cost_config,
             "tcn",
+            segment_profile,
         )
     except ExcludedComboError:
         return DistrictPredictionResult(district=dong_name, dong_code=dong_code, is_excluded_combo=True)
@@ -427,6 +429,9 @@ async def _predict_single_district(
         closure_rate=sim_result.get("closure_rate"),
         closure_risk=sim_result.get("closure_risk"),
         shap_result=shap_result,
+        customer_segment=sim_result.get("customer_segment"),
+        living_pop_forecast=sim_result.get("living_pop_forecast"),
+        emerging_signal=sim_result.get("emerging_signal"),
     )
 
 
@@ -1372,11 +1377,27 @@ async def predict_districts(input_data: SimulationInput):
         monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
     )
 
+    target_age = getattr(input_data, "target_age_groups", None) or []
+    target_gender = getattr(input_data, "target_gender", None)
+    target_time = getattr(input_data, "target_time_slots", None) or []
+    target_day = getattr(input_data, "target_day_type", None)
+    segment_profile: dict | None = None
+    if target_age or target_gender or target_time or target_day:
+        segment_profile = {
+            "age_groups": target_age,
+            "gender": target_gender,
+            "time_slots": target_time,
+            "day_type": target_day,
+        }
+
     print(f"--- [/predict] {target_districts} / {normalized_biz} 병렬 ML 예측 시작 ---")
 
     results: list[DistrictPredictionResult] = list(
         await asyncio.gather(
-            *[_predict_single_district(dong, industry_code, normalized_biz, cost_config) for dong in target_districts]
+            *[
+                _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
+                for dong in target_districts
+            ]
         )
     )
 
