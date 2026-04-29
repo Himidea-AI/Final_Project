@@ -4,7 +4,7 @@
  * 기존 App.tsx inline 대시보드의 dashboardMode('map'|'abm') 플로우를 탭으로 이관.
  * 플로우:
  *   1) AgentMapVisualizer — 마포 지도 + 공실 마커 + 경쟁점. 공실 클릭 시
- *      /api/simulate-abm 호출로 1000 에이전트 × 1일 시뮬 실행
+ *      /api/simulate-abm 호출로 5000 에이전트 × 1일 시뮬 실행
  *   2) AbmPersonaMap — 결과 수신 후 페르소나 행동 시뮬 오버레이
  *   3) "뒤로" → AgentMapVisualizer 복귀
  *
@@ -97,11 +97,14 @@ export function AbmTab({ simResult, brandName, businessType }: Props) {
           business_type: businessType ?? 'cafe',
           brand_name: brandName || '신규 매장',
           langgraph_result: r?._raw ?? r,
-          n_agents: 1000,
+          n_agents: 5000,
           days: 1,
           spot_lat: params.spotLat,
           spot_lon: params.spotLon,
           scenario: params.scenario,
+          // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 시각화에 필요.
+          // backend default False 라 명시적으로 true 전달.
+          enable_llm_thought: true,
         }),
       });
       const data = await res.json();
@@ -235,6 +238,8 @@ export function AbmTab({ simResult, brandName, businessType }: Props) {
           targetDistrict={targetDistrict}
           vacancySpots={vacancySpots}
           focusSpot={focusSpot}
+          mode="general"
+          competitors={competitors}
           onClearResult={handleClearResult}
           onSpotClick={handleAbmSpotClick}
           onRunSimulation={handleRunSimulation}

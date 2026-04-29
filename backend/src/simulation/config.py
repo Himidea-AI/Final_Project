@@ -6,10 +6,20 @@ from dataclasses import dataclass
 
 
 # ---------------------------------------------------------------
-# Agent Tier 분포 (총 1000명 기준)
+# Agent Tier 분포 (절대 카운트 — % 아님 주의)
 # ---------------------------------------------------------------
 @dataclass
 class TierDistribution:
+    """Tier S/A/B 절대 에이전트 수 (퍼센트 아님).
+
+    기본값은 1000 agents 기준 50/200/750 (5%/20%/75%).
+    `ModelConfig.n_personas` 로 PopulationMix 가 scale 될 때 runner.py 가
+    이 분포도 비례 scale 한다 (5000 agents → S=250 / A=1000 / B=3750).
+
+    main.py /simulate-abm 처럼 `TierDistribution(5, 20, 75)` 으로 % 비율을
+    넣어도 동일 scale 룰이 적용돼 결과적으로 같은 분포가 나온다.
+    """
+
     tier_s: int = 50  # 풀 LLM (Haiku + cache) — 대표 페르소나
     tier_a: int = 200  # SLM (Gemini Flash-Lite) — 간단한 결정
     tier_b: int = 750  # 규칙 기반 (LLM 0) — 통계 분포

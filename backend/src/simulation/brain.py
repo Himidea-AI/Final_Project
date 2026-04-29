@@ -37,6 +37,11 @@ class CallStats:
     tier_a_input_tokens: int = 0
     tier_a_output_tokens: int = 0
     failures: int = 0
+    # Thought (시각화용 내적 독백) — smart_decide 와 분리 카운트
+    thought_calls: int = 0
+    thought_input_tokens: int = 0
+    thought_output_tokens: int = 0
+    thought_cache_read: int = 0
 
 
 class LLMBrain:
@@ -642,3 +647,136 @@ class LLMBrain:
             return Decision(action="rest", target_dong=agent.current_dong)
 
         return Decision(action="rest", target_dong=agent.current_dong)
+
+    # -----------------------------------------------------------
+    # Thought generator — Tier S 50명만 시각화용 한국어 내적 독백
+    # 의사결정과 분리: trajectory 풍선/페르소나 카드 demo 용
+    # -----------------------------------------------------------
+    def generate_thought(
+        self,
+        agent: "Agent",
+        world: "World",
+    ) -> str:
+        """Tier S agent 의 12자 이내 한국어 thought 1문장.
+
+        Args:
+            agent: Agent 인스턴스 (archetype, mood, hunger 참조).
+            world: World 인스턴스 (current_hour, weather 참조).
+
+        Returns:
+            12자 이내 한국어 (마침표 없음). LLM 실패/키 부재 시
+            dialog_templates 의 hardcoded 문장 fallback.
+
+        비용:
+            gpt-4.1-mini 기준 평균 326 input + 10 output token / call.
+            Tier S 50명 × 24h = 1,200 call → cache 활성 시 ~$0.05/시뮬.
+
+        설계:
+            - 의사결정에 영향 X (Decision 반환 X) — Pearson r=0.95 보존
+            - prompt cache 활용: 동일 system prompt 매 call 재사용
+            - parallel batch 호출은 runner.py 가 asyncio.gather 로 처리
+        """
+        archetype = getattr(agent, "persona_id", "office_worker") or "office_worker"
+        hour = world.current_hour % 24
+        weather = getattr(world, "weather", "맑음")
+        mood_label = "high" if agent.mood > 0.66 else "low" if agent.mood < 0.33 else "neutral"
+        hunger = round(agent.hunger, 2)
+        # dong 정보 — thought 텍스트가 실제 dot 위치와 일치해야 함 (mismatch fix)
+        # 외부 시간엔 home_dong 으로 fallback (외부 dot 시각화는 ext skip 처리됨)
+        current_dong = getattr(agent, "current_dong", None) or getattr(agent, "home_dong", None) or "마포"
+        if current_dong == "외부":
+            current_dong = getattr(agent, "home_dong", None) or "마포"
+
+        # mock / 키 부재 → template fallback
+        if self.cfg.mock_mode or self._openai is None:
+            return self._thought_template_fallback(archetype, hour)
+
+        try:
+            resp = self._openai.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {"role": "system", "content": _THOUGHT_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"archetype={archetype}, hour={hour}, weather={weather}, "
+                            f"mood={mood_label}, hunger={hunger}, dong={current_dong}"
+                        ),
+                    },
+                ],
+                max_tokens=30,
+                temperature=1.2,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+            usage = resp.usage
+            self.stats.thought_calls += 1
+            if usage:
+                self.stats.thought_input_tokens += usage.prompt_tokens
+                self.stats.thought_output_tokens += usage.completion_tokens
+                cached_obj = getattr(usage, "prompt_tokens_details", None)
+                cached_n = getattr(cached_obj, "cached_tokens", 0) if cached_obj else 0
+                self.stats.thought_cache_read += cached_n
+            return text or self._thought_template_fallback(archetype, hour)
+        except Exception:
+            self.stats.failures += 1
+            return self._thought_template_fallback(archetype, hour)
+
+    def _thought_template_fallback(self, archetype: str, hour: int) -> str:
+        """LLM 실패 시 dialog_templates 의 hardcoded 문장 fallback ($0)."""
+        from .dialog_templates import TEMPLATES, pick_dialog
+
+        # Unknown archetype → office_worker default ("..." 회피)
+        arch = archetype if archetype in TEMPLATES else "office_worker"
+
+        if 12 <= hour <= 13:
+            situation = "lunch_decide"
+        elif 18 <= hour <= 20:
+            situation = "evening_decide"
+        elif 21 <= hour <= 23:
+            situation = "rest"
+        else:
+            situation = "morning_visit_cafe"
+        return pick_dialog(arch, situation, hour, self._rng)
+
+
+# ---------------------------------------------------------------------------
+# Thought generator system prompt (cache 대상 — 매 call 동일 텍스트로 90% discount)
+# ---------------------------------------------------------------------------
+_THOUGHT_SYSTEM_PROMPT = """당신은 마포구 시민 ABM 의 내적 독백 생성기입니다.
+주어진 페르소나(archetype) + 상황(hour, weather, mood, hunger) 에 따라
+12자 이내 한국어 1문장 (마침표 없이) 으로 "지금 뭐가 땡기는지" 출력.
+
+archetype (dialog_templates.py 8 종 일치 — 어휘를 archetype 에 강하게 맞출 것):
+- creative_freelancer: 라떼/감성 카페/와이파이/작업/디저트/사진/플레이리스트
+- office_worker: 회의/카페인/점심/회식/메일/김밥/가성비/팀
+- broadcasting_staff: 야식/편의점/촬영/대본/스튜디오/24시/컵라면
+- student_couple: 데이트/신상/SNS/인스타/홍대/카페투어/사진
+- retired_local: 단골/시장/된장/국밥/막걸리/벤치/산책/늘 가던
+- young_parent: 키즈/아이/주차/배달/주말/가족/유모차
+- tourist_foreign: 한식/포토스팟/시장/명물/구경/처음
+- f&b_owner: 매출/경쟁/직원/원가/회식/세무/벤치마킹
+
+규칙 (반드시 지킬 것):
+- 12자 이내, 마침표/따옴표 없음
+- archetype 고유 어휘 1개 이상 포함 (위 vocab 참조)
+- weather/mood/hunger 변수가 출력에 반영되어야 함 (비→실내, mood low→짧게, hunger 0.7+→음식 명시)
+- **dong (현재 위치) 정보 일관성 — 매우 중요**:
+  * 입력으로 받은 `dong=공덕동` 같은 현재 위치를 자연스럽게 반영
+  * 그 동에서 활동하는 표현 우선 ("공덕 카페 가야지", "지금 있는 곳 근처")
+  * 다른 동 가고 싶을 땐 명시적 이동 표현 ("연남까지 가야겠다", "홍대 들를까")
+  * **금지: 현재 dong 과 모순되는 어휘** — 예: dong=공덕동 인데 "홍대 카페투어" (현재 공덕에 있는 student_couple → "공덕 카페 한 번", "연남까지 가볼까" 가 자연스러움)
+- 다양성 원칙 — 다음 패턴 금지:
+  * "따뜻한 ~ 한잔" 류 안전 답변 회피
+  * "땡기네/생각나네" 어미 반복 회피 — 다양한 어미 사용 (할까/먹자/가야지/들를까/시키자/단골 가자)
+  * 같은 명사 반복 금지 (커피 → 라떼/아메리카노/모카/콜드브루 등 구체화)
+- 출력 예시 (좋음):
+  * creative + 비 + 14시 + dong=합정동: "합정 카페 작업하자"
+  * office + 12시 + dong=공덕동: "공덕 김밥 먹자"
+  * retired + 19시 + dong=대흥동: "단골 국밥집 가야지"
+  * student_couple + 14시 + dong=서교동: "홍대 카페투어 가자"
+  * student_couple + 14시 + dong=공덕동: "연남까지 가볼까"  ← 다른 동 표현
+  * f&b_owner + 9시 + dong=상암동: "원가 점검 먼저"
+- 출력 예시 (나쁨, 회피):
+  * "따뜻한 국물이 땡기네" — 너무 일반적
+  * "달달한 커피 한잔" — archetype 어휘 부재
+  * dong=공덕동 인데 "홍대 카페투어 가자" — 현재 위치와 모순 (가려면 "홍대 가야지" 처럼 이동 표현)"""

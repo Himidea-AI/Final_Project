@@ -1157,6 +1157,19 @@ async def get_mapo_spots(dong_name: str, limit: int = 4):
     return {"dong_name": dong_name, "spots": spots}
 
 
+@app.get("/mapo/spots-all")
+async def get_mapo_spots_all(per_dong: int = 3):
+    """마포 16동 전체 spot pool (ABM 시각화 마포 전체 dot spread 용).
+
+    동 별 per_dong 개 spot (지하철 + 매장) 합집합 = 16 × per_dong spot.
+    AbmPersonaMap 가 마포 전체 spot 풀에서 agent source/target 분배.
+    """
+    from src.services.mapo_spots import get_all_mapo_spots
+
+    spots = get_all_mapo_spots(per_dong=per_dong)
+    return {"per_dong": per_dong, "spots": spots, "n_spots": len(spots)}
+
+
 @app.get("/population/live")
 async def get_live_population(dongs: str | None = None):
     """
@@ -1334,6 +1347,8 @@ class AbmSimulationRequest(BaseModel):
     # 공실 스팟 클릭 시 그 좌표 (optional) — 지도에 매장 정확히 찍기 위해
     spot_lat: float | None = None
     spot_lon: float | None = None
+    # Tier S 50 LLM thought 활성 (default off, 비용 발생 — demo 시나리오용)
+    enable_llm_thought: bool = False
 
 
 @app.post("/simulate-abm")
@@ -1365,6 +1380,13 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     analysis_metrics = lr.get("analysis_metrics", {})
     market_report = lr.get("market_report") or {}
 
+    # 신규 매장 popularity_boost — runner 내부 default 1.0 (중립) 은
+    # RDS 실데이터(도화동 음식점 115개 등) 환경에서 신규 매장 weight 가
+    # 기존 ~100개 이상 매장에 묻혀 visits=0 이 빈번. vacancy_inject.py
+    # 가 정의한 DEFAULT_POPULARITY_BOOST=5.0 (인스타·블로그 마케팅 효과
+    # 가정) 를 본 endpoint 에서도 동일하게 사용해 sample 신호 확보.
+    from src.simulation.vacancy_inject import DEFAULT_POPULARITY_BOOST as _NEW_STORE_BOOST
+
     new_store_spec = {
         "district": req.target_district,
         "brand": req.brand_name,
@@ -1377,6 +1399,8 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         # 공실 스팟 클릭 시 좌표 (Optional) — 지도에 정확한 위치 표시
         "lat": req.spot_lat,
         "lon": req.spot_lon,
+        # 신규 매장 weight 부스트 — 기존 매장 (~100+개) 와 경쟁할 수 있도록
+        "popularity_boost": _NEW_STORE_BOOST,
     }
 
     pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
@@ -1411,9 +1435,13 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "date": req.scenario.date_override,
         "weekend": req.scenario.weekend_force,
         "rent_shock": req.scenario.rent_shock_pct,
+        "enable_llm_thought": req.enable_llm_thought,
     }
+    # cache 버전 prefix — 응답 schema 변경(trajectory/thoughts 추가) 시 bump 해 기존 캐시 무효화.
+    # v2: collect_trajectory=True 회귀 fix + thoughts 필드 (2026-04-28).
+    # v3: 신규 매장 popularity_boost=5.0 적용 (visits=0 회귀 fix, 2026-04-28).
     cache_key = (
-        "abm_sim:"
+        "abm_sim:v3:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -1442,6 +1470,10 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             use_profiles=True,
             scenario=scenario,
             days=req.days,
+            enable_llm_thought=req.enable_llm_thought,
+            # ⚠️ 누락 시 trajectory=None 반환 → 프론트 trajectory 기반 렌더 전부 차단.
+            # vacancy_evaluation 엔드포인트는 정상 전달 중 — 여기만 누락된 회귀였음.
+            collect_trajectory=True,
         )
     except Exception as e:
         logger.error(f"[ABM] 시뮬레이션 실패: {e}")
@@ -1498,10 +1530,18 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "cannibalization": result.get("cannibalization", {}),
         "narrator_summary": target_narrator,
         "trajectory": result.get("trajectory"),  # 미로피쉬 재생용
+        # 5000 agent 전체 시간별 위치 집계 — frontend 히트맵 layer (28×24 격자, ~43KB).
+        "density_grid": result.get("density_grid"),
         # 신규 매장(공실 스팟 클릭) 지표 — 프론트 결과 카드용
         "new_store_visits": result.get("new_store_visits", 0),
         "new_store_revenue": result.get("new_store_revenue", 0.0),
         "new_store_visit_share_pct": result.get("new_store_visit_share_pct", 0.0),
+        # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채워짐
+        "thoughts": result.get("thoughts", []),
+        "thought_calls": result.get("thought_calls", 0),
+        "thought_input_tokens": result.get("thought_input_tokens", 0),
+        "thought_output_tokens": result.get("thought_output_tokens", 0),
+        "thought_cached_tokens": result.get("thought_cached_tokens", 0),
         # 캐시 여부 (cache miss 라 False)
         "cached": False,
         # 원본 LangGraph 분석 결과 — 수정 없음

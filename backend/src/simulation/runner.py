@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .agents import spawn_agents
+from .agents import Agent, Role, Tier, spawn_agents
 from .brain import LLMBrain
 from .config import (
     MAPO_DONGS,
@@ -166,6 +167,83 @@ def _dump_sidecar(base_path: str | Path, suffix: str, rows: list[dict]) -> None:
         _json.dump(rows, f, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------------------
+# Tier S thought 생성 헬퍼 — 매 hour 50명 LLM 호출 (시각화 풍선용)
+# ---------------------------------------------------------------------------
+def _select_thought_agents(agents: list[Agent], n: int = 50) -> list[Agent]:
+    """Tier S agent 중 n 명 선택 (안정 순서 + ext 후순위).
+
+    PopulationMix 5x scale 시 Tier S 250명까지 가능 → LLM 비용 제어 위해
+    절대값 cap. 50명 × 24h = 1,200 calls/day.
+
+    선택 우선순위:
+        1) non-ext (resident/commuter/visitor/owner): 마포 안에서 활동 → 시각화 풍선 안정
+        2) ext (ext_commuter/ext_visitor): 외부 시간엔 hour 루프에서 skip 되어 호출 효율 ↓
+
+    5000 agents 시뮬에서 ext 비율이 ~80% 라 ext 가 Tier S 풀의 대부분을 차지하면
+    매 hour active_thought_agents 가 1~2명까지 떨어져 thought 호출 수가 30회 수준으로
+    급감 (예상 100~120회 대비 1/4). non-ext 우선 선택으로 활성 hour 비율을 높인다.
+    각 그룹 내부는 agent_id 오름차순 (안정 순서, 회귀 보호).
+    """
+    tier_s = [a for a in agents if a.tier == Tier.S]
+    tier_s.sort(key=lambda a: a.agent_id)
+    non_ext = [a for a in tier_s if a.role not in (Role.EXT_COMMUTER, Role.EXT_VISITOR)]
+    ext = [a for a in tier_s if a.role in (Role.EXT_COMMUTER, Role.EXT_VISITOR)]
+    return (non_ext + ext)[:n]
+
+
+async def _generate_thought_with_retry(
+    brain: LLMBrain,
+    agent: Agent,
+    world,
+    max_retries: int = 3,
+) -> str:
+    """generate_thought 를 to_thread 로 wrap + exponential backoff retry.
+
+    rate-limit 보호: 1s, 2s, 4s 간 재시도. 모두 실패 시 빈 문자열 반환.
+    """
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            return await asyncio.to_thread(brain.generate_thought, agent, world)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"[thought] agent#{agent.agent_id} 실패 ({max_retries}회): {e}")
+                return ""
+            await asyncio.sleep(delay)
+            delay *= 2
+    return ""
+
+
+async def _batch_generate_thoughts(
+    brain: LLMBrain,
+    agents: list[Agent],
+    world,
+) -> list[str]:
+    """50 agents 동시 호출 (asyncio.gather). 직렬 0.86s × 50 → ~1s."""
+    tasks = [_generate_thought_with_retry(brain, a, world) for a in agents]
+    return await asyncio.gather(*tasks, return_exceptions=False)
+
+
+def _run_thought_batch(
+    brain: LLMBrain,
+    agents: list[Agent],
+    world,
+) -> list[str]:
+    """동기 컨텍스트에서 호출 가능한 entry. asyncio.run 으로 실행."""
+    if not agents:
+        return []
+    try:
+        return asyncio.run(_batch_generate_thoughts(brain, agents, world))
+    except RuntimeError:
+        # 이미 이벤트 루프 안 (Jupyter/uvloop) → 새 루프 생성
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(_batch_generate_thoughts(brain, agents, world))
+        finally:
+            loop.close()
+
+
 def _dump_partial(
     save_path: str | Path,
     *,
@@ -238,10 +316,20 @@ class SimulationResult:
     cannibalization: dict = field(default_factory=dict)
     narrator_summary: str = ""
     trajectory: list | None = None
+    # 5000 agent 전체 시간별 위치 집계 (히트맵 — 마포 bbox 28×24 격자).
+    # frontend AbmPersonaMap 의 히트맵 layer 가 hour 별 셀 카운트 → hue/alpha 렌더.
+    # trajectory 는 300 sample dot 시각화용, density_grid 는 전체 5000 집계.
+    density_grid: dict | None = None
     # 신규 매장(공실 스팟 클릭) 의 시뮬 결과 — 프론트 결과 카드용
     new_store_visits: int = 0
     new_store_revenue: float = 0.0
     new_store_visit_share_pct: float = 0.0  # 전체 방문 중 점유율 (%)
+    # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채움
+    thoughts: list = field(default_factory=list)  # [{day, hour, agent_id, archetype, thought, lat, lon}, ...]
+    thought_calls: int = 0
+    thought_input_tokens: int = 0
+    thought_output_tokens: int = 0
+    thought_cached_tokens: int = 0
 
     def get(self, key: str, default=None):
         """dict-like access — B1 엔드포인트 result.get() 호환."""
@@ -279,6 +367,7 @@ def run_simulation(
     memory_seed_days: int = 14,
     warmup_days: int = 0,
     llm_base_cache: str | Path | None = None,
+    enable_llm_thought: bool = False,
 ) -> SimulationResult:
     pop = pop or PopulationMix()
     tier = tier or TierDistribution()
@@ -298,6 +387,31 @@ def run_simulation(
                 ext_commuters=max(0, int(pop.ext_commuters * scale)),
                 ext_visitors=max(0, int(pop.ext_visitors * scale)),
             )
+            # TierDistribution 도 PopulationMix 와 동일 scale 로 비례 조정.
+            # 미적용 시 5000 agents 시뮬에서 Tier S 가 절대값 5명에 머물러
+            # spawn_agents 가 의도된 Tier 비율을 만들지 못함 (e.g. main.py 의
+            # TierDistribution(5, 20, 75) 는 % 의도였으나 실제로는 절대 카운트).
+            tier_total = tier.tier_s + tier.tier_a + tier.tier_b
+            if tier_total > 0 and tier_total != cfg.n_personas:
+                tier_scale = cfg.n_personas / tier_total
+                tier = TierDistribution(
+                    tier_s=max(0, int(tier.tier_s * tier_scale)),
+                    tier_a=max(0, int(tier.tier_a * tier_scale)),
+                    tier_b=max(0, int(tier.tier_b * tier_scale)),
+                )
+            # spawn_agents 는 (tier_s + tier_a) <= 실제 agent 수 를 요구.
+            # int 절삭 차이로 초과되지 않도록 안전 clamp (B 가 흡수).
+            actual_pop_total = (
+                pop.residents + pop.commuters + pop.visitors + pop.owners + pop.ext_commuters + pop.ext_visitors
+            )
+            if tier.tier_s + tier.tier_a > actual_pop_total:
+                if tier.tier_s + tier.tier_a > 0:
+                    ratio = actual_pop_total / (tier.tier_s + tier.tier_a)
+                    tier = TierDistribution(
+                        tier_s=int(tier.tier_s * ratio),
+                        tier_a=int(tier.tier_a * ratio),
+                        tier_b=0,
+                    )
             # Policy 모드가 기본 ON (B1 호환)
             use_policy = True
 
@@ -384,7 +498,11 @@ def run_simulation(
             f" / 외부통근{ext_c} / 외부방문{ext_v} (총{pop.residents + pop.commuters + pop.visitors + pop.owners + ext_c + ext_v})",
             flush=True,
         )
-        print(f"  Tier: S={tier.tier_s} / A={tier.tier_a} / B={tier.tier_b}", flush=True)
+        print(
+            f"  Tier(절대값): S={tier.tier_s}명 / A={tier.tier_a}명 / B={tier.tier_b}명"
+            f" (총 {tier.tier_s + tier.tier_a + tier.tier_b}명)",
+            flush=True,
+        )
         print(f"  모드: {'MOCK' if cfg.mock_mode else 'API'}", flush=True)
         print(f"  Days: {days}, Hours/day: {time_cfg.total_steps}", flush=True)
 
@@ -494,8 +612,15 @@ def run_simulation(
     trajectory: list[dict] = []
     visits_log: list[dict] = []
     chats_log: list[dict] = []
-    _need_trajectory = bool(trajectory_path) or collect_trajectory
+    thoughts_log: list[dict] = []
+    # thought 도 trajectory 처럼 dong_coords 가 필요 → 활성 시 강제 로드
+    _need_trajectory = bool(trajectory_path) or collect_trajectory or enable_llm_thought
     dong_coords = _load_dong_coords() if _need_trajectory else {}
+
+    # Tier S 50 명만 thought 생성 (LLM 비용 cap)
+    thought_agents: list[Agent] = _select_thought_agents(agents, n=50) if enable_llm_thought else []
+    if enable_llm_thought and verbose:
+        print(f"  [thought] LLM thought 활성: Tier S {len(thought_agents)}명, 매 hour 호출", flush=True)
     # 인메모리 샘플링 — 1000 agents 전부 보내면 payload 과대, sample_size 만큼만 수집
     _trajectory_sample_ids: set[int] = set()
     if collect_trajectory and agents:
@@ -504,6 +629,27 @@ def run_simulation(
         _r = _sample_rng.Random(seed)
         sample_n = min(trajectory_sample_size, len(agents))
         _trajectory_sample_ids = {a.agent_id for a in _r.sample(agents, sample_n)}
+
+    # ⚠️ Tier S thought 대상은 항상 trajectory 에 포함 — 풍선/PersonaCard 가시성 필수.
+    # 미적용 시 50 thought 와 300 random sample 의 교집합 ~15명만 dot 으로 보임 →
+    # 외부 필터 + displayHour 필터 후 ~5명만 풍선. handoff doc:
+    # docs/api/2026-04-28-abm-trajectory-action-field.md (P1 핵심 버그 섹션).
+    if enable_llm_thought and thought_agents:
+        _trajectory_sample_ids |= {a.agent_id for a in thought_agents}
+
+    # 5000 agent 전체 위치 집계 (히트맵용) — 마포 bbox × 80×64 격자(셀 ~75m × ~70m).
+    # trajectory(300 sample) 와 별개로 모든 agent 합산 → 정확한 시간별 유동인구 시각화.
+    # cell payload: 80×64 × 16h × 4byte = ~328KB (gzip 후 ~30KB) — 가독성 ↑ 비용 ↓.
+    DENSITY_MIN_LAT = 37.535
+    DENSITY_MIN_LON = 126.888
+    DENSITY_MAX_LAT = 37.580
+    DENSITY_MAX_LON = 126.955
+    DENSITY_COLS = 80
+    DENSITY_ROWS = 64
+    _density_d_lat = (DENSITY_MAX_LAT - DENSITY_MIN_LAT) / DENSITY_ROWS
+    _density_d_lon = (DENSITY_MAX_LON - DENSITY_MIN_LON) / DENSITY_COLS
+    density_hours: dict[str, list[int]] = {}
+    density_max: int = 0
 
     # 에이전트 홈 좌표 (동 center)
     def _home_coord(a) -> tuple[float, float] | None:
@@ -654,6 +800,8 @@ def run_simulation(
                                 "spend": float(dec.spend),
                                 "menu_name": ordered["name"] if ordered else None,
                                 "menu_price": ordered["price"] if ordered else None,
+                                # visit event 로 명시 — frontend visit-pulse 렌더 트리거.
+                                "action": "visit",
                             }
                         )
                 if memory_index is not None and dec.action != "rest":
@@ -687,6 +835,31 @@ def run_simulation(
                         if st and st.lat and st.lon:
                             visited_now[aid] = (st.lat, st.lon)
 
+                # 히트맵 — 모든 agent (sample 무관) 의 hour 별 격자 셀 카운트.
+                # trajectory loop 와 별개. 외부 / 좌표 없음 skip.
+                abs_hour_key = str(day * 24 + res.hour)
+                density_cells = density_hours.get(abs_hour_key)
+                if density_cells is None:
+                    density_cells = [0] * (DENSITY_COLS * DENSITY_ROWS)
+                    density_hours[abs_hour_key] = density_cells
+                for a in agents:
+                    if a.current_dong == "외부":
+                        continue
+                    if a.agent_id in visited_now:
+                        d_lat, d_lon = visited_now[a.agent_id]
+                    else:
+                        d_coord = dong_coords.get(a.current_dong)
+                        if not d_coord:
+                            continue
+                        d_lat, d_lon = d_coord
+                    d_r = int((DENSITY_MAX_LAT - d_lat) / _density_d_lat)
+                    d_c = int((d_lon - DENSITY_MIN_LON) / _density_d_lon)
+                    if 0 <= d_r < DENSITY_ROWS and 0 <= d_c < DENSITY_COLS:
+                        d_idx = d_r * DENSITY_COLS + d_c
+                        density_cells[d_idx] += 1
+                        if density_cells[d_idx] > density_max:
+                            density_max = density_cells[d_idx]
+
                 _iter_agents = (
                     [a for a in agents if a.agent_id in _trajectory_sample_ids]
                     if collect_trajectory and _trajectory_sample_ids
@@ -714,7 +887,9 @@ def run_simulation(
                             "day": day,
                             "hour": res.hour,
                             "dong": a.current_dong,
-                            "action": a.last_action,
+                            # frontend AbmPersonaMap 이 rest/visit/work/move 로 dot 분기 렌더.
+                            # default "rest" — None 이면 frontend `String(null) === 'null'`.
+                            "action": a.current_action or "rest",
                             "tier": a.tier.value,
                             "role": a.role.value,
                             "lat": lat,
@@ -747,11 +922,43 @@ def run_simulation(
                             }
                         )
 
+            # 매 시간 Tier S 50명 LLM thought 생성 (시각화용 풍선)
+            # ext_commuter/ext_visitor 가 외부에 있을 때는 skip (지도 표시 X)
+            # 주의: scheduler.step 이 world.current_hour 를 이미 +1 증가시킴 → res.hour 가
+            #       의미상 "방금 진행한 시간" 이므로 generate_thought 호출 시 임시로 복원했다
+            #       원복.
+            if enable_llm_thought and thought_agents and not is_warmup:
+                _saved_hour = world.current_hour
+                world.current_hour = res.hour  # generate_thought 가 참조하는 시간 정합
+                try:
+                    active_thought_agents = [a for a in thought_agents if a.current_dong != "외부"]
+                    if active_thought_agents:
+                        thoughts = _run_thought_batch(brain, active_thought_agents, world)
+                        for a, thought in zip(active_thought_agents, thoughts):
+                            if not thought:
+                                continue
+                            coord = dong_coords.get(a.current_dong)
+                            thoughts_log.append(
+                                {
+                                    "day": day,
+                                    "hour": res.hour,
+                                    "agent_id": a.agent_id,
+                                    "archetype": a.persona_id or "office_worker",
+                                    "thought": thought,
+                                    "lat": coord[0] if coord else None,
+                                    "lon": coord[1] if coord else None,
+                                }
+                            )
+                finally:
+                    world.current_hour = _saved_hour
+
             # 매 시간 trajectory 증분 덤프 (라이브 움직임 시각화)
             if trajectory_path and trajectory:
                 _dump_trajectory(trajectory_path, trajectory)
                 _dump_sidecar(trajectory_path, "visits", visits_log)
                 _dump_sidecar(trajectory_path, "chats", chats_log)
+                if enable_llm_thought:
+                    _dump_sidecar(trajectory_path, "thoughts", thoughts_log)
 
             # 매 시간 partial save (라이브 dashboard용)
             if save_path is not None:
@@ -883,6 +1090,13 @@ def run_simulation(
         )
         print(f"  토큰 (A): in={brain.stats.tier_a_input_tokens} / out={brain.stats.tier_a_output_tokens}")
         print(f"  추정 비용: ${cost['total_usd']:.4f} (S=${cost['tier_s_usd']:.4f}, A=${cost['tier_a_usd']:.4f})")
+        if enable_llm_thought:
+            print(
+                f"  Thought: {brain.stats.thought_calls}회 호출 "
+                f"(in={brain.stats.thought_input_tokens} / "
+                f"cache_r={brain.stats.thought_cache_read} / "
+                f"out={brain.stats.thought_output_tokens})"
+            )
         print("\n  매출 TOP 5:")
         for s in top_stores[:5]:
             print(f"    [{s.store_id}] {s.name} ({s.dong}) - 방문 {s.visits_today} / 매출 {int(s.revenue_today):,}원")
@@ -920,9 +1134,25 @@ def run_simulation(
         cannibalization=cannibalization_val,
         narrator_summary=narrator_summary_val,
         trajectory=trajectory if trajectory else None,
+        density_grid=(
+            {
+                "bbox": [DENSITY_MIN_LAT, DENSITY_MIN_LON, DENSITY_MAX_LAT, DENSITY_MAX_LON],
+                "cols": DENSITY_COLS,
+                "rows": DENSITY_ROWS,
+                "hours": density_hours,
+                "max_count": density_max,
+            }
+            if density_hours
+            else None
+        ),
         new_store_visits=new_store_visits_val,
         new_store_revenue=new_store_revenue_val,
         new_store_visit_share_pct=new_store_visit_share_pct_val,
+        thoughts=thoughts_log if enable_llm_thought else [],
+        thought_calls=brain.stats.thought_calls,
+        thought_input_tokens=brain.stats.thought_input_tokens,
+        thought_output_tokens=brain.stats.thought_output_tokens,
+        thought_cached_tokens=brain.stats.thought_cache_read,
     )
 
     # final partial 저장 (in_progress=False로 덮어쓰기)
@@ -935,6 +1165,8 @@ def run_simulation(
         _dump_trajectory(trajectory_path, trajectory)
         _dump_sidecar(trajectory_path, "visits", visits_log)
         _dump_sidecar(trajectory_path, "chats", chats_log)
+        if enable_llm_thought:
+            _dump_sidecar(trajectory_path, "thoughts", thoughts_log)
 
         # 매장 좌표 dump
         stores_rows = [
@@ -981,10 +1213,11 @@ def run_simulation(
         _dump_sidecar(trajectory_path, "friends", friends_rows)
 
         if verbose:
+            extra = f", thoughts {len(thoughts_log):,}" if enable_llm_thought else ""
             print(
                 f"  [trajectory] {len(trajectory):,}건, "
                 f"visits {len(visits_log):,}, chats {len(chats_log):,}, "
-                f"stores {len(stores_rows):,}, friends {len(friends_rows):,} 저장",
+                f"stores {len(stores_rows):,}, friends {len(friends_rows):,}{extra} 저장",
                 flush=True,
             )
 
