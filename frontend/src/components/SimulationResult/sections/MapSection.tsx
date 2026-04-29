@@ -107,8 +107,7 @@ export function MapSection({ simResult }: Props) {
   const district = sim.winner_district ?? sim.target_district ?? '—';
   // 회원가입 시 사업자등록번호로 받은 브랜드명 → user.company_name → fallback 순.
   // simResult.brand_name 은 백엔드가 시뮬 응답에 채울 수 있으니 우선시.
-  const brand =
-    sim.brand_name ?? authBrand?.brand_name ?? user?.company_name ?? '브랜드 미지정';
+  const brand = sim.brand_name ?? authBrand?.brand_name ?? user?.company_name ?? '브랜드 미지정';
   const businessType = sim.business_type ?? sim.biz_type ?? '—';
   const address = sim.target_address ?? '—';
 
@@ -143,7 +142,9 @@ export function MapSection({ simResult }: Props) {
           <div className="mt-0.5 text-xs text-stone-400">{businessType}</div>
           <div className="mt-2 border-t border-stone-700/60 pt-2">
             <div className="text-xs text-indigo-400">{district}</div>
-            {address !== '—' && <div className="mt-0.5 text-[0.6875rem] text-stone-500">{address}</div>}
+            {address !== '—' && (
+              <div className="mt-0.5 text-[0.6875rem] text-stone-500">{address}</div>
+            )}
             <div className="mt-1 font-mono text-[0.625rem] text-stone-500">
               {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
             </div>
@@ -152,7 +153,9 @@ export function MapSection({ simResult }: Props) {
 
         {/* Layer 6 — 좌하단 범례 패널 */}
         <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-stone-700 bg-stone-900/75 p-3 backdrop-blur-xl">
-          <div className="mb-2 text-[0.625rem] uppercase tracking-widest text-stone-400">Legend</div>
+          <div className="mb-2 text-[0.625rem] uppercase tracking-widest text-stone-400">
+            Legend
+          </div>
           <div className="space-y-1.5 text-xs text-stone-300">
             <div className="flex items-center gap-2">
               <span className="inline-block h-3 w-3 rounded-full border border-indigo-400/80 bg-indigo-500/20" />

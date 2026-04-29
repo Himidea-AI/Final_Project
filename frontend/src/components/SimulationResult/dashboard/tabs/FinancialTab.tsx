@@ -236,7 +236,9 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
             <span className="w-1 h-1 rounded-full bg-indigo-400" />
             LightGBM · 과거 패턴
           </div>
-          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">{closure.summary_lgbm[0]}</p>
+          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">
+            {closure.summary_lgbm[0]}
+          </p>
         </div>
       )}
       <ClosureSignalsBar
@@ -250,7 +252,9 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
             <span className="w-1 h-1 rounded-full bg-cyan-400" />
             TCN · 시계열 흐름
           </div>
-          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">{closure.summary_tcn[0]}</p>
+          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">
+            {closure.summary_tcn[0]}
+          </p>
         </div>
       )}
       <ClosureSignalsBar

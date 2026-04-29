@@ -142,7 +142,9 @@ Authorization: Bearer <JWT>
           <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
             일별 토큰 소진
           </span>
-          <span className="text-[0.625rem] text-stone-600">peak {formatInt(maxDaily)} tokens/day</span>
+          <span className="text-[0.625rem] text-stone-600">
+            peak {formatInt(maxDaily)} tokens/day
+          </span>
         </div>
         {data.daily.length === 0 ? (
           <div className="py-8 text-center text-xs text-stone-500">해당 기간 기록 없음</div>

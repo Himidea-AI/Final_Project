@@ -53,7 +53,9 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
                   />
                 )}
               </div>
-              <span className={`text-[0.6875rem] font-black tabular-nums w-14 text-right ${labelColor}`}>
+              <span
+                className={`text-[0.6875rem] font-black tabular-nums w-14 text-right ${labelColor}`}
+              >
                 {positive ? '+' : ''}
                 {s.contribution.toFixed(2)}
               </span>

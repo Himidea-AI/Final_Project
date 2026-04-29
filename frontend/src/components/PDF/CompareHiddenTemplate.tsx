@@ -188,7 +188,9 @@ function ComparisonColumn({ item }: { item: CompareItem }) {
           <span className="rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[0.5625rem] font-mono font-bold text-indigo-700">
             {docId}
           </span>
-          <span className="text-[0.5625rem] font-mono text-slate-400">{formatDate(item.createdAt)}</span>
+          <span className="text-[0.5625rem] font-mono text-slate-400">
+            {formatDate(item.createdAt)}
+          </span>
         </div>
         <div className="text-[0.875rem] font-black text-slate-900 leading-tight truncate">
           {item.clientName}
@@ -197,7 +199,9 @@ function ComparisonColumn({ item }: { item: CompareItem }) {
           {item.brandName}
           {item.businessType && <span className="text-slate-400"> · {item.businessType}</span>}
         </div>
-        <div className="text-[0.625rem] text-indigo-600 font-bold mt-0.5">마포구 {item.district}</div>
+        <div className="text-[0.625rem] text-indigo-600 font-bold mt-0.5">
+          마포구 {item.district}
+        </div>
       </div>
 
       {/* Entry signal */}
