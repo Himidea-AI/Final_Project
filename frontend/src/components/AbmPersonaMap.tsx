@@ -412,9 +412,15 @@ export default function AbmPersonaMap({
   const tierSIdsRef = useRef<Set<number>>(new Set());
   // 4950 non-Tier-S 히트맵 격자 — hour 별 cell 카운트 (backend density_grid).
   const densityGridRef = useRef<AbmDensityGrid | null>(null);
-  // 헥사 격자 — 마포 bbox 안의 hex 좌표 + density cell 매핑 (pan/zoom 시 재계산).
+  // 헥사 격자 — 마포 polygon 안의 hex 좌표 + density cell 매핑 (pan/zoom 시 재계산).
   // 매 프레임 projection 호출 비용 회피 (2000+ hex × 60fps = 너무 비쌈).
   const hexGridRef = useRef<{ x: number; y: number; dr: number; dc: number }[]>([]);
+  // Mapo 16 dong polygon (lat/lon) — public/mapo-dong.geo.json fetch.
+  const mapoPolygonsRef = useRef<{ name: string; ring: [number, number][] }[]>([]);
+  // Mapo polygon — pixel space cache (pan/zoom 시 재투영). 외부 dark mask 그릴 때 사용.
+  const mapoPolyPixelsRef = useRef<{ x: number; y: number }[][]>([]);
+  // dong 이름 라벨용 — centroid lat/lon → 픽셀 (pan/zoom 시 갱신).
+  const [dongLabels, setDongLabels] = useState<Array<{ name: string; x: number; y: number }>>([]);
   // Phase 2: 4 거점 floating 카드 픽셀 좌표 — pan/zoom 시 갱신.
   const [keyDongPx, setKeyDongPx] = useState<Array<{ x: number; y: number }>>([]);
   // Phase 2: hover hit-test 결과 — 마우스 근처 hex 의 density 정보. 우하단 카드 표시용.
@@ -446,6 +452,26 @@ export default function AbmPersonaMap({
     weekend_force: false,
     rent_shock_pct: 0.0,
   });
+
+  // 마포 polygon GeoJSON load (1회) — public/mapo-dong.geo.json 16 동.
+  // hex 마스킹(폴리곤 내부만) + dong 라벨 표시에 사용.
+  useEffect(() => {
+    fetch('/mapo-dong.geo.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((geo) => {
+        if (!geo?.features) return;
+        const polys = geo.features.map((f: any) => ({
+          name: String(f?.properties?.dong_name ?? ''),
+          ring: (f?.geometry?.coordinates?.[0] ?? []) as [number, number][],
+        }));
+        mapoPolygonsRef.current = polys.filter(
+          (p: any) => p.name && Array.isArray(p.ring) && p.ring.length >= 3,
+        );
+        // 폴리곤 변경 → hex 격자 + dong 라벨 재계산.
+        recomputeNodePixelsRef.current?.();
+      })
+      .catch((e) => console.warn('[ABM] mapo-dong.geo.json fetch 실패:', e));
+  }, []);
 
   // 시뮬에서 받은 실제 에이전트 수로 점박이 개수 맞춤 (기본 100)
   const N_PERSONAS = abmResult?.n_personas ?? abmResult?.n_agents ?? 100;
@@ -765,6 +791,26 @@ export default function AbmPersonaMap({
       const dLonPx = bottomRight.x - topLeft.x;
       const cols = Math.ceil(dLonPx / xStep) + 1;
       const rows = Math.ceil(dLatPx / yStep) + 1;
+      // pointInPolygon — ray casting (lat/lon 공간).
+      const polys = mapoPolygonsRef.current;
+      const inMapo = (lat: number, lon: number): boolean => {
+        if (polys.length === 0) return true; // geo 미로드 시 마스킹 X (전체 통과)
+        for (const p of polys) {
+          const ring = p.ring;
+          let inside = false;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0], // lon
+              yi = ring[i][1]; // lat
+            const xj = ring[j][0],
+              yj = ring[j][1];
+            const intersect =
+              yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+            if (intersect) inside = !inside;
+          }
+          if (inside) return true; // 어느 한 dong polygon 안이면 마포 안.
+        }
+        return false;
+      };
       const newGrid: { x: number; y: number; dr: number; dc: number }[] = [];
       for (let rr = 0; rr < rows; rr++) {
         for (let cc = 0; cc < cols; cc++) {
@@ -780,12 +826,39 @@ export default function AbmPersonaMap({
           const dr = Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dg.rows);
           const dc = Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dg.cols);
           if (dr < 0 || dr >= dg.rows || dc < 0 || dc >= dg.cols) continue;
+          // 마포 polygon 안에 있는 hex 만 (한강·외부 자동 컷).
+          if (!inMapo(hexLat, hexLon)) continue;
           newGrid.push({ x: px, y: py, dr, dc });
         }
       }
       hexGridRef.current = newGrid;
     } else {
       hexGridRef.current = [];
+    }
+
+    // dong 16 centroid 픽셀 — 라벨 표시용. polygon 평균.
+    const polys = mapoPolygonsRef.current;
+    if (polys.length > 0) {
+      setDongLabels(
+        polys.map((p) => {
+          const lons = p.ring.map((c) => c[0]);
+          const lats = p.ring.map((c) => c[1]);
+          const cLon = lons.reduce((a, b) => a + b, 0) / lons.length;
+          const cLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+          const pix = proj.containerPointFromCoords(new kakao.maps.LatLng(cLat, cLon));
+          return { name: p.name, x: pix.x, y: pix.y };
+        }),
+      );
+      // 외부 dark mask 용 — 16 polygon 의 ring 을 픽셀로 캐싱.
+      mapoPolyPixelsRef.current = polys.map((p) =>
+        p.ring.map(([lon, lat]) => {
+          const px = proj.containerPointFromCoords(new kakao.maps.LatLng(lat, lon));
+          return { x: px.x, y: px.y };
+        }),
+      );
+    } else {
+      setDongLabels([]);
+      mapoPolyPixelsRef.current = [];
     }
 
     // Phase 2: 4 거점 카드 픽셀 좌표 — pan/zoom 변할 때마다 갱신.
@@ -1175,6 +1248,31 @@ export default function AbmPersonaMap({
         return;
       }
 
+      // ─── Mapo 외부 dark mask (Orion 레퍼런스 스타일) ───────────────────────
+      // canvas 전체 dark fill - 16 dong polygon 구멍 (even-odd fill rule).
+      // 마포 안만 카카오맵 보이고, 외부(한강·외부 구) 는 dim 처리.
+      const polyPixels = mapoPolyPixelsRef.current;
+      if (polyPixels.length > 0) {
+        ctx.save();
+        ctx.beginPath();
+        // 외곽 사각형 (시계방향)
+        ctx.moveTo(0, 0);
+        ctx.lineTo(W, 0);
+        ctx.lineTo(W, H);
+        ctx.lineTo(0, H);
+        ctx.closePath();
+        // 16 dong polygon — even-odd 로 자동 hole 처리.
+        for (const ring of polyPixels) {
+          if (ring.length < 3) continue;
+          ctx.moveTo(ring[0].x, ring[0].y);
+          for (let i = 1; i < ring.length; i++) ctx.lineTo(ring[i].x, ring[i].y);
+          ctx.closePath();
+        }
+        ctx.fillStyle = 'rgba(7, 7, 9, 0.78)';
+        ctx.fill('evenodd');
+        ctx.restore();
+      }
+
       // C-2: storeNodes/nodePixels 개수 불일치 시 해당 프레임 skip
       // (동 전환 직후 storeNodes는 교체되었지만 persona/nodePixels는 300ms 뒤 갱신)
       if (storeNodes.length !== nodePixelsRef.current.length) {
@@ -1234,6 +1332,29 @@ export default function AbmPersonaMap({
         const recentPay = paymentEffectsRef.current.some(
           (e) => e.nodeIdx === idx && tickRef.current - e.startTick < 30,
         );
+
+        // 경쟁업체(comp_ 접두) 는 작은 dot — 사용자 피드백: 집모양 너무 큼.
+        // 일반 마포 상점 / 공실 후보는 그대로 집 모양 유지.
+        const isCompetitor = node.id.startsWith('comp_');
+        if (isCompetitor) {
+          // 작은 4px dot — 보라 (vacancy 빨강과 구분)
+          const dotColor = recentPay ? '#FBBF24' : '#A78BFA';
+          ctx.save();
+          ctx.shadowColor = 'rgba(167, 139, 250, 0.85)';
+          ctx.shadowBlur = 6;
+          ctx.fillStyle = dotColor;
+          ctx.beginPath();
+          ctx.arc(np.x, np.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(np.x, np.y, 4, 0, Math.PI * 2);
+          ctx.stroke();
+          // 라벨 생략 (경쟁업체 다수면 산만 → 호버 시만 적정)
+          return;
+        }
 
         // 상점: 집 모양 (26×22)
         const ringColor = recentPay ? '#FBBF24' : 'rgba(255,255,255,0.8)';
@@ -1314,9 +1435,9 @@ export default function AbmPersonaMap({
           };
 
           // ─── 히트맵 layer — 헥사 격자 + 네온 글로우 (Orion 스타일 ref) ─────
-          // hex 좌표는 recomputeNodePixels 에서 사전 캐싱 (pan/zoom 시만 갱신).
-          // 색 스펙트럼: indigo #818cf8 (cool/medium) → rose #f43f5e (hot).
-          // intensity > 0.6 hex 는 네온 글로우 (shadowBlur).
+          // 사용자 피드백: Kakao 위에 hex 가 묻혀 잘 안 보임 → 마포 bbox 다크 오버레이 + source-over.
+          // 색 스펙트럼: 어두운 indigo (cool/zero) → indigo → rose (hot).
+          // intensity > 0.55 hex 는 네온 글로우 + 카운트 텍스트.
           const dg = densityGridRef.current;
           const hexes = hexGridRef.current;
           if (dg && hexes.length > 0) {
@@ -1329,8 +1450,6 @@ export default function AbmPersonaMap({
               }
               if (maxC > 0) {
                 const HEX_SIZE = 8;
-                // hex polygon path (회전 없음, flat-top): 6 vertex.
-                // (xi, yi) = HEX_SIZE × (cos(60°·i + 30°), sin(60°·i + 30°))
                 const hexPath = new Path2D();
                 for (let i = 0; i < 6; i++) {
                   const ang = (Math.PI / 3) * i + Math.PI / 6;
@@ -1341,13 +1460,13 @@ export default function AbmPersonaMap({
                 }
                 hexPath.closePath();
 
+                // 사용자 피드백: 검은 박스 제거 → bbox 다크 오버레이 삭제. hex 자체 명도 ↑.
+
+                // ② 1차 패스 — ALL hex 그리기 (v=0도 dim 색). source-over 라 카카오 위 선명.
                 ctx.save();
-                // 1차 패스 — 일반 hex (additive blending 으로 dim 색)
-                ctx.globalCompositeOperation = 'lighter';
-                const hotIndices: number[] = []; // 2차 글로우 패스용
+                const hotIndices: number[] = [];
                 for (let h = 0; h < hexes.length; h++) {
                   const hex = hexes[h];
-                  // 화면 밖 hex skip
                   if (
                     hex.x < -HEX_SIZE ||
                     hex.x > W + HEX_SIZE ||
@@ -1355,39 +1474,73 @@ export default function AbmPersonaMap({
                     hex.y > H + HEX_SIZE
                   )
                     continue;
-                  const v = cells[hex.dr * dg.cols + hex.dc];
-                  if (v <= 0) continue; // 셀 데이터 없으면 skip (마포 활동 영역 자동 마스킹)
+                  const v = cells[hex.dr * dg.cols + hex.dc] ?? 0;
                   const intensity = v / maxC; // 0~1
-                  // 색 보간: indigo #818cf8 (129,140,248) → rose #f43f5e (244,63,94).
-                  // intensity 0~1 사이 RGB lerp.
-                  const r = Math.round(129 + (244 - 129) * intensity);
-                  const g = Math.round(140 + (63 - 140) * intensity);
-                  const b = Math.round(248 + (94 - 248) * intensity);
-                  const alpha = 0.35 + 0.55 * intensity; // 0.35 ~ 0.9
+                  let r: number, g: number, b: number, alpha: number;
+                  if (v <= 0) {
+                    // dim 베이스 hex — 마포 모자이크 윤곽 표시
+                    r = 30;
+                    g = 27;
+                    b = 30;
+                    alpha = 0.5;
+                  } else {
+                    // 색 보간: indigo #818cf8 → rose #f43f5e
+                    r = Math.round(129 + (244 - 129) * intensity);
+                    g = Math.round(140 + (63 - 140) * intensity);
+                    b = Math.round(248 + (94 - 248) * intensity);
+                    alpha = 0.55 + 0.4 * intensity; // 0.55 ~ 0.95
+                  }
                   ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
                   ctx.translate(hex.x, hex.y);
                   ctx.fill(hexPath);
+                  // hex 외곽선 — 격자 선명도
+                  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                  ctx.lineWidth = 0.6;
+                  ctx.stroke(hexPath);
                   ctx.translate(-hex.x, -hex.y);
                   if (intensity > 0.55) hotIndices.push(h);
                 }
                 ctx.restore();
 
-                // 2차 패스 — hot hex 만 네온 글로우 + 외곽선
+                // ③ 2차 패스 — hot hex 네온 글로우 + 카운트 텍스트
                 if (hotIndices.length > 0) {
                   ctx.save();
-                  ctx.globalCompositeOperation = 'lighter';
-                  ctx.shadowColor = 'rgba(244, 63, 94, 0.8)';
-                  ctx.shadowBlur = 18;
+                  ctx.shadowColor = 'rgba(244, 63, 94, 0.95)';
+                  ctx.shadowBlur = 16;
                   for (const h of hotIndices) {
                     const hex = hexes[h];
-                    const v = cells[hex.dr * dg.cols + hex.dc];
-                    const intensity = v / maxC;
-                    // hot hex 한 번 더 — glow 효과 강조
-                    ctx.fillStyle = `rgba(244, 63, 94, ${(0.45 + 0.45 * intensity).toFixed(2)})`;
+                    ctx.fillStyle = 'rgba(244, 63, 94, 0.55)';
                     ctx.translate(hex.x, hex.y);
                     ctx.fill(hexPath);
                     ctx.translate(-hex.x, -hex.y);
                   }
+                  ctx.restore();
+
+                  // 카운트 텍스트 — 가장 hot 한 상위 8개 hex 에만 (산만함 방지)
+                  // intensity 내림차순 정렬해서 top N
+                  const topHot = hotIndices
+                    .slice()
+                    .sort((a, b) => {
+                      const va = cells[hexes[a].dr * dg.cols + hexes[a].dc] ?? 0;
+                      const vb = cells[hexes[b].dr * dg.cols + hexes[b].dc] ?? 0;
+                      return vb - va;
+                    })
+                    .slice(0, 8);
+                  ctx.save();
+                  ctx.font = 'bold 10px monospace';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillStyle = '#FEF3C7';
+                  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+                  ctx.lineWidth = 2.5;
+                  for (const h of topHot) {
+                    const hex = hexes[h];
+                    const v = cells[hex.dr * dg.cols + hex.dc] ?? 0;
+                    const txt = String(v);
+                    ctx.strokeText(txt, hex.x, hex.y);
+                    ctx.fillText(txt, hex.x, hex.y);
+                  }
+                  ctx.textBaseline = 'alphabetic';
                   ctx.restore();
                 }
               }
@@ -1401,6 +1554,29 @@ export default function AbmPersonaMap({
           // 사용자 피드백: "앞뒤로" 보이지 말고 "이리저리" wandering 으로.
           // 1축 perpendicular wobble (직선 양옆 진동) → lat/lon 독립 2축 Lissajous 드리프트.
           const DRIFT_LATLON = 1.8e-4;
+
+          // 마포 polygon hit-test (사용자 피드백: agent 가 hex 안에서만 움직이도록).
+          // mapoPolygonsRef 가 비어있으면 마스킹 skip (geo 미로드 시 fallback).
+          const mapoPolys = mapoPolygonsRef.current;
+          const inMapoLatLon = (lat: number, lon: number): boolean => {
+            if (mapoPolys.length === 0) return true;
+            for (const p of mapoPolys) {
+              const ring = p.ring;
+              let inside = false;
+              for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0],
+                  yi = ring[i][1];
+                const xj = ring[j][0],
+                  yj = ring[j][1];
+                const intersect =
+                  yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+                if (intersect) inside = !inside;
+              }
+              if (inside) return true;
+            }
+            return false;
+          };
+
           trajectoryPathsRef.current.forEach((path, agentId) => {
             if (path.length === 0) return;
             // virtualHour 를 둘러싼 두 waypoint 찾기 (binary search 대신 경로가 짧으므로 linear)
@@ -1450,6 +1626,8 @@ export default function AbmPersonaMap({
               Math.sin(virtualHour * 2.35 + seed * 13) * DRIFT_LATLON * 0.18 * driftScale;
             const lat = prev.lat + dLat * t + driftLat;
             const lon = prev.lon + dLon * t + driftLon + ripple;
+            // 마포 polygon 밖이면 dot 안 그림 — agent 가 hex 격자 안에서만 보이도록.
+            if (!inMapoLatLon(lat, lon)) return;
             const latLng = new kakao.maps.LatLng(lat, lon);
             const pix = proj.containerPointFromCoords(latLng);
             if (pix.x < -10 || pix.y < -10 || pix.x > W + 10 || pix.y > H + 10) return;
@@ -2030,6 +2208,31 @@ export default function AbmPersonaMap({
             className="absolute inset-0 w-full h-full"
             style={{ zIndex: 10, pointerEvents: 'none' }}
           />
+
+          {/* 16 행정동 이름 라벨 — Mapo polygon centroid 위치. */}
+          {dongLabels.length > 0 &&
+            dongLabels.map((d) => (
+              <div
+                key={`dong-${d.name}`}
+                className="absolute pointer-events-none select-none"
+                style={{
+                  left: d.x,
+                  top: d.y,
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 25,
+                }}
+              >
+                <span
+                  className="text-[10px] font-black tracking-tight text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+                  style={{
+                    textShadow:
+                      '0 0 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,1), 1px 1px 0 rgba(0,0,0,0.8)',
+                  }}
+                >
+                  {d.name}
+                </span>
+              </div>
+            ))}
 
           {/* Phase 2: 4 거점 floating glassmorphism 카드 (Orion ref). */}
           {keyDongPx.length === KEY_DONGS.length &&
