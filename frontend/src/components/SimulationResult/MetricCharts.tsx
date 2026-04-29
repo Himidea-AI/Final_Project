@@ -105,7 +105,7 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
                   if (active && payload && payload.length) {
                     return (
                       <div className="bg-white/90 backdrop-blur-md p-3 shadow-2xl rounded-xl border border-blue-50">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
+                        <p className="text-[0.625rem] font-bold text-gray-400 uppercase mb-1">
                           매출 성장률
                         </p>
                         <span className="text-xl font-black text-blue-600">
@@ -129,7 +129,7 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-[11px] text-center text-gray-400 font-medium mt-2 leading-relaxed">
+        <p className="text-[0.6875rem] text-center text-gray-400 font-medium mt-2 leading-relaxed">
           과거 12개월 대비 평균 매출이{' '}
           <span className="font-bold underline" style={{ color: themeColor }}>
             {metrics.growth_rate}% 쾌속 성장
@@ -152,7 +152,7 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
             </div>
             <h3 className="font-black text-gray-800 tracking-tight">5차원 입지 정밀 진단</h3>
           </div>
-          <span className="text-[10px] font-black bg-gray-100 px-2 py-1 rounded text-gray-500">
+          <span className="text-[0.625rem] font-black bg-gray-100 px-2 py-1 rounded text-gray-500">
             AI AGENT ENGINE v1.2
           </span>
         </div>
@@ -178,17 +178,17 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
         </div>
         <div className="grid grid-cols-3 gap-2 mt-4">
           <div className="p-3 bg-gray-50 rounded-xl text-center">
-            <p className="text-[9px] font-bold text-gray-400 uppercase">경쟁 지수</p>
+            <p className="text-[0.5625rem] font-bold text-gray-400 uppercase">경쟁 지수</p>
             <p className="text-sm font-black text-gray-700">
               {(metrics.competition_score * 10).toFixed(1)}/10
             </p>
           </div>
           <div className="p-3 bg-gray-50 rounded-xl text-center">
-            <p className="text-[9px] font-bold text-gray-400 uppercase">임대료</p>
+            <p className="text-[0.5625rem] font-bold text-gray-400 uppercase">임대료</p>
             <p className="text-sm font-black text-gray-700">{metrics.rent_affordability}</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-xl text-center">
-            <p className="text-[9px] font-bold text-gray-400 uppercase">종합 점수</p>
+            <p className="text-[0.5625rem] font-bold text-gray-400 uppercase">종합 점수</p>
             <p className="text-sm font-black text-blue-600">84.2</p>
           </div>
         </div>

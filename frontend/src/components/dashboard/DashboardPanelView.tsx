@@ -50,7 +50,7 @@ export function StatCard({
         <p className="text-[#9ca3af] text-xs font-medium">{title}</p>
         <div className="flex items-center gap-1.5">
           {subtitle && (
-            <span className="text-[9px] text-[#9ca3af] opacity-50 font-mono">{subtitle}</span>
+            <span className="text-[0.5625rem] text-[#9ca3af] opacity-50 font-mono">{subtitle}</span>
           )}
           <div className="text-[#9ca3af] opacity-50 group-hover:opacity-100 group-hover:text-indigo-400 transition-colors">
             {React.cloneElement(icon, {
@@ -63,7 +63,7 @@ export function StatCard({
         <h3 className="text-xl md:text-2xl font-black text-white tracking-tight mb-1">{value}</h3>
         <div className="flex items-center justify-between">
           <span
-            className={`text-[10px] font-bold flex items-center gap-0.5 ${trendUp ? 'text-emerald-500' : 'text-rose-500'}`}
+            className={`text-[0.625rem] font-bold flex items-center gap-0.5 ${trendUp ? 'text-emerald-500' : 'text-rose-500'}`}
           >
             {trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}{' '}
             {trend}
@@ -152,11 +152,11 @@ export function TableRow({
   };
   const dc =
     density === 'compact'
-      ? 'py-1.5 px-3 text-[10px]'
+      ? 'py-1.5 px-3 text-[0.625rem]'
       : density === 'comfortable'
         ? 'py-4 px-3 text-sm'
         : 'py-3 px-3 text-xs';
-  const statusSize = density === 'compact' ? 'text-[9px]' : 'text-[10px]';
+  const statusSize = density === 'compact' ? 'text-[0.5625rem]' : 'text-[0.625rem]';
   return (
     <>
       <tr
@@ -195,7 +195,7 @@ export function TableRow({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* 1. Mini Map — 상권 겹침 (Venn) */}
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#9ca3af]">
+                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-[#9ca3af]">
                   상권 겹침
                 </span>
                 <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex items-center justify-center">
@@ -253,10 +253,10 @@ export function TableRow({
               {/* 2. 시간대별 영향도 — 실데이터 필드 미정의 (DistrictComparison/MarketReport에 없음).
                   mock %값 노출(거짓 양성) 제거하고 모두 '—' 표시. backend 보강 시 실값 매핑. */}
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#9ca3af]">
+                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-[#9ca3af]">
                   시간대별 영향도
                 </span>
-                <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex flex-col gap-1.5 text-[10px] font-mono">
+                <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex flex-col gap-1.5 text-[0.625rem] font-mono">
                   <div className="flex justify-between">
                     <span className="text-[#9ca3af]">오전 (06-11)</span>
                     <span className="text-[#9ca3af]">—</span>
@@ -278,13 +278,15 @@ export function TableRow({
 
               {/* 3. Counterfactual — 실데이터 필드 미정의. mock '+18.4%' 제거하고 '—' 표시. */}
               <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#9ca3af]">
+                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-[#9ca3af]">
                   Counterfactual
                 </span>
                 <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex-1 flex flex-col justify-center gap-1">
-                  <p className="text-[10px] text-[#9ca3af] leading-relaxed">이 매장이 없었다면</p>
+                  <p className="text-[0.625rem] text-[#9ca3af] leading-relaxed">
+                    이 매장이 없었다면
+                  </p>
                   <p className="text-lg font-black text-[#9ca3af] font-mono leading-none">—</p>
-                  <p className="text-[9px] text-[#9ca3af]">월 매출 추가 예상</p>
+                  <p className="text-[0.5625rem] text-[#9ca3af]">월 매출 추가 예상</p>
                 </div>
               </div>
             </div>
@@ -327,12 +329,12 @@ export function InsightCard({
             <h4 className="text-[#e2e8f0] font-bold text-xs">{title}</h4>
             <span className="inline-flex items-center gap-1 shrink-0">
               <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-              <span className="text-[8px] font-mono uppercase tracking-wider text-[#9ca3af]">
+              <span className="text-[0.5rem] font-mono uppercase tracking-wider text-[#9ca3af]">
                 {severityStyle.label}
               </span>
             </span>
           </div>
-          <p className="text-[#9ca3af] text-[10px] leading-relaxed">{desc}</p>
+          <p className="text-[#9ca3af] text-[0.625rem] leading-relaxed">{desc}</p>
         </div>
       </div>
 
@@ -532,7 +534,7 @@ function DashboardPanelView({
           <MapPin className={`w-4 h-4 ${isWinner ? 'text-indigo-400' : accentColor}`} />
           <span className="font-bold text-white text-sm">{districtName}</span>
         </div>
-        <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${winnerBadgeCls}`}>
+        <span className={`px-2 py-0.5 text-[0.625rem] font-bold rounded border ${winnerBadgeCls}`}>
           {winnerLabel}
         </span>
       </div>
@@ -540,29 +542,29 @@ function DashboardPanelView({
       {/* 4 Stats Cards */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[10px] text-[#9ca3af] mb-1">예상 월 매출</p>
+          <p className="text-[0.625rem] text-[#9ca3af] mb-1">예상 월 매출</p>
           <p className="text-lg font-black text-white">{revenue}</p>
           {/* trend는 DistrictComparison에 명시 필드 없음 → 항상 '—' + 중립 회색. */}
-          <p className="text-[10px] mt-1 text-[#9ca3af]">{revenueTrend}</p>
+          <p className="text-[0.625rem] mt-1 text-[#9ca3af]">{revenueTrend}</p>
         </div>
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[10px] text-[#9ca3af] mb-1">상권 매력도</p>
+          <p className="text-[0.625rem] text-[#9ca3af] mb-1">상권 매력도</p>
           <p className="text-lg font-black text-white">{score}</p>
-          <p className="text-[10px] mt-1 text-[#9ca3af]">{scoreTrend}</p>
+          <p className="text-[0.625rem] mt-1 text-[#9ca3af]">{scoreTrend}</p>
         </div>
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[10px] text-[#9ca3af] mb-1">일 유동인구</p>
+          <p className="text-[0.625rem] text-[#9ca3af] mb-1">일 유동인구</p>
           <p className="text-lg font-black text-white">{traffic}</p>
-          <p className="text-[10px] mt-1 text-[#9ca3af]">
+          <p className="text-[0.625rem] mt-1 text-[#9ca3af]">
             {dongPop ? `피크 ${dongPop.peak_hour}시 · ${popData?.date}` : 'KT 통신망 기준'}
           </p>
         </div>
         <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[10px] text-[#9ca3af] mb-1">카니발리제이션</p>
+          <p className="text-[0.625rem] text-[#9ca3af] mb-1">카니발리제이션</p>
           <p className="text-lg font-black text-white">{risk}</p>
           {/* 위험 등급 — 실데이터(closureRateNum) 기반. mock '주의/안전 권역' 제거. */}
           <p
-            className={`text-[10px] mt-1 ${
+            className={`text-[0.625rem] mt-1 ${
               closureRateNum == null
                 ? 'text-[#9ca3af]'
                 : closureRateNum > 0.3
@@ -591,8 +593,8 @@ function DashboardPanelView({
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
               <div className="text-center px-3">
                 <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-[#3a3633]" />
-                <div className="text-[11px] font-semibold text-[#e2e8f0]">구현 예정</div>
-                <div className="mt-0.5 text-[9px] text-[#9ca3af]">
+                <div className="text-[0.6875rem] font-semibold text-[#e2e8f0]">구현 예정</div>
+                <div className="mt-0.5 text-[0.5625rem] text-[#9ca3af]">
                   market_report · {dongName || '해당 동'} 대기
                 </div>
               </div>

@@ -4,7 +4,7 @@
  * 기존 App.tsx inline 대시보드의 dashboardMode('map'|'abm') 플로우를 탭으로 이관.
  * 플로우:
  *   1) AgentMapVisualizer — 마포 지도 + 공실 마커 + 경쟁점. 공실 클릭 시
- *      /api/simulate-abm 호출로 1000 에이전트 × 1일 시뮬 실행
+ *      /api/simulate-abm 호출로 5000 에이전트 × 1일 시뮬 실행
  *   2) AbmPersonaMap — 결과 수신 후 페르소나 행동 시뮬 오버레이
  *   3) "뒤로" → AgentMapVisualizer 복귀
  *
@@ -22,6 +22,8 @@ interface Props {
   brandName?: string;
   /** 업종 (cafe/restaurant/…) — 저장된 이력이면 props로 전달, 라이브 시뮬이면 undefined 가능 */
   businessType?: string | null;
+  /** 신규 매장 평수 — backend seats=storeArea*2 + 잠식 계산에 사용. 미지정 시 simResult 에서 추출 또는 15. */
+  storeArea?: number;
 }
 
 interface FocusSpot {
@@ -39,7 +41,7 @@ interface AbmScenario {
 
 type DashboardMode = 'map' | 'abm';
 
-export function AbmTab({ simResult, brandName, businessType }: Props) {
+export function AbmTab({ simResult, brandName, businessType, storeArea }: Props) {
   const [mode, setMode] = useState<DashboardMode>('map');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [abmResult, setAbmResult] = useState<any>(null);
@@ -97,11 +99,17 @@ export function AbmTab({ simResult, brandName, businessType }: Props) {
           business_type: businessType ?? 'cafe',
           brand_name: brandName || '신규 매장',
           langgraph_result: r?._raw ?? r,
-          n_agents: 1000,
+          n_agents: 5000,
           days: 1,
           spot_lat: params.spotLat,
           spot_lon: params.spotLon,
           scenario: params.scenario,
+          // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 시각화에 필요.
+          // backend default False 라 명시적으로 true 전달.
+          enable_llm_thought: true,
+          // 신규 매장 평수 — props 우선, 없으면 simResult.storeArea, 둘다 없으면 15.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          store_area: storeArea ?? (r as any)?.storeArea ?? (r as any)?.store_area ?? 15,
         }),
       });
       const data = await res.json();
@@ -191,7 +199,7 @@ export function AbmTab({ simResult, brandName, businessType }: Props) {
           <button
             type="button"
             onClick={handleClearResult}
-            className="text-[11px] font-bold text-stone-400 hover:text-stone-100 uppercase tracking-widest"
+            className="text-[0.6875rem] font-bold text-stone-400 hover:text-stone-100 uppercase tracking-widest"
           >
             ← 지도로 돌아가기
           </button>
@@ -214,7 +222,7 @@ export function AbmTab({ simResult, brandName, businessType }: Props) {
               <span className="w-2 h-2 rounded-full bg-[#818cf8] animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
               Multi-Agent Geospatial Recommendations
             </h4>
-            <p className="text-[10px] text-stone-500 font-mono tracking-widest">
+            <p className="text-[0.625rem] text-stone-500 font-mono tracking-widest">
               AI AGENT TARGETING · {locations.length} VACANCY · {competitors.length} COMP
             </p>
           </div>
@@ -235,6 +243,8 @@ export function AbmTab({ simResult, brandName, businessType }: Props) {
           targetDistrict={targetDistrict}
           vacancySpots={vacancySpots}
           focusSpot={focusSpot}
+          mode="general"
+          competitors={competitors}
           onClearResult={handleClearResult}
           onSpotClick={handleAbmSpotClick}
           onRunSimulation={handleRunSimulation}

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .agents import spawn_agents
+from .agents import Agent, Role, Tier, spawn_agents
 from .brain import LLMBrain
 from .config import (
     MAPO_DONGS,
@@ -25,6 +27,32 @@ from .scheduler import Scheduler
 from .policy_generator import generate_policies
 from .world import World, seed_synthetic_world
 from .world_loader import StoreHoursMap, load_subway_inflow_csv, load_world_from_rds
+
+
+# ---------------------------------------------------------------------------
+# Module-level static-data cache — /simulate-abm 매 호출마다 재로드되던
+# 무거운 정적 데이터(파일/RDS aggregation) 를 첫 호출 후 메모리에 보관.
+# 첫 호출: 30~40s setup, 이후: ~0s setup. uvicorn 재시작 시 무효.
+# ---------------------------------------------------------------------------
+_STATIC_CACHE: dict = {}
+_WEATHER_TTL_SEC = 1800  # 날씨는 30분 TTL — 너무 오래 캐시하면 시뮬 부정확
+
+
+def _cached(key: str, loader, ttl: float | None = None):
+    """key 별 lazy load + 옵션 TTL. loader 는 인자 없는 함수."""
+    now = time.time()
+    entry = _STATIC_CACHE.get(key)
+    if entry is not None:
+        ts, val = entry
+        if ttl is None or (now - ts) < ttl:
+            return val
+    val = loader()
+    _STATIC_CACHE[key] = (now, val)
+    return val
+
+
+# KT prior helper 제거됨 — 순수 ABM 동적 유동인구로 회귀.
+# 5000 agent 가 정책 기반 의사결정으로 hour 별 위치 변함 → 이게 곧 유동인구.
 
 
 def _load_dong_coords() -> dict[str, tuple[float, float]]:
@@ -166,6 +194,83 @@ def _dump_sidecar(base_path: str | Path, suffix: str, rows: list[dict]) -> None:
         _json.dump(rows, f, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------------------
+# Tier S thought 생성 헬퍼 — 매 hour 50명 LLM 호출 (시각화 풍선용)
+# ---------------------------------------------------------------------------
+def _select_thought_agents(agents: list[Agent], n: int = 50) -> list[Agent]:
+    """Tier S agent 중 n 명 선택 (안정 순서 + ext 후순위).
+
+    PopulationMix 5x scale 시 Tier S 250명까지 가능 → LLM 비용 제어 위해
+    절대값 cap. 50명 × 24h = 1,200 calls/day.
+
+    선택 우선순위:
+        1) non-ext (resident/commuter/visitor/owner): 마포 안에서 활동 → 시각화 풍선 안정
+        2) ext (ext_commuter/ext_visitor): 외부 시간엔 hour 루프에서 skip 되어 호출 효율 ↓
+
+    5000 agents 시뮬에서 ext 비율이 ~80% 라 ext 가 Tier S 풀의 대부분을 차지하면
+    매 hour active_thought_agents 가 1~2명까지 떨어져 thought 호출 수가 30회 수준으로
+    급감 (예상 100~120회 대비 1/4). non-ext 우선 선택으로 활성 hour 비율을 높인다.
+    각 그룹 내부는 agent_id 오름차순 (안정 순서, 회귀 보호).
+    """
+    tier_s = [a for a in agents if a.tier == Tier.S]
+    tier_s.sort(key=lambda a: a.agent_id)
+    non_ext = [a for a in tier_s if a.role not in (Role.EXT_COMMUTER, Role.EXT_VISITOR)]
+    ext = [a for a in tier_s if a.role in (Role.EXT_COMMUTER, Role.EXT_VISITOR)]
+    return (non_ext + ext)[:n]
+
+
+async def _generate_thought_with_retry(
+    brain: LLMBrain,
+    agent: Agent,
+    world,
+    max_retries: int = 3,
+) -> str:
+    """generate_thought 를 to_thread 로 wrap + exponential backoff retry.
+
+    rate-limit 보호: 1s, 2s, 4s 간 재시도. 모두 실패 시 빈 문자열 반환.
+    """
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            return await asyncio.to_thread(brain.generate_thought, agent, world)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"[thought] agent#{agent.agent_id} 실패 ({max_retries}회): {e}")
+                return ""
+            await asyncio.sleep(delay)
+            delay *= 2
+    return ""
+
+
+async def _batch_generate_thoughts(
+    brain: LLMBrain,
+    agents: list[Agent],
+    world,
+) -> list[str]:
+    """50 agents 동시 호출 (asyncio.gather). 직렬 0.86s × 50 → ~1s."""
+    tasks = [_generate_thought_with_retry(brain, a, world) for a in agents]
+    return await asyncio.gather(*tasks, return_exceptions=False)
+
+
+def _run_thought_batch(
+    brain: LLMBrain,
+    agents: list[Agent],
+    world,
+) -> list[str]:
+    """동기 컨텍스트에서 호출 가능한 entry. asyncio.run 으로 실행."""
+    if not agents:
+        return []
+    try:
+        return asyncio.run(_batch_generate_thoughts(brain, agents, world))
+    except RuntimeError:
+        # 이미 이벤트 루프 안 (Jupyter/uvloop) → 새 루프 생성
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(_batch_generate_thoughts(brain, agents, world))
+        finally:
+            loop.close()
+
+
 def _dump_partial(
     save_path: str | Path,
     *,
@@ -238,10 +343,20 @@ class SimulationResult:
     cannibalization: dict = field(default_factory=dict)
     narrator_summary: str = ""
     trajectory: list | None = None
+    # 5000 agent 전체 시간별 위치 집계 (히트맵 — 마포 bbox 28×24 격자).
+    # frontend AbmPersonaMap 의 히트맵 layer 가 hour 별 셀 카운트 → hue/alpha 렌더.
+    # trajectory 는 300 sample dot 시각화용, density_grid 는 전체 5000 집계.
+    density_grid: dict | None = None
     # 신규 매장(공실 스팟 클릭) 의 시뮬 결과 — 프론트 결과 카드용
     new_store_visits: int = 0
     new_store_revenue: float = 0.0
     new_store_visit_share_pct: float = 0.0  # 전체 방문 중 점유율 (%)
+    # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채움
+    thoughts: list = field(default_factory=list)  # [{day, hour, agent_id, archetype, thought, lat, lon}, ...]
+    thought_calls: int = 0
+    thought_input_tokens: int = 0
+    thought_output_tokens: int = 0
+    thought_cached_tokens: int = 0
 
     def get(self, key: str, default=None):
         """dict-like access — B1 엔드포인트 result.get() 호환."""
@@ -279,6 +394,7 @@ def run_simulation(
     memory_seed_days: int = 14,
     warmup_days: int = 0,
     llm_base_cache: str | Path | None = None,
+    enable_llm_thought: bool = False,
 ) -> SimulationResult:
     pop = pop or PopulationMix()
     tier = tier or TierDistribution()
@@ -298,6 +414,31 @@ def run_simulation(
                 ext_commuters=max(0, int(pop.ext_commuters * scale)),
                 ext_visitors=max(0, int(pop.ext_visitors * scale)),
             )
+            # TierDistribution 도 PopulationMix 와 동일 scale 로 비례 조정.
+            # 미적용 시 5000 agents 시뮬에서 Tier S 가 절대값 5명에 머물러
+            # spawn_agents 가 의도된 Tier 비율을 만들지 못함 (e.g. main.py 의
+            # TierDistribution(5, 20, 75) 는 % 의도였으나 실제로는 절대 카운트).
+            tier_total = tier.tier_s + tier.tier_a + tier.tier_b
+            if tier_total > 0 and tier_total != cfg.n_personas:
+                tier_scale = cfg.n_personas / tier_total
+                tier = TierDistribution(
+                    tier_s=max(0, int(tier.tier_s * tier_scale)),
+                    tier_a=max(0, int(tier.tier_a * tier_scale)),
+                    tier_b=max(0, int(tier.tier_b * tier_scale)),
+                )
+            # spawn_agents 는 (tier_s + tier_a) <= 실제 agent 수 를 요구.
+            # int 절삭 차이로 초과되지 않도록 안전 clamp (B 가 흡수).
+            actual_pop_total = (
+                pop.residents + pop.commuters + pop.visitors + pop.owners + pop.ext_commuters + pop.ext_visitors
+            )
+            if tier.tier_s + tier.tier_a > actual_pop_total:
+                if tier.tier_s + tier.tier_a > 0:
+                    ratio = actual_pop_total / (tier.tier_s + tier.tier_a)
+                    tier = TierDistribution(
+                        tier_s=int(tier.tier_s * ratio),
+                        tier_a=int(tier.tier_a * ratio),
+                        tier_b=0,
+                    )
             # Policy 모드가 기본 ON (B1 호환)
             use_policy = True
 
@@ -324,12 +465,15 @@ def run_simulation(
         ns_dong = scenario.new_store.get("district") or scenario.new_store.get("dong")
         if ns_dong and ns_dong in world.dongs:
             new_store_sim_id = f"new_spot_{scenario.new_store.get('brand') or 'candidate'}"
+            # seats — frontend store_area (평) 가 주어지면 평수×2, 아니면 30 default.
+            # capacity 모델링: 작은 매장은 일 visit cap 낮음 (10평 = 20 seats = 일 ~20 cap).
+            _ns_seats = int(scenario.new_store.get("seats") or 30)
             new_store = _Store(
                 store_id=new_store_sim_id,
                 name=str(scenario.new_store.get("brand") or "신규 스팟"),
                 dong=ns_dong,
                 category=ns_cat,
-                seats=30,
+                seats=_ns_seats,
                 rating=4.0,
                 price_level=int(scenario.new_store.get("price_level") or 2),
                 lat=scenario.new_store.get("lat"),
@@ -350,12 +494,12 @@ def run_simulation(
         if verbose:
             print(f"  시나리오 날씨 override: {world.weather}", flush=True)
 
-    # 지하철 외부유입 calibration 데이터 로드 (External 에이전트 시간/동 분포에 사용)
-    world.subway_inflow = load_subway_inflow_csv()
+    # 지하철 외부유입 calibration 데이터 — 모듈 캐시 (CSV 파일, 변경 X)
+    world.subway_inflow = _cached("subway_inflow", load_subway_inflow_csv)
     if verbose and world.subway_inflow:
         n_keys = len(world.subway_inflow)
         n_dongs = len({d for d, _ in world.subway_inflow})
-        print(f"  지하철 inflow: {n_keys}건 ({n_dongs}개 동) 로드", flush=True)
+        print(f"  지하철 inflow: {n_keys}건 ({n_dongs}개 동) 로드 (cached)", flush=True)
 
     # Policy Generator — use_policy=True면 11개 정책 로드 (캐시 있으면 재사용)
     if use_policy:
@@ -363,17 +507,19 @@ def run_simulation(
         if verbose:
             print(f"  정책 캐시: {len(world.policy_cache)}개 (LLM 호출 0회 모드)", flush=True)
 
-    # 날씨 + 휴일 RDS 주입 — weather_override 있으면 날씨는 건드리지 않음
-    weather_info = _load_weather_recent()
+    # 날씨 + 휴일 RDS 주입 — 모듈 캐시 (날씨 30min TTL, 휴일 24h TTL)
+    weather_info = _cached("weather_recent", _load_weather_recent, ttl=_WEATHER_TTL_SEC)
     if weather_info:
         if not scenario.weather_override:
             world.weather = weather_info.get("weather", world.weather)
         world.temperature = weather_info.get("temperature", world.temperature)
         world.rain_mm = weather_info.get("rain_mm", 0.0)
         if verbose:
-            print(f"  날씨: {world.weather} {world.temperature:.1f}도 (강수 {world.rain_mm:.1f}mm)", flush=True)
+            print(
+                f"  날씨: {world.weather} {world.temperature:.1f}도 (강수 {world.rain_mm:.1f}mm) (cached)", flush=True
+            )
 
-    holiday_map = _load_holidays()
+    holiday_map = _cached("holidays", _load_holidays, ttl=86400)
 
     if verbose:
         print("\n=== Simulation 시작 ===", flush=True)
@@ -384,7 +530,11 @@ def run_simulation(
             f" / 외부통근{ext_c} / 외부방문{ext_v} (총{pop.residents + pop.commuters + pop.visitors + pop.owners + ext_c + ext_v})",
             flush=True,
         )
-        print(f"  Tier: S={tier.tier_s} / A={tier.tier_a} / B={tier.tier_b}", flush=True)
+        print(
+            f"  Tier(절대값): S={tier.tier_s}명 / A={tier.tier_a}명 / B={tier.tier_b}명"
+            f" (총 {tier.tier_s + tier.tier_a + tier.tier_b}명)",
+            flush=True,
+        )
         print(f"  모드: {'MOCK' if cfg.mock_mode else 'API'}", flush=True)
         print(f"  Days: {days}, Hours/day: {time_cfg.total_steps}", flush=True)
 
@@ -409,31 +559,31 @@ def run_simulation(
     if verbose:
         print(f"  페르소나: {len(personas)}개 생성 (Tier S)")
 
-    # 2.5 실데이터 기반 시간×동×연령×요일 가중치 로드
+    # 2.5 실데이터 기반 시간×동×연령×요일 가중치 — 모듈 캐시 (RDS 집계, 변경 X)
     try:
         from .profile_builder import ProfileBuilder
 
-        _pb = ProfileBuilder(seed=seed)
-        world.time_age_boost = _pb.load_time_age_boost()
+        # ProfileBuilder 도 캐시 (seed 다른 인스턴스 만들지 않게 — load 함수만 결과 캐싱)
+        world.time_age_boost = _cached("time_age_boost", lambda: ProfileBuilder(seed=seed).load_time_age_boost())
     except Exception as e:
         print(f"  [warn] time_age_boost 로드 실패: {e}")
 
-    # 2.5+ seoul_adstrd_flpop 분기 안정 평균 boost (16동 전체 커버, time_age_boost 보완)
+    # 2.5+ seoul_adstrd_flpop 분기 평균 boost — 850K row 쿼리, 캐시 필수.
     try:
-        if "_pb" not in dir() or _pb is None:
-            from .profile_builder import ProfileBuilder
-
-            _pb = ProfileBuilder(seed=seed)
-        world.adstrd_flpop_boost = _pb.load_adstrd_flpop_boost()
+        world.adstrd_flpop_boost = _cached(
+            "adstrd_flpop_boost", lambda: ProfileBuilder(seed=seed).load_adstrd_flpop_boost()
+        )
     except Exception as e:
         print(f"  [warn] adstrd_flpop_boost 로드 실패: {e}")
 
-    # 2.5++ OFS (Operational Fit Score) — 동 단위 입지 매력도 (Hansen+E2SFCA)
-    # ext_visitor / ext_commuter 매장 선호 boost 로 활용 (Option E, role 차등)
+    # 2.5++ OFS (Operational Fit Score) — 동 단위 입지 매력도. 캐싱 필수.
     try:
-        from src.services.inflow import attach_ofs_to_world
+        from src.services.operational_fit import compute_ofs_scores
 
-        attach_ofs_to_world(world, verbose=verbose)
+        world.ofs_dong_score = _cached("ofs_scores", lambda: compute_ofs_scores())
+        if verbose:
+            top3 = sorted(world.ofs_dong_score.items(), key=lambda x: -x[1])[:3]
+            print(f"  [loader] OFS 16동 주입 (cached) — top3: {top3}")
     except Exception as e:
         print(f"  [warn] OFS 로드 실패: {e}")
 
@@ -494,8 +644,15 @@ def run_simulation(
     trajectory: list[dict] = []
     visits_log: list[dict] = []
     chats_log: list[dict] = []
-    _need_trajectory = bool(trajectory_path) or collect_trajectory
+    thoughts_log: list[dict] = []
+    # thought 도 trajectory 처럼 dong_coords 가 필요 → 활성 시 강제 로드
+    _need_trajectory = bool(trajectory_path) or collect_trajectory or enable_llm_thought
     dong_coords = _load_dong_coords() if _need_trajectory else {}
+
+    # Tier S 50 명만 thought 생성 (LLM 비용 cap)
+    thought_agents: list[Agent] = _select_thought_agents(agents, n=50) if enable_llm_thought else []
+    if enable_llm_thought and verbose:
+        print(f"  [thought] LLM thought 활성: Tier S {len(thought_agents)}명, 매 hour 호출", flush=True)
     # 인메모리 샘플링 — 1000 agents 전부 보내면 payload 과대, sample_size 만큼만 수집
     _trajectory_sample_ids: set[int] = set()
     if collect_trajectory and agents:
@@ -504,6 +661,28 @@ def run_simulation(
         _r = _sample_rng.Random(seed)
         sample_n = min(trajectory_sample_size, len(agents))
         _trajectory_sample_ids = {a.agent_id for a in _r.sample(agents, sample_n)}
+
+    # ⚠️ Tier S thought 대상은 항상 trajectory 에 포함 — 풍선/PersonaCard 가시성 필수.
+    # 미적용 시 50 thought 와 300 random sample 의 교집합 ~15명만 dot 으로 보임 →
+    # 외부 필터 + displayHour 필터 후 ~5명만 풍선. handoff doc:
+    # docs/api/2026-04-28-abm-trajectory-action-field.md (P1 핵심 버그 섹션).
+    if enable_llm_thought and thought_agents:
+        _trajectory_sample_ids |= {a.agent_id for a in thought_agents}
+
+    # 5000 agent 전체 위치 집계 (히트맵용) — 마포 polygon 실 bbox × 128×96 격자.
+    # bbox 는 frontend mapo-dong.geo.json 16동 polygon 의 min/max + 0.002 padding 과 일치.
+    # 이전 80×64 (좁은 bbox) 에서 상암동 서쪽·아현동 동쪽 잘리던 문제 수정.
+    # cell ~83m × ~76m. payload: 128×96 × 16h × 4byte = ~786KB (gzip 후 ~55KB).
+    DENSITY_MIN_LAT = 37.524
+    DENSITY_MIN_LON = 126.858
+    DENSITY_MAX_LAT = 37.590
+    DENSITY_MAX_LON = 126.967
+    DENSITY_COLS = 128
+    DENSITY_ROWS = 96
+    _density_d_lat = (DENSITY_MAX_LAT - DENSITY_MIN_LAT) / DENSITY_ROWS
+    _density_d_lon = (DENSITY_MAX_LON - DENSITY_MIN_LON) / DENSITY_COLS
+    density_hours: dict[str, list[int]] = {}
+    density_max: int = 0
 
     # 에이전트 홈 좌표 (동 center)
     def _home_coord(a) -> tuple[float, float] | None:
@@ -654,6 +833,8 @@ def run_simulation(
                                 "spend": float(dec.spend),
                                 "menu_name": ordered["name"] if ordered else None,
                                 "menu_price": ordered["price"] if ordered else None,
+                                # visit event 로 명시 — frontend visit-pulse 렌더 트리거.
+                                "action": "visit",
                             }
                         )
                 if memory_index is not None and dec.action != "rest":
@@ -687,6 +868,39 @@ def run_simulation(
                         if st and st.lat and st.lon:
                             visited_now[aid] = (st.lat, st.lon)
 
+                # 히트맵 — 5000 agent 의 동적 위치 분포.
+                # 본질: 각 agent 가 정책 기반 의사결정으로 hour 마다 visit/work/rest 에
+                # 따라 위치가 변함 → emergent 유동인구 패턴.
+                # visit 시 store 좌표, 그 외엔 home dong 안 stable 위치 (Gaussian σ=165m).
+                abs_hour_key = str(day * 24 + res.hour)
+                density_cells = density_hours.get(abs_hour_key)
+                if density_cells is None:
+                    density_cells = [0] * (DENSITY_COLS * DENSITY_ROWS)
+                    density_hours[abs_hour_key] = density_cells
+                import random as _agent_rng_lib
+
+                for a in agents:
+                    if a.current_dong == "외부":
+                        continue
+                    if a.agent_id in visited_now:
+                        d_lat, d_lon = visited_now[a.agent_id]
+                    else:
+                        d_coord = dong_coords.get(a.current_dong)
+                        if not d_coord:
+                            continue
+                        # per-agent stable Gaussian — 같은 agent 는 시간 무관 같은 home.
+                        # σ=0.0015° (~165m lat / 134m lon) → dong 안 자연 분산.
+                        ag_rng = _agent_rng_lib.Random(a.agent_id * 0x9E3779B1)
+                        d_lat = d_coord[0] + ag_rng.gauss(0, 0.0015)
+                        d_lon = d_coord[1] + ag_rng.gauss(0, 0.0015)
+                    d_r = int((DENSITY_MAX_LAT - d_lat) / _density_d_lat)
+                    d_c = int((d_lon - DENSITY_MIN_LON) / _density_d_lon)
+                    if 0 <= d_r < DENSITY_ROWS and 0 <= d_c < DENSITY_COLS:
+                        d_idx = d_r * DENSITY_COLS + d_c
+                        density_cells[d_idx] += 1
+                        if density_cells[d_idx] > density_max:
+                            density_max = density_cells[d_idx]
+
                 _iter_agents = (
                     [a for a in agents if a.agent_id in _trajectory_sample_ids]
                     if collect_trajectory and _trajectory_sample_ids
@@ -714,7 +928,9 @@ def run_simulation(
                             "day": day,
                             "hour": res.hour,
                             "dong": a.current_dong,
-                            "action": a.last_action,
+                            # frontend AbmPersonaMap 이 rest/visit/work/move 로 dot 분기 렌더.
+                            # default "rest" — None 이면 frontend `String(null) === 'null'`.
+                            "action": a.current_action or "rest",
                             "tier": a.tier.value,
                             "role": a.role.value,
                             "lat": lat,
@@ -747,11 +963,43 @@ def run_simulation(
                             }
                         )
 
+            # 매 시간 Tier S 50명 LLM thought 생성 (시각화용 풍선)
+            # ext_commuter/ext_visitor 가 외부에 있을 때는 skip (지도 표시 X)
+            # 주의: scheduler.step 이 world.current_hour 를 이미 +1 증가시킴 → res.hour 가
+            #       의미상 "방금 진행한 시간" 이므로 generate_thought 호출 시 임시로 복원했다
+            #       원복.
+            if enable_llm_thought and thought_agents and not is_warmup:
+                _saved_hour = world.current_hour
+                world.current_hour = res.hour  # generate_thought 가 참조하는 시간 정합
+                try:
+                    active_thought_agents = [a for a in thought_agents if a.current_dong != "외부"]
+                    if active_thought_agents:
+                        thoughts = _run_thought_batch(brain, active_thought_agents, world)
+                        for a, thought in zip(active_thought_agents, thoughts):
+                            if not thought:
+                                continue
+                            coord = dong_coords.get(a.current_dong)
+                            thoughts_log.append(
+                                {
+                                    "day": day,
+                                    "hour": res.hour,
+                                    "agent_id": a.agent_id,
+                                    "archetype": a.persona_id or "office_worker",
+                                    "thought": thought,
+                                    "lat": coord[0] if coord else None,
+                                    "lon": coord[1] if coord else None,
+                                }
+                            )
+                finally:
+                    world.current_hour = _saved_hour
+
             # 매 시간 trajectory 증분 덤프 (라이브 움직임 시각화)
             if trajectory_path and trajectory:
                 _dump_trajectory(trajectory_path, trajectory)
                 _dump_sidecar(trajectory_path, "visits", visits_log)
                 _dump_sidecar(trajectory_path, "chats", chats_log)
+                if enable_llm_thought:
+                    _dump_sidecar(trajectory_path, "thoughts", thoughts_log)
 
             # 매 시간 partial save (라이브 dashboard용)
             if save_path is not None:
@@ -846,17 +1094,88 @@ def run_simulation(
         {r: round(v / profile_total, 3) for r, v in role_counts.items()} if profile_total else {}
     )
 
-    # cannibalization — 신규 매장 주변 기존 매장 매출 감소 추정 (scenario.new_store 있을 때만)
+    # cannibalization — 학술 기반 정밀 추정.
+    # 참고:
+    #   - Pancras, Sriram & Kumar (2012, Mgmt Sci): 신규 매장 매출의 86.7% incremental,
+    #     13.3% same-chain cannibalization. same-category cross-brand 보정 ~3x → 40%.
+    #   - Kim (2017, Wharton): 0.5mi(800m) 내 추가 매장 매출 감소 효과는 0.5~3mi 구간에서 1/5.
+    #   - Huff (1963) gravity model: visit_probability ∝ attractiveness / distance^β (β=2).
+    #
+    # 적용:
+    #   - 1차 영향권 0~500m: Huff β=2 거리 가중치 (50m 기준 정규화, max 1.0)
+    #   - 2차 영향권 500~1500m: Kim 1/5 효과 → primary × 0.2
+    #   - 잠식률 = (신규 visit / (신규 + weighted nearby)) × 40%, 0~25% clamp
     cannibalization_val: dict = {}
-    if scenario.new_store and scenario.new_store.get("district"):
+    if scenario.new_store and scenario.new_store.get("district") and new_store_sim_id:
         target_dong = scenario.new_store.get("district")
-        if target_dong in dong_totals_:
-            cannibalization_val = {
-                "target_dong": target_dong,
-                "cannibalize_radius_m": scenario.cannibalize_radius_m,
-                "estimated_impact_pct": 5.0,  # 간이 추정 (추후 반경 기반 정밀 계산)
-                "affected_stores": len(world.stores_by_dong.get(target_dong, [])),
-            }
+        ns_in_world = world.stores.get(new_store_sim_id)
+        # scenario.cannibalize_radius_m 은 1차 임계. 2차는 그 × 3.
+        primary_r = scenario.cannibalize_radius_m or 500
+        secondary_r = primary_r * 3
+        affected_count = 0
+        affected_visits_raw = 0
+        weighted_nearby = 0.0
+
+        def _huff_weight(dist_m: float, primary: float, secondary: float) -> float:
+            """Huff β=2 거리 가중 + tiered. 50m 기준 정규화 (max 1.0)."""
+            if dist_m <= 0:
+                return 1.0
+            base = min(1.0, (50.0 / max(dist_m, 50.0)) ** 2)
+            if dist_m <= primary:
+                return base
+            if dist_m <= secondary:
+                return base * 0.2  # Kim 2017 — 0.5~3mi 1/5
+            return 0.0
+
+        if ns_in_world and ns_in_world.lat and ns_in_world.lon:
+            ns_lat = float(ns_in_world.lat)
+            ns_lon = float(ns_in_world.lon)
+            ns_cat_eff = ns_in_world.category
+            # 단거리 평면 근사 (Seoul 위도): 1° lat ≈ 111km, 1° lon ≈ 89km.
+            for s in world.stores.values():
+                if s.store_id == new_store_sim_id:
+                    continue
+                if s.category != ns_cat_eff:
+                    continue
+                if not (s.lat and s.lon):
+                    continue
+                dlat_m = (float(s.lat) - ns_lat) * 111000.0
+                dlon_m = (float(s.lon) - ns_lon) * 89000.0
+                d_m = (dlat_m * dlat_m + dlon_m * dlon_m) ** 0.5
+                w = _huff_weight(d_m, primary_r, secondary_r)
+                if w <= 0:
+                    continue
+                affected_count += 1
+                affected_visits_raw += int(s.visits_today)
+                weighted_nearby += float(s.visits_today) * w
+            ns_visits = int(ns_in_world.visits_today)
+            total_market = weighted_nearby + ns_visits
+            if total_market > 0 and ns_visits > 0:
+                # 신규 visit share × 40% (Pancras 13.3% × 3x same-category cross-brand).
+                impact = (ns_visits / total_market) * 40.0
+                impact_pct = round(max(0.0, min(25.0, impact)), 2)
+            else:
+                impact_pct = 0.0
+        else:
+            # 좌표 없으면 fallback: dong 전체 같은 카테고리 매장
+            same_cat_in_dong = [
+                s
+                for s in world.stores_by_dong.get(target_dong, [])
+                if s.category == (scenario.new_store.get("category") or "음식점")
+            ]
+            affected_count = len(same_cat_in_dong)
+            affected_visits_raw = sum(int(s.visits_today) for s in same_cat_in_dong)
+            impact_pct = 5.0  # legacy fallback
+        cannibalization_val = {
+            "target_dong": target_dong,
+            "cannibalize_radius_m": primary_r,
+            "secondary_radius_m": secondary_r,
+            "estimated_impact_pct": impact_pct,
+            "affected_stores": affected_count,
+            "affected_visits": affected_visits_raw,
+            "model": "huff_b2_tiered_v1",
+            "rate_pct": 40.0,
+        }
 
     # 새벽 home stay trajectory 시도들 — 모두 실패로 revert.
     # Phase 5 (1K 단독): Δ -0.032. Phase B (5K + 새벽): Δ -0.025.
@@ -883,6 +1202,13 @@ def run_simulation(
         )
         print(f"  토큰 (A): in={brain.stats.tier_a_input_tokens} / out={brain.stats.tier_a_output_tokens}")
         print(f"  추정 비용: ${cost['total_usd']:.4f} (S=${cost['tier_s_usd']:.4f}, A=${cost['tier_a_usd']:.4f})")
+        if enable_llm_thought:
+            print(
+                f"  Thought: {brain.stats.thought_calls}회 호출 "
+                f"(in={brain.stats.thought_input_tokens} / "
+                f"cache_r={brain.stats.thought_cache_read} / "
+                f"out={brain.stats.thought_output_tokens})"
+            )
         print("\n  매출 TOP 5:")
         for s in top_stores[:5]:
             print(f"    [{s.store_id}] {s.name} ({s.dong}) - 방문 {s.visits_today} / 매출 {int(s.revenue_today):,}원")
@@ -920,9 +1246,25 @@ def run_simulation(
         cannibalization=cannibalization_val,
         narrator_summary=narrator_summary_val,
         trajectory=trajectory if trajectory else None,
+        density_grid=(
+            {
+                "bbox": [DENSITY_MIN_LAT, DENSITY_MIN_LON, DENSITY_MAX_LAT, DENSITY_MAX_LON],
+                "cols": DENSITY_COLS,
+                "rows": DENSITY_ROWS,
+                "hours": density_hours,
+                "max_count": density_max,
+            }
+            if density_hours
+            else None
+        ),
         new_store_visits=new_store_visits_val,
         new_store_revenue=new_store_revenue_val,
         new_store_visit_share_pct=new_store_visit_share_pct_val,
+        thoughts=thoughts_log if enable_llm_thought else [],
+        thought_calls=brain.stats.thought_calls,
+        thought_input_tokens=brain.stats.thought_input_tokens,
+        thought_output_tokens=brain.stats.thought_output_tokens,
+        thought_cached_tokens=brain.stats.thought_cache_read,
     )
 
     # final partial 저장 (in_progress=False로 덮어쓰기)
@@ -935,6 +1277,8 @@ def run_simulation(
         _dump_trajectory(trajectory_path, trajectory)
         _dump_sidecar(trajectory_path, "visits", visits_log)
         _dump_sidecar(trajectory_path, "chats", chats_log)
+        if enable_llm_thought:
+            _dump_sidecar(trajectory_path, "thoughts", thoughts_log)
 
         # 매장 좌표 dump
         stores_rows = [
@@ -981,10 +1325,11 @@ def run_simulation(
         _dump_sidecar(trajectory_path, "friends", friends_rows)
 
         if verbose:
+            extra = f", thoughts {len(thoughts_log):,}" if enable_llm_thought else ""
             print(
                 f"  [trajectory] {len(trajectory):,}건, "
                 f"visits {len(visits_log):,}, chats {len(chats_log):,}, "
-                f"stores {len(stores_rows):,}, friends {len(friends_rows):,} 저장",
+                f"stores {len(stores_rows):,}, friends {len(friends_rows):,}{extra} 저장",
                 flush=True,
             )
 

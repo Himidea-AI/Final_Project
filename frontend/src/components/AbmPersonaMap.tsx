@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Activity, Play } from 'lucide-react';
 import VacancySpotMarker from './VacancySpotMarker';
 import VacancyStatsPanel from './VacancyStatsPanel';
+import PersonaCard, { type PersonaCardData } from './PersonaCard';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -28,6 +29,15 @@ const ACTION_COLOR: Record<string, string> = {
   work: '#54A24B', // Green — 근무 (테두리만)
   rest: '#6b7280', // Gray — 휴식 (희미)
 };
+
+// Phase 2: 4 거점 floating glassmorphism 카드 — 마포 대표 dong centroid.
+// Orion 레퍼런스의 주요 도시 카드(Chicago/Berlin/Sangam-DMC 등) 패턴 재현.
+const KEY_DONGS: Array<{ name: string; lat: number; lon: number; color: string }> = [
+  { name: 'Hongdae-Ip-Gu', lat: 37.553, lon: 126.918, color: '#f43f5e' }, // 서교동·홍대입구
+  { name: 'Sangam-DMC', lat: 37.567, lon: 126.916, color: '#818cf8' }, // 성산동
+  { name: 'Gongdeok-Stn', lat: 37.544, lon: 126.953, color: '#f43f5e' }, // 공덕동
+  { name: 'Mangwon-Mkt', lat: 37.557, lon: 126.905, color: '#fbbf24' }, // 망원동
+];
 
 interface PixelCoord {
   x: number;
@@ -63,11 +73,8 @@ interface Persona {
   preferredSpots: number[]; // 이 agent가 선호하는 스팟 인덱스 순서
   dwellMultiplier: number; // 체류 시간 배수 (role별)
   hasSpawned: boolean; // External 에이전트 최초 등장 이펙트 여부
-  // External 전용 — 차량/지하철 진입 애니메이션
-  entryStartX: number;
-  entryStartY: number;
-  entryDuration: number; // 초기 waitTicks 값 (진행률 계산용)
-  entryMode: 'subway' | 'car';
+  // External 페이드인 진행률 계산용 — 초기 waitTicks 값
+  entryDuration: number;
   // 이동 꼬리 (최대 8개 ring buffer) — 움직일 때만 push
   trail: { x: number; y: number; age: number }[];
 }
@@ -105,6 +112,30 @@ export interface VacancySpotHighlight {
   category?: string;
 }
 
+// Tier S 50명만 LLM thought 생성 — backend (Task 1·2·3, 다른 세션) contract.
+// Plan: docs/superpowers/plans/2026-04-28-tier-s-llm-thought.md
+// 본 컴포넌트는 plan T4·T5 (frontend 풍선 + PersonaCard) 담당.
+export interface AbmThought {
+  agent_id: number;
+  hour: number;
+  day: number;
+  archetype: string;
+  thought: string; // 한국어 ≤ 12자
+  lat: number | null; // backend 가 null 가능
+  lon: number | null;
+}
+
+// 4950 non-Tier-S 에이전트의 시간별 위치 집계 — 히트맵 렌더용.
+// backend 가 마포 bbox 를 cols×rows 격자로 나눠 hour 별 셀 카운트 응답.
+// hours[absHour] = row-major flat array (length = cols × rows).
+export interface AbmDensityGrid {
+  bbox: [number, number, number, number]; // [minLat, minLon, maxLat, maxLon]
+  cols: number;
+  rows: number;
+  hours: Record<string, number[]>;
+  max_count?: number; // 색 정규화용 (없으면 hour 별 max 동적 계산)
+}
+
 export interface AbmPersonaMapProps {
   abmResult: any;
   abmLoading: boolean;
@@ -127,6 +158,28 @@ export interface AbmPersonaMapProps {
   vacancySpot?: VacancySpotHighlight;
   /** mode='vacancy' 시 외부에서 직접 pse_summary 주입 (선택, 미주입 시 vacancyJobId 로 fetch) */
   vacancyPseSummary?: VacancyPseSummary | null;
+  /**
+   * 선택 공실 근처의 경쟁업체 (같은 카테고리). 있으면 spots-all 의 마포 16동
+   * 일반 매장 80개 대신 이 경쟁업체들을 storeNodes 로 사용 — agents 가 이쪽으로
+   * 방문 → 신규 매장 vs 경쟁사 visit 분포 비교 시각화에 더 의미 있음.
+   */
+  competitors?: Array<{
+    id?: string;
+    name?: string;
+    place_name?: string;
+    brand_name?: string;
+    lat: number;
+    lng?: number;
+    lon?: number;
+    distance_m?: number;
+    is_franchise?: boolean;
+    category?: string;
+  }>;
+  /**
+   * Tier S 50명만 클릭 가능. canvas 클릭 시 5px 이내 Tier S agent 가 있으면 호출.
+   * 부모(AbmTab)가 PersonaCard 모달로 연결.
+   */
+  onPersonaClick?: (agentId: number, thoughts: AbmThought[]) => void;
 }
 
 function randomBetween(a: number, b: number) {
@@ -191,33 +244,6 @@ function shuffleSpots(nodeCount: number): number[] {
 const KAKAO_API_KEY = (import.meta as any).env?.VITE_KAKAO_MAP_API_KEY || '';
 const KAKAO_KEY_MISSING = !KAKAO_API_KEY || KAKAO_API_KEY.includes('YOUR');
 
-// OSRM 공개 도보 라우팅 API (OpenStreetMap 기반, CORS OK)
-async function fetchWalkingRoute(
-  fromLat: number,
-  fromLng: number,
-  toLat: number,
-  toLng: number,
-  signal?: AbortSignal,
-): Promise<[number, number][]> {
-  try {
-    const url = `https://router.project-osrm.org/route/v1/foot/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
-    const r = await fetch(url, { signal });
-    if (!r.ok) throw new Error('OSRM fetch failed');
-    const data = await r.json();
-    const coords = data?.routes?.[0]?.geometry?.coordinates;
-    if (!Array.isArray(coords)) throw new Error('No route geometry');
-    // OSRM: [lng, lat] → [lat, lng]로 변환
-    return coords.map((c: [number, number]) => [c[1], c[0]]);
-  } catch (e: any) {
-    if (e?.name === 'AbortError') throw e;
-    // 실패 시 직선 fallback — 시작/끝 2점만
-    return [
-      [fromLat, fromLng],
-      [toLat, toLng],
-    ];
-  }
-}
-
 // Safari 15 / iOS 15 등 구형 대응 — ctx.roundRect 폴백
 function roundedRect(
   ctx: CanvasRenderingContext2D,
@@ -238,79 +264,6 @@ function roundedRect(
   ctx.arcTo(x, y + h, x, y, maxR);
   ctx.arcTo(x, y, x + w, y, maxR);
   ctx.closePath();
-}
-
-// 지하철 차량 — 진행 방향으로 회전한 실루엣 (본체 + 창문 2개 + 앞유리)
-function drawSubwayCar(ctx: CanvasRenderingContext2D, cx: number, cy: number, heading: number) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(heading);
-  // 본체 — cyan 계열
-  ctx.fillStyle = '#0891B2';
-  ctx.strokeStyle = '#67E8F9';
-  ctx.lineWidth = 1;
-  const w = 22;
-  const h = 10;
-  ctx.beginPath();
-  roundedRect(ctx, -w / 2, -h / 2, w, h, 3);
-  ctx.fill();
-  ctx.stroke();
-  // 창문 2개 — 흰색
-  ctx.fillStyle = '#ECFEFF';
-  ctx.fillRect(-w / 2 + 4, -h / 2 + 2, 5, h - 4);
-  ctx.fillRect(-w / 2 + 11, -h / 2 + 2, 5, h - 4);
-  // 앞유리 — 진행 방향 쪽 밝게
-  ctx.fillStyle = '#FDE68A';
-  ctx.fillRect(w / 2 - 3, -h / 2 + 2, 2, h - 4);
-  // 바퀴 2개 — 어두운 원
-  ctx.fillStyle = '#1F2937';
-  ctx.beginPath();
-  ctx.arc(-w / 2 + 5, h / 2 + 1, 1.8, 0, Math.PI * 2);
-  ctx.arc(w / 2 - 5, h / 2 + 1, 1.8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-// 지하철역 픽토그램 — 이중 원 + 중앙 T 심볼 (국제 지하철 표준 스타일)
-function drawSubwayStation(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  ringColor: string,
-  lineWidth: number,
-) {
-  const outerR = 15;
-  const innerR = 11;
-  // 바깥 채움 (배경)
-  ctx.fillStyle = '#ECFEFF';
-  ctx.beginPath();
-  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-  ctx.fill();
-  // 바깥 테두리
-  ctx.strokeStyle = ringColor;
-  ctx.lineWidth = lineWidth;
-  ctx.beginPath();
-  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-  ctx.stroke();
-  // 안쪽 얇은 원
-  ctx.strokeStyle = '#0891B2';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-  ctx.stroke();
-  // T 심볼 (둥근 선)
-  ctx.strokeStyle = '#0F172A';
-  ctx.lineWidth = 2.4;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  // 가로 획
-  ctx.moveTo(cx - 5.5, cy - 4.5);
-  ctx.lineTo(cx + 5.5, cy - 4.5);
-  // 세로 획
-  ctx.moveTo(cx, cy - 4.5);
-  ctx.lineTo(cx, cy + 5.2);
-  ctx.stroke();
-  ctx.lineCap = 'butt';
 }
 
 // 상점 — 집 모양 (지붕 삼각형 + 몸체 사각형)
@@ -411,36 +364,6 @@ function drawPaymentBounce(ctx: CanvasRenderingContext2D, cx: number, baseY: num
   ctx.restore();
 }
 
-// 택시/자가용 — 진행 방향으로 회전한 실루엣 (본체 + 앞유리 + 루프사인 + 바퀴)
-function drawTaxi(ctx: CanvasRenderingContext2D, cx: number, cy: number, heading: number) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(heading);
-  // 본체 — amber 계열
-  ctx.fillStyle = '#B45309';
-  ctx.strokeStyle = '#FDE68A';
-  ctx.lineWidth = 1;
-  const w = 16;
-  const h = 8;
-  ctx.beginPath();
-  roundedRect(ctx, -w / 2, -h / 2, w, h, 2);
-  ctx.fill();
-  ctx.stroke();
-  // 앞유리 (진행 방향)
-  ctx.fillStyle = '#FEF3C7';
-  ctx.fillRect(1, -h / 2 + 1.5, 5, h - 3);
-  // 루프사인 — 택시 표식
-  ctx.fillStyle = '#FBBF24';
-  ctx.fillRect(-2, -h / 2 - 2, 4, 2);
-  // 바퀴 2개
-  ctx.fillStyle = '#111827';
-  ctx.beginPath();
-  ctx.arc(-w / 2 + 3, h / 2, 1.6, 0, Math.PI * 2);
-  ctx.arc(w / 2 - 3, h / 2, 1.6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
 export default function AbmPersonaMap({
   abmResult,
   abmLoading,
@@ -455,6 +378,8 @@ export default function AbmPersonaMap({
   vacancyJobId,
   vacancySpot,
   vacancyPseSummary = null,
+  competitors,
+  onPersonaClick,
 }: AbmPersonaMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -463,9 +388,6 @@ export default function AbmPersonaMap({
   const nodePixelsRef = useRef<PixelCoord[]>([]);
   const rafRef = useRef<number>(0);
   const tickRef = useRef(0);
-  // OSRM 도보 경로 캐시 — key: "fromIdx-toIdx", value: [[lat,lng],...]
-  const routeCacheRef = useRef<Record<string, [number, number][]>>({});
-  const [routesLoaded, setRoutesLoaded] = useState(false);
 
   // 결제 이펙트 (ring pulse + ₩ 텍스트) — tick 기반 애니메이션
   const paymentEffectsRef = useRef<{ nodeIdx: number; amount: number; startTick: number }[]>([]);
@@ -476,12 +398,59 @@ export default function AbmPersonaMap({
   // External 스폰 이펙트 (역 출구 cyan pulse) — 지하철/버스 도착 연출
   const spawnEffectsRef = useRef<{ x: number; y: number; startTick: number }[]>([]);
   // 실제 ABM trajectory — 에이전트별 시간순 경로 (백엔드 실시뮬 결과).
-  // agent_id → [{absHour, lat, lon, role}, ...] (시간 순 정렬). 보간해서 부드럽게 이동.
+  // agent_id → [{absHour, lat, lon, role, action}, ...] (시간 순 정렬). 보간해서 부드럽게 이동.
+  // action: 'rest'|'visit'|'work'|'move' — backend 가 행동 라벨 함께 전달 (미응답 시 'move').
   const trajectoryPathsRef = useRef<
-    Map<number, { absHour: number; lat: number; lon: number; role: string }[]>
+    Map<number, { absHour: number; lat: number; lon: number; role: string; action: string }[]>
   >(new Map());
   const trajectoryMinHourRef = useRef(0);
   const trajectoryMaxHourRef = useRef(0);
+
+  // Tier S thoughts — agent_id 별 hour-keyed Map. trajectory 모드에서 풍선 표시용.
+  // tierSIdsRef = thoughts 에 등장한 agent_id Set (Tier S 마커용 — 별도 필드 불필요).
+  const thoughtsByAgentRef = useRef<Map<number, Map<number, AbmThought>>>(new Map());
+  const tierSIdsRef = useRef<Set<number>>(new Set());
+  // 4950 non-Tier-S 히트맵 격자 — hour 별 cell 카운트 (backend density_grid).
+  const densityGridRef = useRef<AbmDensityGrid | null>(null);
+  // 헥사 격자 — 마포 polygon 안의 hex 좌표 + density cell 매핑 (pan/zoom 시 재계산).
+  // 매 프레임 projection 호출 비용 회피 (2000+ hex × 60fps = 너무 비쌈).
+  const hexGridRef = useRef<{ x: number; y: number; dr: number; dc: number }[]>([]);
+  // Mapo 16 dong polygon (lat/lon) — public/mapo-dong.geo.json fetch.
+  const mapoPolygonsRef = useRef<{ name: string; ring: [number, number][] }[]>([]);
+  // Mapo polygon — pixel space cache (pan/zoom 시 재투영). 외부 dark mask 그릴 때 사용.
+  const mapoPolyPixelsRef = useRef<{ x: number; y: number }[][]>([]);
+  // dong centroid (라벨 자체는 hover 방식으로 변경됨, 계산은 보존). state 안 읽으므로 ref.
+  const dongLabelsRef = useRef<Array<{ name: string; x: number; y: number }>>([]);
+  const setDongLabels = (v: Array<{ name: string; x: number; y: number }>) => {
+    dongLabelsRef.current = v;
+  };
+  // dong hover 상태 — 마우스 위 dong 의 name + 픽셀 ring (highlight 렌더용).
+  const [hoveredDong, setHoveredDong] = useState<{
+    name: string;
+    mouseX: number;
+    mouseY: number;
+  } | null>(null);
+  // 현재 hover 된 polygon ring 픽셀 — draw 루프에서 fill/stroke 용 (Set 대신 ref 로 매 frame 접근).
+  const hoveredDongRingRef = useRef<{ x: number; y: number }[] | null>(null);
+  // Phase 2: 4 거점 카드 제거됨 — keyDongPx state 도 미사용. setter 만 stub 으로 유지
+  // (recomputeNodePixels 가 호출하는 코드 보존). 추후 카드 부활 시 재활성.
+  const _keyDongPxRef = useRef<Array<{ x: number; y: number }>>([]);
+  const setKeyDongPx = (v: Array<{ x: number; y: number }>) => {
+    _keyDongPxRef.current = v;
+  };
+  // Phase 2: hover hit-test 결과 — 마우스 근처 hex 의 density 정보. 우하단 카드 표시용.
+  const [hoveredHex, setHoveredHex] = useState<{
+    x: number;
+    y: number;
+    intensity: number;
+    count: number;
+  } | null>(null);
+  // Tier S agent_id → 현재 프레임 화면 픽셀 — 클릭 hit-test 용. forEach 안에서 매 프레임 업데이트.
+  const tierSPixelsRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // 현재 displayHour — 클릭 핸들러가 PersonaCard 에 전달.
+  const currentDisplayHourRef = useRef<number>(0);
+  // 선택된 Tier S 페르소나 카드 (모달).
+  const [selectedPersona, setSelectedPersona] = useState<PersonaCardData | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState(false);
   // Kakao 맵 이벤트 리스너가 항상 최신 함수 참조하도록 (stale closure 방지)
@@ -498,6 +467,26 @@ export default function AbmPersonaMap({
     weekend_force: false,
     rent_shock_pct: 0.0,
   });
+
+  // 마포 polygon GeoJSON load (1회) — public/mapo-dong.geo.json 16 동.
+  // hex 마스킹(폴리곤 내부만) + dong 라벨 표시에 사용.
+  useEffect(() => {
+    fetch('/mapo-dong.geo.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((geo) => {
+        if (!geo?.features) return;
+        const polys = geo.features.map((f: any) => ({
+          name: String(f?.properties?.dong_name ?? ''),
+          ring: (f?.geometry?.coordinates?.[0] ?? []) as [number, number][],
+        }));
+        mapoPolygonsRef.current = polys.filter(
+          (p: any) => p.name && Array.isArray(p.ring) && p.ring.length >= 3,
+        );
+        // 폴리곤 변경 → hex 격자 + dong 라벨 재계산.
+        recomputeNodePixelsRef.current?.();
+      })
+      .catch((e) => console.warn('[ABM] mapo-dong.geo.json fetch 실패:', e));
+  }, []);
 
   // 시뮬에서 받은 실제 에이전트 수로 점박이 개수 맞춤 (기본 100)
   const N_PERSONAS = abmResult?.n_personas ?? abmResult?.n_agents ?? 100;
@@ -533,7 +522,7 @@ export default function AbmPersonaMap({
     // agent 별로 시간순 경로 구성 → 보간 대상
     const byAgent = new Map<
       number,
-      { absHour: number; lat: number; lon: number; role: string }[]
+      { absHour: number; lat: number; lon: number; role: string; action: string }[]
     >();
     let minHour = Infinity;
     let maxHour = -Infinity;
@@ -544,11 +533,13 @@ export default function AbmPersonaMap({
       maxHour = Math.max(maxHour, absHour);
       const aid = Number(e.agent_id) || 0;
       if (!byAgent.has(aid)) byAgent.set(aid, []);
+      // action 미응답 시 'move' default. backend Task 추가되면 실값 ('rest'|'visit'|'work'|'move').
       byAgent.get(aid)!.push({
         absHour,
         lat: Number(e.lat),
         lon: Number(e.lon),
         role: String(e.role || 'resident'),
+        action: String(e.action || 'move'),
       });
     }
     // 각 에이전트 경로를 absHour 기준 정렬
@@ -556,6 +547,115 @@ export default function AbmPersonaMap({
     trajectoryPathsRef.current = byAgent;
     trajectoryMinHourRef.current = isFinite(minHour) ? minHour : 0;
     trajectoryMaxHourRef.current = isFinite(maxHour) ? maxHour : 0;
+  }, [abmResult]);
+
+  // (revert) 이전: KT 실 데이터 hex 덮어쓰기 — 시뮬 결과 반영 X 라 제거.
+  // hex 는 sim agent density 그대로. KT JSON 은 backend spawn prior 로 활용.
+
+  // abmResult.thoughts 파싱 — Tier S 50명 LLM thought (다른 세션 backend 작업).
+  // 미수신 시 빈 Map → 기존 동작 그대로 (graceful degradation).
+  useEffect(() => {
+    const ths = abmResult?.thoughts;
+    thoughtsByAgentRef.current = new Map();
+    tierSIdsRef.current = new Set();
+    if (!Array.isArray(ths) || ths.length === 0) return;
+    for (const t of ths) {
+      if (typeof t?.agent_id !== 'number') continue;
+      const aid = Number(t.agent_id);
+      const absHour = (Number(t.day) || 0) * 24 + (Number(t.hour) || 0);
+      if (!thoughtsByAgentRef.current.has(aid)) {
+        thoughtsByAgentRef.current.set(aid, new Map());
+      }
+      thoughtsByAgentRef.current.get(aid)!.set(absHour, {
+        agent_id: aid,
+        hour: Number(t.hour) || 0,
+        day: Number(t.day) || 0,
+        archetype: String(t.archetype || ''),
+        thought: String(t.thought || '').slice(0, 12),
+        lat: typeof t.lat === 'number' ? t.lat : null,
+        lon: typeof t.lon === 'number' ? t.lon : null,
+      });
+      tierSIdsRef.current.add(aid);
+    }
+  }, [abmResult]);
+
+  // 히트맵 grid 구성 — 우선순위:
+  //   1) backend abmResult.density_grid (정식 contract) — 5000 agents 전체 카운트
+  //   2) 폴백: trajectory 데이터(300 sample) 를 마포 bbox × 30×30 격자에 hour 별 binning
+  // backend 미구현 시 frontend 가 직접 derive 해서 히트맵 표시.
+  useEffect(() => {
+    const dg = abmResult?.density_grid;
+    // (1) backend 가 정식 density_grid 보내주면 그걸 사용
+    if (
+      dg &&
+      Array.isArray(dg.bbox) &&
+      dg.bbox.length === 4 &&
+      typeof dg.cols === 'number' &&
+      typeof dg.rows === 'number' &&
+      typeof dg.hours === 'object'
+    ) {
+      densityGridRef.current = {
+        bbox: dg.bbox as [number, number, number, number],
+        cols: dg.cols,
+        rows: dg.rows,
+        hours: dg.hours,
+        max_count: typeof dg.max_count === 'number' ? dg.max_count : undefined,
+      };
+      recomputeNodePixelsRef.current?.();
+      return;
+    }
+
+    // (2) Fallback: trajectory entries 로 격자 binning.
+    const tr = abmResult?.trajectory;
+    if (!Array.isArray(tr) || tr.length === 0) {
+      densityGridRef.current = null;
+      return;
+    }
+    // 마포구 bbox (대략) — 실제 trajectory min/max 로 동적 결정 가능하지만 고정이 안정적.
+    // 마포 동 centroid 범위: lat 37.539~37.575, lon 126.892~126.951 → 약간 padding.
+    // 마포 polygon 실 bbox (mapo-dong.geo.json 의 min/max + 0.002 padding).
+    const minLat = 37.524;
+    const maxLat = 37.59;
+    const minLon = 126.858;
+    const maxLon = 126.967;
+    // 격자 128×96 (셀 ~83m × ~76m) — backend density_grid 와 동일 해상도.
+    const cols = 128;
+    const rows = 96;
+    const dLat = (maxLat - minLat) / rows;
+    const dLon = (maxLon - minLon) / cols;
+    const hours: Record<string, number[]> = {};
+    let maxCount = 0;
+    for (const e of tr) {
+      const lat = Number(e?.lat);
+      const lon = Number(e?.lon);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      const absHour = (Number(e.day) || 0) * 24 + (Number(e.hour) || 0);
+      const r = Math.floor((maxLat - lat) / dLat);
+      const c = Math.floor((lon - minLon) / dLon);
+      if (r < 0 || r >= rows || c < 0 || c >= cols) continue; // 마포 밖 skip
+      const key = String(absHour);
+      let arr = hours[key];
+      if (!arr) {
+        arr = new Array(cols * rows).fill(0);
+        hours[key] = arr;
+      }
+      const idx = r * cols + c;
+      arr[idx] += 1;
+      if (arr[idx] > maxCount) maxCount = arr[idx];
+    }
+    if (Object.keys(hours).length === 0) {
+      densityGridRef.current = null;
+      return;
+    }
+    densityGridRef.current = {
+      bbox: [minLat, minLon, maxLat, maxLon],
+      cols,
+      rows,
+      hours,
+      max_count: maxCount,
+    };
+    // density_grid 갱신 → hex 격자 재계산 (recomputeNodePixels 가 hex 도 생성).
+    recomputeNodePixelsRef.current?.();
   }, [abmResult]);
 
   useEffect(() => {
@@ -618,12 +718,33 @@ export default function AbmPersonaMap({
       };
     }
 
-    // mode='general' (default) — 기존 동작 유지 (회귀 X)
-    // 마포구 전체 유동인구 시각화 — 16개 동의 지하철역 + 대표 상점 POI 를 routine 노드로 사용.
-    // 공실(vacancySpots) 은 "비어있는 부동산" 이라 에이전트 목적지로 부적절 → focusSpot 으로 별도 표시만.
+    // mode='general' (default).
+    // 우선순위: competitors prop (선택 공실 근처 동일 카테고리 매장) → spots-all → /mapo/spots/{dong}.
+    // competitors 가 있으면 마포 전역 80 spot 대신 경쟁사 좌표를 storeNodes 로 사용 →
+    // 5000 agents 가 그 매장들에 visit 하는 모습이 의미 있는 "신규 vs 경쟁" 분포 시각화가 됨.
     let cancelled = false;
     setSpotsLoading(true);
-    fetch(`/api/mapo/spots-all?per_dong=3`)
+    if (Array.isArray(competitors) && competitors.length > 0) {
+      const compNodes: StoreNode[] = competitors
+        .filter(
+          (c) =>
+            typeof c.lat === 'number' && (typeof c.lng === 'number' || typeof c.lon === 'number'),
+        )
+        .slice(0, 60)
+        .map((c, i) => ({
+          id: c.id ?? `comp-${i}`,
+          label: (c.name || c.place_name || c.brand_name || '경쟁업체').slice(0, 18),
+          lat: c.lat as number,
+          lng: (c.lng ?? c.lon) as number,
+          tier: c.is_franchise ? 'A' : 'B',
+        }));
+      setStoreNodes(compNodes.length > 0 ? compNodes : [FALLBACK_CENTER]);
+      setSpotsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetch(`/api/mapo/spots-all?per_dong=5`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`spots-all ${r.status}`))))
       .then((data: { spots?: StoreNode[] }) => {
         if (cancelled) return;
@@ -651,7 +772,7 @@ export default function AbmPersonaMap({
     return () => {
       cancelled = true;
     };
-  }, [mode, vacancyJobId, targetDistrict]);
+  }, [mode, vacancyJobId, targetDistrict, competitors]);
 
   // mode='vacancy' 시 외부에서 prop 으로 주입된 pse_summary 동기화
   useEffect(() => {
@@ -674,6 +795,180 @@ export default function AbmPersonaMap({
       const pixel = proj.containerPointFromCoords(latLng);
       return { x: pixel.x, y: pixel.y };
     });
+
+    // 헥사 격자 hex 중심 픽셀 + density cell 매핑 — pan/zoom 변할 때만 재계산.
+    // hex size 8px (셀 ~14px wide), 1100~1300개 hex (마포 bbox 한정).
+    const dg = densityGridRef.current;
+    if (dg && dg.cols > 0 && dg.rows > 0) {
+      const [minLat, minLon, maxLat, maxLon] = dg.bbox;
+      const topLeft = proj.containerPointFromCoords(new kakao.maps.LatLng(maxLat, minLon));
+      const bottomRight = proj.containerPointFromCoords(new kakao.maps.LatLng(minLat, maxLon));
+      const HEX_SIZE = 8; // hex 외접원 반지름 (px)
+      const xStep = HEX_SIZE * Math.sqrt(3); // 가로 간격
+      const yStep = HEX_SIZE * 1.5; // 세로 간격
+      const dLatPx = bottomRight.y - topLeft.y;
+      const dLonPx = bottomRight.x - topLeft.x;
+      const cols = Math.ceil(dLonPx / xStep) + 1;
+      const rows = Math.ceil(dLatPx / yStep) + 1;
+      // pointInPolygon — ray casting (lat/lon 공간).
+      const polys = mapoPolygonsRef.current;
+      const inMapo = (lat: number, lon: number): boolean => {
+        if (polys.length === 0) return true; // geo 미로드 시 마스킹 X (전체 통과)
+        for (const p of polys) {
+          const ring = p.ring;
+          let inside = false;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0], // lon
+              yi = ring[i][1]; // lat
+            const xj = ring[j][0],
+              yj = ring[j][1];
+            const intersect =
+              yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+            if (intersect) inside = !inside;
+          }
+          if (inside) return true; // 어느 한 dong polygon 안이면 마포 안.
+        }
+        return false;
+      };
+      const newGrid: { x: number; y: number; dr: number; dc: number }[] = [];
+      for (let rr = 0; rr < rows; rr++) {
+        for (let cc = 0; cc < cols; cc++) {
+          const offsetX = rr % 2 === 0 ? 0 : xStep / 2;
+          const px = topLeft.x + cc * xStep + offsetX;
+          const py = topLeft.y + rr * yStep;
+          // pixel → lat/lon 역산: 선형 보간 (Kakao map 단거리 근사 OK)
+          const latRatio = (py - topLeft.y) / (dLatPx || 1);
+          const lonRatio = (px - topLeft.x) / (dLonPx || 1);
+          const hexLat = maxLat - latRatio * (maxLat - minLat);
+          const hexLon = minLon + lonRatio * (maxLon - minLon);
+          // density cell index
+          const dr = Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dg.rows);
+          const dc = Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dg.cols);
+          if (dr < 0 || dr >= dg.rows || dc < 0 || dc >= dg.cols) continue;
+          // 마포 polygon 안에 있는 hex 만 (한강·외부 자동 컷).
+          if (!inMapo(hexLat, hexLon)) continue;
+          newGrid.push({ x: px, y: py, dr, dc });
+        }
+      }
+      hexGridRef.current = newGrid;
+    } else {
+      hexGridRef.current = [];
+    }
+
+    // dong 16 centroid 픽셀 — 라벨 표시용.
+    // signed-area 가중 polygon centroid (geometric center) — vertex avg 보다 정확.
+    // polygon 모양이 길쭉해도 실제 중심에 라벨 → 인접 dong 라벨 겹침 ↓.
+    const polys = mapoPolygonsRef.current;
+    const polygonCentroid = (ring: [number, number][]): { lat: number; lon: number } => {
+      let cx = 0;
+      let cy = 0;
+      let A = 0;
+      const n = ring.length;
+      for (let i = 0; i < n; i++) {
+        const [xi, yi] = ring[i];
+        const [xj, yj] = ring[(i + 1) % n];
+        const f = xi * yj - xj * yi;
+        A += f;
+        cx += (xi + xj) * f;
+        cy += (yi + yj) * f;
+      }
+      A *= 0.5;
+      if (Math.abs(A) < 1e-12) {
+        const lons = ring.map((c) => c[0]);
+        const lats = ring.map((c) => c[1]);
+        return {
+          lon: lons.reduce((a, b) => a + b, 0) / lons.length,
+          lat: lats.reduce((a, b) => a + b, 0) / lats.length,
+        };
+      }
+      return { lon: cx / (6 * A), lat: cy / (6 * A) };
+    };
+    if (polys.length > 0) {
+      // collision avoidance — 면적 큰 동부터 anchor, 작은 동은 후보 위치 8방향 시도.
+      // 마포 동쪽 7동 (공덕/도화/용강/대흥/염리/아현/신수) 가 좁은 영역에 밀집 → 자연 충돌.
+      const polyArea = (ring: [number, number][]) => {
+        let A = 0;
+        const n = ring.length;
+        for (let i = 0; i < n; i++) {
+          const [xi, yi] = ring[i];
+          const [xj, yj] = ring[(i + 1) % n];
+          A += xi * yj - xj * yi;
+        }
+        return Math.abs(A * 0.5);
+      };
+      const items = polys.map((p) => {
+        const c = polygonCentroid(p.ring);
+        const pix = proj.containerPointFromCoords(new kakao.maps.LatLng(c.lat, c.lon));
+        return {
+          name: p.name.replace(/동$/, ''),
+          baseX: pix.x,
+          baseY: pix.y,
+          area: polyArea(p.ring),
+        };
+      });
+      // 큰 동부터 — 큰 동은 라벨이 polygon 안 어디에 있어도 OK, 작은 동만 흔들어 분산.
+      items.sort((a, b) => b.area - a.area);
+      const placed: { x: number; y: number; name: string }[] = [];
+      const COLLIDE = 30; // 30px 이내면 충돌 간주 (라벨 가로 폭 + 마진)
+      // 8방향 × 2거리 후보 (총 17 — 0,0 + 8×{30,60})
+      const offsets: Array<[number, number]> = [
+        [0, 0],
+        [30, 0],
+        [-30, 0],
+        [0, -16],
+        [0, 16],
+        [22, -14],
+        [-22, -14],
+        [22, 14],
+        [-22, 14],
+        [50, 0],
+        [-50, 0],
+        [0, -28],
+        [0, 28],
+        [40, -22],
+        [-40, -22],
+        [40, 22],
+        [-40, 22],
+      ];
+      for (const it of items) {
+        let best = { x: it.baseX, y: it.baseY };
+        for (const [dx, dy] of offsets) {
+          const cx = it.baseX + dx;
+          const cy = it.baseY + dy;
+          let collide = false;
+          for (const p of placed) {
+            if (Math.hypot(p.x - cx, p.y - cy) < COLLIDE) {
+              collide = true;
+              break;
+            }
+          }
+          if (!collide) {
+            best = { x: cx, y: cy };
+            break;
+          }
+        }
+        placed.push({ x: best.x, y: best.y, name: it.name });
+      }
+      setDongLabels(placed);
+      // 외부 dark mask 용 — 16 polygon 의 ring 을 픽셀로 캐싱.
+      mapoPolyPixelsRef.current = polys.map((p) =>
+        p.ring.map(([lon, lat]) => {
+          const px = proj.containerPointFromCoords(new kakao.maps.LatLng(lat, lon));
+          return { x: px.x, y: px.y };
+        }),
+      );
+    } else {
+      setDongLabels([]);
+      mapoPolyPixelsRef.current = [];
+    }
+
+    // Phase 2: 4 거점 카드 픽셀 좌표 — pan/zoom 변할 때마다 갱신.
+    setKeyDongPx(
+      KEY_DONGS.map((d) => {
+        const pix = proj.containerPointFromCoords(new kakao.maps.LatLng(d.lat, d.lon));
+        return { x: pix.x, y: pix.y };
+      }),
+    );
   }, [storeNodes]);
 
   // 페르소나 전체 초기화 — 동 변경 or 최초 로드 시만
@@ -700,9 +995,6 @@ export default function AbmPersonaMap({
       spawnEffectsRef.current = [];
       return;
     }
-
-    const W = canvas.width;
-    const H = canvas.height;
 
     // customer_profile_dist 반영 (pickType에 전달)
     const dist = customerProfileDistRef.current;
@@ -744,37 +1036,10 @@ export default function AbmPersonaMap({
 
       const targetNode = nodePixelsRef.current[nodeIdx];
 
-      // External 차량 진입 시작점 — 허브에서 가장 가까운 canvas edge
-      let entryStartX = sx;
-      let entryStartY = sy;
-      let entryMode: 'subway' | 'car' = 'subway';
-      let initialWait = isExternal
+      // External 은 60~180 tick(1~3초) 페이드인 후 cyan ripple 등장. 일반 에이전트는 즉시 활동.
+      const initialWait = isExternal
         ? Math.floor(randomBetween(60, 180))
         : Math.floor(randomBetween(0, 180));
-      if (isExternal) {
-        const hubNode = storeNodes[sourceIdx];
-        const isSubwayHub = !!hubNode && (hubNode.id.startsWith('subway-') || hubNode.tier === 'S');
-        entryMode = isSubwayHub ? 'subway' : 'car';
-        // 허브에서 가장 가까운 edge 방향 (직선거리)
-        const distTop = sy;
-        const distBot = H - sy;
-        const distLeft = sx;
-        const distRight = W - sx;
-        const minD = Math.min(distTop, distBot, distLeft, distRight);
-        if (minD === distTop) {
-          entryStartX = sx + randomBetween(-40, 40);
-          entryStartY = -20;
-        } else if (minD === distBot) {
-          entryStartX = sx + randomBetween(-40, 40);
-          entryStartY = H + 20;
-        } else if (minD === distLeft) {
-          entryStartX = -20;
-          entryStartY = sy + randomBetween(-40, 40);
-        } else {
-          entryStartX = W + 20;
-          entryStartY = sy + randomBetween(-40, 40);
-        }
-      }
 
       return {
         id: i,
@@ -802,10 +1067,7 @@ export default function AbmPersonaMap({
         preferredSpots: preferred,
         dwellMultiplier: traits.dwellMult,
         hasSpawned: false,
-        entryStartX,
-        entryStartY,
         entryDuration: initialWait,
-        entryMode,
         trail: [],
       };
     });
@@ -821,53 +1083,9 @@ export default function AbmPersonaMap({
     spawnEffectsRef.current = [];
   }, [storeNodes, N_PERSONAS]);
 
-  // OSRM 도보 경로 prefetch — 노드 변경 시 pairwise 경로 로드
-  // M-1: 빠른 동 전환 시 이전 fetch 취소 (AbortController)
-  useEffect(() => {
-    if (KAKAO_KEY_MISSING) return;
-    if (storeNodes.length < 2) return;
-    let cancelled = false;
-    const controller = new AbortController();
-    setRoutesLoaded(false);
-    (async () => {
-      const newCache: Record<string, [number, number][]> = {};
-      const nodes = storeNodes;
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = 0; j < nodes.length; j++) {
-          if (i === j) continue;
-          const key = `${i}-${j}`;
-          try {
-            const path = await fetchWalkingRoute(
-              nodes[i].lat,
-              nodes[i].lng,
-              nodes[j].lat,
-              nodes[j].lng,
-              controller.signal,
-            );
-            newCache[key] = path;
-          } catch (e: any) {
-            if (e?.name === 'AbortError' || cancelled) return;
-            // fallback — 직선
-            newCache[key] = [
-              [nodes[i].lat, nodes[i].lng],
-              [nodes[j].lat, nodes[j].lng],
-            ];
-          }
-          if (cancelled) return;
-          // Rate limit 회피 — 150ms 간격
-          await new Promise((r) => setTimeout(r, 150));
-        }
-      }
-      if (!cancelled) {
-        routeCacheRef.current = newCache;
-        setRoutesLoaded(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [storeNodes]);
+  // OSRM prefetch 제거 (2026-04-28) — 합성 ambient persona 만 쓰던 캐시.
+  // 결과 모드(trajectory)는 OSRM 미사용, Tier S 50/heatmap 4950 도 미사용.
+  // 합성 persona 는 bezier fallback (waypoints.length<2 분기) 으로 자동 회귀.
 
   // KakaoMap 초기화
   useEffect(() => {
@@ -881,11 +1099,30 @@ export default function AbmPersonaMap({
       }
       if (!mapContainerRef.current) return;
       const map = new kakao.maps.Map(mapContainerRef.current, {
-        center: new kakao.maps.LatLng(37.558, 126.919),
+        // 마포구 centroid 근처 (서교/연남) — bound 적용 전 임시 center.
+        center: new kakao.maps.LatLng(37.558, 126.916),
         level: 6,
       });
       mapInstanceRef.current = map;
       setMapLoaded(true);
+      // 마포 polygon bbox 에 fit — 좌우 분할 후 좁아진 viewport 에서도 전체 시야.
+      // bbox: lat 37.524~37.59, lon 126.858~126.967 (mapo-dong.geo.json 기준).
+      // Kakao 컨테이너 크기 측정 후 setBounds — mount 직후 0×0 회피용 200ms 지연.
+      const mapoBounds = new kakao.maps.LatLngBounds(
+        new kakao.maps.LatLng(37.524, 126.858),
+        new kakao.maps.LatLng(37.59, 126.967),
+      );
+      setTimeout(() => {
+        try {
+          map.relayout();
+          map.setBounds(mapoBounds);
+          // 한 단계 확대 (zoom in) — 사용자 피드백: 한 칸 더 가까이.
+          // Kakao level 은 숫자 작을수록 zoom in (확대).
+          map.setLevel(Math.max(1, map.getLevel() - 1));
+        } catch (e) {
+          console.warn('[ABM] setBounds 실패:', e);
+        }
+      }, 200);
 
       // Zoom/Pan 시작 전 — 현재 에이전트 위치 lat/lng snapshot 저장
       let snapshots: { id: number; lat: number; lng: number }[] = [];
@@ -924,8 +1161,6 @@ export default function AbmPersonaMap({
               p.progress = 1;
               p.mx = p.x;
               p.my = p.y;
-              p.entryStartX = p.x;
-              p.entryStartY = p.y;
             }
           }
           snapshots = [];
@@ -937,6 +1172,95 @@ export default function AbmPersonaMap({
         isMapMovingRef.current = false;
       };
 
+      // Phase 2: hover — hex 위 마우스 → 가까운 hex 의 density 표시.
+      // throttle: 50ms 간격 (rAF 대신 setTimeout 으로 단순화).
+      let _hoverTimer: number | null = null;
+      kakao.maps.event.addListener(map, 'mousemove', (mouseEvent: any) => {
+        if (_hoverTimer != null) return;
+        _hoverTimer = window.setTimeout(() => {
+          _hoverTimer = null;
+          const proj2 = map.getProjection?.();
+          if (!proj2 || !mouseEvent?.latLng) return;
+          const mPx = proj2.containerPointFromCoords(mouseEvent.latLng);
+          const mLat = mouseEvent.latLng.getLat();
+          const mLon = mouseEvent.latLng.getLng();
+
+          // ─── dong polygon hover hit-test ─────────────────────────────────
+          const polys = mapoPolygonsRef.current;
+          const polyPx = mapoPolyPixelsRef.current;
+          let hoveredDongName: string | null = null;
+          let hoveredRingPx: { x: number; y: number }[] | null = null;
+          if (polys.length > 0 && polyPx.length === polys.length) {
+            for (let pi = 0; pi < polys.length; pi++) {
+              const ring = polys[pi].ring;
+              let inside = false;
+              for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0],
+                  yi = ring[i][1];
+                const xj = ring[j][0],
+                  yj = ring[j][1];
+                const intersect =
+                  yi > mLat !== yj > mLat && mLon < ((xj - xi) * (mLat - yi)) / (yj - yi) + xi;
+                if (intersect) inside = !inside;
+              }
+              if (inside) {
+                hoveredDongName = polys[pi].name;
+                hoveredRingPx = polyPx[pi];
+                break;
+              }
+            }
+          }
+          hoveredDongRingRef.current = hoveredRingPx;
+          setHoveredDong(
+            hoveredDongName ? { name: hoveredDongName, mouseX: mPx.x, mouseY: mPx.y } : null,
+          );
+
+          // ─── hex hover hit-test ──────────────────────────────────────────
+          const dg = densityGridRef.current;
+          const hexes = hexGridRef.current;
+          if (!dg || hexes.length === 0) {
+            setHoveredHex(null);
+            return;
+          }
+          const HOVER_R2 = 12 * 12;
+          let bestIdx = -1;
+          let bestD2 = HOVER_R2;
+          for (let i = 0; i < hexes.length; i++) {
+            const dx = hexes[i].x - mPx.x;
+            const dy = hexes[i].y - mPx.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < bestD2) {
+              bestD2 = d2;
+              bestIdx = i;
+            }
+          }
+          if (bestIdx < 0) {
+            setHoveredHex(null);
+            return;
+          }
+          const hex = hexes[bestIdx];
+          const hourKey = String(currentDisplayHourRef.current);
+          const cells = dg.hours[hourKey];
+          if (!Array.isArray(cells)) {
+            setHoveredHex(null);
+            return;
+          }
+          const v = cells[hex.dr * dg.cols + hex.dc] ?? 0;
+          const maxC = dg.max_count || 1;
+          setHoveredHex({
+            x: hex.x,
+            y: hex.y,
+            intensity: v / maxC,
+            count: v,
+          });
+        }, 50);
+      });
+      kakao.maps.event.addListener(map, 'mouseout', () => {
+        setHoveredHex(null);
+        setHoveredDong(null);
+        hoveredDongRingRef.current = null;
+      });
+
       kakao.maps.event.addListener(map, 'zoom_start', takeSnapshot);
       kakao.maps.event.addListener(map, 'dragstart', takeSnapshot);
       kakao.maps.event.addListener(map, 'idle', () => {
@@ -946,6 +1270,76 @@ export default function AbmPersonaMap({
           recomputeNodePixelsRef.current();
           isMapMovingRef.current = false;
         }
+      });
+
+      // Tier S 클릭 hit-test — Kakao map 'click' 이벤트로 latLng 받아 픽셀 변환 후
+      // tierSPixelsRef 를 18px 이내 검색. 일치 agent 있으면 PersonaCard 모달 오픈.
+      // (canvas 가 pointer-events:none 이라 직접 onClick 못 씀 → map 이벤트 사용)
+      kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
+        // 디버그 — click 이 도달하는지 확인 (사용자 보고: "안 눌려").
+        // 빠른 dot 클릭 가능하게 hit 반경 8 → 18px 로 확대.
+        const tsCount = tierSPixelsRef.current.size;
+        const tCount = thoughtsByAgentRef.current.size;
+
+        console.log(
+          `[ABM click] tierSPixels=${tsCount} thoughts=${tCount} latLng=`,
+          mouseEvent?.latLng?.getLat?.()?.toFixed?.(5),
+          mouseEvent?.latLng?.getLng?.()?.toFixed?.(5),
+        );
+        if (tsCount === 0) {
+          console.warn(
+            '[ABM click] Tier S dot 없음 — backend 가 thoughts 응답을 안 줬거나, ' +
+              'enable_llm_thought=false, 또는 backend 재시작 필요. ' +
+              '시뮬 결과 화면 좌상단 배지에 "⭐50" 표시되는지 확인.',
+          );
+          return;
+        }
+        const proj = map.getProjection?.();
+        if (!proj || !mouseEvent?.latLng) return;
+        const clickPx = proj.containerPointFromCoords(mouseEvent.latLng);
+        const HIT_R2 = 18 * 18; // 18px 이내 hit — 빠른 dot 클릭 마진
+        let bestAid: number | null = null;
+        let bestD2 = HIT_R2;
+        tierSPixelsRef.current.forEach((pix, aid) => {
+          const dx = pix.x - clickPx.x;
+          const dy = pix.y - clickPx.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) {
+            bestD2 = d2;
+            bestAid = aid;
+          }
+        });
+        if (bestAid === null) {
+          // 가장 가까운 dot 거리도 함께 표시 (debug)
+          let nearestD = Infinity;
+          tierSPixelsRef.current.forEach((pix) => {
+            const d = Math.hypot(pix.x - clickPx.x, pix.y - clickPx.y);
+            if (d < nearestD) nearestD = d;
+          });
+
+          console.log(
+            `[ABM click] miss — 가장 가까운 Tier S dot ${nearestD.toFixed(1)}px (hit 임계 18px)`,
+          );
+          return;
+        }
+        const aid: number = bestAid;
+
+        console.log(`[ABM click] HIT agent#${aid}, distance=${Math.sqrt(bestD2).toFixed(1)}px`);
+        const thoughts = Array.from(thoughtsByAgentRef.current.get(aid)?.values() ?? []);
+        // 부모 콜백 우선 (있으면 부모가 모달 표시), 없으면 내부 PersonaCard 사용.
+        if (onPersonaClick) {
+          onPersonaClick(aid, thoughts);
+          return;
+        }
+        const archetype = thoughts[0]?.archetype || '';
+        const path = trajectoryPathsRef.current.get(aid);
+        const role = path && path[0] ? path[0].role : undefined;
+        setSelectedPersona({
+          agentId: aid,
+          archetype,
+          thoughts,
+          role,
+        });
       });
     };
 
@@ -1009,6 +1403,41 @@ export default function AbmPersonaMap({
         return;
       }
 
+      // ─── Full canvas dark mask (Orion 레퍼런스 — hex 만 시각) ─────────────
+      if (
+        hexGridRef.current.length > 0 &&
+        densityGridRef.current &&
+        trajectoryPathsRef.current.size > 0
+      ) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(7, 7, 9, 0.97)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
+
+      // ─── dong hover highlight — 마우스 위 행정동 polygon 강조 ──────────────
+      // dark mask 위, hex 아래에 그려 dong 형태가 hex 와 함께 보이도록.
+      const hoveredRing = hoveredDongRingRef.current;
+      if (hoveredRing && hoveredRing.length >= 3) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(hoveredRing[0].x, hoveredRing[0].y);
+        for (let i = 1; i < hoveredRing.length; i++) {
+          ctx.lineTo(hoveredRing[i].x, hoveredRing[i].y);
+        }
+        ctx.closePath();
+        // 옅은 emerald fill — 어떤 dong 인지 명확히
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
+        ctx.fill();
+        // 외곽선 emerald 글로우
+        ctx.shadowColor = 'rgba(16, 185, 129, 0.85)';
+        ctx.shadowBlur = 14;
+        ctx.strokeStyle = 'rgba(110, 231, 183, 0.95)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // C-2: storeNodes/nodePixels 개수 불일치 시 해당 프레임 skip
       // (동 전환 직후 storeNodes는 교체되었지만 persona/nodePixels는 300ms 뒤 갱신)
       if (storeNodes.length !== nodePixelsRef.current.length) {
@@ -1016,22 +1445,25 @@ export default function AbmPersonaMap({
         return;
       }
 
-      // 노드 간 연결선 (거리 기반)
       const nodes = nodePixelsRef.current;
-      ctx.strokeStyle = 'rgba(129,140,248,0.15)';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[i].x - nodes[j].x;
-          const dy = nodes[i].y - nodes[j].y;
-          if (Math.hypot(dx, dy) < W * 0.28) {
-            ctx.beginPath();
-            ctx.moveTo(nodes[i].x, nodes[i].y);
-            ctx.lineTo(nodes[j].x, nodes[j].y);
-            ctx.stroke();
-          }
+
+      // focusSpot 픽셀 좌표 — 노드 필터(주변 가게만) + persona proximity 두 곳에서 사용.
+      // draw 한 번에 1회 계산 (Kakao projection 호출 비용 회피).
+      let focusPx: { x: number; y: number } | null = null;
+      if (focusSpot && mapInstanceRef.current) {
+        const kakao = (window as any).kakao;
+        const proj = mapInstanceRef.current.getProjection?.();
+        if (proj && kakao?.maps?.LatLng) {
+          const latLng = new kakao.maps.LatLng(focusSpot.lat, focusSpot.lon);
+          const px = proj.containerPointFromCoords(latLng);
+          focusPx = { x: px.x, y: px.y };
         }
       }
+      const FOCUS_R2 = 35 * 35; // persona 강조용 35px (squared)
+      // 공실스팟 주변 가게만 표시 — focusSpot 있을 때 반경 NEAR_RADIUS_PX 밖 노드는 숨김.
+      // 250px ≈ 마포 줌레벨 6 기준 ~600m. 사용자: "공실스팟 주변의 가게만 보여줘"
+      const NEAR_RADIUS_PX = 250;
+      const NEAR_R2 = NEAR_RADIUS_PX * NEAR_RADIUS_PX;
 
       // 현재 체류 중 에이전트 집계 (waitTicks > 0 = 매장 이용 중)
       spotStatsRef.current.forEach((s) => {
@@ -1043,81 +1475,49 @@ export default function AbmPersonaMap({
         }
       });
 
-      // focusSpot 있으면 routine 노드(지하철·상점)는 전부 시각 숨김 → focusSpot 만 "신규 매장" 마커로 별도 렌더.
-      // 없으면 routine 노드 전부 렌더 (마포 전체 POI 맵).
-      const hideRoutineNodes = !!focusSpot;
-
-      // 상권 노드 그리기 — 스팟 유형별 픽토그램 (지하철=T심볼 이중원 / 상점=집모양)
+      // 상권 노드 그리기 — 상점만(지하철역 제외) + focusSpot 반경 내만.
+      // 사용자 피드백: 노드 간 파란 연결선 제거, 지하철 픽토그램 제거, 멀리 있는 가게 숨김.
       nodes.forEach((np, idx) => {
         const node = storeNodes[idx];
         if (!node) return;
-        if (hideRoutineNodes) return;
 
-        // 스팟 유형 분기 — 백엔드 id/tier 기반
+        // 지하철역(tier S 또는 id 'subway-' 접두) 은 마커/라벨 모두 숨김.
+        // 단, 에이전트 routine 의 hub idx 로는 여전히 사용 (sourceIdx).
         const isSubway = node.id.startsWith('subway-') || node.tier === 'S';
+        if (isSubway) return;
+
+        // focusSpot 있으면 반경 NEAR_RADIUS_PX 밖 노드는 숨김 — "주변 가게만" 의도.
+        if (focusPx) {
+          const dxN = np.x - focusPx.x;
+          const dyN = np.y - focusPx.y;
+          if (dxN * dxN + dyN * dyN > NEAR_R2) return;
+        }
 
         // 최근 30 tick 이내 결제 여부 (테두리만 gold 강조)
         const recentPay = paymentEffectsRef.current.some(
           (e) => e.nodeIdx === idx && tickRef.current - e.startTick < 30,
         );
 
-        if (isSubway) {
-          // 지하철역: 이중 원 + T 심볼 (15px 반경)
-          const ringColor = recentPay ? '#FBBF24' : '#0891B2';
-          const lineWidth = recentPay ? 3 : 2;
-          drawSubwayStation(ctx, np.x, np.y, ringColor, lineWidth);
-        } else {
-          // 상점: 집 모양 (26×22)
-          const ringColor = recentPay ? '#FBBF24' : 'rgba(255,255,255,0.8)';
-          const lineWidth = recentPay ? 2.5 : 1.5;
-          drawStoreHouse(ctx, np.x, np.y, node.tier, ringColor, lineWidth);
-        }
+        // 경쟁업체(comp_ 접두) 는 작은 dot — 사용자 피드백: 집모양 너무 큼.
+        // 일반 마포 상점 / 공실 후보는 그대로 집 모양 유지.
+        const isCompetitor = node.id.startsWith('comp_');
+        if (!isCompetitor) return; // 일반 store/공실 후보 의 집모양 제거 — 사용자 피드백.
 
-        // 라벨 — 11px + 반투명 박스 (가독성)
-        const labelY = np.y + (isSubway ? 15 : 11) + 14;
-        ctx.font = 'bold 11px monospace';
-        ctx.textAlign = 'center';
-        const textW = ctx.measureText(node.label).width;
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        // 작은 4px dot — 보라 (vacancy 빨강과 구분)
+        const dotColor = recentPay ? '#FBBF24' : '#A78BFA';
+        ctx.save();
+        ctx.shadowColor = 'rgba(167, 139, 250, 0.85)';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = dotColor;
         ctx.beginPath();
-        roundedRect(ctx, np.x - textW / 2 - 3, labelY - 10, textW + 6, 14, 3);
+        ctx.arc(np.x, np.y, 4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(node.label, np.x, labelY);
-
-        // 스팟 통계 (누적 매출 · 체류자)
-        const stats = spotStatsRef.current[idx];
-        if (stats && stats.revenue > 0) {
-          // 누적 매출 (gold — 결제 관련만 gold 사용 OK)
-          ctx.fillStyle = '#FBBF24';
-          ctx.font = 'bold 9px monospace';
-          ctx.fillText(
-            `\u20A9${Math.round(stats.revenue / 1000)}K \u00B7 ${stats.visits}\u4EF6`,
-            np.x,
-            labelY + 11,
-          );
-        } else {
-          ctx.fillStyle = isSubway ? '#67E8F9' : node.tier === 'A' ? '#A5B4FC' : '#D1D5DB';
-          ctx.font = 'bold 9px monospace';
-          ctx.fillText(`Tier ${node.tier}`, np.x, labelY + 11);
-        }
-
-        // 현재 체류자 배지 (우상단)
-        if (stats && stats.currentAgents > 0) {
-          const badgeOffset = isSubway ? 13 : 12;
-          const bx = np.x + badgeOffset;
-          const by = np.y - badgeOffset;
-          ctx.fillStyle = '#10B981';
-          ctx.beginPath();
-          ctx.arc(bx, by, 8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#000';
-          ctx.font = 'bold 9px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(stats.currentAgents), bx, by + 0.5);
-          ctx.textBaseline = 'alphabetic';
-        }
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(np.x, np.y, 4, 0, Math.PI * 2);
+        ctx.stroke();
       });
 
       // 실제 ABM trajectory — 에이전트별 시간순 경로를 tick 단위로 보간하여 부드럽게 이동 재생
@@ -1125,8 +1525,9 @@ export default function AbmPersonaMap({
         const proj = mapInstanceRef.current.getProjection?.();
         const kakao = (window as any).kakao;
         if (proj && kakao?.maps?.LatLng) {
-          // 실시간 2초 = 가상 1시간 (60fps 기준 120 tick/hour)
-          const ticksPerHour = 120;
+          // 실시간 4초 = 가상 1시간 (60fps 기준 240 tick/hour).
+          // 사용자 피드백: 2초/hour 너무 빠름 → 4초/hour 절반 속도. 하루 전체 ~64초 재생.
+          const ticksPerHour = 240;
           const minH = trajectoryMinHourRef.current;
           const maxH = trajectoryMaxHourRef.current;
           const totalHours = Math.max(1, maxH - minH + 1);
@@ -1145,8 +1546,159 @@ export default function AbmPersonaMap({
             ext_visitor: '#A78BFA',
           };
 
+          // ─── 히트맵 layer — 헥사 격자 + 네온 글로우 (Orion 스타일 ref) ─────
+          // 사용자 피드백: Kakao 위에 hex 가 묻혀 잘 안 보임 → 마포 bbox 다크 오버레이 + source-over.
+          // 색 스펙트럼: 어두운 indigo (cool/zero) → indigo → rose (hot).
+          // intensity > 0.55 hex 는 네온 글로우 + 카운트 텍스트.
+          const dg = densityGridRef.current;
+          const hexes = hexGridRef.current;
+          if (dg && hexes.length > 0) {
+            // 실 인구 데이터(KOSTAT 24h)는 키가 "0"~"23". sim 데이터는 absHour
+            // ("30","31"...) 키일 수 있음. 둘 다 호환되도록 우선 displayHour 직접 →
+            // 없으면 displayHour % 24 (KOSTAT fallback).
+            let hourKey = String(displayHour);
+            if (!Array.isArray(dg.hours[hourKey])) {
+              hourKey = String(displayHour % 24);
+            }
+            const cells = dg.hours[hourKey];
+            if (Array.isArray(cells) && cells.length === dg.cols * dg.rows) {
+              let maxC = dg.max_count ?? 0;
+              if (!maxC) {
+                for (let i = 0; i < cells.length; i++) if (cells[i] > maxC) maxC = cells[i];
+              }
+              if (maxC > 0) {
+                const HEX_SIZE = 8;
+                const hexPath = new Path2D();
+                for (let i = 0; i < 6; i++) {
+                  const ang = (Math.PI / 3) * i + Math.PI / 6;
+                  const px = HEX_SIZE * Math.cos(ang);
+                  const py = HEX_SIZE * Math.sin(ang);
+                  if (i === 0) hexPath.moveTo(px, py);
+                  else hexPath.lineTo(px, py);
+                }
+                hexPath.closePath();
+
+                // 사용자 피드백: 검은 박스 제거 → bbox 다크 오버레이 삭제. hex 자체 명도 ↑.
+
+                // ② 1차 패스 — ALL hex 그리기 (v=0도 dim 색). source-over 라 카카오 위 선명.
+                ctx.save();
+                const hotIndices: number[] = [];
+                for (let h = 0; h < hexes.length; h++) {
+                  const hex = hexes[h];
+                  if (
+                    hex.x < -HEX_SIZE ||
+                    hex.x > W + HEX_SIZE ||
+                    hex.y < -HEX_SIZE ||
+                    hex.y > H + HEX_SIZE
+                  )
+                    continue;
+                  const v = cells[hex.dr * dg.cols + hex.dc] ?? 0;
+                  // v=0 hex — 외곽선만 그려 격자 윤곽 표시 (사용자 피드백: 경계 보이게).
+                  if (v <= 0) {
+                    ctx.translate(hex.x, hex.y);
+                    ctx.strokeStyle = 'rgba(99, 102, 241, 0.18)'; // indigo dim
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke(hexPath);
+                    ctx.translate(-hex.x, -hex.y);
+                    continue;
+                  }
+                  // log-scale intensity — 저활성 셀도 visible (linear 은 핫스팟 가려짐).
+                  // log(1+v) / log(1+maxC) 라 v=1 도 충분한 밝기 확보.
+                  const logIntensity = Math.log(1 + v) / Math.log(1 + maxC);
+                  // 색 보간: indigo #818cf8 → rose #f43f5e
+                  const r = Math.round(129 + (244 - 129) * logIntensity);
+                  const g = Math.round(140 + (63 - 140) * logIntensity);
+                  const b = Math.round(248 + (94 - 248) * logIntensity);
+                  const alpha = 0.45 + 0.5 * logIntensity; // 0.45 ~ 0.95 — 저활성도 충분히 visible
+                  ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
+                  ctx.translate(hex.x, hex.y);
+                  ctx.fill(hexPath);
+                  // hex 외곽선
+                  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+                  ctx.lineWidth = 0.6;
+                  ctx.stroke(hexPath);
+                  ctx.translate(-hex.x, -hex.y);
+                  // hot hex 기준도 log-scale 에 맞춰 — 0.55 → 0.65 (log 라 더 부드러움)
+                  if (logIntensity > 0.65) hotIndices.push(h);
+                }
+                ctx.restore();
+
+                // ③ 2차 패스 — hot hex 네온 글로우 + 카운트 텍스트
+                if (hotIndices.length > 0) {
+                  ctx.save();
+                  ctx.shadowColor = 'rgba(244, 63, 94, 0.95)';
+                  ctx.shadowBlur = 16;
+                  for (const h of hotIndices) {
+                    const hex = hexes[h];
+                    ctx.fillStyle = 'rgba(244, 63, 94, 0.55)';
+                    ctx.translate(hex.x, hex.y);
+                    ctx.fill(hexPath);
+                    ctx.translate(-hex.x, -hex.y);
+                  }
+                  ctx.restore();
+
+                  // 카운트 텍스트 — 가장 hot 한 상위 8개 hex 에만 (산만함 방지)
+                  // intensity 내림차순 정렬해서 top N
+                  const topHot = hotIndices
+                    .slice()
+                    .sort((a, b) => {
+                      const va = cells[hexes[a].dr * dg.cols + hexes[a].dc] ?? 0;
+                      const vb = cells[hexes[b].dr * dg.cols + hexes[b].dc] ?? 0;
+                      return vb - va;
+                    })
+                    .slice(0, 8);
+                  ctx.save();
+                  ctx.font = 'bold 10px monospace';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillStyle = '#FEF3C7';
+                  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+                  ctx.lineWidth = 2.5;
+                  for (const h of topHot) {
+                    const hex = hexes[h];
+                    const v = cells[hex.dr * dg.cols + hex.dc] ?? 0;
+                    const txt = String(v);
+                    ctx.strokeText(txt, hex.x, hex.y);
+                    ctx.fillText(txt, hex.x, hex.y);
+                  }
+                  ctx.textBaseline = 'alphabetic';
+                  ctx.restore();
+                }
+              }
+            }
+          }
+
           let drawn = 0;
-          trajectoryPathsRef.current.forEach((path) => {
+          let tierSDrawn = 0;
+          tierSPixelsRef.current = new Map();
+          // 자유 드리프트 진폭 — 서울 위도에서 1e-5 ≈ 0.85m. 1.8e-4 ≈ ~16m wandering 반경.
+          // 사용자 피드백: "앞뒤로" 보이지 말고 "이리저리" wandering 으로.
+          // 1축 perpendicular wobble (직선 양옆 진동) → lat/lon 독립 2축 Lissajous 드리프트.
+          const DRIFT_LATLON = 1.8e-4;
+
+          // 마포 polygon hit-test (사용자 피드백: agent 가 hex 안에서만 움직이도록).
+          // mapoPolygonsRef 가 비어있으면 마스킹 skip (geo 미로드 시 fallback).
+          const mapoPolys = mapoPolygonsRef.current;
+          const inMapoLatLon = (lat: number, lon: number): boolean => {
+            if (mapoPolys.length === 0) return true;
+            for (const p of mapoPolys) {
+              const ring = p.ring;
+              let inside = false;
+              for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0],
+                  yi = ring[i][1];
+                const xj = ring[j][0],
+                  yj = ring[j][1];
+                const intersect =
+                  yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+                if (intersect) inside = !inside;
+              }
+              if (inside) return true;
+            }
+            return false;
+          };
+
+          trajectoryPathsRef.current.forEach((path, agentId) => {
             if (path.length === 0) return;
             // virtualHour 를 둘러싼 두 waypoint 찾기 (binary search 대신 경로가 짧으므로 linear)
             let prev = path[0];
@@ -1164,21 +1716,148 @@ export default function AbmPersonaMap({
               prev = next = path[path.length - 1];
             }
             const span = next.absHour - prev.absHour;
-            const t = span > 0 ? Math.min(1, Math.max(0, (virtualHour - prev.absHour) / span)) : 0;
-            const lat = prev.lat + (next.lat - prev.lat) * t;
-            const lon = prev.lon + (next.lon - prev.lon) * t;
+            const tRaw =
+              span > 0 ? Math.min(1, Math.max(0, (virtualHour - prev.absHour) / span)) : 0;
+            // smoothstep ease-in-out — 시간 경계에서 직선 보간 snap 제거.
+            const t = tRaw * tRaw * (3 - 2 * tRaw);
+            const dLat = next.lat - prev.lat;
+            const dLon = next.lon - prev.lon;
+            // 개인별 자유 드리프트 — golden-ratio 시드로 phase 분산.
+            // lat / lon 독립적으로 다른 주기 sin → 직선 A→B 와 무관한 Lissajous wandering.
+            // 같은 hour 정지(span=0) 도 dot 이 한 자리 안에서 흐물흐물 떠도는 효과.
+            const seed = (agentId * 0.6180339887) % 1;
+            const seed2 = (agentId * 0.7548776662) % 1;
+            const tau = Math.PI * 2;
+            // 행동 분기 — backend action 필드 (rest/visit/work/move). drift 진폭/색/펄스 차별화.
+            // - rest: 정지(드리프트 X) + 회색 dim → "집에서 쉼"
+            // - visit: 매장 좌표 펄스 + 빨강 → "방문 결제"
+            // - work: 정적 + 초록 steady → "근무"
+            // - move: 풀 wandering drift + role 색 → "이동"
+            const action = prev.action || 'move';
+            // 드리프트 스케일 — rest/work 는 거의 정지, visit 은 작게 떨림, move 는 풀 wander.
+            const driftScale =
+              action === 'rest' ? 0.05 : action === 'work' ? 0.08 : action === 'visit' ? 0.25 : 1.0;
+            // lat 축 — 주기 ~1.4 hour (실시간 ~5.6초). 너무 빠르지 않게 느리게.
+            const driftLat = Math.sin(virtualHour * 0.7 + seed * tau) * DRIFT_LATLON * driftScale;
+            // lon 축 — 주기 ~2.2 hour. lat 과 frequency 비 무리수 → 반복 X.
+            const driftLon =
+              Math.cos(virtualHour * 0.45 + seed2 * tau) * DRIFT_LATLON * 1.15 * driftScale;
+            // 짧은 ripple — 걸음걸이 미세 흔들림 (~3m, 0.85 hour 주기 → 실시간 ~3.4초)
+            const ripple =
+              Math.sin(virtualHour * 2.35 + seed * 13) * DRIFT_LATLON * 0.18 * driftScale;
+            const lat = prev.lat + dLat * t + driftLat;
+            const lon = prev.lon + dLon * t + driftLon + ripple;
+            // 마포 polygon 밖이면 dot 안 그림 — agent 가 hex 격자 안에서만 보이도록.
+            if (!inMapoLatLon(lat, lon)) return;
             const latLng = new kakao.maps.LatLng(lat, lon);
             const pix = proj.containerPointFromCoords(latLng);
-            if (pix.x < 0 || pix.y < 0 || pix.x > W || pix.y > H) return;
-            ctx.fillStyle = roleColor[prev.role] || '#E5E7EB';
-            ctx.beginPath();
-            ctx.arc(pix.x, pix.y, 3, 0, Math.PI * 2);
-            ctx.fill();
+            if (pix.x < -10 || pix.y < -10 || pix.x > W + 10 || pix.y > H + 10) return;
+
+            // action 별 색·alpha — role 색이 base, action 으로 modulate.
+            let fill = roleColor[prev.role] || '#E5E7EB';
+            let alpha = 1;
+            if (action === 'rest') {
+              fill = '#9CA3AF'; // gray — 휴식
+              alpha = 0.45;
+            } else if (action === 'visit') {
+              fill = '#E45756'; // red — 매장 방문/결제
+              alpha = 1;
+            } else if (action === 'work') {
+              fill = '#54A24B'; // green — 근무 (정적)
+              alpha = 0.85;
+            }
+
+            const isTierS = tierSIdsRef.current.has(agentId);
+
+            if (isTierS) {
+              // Tier S — 노란 테두리 + 큰 dot + 풍선 (forEach 후 별도 패스).
+              ctx.globalAlpha = alpha;
+              tierSPixelsRef.current.set(agentId, { x: pix.x, y: pix.y });
+              ctx.fillStyle = fill;
+              ctx.beginPath();
+              ctx.arc(pix.x, pix.y, 3.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#FCD34D';
+              ctx.lineWidth = 1.6;
+              ctx.beginPath();
+              ctx.arc(pix.x, pix.y, 4.2, 0, Math.PI * 2);
+              ctx.stroke();
+              tierSDrawn++;
+              ctx.globalAlpha = 1;
+            } else {
+              // 4950 non-Tier-S (trajectory sample 250명) — ambient 작은 dot.
+              // 시간대별 통근/visit 이동이 시각적으로 보이도록. action 색·alpha 그대로.
+              ctx.globalAlpha = alpha * 0.7;
+              ctx.fillStyle = fill;
+              ctx.beginPath();
+              // visit 은 살짝 큰 1.6px (action 강조), 그 외 1.0px ambient
+              const r = action === 'visit' ? 1.6 : 1.0;
+              ctx.arc(pix.x, pix.y, r, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.globalAlpha = 1;
+            }
             drawn++;
           });
 
-          // 좌상단 타임스탬프 배지
-          const hourLabel = `ABM ${String(displayHour % 24).padStart(2, '0')}:00 · 실데이터 ${drawn}명`;
+          // Tier S 풍선 layer — 별도 패스로 dot 위에 그려서 가독성 보장.
+          // T4 Step 3: fade in/out (3 tick spawn, 15 tick fade out at end of hour).
+          // 매 hour 경계마다 새 thought 가 시작 → tickInHour 0~3 fade-in, 마지막 15 tick fade-out.
+          if (tierSPixelsRef.current.size > 0 && thoughtsByAgentRef.current.size > 0) {
+            const tickInHour = Math.floor((virtualHour - displayHour) * ticksPerHour);
+            const FADE_IN = 3;
+            const FADE_OUT_START = ticksPerHour - 15;
+            let bubbleAlpha = 1;
+            if (tickInHour < FADE_IN) bubbleAlpha = tickInHour / FADE_IN;
+            else if (tickInHour >= FADE_OUT_START)
+              bubbleAlpha = Math.max(0, 1 - (tickInHour - FADE_OUT_START) / 15);
+
+            if (bubbleAlpha > 0.02) {
+              ctx.font = 'bold 11px "Apple SD Gothic Neo", monospace';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              tierSPixelsRef.current.forEach((pix, aid) => {
+                const th = thoughtsByAgentRef.current.get(aid)?.get(displayHour);
+                if (!th || !th.thought) return;
+                const text = th.thought;
+                const tw = ctx.measureText(text).width;
+                const bx = pix.x;
+                const by = pix.y - 18;
+                const padX = 6;
+                const padY = 4;
+                ctx.globalAlpha = bubbleAlpha;
+                // 말풍선 박스
+                ctx.fillStyle = 'rgba(15,23,42,0.88)';
+                ctx.beginPath();
+                roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY, 5);
+                ctx.fill();
+                ctx.strokeStyle = '#FCD34D';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY, 5);
+                ctx.stroke();
+                // 꼬리
+                ctx.fillStyle = 'rgba(15,23,42,0.88)';
+                ctx.beginPath();
+                ctx.moveTo(bx - 3, by + 4);
+                ctx.lineTo(bx + 3, by + 4);
+                ctx.lineTo(bx, by + 9);
+                ctx.closePath();
+                ctx.fill();
+                // 텍스트
+                ctx.fillStyle = '#FEF3C7';
+                ctx.fillText(text, bx, by);
+              });
+              ctx.globalAlpha = 1;
+              ctx.textBaseline = 'alphabetic';
+            }
+          }
+
+          // displayHour ref 갱신 — 클릭 hit-test 시 PersonaCard 에 전달.
+          currentDisplayHourRef.current = displayHour;
+
+          // 좌상단 타임스탬프 배지 — Tier S 활성 시 별도 표시
+          const tierSLabel = tierSDrawn > 0 ? ` · ⭐${tierSDrawn}` : '';
+          const hourLabel = `ABM ${String(displayHour % 24).padStart(2, '0')}:00 · 실데이터 ${drawn}명${tierSLabel}`;
           ctx.font = 'bold 11px monospace';
           ctx.textAlign = 'left';
           ctx.fillStyle = 'rgba(15,23,42,0.85)';
@@ -1221,12 +1900,16 @@ export default function AbmPersonaMap({
         }
       }
 
-      // 결제 bounce 아이콘 (gold 원 + ₩) — 36 tick 선행 애니메이션
-      // focusSpot 있을 땐 routine 노드가 숨겨져 있으므로 ₩ 이펙트도 숨김 (허공 표시 방지)
+      // 결제 bounce 아이콘 (gold 원 + ₩) — 36 tick 선행 애니메이션.
+      // focusSpot 모드: 다른 80개 매장의 결제 이펙트는 시각이 너무 산만 → 전부 비활성화.
+      // 선택 공실의 visit/결제는 별도 focusSpot 펄스 + 통계 패널로 표시.
+      if (focusSpot) {
+        paymentBouncesRef.current = [];
+        paymentEffectsRef.current = [];
+      }
       paymentBouncesRef.current = paymentBouncesRef.current.filter((e) => {
         const age = tickRef.current - e.startTick;
         if (age > 36) return false;
-        if (hideRoutineNodes) return true;
         const np = nodes[e.nodeIdx];
         if (!np) return true;
         drawPaymentBounce(ctx, np.x, np.y - 14, age);
@@ -1237,7 +1920,6 @@ export default function AbmPersonaMap({
       paymentEffectsRef.current = paymentEffectsRef.current.filter((e) => {
         const age = tickRef.current - e.startTick;
         if (age > 130) return false;
-        if (hideRoutineNodes) return true;
         const np = nodes[e.nodeIdx];
         if (!np) return true;
 
@@ -1271,11 +1953,11 @@ export default function AbmPersonaMap({
         return true;
       });
 
-      // 페르소나 이동 — OSRM 실제 도로 waypoint 따라 걷기 (+ wobble / ease)
+      // 페르소나 이동 — bezier fallback (OSRM 캐시 제거 2026-04-28)
       // trajectory 실데이터 있으면 합성 persona 렌더 skip (실데이터 점으로 대체)
       const useRealTrajectory = trajectoryPathsRef.current.size > 0;
-      const map = mapInstanceRef.current;
-      const kakao = (window as any).kakao ?? null;
+
+      // focusPx / FOCUS_R2 는 draw 시작부에서 hoisted (노드 필터 + persona proximity 공유).
 
       personasRef.current.forEach((p) => {
         if (nodes.length < 2) return;
@@ -1325,21 +2007,8 @@ export default function AbmPersonaMap({
             // C-2: waypoint 생성 전 source/target 인덱스 범위 재확인
             if (!nodes[p.sourceIdx] || !nodes[p.targetIdx]) return;
 
-            // 실제 도로 경로 캐시 lookup
-            const key = `${p.sourceIdx}-${p.targetIdx}`;
-            const latlngs = routeCacheRef.current[key];
-            if (latlngs && latlngs.length >= 2 && kakao && map) {
-              const proj = map.getProjection();
-              p.waypoints = latlngs.map(([la, lo]) => {
-                const pix = proj.containerPointFromCoords(new kakao.maps.LatLng(la, lo));
-                return { x: pix.x, y: pix.y };
-              });
-              // 시작점을 현재 위치로 override (끊김 방지)
-              p.waypoints[0] = { x: p.x, y: p.y };
-              p.waypointIdx = 0;
-              p.segmentProgress = 0;
-            } else {
-              // Fallback bezier
+            // OSRM 캐시 제거됨 — 합성 persona 는 항상 bezier fallback.
+            {
               p.waypoints = [];
               const sx = p.x;
               const sy = p.y;
@@ -1419,11 +2088,16 @@ export default function AbmPersonaMap({
             // 세그먼트 수직 단위 벡터 (lateral 편향 + wobble 방향 공통)
             const wobPerpX = -segDy / segLen;
             const wobPerpY = segDx / segLen;
-            // 개인별 좌/우 편향 — 전 경로 내내 유지 (한 도로 위 여러 에이전트가 나란히 걷지 않음)
-            const lateralX = wobPerpX * p.lateralOffset;
-            const lateralY = wobPerpY * p.lateralOffset;
-            // 개인별 걸음걸이 진폭
-            const wob = p.wobbleAmp * Math.sin(tickRef.current * 0.22 + p.wobblePhase);
+            // lateral breath — 50초 주기로 좌/우 편향이 유기적으로 부풀었다 줄었다 (직선 보간 깨기).
+            const lateralBreath =
+              1 + 0.45 * Math.sin(tickRef.current * 0.011 + p.wobblePhase * 0.5);
+            const lateralX = wobPerpX * p.lateralOffset * lateralBreath;
+            const lateralY = wobPerpY * p.lateralOffset * lateralBreath;
+            // 두 주기 합성 — 빠른 걸음걸이 + 느린 흐름. 사용자 피드백: 직선·로봇 같음 → 유기적으로.
+            const wobFast = p.wobbleAmp * Math.sin(tickRef.current * 0.22 + p.wobblePhase);
+            const wobSlow =
+              p.wobbleAmp * 0.8 * Math.sin(tickRef.current * 0.055 + p.wobblePhase * 1.7);
+            const wob = wobFast + wobSlow;
             p.x = baseX + lateralX + wobPerpX * wob;
             p.y = baseY + lateralY + wobPerpY * wob;
           }
@@ -1463,147 +2137,69 @@ export default function AbmPersonaMap({
 
         const isExternal = p.type === 'ext_commuter' || p.type === 'ext_visitor';
 
-        // External + 진입 중 (waitTicks > 0 + hasSpawned 전) = 차량/지하철 애니메이션
+        // External 진입 페이드인 — 차량/지하철 애니메이션 제거 (사용자 피드백: 거슬림).
+        // 도착(waitTicks=0) 시점의 cyan ripple 만 유지.
         if (isExternal && !p.hasSpawned && p.waitTicks > 0 && p.entryDuration > 0) {
           const progress = 1 - p.waitTicks / p.entryDuration;
-          const vx = p.entryStartX + (p.x - p.entryStartX) * progress;
-          const vy = p.entryStartY + (p.y - p.entryStartY) * progress;
-          const heading = Math.atan2(p.y - p.entryStartY, p.x - p.entryStartX);
-          // 이동 경로 trail
-          ctx.strokeStyle =
-            p.entryMode === 'subway'
-              ? `rgba(6, 182, 212, ${0.25 + progress * 0.25})`
-              : `rgba(251, 191, 36, ${0.2 + progress * 0.2})`;
-          ctx.lineWidth = p.entryMode === 'subway' ? 2.5 : 1.5;
-          ctx.setLineDash(p.entryMode === 'subway' ? [6, 4] : [4, 2]);
+          ctx.globalAlpha = 0.2 + 0.8 * progress;
+          ctx.fillStyle = ACTION_COLOR.move;
+          const fadeR = 0.8 + progress * 1.2;
           ctx.beginPath();
-          ctx.moveTo(p.entryStartX, p.entryStartY);
-          ctx.lineTo(vx, vy);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          // 차량 벡터 드로잉 (이모티콘 대신 Canvas 도형)
-          if (p.entryMode === 'subway') {
-            drawSubwayCar(ctx, vx, vy, heading);
-          } else {
-            drawTaxi(ctx, vx, vy, heading);
-          }
-          return; // skip normal circle render
-        }
-
-        // 꼬리(Trail) 갱신 — 움직일 때만 push (정지/매장 체류 중엔 누적 방지)
-        if (p.waitTicks <= 0) {
-          // age 증가
-          for (let ti = 0; ti < p.trail.length; ti++) {
-            p.trail[ti].age++;
-          }
-          // 매 3 tick마다 현재 위치 snapshot
-          if (tickRef.current % 3 === 0) {
-            p.trail.unshift({ x: p.x, y: p.y, age: 0 });
-            if (p.trail.length > 8) p.trail.pop();
-          }
-        }
-
-        // 기본 반경 — spend 기반 (5~13)
-        const baseR = 5 + Math.min(8, Math.sqrt(p.spend / 3000));
-        // Tier별 크기 배율 + 테두리 두께 (색 아닌 크기/두께로 표현)
-        const tierScale = p.tier === 'S' ? 1.2 : p.tier === 'A' ? 1.0 : 0.85;
-        const tierLine = p.tier === 'S' ? 2.5 : p.tier === 'A' ? 1.8 : 1.2;
-        const r = baseR * tierScale;
-        const actionColor = ACTION_COLOR[p.action];
-
-        // Trail 렌더 — action 색 (external은 cyan), age 높을수록 작고 투명하게
-        const trailColor = isExternal ? '#06B6D4' : actionColor;
-        for (const pt of p.trail) {
-          const tAge = pt.age;
-          if (tAge > 24) continue;
-          const tAlpha = Math.max(0, 0.5 * (1 - tAge / 24));
-          const tR = Math.max(1.2, 3 - (tAge / 24) * 1.5);
-          ctx.globalAlpha = tAlpha;
-          ctx.fillStyle = trailColor;
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, tR, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-
-        // External — 본체 뒤쪽 영구 cyan radial halo (반경 × 2.2)
-        if (isExternal) {
-          const haloR = r * 2.2;
-          const extGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, haloR);
-          extGrad.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
-          extGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
-          ctx.fillStyle = extGrad;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, haloR, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Action 별 분기 렌더링
-        // rest: globalAlpha 0.4 + 회색 채움
-        // work: 채움 없음 + 초록 테두리만
-        // visit/move: Action 색 채움 + 흰색 테두리 (tierLine 두께)
-        if (p.action === 'rest') {
-          ctx.globalAlpha = 0.4;
-          ctx.fillStyle = '#6b7280';
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, fadeR, 0, Math.PI * 2);
           ctx.fill();
           ctx.globalAlpha = 1;
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = tierLine;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.stroke();
-        } else if (p.action === 'work') {
-          // 채움 없이 초록 테두리만 (2px 고정) — 근무 outline-only
-          ctx.strokeStyle = '#54A24B';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.stroke();
-          // tier 크기 강조용 살짝 두꺼운 흰색 얇은 바깥 링 (S만)
-          if (p.tier === 'S') {
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        } else {
-          // visit / move
-          ctx.fillStyle = actionColor + 'dd';
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = tierLine;
-          ctx.stroke();
+          return;
         }
 
-        // 방향성 화살표 tip — 이동 중이고 trail 2개 이상일 때만
-        if (p.action === 'move' && p.trail.length >= 2) {
-          const prev = p.trail[1]; // 직전 위치
-          const dx = p.x - prev.x;
-          const dy = p.y - prev.y;
-          const len = Math.hypot(dx, dy);
-          if (len > 0.5) {
-            const heading = Math.atan2(dy, dx);
-            const tipDist = r + 4;
-            const tipX = p.x + Math.cos(heading) * tipDist;
-            const tipY = p.y + Math.sin(heading) * tipDist;
-            ctx.save();
-            ctx.translate(tipX, tipY);
-            ctx.rotate(heading);
-            ctx.fillStyle = actionColor;
-            ctx.beginPath();
-            ctx.moveTo(4, 0);
-            ctx.lineTo(-3, 3);
-            ctx.lineTo(-3, -3);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
+        // Trail / 화살표 tip / external halo 모두 비활성화 — 5000 agents 성능 + 시각 단순화.
+        // (사용자 피드백: 너무 복잡 → dot 만 깔끔히)
+        void isExternal;
+
+        // 기본 반경 — 더 작게 (1.0 ~ 2.5). focusSpot 근처 dot 은 1.6× 확대.
+        const baseR = 1.0 + Math.min(1.5, Math.sqrt(p.spend / 16000));
+        const tierScale = p.tier === 'S' ? 1.3 : p.tier === 'A' ? 1.0 : 0.8;
+        let r = baseR * tierScale;
+
+        // focusSpot proximity — 35px 이내 dot 만 빨강 + 사이즈 ↑.
+        // 다른 80개 매장에서의 visit 빨간색은 산만 → 일반 색으로 통합.
+        let isNearFocus = false;
+        if (focusPx) {
+          const dxF = p.x - focusPx.x;
+          const dyF = p.y - focusPx.y;
+          if (dxF * dxF + dyF * dyF < FOCUS_R2) {
+            isNearFocus = true;
+            r = r * 1.6;
           }
         }
+
+        // Action 별 fill-only 렌더링
+        if (isNearFocus) {
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = ACTION_COLOR.visit; // 빨강 — focusSpot 근처 dot 강조
+        } else if (p.action === 'rest') {
+          ctx.globalAlpha = 0.4;
+          ctx.fillStyle = '#6b7280';
+        } else if (p.action === 'work') {
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = '#54A24B';
+        } else if (p.action === 'visit') {
+          // focusSpot 모드 시 다른 매장 visit 은 단조 색 (빨강 산만 회피)
+          ctx.globalAlpha = focusSpot ? 0.7 : 1;
+          ctx.fillStyle = focusSpot ? ACTION_COLOR.move : ACTION_COLOR.visit;
+        } else {
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = ACTION_COLOR.move;
+        }
+        // viewport culling — 화면 밖 dot 은 그리기 skip (5000 forEach 비용 절감).
+        // 위치 업데이트는 위에서 이미 끝났으므로 fill 만 안 하면 됨.
+        if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10) {
+          ctx.globalAlpha = 1;
+          return;
+        }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
       });
 
       // External 스폰 이펙트 (cyan ripple) — age 0~60 tick
@@ -1640,7 +2236,7 @@ export default function AbmPersonaMap({
   const timeLabel = `${String((Math.floor(elapsedMin / 60) + 8) % 24).padStart(2, '0')}:${String(elapsedMin % 60).padStart(2, '0')}`;
 
   return (
-    <div className="flex-1 w-full h-full min-h-[700px] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
+    <div className="flex-1 w-full h-full min-h-[88vh] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
       <div className="flex-1 bg-[#1e1b18] border border-[#3a3633] rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
         {/* 헤더 — AI 에이전트 맵과 동일 스타일 */}
         <div className="h-14 bg-[#171717]/90 backdrop-blur-md border-b border-[#3a3633] flex justify-between items-center px-6 shrink-0 z-10">
@@ -1658,18 +2254,6 @@ export default function AbmPersonaMap({
                 title="행정동 스팟 좌표 로딩 중"
               >
                 스팟 로딩...
-              </span>
-            )}
-            {!KAKAO_KEY_MISSING && storeNodes.length >= 2 && (
-              <span
-                className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                  routesLoaded
-                    ? 'text-emerald-400 border-emerald-500/40'
-                    : 'text-amber-400 border-amber-500/40 animate-pulse'
-                }`}
-                title="OSRM 도보 경로 프리로드 상태"
-              >
-                {routesLoaded ? '도로 경로 OK' : '경로 로딩...'}
               </span>
             )}
             {mode === 'vacancy' && (
@@ -1702,136 +2286,428 @@ export default function AbmPersonaMap({
           </div>
         </div>
 
-        {/* 맵 + 캔버스 오버레이 레이어 */}
-        <div className="flex-1 relative">
-          {/* KakaoMap 베이스 레이어 */}
-          <div ref={mapContainerRef} className="absolute inset-0" />
-          {/* S-2: API 키 없으면 mock 대신 안내 UI로 명시 */}
-          {KAKAO_KEY_MISSING && (
-            <div className="absolute inset-0 bg-[#1a2535]/95 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center">
-              <p className="text-sm font-bold text-amber-300">카카오맵 API 키가 필요합니다</p>
-              <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
-                .env 에{' '}
-                <code className="text-emerald-300">VITE_KAKAO_MAP_API_KEY=&lt;your_key&gt;</code>{' '}
-                설정 후 개발 서버를 재시작하세요. 키 없이 mock 모드로는 도보/교통/결제 시각화가
-                동작하지 않습니다.
-              </p>
-            </div>
-          )}
-          {/* C-3: 스팟 로딩 실패 (1개 이하) — 에이전트 시뮬 비활성 안내 */}
-          {!KAKAO_KEY_MISSING && !spotsLoading && storeNodes.length < 2 && (
-            <div className="absolute inset-0 bg-[#1a2535]/60 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center pointer-events-none">
-              <p className="text-sm font-bold text-amber-300">지도 스팟 로딩 실패</p>
-              <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
-                {targetDistrict}의 스팟 정보를 불러오지 못했습니다. 에이전트 시뮬레이션이
-                비활성화됩니다.
-              </p>
-              <button
-                onClick={() => {
-                  setSpotsLoading(true);
-                  fetch(`/api/mapo/spots/${encodeURIComponent(targetDistrict)}?limit=4`)
-                    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`spots ${r.status}`))))
-                    .then((data: { spots?: StoreNode[] }) => {
-                      const list =
-                        Array.isArray(data.spots) && data.spots.length > 0 ? data.spots : null;
-                      setStoreNodes(list ?? [FALLBACK_CENTER]);
-                      setSpotsLoading(false);
-                    })
-                    .catch(() => {
-                      setStoreNodes([FALLBACK_CENTER]);
-                      setSpotsLoading(false);
-                    });
-                }}
-                className="pointer-events-auto px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 rounded text-xs font-bold"
-              >
-                다시 시도
-              </button>
-            </div>
-          )}
+        {/* 좌우 분할 — 지도 (좌, 75%) + 결과 패널 (우, 25%) */}
+        <div className="flex-1 flex flex-row min-h-0">
+          {/* 맵 + 캔버스 오버레이 레이어 — 좌측 */}
+          <div className="flex-[3] relative min-w-0">
+            {/* KakaoMap 베이스 레이어 */}
+            <div ref={mapContainerRef} className="absolute inset-0" />
+            {/* S-2: API 키 없으면 mock 대신 안내 UI로 명시 */}
+            {KAKAO_KEY_MISSING && (
+              <div className="absolute inset-0 bg-[#1a2535]/95 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center">
+                <p className="text-sm font-bold text-amber-300">카카오맵 API 키가 필요합니다</p>
+                <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
+                  .env 에{' '}
+                  <code className="text-emerald-300">VITE_KAKAO_MAP_API_KEY=&lt;your_key&gt;</code>{' '}
+                  설정 후 개발 서버를 재시작하세요. 키 없이 mock 모드로는 도보/교통/결제 시각화가
+                  동작하지 않습니다.
+                </p>
+              </div>
+            )}
+            {/* C-3: 스팟 로딩 실패 (1개 이하) — 에이전트 시뮬 비활성 안내 */}
+            {!KAKAO_KEY_MISSING && !spotsLoading && storeNodes.length < 2 && (
+              <div className="absolute inset-0 bg-[#1a2535]/60 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center pointer-events-none">
+                <p className="text-sm font-bold text-amber-300">지도 스팟 로딩 실패</p>
+                <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
+                  {targetDistrict}의 스팟 정보를 불러오지 못했습니다. 에이전트 시뮬레이션이
+                  비활성화됩니다.
+                </p>
+                <button
+                  onClick={() => {
+                    setSpotsLoading(true);
+                    fetch(`/api/mapo/spots/${encodeURIComponent(targetDistrict)}?limit=4`)
+                      .then((r) =>
+                        r.ok ? r.json() : Promise.reject(new Error(`spots ${r.status}`)),
+                      )
+                      .then((data: { spots?: StoreNode[] }) => {
+                        const list =
+                          Array.isArray(data.spots) && data.spots.length > 0 ? data.spots : null;
+                        setStoreNodes(list ?? [FALLBACK_CENTER]);
+                        setSpotsLoading(false);
+                      })
+                      .catch(() => {
+                        setStoreNodes([FALLBACK_CENTER]);
+                        setSpotsLoading(false);
+                      });
+                  }}
+                  className="pointer-events-auto px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 rounded text-xs font-bold"
+                >
+                  다시 시도
+                </button>
+              </div>
+            )}
 
-          {/* 투명 캔버스 오버레이 — 페르소나 + 노드 (맵 드래그/줌 이벤트는 통과) */}
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full"
-            style={{ zIndex: 10, pointerEvents: 'none' }}
-          />
-
-          {/* mode='vacancy' + vacancySpot — 빨간 펄스 마커 + 반경 500m 원 */}
-          {mode === 'vacancy' && vacancySpot && mapLoaded && mapInstanceRef.current && (
-            <VacancySpotMarker
-              map={mapInstanceRef.current}
-              lat={vacancySpot.lat}
-              lng={vacancySpot.lng}
+            {/* 투명 캔버스 오버레이 — 페르소나 + 노드 (맵 드래그/줌 이벤트는 통과) */}
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full"
+              style={{ zIndex: 10, pointerEvents: 'none' }}
             />
-          )}
 
-          {/* mode='vacancy' — 우측 상단 사이드 패널 (매출/방문 통계) */}
-          {mode === 'vacancy' && vacancySpot && (
-            <div className="absolute top-4 right-4 z-20">
-              <VacancyStatsPanel
-                summary={vacancySummary}
-                vacancySpot={vacancySpot}
-                loading={vacancyFetching || (!vacancySummary && !vacancyFetchError)}
-              />
-            </div>
-          )}
+            {/* dong hover tooltip — 마우스 올린 polygon 의 이름 (커서 우상단). */}
+            {hoveredDong && (
+              <div
+                className="absolute pointer-events-none select-none"
+                style={{
+                  left: hoveredDong.mouseX + 12,
+                  top: hoveredDong.mouseY - 12,
+                  zIndex: 35,
+                }}
+              >
+                <span className="inline-block rounded-md bg-black/85 backdrop-blur-md border border-emerald-400/60 px-2 py-1 text-xs font-black tracking-tight text-emerald-200 leading-none whitespace-nowrap shadow-lg shadow-emerald-500/20">
+                  {hoveredDong.name}
+                </span>
+              </div>
+            )}
 
-          {/* 하단 — 결과 통계 or 실행 버튼 */}
-          <div className="absolute bottom-4 left-0 right-0 px-4 z-20 flex flex-col items-center gap-3">
-            {abmResult ? (
-              <div className="w-full max-w-2xl flex flex-col gap-2">
-                {/* 메인 지표 4칸 */}
-                <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-emerald-500/30 rounded-xl p-3 grid grid-cols-4 gap-3">
-                  <div className="text-center">
-                    <p className="text-[9px] font-mono text-[#6b7280] uppercase mb-0.5">일 방문</p>
-                    <p className="text-lg font-black text-emerald-300">
-                      {abmResult.daily_visits_mean?.toLocaleString() ?? '-'}
-                      <span className="text-[10px] text-[#6b7280] ml-0.5">회</span>
-                    </p>
-                    {abmResult.daily_visits_std > 0 && (
-                      <p className="text-[9px] text-[#6b7280]">σ {abmResult.daily_visits_std}</p>
-                    )}
+            {/* Phase 2 4 거점 카드 제거됨 — 사용자 피드백: hex 만 남기고 깔끔하게. */}
+
+            {/* Phase 2: hover 시 우하단 active node 카드. */}
+            {hoveredHex && trajectoryPathsRef.current.size > 0 && (
+              <div className="absolute bottom-4 right-4 z-30 pointer-events-none">
+                <div className="w-56 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_30px_60px_rgba(0,0,0,0.8)]">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                    <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest">
+                      Active Node Analysis
+                    </span>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[9px] font-mono text-[#6b7280] uppercase mb-0.5">
-                      월 매출 추정
-                    </p>
-                    <p className="text-lg font-black text-emerald-300">
-                      {abmResult.monthly_revenue_estimate
-                        ? `${Math.round(abmResult.monthly_revenue_estimate / 10000)}만`
-                        : '-'}
-                    </p>
-                    <p className="text-[9px] text-[#6b7280]">일매출×25</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[9px] font-mono text-[#6b7280] uppercase mb-0.5">피크</p>
-                    <p className="text-sm font-bold text-emerald-300">
-                      {abmResult.peak_hours && abmResult.peak_hours.length > 0
-                        ? abmResult.peak_hours
-                            .slice(0, 3)
-                            .map((h: any) => `${h}시`)
-                            .join('·')
-                        : '-'}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[9px] font-mono text-[#6b7280] uppercase mb-0.5">에이전트</p>
-                    <p className="text-lg font-black text-emerald-300">
-                      {abmResult.n_personas ?? '-'}
-                      <span className="text-[10px] text-[#6b7280] ml-0.5">명</span>
-                    </p>
-                    <p className="text-[9px] text-[#6b7280]">LLM 11회</p>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-end">
+                      <span className="text-[10px] font-bold text-stone-500 uppercase">
+                        Density
+                      </span>
+                      <span className="text-xl font-black text-white italic tabular-nums">
+                        {(hoveredHex.intensity * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1 bg-stone-900 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 to-rose-500 shadow-[0_0_10px_#f43f5e]"
+                        style={{ width: `${(hoveredHex.intensity * 100).toFixed(0)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] font-bold uppercase">
+                      <span className="text-stone-600">Agents</span>
+                      <span className="text-white font-black tabular-nums">
+                        {hoveredHex.count.toLocaleString()}
+                      </span>
+                    </div>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* 페르소나 분포 (customer_profile_dist) */}
+            {/* mode='vacancy' + vacancySpot — 빨간 펄스 마커 + 반경 500m 원 */}
+            {mode === 'vacancy' && vacancySpot && mapLoaded && mapInstanceRef.current && (
+              <VacancySpotMarker
+                map={mapInstanceRef.current}
+                lat={vacancySpot.lat}
+                lng={vacancySpot.lng}
+              />
+            )}
+
+            {/* mode='vacancy' — 우측 상단 사이드 패널 (매출/방문 통계) */}
+            {mode === 'vacancy' && vacancySpot && (
+              <div className="absolute top-4 right-4 z-20">
+                <VacancyStatsPanel
+                  summary={vacancySummary}
+                  vacancySpot={vacancySpot}
+                  loading={vacancyFetching || (!vacancySummary && !vacancyFetchError)}
+                />
+              </div>
+            )}
+
+            {/* 공실 스팟 선택 패널 — vacancySpots 받았을 때만 표시 + 결과 없을 때만 */}
+            {Array.isArray(vacancySpots) &&
+              vacancySpots.length > 0 &&
+              !abmResult?.new_store_visit_share_pct && (
+                <div className="absolute top-3 right-3 max-w-[260px] bg-[#0d1117]/95 backdrop-blur-sm border border-emerald-500/40 rounded-lg p-3 z-20 shadow-[0_0_20px_rgba(52,211,153,0.15)]">
+                  <p className="text-[10px] font-mono text-emerald-400 mb-2 uppercase tracking-wider">
+                    공실 스팟 ({vacancySpots.length})
+                  </p>
+                  <p className="text-[10px] text-[#6b7280] mb-2 leading-relaxed">
+                    스팟 클릭 → 그 위치에서 ABM 시뮬 실행
+                  </p>
+                  <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto">
+                    {[...vacancySpots]
+                      .sort((a, b) => (b.listing_count ?? 0) - (a.listing_count ?? 0))
+                      .slice(0, 8)
+                      .map((spot, idx) => {
+                        const isTarget = spot.dong_name === targetDistrict;
+                        return (
+                          <button
+                            key={`spot-${spot.id}`}
+                            onClick={() => onSpotClick?.(spot)}
+                            disabled={abmLoading || !onSpotClick}
+                            className={`text-left px-2 py-1.5 rounded text-[11px] border transition-all ${
+                              isTarget
+                                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/20'
+                                : 'bg-[#1a1815]/60 border-[#3a3633] text-[#9ca3af] hover:border-[#4a4643]'
+                            } ${abmLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold">
+                                {idx + 1}. {spot.dong_name}
+                              </span>
+                              <span className="text-[9px] font-mono text-[#6b7280]">
+                                {spot.listing_count ?? 0}건
+                              </span>
+                            </div>
+                            <div className="text-[9px] text-[#6b7280] mt-0.5 font-mono">
+                              {spot.lat.toFixed(4)}, {spot.lon.toFixed(4)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+            {/* 시뮬 결과 오버레이 — new_store_visit_share_pct 가 있을 때 (스팟 클릭 시뮬 후) */}
+            {abmResult &&
+              (abmResult.new_store_visit_share_pct > 0 || abmResult.new_store_visits > 0) && (
+                <div className="absolute top-3 right-3 w-[300px] bg-[#0d1117]/95 backdrop-blur-md border border-emerald-500/60 rounded-lg p-4 z-30 shadow-[0_0_30px_rgba(52,211,153,0.25)]">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                      스팟 시뮬 결과
+                      {abmResult.cached && (
+                        <span className="ml-1.5 text-[8px] text-cyan-400 normal-case">
+                          (cached)
+                        </span>
+                      )}
+                    </p>
+                    <button
+                      onClick={() => onClearResult?.()}
+                      className="text-[10px] px-2 py-1 rounded border border-[#3a3633] text-[#9ca3af] hover:text-white hover:border-emerald-500/60 transition-all"
+                    >
+                      ← 뒤로
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2">
+                      <p className="text-[9px] text-emerald-300 mb-1">방문 점유율</p>
+                      <p className="text-lg font-bold text-emerald-200">
+                        {abmResult.new_store_visit_share_pct?.toFixed(2) ?? '0.00'}%
+                      </p>
+                      <p className="text-[8px] text-[#6b7280] mt-0.5">마포 전체 방문 중</p>
+                    </div>
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2">
+                      <p className="text-[9px] text-amber-300 mb-1">일 매출</p>
+                      <p className="text-lg font-bold text-amber-200">
+                        {Math.round(abmResult.new_store_revenue ?? 0).toLocaleString()}원
+                      </p>
+                      <p className="text-[8px] text-[#6b7280] mt-0.5">
+                        방문 {abmResult.new_store_visits ?? 0}회
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-[#9ca3af] border-t border-[#3a3633] pt-2 leading-relaxed">
+                    <p className="mb-1">
+                      <span className="text-[#6b7280]">대상 동:</span>{' '}
+                      <span className="text-[#e5e7eb] font-bold">{targetDistrict}</span>
+                    </p>
+                    <p className="mb-1">
+                      <span className="text-[#6b7280]">전체 일 매출:</span>{' '}
+                      <span className="text-[#e5e7eb]">
+                        {Math.round(abmResult.total_daily_revenue ?? 0).toLocaleString()}원
+                      </span>
+                    </p>
+                    <p>
+                      <span className="text-[#6b7280]">월 추정:</span>{' '}
+                      <span className="text-[#e5e7eb]">
+                        {Math.round(abmResult.monthly_revenue_estimate ?? 0).toLocaleString()}원
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {/* Narrator 요약 — 결과 오버레이 활성 시에는 숨김 */}
+            {abmResult?.narrator_summary && !abmResult?.new_store_visit_share_pct && (
+              <div className="absolute top-3 right-3 max-w-xs bg-[#0d1117]/90 backdrop-blur-sm border border-[#3a3633] rounded-lg p-3 z-20">
+                <p className="text-[10px] font-mono text-emerald-400 mb-1 uppercase tracking-wider">
+                  Narrator
+                </p>
+                <p className="text-[11px] text-[#9ca3af] leading-relaxed">
+                  {abmResult.narrator_summary}
+                </p>
+              </div>
+            )}
+          </div>
+          {/* 우측 결과 패널 — 좌우 분할 모드 (지도 75% / 결과 25%) */}
+          <div className="relative px-5 py-5 flex flex-col gap-4 shrink-0 w-[28%] min-w-[340px] max-w-[480px] bg-[#070708] border-l border-white/10 overflow-y-auto">
+            {/* 백그라운드 무드 조명 */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_rgba(79,70,229,0.05)_0%,_transparent_60%)] pointer-events-none" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            {abmResult ? (
+              <div className="relative w-full flex flex-col gap-4">
+                {/* 헤더 라벨 — narrow column 에 맞춰 작게 */}
+                <div className="flex items-baseline justify-between">
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-lg font-black text-white italic tracking-tighter leading-none">
+                      General Statistics
+                    </h4>
+                    <p className="text-[9px] font-black text-stone-600 uppercase tracking-[0.3em]">
+                      {abmResult.n_personas?.toLocaleString() ?? '-'} agents · live
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[9px] font-mono text-emerald-400 tracking-widest">
+                      LIVE
+                    </span>
+                  </div>
+                </div>
+                {/* 메인 지표 4칸 — 1열 (narrow column) */}
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    {
+                      label: '일 방문',
+                      value: abmResult.daily_visits_mean?.toLocaleString() ?? '-',
+                      suffix: '회',
+                      sub:
+                        abmResult.daily_visits_std > 0
+                          ? `σ ${abmResult.daily_visits_std}`
+                          : '시뮬 평균',
+                      color: '#34D399',
+                      glow: 'rgba(52,211,153,0.18)',
+                      icon: (
+                        <path
+                          d="M3 12L9 18L21 6"
+                          stroke="#000"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ),
+                    },
+                    {
+                      label: 'Total Earning',
+                      value: abmResult.monthly_revenue_estimate
+                        ? Math.round(abmResult.monthly_revenue_estimate / 10000).toLocaleString()
+                        : '-',
+                      suffix: '만 ₩',
+                      sub: '월 매출 (일×25)',
+                      color: '#FBBF24',
+                      glow: 'rgba(251,191,36,0.18)',
+                      icon: (
+                        <text
+                          x="12"
+                          y="17"
+                          textAnchor="middle"
+                          fontSize="14"
+                          fontWeight="900"
+                          fill="#000"
+                        >
+                          ₩
+                        </text>
+                      ),
+                    },
+                    {
+                      label: 'Peak Hours',
+                      value:
+                        abmResult.peak_hours && abmResult.peak_hours.length > 0
+                          ? abmResult.peak_hours
+                              .slice(0, 3)
+                              .map((h: any) => `${h}`)
+                              .join(' · ')
+                          : '-',
+                      suffix: '시',
+                      sub: '상위 3 시간대',
+                      color: '#22D3EE',
+                      glow: 'rgba(34,211,238,0.18)',
+                      icon: (
+                        <>
+                          <circle cx="12" cy="12" r="9" stroke="#000" strokeWidth="2" />
+                          <path
+                            d="M12 6v6l4 2"
+                            stroke="#000"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </>
+                      ),
+                    },
+                    {
+                      label: 'Active Agents',
+                      value: abmResult.n_personas ? abmResult.n_personas.toLocaleString() : '-',
+                      suffix: '명',
+                      sub: 'Tier S 50 · LLM thought',
+                      color: '#818CF8',
+                      glow: 'rgba(129,140,248,0.18)',
+                      icon: (
+                        <>
+                          <circle cx="9" cy="8" r="3" stroke="#000" strokeWidth="2" />
+                          <circle cx="17" cy="9" r="2.5" stroke="#000" strokeWidth="2" />
+                          <path
+                            d="M3 19c0-3 3-5 6-5s6 2 6 5M14 18c.5-2 2-3.5 4-3.5s3.5 1.5 4 3.5"
+                            stroke="#000"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </>
+                      ),
+                    },
+                  ].map((m) => (
+                    <div
+                      key={m.label}
+                      className="relative bg-[#111113]/90 backdrop-blur-xl border border-white/10 rounded-[24px] p-5 shadow-2xl flex flex-col gap-3 overflow-hidden group transition-all hover:border-white/20"
+                      style={{ boxShadow: `0 0 32px ${m.glow}` }}
+                    >
+                      {/* 상단 글로스 highlight */}
+                      <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none" />
+                      {/* 헤더 — 색 박스 아이콘 + 라벨 */}
+                      <div className="relative z-10 flex items-center gap-2.5">
+                        <div
+                          className="w-5 h-5 rounded-md flex items-center justify-center border border-white/10 shrink-0"
+                          style={{ backgroundColor: m.color }}
+                        >
+                          <svg
+                            width="11"
+                            height="11"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            {m.icon}
+                          </svg>
+                        </div>
+                        <span className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none">
+                          {m.label}
+                        </span>
+                      </div>
+                      {/* 큰 숫자 */}
+                      <div className="relative z-10 flex items-baseline gap-1.5">
+                        <span className="text-3xl font-black text-white italic tracking-tighter leading-none tabular-nums">
+                          {m.value}
+                        </span>
+                        <span className="text-xs font-bold text-white/40 italic tracking-tight">
+                          {m.suffix}
+                        </span>
+                      </div>
+                      <div className="relative z-10 w-full h-px bg-white/[0.06]" />
+                      {/* 서브라인 */}
+                      <div className="relative z-10 flex items-center gap-1.5 text-[9.5px] font-bold text-stone-500 uppercase tracking-tighter">
+                        <div
+                          className="w-1 h-1 rounded-full"
+                          style={{ backgroundColor: m.color }}
+                        />
+                        {m.sub}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 페르소나 분포 (customer_profile_dist) — 큰 막대 + 색 차별화 */}
                 {abmResult.customer_profile_dist &&
                   Object.keys(abmResult.customer_profile_dist).length > 0 && (
-                    <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-[#3a3633] rounded-xl p-3">
-                      <p className="text-[9px] font-mono text-[#6b7280] uppercase mb-2">
+                    <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-[#3a3633] rounded-2xl p-4">
+                      <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">
                         페르소나 방문 분포
                       </p>
-                      <div className="flex gap-1.5 items-end h-10">
+                      <div className="flex gap-2 items-end h-20">
                         {Object.entries(abmResult.customer_profile_dist as Record<string, number>)
                           .sort((a, b) => b[1] - a[1])
                           .map(([role, ratio]) => {
@@ -1846,20 +2722,44 @@ export default function AbmPersonaMap({
                                     : role === 'owner'
                                       ? '점주'
                                       : role === 'ext_commuter'
-                                        ? '외부통근'
+                                        ? '외부 통근'
                                         : role === 'ext_visitor'
-                                          ? '외부방문'
+                                          ? '외부 방문'
                                           : role;
+                            const color =
+                              role === 'resident'
+                                ? '#34D399'
+                                : role === 'commuter'
+                                  ? '#60A5FA'
+                                  : role === 'visitor'
+                                    ? '#F472B6'
+                                    : role === 'owner'
+                                      ? '#FBBF24'
+                                      : role === 'ext_commuter'
+                                        ? '#22D3EE'
+                                        : role === 'ext_visitor'
+                                          ? '#A78BFA'
+                                          : '#9CA3AF';
                             return (
-                              <div key={role} className="flex-1 flex flex-col items-center gap-0.5">
-                                <span className="text-[9px] font-bold text-emerald-300">
+                              <div
+                                key={role}
+                                className="flex-1 flex flex-col items-center gap-1.5 min-w-0"
+                              >
+                                <span className="text-sm font-black tabular-nums" style={{ color }}>
                                   {pct}%
                                 </span>
                                 <div
-                                  className="w-full bg-emerald-500/40 rounded-sm transition-all"
-                                  style={{ height: `${Math.max(4, pct * 0.8)}px` }}
+                                  className="w-full rounded-md transition-all"
+                                  style={{
+                                    height: `${Math.max(6, pct * 1.2)}px`,
+                                    backgroundColor: color,
+                                    opacity: 0.6,
+                                    boxShadow: `0 0 12px ${color}40`,
+                                  }}
                                 />
-                                <span className="text-[8px] text-[#6b7280]">{label}</span>
+                                <span className="text-[10px] font-bold text-stone-400 truncate w-full text-center">
+                                  {label}
+                                </span>
                               </div>
                             );
                           })}
@@ -1867,23 +2767,39 @@ export default function AbmPersonaMap({
                     </div>
                   )}
 
-                {/* 신규 매장 진입 시 잠식 효과 */}
+                {/* 신규 매장 진입 시 잠식 효과 — 큼직하게 + 위험 시각화 */}
                 {abmResult.cannibalization && abmResult.cannibalization.target_dong && (
-                  <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-rose-500/30 rounded-xl p-3 flex items-center gap-3">
-                    <div>
-                      <p className="text-[9px] font-mono text-rose-400 uppercase mb-0.5">
+                  <div className="bg-rose-500/10 backdrop-blur-sm border border-rose-500/40 rounded-2xl p-4 flex items-center gap-4 shadow-lg shadow-rose-500/10">
+                    <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
+                      <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M12 9v4M12 17h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"
+                          stroke="#FB7185"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-rose-300 uppercase tracking-wider mb-1">
                         기존 매장 잠식 (반경 {abmResult.cannibalization.cannibalize_radius_m}m)
                       </p>
-                      <p className="text-[11px] text-[#9ca3af]">
-                        <span className="text-rose-300 font-bold">
+                      <p className="text-sm text-stone-200 leading-relaxed">
+                        <span className="text-rose-200 font-black">
                           {abmResult.cannibalization.target_dong}
                         </span>{' '}
                         내 영향권 매장{' '}
-                        <span className="text-rose-300 font-bold">
+                        <span className="text-rose-200 font-black text-base">
                           {abmResult.cannibalization.affected_stores}
                         </span>
                         개 · 예상 매출 감소{' '}
-                        <span className="text-rose-300 font-bold">
+                        <span className="text-rose-200 font-black text-base">
                           {abmResult.cannibalization.estimated_impact_pct}%
                         </span>
                       </p>
@@ -2065,233 +2981,18 @@ export default function AbmPersonaMap({
               </div>
             )}
           </div>
-
-          {/* 공실 스팟 선택 패널 — vacancySpots 받았을 때만 표시 + 결과 없을 때만 */}
-          {Array.isArray(vacancySpots) &&
-            vacancySpots.length > 0 &&
-            !abmResult?.new_store_visit_share_pct && (
-              <div className="absolute top-3 right-3 max-w-[260px] bg-[#0d1117]/95 backdrop-blur-sm border border-emerald-500/40 rounded-lg p-3 z-20 shadow-[0_0_20px_rgba(52,211,153,0.15)]">
-                <p className="text-[10px] font-mono text-emerald-400 mb-2 uppercase tracking-wider">
-                  공실 스팟 ({vacancySpots.length})
-                </p>
-                <p className="text-[10px] text-[#6b7280] mb-2 leading-relaxed">
-                  스팟 클릭 → 그 위치에서 ABM 시뮬 실행
-                </p>
-                <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto">
-                  {[...vacancySpots]
-                    .sort((a, b) => (b.listing_count ?? 0) - (a.listing_count ?? 0))
-                    .slice(0, 8)
-                    .map((spot, idx) => {
-                      const isTarget = spot.dong_name === targetDistrict;
-                      return (
-                        <button
-                          key={`spot-${spot.id}`}
-                          onClick={() => onSpotClick?.(spot)}
-                          disabled={abmLoading || !onSpotClick}
-                          className={`text-left px-2 py-1.5 rounded text-[11px] border transition-all ${
-                            isTarget
-                              ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/20'
-                              : 'bg-[#1a1815]/60 border-[#3a3633] text-[#9ca3af] hover:border-[#4a4643]'
-                          } ${abmLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold">
-                              {idx + 1}. {spot.dong_name}
-                            </span>
-                            <span className="text-[9px] font-mono text-[#6b7280]">
-                              {spot.listing_count ?? 0}건
-                            </span>
-                          </div>
-                          <div className="text-[9px] text-[#6b7280] mt-0.5 font-mono">
-                            {spot.lat.toFixed(4)}, {spot.lon.toFixed(4)}
-                          </div>
-                        </button>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-
-          {/* 시뮬 결과 오버레이 — new_store_visit_share_pct 가 있을 때 (스팟 클릭 시뮬 후) */}
-          {abmResult &&
-            (abmResult.new_store_visit_share_pct > 0 || abmResult.new_store_visits > 0) && (
-              <div className="absolute top-3 right-3 w-[300px] bg-[#0d1117]/95 backdrop-blur-md border border-emerald-500/60 rounded-lg p-4 z-30 shadow-[0_0_30px_rgba(52,211,153,0.25)]">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
-                    스팟 시뮬 결과
-                    {abmResult.cached && (
-                      <span className="ml-1.5 text-[8px] text-cyan-400 normal-case">(cached)</span>
-                    )}
-                  </p>
-                  <button
-                    onClick={() => onClearResult?.()}
-                    className="text-[10px] px-2 py-1 rounded border border-[#3a3633] text-[#9ca3af] hover:text-white hover:border-emerald-500/60 transition-all"
-                  >
-                    ← 뒤로
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2">
-                    <p className="text-[9px] text-emerald-300 mb-1">방문 점유율</p>
-                    <p className="text-lg font-bold text-emerald-200">
-                      {abmResult.new_store_visit_share_pct?.toFixed(2) ?? '0.00'}%
-                    </p>
-                    <p className="text-[8px] text-[#6b7280] mt-0.5">마포 전체 방문 중</p>
-                  </div>
-                  <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2">
-                    <p className="text-[9px] text-amber-300 mb-1">일 매출</p>
-                    <p className="text-lg font-bold text-amber-200">
-                      {Math.round(abmResult.new_store_revenue ?? 0).toLocaleString()}원
-                    </p>
-                    <p className="text-[8px] text-[#6b7280] mt-0.5">
-                      방문 {abmResult.new_store_visits ?? 0}회
-                    </p>
-                  </div>
-                </div>
-                <div className="text-[10px] text-[#9ca3af] border-t border-[#3a3633] pt-2 leading-relaxed">
-                  <p className="mb-1">
-                    <span className="text-[#6b7280]">대상 동:</span>{' '}
-                    <span className="text-[#e5e7eb] font-bold">{targetDistrict}</span>
-                  </p>
-                  <p className="mb-1">
-                    <span className="text-[#6b7280]">전체 일 매출:</span>{' '}
-                    <span className="text-[#e5e7eb]">
-                      {Math.round(abmResult.total_daily_revenue ?? 0).toLocaleString()}원
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-[#6b7280]">월 추정:</span>{' '}
-                    <span className="text-[#e5e7eb]">
-                      {Math.round(abmResult.monthly_revenue_estimate ?? 0).toLocaleString()}원
-                    </span>
-                  </p>
-                </div>
-              </div>
-            )}
-
-          {/* Narrator 요약 — 결과 오버레이 활성 시에는 숨김 */}
-          {abmResult?.narrator_summary && !abmResult?.new_store_visit_share_pct && (
-            <div className="absolute top-3 right-3 max-w-xs bg-[#0d1117]/90 backdrop-blur-sm border border-[#3a3633] rounded-lg p-3 z-20">
-              <p className="text-[10px] font-mono text-emerald-400 mb-1 uppercase tracking-wider">
-                Narrator
-              </p>
-              <p className="text-[11px] text-[#9ca3af] leading-relaxed">
-                {abmResult.narrator_summary}
-              </p>
-            </div>
-          )}
-
-          {/* 통합 범례 — 스팟 / Action / Tier / External (4섹션 한 박스) */}
-          <div className="absolute top-3 left-3 bg-[#0d1117]/80 backdrop-blur-sm border border-[#3a3633] rounded-lg p-2.5 z-20 w-[200px]">
-            <p className="text-[9px] font-mono text-emerald-400 mb-1.5 uppercase tracking-wider">
-              Legend
-            </p>
-            {/* 섹션 1 — 스팟 */}
-            <p className="text-[8px] font-mono text-[#6b7280] mb-1">SPOT</p>
-            <div className="flex flex-col gap-1 mb-2 text-[10px]">
-              <div className="flex items-center gap-2">
-                {/* 지하철역 이중원 + T */}
-                <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-                  <circle cx="10" cy="10" r="9" fill="#ECFEFF" stroke="#0891B2" strokeWidth="1.8" />
-                  <circle cx="10" cy="10" r="6.5" fill="none" stroke="#0891B2" strokeWidth="0.8" />
-                  <path
-                    d="M 6.5 7.3 H 13.5 M 10 7.3 V 13.2"
-                    stroke="#0F172A"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="text-[#9ca3af]">지하철역</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* 상점 집 모양 */}
-                <svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true">
-                  <polygon points="11,2 20,9 2,9" fill="#818CF8" />
-                  <rect x="3" y="9" width="16" height="9" fill="#4F46E5" />
-                  <rect x="6" y="11" width="3" height="3" fill="#818CF8" />
-                  <rect x="13" y="11" width="3" height="3" fill="#818CF8" />
-                  <rect x="9" y="14" width="4" height="4" fill="#1F2937" />
-                </svg>
-                <span className="text-[#9ca3af]">상점</span>
-              </div>
-            </div>
-            <div className="border-t border-[#3a3633] my-1.5" />
-
-            {/* 섹션 2 — Action */}
-            <p className="text-[8px] font-mono text-[#6b7280] mb-1">AGENT ACTION</p>
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-2 text-[9px]">
-              <span className="flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                  <circle cx="6" cy="6" r="5" fill="#E45756" stroke="#FFFFFF" strokeWidth="1.5" />
-                </svg>
-                <span className="text-[#fca5a5]">방문</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                  <circle cx="6" cy="6" r="5" fill="#4C78A8" stroke="#FFFFFF" strokeWidth="1.5" />
-                </svg>
-                <span className="text-[#93c5fd]">이동</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                  <circle cx="6" cy="6" r="4.5" fill="none" stroke="#54A24B" strokeWidth="2" />
-                </svg>
-                <span className="text-[#86efac]">근무</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                  <circle cx="6" cy="6" r="5" fill="#6b7280" fillOpacity="0.4" />
-                </svg>
-                <span className="text-[#9ca3af]">휴식</span>
-              </span>
-            </div>
-            <div className="border-t border-[#3a3633] my-1.5" />
-
-            {/* 섹션 3 — Tier (크기로 표현) */}
-            <p className="text-[8px] font-mono text-[#6b7280] mb-1">TIER (크기)</p>
-            <div className="flex items-center gap-3 mb-2 text-[9px]">
-              <span className="flex items-center gap-1">
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <circle cx="8" cy="8" r="7" fill="#4C78A8" stroke="#FFFFFF" strokeWidth="2.5" />
-                </svg>
-                <span className="text-white">S</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                  <circle cx="7" cy="7" r="6" fill="#4C78A8" stroke="#FFFFFF" strokeWidth="1.8" />
-                </svg>
-                <span className="text-white">A</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                  <circle cx="6" cy="6" r="5" fill="#4C78A8" stroke="#FFFFFF" strokeWidth="1.2" />
-                </svg>
-                <span className="text-white">B</span>
-              </span>
-            </div>
-            <div className="border-t border-[#3a3633] my-1.5" />
-
-            {/* 섹션 4 — External */}
-            <p className="text-[8px] font-mono text-[#6b7280] mb-1">EXTERNAL</p>
-            <div className="flex items-center gap-2 text-[9px]">
-              <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-                <defs>
-                  <radialGradient id="extHalo" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#06B6D4" stopOpacity="0.55" />
-                    <stop offset="100%" stopColor="#06B6D4" stopOpacity="0" />
-                  </radialGradient>
-                </defs>
-                <circle cx="11" cy="11" r="10" fill="url(#extHalo)" />
-                <circle cx="11" cy="11" r="4.5" fill="#4C78A8" stroke="#FFFFFF" strokeWidth="1.5" />
-              </svg>
-              <span className="text-cyan-300">외부 유입 (cyan halo)</span>
-            </div>
-            <p className="text-[8px] text-[#6b7280] mt-1.5 leading-tight">
-              크기 = 누적 지출 · 결제 시 gold 링/텍스트
-            </p>
-          </div>
         </div>
       </div>
+
+      {/* Tier S 페르소나 카드 모달 — Tier S dot 클릭 시 표시 (plan T5).
+          onPersonaClick prop 가 있으면 부모가 모달 처리하므로 여기 렌더 X. */}
+      {selectedPersona && !onPersonaClick && (
+        <PersonaCard
+          data={selectedPersona}
+          onClose={() => setSelectedPersona(null)}
+          currentHour={currentDisplayHourRef.current % 24}
+        />
+      )}
     </div>
   );
 }

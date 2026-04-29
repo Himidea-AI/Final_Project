@@ -17,7 +17,7 @@ export function PlaceholderPanel({
       <p className="text-sm font-bold">준비 중입니다.</p>
       <p className="mt-1 text-xs">{description}</p>
       {modelName && (
-        <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-stone-600">
+        <p className="mt-3 text-[0.625rem] font-mono uppercase tracking-widest text-stone-600">
           {modelName}
         </p>
       )}

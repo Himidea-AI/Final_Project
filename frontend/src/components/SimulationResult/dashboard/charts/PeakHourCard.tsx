@@ -36,7 +36,7 @@ export function PeakHourCard({ data }: Props) {
       <div className="rounded-3xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center">
         <Activity className="mx-auto text-stone-600 mb-2" size={22} />
         <p className="text-xs text-stone-500">유동인구 피크 시간 예측 데이터 없음</p>
-        <p className="mt-1 text-[10px] text-stone-600">
+        <p className="mt-1 text-[0.625rem] text-stone-600">
           living_pop_forecast (TCN) 모델 호출 실패 시 표시됩니다
         </p>
       </div>
@@ -56,25 +56,25 @@ export function PeakHourCard({ data }: Props) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
           <Activity size={16} className="text-indigo-400" /> 유동인구 피크 시간 예측
-          <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal">
+          <span className="text-[0.625rem] font-black text-stone-500 normal-case tracking-normal">
             living_pop_forecast · TCN
           </span>
         </h4>
-        <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[11px] font-black text-indigo-400 tabular-nums flex items-center gap-1.5">
+        <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[0.6875rem] font-black text-indigo-400 tabular-nums flex items-center gap-1.5">
           <Clock size={11} />
           피크 {formatTimeZone(peakTz)} · {formatPop(peakPop)}명
         </div>
       </div>
 
       {/* 자연어 요약 */}
-      <p className="text-[13px] text-stone-300 leading-relaxed">
+      <p className="text-[0.8125rem] text-stone-300 leading-relaxed">
         {data.dong_name} 다음 분기 시간대별 유동인구 예측. 피크는 {formatTimeZone(peakTz)}에 약{' '}
         {formatPop(peakPop)}명으로 집중되며, 운영 인력·재고 배치의 기준 시간대로 활용 가능합니다.
       </p>
 
       {/* 24시간 막대 차트 */}
       <div>
-        <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-3">
+        <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest mb-3">
           24시간 예측 ({q1.quarter_offset}분기 후)
         </div>
         <div className="flex items-end gap-[2px] h-[140px]">
@@ -97,7 +97,7 @@ export function PeakHourCard({ data }: Props) {
                 />
                 {/* 시간대 라벨 — 3의 배수 시간만 표시 (가독성, 24개 라벨 다 노출하면 빽빽) */}
                 <div
-                  className={`text-[8px] font-bold tabular-nums ${
+                  className={`text-[0.5rem] font-bold tabular-nums ${
                     isPeak ? 'text-indigo-400' : 'text-stone-600'
                   }`}
                 >
@@ -107,7 +107,7 @@ export function PeakHourCard({ data }: Props) {
             );
           })}
         </div>
-        <div className="flex justify-between text-[9px] font-bold text-stone-600 tabular-nums mt-1">
+        <div className="flex justify-between text-[0.5625rem] font-bold text-stone-600 tabular-nums mt-1">
           <span>0시</span>
           <span>6시</span>
           <span>12시</span>
@@ -119,7 +119,7 @@ export function PeakHourCard({ data }: Props) {
       {/* 분기별 피크 요약 (q1~qn) */}
       {data.quarters.length > 1 && (
         <div>
-          <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-3">
+          <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest mb-3">
             분기별 피크 시간 추이
           </div>
           <div className="grid grid-cols-4 gap-2">
@@ -128,13 +128,13 @@ export function PeakHourCard({ data }: Props) {
                 key={q.quarter_offset}
                 className="bg-stone-950/40 border border-stone-800 rounded-xl p-3 text-left"
               >
-                <div className="text-[9px] font-black text-stone-500 uppercase tracking-widest">
+                <div className="text-[0.5625rem] font-black text-stone-500 uppercase tracking-widest">
                   +{q.quarter_offset}분기
                 </div>
                 <div className="text-base font-black text-stone-100 tabular-nums tracking-tighter mt-1">
                   {formatTimeZone(q.peak_time_zone)}
                 </div>
-                <div className="text-[10px] font-bold text-indigo-400 tabular-nums mt-0.5">
+                <div className="text-[0.625rem] font-bold text-indigo-400 tabular-nums mt-0.5">
                   {formatPop(q.peak_pop)}명
                 </div>
               </div>
@@ -145,10 +145,10 @@ export function PeakHourCard({ data }: Props) {
 
       {/* Disclaimer */}
       <div className="pt-4 border-t border-stone-800/50 space-y-1">
-        <p className="text-[10px] text-stone-600 leading-relaxed">
+        <p className="text-[0.625rem] text-stone-600 leading-relaxed">
           ※ TCN 모델 — 코로나 시기(2020~2021) 가중치 0.5 보정 적용.
         </p>
-        <p className="text-[10px] text-stone-600 leading-relaxed">
+        <p className="text-[0.625rem] text-stone-600 leading-relaxed">
           ※ 마포구 16동 × 24시간대 단일 학습. 다른 조합/시간대는 외삽 결과로 신뢰도 하락 가능.
         </p>
       </div>

@@ -59,7 +59,7 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
 const fieldClass =
   'w-full px-4 py-3 rounded-xl bg-[#1e1b18] border text-[#e2e8f0] text-sm placeholder-[#9ca3af] outline-none transition-colors duration-200';
 const labelClass = 'block text-xs text-[#9ca3af] font-medium mb-1.5';
-const errorClass = 'text-[10px] text-red-400 mt-1';
+const errorClass = 'text-[0.625rem] text-red-400 mt-1';
 
 export default function ManagerSignupForm({ onSuccess }: Props) {
   const { showToast } = useToast();
@@ -222,7 +222,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           )}
         </div>
 
-        {verifyError && <p className="text-[10px] text-red-400 mt-2">{verifyError}</p>}
+        {verifyError && <p className="text-[0.625rem] text-red-400 mt-2">{verifyError}</p>}
 
         {workspace && (
           <motion.div
@@ -354,7 +354,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
                   />
                 ))}
               </div>
-              <span className="text-[10px] text-[#9ca3af]">{pwStrength.label}</span>
+              <span className="text-[0.625rem] text-[#9ca3af]">{pwStrength.label}</span>
             </div>
           )}
         </motion.div>

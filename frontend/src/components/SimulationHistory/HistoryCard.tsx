@@ -94,11 +94,11 @@ export function HistoryCard({
           <div className="flex items-center gap-2 text-xs text-stone-500">
             <span>📅</span>
             <span className="font-mono">{formatWhen(item.created_at)}</span>
-            <span className="ml-1 rounded bg-stone-900/60 px-1.5 py-0.5 text-[10px] font-mono text-indigo-400">
+            <span className="ml-1 rounded bg-stone-900/60 px-1.5 py-0.5 text-[0.625rem] font-mono text-indigo-400">
               {docId}
             </span>
             {showManagerBadge && (
-              <span className="ml-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+              <span className="ml-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[0.625rem] font-bold text-cyan-300">
                 by {item.manager_name}
               </span>
             )}
@@ -115,7 +115,7 @@ export function HistoryCard({
           </div>
           <div className="mt-2 flex items-center gap-2">
             <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${signalCls}`}
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.625rem] font-bold ${signalCls}`}
             >
               ● {signalLbl}
             </span>

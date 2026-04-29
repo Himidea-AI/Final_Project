@@ -79,7 +79,7 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
         <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-stone-900/40 to-stone-900/40 p-8">
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1">
-              <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">
+              <div className="mb-3 flex items-center gap-2 text-[0.625rem] font-black uppercase tracking-widest text-indigo-300">
                 <Trophy className="h-3.5 w-3.5" />
                 추천 1순위
               </div>
@@ -100,7 +100,7 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
 
           {showTopChips && (
             <div className="mt-6 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+              <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
                 Top {topCandidates!.length}
               </span>
               {topCandidates!.map((d, i) => {
@@ -158,7 +158,7 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
         />
 
         <div className="col-span-2 flex flex-col rounded-3xl border border-stone-800/60 bg-stone-900/40 p-6">
-          <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-stone-500">
+          <div className="mb-3 text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
             창업 진입 신호
           </div>
           <div className="flex flex-1 items-center">

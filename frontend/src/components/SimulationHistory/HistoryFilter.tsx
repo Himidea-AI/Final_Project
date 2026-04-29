@@ -115,7 +115,7 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
                 key={k}
                 type="button"
                 onClick={() => applyPreset(k)}
-                className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
+                className={`rounded-md px-2.5 py-1.5 text-[0.6875rem] font-semibold transition-all ${
                   active
                     ? 'bg-[#818cf8]/15 text-[#818cf8] border border-[#818cf8]/40'
                     : 'border border-transparent text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]/40'
@@ -158,7 +158,7 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
             onClick={() => setSortOpen((o) => !o)}
             className="flex items-center gap-2 rounded-lg border border-[#3a3633] bg-[#1e1b18] px-3 py-2 text-xs text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors min-w-[170px] justify-between"
           >
-            <span className="text-[#9ca3af] tracking-wider uppercase text-[10px]">정렬</span>
+            <span className="text-[#9ca3af] tracking-wider uppercase text-[0.625rem]">정렬</span>
             <span className="flex-1 text-left ml-2">{currentSortLabel}</span>
             <ChevronDown
               size={14}

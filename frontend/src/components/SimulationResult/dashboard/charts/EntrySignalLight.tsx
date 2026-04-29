@@ -45,7 +45,7 @@ export function EntrySignalLight({ signal }: Props) {
     <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border ${meta.colorBg}`}>
       <Icon className={meta.colorText} size={18} />
       <div className="flex flex-col">
-        <span className={`text-[10px] font-black uppercase tracking-widest ${meta.colorText}`}>
+        <span className={`text-[0.625rem] font-black uppercase tracking-widest ${meta.colorText}`}>
           Entry Signal
         </span>
         <span className={`text-sm font-black ${meta.colorText}`}>{meta.label}</span>

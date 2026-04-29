@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import type { SimulationOutput } from '../../../types';
+import { useAuth } from '../../../auth/AuthContext';
+import { useSimulationStore } from '../../../stores/simulationStore';
 import { SectionLabel } from '../shared/SectionLabel';
 import { MarketMap, type Competitor, type RankingEntry } from './MarketMap';
 
@@ -98,15 +100,21 @@ export function MapSection({ simResult }: Props) {
   const rankings = useMemo(() => buildRankings(simResult), [simResult]);
   const center = useMemo(() => buildCenter(simResult), [simResult]);
 
+  const { brand: authBrand, user } = useAuth();
+  // 사용자 입력 commercial_radius — backend 응답에 echo 안 되므로 store.params 에서 직접.
+  const userRadius = useSimulationStore((s) => s.params?.commercial_radius);
   const sim = simResult as SimulationOutput & Record<string, any>;
   const district = sim.winner_district ?? sim.target_district ?? '—';
-  const brand = sim.brand_name ?? '브랜드 미지정';
+  // 회원가입 시 사업자등록번호로 받은 브랜드명 → user.company_name → fallback 순.
+  // simResult.brand_name 은 백엔드가 시뮬 응답에 채울 수 있으니 우선시.
+  const brand = sim.brand_name ?? authBrand?.brand_name ?? user?.company_name ?? '브랜드 미지정';
   const businessType = sim.business_type ?? sim.biz_type ?? '—';
   const address = sim.target_address ?? '—';
 
+  const effectiveRadius = userRadius ?? 500;
   const totalCompetitors = competitors.length;
   const withinCompetitors = competitors.filter(
-    (c) => (c.distance_m ?? Number.POSITIVE_INFINITY) <= 500,
+    (c) => (c.distance_m ?? Number.POSITIVE_INFINITY) <= effectiveRadius,
   ).length;
 
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
@@ -122,20 +130,22 @@ export function MapSection({ simResult }: Props) {
           center={center}
           competitors={competitors}
           rankings={rankings}
-          radius={500}
+          radius={effectiveRadius}
           winnerDistrict={simResult.winner_district}
           height={520}
         />
 
         {/* Layer 5 — 좌상단 타겟 요약 패널 */}
         <div className="absolute left-4 top-4 z-10 max-w-xs rounded-lg border border-stone-700 bg-stone-900/75 p-4 backdrop-blur-xl">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400">Target</div>
+          <div className="text-[0.625rem] uppercase tracking-widest text-stone-400">Target</div>
           <div className="mt-1 text-sm font-semibold text-stone-100">{brand}</div>
           <div className="mt-0.5 text-xs text-stone-400">{businessType}</div>
           <div className="mt-2 border-t border-stone-700/60 pt-2">
             <div className="text-xs text-indigo-400">{district}</div>
-            {address !== '—' && <div className="mt-0.5 text-[11px] text-stone-500">{address}</div>}
-            <div className="mt-1 font-mono text-[10px] text-stone-500">
+            {address !== '—' && (
+              <div className="mt-0.5 text-[0.6875rem] text-stone-500">{address}</div>
+            )}
+            <div className="mt-1 font-mono text-[0.625rem] text-stone-500">
               {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
             </div>
           </div>
@@ -143,12 +153,14 @@ export function MapSection({ simResult }: Props) {
 
         {/* Layer 6 — 좌하단 범례 패널 */}
         <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-stone-700 bg-stone-900/75 p-3 backdrop-blur-xl">
-          <div className="mb-2 text-[10px] uppercase tracking-widest text-stone-400">Legend</div>
+          <div className="mb-2 text-[0.625rem] uppercase tracking-widest text-stone-400">
+            Legend
+          </div>
           <div className="space-y-1.5 text-xs text-stone-300">
             <div className="flex items-center gap-2">
               <span className="inline-block h-3 w-3 rounded-full border border-indigo-400/80 bg-indigo-500/20" />
               <span>
-                반경 500m · 내부{' '}
+                반경 {effectiveRadius.toLocaleString()}m · 내부{' '}
                 <span className="font-mono text-indigo-400">{withinCompetitors}</span> / 총{' '}
                 <span className="font-mono text-stone-100">{totalCompetitors}</span>
               </span>
@@ -181,7 +193,7 @@ export function MapSection({ simResult }: Props) {
               <span>외부 경쟁점</span>
             </div>
             {saturation && (
-              <div className="pt-1 text-[10px] text-stone-500">포화도: {saturation}</div>
+              <div className="pt-1 text-[0.625rem] text-stone-500">포화도: {saturation}</div>
             )}
           </div>
         </div>

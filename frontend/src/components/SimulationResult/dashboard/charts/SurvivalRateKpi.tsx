@@ -30,13 +30,13 @@ export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
     <div className="rounded-2xl border border-stone-800/60 bg-stone-950/40 p-5">
       <div className="flex items-center gap-2 mb-3">
         <ShieldCheck size={14} className="text-emerald-400" />
-        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+        <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
           3년 생존 vs 폐업
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <div className="text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-1">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-emerald-400 mb-1">
             생존률
           </div>
           <div className="text-3xl font-black tabular-nums text-emerald-400 tracking-tighter">
@@ -45,7 +45,7 @@ export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
           </div>
         </div>
         <div>
-          <div className="text-[9px] font-black uppercase tracking-widest text-rose-400 mb-1">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-rose-400 mb-1">
             폐업률
           </div>
           <div className="text-3xl font-black tabular-nums text-rose-400 tracking-tighter">
@@ -70,7 +70,7 @@ export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
             </div>
           );
         })()}
-      <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+      <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
         market_report 정규화 지표. 100을 합한 비율 시각화.
       </p>
     </div>

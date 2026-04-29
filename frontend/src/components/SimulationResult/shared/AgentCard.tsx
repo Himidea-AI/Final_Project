@@ -18,7 +18,7 @@ const AGENT_ICONS: Record<AgentId, LucideIcon> = {
   population_analyst: Users,
   legal: ShieldAlert,
   district_ranking: Target,
-  operational_fit: Route,
+  inflow: Route,
   synthesis: Brain,
   demographic_depth: UserSearch,
   trend_forecaster: LineChartIcon,
@@ -30,7 +30,7 @@ const AGENT_COLORS: Record<AgentId, string> = {
   population_analyst: 'text-emerald-400',
   legal: 'text-rose-400',
   district_ranking: 'text-sky-400',
-  operational_fit: 'text-teal-400',
+  inflow: 'text-teal-400',
   synthesis: 'text-indigo-400',
   demographic_depth: 'text-violet-400',
   trend_forecaster: 'text-cyan-400',
@@ -70,7 +70,7 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
             <span className="text-xs font-semibold text-stone-100 truncate">
               {attribution.display_name}
             </span>
-            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono ${kindCls}`}>
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[0.625rem] font-mono ${kindCls}`}>
               {attribution.kind}
             </span>
           </div>
@@ -89,7 +89,7 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-semibold text-stone-100">{attribution.display_name}</h3>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${kindCls}`}>
+            <span className={`rounded px-1.5 py-0.5 text-[0.625rem] font-mono ${kindCls}`}>
               {attribution.kind}
             </span>
           </div>
@@ -115,7 +115,7 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
       )}
       {attribution.confidence != null && (
         <div className="mt-3">
-          <div className="flex items-center justify-between text-[10px] text-stone-500">
+          <div className="flex items-center justify-between text-[0.625rem] text-stone-500">
             <span>신뢰도</span>
             <span>{(attribution.confidence * 100).toFixed(0)}%</span>
           </div>

@@ -64,18 +64,18 @@ export function ClosureRatePanel({ rate }: { rate: ClosureRate | null | undefine
       <div className="flex items-center justify-between mb-4">
         <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
           <History size={14} className="text-stone-400" /> 과거 폐업률 추이
-          <span className="text-[10px] font-black text-stone-600 normal-case tracking-normal">
+          <span className="text-[0.625rem] font-black text-stone-600 normal-case tracking-normal">
             closure_rate · 실측
           </span>
         </h4>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-black text-stone-500 tabular-nums">
+          <span className="text-[0.6875rem] font-black text-stone-500 tabular-nums">
             최근 4분기 평균 {avgPct}%
           </span>
         </div>
       </div>
       <ClosureRateHistoryChart rates={rate.monthly_closure_rates} />
-      <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+      <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
         ※ 이 차트는 과거 데이터 기반 실측 폐업률입니다. 예측은 아래 LightGBM + TCN 폐업위험도 패널을
         참고하세요.
       </p>
@@ -111,18 +111,18 @@ function ProfitSimulationPanelFull({
       <div className="flex items-center justify-between mb-6">
         <h4 className="text-sm font-black text-stone-100 uppercase tracking-tight flex items-center gap-2">
           <Activity size={16} className="text-indigo-400" /> 상세 수익성 시뮬레이션
-          <span className="text-[10px] font-black text-stone-500 normal-case tracking-normal">
+          <span className="text-[0.625rem] font-black text-stone-500 normal-case tracking-normal">
             profit_simulation
           </span>
         </h4>
         <div className="flex items-center gap-2">
           {margin != null && (
-            <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[11px] font-black text-indigo-400 tabular-nums">
+            <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[0.6875rem] font-black text-indigo-400 tabular-nums">
               마진 {formatPct(margin)}
             </div>
           )}
           {bepMonths != null && (
-            <div className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[11px] font-black text-cyan-400 tabular-nums">
+            <div className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[0.6875rem] font-black text-cyan-400 tabular-nums">
               BEP {bepMonths.toFixed(1)}개월
             </div>
           )}
@@ -131,7 +131,7 @@ function ProfitSimulationPanelFull({
 
       {/* 2026-04-27 BEP 면책 — 백엔드 계산식이 인건비 제외라 명시 필요 */}
       {bepMonths != null && (
-        <p className="mb-4 text-[10px] text-stone-500 leading-relaxed">
+        <p className="mb-4 text-[0.625rem] text-stone-500 leading-relaxed">
           ※ 인건비 미포함 기준입니다. 실제 BEP는 운영 인원에 따라 길어질 수 있습니다.
         </p>
       )}
@@ -162,7 +162,7 @@ function ProfitSimulationPanelFull({
         <div className="bg-stone-950/40 border border-stone-800 rounded-2xl p-5 flex flex-col justify-center">
           <div className="flex items-center gap-2 mb-3">
             <Gauge size={18} className="text-indigo-500" />
-            <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+            <span className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
               분석 신뢰도
             </span>
           </div>
@@ -177,7 +177,7 @@ function ProfitSimulationPanelFull({
                   style={{ width: `${Math.min(100, Math.max(0, confidencePct))}%` }}
                 />
               </div>
-              <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+              <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
                 synthesis 에이전트 판단 신뢰도 기반. TCN MAPE 제공 시 교체됩니다.
               </p>
             </>
@@ -185,7 +185,7 @@ function ProfitSimulationPanelFull({
             <>
               <div className="text-2xl font-black text-stone-500 tabular-nums mb-2">—</div>
               <div className="w-full bg-stone-800 h-1.5 rounded-full" />
-              <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+              <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
                 synthesis 에이전트 신뢰도 미산정. 분석 완료 후 표시됩니다.
               </p>
             </>
@@ -216,7 +216,7 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
           폐업 위험도
         </h4>
         {closure.is_mock && (
-          <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full uppercase">
+          <span className="text-[0.5625rem] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full uppercase">
             MOCK
           </span>
         )}
@@ -232,11 +232,13 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
       {/* 2026-04-27: closure_risk가 LightGBM(과거 패턴) + TCN(시계열) 두 모델 결과를 별도 노출 */}
       {closure.summary_lgbm && closure.summary_lgbm.length > 0 && (
         <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-indigo-400 mb-1">
+          <div className="flex items-center gap-1.5 text-[0.5625rem] font-black uppercase tracking-widest text-indigo-400 mb-1">
             <span className="w-1 h-1 rounded-full bg-indigo-400" />
             LightGBM · 과거 패턴
           </div>
-          <p className="text-[11px] text-stone-300 leading-relaxed">{closure.summary_lgbm[0]}</p>
+          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">
+            {closure.summary_lgbm[0]}
+          </p>
         </div>
       )}
       <ClosureSignalsBar
@@ -246,11 +248,13 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
       />
       {closure.summary_tcn && closure.summary_tcn.length > 0 && (
         <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-cyan-400 mb-1">
+          <div className="flex items-center gap-1.5 text-[0.5625rem] font-black uppercase tracking-widest text-cyan-400 mb-1">
             <span className="w-1 h-1 rounded-full bg-cyan-400" />
             TCN · 시계열 흐름
           </div>
-          <p className="text-[11px] text-stone-300 leading-relaxed">{closure.summary_tcn[0]}</p>
+          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">
+            {closure.summary_tcn[0]}
+          </p>
         </div>
       )}
       <ClosureSignalsBar
@@ -262,7 +266,7 @@ export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | un
         (!closure.summary_tcn || closure.summary_tcn.length === 0) &&
         (!closure.top_signals_lgbm || closure.top_signals_lgbm.length === 0) &&
         (!closure.top_signals_tcn || closure.top_signals_tcn.length === 0) && (
-          <p className="mt-3 text-[11px] text-stone-500 leading-relaxed">
+          <p className="mt-3 text-[0.6875rem] text-stone-500 leading-relaxed">
             폐업 위험도 모델 요약 미생성
           </p>
         )}

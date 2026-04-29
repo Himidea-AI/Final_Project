@@ -14,13 +14,7 @@
  * - 타입 정의는 src/types/index.ts 참고
  */
 import axios from 'axios';
-import type {
-  SimulationInput,
-  SimulationOutput,
-  JobStatus,
-  AnalysisResult,
-  CustomerSegment,
-} from '../types';
+import type { SimulationInput, SimulationOutput, JobStatus, CustomerSegment } from '../types';
 import type {
   HistoryFilterParams,
   HistoryListResponse,
@@ -134,12 +128,6 @@ export async function runSimulation(
     if (body.status === 'error') throw new Error(body.message || 'Simulation failed');
   }
   return body as SimulationOutput;
-}
-
-/** 상권 분석 및 지도 데이터 요청 */
-export async function analyzeLocation(input: SimulationInput): Promise<AnalysisResult> {
-  const response = await apiClient.post('/analyze', input);
-  return response.data;
 }
 
 /** 시뮬레이션 리포트 조회 */

@@ -151,10 +151,10 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
         {/* 주간 시뮬 수 스파크 바 */}
         <div className="md:col-span-2 rounded-xl border border-stone-800 bg-stone-900/40 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
               최근 8주 주간 시뮬 수
             </span>
-            <span className="text-[10px] text-stone-600">
+            <span className="text-[0.625rem] text-stone-600">
               {startOfDay(new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000)) > 0 ? '' : ''}
               {items.length}건 집계 · peak {maxWeek}
             </span>
@@ -169,7 +169,7 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
                     style={{ height: `${pct}%`, minHeight: w.count > 0 ? '4px' : '0' }}
                     title={`${w.week}: ${w.count}건`}
                   />
-                  <span className="text-[9px] font-mono text-stone-600">{w.week}</span>
+                  <span className="text-[0.5625rem] font-mono text-stone-600">{w.week}</span>
                 </div>
               );
             })}
@@ -179,7 +179,7 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
         {/* Top 브랜드 */}
         <div className="rounded-xl border border-stone-800 bg-stone-900/40 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
               최다 분석 브랜드
             </span>
           </div>
@@ -190,12 +190,12 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
               topBrands.map((b, i) => (
                 <div key={b.key} className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2 text-xs text-stone-300">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-[9px] font-mono text-stone-400">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-[0.5625rem] font-mono text-stone-400">
                       {i + 1}
                     </span>
                     <span className="truncate">{b.key}</span>
                   </span>
-                  <span className="font-mono text-[11px] text-indigo-400 tabular-nums">
+                  <span className="font-mono text-[0.6875rem] text-indigo-400 tabular-nums">
                     {b.count}건
                   </span>
                 </div>
@@ -232,13 +232,13 @@ function StatCard({
   return (
     <div className="rounded-xl border border-stone-800 bg-stone-900/40 p-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+        <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
           {label}
         </span>
         {icon}
       </div>
       <div className={`text-xl font-black tabular-nums ${toneCls}`}>{value}</div>
-      {sub && <div className="mt-1 text-[10px] text-stone-500">{sub}</div>}
+      {sub && <div className="mt-1 text-[0.625rem] text-stone-500">{sub}</div>}
     </div>
   );
 }

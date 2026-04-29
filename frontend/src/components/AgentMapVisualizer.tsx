@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Brain, ShieldAlert, LineChart, Target, MapPin, Users } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { MapPin } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -47,15 +47,6 @@ const DEFAULT_LOCATIONS: LocationData[] = [
   { id: 5, name: '합정카페거리', lat: 37.5495, lng: 126.9185 },
 ];
 
-// 백엔드 `backend/src/agents/nodes/` 5개 노드와 일치
-const AGENTS = [
-  { id: 'market', name: 'Market Analyst', icon: <LineChart />, color: '#818cf8' },
-  { id: 'population', name: 'Population Analyst', icon: <Users />, color: '#10b981' },
-  { id: 'supervisor', name: 'Supervisor Node', icon: <Brain />, color: '#f59e0b' },
-  { id: 'legal', name: 'Legal Analyst', icon: <ShieldAlert />, color: '#f43f5e' },
-  { id: 'strategy', name: 'Strategy Synthesizer', icon: <Target />, color: '#06b6d4' },
-];
-
 export default function AgentMapVisualizer({
   locations = DEFAULT_LOCATIONS,
   competitors = [],
@@ -65,13 +56,10 @@ export default function AgentMapVisualizer({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstanceRef = useRef<any>(null);
-  const agentRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [mapLoaded, setMapLoaded] = useState(false);
   const [targetPixels, setTargetPixels] = useState<Record<string | number, PixelCoord>>({});
   const [competitorPixels, setCompetitorPixels] = useState<Record<string | number, PixelCoord>>({});
-  const [agentPixels, setAgentPixels] = useState<Record<string, PixelCoord>>({});
-  const [showLasers, setShowLasers] = useState(false);
 
   const KAKAO_MAP_API_KEY: string = import.meta.env?.VITE_KAKAO_MAP_API_KEY || '';
   const IS_MOCK_MODE = !KAKAO_MAP_API_KEY || KAKAO_MAP_API_KEY.includes('YOUR');
@@ -132,19 +120,6 @@ export default function AgentMapVisualizer({
     }
     setTargetPixels(newTargetPixels);
     setCompetitorPixels(newCompetitorPixels);
-
-    const newAgentPixels: Record<string, PixelCoord> = {};
-    AGENTS.forEach((agent) => {
-      const agentEl = agentRefs.current[agent.id];
-      if (agentEl) {
-        const rect = agentEl.getBoundingClientRect();
-        newAgentPixels[agent.id] = {
-          x: rect.left - containerRect.left + rect.width / 2,
-          y: rect.top - containerRect.top - 10,
-        };
-      }
-    });
-    setAgentPixels(newAgentPixels);
   }, [IS_MOCK_MODE, locations, competitors]);
 
   useEffect(() => {
@@ -155,7 +130,6 @@ export default function AgentMapVisualizer({
       setMapLoaded(true);
       const timer = setTimeout(() => {
         updateCoordinates();
-        setShowLasers(true);
       }, 500);
       window.addEventListener('resize', handleResize);
       cleanupFn = () => {
@@ -191,7 +165,6 @@ export default function AgentMapVisualizer({
 
         const timer = setTimeout(() => {
           updateCoordinates();
-          setShowLasers(true);
         }, 500);
 
         cleanupFn = () => {
@@ -253,7 +226,7 @@ export default function AgentMapVisualizer({
           />
           <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-[#818cf8]/20 rounded-full animate-[spin_10s_linear_infinite]" />
           <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] border border-[#818cf8]/10 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
-          <div className="absolute top-4 left-4 font-mono text-[10px] text-[#818cf8] opacity-50 tracking-widest">
+          <div className="absolute top-4 left-4 font-mono text-[0.625rem] text-[#818cf8] opacity-50 tracking-widest">
             MOCK RADAR MODE ACTIVE // NO API KEY DETECTED
           </div>
         </div>
@@ -303,7 +276,7 @@ export default function AgentMapVisualizer({
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div className="bg-[#1e1b18] border text-[#e2e8f0] px-2 py-0.5 rounded text-[9px] font-bold mb-1 border-[#818cf8] shadow-[0_0_10px_rgba(129,140,248,0.5)]">
+              <div className="bg-[#1e1b18] border text-[#e2e8f0] px-2 py-0.5 rounded text-[0.5625rem] font-bold mb-1 border-[#818cf8] shadow-[0_0_10px_rgba(129,140,248,0.5)]">
                 {loc.name}
               </div>
               <MapPin className="w-6 h-6" style={{ color: pinColor, fill: `${pinColor}33` }} />
@@ -334,13 +307,13 @@ export default function AgentMapVisualizer({
               }}
             >
               <div
-                className={`bg-[#1e1b18] border text-[10px] font-bold mb-0.5 px-2 py-0.5 rounded max-w-[120px] truncate ${borderClass}`}
+                className={`bg-[#1e1b18] border text-[0.625rem] font-bold mb-0.5 px-2 py-0.5 rounded max-w-[120px] truncate ${borderClass}`}
                 style={{ color: pinColor }}
                 title={comp.name}
               >
                 {comp.name}
                 {distLabel && (
-                  <span className="ml-1 text-[8px] text-[#9ca3af] font-normal">{distLabel}</span>
+                  <span className="ml-1 text-[0.5rem] text-[#9ca3af] font-normal">{distLabel}</span>
                 )}
               </div>
               <svg width="18" height="18" viewBox="0 0 18 18">
@@ -352,7 +325,7 @@ export default function AgentMapVisualizer({
                 />
               </svg>
               <span
-                className="text-[7px] font-mono mt-0.5 px-1 rounded"
+                className="text-[0.4375rem] font-mono mt-0.5 px-1 rounded"
                 style={{ color: pinColor, background: `${pinColor}22` }}
               >
                 {isFranchise ? '프랜차이즈' : '개인점'}
@@ -368,91 +341,20 @@ export default function AgentMapVisualizer({
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
         </defs>
-
-        {showLasers &&
-          AGENTS.map((agent, idx) => {
-            const start = agentPixels[agent.id];
-            const dynamicTargetId = locations[idx % locations.length]?.id;
-            const end = dynamicTargetId !== undefined ? targetPixels[dynamicTargetId] : undefined;
-            if (!start || !end) return null;
-
-            const controlY = Math.min(start.y, end.y) - 150;
-            const pathD = `M ${start.x} ${start.y} Q ${(start.x + end.x) / 2} ${controlY} ${end.x} ${end.y}`;
-
-            return (
-              <g key={`laser-${agent.id}`}>
-                <path
-                  d={pathD}
-                  fill="none"
-                  stroke={agent.color}
-                  strokeWidth="4"
-                  opacity="0.3"
-                  filter="url(#glow)"
-                />
-                <path
-                  d={pathD}
-                  fill="none"
-                  stroke={agent.color}
-                  strokeWidth="2"
-                  strokeDasharray="10 15"
-                  className="animate-[dash_20s_linear_infinite]"
-                />
-                <circle r="3" fill="#fff" filter="url(#glow)">
-                  <animateMotion
-                    dur={`${2 + Math.random()}s`}
-                    repeatCount="indefinite"
-                    path={pathD}
-                  />
-                </circle>
-              </g>
-            );
-          })}
       </svg>
-
-      <div className="absolute bottom-6 left-0 w-full flex justify-center gap-6 md:gap-12 z-40 px-4">
-        {AGENTS.map((agent) => (
-          <div
-            key={agent.id}
-            ref={(el) => {
-              agentRefs.current[agent.id] = el;
-            }}
-            className="flex flex-col items-center group cursor-pointer"
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-white mb-1 shadow-[0_0_8px_#fff]" />
-            <div
-              className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-[#1e1b18]/90 backdrop-blur-md border border-[#3a3633] flex items-center justify-center shadow-xl transition-all duration-300 group-hover:-translate-y-2 group-hover:border-[var(--agent-color)]"
-              style={{ ['--agent-color' as string]: agent.color } as React.CSSProperties}
-            >
-              {React.cloneElement(
-                agent.icon as React.ReactElement<{
-                  className?: string;
-                  color?: string;
-                }>,
-                {
-                  className: 'w-6 h-6 md:w-8 md:h-8',
-                  color: agent.color,
-                },
-              )}
-            </div>
-            <span className="mt-3 text-[10px] md:text-xs font-mono font-bold text-[#9ca3af] group-hover:text-white transition-colors bg-[#1e1b18]/80 px-2 py-1 rounded border border-[#3a3633]/50">
-              {agent.name}
-            </span>
-          </div>
-        ))}
-      </div>
 
       {/* 범례 */}
       <div className="absolute top-3 left-3 z-40 bg-[#0d1117]/80 backdrop-blur-sm border border-[#3a3633] rounded-lg p-2.5 flex flex-col gap-1.5">
-        <p className="text-[8px] font-mono text-[#6b7280] uppercase tracking-wider mb-0.5">
+        <p className="text-[0.5rem] font-mono text-[#6b7280] uppercase tracking-wider mb-0.5">
           Legend
         </p>
         <div className="flex items-center gap-1.5">
           <MapPin className="w-3 h-3" style={{ color: '#818cf8' }} />
-          <span className="text-[9px] text-[#9ca3af]">출점 후보지</span>
+          <span className="text-[0.5625rem] text-[#9ca3af]">출점 후보지</span>
         </div>
         <div className="flex items-center gap-1.5">
           <MapPin className="w-3 h-3" style={{ color: '#10b981' }} />
-          <span className="text-[9px] text-[#9ca3af]">공실 매물</span>
+          <span className="text-[0.5625rem] text-[#9ca3af]">공실 매물</span>
         </div>
         {competitors.length > 0 && (
           <>
@@ -465,7 +367,7 @@ export default function AgentMapVisualizer({
                   strokeWidth="2"
                 />
               </svg>
-              <span className="text-[9px] text-[#9ca3af]">경쟁 프랜차이즈</span>
+              <span className="text-[0.5625rem] text-[#9ca3af]">경쟁 프랜차이즈</span>
             </div>
             <div className="flex items-center gap-1.5">
               <svg width="10" height="10" viewBox="0 0 18 18">
@@ -476,10 +378,10 @@ export default function AgentMapVisualizer({
                   strokeWidth="2"
                 />
               </svg>
-              <span className="text-[9px] text-[#9ca3af]">경쟁 개인점</span>
+              <span className="text-[0.5625rem] text-[#9ca3af]">경쟁 개인점</span>
             </div>
             <div className="mt-0.5 pt-1 border-t border-[#3a3633]">
-              <span className="text-[8px] font-mono text-[#6b7280]">
+              <span className="text-[0.5rem] font-mono text-[#6b7280]">
                 경쟁 {competitors.length}개 · 500m 반경
               </span>
             </div>

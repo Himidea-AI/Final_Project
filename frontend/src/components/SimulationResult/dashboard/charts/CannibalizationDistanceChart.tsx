@@ -51,13 +51,13 @@ export function CannibalizationDistanceChart({ bins, closestM, impactPct, height
   return (
     <div className="rounded-2xl border border-stone-800/60 bg-stone-950/40 p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+        <div className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
           자사 매장 거리 분포
-          <span className="ml-2 text-[9px] font-bold text-stone-600 normal-case tracking-normal">
+          <span className="ml-2 text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
             cannibalization · 2km 반경
           </span>
         </div>
-        <div className="flex items-center gap-3 text-[10px] font-bold tabular-nums">
+        <div className="flex items-center gap-3 text-[0.625rem] font-bold tabular-nums">
           {closestM != null && (
             <span className="text-stone-400">
               최근접 <span className="text-stone-100">{closestM}m</span>

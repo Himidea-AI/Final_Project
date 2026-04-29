@@ -39,7 +39,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
           <span className="text-lg">{plan.badge}</span>
           <span className="text-[#e2e8f0] font-bold text-lg">{plan.name}</span>
           {plan.badgeLabel && (
-            <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-[#a5b4fc] text-[10px] font-bold tracking-wider uppercase">
+            <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-[#a5b4fc] text-[0.625rem] font-bold tracking-wider uppercase">
               {plan.badgeLabel}
             </span>
           )}

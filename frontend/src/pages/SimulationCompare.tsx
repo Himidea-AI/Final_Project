@@ -330,7 +330,7 @@ function CompareColumn({ state }: { state: DetailState }) {
           <AlertCircle size={14} />
           <span className="text-xs font-bold">조회 실패</span>
         </div>
-        <p className="mt-2 text-[11px] text-rose-300/80">
+        <p className="mt-2 text-[0.6875rem] text-rose-300/80">
           ID {id} · {error ?? '데이터 없음'}
         </p>
       </div>
@@ -347,20 +347,20 @@ function CompareColumn({ state }: { state: DetailState }) {
     <div className="flex flex-col gap-3 rounded-xl border border-stone-700 bg-[#1e1b18] p-5">
       {/* Header */}
       <div className="border-b border-stone-800 pb-3">
-        <span className="text-[9px] font-mono text-indigo-400">{docId}</span>
+        <span className="text-[0.5625rem] font-mono text-indigo-400">{docId}</span>
         <div className="mt-1 text-sm font-bold text-stone-100 truncate">{data.client_name}</div>
-        <div className="text-[11px] text-stone-400">
+        <div className="text-[0.6875rem] text-stone-400">
           {data.brand_name}
           {data.business_type && <span className="text-stone-600"> · {data.business_type}</span>}
         </div>
-        <div className="mt-1 text-[10px] text-stone-500">
+        <div className="mt-1 text-[0.625rem] text-stone-500">
           {data.district} · {formatDate(data.created_at)}
         </div>
       </div>
 
       {/* Signal */}
       <div className={`rounded-lg border px-3 py-2 text-center ${signalCls}`}>
-        <span className="text-[9px] font-black uppercase tracking-widest">Entry Signal</span>
+        <span className="text-[0.5625rem] font-black uppercase tracking-widest">Entry Signal</span>
         <div className="mt-0.5 text-sm font-black">{signalLbl}</div>
       </div>
 
@@ -410,7 +410,7 @@ function CompareColumn({ state }: { state: DetailState }) {
       {/* SHAP top 3 */}
       {m.shap.length > 0 && (
         <div className="border-t border-stone-800 pt-3">
-          <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-stone-500">
+          <div className="mb-2 text-[0.5625rem] font-black uppercase tracking-widest text-stone-500">
             매출 기여 요인 Top {m.shap.length}
           </div>
           <div className="flex flex-col gap-1.5">
@@ -419,7 +419,7 @@ function CompareColumn({ state }: { state: DetailState }) {
               return (
                 <div
                   key={`${s.label}-${i}`}
-                  className="flex items-center justify-between text-[10px]"
+                  className="flex items-center justify-between text-[0.625rem]"
                 >
                   <span className="truncate text-stone-300">{s.label}</span>
                   <span
@@ -438,10 +438,10 @@ function CompareColumn({ state }: { state: DetailState }) {
       {/* Recommendation */}
       {m.recommendation && (
         <div className="border-t border-stone-800 pt-3">
-          <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-stone-500">
+          <div className="mb-1 text-[0.5625rem] font-black uppercase tracking-widest text-stone-500">
             AI 판정
           </div>
-          <p className="text-[10px] leading-relaxed text-stone-400 line-clamp-6">
+          <p className="text-[0.625rem] leading-relaxed text-stone-400 line-clamp-6">
             {m.recommendation}
           </p>
         </div>
@@ -469,7 +469,7 @@ function MetricRow({
           : 'text-stone-100';
   return (
     <div className="flex items-center justify-between border-b border-stone-800/60 pb-1.5">
-      <span className="text-[10px] text-stone-500">{label}</span>
+      <span className="text-[0.625rem] text-stone-500">{label}</span>
       <span className={`text-xs font-black tabular-nums ${toneCls}`}>{value}</span>
     </div>
   );
