@@ -364,6 +364,7 @@ async def _predict_single_district(
     industry_code: str,
     industry_name: str,
     cost_config: dict,
+    segment_profile: dict | None = None,
 ) -> DistrictPredictionResult:
     """단일 동 ML 예측 실행 (/predict 병렬 호출용)"""
     from models.interface import ModelOutput
@@ -380,6 +381,7 @@ async def _predict_single_district(
             industry_name,
             cost_config,
             "tcn",
+            segment_profile,
         )
     except ExcludedComboError:
         return DistrictPredictionResult(district=dong_name, dong_code=dong_code, is_excluded_combo=True)
@@ -427,6 +429,9 @@ async def _predict_single_district(
         closure_rate=sim_result.get("closure_rate"),
         closure_risk=sim_result.get("closure_risk"),
         shap_result=shap_result,
+        customer_segment=sim_result.get("customer_segment"),
+        living_pop_forecast=sim_result.get("living_pop_forecast"),
+        emerging_signal=sim_result.get("emerging_signal"),
     )
 
 
@@ -917,17 +922,60 @@ async def analyze_quick(input_data: SimulationInput):
 
 class BizLookupRequest(BaseModel):
     biz_number: str
-    company_name: str
+    company_name: str = ""
 
 
 @app.post("/biz/lookup")
 async def biz_lookup(req: BizLookupRequest):
-    """사업자등록번호 + 기업명으로 프랜차이즈 브랜드 매핑"""
+    """사업자등록번호 + 기업명으로 프랜차이즈 브랜드 매핑.
+
+    company_name 미입력 시 biz_brand_mapping에서 사업자번호로 기업명을 먼저 조회.
+    """
+    from sqlalchemy import text as sa_text
+    from src.database.sync_engine import get_sync_engine
+
     mapper = BizMapper(
         nts_api_key=os.environ.get("NTS_API_KEY", ""),
     )
+    biz_clean = req.biz_number.replace("-", "")
+    company = req.company_name.strip()
+
+    # 기업명 미입력 시 biz_brand_mapping에서 조회
+    if not company:
+        try:
+            engine = get_sync_engine(os.environ.get("POSTGRES_URL", ""))
+            with engine.connect() as conn:
+                row = conn.execute(
+                    sa_text("SELECT company_name, brand_name, industry_large, industry_medium, "
+                            "franchise_count, avg_sales, mapo_store_count "
+                            "FROM biz_brand_mapping WHERE biz_number = :biz"),
+                    {"biz": biz_clean},
+                ).fetchone()
+            engine.dispose()
+            if row:
+                d = dict(row._mapping)
+                return {
+                    "status": "success",
+                    "data": {
+                        "verification": {"biz_number": biz_clean, "status": "", "tax_type": "", "valid": True},
+                        "brands": [{
+                            "brand_name": d["brand_name"],
+                            "corp_name": d["company_name"],
+                            "industry_large": d.get("industry_large", ""),
+                            "industry_medium": d.get("industry_medium", ""),
+                            "franchise_count": d["franchise_count"],
+                            "avrgSlsAmt": d["avg_sales"],
+                            "mapo_store_count": d["mapo_store_count"],
+                        }],
+                        "matched_count": 1,
+                    },
+                }
+        except Exception:
+            pass
+        return {"status": "error", "message": "기업명을 입력해주세요."}
+
     try:
-        result = await mapper.map_franchise(req.biz_number, req.company_name)
+        result = await mapper.map_franchise(biz_clean, company)
         return {"status": "success", "data": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -1329,11 +1377,27 @@ async def predict_districts(input_data: SimulationInput):
         monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
     )
 
+    target_age = getattr(input_data, "target_age_groups", None) or []
+    target_gender = getattr(input_data, "target_gender", None)
+    target_time = getattr(input_data, "target_time_slots", None) or []
+    target_day = getattr(input_data, "target_day_type", None)
+    segment_profile: dict | None = None
+    if target_age or target_gender or target_time or target_day:
+        segment_profile = {
+            "age_groups": target_age,
+            "gender": target_gender,
+            "time_slots": target_time,
+            "day_type": target_day,
+        }
+
     print(f"--- [/predict] {target_districts} / {normalized_biz} 병렬 ML 예측 시작 ---")
 
     results: list[DistrictPredictionResult] = list(
         await asyncio.gather(
-            *[_predict_single_district(dong, industry_code, normalized_biz, cost_config) for dong in target_districts]
+            *[
+                _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
+                for dong in target_districts
+            ]
         )
     )
 

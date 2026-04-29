@@ -122,6 +122,8 @@ class AuthService:
                             )
                             ON CONFLICT (biz_number) DO UPDATE SET
                                 brand_name = EXCLUDED.brand_name,
+                                industry_large = EXCLUDED.industry_large,
+                                industry_medium = EXCLUDED.industry_medium,
                                 franchise_count = EXCLUDED.franchise_count,
                                 avg_sales = EXCLUDED.avg_sales,
                                 mapo_store_count = EXCLUDED.mapo_store_count
@@ -130,8 +132,8 @@ class AuthService:
                             "biz": biz_clean,
                             "company": data["companyName"],
                             "brand": top_brand["brand_name"],
-                            "ind_l": top_brand.get("industry_large", ""),
-                            "ind_m": top_brand.get("industry_medium", ""),
+                            "ind_l": top_brand.get("indutyLclasNm", top_brand.get("industry_large", "")),
+                            "ind_m": top_brand.get("indutyMlsfcNm", top_brand.get("industry_medium", "")),
                             "frc_cnt": top_brand.get("franchise_count", top_brand.get("frcsCnt", 0)),
                             "avg_sales": top_brand.get("avrgSlsAmt", top_brand.get("avg_sales", 0)),
                             "mapo_cnt": top_brand.get("mapo_store_count", 0),
@@ -241,6 +243,8 @@ class AuthService:
                     },
                     "brand": {
                         "brand_name": brand_data.get("brand_name", ""),
+                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")),
+                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")),
                         "franchise_count": brand_data.get("franchise_count", 0),
                         "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)),
                         "mapo_store_count": brand_data.get("mapo_store_count", 0),
@@ -682,7 +686,7 @@ class AuthService:
 
                 user = dict(row._mapping)
 
-                # 브랜드 매핑 조회
+                # 브랜드 매핑 — biz_brand_mapping 우선, 없으면 ftc_brand_franchise 검색
                 brand_row = conn.execute(
                     text(
                         "SELECT brand_name, industry_large, industry_medium, "
@@ -691,6 +695,13 @@ class AuthService:
                     ),
                     {"biz": user["biz_number"]},
                 ).fetchone()
+
+                if not brand_row:
+                    brands = self._mapper.search_brand_by_company(user["company_name"])
+                    top = brands[0] if brands else None
+                    if top:
+                        top["mapo_store_count"] = self._mapper.count_mapo_stores(top["brand_name"])
+                        brand_row = top  # dict 형태로 fallback
 
                 # 매니저 수
                 mgr_count = conn.execute(
@@ -721,7 +732,9 @@ class AuthService:
                         "manager_count": mgr_count,
                         "invite_code_count": invite_count,
                     },
-                    "brand": dict(brand_row._mapping) if brand_row else None,
+                    "brand": (dict(brand_row._mapping) if hasattr(brand_row, "_mapping") else brand_row)
+                    if brand_row
+                    else None,
                 }
         finally:
             engine.dispose()
@@ -893,7 +906,7 @@ class AuthService:
                     {"id": owner_id},
                 ).fetchall()
 
-                # 브랜드 매핑
+                # 브랜드 매핑 — biz_brand_mapping 우선, 없으면 ftc_brand_franchise 검색
                 brand = conn.execute(
                     text(
                         "SELECT brand_name, franchise_count, avg_sales, mapo_store_count "
@@ -901,6 +914,13 @@ class AuthService:
                     ),
                     {"biz": owner._mapping["biz_number"]},
                 ).fetchone()
+
+                if not brand:
+                    brands = self._mapper.search_brand_by_company(owner._mapping["company_name"])
+                    top = brands[0] if brands else None
+                    if top:
+                        top["mapo_store_count"] = self._mapper.count_mapo_stores(top["brand_name"])
+                        brand = top
 
                 return {
                     "status": "success",
@@ -914,7 +934,7 @@ class AuthService:
                             "store_count": owner._mapping["store_count"],
                             "created_at": str(owner._mapping["created_at"]),
                         },
-                        "brand": dict(brand._mapping) if brand else None,
+                        "brand": (dict(brand._mapping) if hasattr(brand, "_mapping") else brand) if brand else None,
                         "managers": [
                             {
                                 "id": str(m._mapping["id"]),

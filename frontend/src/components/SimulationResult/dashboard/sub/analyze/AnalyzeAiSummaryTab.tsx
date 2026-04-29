@@ -5,9 +5,11 @@
  * 2026-04-28 H6 — LLM 산출 "1등 추천 동" + Top 3 칩 카드 추가.
  * 2026-04-29 IM3-263 — LLM 출처 통합 판단 + 창업 진입 신호 카드를 LegalTab 으로 이관.
  *   synthesis 종합 분석을 최상단에 강조, 최종 권고를 그 밑에 배치.
- * 2026-04-29 B1 — synthesis / 최종 권고를 react-markdown 으로 렌더. 백엔드가 ## 헤더,
+ * 2026-04-29 B1 — 최종 권고를 react-markdown 으로 렌더. 백엔드가 ## 헤더,
  *   **bold**, 리스트 등을 포함한 마크다운으로 응답하므로 plain text 렌더 시 헤더가
  *   '## 추천 입지' 형태로 노출되던 문제 해소.
+ * 2026-04-29 IM3-263 후속 — synthesis 종합은 SynthesisSections 컴포넌트로 섹션별 블록 구조
+ *   렌더링 (지역명·분기 숫자 강조 회피 포함). 단순 마크다운보다 가독성/구조화 강화.
  *
  * 데이터 출처:
  *   - 1등 추천 동: simResult.winner_district (district_ranking 에이전트 산출)
@@ -23,6 +25,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import type { SimulationOutput } from '../../../../../types';
+import { SynthesisSections } from '../../shared/SynthesisSections';
 
 interface Props {
   simResult: SimulationOutput;
@@ -30,7 +33,10 @@ interface Props {
 
 /**
  * Markdown components mapping — backend 가 ## 헤더, **bold**, 리스트 등을 포함한 마크다운으로
- * synthesis / final_recommendation 응답을 보낸다. Tailwind 토큰 (stone/indigo 톤) 으로 통일.
+ * final_recommendation 응답을 보낸다. Tailwind 토큰 (stone/indigo 톤) 으로 통일.
+ *
+ * NOTE: synthesis 종합은 SynthesisSections 가 섹션 블록 구조 + 숫자 강조 회피로 별도 처리.
+ * 본 매핑은 최종 권고 (단순 마크다운) 전용.
  */
 const MARKDOWN_COMPONENTS: Components = {
   h1: ({ node: _n, ...props }) => (
@@ -134,15 +140,13 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
         </div>
       )}
 
-      {/* ═══ synthesis 종합 분석 (최상단, 강조) ═══ */}
+      {/* ═══ synthesis 종합 분석 (최상단, 섹션별 블록 구조) ═══ */}
       {summary && (
-        <div className="rounded-3xl border border-stone-700/60 bg-stone-900/60 p-10">
+        <div className="rounded-3xl border border-stone-700/60 bg-stone-900/60 p-8">
           <h3 className="mb-6 text-base font-black uppercase tracking-widest text-stone-300">
             synthesis 종합 분석
           </h3>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-            {summary}
-          </ReactMarkdown>
+          <SynthesisSections text={summary} />
         </div>
       )}
 

@@ -436,6 +436,7 @@ class FtcBrandFranchise(Base):
     """공정거래위원회 프랜차이즈 브랜드 정보 — 회원가입 시 브랜드 자동 매핑용"""
 
     __tablename__ = "ftc_brand_franchise"
+    __table_args__ = (UniqueConstraint("yr", "corpNm", "brandNm", name="uq_ftc_yr_corp_brand"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     yr = Column(SmallInteger, index=True, comment="기준 연도")

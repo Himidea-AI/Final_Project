@@ -845,8 +845,32 @@ function SimulatorDashboard({
   );
   const [dongDropdownOpen, setDongDropdownOpen] = useState(false);
 
-  // [Frontend Mockup] 백엔드 연동 보류 — SimulationInput 확장 후 페이로드 매핑 필요
-  const [businessType, setBusinessType] = useState('커피-음료');
+  // FTC 업종 중분류 → 프론트 드롭다운 업종명 매핑
+  const FTC_TO_FRONTEND_INDUSTRY: Record<string, string> = {
+    한식: '한식음식점',
+    중식: '중식음식점',
+    일식: '일식음식점',
+    서양식: '양식음식점',
+    제과제빵: '제과점',
+    패스트푸드: '패스트푸드점',
+    피자: '패스트푸드점',
+    치킨: '치킨전문점',
+    분식: '분식전문점',
+    주점: '호프-간이주점',
+    커피: '커피-음료',
+    '음료 (커피 외)': '커피-음료',
+    '아이스크림/빙수': '커피-음료',
+  };
+  const defaultBizType =
+    (brand?.industry_medium && FTC_TO_FRONTEND_INDUSTRY[brand.industry_medium]) || '커피-음료';
+  const [businessType, setBusinessType] = useState(defaultBizType);
+  // 로그인 후 brand 정보가 비동기 로드되면 업종 자동 반영
+  useEffect(() => {
+    if (brand?.industry_medium) {
+      const mapped = FTC_TO_FRONTEND_INDUSTRY[brand.industry_medium];
+      if (mapped) setBusinessType(mapped);
+    }
+  }, [brand?.industry_medium]);
   const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
   const [storeArea, setStoreArea] = useState(15); // 평
   const [targetPrice, setTargetPrice] = useState('5to10k');
