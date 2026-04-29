@@ -760,13 +760,24 @@ def policy_decide(
             if patch:
                 policy = replace(policy, **patch)
 
-    # 4. 친구 동반 — 최근 친구가 방문한 매장 있으면 30% 확률로 따라감
+    # 4. 친구 동반 — 시간 decay 적용.
+    # 출처: HRC Research (2021) 식당 선택 시 58% 가 주변 사람 추천 참고.
+    # "방금 다녀온 가게 즉시 follow" 의 직접 통계 부재 → 보수적 추정:
+    #   - 1시간 내: 25% (즉시 따라가기, 추천 58% × 시간 근접 가중)
+    #   - 1~2시간 내: 15% (시간 경과로 감쇠)
+    # 이전 30% 일괄 적용은 1-2시간 모두 동일 → 시간 decay 미반영 회귀 fix.
     friend_store = None
-    if agent.friend_visits and rng.random() < 0.30:
-        # 최근 1-2시간 내 친구 방문 기록만 유효
-        fresh = [(sid, fh) for sid, fh in agent.friend_visits if h - fh <= 2]
-        if fresh:
-            sid, _ = rng.choice(fresh)
+    if agent.friend_visits:
+        # 1시간 내 / 1~2시간 별도 분류
+        fresh_1h = [(sid, fh) for sid, fh in agent.friend_visits if (h - fh) <= 1]
+        fresh_2h = [(sid, fh) for sid, fh in agent.friend_visits if 1 < (h - fh) <= 2]
+        chosen = None
+        if fresh_1h and rng.random() < 0.25:
+            chosen = rng.choice(fresh_1h)
+        elif fresh_2h and rng.random() < 0.15:
+            chosen = rng.choice(fresh_2h)
+        if chosen is not None:
+            sid, _ = chosen
             fs = world.stores.get(sid)
             if fs and fs.is_open_now and fs.visits_today < fs.seats:
                 friend_store = fs

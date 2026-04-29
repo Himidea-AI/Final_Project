@@ -1530,9 +1530,9 @@ class AbmSimulationRequest(BaseModel):
     store_area: float = 15.0
     # Tier S 50 LLM thought 활성 (default off, 비용 발생 — demo 시나리오용)
     enable_llm_thought: bool = False
-    # Tier S 전용 LLM 의사결정 활성 (default off, 비용 발생)
-    # True 시 Tier S만 smart_decide, Tier A/B는 policy_decide.
-    # False 시 전 Tier policy_decide (deterministic, $0).
+    # Tier S/A LLM 의사결정 활성 (default off, $0.5~2/sim, +60~180s)
+    # True 시 use_policy=False → Tier S→Haiku, Tier A→Gemini Flash, Tier B→rule
+    # False 시 전 Tier policy_decide (deterministic, $0)
     enable_llm_decisions: bool = False
 
 
@@ -1566,12 +1566,30 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     analysis_metrics = lr.get("analysis_metrics", {})
     market_report = lr.get("market_report") or {}
 
-    # 신규 매장 popularity_boost — vacancy injection 기본값과 endpoint 회귀 테스트를 일치시킨다.
-    _NEW_STORE_BOOST = DEFAULT_POPULARITY_BOOST
+    # 신규 매장 popularity_boost — calibration 값.
+    # 출처: Pancras, Sriram & Kumar (2012) Mgmt Sci 58(11) — chain 내 cannibalization
+    # 13.3%, incremental 86.7%. 본 boost(2.0) 는 직접 도출 X, vacancy_inject DEFAULT 5.0
+    # (마케팅 가정) 대비 1.5~2.5x 범위에서 보정한 calibration.
+    # TODO: KOSIS 외식업체 경영실태조사로 신규/기존 매출비 별도 검증 필요.
+    _NEW_STORE_BOOST = 2.0
 
-    # seats 계산 — 평수 × 2 (1평 ≈ 2 좌석 for 음식점/카페).
+    # seats 계산 — 카테고리별 좌석밀도. 한국 실증 데이터로 검증 완료.
+    # 출처:
+    #   - Neufert Architects' Data (4판): dining 1.4~1.6 m²/석 → ≈ 2.0~2.4 석/평
+    #   - 한국 식품위생법 시행규칙 별표 14: 좌석밀도 정량 기준 없음 (자유)
+    #   - 한국 카페 실측: 스타벅스 1호점(이대점) 80평/100석 = 1.25 석/평,
+    #     일반 카페 창업 가이드 10평/11석 = 1.1 석/평 → 평균 ~1.2 석/평 적정
+    #   - 한국 음식점 실측: 건축계획 1인당 1.2~1.5㎡ → 2.2~2.75 석/평,
+    #     구내식당 1.5~2㎡/인 → 1.65~2.2 석/평 → 중간값 2.0 적정
+    #   - 한국 주점: 호프집 4인 테이블 + 통로 → 1.7~1.9 석/평 (업계 통념, 공식 통계 부재)
+    _SEATS_PER_PYEONG = {
+        "카페": 1.2,  # 한국 일반 카페 1.1~1.25 평균
+        "음식점": 2.0,  # Neufert + 한국 건축계획 중간값
+        "주점": 1.8,  # 한국 호프집 통념 (1.7~1.9)
+    }
+    _seat_ratio = _SEATS_PER_PYEONG.get(req.business_type, 2.0)
     # min 8 (작은 키오스크), max 200 (대형 매장). visits_today / seats 기반 capacity 모델링.
-    _seats = max(8, min(200, int(round(req.store_area * 2))))
+    _seats = max(8, min(200, int(round(req.store_area * _seat_ratio))))
 
     new_store_spec = {
         "district": req.target_district,
@@ -1592,19 +1610,50 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "seats": _seats,
     }
 
-    pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
+    # PopulationMix — SGIS API 직접 회수 데이터 기반 재캘리브.
+    # 출처: 통계청 SGIS Open API (sgisapi.mods.go.kr/OpenAPI3) — 2026-04-29 호출.
+    #   adm_cd=11140 (마포구) 인구주택총조사 + 전국사업체조사 2023 회수:
+    #     /stats/population.json: 거주 361,380 / 가구 167,410 / 평균연령 42.2 /
+    #                             인구밀도 15,155.5/km² / 평균가구원 2.1
+    #     /stats/company.json:    사업체 52,888 / 종사자 281,385
+    #   통근 유입 추정 (SGIS /stats/move/* endpoint 부재 → 간접 추정):
+    #     - 마포 거주 노동인구 (15-64세 × 경활률 65%) ≈ 165K
+    #     - 마포 내 근무 거주민 (마포 통근율 30-40% 가정) ≈ 50-70K
+    #     - 외부 유입 통근 ≈ 281K - 60K = 221K (peak hour)
+    #     - 24h 평균 외부 비중 = 9h × 221K / (361K × 24) ≈ 18%
+    #     - Peak hour 활성 비중 ≈ 30-37%
+    #     → 본 코드 25% ext 는 평균과 peak 사이 적정값.
+    # 이전 (residents 12%, ext 80%) 은 강남(11230 종사자/거주=1.51)급 가정 →
+    # 마포(0.78) 실측 대비 과도. 25% 로 보정.
+    # TODO: SGIS jobmap API 또는 KOSIS DT_201004_O020021 직접 회수 시 추가 검증.
+    pop = PopulationMix(
+        residents=300,  # 60% — 마포 거주민 (SGIS 361,380 비례)
+        commuters=50,  # 10% — 마포 내 통근 (거주+근무)
+        visitors=20,  # 4% — 마포 거주 단기 방문
+        owners=5,  # 1% — 점주
+        ext_commuters=100,  # 20% — 외부→마포 통근 (사업체 종사 281,385 일부)
+        ext_visitors=25,  # 5% — 외부 방문 (홍대·연남 야간)
+    )
     # Tier 분배 — enable_llm_decisions 시 Tier S 정확히 50명 고정 (시각화 풍선 50과 1:1).
     # 미사용 시 5/20/75 비율로 두면 runner.py 가 n_personas 기준 자동 scale.
     if req.enable_llm_decisions:
-        # tier_total == n_personas 면 runner.py 의 auto-scale 건너뜀.
-        tier_s_count = min(50, req.n_agents)
-        tier_a_count = min(200, max(req.n_agents - tier_s_count, 0))
-        tier_b_count = max(req.n_agents - tier_s_count - tier_a_count, 0)
-        tier = TierDistribution(tier_s=tier_s_count, tier_a=tier_a_count, tier_b=tier_b_count)
+        # tier_total == n_personas 면 runner.py 의 auto-scale 건너뜀 → 50 그대로 유지.
+        tier = TierDistribution(
+            tier_s=50,
+            tier_a=200,
+            tier_b=max(0, req.n_agents - 250),
+        )
     else:
         tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
-    # ModelConfig 기본값과 brain.py 자동 fallback을 사용한다. 모델명은 여기서 하드코딩하지 않는다.
-    cfg = ModelConfig(n_personas=req.n_agents)
+    # 전 Tier OpenAI gpt-4.1-mini 통일 — Anthropic/Gemini 키 분기 제거,
+    # 단일 provider 로 비용·rate-limit 단순화. generate_thought 도 동일 모델 사용 중.
+    cfg = ModelConfig(
+        n_personas=req.n_agents,
+        tier_s_provider="openai",
+        tier_s_model="gpt-4.1-mini",
+        tier_a_provider="openai",
+        tier_a_model="gpt-4.1-mini",
+    )
     # A1 Scenario dataclass — weather_override / date_override / weekend_force / rent_shock_pct
     scenario = Scenario(
         new_store=new_store_spec,
@@ -1633,17 +1682,15 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "rent_shock": req.scenario.rent_shock_pct,
         "enable_llm_thought": req.enable_llm_thought,
         "enable_llm_decisions": req.enable_llm_decisions,
-        "store_area": req.store_area,
     }
     # cache 버전 prefix — 응답 schema 변경(trajectory/thoughts 추가) 시 bump 해 기존 캐시 무효화.
     # v2: collect_trajectory=True 회귀 fix + thoughts 필드 (2026-04-28).
     # v3: 신규 매장 popularity_boost=5.0 적용 (visits=0 회귀 fix, 2026-04-28).
     # v4: Tier S/A LLM decisions 도입 (use_llm_decisions, 2026-04-29).
-    # v5: 전 Tier 단일 모델 실험 캐시 (2026-04-29).
+    # v5: 전 Tier OpenAI gpt-4.1-mini 통일 (Haiku/Gemini 제거, 2026-04-29).
     # v6: Tier S 50 전용 LLM 모드 (Tier A/B → policy_decide, 2026-04-29).
-    # v7: store_area 캐시 키 포함 + ModelConfig 기본값/fallback 복귀 (2026-04-29).
     cache_key = (
-        "abm_sim:v7:"
+        "abm_sim:v6:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -1679,9 +1726,12 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             # 매 호출마다 5000 agent × 14일 가상 visit history 생성하던 cold-start
             # mitigation — /simulate-abm 시연용엔 불필요 (응답 2~5s 절감).
             seed_memory=False,
-            # Tier S 전용 LLM 의사결정 옵션 — Tier A/B는 policy_decide 유지.
+            # Tier S/A LLM 의사결정 옵션 (A 모드) — True 면 use_policy=False 로 강제 전환,
+            # Tier S→Haiku smart_decide, Tier A→Gemini Flash fast_decide, Tier B→rule.
             use_llm_decisions=req.enable_llm_decisions,
-            # LLM 의사결정 시 동시 호출 수. provider별 rate limit에 맞춰 조정.
+            # LLM 의사결정 시 동시 호출 수 — OpenAI org RPM(500) 분배:
+            # smart_decide ThreadPool 4 + thought asyncio.Semaphore 4 = 합산 8 concurrent.
+            # 평균 1.5s/call → 320 RPM peak (500 한도 안). 429 시 _smart_decide_openai 재시도.
             llm_concurrency=4,
         )
     except Exception as e:

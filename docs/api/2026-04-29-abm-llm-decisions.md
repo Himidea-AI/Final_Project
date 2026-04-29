@@ -15,7 +15,7 @@
 - 사용자 피드백: *"LLM 적용된 애들은 좀 달라야 되는 거 아니야?"*
 
 ### 1.2 새 모드 (이번 변경)
-- **Tier S 50명 전용 LLM 의사결정** — `ModelConfig` 기본값/fallback 기반 `smart_decide` 활성
+- **Tier S 50명 전용 LLM 의사결정** — `smart_decide` (gpt-4.1-mini) 활성
 - **Tier A/B** — 기존 `policy_decide` 유지 (deterministic, 비용 0)
 - **Thought 풍선** — `generate_thought` 별도 호출 폐지, `smart_decide.reason` 필드 재활용 → LLM 호출 50% 절감
 - **Frontend** — 풍선 hover 한 명만 표시, 우측 패널에 시간순 thought feed
@@ -46,10 +46,10 @@
 #### 2.2 enable_llm_decisions 동작
 
 `True` 시:
-- `TierDistribution`은 S=min(50, n_agents), A=min(200, remaining), B=remaining 으로 총합을 `n_agents`와 같게 구성 (auto-scale 우회)
+- `TierDistribution(tier_s=50, tier_a=200, tier_b=n_agents-250)` 강제 (auto-scale 우회)
 - `world.tier_s_llm_only = True` 플래그 설정 → `agents.py:decide()` 가 Tier S 만 `smart_decide` 라우팅
-- `ModelConfig` 기본값과 `brain.py` 자동 fallback 사용. `main.py`에서 모델명 하드코딩 금지
-- `llm_concurrency=4` (provider별 rate limit 보호)
+- `cfg.tier_s_provider="openai"`, `cfg.tier_s_model="gpt-4.1-mini"`, `cfg.tier_a_*` 동일
+- `llm_concurrency=4` (OpenAI 500 RPM 보호)
 
 `False` 시 (기본):
 - `TierDistribution(5, 20, 75)` 비율 → runner.py 가 n_personas 기준 비례 scale
@@ -164,10 +164,10 @@ if enable_llm_thought and thought_agents and not is_warmup:
 
 ## 5. Rate Limit 처리
 
-### 5.1 Rate limit 기준
-- 모델/provider는 `ModelConfig` 기본값과 `brain.py` fallback이 결정한다.
-- 동시 호출 기본값: `llm_concurrency=4`
-- provider별 RPM/TPM 한도에 맞춰 운영 환경에서 조정한다.
+### 5.1 OpenAI Tier 1 한도
+- gpt-4.1-mini: **500 RPM**
+- 동시 호출: smart_decide(ThreadPool 4) + thought batch(asyncio.Semaphore 4) = 합산 8 concurrent
+- 평균 RPM: ~320 (한도 내)
 
 ### 5.2 429 자동 재시도
 **`brain.py:_smart_decide_openai`**:
@@ -230,9 +230,8 @@ async def _bounded(a):
 | `abm_sim:v2:` | 2026-04-28 | `collect_trajectory=True` 회귀 fix + `thoughts` 필드 |
 | `abm_sim:v3:` | 2026-04-28 | 신규 매장 `popularity_boost=5.0` (visits=0 회귀 fix) |
 | `abm_sim:v4:` | 2026-04-29 | `use_llm_decisions` 도입 |
-| `abm_sim:v5:` | 2026-04-29 | 전 Tier 단일 모델 실험 캐시 |
+| `abm_sim:v5:` | 2026-04-29 | 전 Tier OpenAI gpt-4.1-mini 통일 |
 | **`abm_sim:v6:`** | **2026-04-29** | **Tier S 50 전용 LLM (Tier A/B → policy)** |
-| **`abm_sim:v7:`** | **2026-04-29** | **`store_area` 포함 + `ModelConfig` 기본값/fallback 복귀** |
 
 ### 7.2 cache_payload 구성
 ```python
@@ -307,7 +306,7 @@ SHA256 해시 32자 + 버전 prefix.
 ### 9.2 한계
 - Pan 중 hover hit-test 부정확 (canvas frozen, mouse 좌표 신선 → 미스매치). drag 끝나면 정상.
 - Zoom 은 여전히 freeze (비선형 재투영 필요, transform 부적합).
-- Provider별 rate limit에 맞춰 `llm_concurrency` 상향 가능.
+- OpenAI Tier 1 (500 RPM) 가정. Tier 2 이상이면 `llm_concurrency=16` 으로 상향 가능.
 
 ---
 
@@ -337,8 +336,8 @@ SHA256 해시 32자 + 버전 prefix.
 - `enable_llm_decisions` 미전송 시 기본 `False` → 기존 동작 그대로
 - `enable_llm_thought` 미전송 시 기본 `False` → 기존 동작 그대로
 - 응답 schema 추가만 (필드 제거 X) → 기존 파서 영향 없음
-- cache_key v6 → v7 자동 무효화 (기존 캐시 1회 miss 후 정상)
+- cache_key v5 → v6 자동 무효화 (기존 캐시 1회 miss 후 정상)
 
 ### 환경 변수
-- `ModelConfig` 기본 provider에 맞는 API key 사용. 키가 없으면 `brain.py` fallback/mock 경로를 탄다.
-- `main.py`에서는 LLM 모델명을 하드코딩하지 않는다.
+- `OPENAI_API_KEY` 필수 (없으면 `_auto_downgrade` → mock fallback, 시뮬 동작은 OK 단 LLM thought/decision 효과 없음)
+- `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` 더 이상 사용 X (전 Tier OpenAI 통일)

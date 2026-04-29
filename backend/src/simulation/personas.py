@@ -161,28 +161,13 @@ def assign_personas(
 
 
 def _build_profile(agent: Agent, arc: dict) -> str:
-    """Anthropic prompt cache에 들어갈 정적 페르소나 프로필 (~500 tok)."""
-    return f"""당신은 마포구에 사는 {agent.name}({agent.age}세, {agent.gender})입니다.
-타입: {arc["label"]}
-특성: {arc["traits"]}
-소비 패턴: {arc["spending"]}
-선호 동: {", ".join(arc["preferred_dongs"])}
-거주: {agent.home_dong}
-소득 수준: {agent.income_level}/3 (1=저, 3=고)
-오늘 예산: {int(agent.budget_today):,}원
+    """Anthropic prompt cache 정적 페르소나 — caveman ultra (~110 tok, 이전 150 tok).
 
-당신은 위 특성에 맞춰 마포구 생활을 합니다. 모든 결정은:
-1. 시간대(아침/점심/저녁/심야)
-2. 현재 위치(어느 동에 있는가)
-3. 당신의 취향과 예산
-4. 날씨와 요일
-
-을 고려해서 내립니다. 응답은 항상 JSON 형식으로 짧게:
-{{
-  "action": "visit|move|rest|work",
-  "target_dong": "동 이름 또는 null",
-  "category": "카페|음식점|편의점|주점|null",
-  "spend": 예상지출원,
-  "reason": "한 문장 이유 (스토리용)"
-}}
-"""
+    토큰 절감: 50 agents × system prompt cache hit 시 입력 비용 -70%.
+    축약: 거주→@, 소득N/3→incN, 예산→bud, 특성→tr, 소비→spd, 선호동→pref.
+    Decision 다양성 보존 위해 핵심 trait·spending·preferred_dongs 유지.
+    """
+    return f"""마포 {agent.name} {agent.age}{agent.gender} @{agent.home_dong} inc{agent.income_level}/3 bud{int(agent.budget_today):,}
+타입:{arc["label"]} tr:{arc["traits"]} spd:{arc["spending"]} pref:{",".join(arc["preferred_dongs"])}
+결정: 시간 위치 취향 예산 날씨. JSON:
+{{"action":"visit|move|rest|work","target_dong":"동|null","category":"카페|음식점|편의점|주점|null","spend":원,"reason":"30자 fragment"}}"""
