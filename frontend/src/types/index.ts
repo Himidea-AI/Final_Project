@@ -384,7 +384,35 @@ export interface SimulationOutput {
       density?: string;
     };
   } | null;
+  // [/predict 분리 호출] 동별 예측 entry 배열 — /predict 응답 합성 시 사용
+  district_predictions?: DistrictPredictionResult[];
+  // [/predict 분리 호출] BEP 도달까지 개월수
+  bep_months?: number | null;
+  // [/predict 분리 호출] 예측 월매출
+  predicted_monthly_revenue?: number | null;
 }
+
+/** /predict 응답의 동별 예측 entry. spec §3 + B1 schemas/simulation_output.py 의 DistrictPredictionResult 매칭. */
+export interface DistrictPredictionResult {
+  district: string;
+  is_excluded_combo: boolean;
+  quarterly_projection?: QuarterlyProjection;
+  closure_risk?: ClosureRisk;
+  shap_result?: ShapResult;
+  bep_months?: number | null;
+  predicted_monthly_revenue?: number | null;
+}
+
+/** /analyze/llm 응답. SimulationOutput 의 ML 필드 빠진 subset. spec §3. */
+export type AnalysisOutput = Omit<
+  SimulationOutput,
+  | 'quarterly_projection'
+  | 'closure_risk'
+  | 'shap_result'
+  | 'bep_months'
+  | 'predicted_monthly_revenue'
+  | 'district_predictions'
+>;
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
 export interface DistrictRanking {
