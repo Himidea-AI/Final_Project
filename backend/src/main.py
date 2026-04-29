@@ -1409,6 +1409,28 @@ async def run_simulation(input_data: SimulationInput):
     try:
         final_state = await _run_pipeline(input_data)
         result = map_state_to_simulation_output(final_state, request_id)
+
+        # /analyze 와 동일하게 winner+top3 의 경쟁업체 좌표 수집 — 지도 멀티핀용.
+        # (이전: /simulate 만 누락돼 frontend `allCompetitorLocations: undefined`)
+        winner = result.get("winner_district") or input_data.target_district
+        top3 = result.get("top_3_candidates") or []
+        try:
+            result["all_competitor_locations"] = await _collect_all_competitor_locations(
+                winner, top3, input_data.business_type
+            )
+        except Exception as ce:
+            print(f"[SIMULATE] all_competitor_locations 수집 실패 (무시): {ce}")
+            result["all_competitor_locations"] = []
+
+        # competitor_intel 진단 — None/error 면 frontend 에서 hex/카드 안 보임.
+        ci = result.get("competitor_intel")
+        if ci is None:
+            print("[SIMULATE] WARNING: competitor_intel is None — competitor_intel_node 미실행 또는 state 누락.")
+        elif isinstance(ci, dict) and ci.get("error"):
+            print(f"[SIMULATE] WARNING: competitor_intel error — {ci.get('error')}")
+        elif isinstance(ci, dict) and not ci.get("competition_500m"):
+            print(f"[SIMULATE] WARNING: competitor_intel.competition_500m 누락 — keys: {list(ci.keys())}")
+
         return result
     except Exception as e:
         import traceback
@@ -1477,6 +1499,9 @@ class AbmSimulationRequest(BaseModel):
     # 공실 스팟 클릭 시 그 좌표 (optional) — 지도에 매장 정확히 찍기 위해
     spot_lat: float | None = None
     spot_lon: float | None = None
+    # 신규 매장 평수 (frontend storeArea state) — seats=store_area*2 로 capacity 영향.
+    # 작은 매장은 daily visits cap, 큰 매장은 cap 여유 → 시뮬 정확도 ↑.
+    store_area: float = 15.0
     # Tier S 50 LLM thought 활성 (default off, 비용 발생 — demo 시나리오용)
     enable_llm_thought: bool = False
 
@@ -1510,12 +1535,16 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     analysis_metrics = lr.get("analysis_metrics", {})
     market_report = lr.get("market_report") or {}
 
-    # 신규 매장 popularity_boost — runner 내부 default 1.0 (중립) 은
-    # RDS 실데이터(도화동 음식점 115개 등) 환경에서 신규 매장 weight 가
-    # 기존 ~100개 이상 매장에 묻혀 visits=0 이 빈번. vacancy_inject.py
-    # 가 정의한 DEFAULT_POPULARITY_BOOST=5.0 (인스타·블로그 마케팅 효과
-    # 가정) 를 본 endpoint 에서도 동일하게 사용해 sample 신호 확보.
-    from src.simulation.vacancy_inject import DEFAULT_POPULARITY_BOOST as _NEW_STORE_BOOST
+    # 신규 매장 popularity_boost — 학술 calibration.
+    # Pancras, Sriram & Kumar (2012, Management Science): 신규 매장 visit share
+    # ~13.3% (within-chain). same-category cross-brand 보정 (~2x) → 25~30% target.
+    # 이전 5.0 (vacancy_inject DEFAULT) 은 마케팅 가정 — 실제 fast-food chain
+    # 데이터로 보정 시 신규 매장의 가중치는 기존 매장의 1.5~2.5x 가 정합.
+    _NEW_STORE_BOOST = 2.0
+
+    # seats 계산 — 평수 × 2 (1평 ≈ 2 좌석 for 음식점/카페).
+    # min 8 (작은 키오스크), max 200 (대형 매장). visits_today / seats 기반 capacity 모델링.
+    _seats = max(8, min(200, int(round(req.store_area * 2))))
 
     new_store_spec = {
         "district": req.target_district,
@@ -1531,6 +1560,9 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "lon": req.spot_lon,
         # 신규 매장 weight 부스트 — 기존 매장 (~100+개) 와 경쟁할 수 있도록
         "popularity_boost": _NEW_STORE_BOOST,
+        # 평수 → seats — capacity 모델링 (작은 매장은 visits cap)
+        "store_area": req.store_area,
+        "seats": _seats,
     }
 
     pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
@@ -1604,6 +1636,9 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             # ⚠️ 누락 시 trajectory=None 반환 → 프론트 trajectory 기반 렌더 전부 차단.
             # vacancy_evaluation 엔드포인트는 정상 전달 중 — 여기만 누락된 회귀였음.
             collect_trajectory=True,
+            # 매 호출마다 5000 agent × 14일 가상 visit history 생성하던 cold-start
+            # mitigation — /simulate-abm 시연용엔 불필요 (응답 2~5s 절감).
+            seed_memory=False,
         )
     except Exception as e:
         logger.error(f"[ABM] 시뮬레이션 실패: {e}")

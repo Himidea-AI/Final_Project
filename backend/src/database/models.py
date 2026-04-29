@@ -1659,3 +1659,98 @@ class SimulationHistory(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ===========================================================================
+# Emerging Trend B1 — 인구·이동성 (2026-04-29)
+# spec: docs/superpowers/specs/2026-04-29-emerging-trend-data-b1-design.md
+# ===========================================================================
+
+
+class MasterSubwayStation(Base):
+    """서울 전체 지하철역 마스터 — 호선/sigungu_code/좌표"""
+
+    __tablename__ = "master_subway_station"
+
+    station_code = Column(String(10), primary_key=True, comment="역코드 (운영사별 통합)")
+    station_name = Column(String(50), nullable=False, comment="역명")
+    line_name = Column(String(20), comment="호선/노선")
+    sigungu_code = Column(String(5), index=True, comment="자치구 코드 (마포=11440)")
+    lat = Column(Float, comment="위도")
+    lon = Column(Float, comment="경도")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
+class MasterTtareungiStation(Base):
+    """서울 전체 따릉이 대여소 마스터"""
+
+    __tablename__ = "master_ttareungi_station"
+
+    station_id = Column(String(20), primary_key=True, comment="대여소 ID")
+    station_name = Column(String(100), nullable=False, comment="대여소명")
+    sigungu_code = Column(String(5), index=True, comment="자치구 코드")
+    dong_code = Column(
+        String(8),
+        ForeignKey("seoul_dong_master.dong_code"),
+        index=True,
+        comment="행정동 코드 (8자리 FK)",
+    )
+    lat = Column(Float, comment="위도")
+    lon = Column(Float, comment="경도")
+    opened_at = Column(Date, comment="개소일 (있으면)")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
+class SeoulSubwayPassengerDaily(Base):
+    """서울 전체 지하철 일별 승하차"""
+
+    __tablename__ = "seoul_subway_passenger_daily"
+
+    date = Column(Date, primary_key=True, comment="영업일")
+    station_code = Column(
+        String(10),
+        ForeignKey("master_subway_station.station_code"),
+        primary_key=True,
+        comment="역코드",
+    )
+    boarding_cnt = Column(Integer, comment="승차 인원")
+    alighting_cnt = Column(Integer, comment="하차 인원")
+
+    __table_args__ = (Index("ix_subway_passenger_station", "station_code"),)
+
+
+class SeoulDongMigrationMonthly(Base):
+    """서울 전체 동별 월간 전입/전출 (20-30대 별도 컬럼)"""
+
+    __tablename__ = "seoul_dong_migration_monthly"
+
+    ym = Column(Integer, primary_key=True, comment="YYYYMM")
+    dong_code = Column(
+        String(8),
+        ForeignKey("seoul_dong_master.dong_code"),
+        primary_key=True,
+        comment="행정동 코드",
+    )
+    move_in_cnt = Column(Integer, comment="전입 총수")
+    move_out_cnt = Column(Integer, comment="전출 총수")
+    net_move = Column(Integer, comment="순이동 (전입 - 전출)")
+    move_in_2030 = Column(Integer, comment="20-30대 전입자 수")
+    move_out_2030 = Column(Integer, comment="20-30대 전출자 수")
+
+
+class SeoulTtareungiUsageDaily(Base):
+    """서울 전체 따릉이 일×대여소 집계"""
+
+    __tablename__ = "seoul_ttareungi_usage_daily"
+
+    date = Column(Date, primary_key=True, comment="이용일")
+    station_id = Column(
+        String(20),
+        ForeignKey("master_ttareungi_station.station_id"),
+        primary_key=True,
+        comment="대여소 ID",
+    )
+    rent_cnt = Column(Integer, comment="대여 건수")
+    return_cnt = Column(Integer, comment="반납 건수")
+
+    __table_args__ = (Index("ix_ttareungi_usage_station", "station_id"),)

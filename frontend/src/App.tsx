@@ -1808,7 +1808,9 @@ function SimulatorDashboard({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* 연령대 — 복수 선택 */}
                   <div>
-                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
+                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>
+                      연령대
+                    </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {[
                         { v: '10대', l: '10대' },
@@ -2132,7 +2134,9 @@ function SimulatorDashboard({
                               >
                                 <FileText className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />{' '}
                                 PDF 리포트{' '}
-                                <span className="text-[0.625rem] text-[#9ca3af] ml-auto">보고용</span>
+                                <span className="text-[0.625rem] text-[#9ca3af] ml-auto">
+                                  보고용
+                                </span>
                               </button>
                               <button
                                 onClick={handleDownloadExcel}
@@ -3834,6 +3838,8 @@ function SimulatorDashboard({
                                         },
                                         // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                         enable_llm_thought: true,
+                                        // 신규 매장 평수 — backend seats(평×2) + capacity 모델링.
+                                        store_area: storeArea,
                                       }),
                                     });
                                     const data = await res.json();
@@ -3917,6 +3923,8 @@ function SimulatorDashboard({
                                   },
                                   // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                   enable_llm_thought: true,
+                                  // 신규 매장 평수 — backend seats + capacity 모델링.
+                                  store_area: storeArea,
                                 }),
                               });
                               const data = await res.json();
@@ -3961,6 +3969,8 @@ function SimulatorDashboard({
                                   },
                                   // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                   enable_llm_thought: true,
+                                  // 신규 매장 평수 — backend seats + capacity 모델링.
+                                  store_area: storeArea,
                                 }),
                               });
                               const data = await res.json();
@@ -4044,7 +4054,9 @@ function SimulatorDashboard({
                 <h2 className="text-sm font-bold text-white tracking-tight">
                   LangGraph Execution Log
                 </h2>
-                <p className="text-[0.625rem] text-[#a3a3a3] font-mono mt-0.5">MULTI-AGENT PIPELINE</p>
+                <p className="text-[0.625rem] text-[#a3a3a3] font-mono mt-0.5">
+                  MULTI-AGENT PIPELINE
+                </p>
               </div>
             </div>
             <button

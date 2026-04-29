@@ -879,7 +879,9 @@ function PendingManagerCard({
 
         {pendingGu && (
           <div>
-            <p className="text-[0.625rem] text-[#9ca3af] mb-2">{pendingGu} 행정동 선택 (복수 가능)</p>
+            <p className="text-[0.625rem] text-[#9ca3af] mb-2">
+              {pendingGu} 행정동 선택 (복수 가능)
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {REGION_DATA[pendingGu]?.map((dong) => {
                 const selected = pendingDongs.includes(dong);
@@ -1853,7 +1855,9 @@ function MyPageView() {
           <div>
             <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
               이메일 (ID)
-              <span className="ml-2 text-[0.5625rem] font-mono text-[#6b7280] uppercase">Read-only</span>
+              <span className="ml-2 text-[0.5625rem] font-mono text-[#6b7280] uppercase">
+                Read-only
+              </span>
             </label>
             <input
               type="email"
@@ -2049,7 +2053,9 @@ function MyPageView() {
                 placeholder="비밀번호 입력"
                 className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#818cf8] mb-2 transition-colors"
               />
-              {passwordError && <p className="text-[0.6875rem] text-rose-400 mb-4">{passwordError}</p>}
+              {passwordError && (
+                <p className="text-[0.6875rem] text-rose-400 mb-4">{passwordError}</p>
+              )}
               {!passwordError && <div className="mb-4" />}
               <div className="flex gap-3 justify-end">
                 <button

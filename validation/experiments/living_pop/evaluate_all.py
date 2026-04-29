@@ -56,6 +56,8 @@ DEFAULT_VERSIONS: tuple[str, ...] = (
     "v5_group_residual",
     "v5_group_rel_only",
     "v5_group_decomp",
+    "v6_dow_hour_residual",
+    "v7_daily_residual",
     "arima",
 )
 
@@ -540,6 +542,296 @@ def _evaluate_v5_group_decomp() -> EvaluatorReturn:
     return y_true, y_pred, y_naive, y_train_actuals
 
 
+def _build_dow_hour_sequences_for_eval(
+    feature_cols: list[str],
+    target_col: str,
+    window_size: int = 8,
+):
+    """dow_hour task 용 raw 시퀀스 빌드 (정규화 X — caller 가 scaler 적용).
+
+    그룹: (dong_code, day_of_week, time_zone) — 16×7×24 = 2,688 그룹.
+
+    Returns
+    -------
+    dict
+        keys: X_raw (N,W,F), y_raw (N,), last_value_raw (N,), last_value_lag4_raw (N,),
+              target_idx, feature_cols, window_size, group_full_targets, group_seq_counts.
+    """
+    from models.living_pop_forecast.data_prep_dow_hour import (
+        build_dow_hour_features,
+        load_dow_hour_cache,
+    )
+
+    df = load_dow_hour_cache()
+    df = build_dow_hour_features(df)
+
+    missing = [c for c in feature_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"DataFrame 에 없는 feature_cols: {missing}")
+    target_idx = feature_cols.index(target_col)
+
+    X_list: list[np.ndarray] = []
+    y_list: list[float] = []
+    last_list: list[float] = []
+    last_lag4_list: list[float] = []
+    group_full_targets: list[np.ndarray] = []
+    group_seq_counts: list[int] = []
+
+    for (_d, _dw, _h), group in df.groupby(["dong_code", "day_of_week", "time_zone"], sort=True):
+        if len(group) <= window_size:
+            continue
+        gs = group.sort_values("quarter").reset_index(drop=True)
+        feat_vals = gs[feature_cols].values.astype(np.float32)
+        raw_targets = gs[target_col].values.astype(np.float32)
+        group_full_targets.append(raw_targets.copy())
+        group_seq_counts.append(len(gs) - window_size)
+        for i in range(len(gs) - window_size):
+            X_list.append(feat_vals[i : i + window_size])
+            y_list.append(float(raw_targets[i + window_size]))
+            last_list.append(float(raw_targets[i + window_size - 1]))
+            lag4_idx_in_window = window_size - 4
+            if lag4_idx_in_window >= 0:
+                last_lag4_list.append(float(feat_vals[i + lag4_idx_in_window, target_idx]))
+            else:
+                last_lag4_list.append(float(raw_targets[i + window_size - 1]))
+
+    if not X_list:
+        raise ValueError(f"dow_hour 시퀀스 생성 실패: window_size={window_size} 보다 긴 그룹 없음")
+
+    return {
+        "X_raw": np.asarray(X_list, dtype=np.float32),
+        "y_raw": np.asarray(y_list, dtype=np.float32),
+        "last_value_raw": np.asarray(last_list, dtype=np.float32),
+        "last_value_lag4_raw": np.asarray(last_lag4_list, dtype=np.float32),
+        "target_idx": target_idx,
+        "feature_cols": feature_cols,
+        "window_size": int(window_size),
+        "group_full_targets": group_full_targets,
+        "group_seq_counts": group_seq_counts,
+    }
+
+
+def _evaluate_v6_dow_hour_residual() -> EvaluatorReturn:
+    """dow_hour residual model 평가.
+
+    데이터: data/processed/living_pop_dow_hour_quarterly.csv (16×7×24×29 = 77,952 row).
+    시퀀스: (dong, dow, hour) 그룹별 sliding window=8 → ~2688×21 = 56,448.
+    시간순 70/15/15 split → test ~8,460 시퀀스.
+    추론: y_pred = last_value + Δŷ (실제 단위).
+    y_naive = last_value (정의상 same baseline).
+    y_train_actuals = train split 의 mean_pop 시계열 1차원 concat (Hyndman MASE 분모).
+    """
+    from models.living_pop_forecast.data_prep_dow_hour import (
+        DOW_HOUR_TARGET_COL,
+    )
+    from models.living_pop_forecast.train import WEIGHTS_DIR
+
+    metadata_path = WEIGHTS_DIR / "living_pop_metadata_v6_dow_hour_residual.json"
+    artifacts = _load_tcn_artifacts(metadata_path)
+    metadata = artifacts["metadata"]
+
+    feature_cols = list(metadata["feature_columns"])
+    target_col = metadata.get("target_col", DOW_HOUR_TARGET_COL)
+    window_size = int(metadata.get("window_size", 8))
+
+    bundle = _build_dow_hour_sequences_for_eval(
+        feature_cols=feature_cols,
+        target_col=target_col,
+        window_size=window_size,
+    )
+
+    n = len(bundle["y_raw"])
+    train_end, val_end = _split_indices(n)
+    X_test = bundle["X_raw"][val_end:]
+    y_true = bundle["y_raw"][val_end:].astype(np.float32)
+    last_value = bundle["last_value_raw"][val_end:].astype(np.float32)
+
+    pred_norm = _predict_tcn_test(artifacts["model"], X_test, artifacts["feat_scaler"], bundle["target_idx"])
+    tgt_scaler = artifacts["tgt_scaler"]
+    delta_actual = tgt_scaler.inverse_transform(pred_norm.reshape(-1, 1)).reshape(-1).astype(np.float32)
+    y_pred = np.maximum(last_value + delta_actual, 0.0)
+
+    y_naive = _compute_naive_lag1(bundle, train_end, val_end)
+    y_train_actuals = _compute_train_actuals(bundle, train_end)
+    return y_true, y_pred, y_naive, y_train_actuals
+
+
+def _build_daily_sequences_for_eval(
+    feature_cols: list[str],
+    target_col: str,
+    window_size: int = 14,
+    mode: str = "residual_lag7",
+):
+    """일별 task 용 raw 시퀀스 빌드 (정규화 X — caller 가 scaler 적용).
+
+    그룹: (dong_code, time_zone) — 16×24 = 384 그룹. 그룹당 ~2,521일.
+    last_value_raw 의 의미는 mode 에 따라 다르다:
+        - residual_lag7 → y[t-7]
+        - residual_lag1 → y[t-1]
+        - absolute → y[t-1]
+
+    Returns
+    -------
+    dict
+        keys: X_raw (N,W,F), y_raw (N,), last_value_raw (N,), last_value_lag4_raw (N,),
+              target_idx, feature_cols, window_size, group_full_targets, group_seq_counts.
+    """
+    from models.living_pop_forecast.data_prep_daily import (
+        build_daily_features,
+        load_living_pop_daily,
+    )
+
+    df = load_living_pop_daily()
+    df = build_daily_features(df)
+
+    missing = [c for c in feature_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"DataFrame 에 없는 feature_cols: {missing}")
+    target_idx = feature_cols.index(target_col)
+
+    X_list: list[np.ndarray] = []
+    y_list: list[float] = []
+    last_list: list[float] = []
+    last_lag4_list: list[float] = []
+    group_full_targets: list[np.ndarray] = []
+    group_seq_counts: list[int] = []
+
+    for (_d, _h), group in df.groupby(["dong_code", "time_zone"], sort=True):
+        if len(group) <= window_size:
+            continue
+        gs = group.sort_values("date").reset_index(drop=True)
+        feat_vals = gs[feature_cols].values.astype(np.float32)
+        raw_targets = gs[target_col].values.astype(np.float32)
+        group_full_targets.append(raw_targets.copy())
+        group_seq_counts.append(len(gs) - window_size)
+        for i in range(len(gs) - window_size):
+            X_list.append(feat_vals[i : i + window_size])
+            y_list.append(float(raw_targets[i + window_size]))
+            if mode == "residual_lag7":
+                last_list.append(float(raw_targets[i + window_size - 7]))
+            else:
+                last_list.append(float(raw_targets[i + window_size - 1]))
+            lag4_idx_in_window = window_size - 4
+            if lag4_idx_in_window >= 0:
+                last_lag4_list.append(float(feat_vals[i + lag4_idx_in_window, target_idx]))
+            else:
+                last_lag4_list.append(float(raw_targets[i + window_size - 1]))
+
+    if not X_list:
+        raise ValueError(f"daily 시퀀스 생성 실패: window_size={window_size} 보다 긴 그룹 없음")
+
+    return {
+        "X_raw": np.asarray(X_list, dtype=np.float32),
+        "y_raw": np.asarray(y_list, dtype=np.float32),
+        "last_value_raw": np.asarray(last_list, dtype=np.float32),
+        "last_value_lag4_raw": np.asarray(last_lag4_list, dtype=np.float32),
+        "target_idx": target_idx,
+        "feature_cols": feature_cols,
+        "window_size": int(window_size),
+        "group_full_targets": group_full_targets,
+        "group_seq_counts": group_seq_counts,
+    }
+
+
+def _split_indices_per_group(
+    seq_counts: list[int], train_ratio: float = 0.70, val_ratio: float = 0.15
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """그룹별 시간순 split 인덱스 — 각 그룹 안에서 train/val/test 비율 적용."""
+    train_pieces: list[np.ndarray] = []
+    val_pieces: list[np.ndarray] = []
+    test_pieces: list[np.ndarray] = []
+    consumed = 0
+    for n_seq in seq_counts:
+        if n_seq <= 0:
+            continue
+        n_train = max(1, int(n_seq * train_ratio))
+        n_val = max(1, int(n_seq * val_ratio))
+        n_train = min(n_train, n_seq - 2)
+        n_val = min(n_val, n_seq - n_train - 1)
+        g_start = consumed
+        train_pieces.append(np.arange(g_start, g_start + n_train, dtype=np.int64))
+        val_pieces.append(np.arange(g_start + n_train, g_start + n_train + n_val, dtype=np.int64))
+        test_pieces.append(np.arange(g_start + n_train + n_val, g_start + n_seq, dtype=np.int64))
+        consumed += n_seq
+    train_idx = np.concatenate(train_pieces) if train_pieces else np.empty(0, dtype=np.int64)
+    val_idx = np.concatenate(val_pieces) if val_pieces else np.empty(0, dtype=np.int64)
+    test_idx = np.concatenate(test_pieces) if test_pieces else np.empty(0, dtype=np.int64)
+    return train_idx, val_idx, test_idx
+
+
+def _evaluate_v7_daily_residual() -> EvaluatorReturn:
+    """v7_daily_residual: 일별 (date × dong × time_zone) residual_lag7 TCN 평가.
+
+    데이터: data/processed/living_pop_daily.parquet (16×24×~2,521 = ~968K row).
+    시퀀스: (dong, hour) 그룹별 sliding window=14 → 384 × ~2,507 = ~962K.
+    그룹별 시간순 70/15/15 split.
+    추론: y_pred = last_value_lag7 + Δŷ (실제 단위).
+    y_naive = last_value_lag7 (정의상 same baseline = naive_lag7).
+    y_train_actuals = train split 의 total_pop 시계열 1차원 concat (Hyndman MASE 분모).
+    """
+    from models.living_pop_forecast.data_prep_daily import DAILY_TARGET_COL
+    from models.living_pop_forecast.train import WEIGHTS_DIR
+
+    metadata_path = WEIGHTS_DIR / "living_pop_metadata_v7_daily_residual.json"
+    artifacts = _load_tcn_artifacts(metadata_path)
+    metadata = artifacts["metadata"]
+
+    feature_cols = list(metadata["feature_columns"])
+    target_col = metadata.get("target_col", DAILY_TARGET_COL)
+    window_size = int(metadata.get("window_size", 14))
+    mode = metadata.get("mode", "residual_lag7")
+
+    bundle = _build_daily_sequences_for_eval(
+        feature_cols=feature_cols,
+        target_col=target_col,
+        window_size=window_size,
+        mode=mode,
+    )
+
+    train_idx, _val_idx, test_idx = _split_indices_per_group(
+        bundle["group_seq_counts"], train_ratio=0.70, val_ratio=0.15
+    )
+
+    X_test = bundle["X_raw"][test_idx]
+    y_true = bundle["y_raw"][test_idx].astype(np.float32)
+    last_value = bundle["last_value_raw"][test_idx].astype(np.float32)
+
+    pred_norm = _predict_tcn_test(artifacts["model"], X_test, artifacts["feat_scaler"], bundle["target_idx"])
+    tgt_scaler = artifacts["tgt_scaler"]
+    delta_actual = tgt_scaler.inverse_transform(pred_norm.reshape(-1, 1)).reshape(-1).astype(np.float32)
+    y_pred = np.maximum(last_value + delta_actual, 0.0)
+
+    # naive baseline = last_value (= naive_lag7 since mode=residual_lag7)
+    y_naive = last_value.copy()
+
+    # train actuals: 그룹별 train 영역 segment concat
+    full_targets = bundle["group_full_targets"]
+    seq_counts = bundle["group_seq_counts"]
+    train_pieces: list[np.ndarray] = []
+    consumed = 0
+    train_end = int(train_idx[-1]) + 1 if train_idx.size > 0 else 0
+    for raw_targets, n_seq in zip(full_targets, seq_counts):
+        if n_seq <= 0:
+            continue
+        g_start = consumed
+        g_end = consumed + n_seq
+        if g_end <= train_end:
+            n_train_seq = n_seq
+        elif g_start >= train_end:
+            n_train_seq = 0
+        else:
+            n_train_seq = train_end - g_start
+        consumed = g_end
+        if n_train_seq <= 0:
+            continue
+        end_t = window_size + n_train_seq
+        segment = raw_targets[:end_t].astype(np.float32)
+        train_pieces.append(segment)
+    y_train_actuals = np.concatenate(train_pieces, axis=0) if train_pieces else np.asarray([], dtype=np.float32)
+
+    return y_true, y_pred, y_naive, y_train_actuals
+
+
 def _evaluate_arima() -> EvaluatorReturn:
     """ARIMA per-group baseline.
 
@@ -629,6 +921,8 @@ EVALUATORS = {
     "v5_group_residual": _evaluate_v5_group_residual,
     "v5_group_rel_only": _evaluate_v5_group_rel_only,
     "v5_group_decomp": _evaluate_v5_group_decomp,
+    "v6_dow_hour_residual": _evaluate_v6_dow_hour_residual,
+    "v7_daily_residual": _evaluate_v7_daily_residual,
     "arima": _evaluate_arima,
 }
 
