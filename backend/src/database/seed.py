@@ -65,7 +65,7 @@ def seed_ftc_brand_franchise():
                     print("[seed] CSV가 비어있음 - 스킵")
                     return
 
-                # batch insert
+                # batch insert (ON CONFLICT DO NOTHING — UNIQUE 제약으로 중복 방지)
                 conn.execute(
                     text(
                         "INSERT INTO ftc_brand_franchise "
@@ -74,7 +74,8 @@ def seed_ftc_brand_franchise():
                         '"nmChgCnt", "avrgSlsAmt", "arUnitAvrgSlsAmt") '
                         "VALUES (:yr, :corpNm, :brandNm, :indutyLclasNm, :indutyMlsfcNm, "
                         ":frcsCnt, :newFrcsRgsCnt, :ctrtEndCnt, :ctrtCncltnCnt, "
-                        ":nmChgCnt, :avrgSlsAmt, :arUnitAvrgSlsAmt)"
+                        ":nmChgCnt, :avrgSlsAmt, :arUnitAvrgSlsAmt) "
+                        'ON CONFLICT (yr, "corpNm", "brandNm") DO NOTHING'
                     ),
                     rows,
                 )

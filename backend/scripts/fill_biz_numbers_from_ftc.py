@@ -52,44 +52,56 @@ def _extract_biz_number(xml_content: str) -> str | None:
     패턴: XXX-XX-XXXXX 또는 XXXXXXXXXX (10자리 숫자)
     """
     # 하이픈 포함 패턴
-    m = re.search(r"사업자[^0-9]{0,20}(\d{3})-(\d{2})-(\d{5})", xml_content)
+    # 1차: "사업자" 키워드 근처
+    m = re.search(r"사업자[^0-9]{0,50}(\d{3})-(\d{2})-(\d{5})", xml_content)
     if m:
         return m.group(1) + m.group(2) + m.group(3)
 
-    # 하이픈 없는 10자리
-    m = re.search(r"사업자[^0-9]{0,20}(\d{10})", xml_content)
+    # 2차: 본문 전체에서 XXX-XX-XXXXX 패턴 (첫 번째 매칭)
+    m = re.search(r"(\d{3})-(\d{2})-(\d{5})", xml_content)
+    if m:
+        return m.group(1) + m.group(2) + m.group(3)
+
+    # 3차: "등록번호" 키워드 근처 10자리
+    m = re.search(r"등록번호[^0-9]{0,50}(\d{10})", xml_content)
     if m:
         return m.group(1)
-
-    # 등록번호 패턴
-    m = re.search(r"등록번호[^0-9]{0,20}(\d{3})-(\d{2})-(\d{5})", xml_content)
-    if m:
-        return m.group(1) + m.group(2) + m.group(3)
 
     return None
 
 
 async def fetch_all_brands(api_key: str, year: str) -> list[dict]:
-    """FTC API에서 전체 브랜드 목록 조회."""
-    key = unquote(api_key)
-    url = f"{BASE_URL}/api/search.do?type=list&yr={year}&serviceKey={key}"
+    """FTC API에서 전체 브랜드 목록 조회 (페이지네이션 처리)."""
+    brands = []
+    page = 1
 
     async with httpx.AsyncClient(timeout=30, headers=_BROWSER_HEADERS) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
+        while True:
+            url = f"{BASE_URL}/api/search.do?type=list&yr={year}&pageNo={page}&numOfRows=100&serviceKey={api_key}"
+            resp = await client.get(url)
+            resp.raise_for_status()
 
-    root = etree.fromstring(resp.content)
-    items = root.findall(".//item")
+            root = etree.fromstring(resp.content)
+            items = root.findall(".//item")
 
-    brands = []
-    for item in items:
-        brands.append(
-            {
-                "jng_ifrmp_sn": item.findtext("jngIfrmpSn") or "",
-                "brand_name": item.findtext("brandNm") or "",
-                "corp_name": item.findtext("corpNm") or "",
-            }
-        )
+            if not items:
+                break
+
+            for item in items:
+                brands.append(
+                    {
+                        "jng_ifrmp_sn": item.findtext("jngIfrmpSn") or "",
+                        "brand_name": item.findtext("brandNm") or "",
+                        "corp_name": item.findtext("corpNm") or "",
+                    }
+                )
+
+            print(f"  page {page}: {len(items)}건 (누적 {len(brands)})")
+
+            if len(items) < 100:
+                break
+            page += 1
+            await asyncio.sleep(0.5)
 
     print(f"FTC API: {year}년 브랜드 {len(brands)}개 조회 완료")
     return brands
@@ -97,8 +109,7 @@ async def fetch_all_brands(api_key: str, year: str) -> list[dict]:
 
 async def fetch_content_and_extract_biz(api_key: str, jng_ifrmp_sn: str) -> str | None:
     """정보공개서 본문에서 사업자등록번호 추출."""
-    key = unquote(api_key)
-    url = f"{BASE_URL}/api/search.do?type=content&jngIfrmpSn={jng_ifrmp_sn}&serviceKey={key}"
+    url = f"{BASE_URL}/api/search.do?type=content&jngIfrmpSn={jng_ifrmp_sn}&serviceKey={api_key}"
 
     try:
         async with httpx.AsyncClient(timeout=20, headers=_BROWSER_HEADERS) as client:
