@@ -11,7 +11,7 @@
  *   둘 다 없으면 dev 환경에서 콘솔 경고 (XOR 강제).
  */
 
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 type Accent = 'indigo' | 'cyan' | 'amber';
@@ -22,6 +22,14 @@ interface BaseProps {
   imgSrc: string;
   imgAlt: string;
   accent: Accent;
+  /**
+   * 슬라이스 실패(예: ML 예측 timeout) 시 카드 비활성화.
+   * - 시각: grayscale + opacity 50% + 호버 효과 제거
+   * - 동작: 클릭 차단 (Link/button 모두 pointer-events-none)
+   * - 사용자 안내: disabledReason 표시 + 재시도 hint (SimulationFloatingWidget 의 재시도 버튼)
+   */
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 interface LinkProps extends BaseProps {
@@ -58,19 +66,24 @@ const ACCENT_CLASS: Record<Accent, { laser: string; arrow: string; ring: string 
 };
 
 export function HubCard(props: Props) {
-  const { title, description, imgSrc, imgAlt, accent } = props;
+  const { title, description, imgSrc, imgAlt, accent, disabled, disabledReason } = props;
   const a = ACCENT_CLASS[accent];
 
   // Link/button 양 모드 공통 className — focus ring, hover lift, transition.
-  const commonCls = `group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-2xl hover:shadow-indigo-500/10 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1e1b18] ${a.ring}`;
+  // disabled 일 때: grayscale + opacity-50 + 호버/transition 제거 + cursor-not-allowed.
+  const commonCls = disabled
+    ? 'group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm grayscale opacity-50 cursor-not-allowed pointer-events-none select-none'
+    : `group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-2xl hover:shadow-indigo-500/10 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1e1b18] ${a.ring}`;
 
   const inner = (
     <>
-      <div
-        className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 motion-reduce:hidden"
-        style={{ background: a.laser }}
-        aria-hidden="true"
-      />
+      {!disabled && (
+        <div
+          className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 motion-reduce:hidden"
+          style={{ background: a.laser }}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="relative z-10 flex h-full flex-col rounded-3xl bg-stone-900/95">
         <div className="aspect-video overflow-hidden rounded-t-3xl">
@@ -80,7 +93,11 @@ export function HubCard(props: Props) {
             loading="lazy"
             width={640}
             height={360}
-            className="h-full w-full object-cover transition-transform duration-700 ease-in-out group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+            className={
+              disabled
+                ? 'h-full w-full object-cover'
+                : 'h-full w-full object-cover transition-transform duration-700 ease-in-out group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100'
+            }
           />
         </div>
 
@@ -88,16 +105,42 @@ export function HubCard(props: Props) {
           <h3 className="text-2xl font-black text-stone-100 tracking-tight">{title}</h3>
           <p className="mt-3 flex-1 text-sm text-stone-400 leading-relaxed">{description}</p>
 
-          <div
-            className={`mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${a.arrow}`}
-          >
-            진입
-            <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none" />
-          </div>
+          {disabled ? (
+            <div className="mt-6 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-[0.6875rem] text-rose-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div>
+                <div className="font-bold uppercase tracking-widest">분석 실패</div>
+                {disabledReason && (
+                  <div className="mt-1 text-rose-200/80 leading-relaxed">{disabledReason}</div>
+                )}
+                <div className="mt-1 text-rose-300/60">우측 위젯에서 재시도하세요</div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`mt-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${a.arrow}`}
+            >
+              진입
+              <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1 motion-reduce:transition-none" />
+            </div>
+          )}
         </div>
       </div>
     </>
   );
+
+  // disabled 일 때 — Link/button 모두 비활성화. tabIndex=-1 로 키보드 진입도 차단.
+  if (disabled) {
+    return (
+      <div
+        aria-label={`${title} (분석 실패 — 비활성화)`}
+        aria-disabled="true"
+        className={commonCls}
+      >
+        {inner}
+      </div>
+    );
+  }
 
   if (props.to !== undefined) {
     return (

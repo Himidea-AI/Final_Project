@@ -46,6 +46,16 @@ export function DashboardHub({
     day: '2-digit',
   });
 
+  // 슬라이스별 status — error 시 카드 비활성화 + 사용자 안내 + 재시도 hint.
+  // ABM 은 별도 endpoint(/simulate-abm) 라 store 슬라이스 미연동 — 일단 활성 유지.
+  const predictStatus = useSimulationStore((s) => s.prediction.status);
+  const predictError = useSimulationStore((s) => s.prediction.error);
+  const analyzeStatus = useSimulationStore((s) => s.analysis.status);
+  const analyzeError = useSimulationStore((s) => s.analysis.error);
+
+  const isPredictDisabled = predictStatus === 'error';
+  const isAnalyzeDisabled = analyzeStatus === 'error';
+
   // 새 시뮬 시작 — store.result 비우고 /simulator 진입.
   // mount-restore (App.tsx:1297-1308) 가 store.result null 보고 setReportState 호출 안 함 → input UI 정상 표시.
   const handleNewSimulation = () => {
@@ -83,6 +93,8 @@ export function DashboardHub({
             imgSrc={HUB_IMAGES.predict}
             imgAlt="데이터 차트 시각화"
             accent="indigo"
+            disabled={isPredictDisabled}
+            disabledReason={predictError ?? undefined}
           />
         ) : (
           <HubCard
@@ -92,6 +104,8 @@ export function DashboardHub({
             imgSrc={HUB_IMAGES.predict}
             imgAlt="데이터 차트 시각화"
             accent="indigo"
+            disabled={isPredictDisabled}
+            disabledReason={predictError ?? undefined}
           />
         )}
         {onSelect ? (
@@ -102,6 +116,8 @@ export function DashboardHub({
             imgSrc={HUB_IMAGES.analyze}
             imgAlt="도시 거리 풍경"
             accent="cyan"
+            disabled={isAnalyzeDisabled}
+            disabledReason={analyzeError ?? undefined}
           />
         ) : (
           <HubCard
@@ -111,6 +127,8 @@ export function DashboardHub({
             imgSrc={HUB_IMAGES.analyze}
             imgAlt="도시 거리 풍경"
             accent="cyan"
+            disabled={isAnalyzeDisabled}
+            disabledReason={analyzeError ?? undefined}
           />
         )}
         {onSelect ? (
