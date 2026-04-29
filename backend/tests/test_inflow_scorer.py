@@ -1,5 +1,5 @@
 """
-operational_fit_scorer 테스트
+inflow_scorer 테스트
 
 1) 순수 수학 단위 테스트 (DB 불필요)
    - Gaussian decay 경계 조건
@@ -21,7 +21,7 @@ import os
 
 import pytest
 
-from src.services.operational_fit_scorer import (
+from src.services.inflow_scorer import (
     _gaussian_decay,
     _minmax_to_100,
     calibrate_weights_from_shap,
@@ -134,13 +134,13 @@ def test_score_all_districts_integration() -> None:
 
     assert len(results) == 16, f"16동 예상, 실제 {len(results)}동"
     for dong, r in results.items():
-        assert 0.0 <= r["operational_fit_score"] <= 100.0, f"{dong} 점수 범위 이탈: {r}"
+        assert 0.0 <= r["inflow_score"] <= 100.0, f"{dong} 점수 범위 이탈: {r}"
         assert 0.0 <= r["subway_sub"] <= 100.0
         assert 0.0 <= r["bus_sub"] <= 100.0
         assert 0.0 <= r["fclty_sub"] <= 100.0
         assert "evidence" in r
 
-    scores = [r["operational_fit_score"] for r in results.values()]
+    scores = [r["inflow_score"] for r in results.values()]
     assert max(scores) - min(scores) > 5.0, "16동 점수 분포 너무 좁음 — 정규화 점검 필요"
 
 
@@ -191,10 +191,10 @@ def test_before_after_ranking_integration() -> None:
     ]
 
     operfit_map = asyncio.run(score_all_districts())
-    print("\n=== operational_fit 16-dong scores ===")
-    for dong, r in sorted(operfit_map.items(), key=lambda kv: -kv[1]["operational_fit_score"]):
+    print("\n=== inflow 16-dong scores ===")
+    for dong, r in sorted(operfit_map.items(), key=lambda kv: -kv[1]["inflow_score"]):
         print(
-            f"  {dong:10s} {r['operational_fit_score']:5.1f} "
+            f"  {dong:10s} {r['inflow_score']:5.1f} "
             f"(sub={r['subway_sub']:.1f} bus={r['bus_sub']:.1f} fclty={r['fclty_sub']:.1f})"
         )
 
