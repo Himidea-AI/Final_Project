@@ -14,7 +14,14 @@
  * - 타입 정의는 src/types/index.ts 참고
  */
 import axios from 'axios';
-import type { SimulationInput, SimulationOutput, JobStatus, CustomerSegment } from '../types';
+import type {
+  SimulationInput,
+  SimulationOutput,
+  JobStatus,
+  CustomerSegment,
+  DistrictPredictionResult,
+  AnalysisOutput,
+} from '../types';
 import type {
   HistoryFilterParams,
   HistoryListResponse,
@@ -109,7 +116,12 @@ export async function healthCheck() {
   return response.data;
 }
 
-/** 시뮬레이션 실행 요청 — LLM 파이프라인이라 10분까지 대기 (전역 2분으로는 캐시 miss 시 timeout) */
+/**
+ * 시뮬레이션 실행 요청 — LLM 파이프라인이라 10분까지 대기 (전역 2분으로는 캐시 miss 시 timeout)
+ *
+ * @deprecated 2026-04-29 IM3-259 — /predict + /analyze/llm 분리 호출로 마이그레이션 진행 중.
+ * 이 함수는 history detail 복원 등 fallback 경로에서만 사용. 신규 시뮬은 fetchPredict + fetchAnalyzeLlm 사용.
+ */
 export async function runSimulation(
   input: SimulationInput,
   signal?: AbortSignal,
@@ -128,6 +140,22 @@ export async function runSimulation(
     if (body.status === 'error') throw new Error(body.message || 'Simulation failed');
   }
   return body as SimulationOutput;
+}
+
+/** ML 예측 — /predict (선택 동 1~4 병렬). 사용자 입력 그대로 받음. */
+export async function fetchPredict(input: SimulationInput): Promise<DistrictPredictionResult[]> {
+  const response = await apiClient.post('/predict', input);
+  // 응답 형태: { results: DistrictPredictionResult[] } 또는 list — backend 확정 시 unwrap.
+  const body = response.data;
+  if (Array.isArray(body)) return body;
+  if (body && Array.isArray(body.results)) return body.results;
+  return [];
+}
+
+/** AI 분석 — /analyze/llm (winner 산출 + LLM 6 에이전트). */
+export async function fetchAnalyzeLlm(input: SimulationInput): Promise<AnalysisOutput> {
+  const response = await apiClient.post('/analyze/llm', input);
+  return response.data as AnalysisOutput;
 }
 
 /** 시뮬레이션 리포트 조회 */
