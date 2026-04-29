@@ -1,28 +1,28 @@
 /**
- * AnalyzeAiSummaryTab — AI 분석 요약 (LLM 출처 통합 판단)
+ * AnalyzeAiSummaryTab — AI 분석 요약 (synthesis 종합 + 최종 권고)
  *
- * 2026-04-28 IA 재구조 — SummaryTab 의 computeDecision + 창업 신호등 + synthesis 자연어 이관.
+ * 2026-04-28 IA 재구조 — SummaryTab 의 synthesis 자연어 이관.
  * 2026-04-28 H6 — LLM 산출 "1등 추천 동" + Top 3 칩 카드 추가.
- * 2026-04-29 B7 — EntrySignalLight 제거 (DecisionCard 와 정보 중복/모순). 레이아웃 재배치:
- *   상단 = synthesis 종합 + 최종 권고 (영업팀장 결론 우선 흐름), 하단 = DecisionCard (보조).
+ * 2026-04-29 IM3-263 — LLM 출처 통합 판단 + 창업 진입 신호 카드를 LegalTab 으로 이관.
+ *   synthesis 종합 분석을 최상단에 강조, 최종 권고를 그 밑에 배치.
+ * 2026-04-29 B1 — synthesis / 최종 권고를 react-markdown 으로 렌더. 백엔드가 ## 헤더,
+ *   **bold**, 리스트 등을 포함한 마크다운으로 응답하므로 plain text 렌더 시 헤더가
+ *   '## 추천 입지' 형태로 노출되던 문제 해소.
  *
  * 데이터 출처:
  *   - 1등 추천 동: simResult.winner_district (district_ranking 에이전트 산출)
  *   - Top 3 후보: simResult.top_3_candidates (district_ranking 에이전트 산출)
- *   - decision verdict: legal × entry signal 2D 매트릭스 (decisionThresholds SSOT)
  *   - synthesis 자연어: simResult.final_report.summary || simResult.analysis_report
  *   - 최종 권고: simResult.final_report.final_recommendation || simResult.ai_recommendation
  *
- * 실데이터 원칙: winner_district 가 없으면 추천 동 카드 자체를 hide (값 없으면 — 표시 정책 + 빈 자리 어색 회피).
+ * 실데이터 원칙: winner_district 가 없으면 추천 동 카드 자체를 hide.
  */
 
-import { BrainCircuit, ShieldAlert, AlertTriangle, MapPin, Trophy } from 'lucide-react';
+import { MapPin, Trophy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import type { SimulationOutput } from '../../../../../types';
-import { DecisionCard } from '../../shared/DecisionCard';
-import { computeDecision, DECISION_COPY } from '../../../../../constants/decisionThresholds';
 
 interface Props {
   simResult: SimulationOutput;
@@ -31,9 +31,6 @@ interface Props {
 /**
  * Markdown components mapping — backend 가 ## 헤더, **bold**, 리스트 등을 포함한 마크다운으로
  * synthesis / final_recommendation 응답을 보낸다. Tailwind 토큰 (stone/indigo 톤) 으로 통일.
- *
- * NOTE: NarrativeText 의 숫자 자동 하이라이트는 마크다운 컨텍스트에서는 포기 — 마크다운 구조를
- * 우선. 강조하고 싶은 수치는 backend 가 **bold** 로 감싸서 보내면 strong 노드로 렌더된다.
  */
 const MARKDOWN_COMPONENTS: Components = {
   h1: ({ node: _n, ...props }) => (
@@ -58,21 +55,7 @@ const MARKDOWN_COMPONENTS: Components = {
   li: ({ node: _n, ...props }) => <li className="leading-relaxed" {...props} />,
 };
 
-const AGENT_ICON = {
-  synthesis: { icon: BrainCircuit, color: 'text-white', borderCls: 'border-stone-300/60' },
-  legal: { icon: AlertTriangle, color: 'text-rose-400', borderCls: 'border-rose-500/50' },
-  competitor: { icon: ShieldAlert, color: 'text-amber-400', borderCls: 'border-amber-500/50' },
-};
-
 export function AnalyzeAiSummaryTab({ simResult }: Props) {
-  const ci = simResult.competitor_intel as Record<string, any> | null | undefined;
-  const legalRaw = simResult.overall_legal_risk ?? null;
-  const entryRaw = (ci?.market_entry_signal as string | undefined) ?? null;
-
-  const verdict = computeDecision(legalRaw, entryRaw);
-  const verdictCopy = DECISION_COPY[verdict];
-  const isVerdictUnknown = verdict === 'UNKNOWN';
-
   const summary = simResult.final_report?.summary ?? simResult.analysis_report ?? '';
   const recommendation =
     simResult.final_report?.final_recommendation ?? simResult.ai_recommendation ?? '';
@@ -151,12 +134,12 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
         </div>
       )}
 
-      {/* ═══ 상단: synthesis 자연어 종합 (영업팀장 결론 우선) ═══ */}
+      {/* ═══ synthesis 종합 분석 (최상단, 강조) ═══ */}
       {summary && (
-        <div className="rounded-3xl border border-stone-800/60 bg-stone-900/40 p-8">
-          <h4 className="mb-4 text-xs font-black uppercase tracking-widest text-stone-500">
+        <div className="rounded-3xl border border-stone-700/60 bg-stone-900/60 p-10">
+          <h3 className="mb-6 text-base font-black uppercase tracking-widest text-stone-300">
             synthesis 종합 분석
-          </h4>
+          </h3>
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
             {summary}
           </ReactMarkdown>
@@ -174,39 +157,6 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
           </ReactMarkdown>
         </div>
       )}
-
-      {/* ═══ 하단: LLM 출처 통합 판단 (보조 카드) ═══ */}
-      <DecisionCard
-        title="LLM 출처 통합 판단"
-        heroBadge={isVerdictUnknown ? verdictCopy.label : `${verdict} · ${verdictCopy.label}`}
-        heroColor={verdictCopy.color}
-        description={
-          isVerdictUnknown
-            ? '법률 분석 또는 경쟁 진입 신호 중 일부가 아직 수신되지 않았습니다. 해당 에이전트 실행이 완료되면 판정이 산출됩니다.'
-            : '법률 리스크(safe/caution/danger) × 경쟁 진입 신호(green/yellow/red)의 2D 매트릭스로 GO / HOLD / STOP 3단계 판정을 도출합니다.'
-        }
-        items={[
-          {
-            text: `법률 리스크 ${legalRaw ?? '미수신'}`,
-            highlight: legalRaw === 'safe',
-          },
-          {
-            text: `진입 신호 ${entryRaw ?? '미수신'}`,
-            highlight: entryRaw === 'green',
-          },
-          {
-            text: `종합 판정 ${verdict}`,
-            highlight: verdict === 'GO',
-          },
-        ]}
-        footer={{
-          agents: [AGENT_ICON.synthesis, AGENT_ICON.legal, AGENT_ICON.competitor].map((a, i) => ({
-            id: `ai-summary-${i}`,
-            ...a,
-          })),
-          methodology: 'synthesis + legal + competitor',
-        }}
-      />
     </div>
   );
 }
