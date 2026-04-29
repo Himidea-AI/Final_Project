@@ -55,6 +55,55 @@ def _cached(key: str, loader, ttl: float | None = None):
 # 5000 agent 가 정책 기반 의사결정으로 hour 별 위치 변함 → 이게 곧 유동인구.
 
 
+# 마포구 16개 행정동 면적 (km²) — 마포구청 통계연보 39회 (2023.12.31 기준).
+# 출처: 마포구청 「마포구 통계연보 2023」 p.46-47
+#   PDF: https://www.mapo.go.kr/site/main/file/download/uu/d5bbb44a9289414aa85f9c45addf4b6a
+# 용도: per-agent home Gaussian σ 동별 가변 산출.
+#   σ_xy = R / 2 (R = √(area/π) 등가반경, uniform circular 가정)
+#   상암동(8.40 km²)은 한강·하늘공원·DMC 비주거 영역 다수 → 주거밀도 편중,
+#   실효 σ 는 0.45 weight 로 보정 (전체 사용 시 dot 가 비주거 영역에 분산).
+_MAPO_DONG_AREA_KM2: dict[str, float] = {
+    "공덕동": 1.01,
+    "아현동": 0.76,
+    "도화동": 0.62,
+    "용강동": 0.84,
+    "대흥동": 0.88,
+    "염리동": 0.43,
+    "신수동": 0.78,
+    "서강동": 1.45,
+    "서교동": 1.65,
+    "합정동": 1.69,
+    "망원1동": 1.14,
+    "망원2동": 0.67,
+    "연남동": 0.65,
+    "성산1동": 0.80,
+    "성산2동": 2.07,
+    "상암동": 8.40,  # 비주거 영역 多 → _MAPO_DONG_RESIDENTIAL_WEIGHT 로 실효 면적 축소
+}
+_MAPO_DONG_RESIDENTIAL_WEIGHT: dict[str, float] = {
+    "상암동": 0.45,  # 한강·DMC·공원 제외, 실주거지(아파트단지) 추정 비율
+}
+
+
+def _dong_sigma_deg(dong_name: str, default: float = 0.0030) -> float:
+    """동별 면적 기반 거주 분산 σ (latitude/longitude 도 단위).
+
+    R = √(A_eff / π) [m], σ = R / 2 [m] → /111000 deg.
+    A_eff = area_km² × residential_weight × 1e6.
+    상암동 (8.40 km²) 의 경우 weight=0.45 → R≈1095m → σ≈547m → 0.0049°.
+    """
+    area = _MAPO_DONG_AREA_KM2.get(dong_name)
+    if area is None:
+        return default
+    weight = _MAPO_DONG_RESIDENTIAL_WEIGHT.get(dong_name, 1.0)
+    a_eff_m2 = area * weight * 1e6
+    import math
+
+    r_m = math.sqrt(a_eff_m2 / math.pi)
+    sigma_m = r_m / 2.0  # uniform circular → σ = R/2
+    return sigma_m / 111000.0
+
+
 def _load_dong_coords() -> dict[str, tuple[float, float]]:
     """dong_subway_access에서 동 중심 좌표 + 외부 가상 좌표."""
     import os
@@ -921,16 +970,16 @@ def run_simulation(
                         d_coord = dong_coords.get(a.current_dong)
                         if not d_coord:
                             continue
-                        # per-agent stable Gaussian — 같은 agent 는 시간 무관 같은 home.
-                        # 출처: 마포 16개 행정동 평균 면적 ~1.0 km² (위키백과 「마포구의
-                        # 행정 구역」, 상암 제외 15동 기준). 등가반경 R≈547m.
-                        # 균등분포 원 가정 시 σ_xy = R/√2 ≈ 387m → 위경도 0.0035°.
-                        # 보수적으로 0.0030° (~330m lat / 268m lon) 적용 →
-                        # 95% CI ±660m → 동 평균 cover. 이전 0.0015° 는 동 면적의
-                        # 25% 만 cover (under-dispersed) 회귀 fix.
+                        # per-agent stable Gaussian — 동별 면적 기반 가변 σ.
+                        # 출처: 마포구청 「마포구 통계연보 2023」 p.46-47 — 16개 행정동
+                        # 면적 (km²). σ = R/2 where R=√(area/π), uniform circular 가정.
+                        # 상암동(8.40 km²) 은 한강·DMC·공원 등 비주거 영역 多 → weight 0.45.
+                        # 동별 σ 범위: 염리동(0.43km²) σ≈185m / 평균(1.0km²) σ≈282m /
+                        # 합정동(1.69km²) σ≈366m / 상암동(가중) σ≈547m.
+                        sigma_deg = _dong_sigma_deg(a.current_dong)
                         ag_rng = _agent_rng_lib.Random(a.agent_id * 0x9E3779B1)
-                        d_lat = d_coord[0] + ag_rng.gauss(0, 0.0030)
-                        d_lon = d_coord[1] + ag_rng.gauss(0, 0.0030)
+                        d_lat = d_coord[0] + ag_rng.gauss(0, sigma_deg)
+                        d_lon = d_coord[1] + ag_rng.gauss(0, sigma_deg)
                     d_r = int((DENSITY_MAX_LAT - d_lat) / _density_d_lat)
                     d_c = int((d_lon - DENSITY_MIN_LON) / _density_d_lon)
                     if 0 <= d_r < DENSITY_ROWS and 0 <= d_c < DENSITY_COLS:
