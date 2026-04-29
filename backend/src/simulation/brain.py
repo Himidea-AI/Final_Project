@@ -13,6 +13,7 @@ import json
 import os
 import random
 import re
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -110,6 +111,16 @@ class LLMBrain:
                 self.cfg.tier_s_model = self.cfg.ollama_model
             else:
                 self.cfg.mock_mode = True
+        # OpenAI provider 명시했지만 키 부재 → silent AuthenticationError 회피.
+        # ollama 가능하면 ollama 로, 아니면 mock_mode 강제 + 명시 로그.
+        elif self.cfg.tier_s_provider == "openai" and not self._key_ok("OPENAI_API_KEY"):
+            if ollama_ok:
+                print(f"[brain] OPENAI 키 없음 → Tier S를 Ollama {self.cfg.ollama_model}로 다운그레이드")
+                self.cfg.tier_s_provider = "ollama"
+                self.cfg.tier_s_model = self.cfg.ollama_model
+            else:
+                print("[brain] ⚠️ OPENAI_API_KEY 부재 → Tier S MOCK 모드. .env 확인 필요.")
+                self.cfg.mock_mode = True
 
         # Tier A
         if self.cfg.tier_a_provider == "gemini" and not (
@@ -123,6 +134,15 @@ class LLMBrain:
                 print("[brain] GEMINI 키 없음 → Tier A를 OpenAI gpt-4.1-nano로 다운그레이드")
                 self.cfg.tier_a_provider = "openai"
                 self.cfg.tier_a_model = "gpt-4.1-nano"
+        # Tier A 도 OpenAI 명시 + 키 부재 케이스 처리.
+        elif self.cfg.tier_a_provider == "openai" and not self._key_ok("OPENAI_API_KEY"):
+            if ollama_ok:
+                print(f"[brain] OPENAI 키 없음 → Tier A를 Ollama {self.cfg.ollama_model}로 다운그레이드")
+                self.cfg.tier_a_provider = "ollama"
+                self.cfg.tier_a_model = self.cfg.ollama_model
+            else:
+                print("[brain] ⚠️ OPENAI_API_KEY 부재 → Tier A MOCK 모드.")
+                self.cfg.mock_mode = True
 
     def _init_clients(self) -> None:
         # OpenAI (Tier S 또는 A에서 사용 가능)
@@ -267,10 +287,9 @@ class LLMBrain:
     def _smart_decide_openai(self, agent: "Agent", world: "World", ctx: str, persona: Persona) -> Decision:
         if self._openai is None:
             return self._mock_decide(agent, world, tier="S")
-        # 429 rate-limit 방어 — 짧은 backoff 로 3회 재시도. OpenAI 응답의 retry-after
-        # 헤더(혹은 메시지 내 ms 값)를 파싱해서 정확한 sleep 시간 적용.
-        import time as _time
-
+        # 429 rate-limit 방어 — 0.5/1/2s backoff 로 3회 재시도.
+        # ⚠️ ThreadPool worker 안에서 동기 sleep → 4 worker 동시 429 시 최대 7s pool 정지.
+        # 정상 RPM 한도 (concurrency=4 + Semaphore=4 → ~320 RPM < 500) 면 거의 안 걸림.
         delay = 0.5
         for attempt in range(3):
             try:
@@ -300,12 +319,13 @@ class LLMBrain:
                 msg = str(e)
                 is_rate_limit = "429" in msg or "rate_limit" in msg or "RateLimit" in type(e).__name__
                 if is_rate_limit and attempt < 2:
-                    _time.sleep(delay)
+                    time.sleep(delay)
                     delay *= 2  # 0.5 → 1 → 2s
                     continue
                 self.stats.failures += 1
                 print(f"[brain.S/openai] {agent.agent_id} 실패: {e}")
                 return self._mock_decide(agent, world, tier="S")
+        # 도달 불가 — for loop 의 모든 path 가 return. 정적 분석기 fallback 용.
         return self._mock_decide(agent, world, tier="S")
 
     # -----------------------------------------------------------

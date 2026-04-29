@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Activity, Play } from 'lucide-react';
 import VacancySpotMarker from './VacancySpotMarker';
 import VacancyStatsPanel from './VacancyStatsPanel';
@@ -593,6 +593,14 @@ export default function AbmPersonaMap({
       tierSIdsRef.current.add(aid);
     }
   }, [abmResult]);
+
+  // thought feed 정렬 캐시 — abmResult.thoughts 참조 동일 시 sort 재실행 회피.
+  // 부모 re-render (hover state 변경, simTick) 마다 [...].sort() 매번 돌던 문제 해결.
+  const sortedThoughts = useMemo(() => {
+    const arr = abmResult?.thoughts;
+    if (!Array.isArray(arr) || arr.length === 0) return [] as AbmThought[];
+    return [...(arr as AbmThought[])].sort((a, b) => a.day * 24 + a.hour - (b.day * 24 + b.hour));
+  }, [abmResult?.thoughts]);
 
   // 히트맵 grid 구성 — 우선순위:
   //   1) backend abmResult.density_grid (정식 contract) — 5000 agents 전체 카운트
@@ -1302,7 +1310,12 @@ export default function AbmPersonaMap({
 
       // ZOOM — 무거운 takeSnapshot 경로 유지 (zoom 은 픽셀 비선형 재투영 필요).
       kakao.maps.event.addListener(map, 'zoom_start', () => {
+        // pan 도중 zoom 시작 → pan ref/transform 정리해서 stale 방지.
+        const canvasEl = canvasRef.current;
+        if (canvasEl) canvasEl.style.transform = '';
         isPanModeRef.current = false;
+        panStartLatLngRef.current = null;
+        panStartPxRef.current = null;
         takeSnapshot();
       });
 
@@ -2652,62 +2665,60 @@ export default function AbmPersonaMap({
                 </div>
                 {/* Tier S Thought Feed — 50명 LLM reason 시간순 스크롤 피드.
                     풍선 클러터 대신 여기서 전체 흐름 표시. 행 클릭 → PersonaCard 모달. */}
-                {Array.isArray(abmResult.thoughts) && abmResult.thoughts.length > 0 && (
+                {sortedThoughts.length > 0 && (
                   <div className="flex flex-col gap-2">
                     <div className="flex items-baseline justify-between">
                       <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest">
                         Tier S · LLM Thoughts
                       </span>
                       <span className="text-[9px] font-mono text-stone-600">
-                        {abmResult.thoughts.length}
+                        {sortedThoughts.length}
                       </span>
                     </div>
                     <div className="relative max-h-[280px] overflow-y-auto rounded-xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.04] to-transparent">
-                      {[...(abmResult.thoughts as AbmThought[])]
-                        .sort((a, b) => a.day * 24 + a.hour - (b.day * 24 + b.hour))
-                        .map((th, idx) => {
-                          const aid = th.agent_id;
-                          const archetype = th.archetype || '';
-                          return (
-                            <button
-                              key={`thought-${idx}-${aid}-${th.hour}`}
-                              type="button"
-                              onClick={() => {
-                                if (aid == null) return;
-                                const all = Array.from(
-                                  thoughtsByAgentRef.current.get(aid)?.values() ?? [],
-                                );
-                                if (onPersonaClick) {
-                                  onPersonaClick(aid, all);
-                                } else {
-                                  setSelectedPersona({
-                                    agentId: aid,
-                                    archetype,
-                                    thoughts: all,
-                                  });
-                                }
-                              }}
-                              className="w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 hover:bg-amber-500/[0.06] transition-colors"
-                            >
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <span className="text-[9px] font-mono text-amber-400/80 tracking-wider tabular-nums">
-                                  {String(th.hour % 24).padStart(2, '0')}:00
-                                </span>
-                                <span className="text-[9px] font-mono text-stone-500 tabular-nums">
-                                  #{aid}
-                                </span>
-                              </div>
-                              <p className="text-[11px] leading-snug text-stone-300 font-medium break-keep">
-                                {th.thought}
+                      {sortedThoughts.map((th, idx) => {
+                        const aid = th.agent_id;
+                        const archetype = th.archetype || '';
+                        return (
+                          <button
+                            key={`thought-${idx}-${aid}-${th.day}-${th.hour}`}
+                            type="button"
+                            onClick={() => {
+                              if (aid == null) return;
+                              const all = Array.from(
+                                thoughtsByAgentRef.current.get(aid)?.values() ?? [],
+                              );
+                              if (onPersonaClick) {
+                                onPersonaClick(aid, all);
+                              } else {
+                                setSelectedPersona({
+                                  agentId: aid,
+                                  archetype,
+                                  thoughts: all,
+                                });
+                              }
+                            }}
+                            className="w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 hover:bg-amber-500/[0.06] transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-[9px] font-mono text-amber-400/80 tracking-wider tabular-nums">
+                                {String(th.hour % 24).padStart(2, '0')}:00
+                              </span>
+                              <span className="text-[9px] font-mono text-stone-500 tabular-nums">
+                                #{aid}
+                              </span>
+                            </div>
+                            <p className="text-[11px] leading-snug text-stone-300 font-medium break-keep">
+                              {th.thought}
+                            </p>
+                            {archetype && (
+                              <p className="mt-0.5 text-[8.5px] font-mono text-stone-600 tracking-wide uppercase">
+                                {archetype}
                               </p>
-                              {archetype && (
-                                <p className="mt-0.5 text-[8.5px] font-mono text-stone-600 tracking-wide uppercase">
-                                  {archetype}
-                                </p>
-                              )}
-                            </button>
-                          );
-                        })}
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
