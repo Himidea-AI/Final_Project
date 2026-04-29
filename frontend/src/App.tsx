@@ -4442,6 +4442,12 @@ export default function App() {
           contact: '/contact',
         };
         const path = pathMap[next] || '/';
+        // simulator 진입 = 새 시뮬 시작 의도. store 비우고 mount-restore (App.tsx:1297)
+        // 가 reportState='result' 강제하지 않도록 → input UI 정상 표시.
+        // dismissResult 는 status가 done/error 일 때만 동작 (running 중 호출은 no-op).
+        if (next === 'simulator') {
+          useSimulationStore.getState().dismissResult();
+        }
         navigate(path);
         setTimeout(() => setIsTransitioning(false), 100);
       }, 800);

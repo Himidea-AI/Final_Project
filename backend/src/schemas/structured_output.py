@@ -110,7 +110,7 @@ AgentIdLiteral = Literal[
     "population_analyst",
     "legal",
     "district_ranking",
-    "operational_fit",
+    "inflow",
     "synthesis",
     "demographic_depth",
     "trend_forecaster",
