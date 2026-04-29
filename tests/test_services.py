@@ -2,16 +2,17 @@
 API 클라이언트 검증 — 외부 API 연동 테스트
 모든 테스트는 외부 API를 호출하지 않고 httpx mock으로 검증.
 """
-import pytest
-import httpx
+
 from unittest.mock import AsyncMock, patch
 
+import httpx
+import pytest
 from src.services.base_client import BaseAPIClient
-from src.services.seoul_opendata import SeoulOpendataClient
-from src.services.sgis_api import SgisAPIClient
-from src.services.semas_api import SemasAPIClient
 from src.services.golmok_api import GolmokAPIClient
 from src.services.molit_api import MolitAPIClient
+from src.services.semas_api import SemasAPIClient
+from src.services.seoul_opendata import SeoulOpendataClient
+from src.services.sgis_api import SgisAPIClient
 from src.services.sns_trend import NaverTrendClient
 
 
@@ -30,7 +31,9 @@ async def test_base_client_get():
     """BaseAPIClient GET 요청 동작 검증"""
     client = BaseAPIClient(base_url="https://example.com", timeout=5)
 
-    with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=_mock_response(json_data={"status": "ok"})):
+    with patch(
+        "httpx.AsyncClient.request", new_callable=AsyncMock, return_value=_mock_response(json_data={"status": "ok"})
+    ):
         result = await client.get("/test")
         assert result == {"status": "ok"}
 
@@ -40,7 +43,9 @@ async def test_base_client_post():
     """BaseAPIClient POST 요청 동작 검증"""
     client = BaseAPIClient(base_url="https://example.com", timeout=5)
 
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=_mock_response(json_data={"result": "created"})):
+    with patch(
+        "httpx.AsyncClient.post", new_callable=AsyncMock, return_value=_mock_response(json_data={"result": "created"})
+    ):
         result = await client.post("/test", json_data={"key": "value"})
         assert result == {"result": "created"}
 
@@ -115,9 +120,7 @@ async def test_seoul_opendata_parse_population():
         new_callable=AsyncMock,
         return_value=_mock_response(json_data=MOCK_LIVING_POPULATION_RESPONSE),
     ):
-        result = await client.get_living_population(
-            district_code="11440", date="20260101", start=1, end=5
-        )
+        result = await client.get_living_population(district_code="11440", date="20260101", start=1, end=5)
 
     assert result["total_population"] == 12345.67
 
@@ -158,9 +161,7 @@ async def test_seoul_opendata_parse_subway():
 async def test_sgis_authenticate():
     """SgisAPIClient.authenticate OAuth2 토큰 발급 검증"""
     client = SgisAPIClient(consumer_key="test_key", consumer_secret="test_secret")
-    mock = _mock_response(
-        json_data={"errMsg": "Success", "errCd": 0, "result": {"accessToken": "mock_token_12345"}}
-    )
+    mock = _mock_response(json_data={"errMsg": "Success", "errCd": 0, "result": {"accessToken": "mock_token_12345"}})
     with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
         token = await client.authenticate()
         assert token == "mock_token_12345"
@@ -192,12 +193,14 @@ async def test_sgis_get_resident_population():
 @pytest.mark.asyncio
 async def test_semas_get_business_density():
     client = SemasAPIClient(api_key="test_key")
-    mock = _mock_response(json_data={
-        "body": {
-            "items": [{"adongNm": "망원1동", "storCnt": 150, "bsnsCdNm": "커피전문점/카페"}],
-            "totalCount": 1,
+    mock = _mock_response(
+        json_data={
+            "body": {
+                "items": [{"adongNm": "망원1동", "storCnt": 150, "bsnsCdNm": "커피전문점/카페"}],
+                "totalCount": 1,
+            }
         }
-    })
+    )
     with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
         result = await client.get_business_density(adong_cd="11440101", business_code="Q01A01")
         assert result["total_count"] == 1
@@ -212,16 +215,25 @@ async def test_semas_get_business_density():
 @pytest.mark.asyncio
 async def test_golmok_get_estimated_sales():
     client = GolmokAPIClient(api_key="test_key")
-    mock = _mock_response(json_data={
-        "VwsmTrdarSelng": {
-            "list_total_count": 1,
-            "row": [{
-                "STDR_YR_CD": "2025", "STDR_QU_CD": "4", "TRDAR_CD": "1001",
-                "SVC_INDUTY_CD": "CS100001", "THSMON_SELNG_AMT": 50000000,
-                "THSMON_SELNG_CO": 3000, "MDW_SELNG_AMT": 8000000, "WKN_SELNG_AMT": 4000000,
-            }],
+    mock = _mock_response(
+        json_data={
+            "VwsmTrdarSelng": {
+                "list_total_count": 1,
+                "row": [
+                    {
+                        "STDR_YR_CD": "2025",
+                        "STDR_QU_CD": "4",
+                        "TRDAR_CD": "1001",
+                        "SVC_INDUTY_CD": "CS100001",
+                        "THSMON_SELNG_AMT": 50000000,
+                        "THSMON_SELNG_CO": 3000,
+                        "MDW_SELNG_AMT": 8000000,
+                        "WKN_SELNG_AMT": 4000000,
+                    }
+                ],
+            }
         }
-    })
+    )
     with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
         result = await client.get_estimated_sales(trdar_cd="1001", svc_induty_cd="CS100001")
         assert result["monthly_sales"] == 50000000
@@ -236,15 +248,29 @@ async def test_golmok_get_estimated_sales():
 @pytest.mark.asyncio
 async def test_molit_get_commercial_trade():
     client = MolitAPIClient(api_key="test_key")
-    mock = _mock_response(json_data={
-        "response": {
-            "header": {"resultCode": "00"},
-            "body": {
-                "items": {"item": [{"dealAmount": "150,000", "buildingMainPurps": "제1종근린생활시설", "sggCd": "11440", "umdNm": "서교동", "dealYear": "2026", "dealMonth": "3", "excluUseAr": 45.5}]},
-                "totalCount": 1,
+    mock = _mock_response(
+        json_data={
+            "response": {
+                "header": {"resultCode": "00"},
+                "body": {
+                    "items": {
+                        "item": [
+                            {
+                                "dealAmount": "150,000",
+                                "buildingMainPurps": "제1종근린생활시설",
+                                "sggCd": "11440",
+                                "umdNm": "서교동",
+                                "dealYear": "2026",
+                                "dealMonth": "3",
+                                "excluUseAr": 45.5,
+                            }
+                        ]
+                    },
+                    "totalCount": 1,
+                },
             }
         }
-    })
+    )
     with patch("httpx.AsyncClient.request", new_callable=AsyncMock, return_value=mock):
         result = await client.get_commercial_trade(sgg_cd="11440", deal_ymd="202603")
         assert len(result["items"]) == 1
@@ -259,10 +285,20 @@ async def test_molit_get_commercial_trade():
 @pytest.mark.asyncio
 async def test_naver_get_search_trend():
     client = NaverTrendClient(client_id="test_id", client_secret="test_secret")
-    mock = _mock_response(json_data={
-        "startDate": "2025-04-01", "endDate": "2026-04-01", "timeUnit": "month",
-        "results": [{"title": "망원동 카페", "keywords": ["망원동 카페"], "data": [{"period": "2026-03-01", "ratio": 85.5}, {"period": "2026-02-01", "ratio": 78.2}]}],
-    })
+    mock = _mock_response(
+        json_data={
+            "startDate": "2025-04-01",
+            "endDate": "2026-04-01",
+            "timeUnit": "month",
+            "results": [
+                {
+                    "title": "망원동 카페",
+                    "keywords": ["망원동 카페"],
+                    "data": [{"period": "2026-03-01", "ratio": 85.5}, {"period": "2026-02-01", "ratio": 78.2}],
+                }
+            ],
+        }
+    )
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock):
         result = await client.get_search_trend(keywords=["망원동 카페"], start_date="2025-04-01", end_date="2026-04-01")
         assert result["results"][0]["title"] == "망원동 카페"
@@ -275,6 +311,7 @@ async def test_naver_get_search_trend():
 
 import os
 import tempfile
+
 from src.services.csv_loader import CsvDataLoader
 
 

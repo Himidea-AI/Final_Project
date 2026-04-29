@@ -20,14 +20,17 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 from models.tcn_forecast.model import TCNForecaster
 
 from .data_prep import (
+    ALL_FEATURES,
     DB_URL,
     POP_FEATURES,
     TARGET_COL,
+    _add_dong_one_hot,
     build_timeseries,
     load_living_population,
 )
@@ -35,11 +38,54 @@ from .train import WEIGHTS_DIR, load_scalers
 
 logger = logging.getLogger(__name__)
 
+# 가중치 경로 — v2 (dong_one_hot 포함, input_size=21)가 표준.
+# v1 (input_size=5)은 archive 용도로만 보존, 추론에는 사용하지 않음.
+WEIGHTS_PATH_V2 = WEIGHTS_DIR / "living_pop_tcn_v2.pt"
+WEIGHTS_PATH_V1 = WEIGHTS_DIR / "living_pop_tcn.pt"
+SCALERS_PATH_V2 = WEIGHTS_DIR / "living_pop_scalers_v2.pkl"
+SCALERS_PATH_V1 = WEIGHTS_DIR / "living_pop_scalers.pkl"
+
+
+def _resolve_weights_path() -> Path:
+    """v2 가중치 (dong_one_hot 포함) 경로를 반환한다.
+
+    v2 가중치가 없으면 명확한 RuntimeError를 던진다 (옵션 B 정책).
+    legacy v1 fallback은 의도적으로 비활성화 — input_size 불일치로
+    인한 silent failure를 방지하기 위함.
+    """
+    if WEIGHTS_PATH_V2.exists():
+        return WEIGHTS_PATH_V2
+    raise RuntimeError(
+        f"v2 가중치 미발견: {WEIGHTS_PATH_V2}\n"
+        f"먼저 학습을 실행하세요:\n"
+        f"  python -m models.living_pop_forecast.train --epochs 100 --patience 15 --seed 2026"
+    )
+
+
+def _resolve_scalers_path() -> Path:
+    """v2 스케일러 경로를 반환한다.
+
+    v2 스케일러가 없으면 명확한 RuntimeError를 던진다 (옵션 B 정책 일관 적용).
+    legacy v1 fallback은 의도적으로 비활성화 — v1 스케일러는 input_size=5 이지만
+    v2 가중치는 21차원이라 weight shape mismatch 로 silent failure 발생 가능.
+    """
+    if SCALERS_PATH_V2.exists():
+        return SCALERS_PATH_V2
+    raise RuntimeError(
+        f"v2 scaler 미발견: {SCALERS_PATH_V2}\n"
+        f"v1 scaler({SCALERS_PATH_V1})는 input_size 5 이지만 v2 가중치는 21차원이라 호환 불가.\n"
+        f"먼저 학습을 실행하세요:\n"
+        f"  python -m models.living_pop_forecast.train --epochs 100 --patience 15 --seed 2026"
+    )
+
+
 DEFAULT_PREDICT_CONFIG: dict = {
     "db_url": DB_URL,
     "csv_path": None,
-    "weights_path": str(WEIGHTS_DIR / "living_pop_tcn.pt"),
-    "scalers_path": str(WEIGHTS_DIR / "living_pop_scalers.pkl"),
+    # weights_path/scalers_path는 _load_model_and_scalers에서 _resolve_*_path()로 해결.
+    # 명시 오버라이드가 필요한 호출자만 config에 전달.
+    "weights_path": None,
+    "scalers_path": None,
     "window_size": 8,
     "n_channels": 64,
     "kernel_size": 2,
@@ -57,10 +103,10 @@ _MODEL_CACHE: dict[str, tuple[TCNForecaster, object, object]] = {}
 
 # DataFrame 캐시 — predict/predict_peak가 매번 living_population 풀스캔(마포 16동 × 24h × N분기)으로 DB I/O 누적.
 # db_url 키로 결과 캐시. DB 데이터 변경 시 서버 재시작 필요.
-_DF_CACHE: dict[str, "pd.DataFrame"] = {}
+_DF_CACHE: dict[str, pd.DataFrame] = {}
 
 
-def _cached_load_living_pop(db_url: str, csv_path: str | None = None) -> "pd.DataFrame":
+def _cached_load_living_pop(db_url: str, csv_path: str | None = None) -> pd.DataFrame:
     """load_living_population 결과를 모듈 레벨에 캐시. 두 번째 호출부터 0ms (DB I/O 없음)."""
     cache_key = f"{db_url}::{csv_path or ''}"
     if cache_key in _DF_CACHE:
@@ -71,8 +117,9 @@ def _cached_load_living_pop(db_url: str, csv_path: str | None = None) -> "pd.Dat
 
 
 def _load_model_and_scalers(cfg: dict) -> tuple[TCNForecaster, object, object]:
-    weights_path = Path(cfg["weights_path"])
-    scalers_path = Path(cfg["scalers_path"])
+    # config 명시 오버라이드 우선, 없으면 v2 우선 resolver.
+    weights_path = Path(cfg["weights_path"]) if cfg.get("weights_path") else _resolve_weights_path()
+    scalers_path = Path(cfg["scalers_path"]) if cfg.get("scalers_path") else _resolve_scalers_path()
 
     cache_key = f"{weights_path}::{scalers_path}"
     if cache_key in _MODEL_CACHE:
@@ -87,6 +134,16 @@ def _load_model_and_scalers(cfg: dict) -> tuple[TCNForecaster, object, object]:
 
     feat_scaler, tgt_scaler = load_scalers(scalers_path)
     input_size = len(feat_scaler.scale_)
+
+    # v2 가중치는 input_size=21 (5 POP_FEATURES + 16 dong_one_hot).
+    # 차원 불일치 시 추론 시퀀스 빌드와 모델이 어긋나 silent failure.
+    expected_input_size = len(ALL_FEATURES)
+    if input_size != expected_input_size:
+        logger.warning(
+            "스케일러 input_size=%d, 기대값=%d (v2 ALL_FEATURES). v1 legacy 스케일러일 수 있음 — v2로 재학습 권장.",
+            input_size,
+            expected_input_size,
+        )
 
     model = TCNForecaster(
         input_size=input_size,
@@ -116,8 +173,12 @@ def _autoregressive_predict(
     """자기회귀 방식으로 n_quarters 예측 후 결과 반환."""
     try:
         target_idx = feature_cols.index(target_col)
-    except ValueError:
-        target_idx = 0
+    except ValueError as exc:
+        raise ValueError(
+            f"target_col '{target_col}' 이 feature_cols 에 없습니다. "
+            f"feature_cols={feature_cols[:5]}... (총 {len(feature_cols)}개). "
+            f"autoregressive 추론에서 잘못된 인덱스를 사용할 수 있어 즉시 중단."
+        ) from exc
 
     predictions: list[float] = []
     with torch.no_grad():
@@ -185,9 +246,18 @@ def predict(
     df = _cached_load_living_pop(cfg["db_url"], cfg.get("csv_path"))
     df = build_timeseries(df)
 
-    feature_cols = cfg.get("feature_cols") or [c for c in POP_FEATURES if c in df.columns]
     target_col = cfg["target_col"]
     window_size = cfg["window_size"]
+
+    # 스케일러 차원에 따라 feature_cols 결정 (v2=21 / legacy v1=5)
+    scaler_dim = len(feat_scaler.scale_)
+    use_dong_one_hot = scaler_dim == len(ALL_FEATURES)
+    if cfg.get("feature_cols"):
+        feature_cols = cfg["feature_cols"]
+    elif use_dong_one_hot:
+        feature_cols = ALL_FEATURES
+    else:
+        feature_cols = [c for c in POP_FEATURES if c in df.columns]
 
     group = df[(df["dong_name"] == dong_name) & (df["time_zone"] == time_zone)].sort_values("quarter")
 
@@ -196,6 +266,10 @@ def predict(
         raise ValueError(f"데이터 없음: dong_name='{dong_name}', time_zone={time_zone}\n사용 가능한 동: {available}")
     if len(group) < window_size:
         raise ValueError(f"과거 데이터 부족: {len(group)}분기 (최소 {window_size}분기 필요)")
+
+    # v2 추론 시퀀스 빌드: dong_one_hot 16-dim 추가
+    if use_dong_one_hot:
+        group = _add_dong_one_hot(group)
 
     actual_features = [c for c in feature_cols if c in group.columns]
     seq = feat_scaler.transform(group[actual_features].values[-window_size:].astype(np.float32))
@@ -252,9 +326,18 @@ def predict_peak(
     df = _cached_load_living_pop(cfg["db_url"], cfg.get("csv_path"))
     df = build_timeseries(df)
 
-    feature_cols = cfg.get("feature_cols") or [c for c in POP_FEATURES if c in df.columns]
     target_col = cfg["target_col"]
     window_size = cfg["window_size"]
+
+    # 스케일러 차원에 따라 feature_cols 결정 (v2=21 / legacy v1=5)
+    scaler_dim = len(feat_scaler.scale_)
+    use_dong_one_hot = scaler_dim == len(ALL_FEATURES)
+    if cfg.get("feature_cols"):
+        feature_cols = cfg["feature_cols"]
+    elif use_dong_one_hot:
+        feature_cols = ALL_FEATURES
+    else:
+        feature_cols = [c for c in POP_FEATURES if c in df.columns]
 
     if dong_name not in df["dong_name"].values:
         available = df["dong_name"].unique().tolist()
@@ -266,6 +349,9 @@ def predict_peak(
         group = df[(df["dong_name"] == dong_name) & (df["time_zone"] == tz)].sort_values("quarter")
         if len(group) < window_size:
             continue
+        # v2 추론 시퀀스 빌드: dong_one_hot 16-dim 추가
+        if use_dong_one_hot:
+            group = _add_dong_one_hot(group)
         actual_features = [c for c in feature_cols if c in group.columns]
         seq = feat_scaler.transform(group[actual_features].values[-window_size:].astype(np.float32))
         all_tz_preds[tz] = _autoregressive_predict(

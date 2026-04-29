@@ -3810,7 +3810,7 @@ function SimulatorDashboard({
                                     category: s.category,
                                   }))}
                                 onSpotClick={async (loc) => {
-                                  // 공실 번호 마커 클릭 → ABM 탭 전환 + 해당 스팟만 1000 에이전트 시뮬
+                                  // 공실 번호 마커 클릭 → ABM 탭 전환 + 해당 스팟만 5000 에이전트 시뮬
                                   if (!simResult || abmLoading) return;
                                   setDashboardMode('abm');
                                   setAbmFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
@@ -3828,7 +3828,7 @@ function SimulatorDashboard({
                                           brand?.brand_name || user?.company_name || '신규 매장',
                                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                         langgraph_result: (simResult as any)._raw ?? simResult,
-                                        n_agents: 1000,
+                                        n_agents: 5000,
                                         days: 1,
                                         spot_lat: loc.lat,
                                         spot_lon: loc.lng,
@@ -3838,6 +3838,8 @@ function SimulatorDashboard({
                                           weekend_force: false,
                                           rent_shock_pct: 0.0,
                                         },
+                                        // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
+                                        enable_llm_thought: true,
                                       }),
                                     });
                                     const data = await res.json();
@@ -3874,6 +3876,15 @@ function SimulatorDashboard({
                           targetDistrict={selectedDongs[0] || '서교동'}
                           vacancySpots={simResult?.vacancySpots}
                           focusSpot={abmFocusSpot}
+                          competitors={
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            ((simResult as any)?.allCompetitorLocations?.length
+                              ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                (simResult as any).allCompetitorLocations
+                              : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                ((simResult as any)?.competitorIntel?.competition_500m?.samples ??
+                                [])) as any
+                          }
                           onClearResult={() => {
                             setAbmResult(null);
                             setAbmError(null);
@@ -3900,7 +3911,7 @@ function SimulatorDashboard({
                                   brand_name:
                                     brand?.brand_name || user?.company_name || '신규 매장',
                                   langgraph_result: (simResult as any)._raw ?? simResult,
-                                  n_agents: 1000,
+                                  n_agents: 5000,
                                   days: 1,
                                   spot_lat: spot.lat,
                                   spot_lon: spot.lon,
@@ -3910,6 +3921,8 @@ function SimulatorDashboard({
                                     weekend_force: false,
                                     rent_shock_pct: 0.0,
                                   },
+                                  // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
+                                  enable_llm_thought: true,
                                 }),
                               });
                               const data = await res.json();
@@ -3944,7 +3957,7 @@ function SimulatorDashboard({
                                   brand_name:
                                     brand?.brand_name || user?.company_name || '신규 매장',
                                   langgraph_result: (simResult as any)._raw ?? simResult,
-                                  n_agents: 1000,
+                                  n_agents: 5000,
                                   days: 1,
                                   scenario: {
                                     weather_override: scenario.weather_override,
@@ -3952,6 +3965,8 @@ function SimulatorDashboard({
                                     weekend_force: scenario.weekend_force,
                                     rent_shock_pct: scenario.rent_shock_pct,
                                   },
+                                  // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
+                                  enable_llm_thought: true,
                                 }),
                               });
                               const data = await res.json();

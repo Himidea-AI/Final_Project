@@ -15,7 +15,6 @@
     pytest tests/test_legal_scenarios.py -v
 """
 
-import json
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -44,9 +43,18 @@ def _make_state(
 
 
 _BATCH_TYPES = [
-    "franchise_law", "commercial_lease_law", "food_hygiene", "safety_regulation",
-    "building_law", "fire_safety_law", "labor_law", "vat_law",
-    "privacy_law", "accessibility_law", "sewage_law", "fair_trade_law",
+    "franchise_law",
+    "commercial_lease_law",
+    "food_hygiene",
+    "safety_regulation",
+    "building_law",
+    "fire_safety_law",
+    "labor_law",
+    "vat_law",
+    "privacy_law",
+    "accessibility_law",
+    "sewage_law",
+    "fair_trade_law",
 ]
 
 
@@ -55,7 +63,9 @@ def _mock_batch_llm_output(all_safe: bool = False) -> LegalBatchOutput:
     level = "safe" if all_safe else "caution"
     return LegalBatchOutput(
         items=[
-            LegalRiskItem(type=t, level=level, summary=f"{t} 검토 완료", recommendation="확인 필요" if not all_safe else "")
+            LegalRiskItem(
+                type=t, level=level, summary=f"{t} 검토 완료", recommendation="확인 필요" if not all_safe else ""
+            )
             for t in _BATCH_TYPES
         ]
     )
@@ -96,9 +106,7 @@ def mock_dependencies():
         # LLM mock: Structured Output 반환
         # MagicMock을 사용해야 .with_structured_output() 체이닝이 coroutine이 되지 않음
         mock_llm_instance = MagicMock()
-        mock_llm_instance.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=_mock_batch_llm_output()
-        )
+        mock_llm_instance.with_structured_output.return_value.ainvoke = AsyncMock(return_value=_mock_batch_llm_output())
         mock_get_fast_llm.return_value = mock_llm_instance
 
         # LawApiClient mock: 빈 판례
@@ -350,4 +358,3 @@ class TestScenarioNoBrand:
         ftc = next(r for r in result["analysis_results"]["legal_risks"] if r["type"] == "ftc_franchise")
         assert ftc["level"] == "caution"
         assert "브랜드명" in ftc["summary"] or "입력되지" in ftc["summary"]
-
