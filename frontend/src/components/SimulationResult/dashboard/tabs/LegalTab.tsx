@@ -90,48 +90,48 @@ export function LegalTab({ simResult, openModal }: Props) {
 
       {/* ═══ 법률·규제 검토 본문 ═══ */}
       <div className="bg-stone-900/40 border border-stone-800/60 p-8 rounded-3xl">
-      <div className="flex justify-between items-center mb-6">
-        <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
-          <AlertTriangle size={16} className="text-rose-400" /> 법률·규제 검토
+        <div className="flex justify-between items-center mb-6">
+          <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
+            <AlertTriangle size={16} className="text-rose-400" /> 법률·규제 검토
+            {totalCount > 0 && (
+              <span className="text-[0.625rem] font-black normal-case tracking-normal">
+                <span className="text-rose-400">위험 {hazardCount}건</span>
+                <span className="text-stone-600 mx-1">·</span>
+                <span className="text-emerald-400/80">안전 {safeCount}건</span>
+              </span>
+            )}
+          </h4>
           {totalCount > 0 && (
-            <span className="text-[0.625rem] font-black normal-case tracking-normal">
-              <span className="text-rose-400">위험 {hazardCount}건</span>
-              <span className="text-stone-600 mx-1">·</span>
-              <span className="text-emerald-400/80">안전 {safeCount}건</span>
-            </span>
+            <button
+              type="button"
+              onClick={() =>
+                openModal({
+                  title: '법률 리스크 종합 검토',
+                  content: risks
+                    .map(
+                      (r, i) =>
+                        `${i + 1}. [${r.risk_level}] ${r.type}\n   ${r.detail || r.recommendation || ''}`,
+                    )
+                    .join('\n\n'),
+                })
+              }
+              className="text-[0.625rem] font-black text-stone-500 hover:text-indigo-400 flex items-center gap-1 uppercase transition-colors"
+            >
+              <Maximize2 size={12} /> 전체 리포트 보기
+            </button>
           )}
-        </h4>
-        {totalCount > 0 && (
-          <button
-            type="button"
-            onClick={() =>
-              openModal({
-                title: '법률 리스크 종합 검토',
-                content: risks
-                  .map(
-                    (r, i) =>
-                      `${i + 1}. [${r.risk_level}] ${r.type}\n   ${r.detail || r.recommendation || ''}`,
-                  )
-                  .join('\n\n'),
-              })
-            }
-            className="text-[0.625rem] font-black text-stone-500 hover:text-indigo-400 flex items-center gap-1 uppercase transition-colors"
-          >
-            <Maximize2 size={12} /> 전체 리포트 보기
-          </button>
-        )}
-      </div>
+        </div>
 
-      {/* 등급 분포 막대 */}
-      <div className="bg-stone-950/40 border border-stone-800/60 rounded-2xl p-6 mb-4">
-        <h5 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-3">
-          법률 리스크 등급 분포
-        </h5>
-        <LegalDistributionBar risks={risks} />
-      </div>
+        {/* 등급 분포 막대 */}
+        <div className="bg-stone-950/40 border border-stone-800/60 rounded-2xl p-6 mb-4">
+          <h5 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-3">
+            법률 리스크 등급 분포
+          </h5>
+          <LegalDistributionBar risks={risks} />
+        </div>
 
-      {/* 상세 테이블 + Drawer */}
-      <InsightsGrid simResult={simResult} legalOnly />
+        {/* 상세 테이블 + Drawer */}
+        <InsightsGrid simResult={simResult} legalOnly />
       </div>
     </div>
   );

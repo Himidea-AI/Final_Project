@@ -89,7 +89,7 @@ export function PredictGroup({ simResult, openModal }: Props) {
       )}
       {activeSub === 'financial_sim' && <PredictFinancialSimTab simResult={simResult} />}
       {activeSub === 'customer_flow' && <PredictCustomerFlowTab simResult={simResult} />}
-      {activeSub === 'emerging_district' && <PredictEmergingDistrictTab />}
+      {activeSub === 'emerging_district' && <PredictEmergingDistrictTab simResult={simResult} />}
     </div>
   );
 }

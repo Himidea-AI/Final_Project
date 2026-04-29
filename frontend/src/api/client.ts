@@ -9,9 +9,11 @@
  *
  * [B1/A1 담당자 참고]
  * - Mock 응답의 구조 = 실제 API 응답 구조와 동일해야 함
- * - SimulationOutput: comparison[], legal_risks[], quarterly_projection[]
- * - AnalysisResult.data.market_report: 7개 항목 (floating_population 등)
+ * - DistrictPredictionResult: quarterly_projection, closure_risk, shap_result, bep_months, predicted_monthly_revenue, ...
+ * - AnalysisOutput: winner_district + market_report 7개 항목 (floating_population 등)
  * - 타입 정의는 src/types/index.ts 참고
+ *
+ * [IM3-259] /simulate 단일 엔드포인트는 제거됨. 신규 호출은 runPredict + runAnalyzeLlm.
  */
 import axios from 'axios';
 import type {
@@ -117,44 +119,35 @@ export async function healthCheck() {
 }
 
 /**
- * 시뮬레이션 실행 요청 — LLM 파이프라인이라 10분까지 대기 (전역 2분으로는 캐시 miss 시 timeout)
+ * ML 예측 — /predict (선택 동 1~4 병렬). 사용자 입력 그대로.
  *
- * @deprecated 2026-04-29 IM3-259 — /predict + /analyze/llm 분리 호출로 마이그레이션 진행 중.
- * 이 함수는 history detail 복원 등 fallback 경로에서만 사용. 신규 시뮬은 fetchPredict + fetchAnalyzeLlm 사용.
+ * 응답 포맷 (backend 수지니 c8ea31f):
+ *   { status: "success" | "error", data: DistrictPredictionResult[], message?: string }
+ *
+ * timeout 300_000 — 4동 병렬 ML 추론 + ECOS/외부 호출 여유.
  */
-export async function runSimulation(
+export async function runPredict(
   input: SimulationInput,
   signal?: AbortSignal,
-): Promise<SimulationOutput> {
-  const response = await apiClient.post('/simulate', input, {
-    signal,
-    timeout: 600_000,
-  });
-  // 백엔드 응답 포맷 변화 대응:
-  //   신규 (dev): {status: 'success', data: {...실제 결과...}}
-  //   구형:       {...실제 결과...}
-  // 양쪽 모두 호환되도록 언래핑. status=error이면 throw.
+): Promise<DistrictPredictionResult[]> {
+  const response = await apiClient.post('/predict', input, { signal, timeout: 300_000 });
   const body = response.data;
-  if (body && typeof body === 'object' && 'status' in body) {
-    if (body.status === 'success' && body.data) return body.data as SimulationOutput;
-    if (body.status === 'error') throw new Error(body.message || 'Simulation failed');
-  }
-  return body as SimulationOutput;
-}
-
-/** ML 예측 — /predict (선택 동 1~4 병렬). 사용자 입력 그대로 받음. */
-export async function fetchPredict(input: SimulationInput): Promise<DistrictPredictionResult[]> {
-  const response = await apiClient.post('/predict', input);
-  // 응답 형태: { results: DistrictPredictionResult[] } 또는 list — backend 확정 시 unwrap.
-  const body = response.data;
-  if (Array.isArray(body)) return body;
-  if (body && Array.isArray(body.results)) return body.results;
+  if (body && body.status === 'success' && Array.isArray(body.data)) return body.data;
+  if (body && body.status === 'error') throw new Error(body.message || 'Predict failed');
+  if (Array.isArray(body)) return body; // legacy
   return [];
 }
 
-/** AI 분석 — /analyze/llm (winner 산출 + LLM 6 에이전트). */
-export async function fetchAnalyzeLlm(input: SimulationInput): Promise<AnalysisOutput> {
-  const response = await apiClient.post('/analyze/llm', input);
+/**
+ * AI 분석 — /analyze/llm (winner 산출 + LLM 6 에이전트).
+ *
+ * timeout 300_000 — LLM 멀티에이전트 파이프라인.
+ */
+export async function runAnalyzeLlm(
+  input: SimulationInput,
+  signal?: AbortSignal,
+): Promise<AnalysisOutput> {
+  const response = await apiClient.post('/analyze/llm', input, { signal, timeout: 300_000 });
   return response.data as AnalysisOutput;
 }
 

@@ -164,12 +164,6 @@ export function buildPdfPropsFromSimulation(input: BuilderInput): PdfProps {
   const cannImpact = ci?.cannibalization?.estimated_revenue_impact_pct;
   const cannSig = ci?.market_entry_signal;
 
-  const synthAttr = Array.isArray(r?.agent_attributions)
-    ? r.agent_attributions.find((a: any) => a?.id === 'synthesis')
-    : null;
-  const overallScore =
-    synthAttr?.confidence != null ? Math.round(synthAttr.confidence * 100) : null;
-
   const floatingPop = r?.market_report?.floating_population;
 
   const stats = [
@@ -177,11 +171,6 @@ export function buildPdfPropsFromSimulation(input: BuilderInput): PdfProps {
       title: '예상 월 매출 (추정)',
       value: formatWon(monthly),
       trend: growthTrend,
-    },
-    {
-      title: '상권 종합 매력도',
-      value: overallScore != null ? `${overallScore} / 100` : '—',
-      trend: '',
     },
     {
       title: '유동인구 점수',

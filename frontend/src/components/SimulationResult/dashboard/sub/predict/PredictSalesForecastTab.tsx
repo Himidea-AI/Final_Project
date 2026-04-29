@@ -55,7 +55,22 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
 
   const shap = simResult.shap_result;
   const scenarios = simResult.scenarios;
-  const hasScenarios = scenarios?.base && scenarios.base.length > 0;
+
+  // 멀티 동 scenarios — district_predictions 우선, 비어있으면 simResult.scenarios 단일 동 fallback
+  const allScenarios =
+    districtPreds.length > 0
+      ? districtPreds.map((p) => ({ district: p.district, scenarios: p.scenarios }))
+      : scenarios && scenarios.base && scenarios.base.length > 0
+        ? [
+            {
+              district: simResult.winner_district ?? simResult.target_district ?? '단일',
+              scenarios,
+            },
+          ]
+        : [];
+  const hasScenarios = allScenarios.some(
+    (s) => s.scenarios !== null && (s.scenarios?.base?.length ?? 0) > 0,
+  );
 
   return (
     <div className="space-y-6">
@@ -89,7 +104,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
             <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2 italic">
               <Zap className="text-amber-400" size={14} /> 매출 기여 요인 분석
             </h4>
-            {shap && (
+            {districtPreds.length === 0 && shap && (
               <button
                 type="button"
                 onClick={() =>
@@ -104,7 +119,15 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
               </button>
             )}
           </div>
-          <ShapInsightCard shap={shap} />
+          {districtPreds.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {districtPreds.map((p) => (
+                <ShapInsightCard key={p.district} district={p.district} shap={p.shap_result} />
+              ))}
+            </div>
+          ) : (
+            <ShapInsightCard shap={shap} />
+          )}
         </div>
       </div>
 
@@ -120,7 +143,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
               </p>
             </div>
           </div>
-          <ScenariosComparisonChart scenarios={scenarios} />
+          <ScenariosComparisonChart allScenarios={allScenarios} />
         </div>
       )}
     </div>

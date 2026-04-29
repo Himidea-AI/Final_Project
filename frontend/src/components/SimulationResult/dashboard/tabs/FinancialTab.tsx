@@ -4,15 +4,22 @@
  * SummaryTab에서 ProfitSimulationPanelFull 이관 + ForecastTab에서 ClosureRiskPanel 이관.
  * 결재자(본부장급) 관점: 매출/운영비/영업이익/마진 + 폐업 위험도.
  * 매출 예측 그래프는 ForecastTab에 그대로 남김 (예측 vs 현재 재무 관점 구분).
+ *
+ * 2026-04-29 M8: ClosureRatePanel / ClosureRiskPanel 을 charts/ 로 분리.
+ * 본 탭은 단일 동(legacy) 영역 — district prop 미지정.
  */
 
-import { Activity, Gauge, History } from 'lucide-react';
-import type { SimulationOutput, ClosureRisk, ClosureRate } from '../../../../types';
+import { Activity } from 'lucide-react';
+import type { SimulationOutput } from '../../../../types';
 import { formatKrw, formatPct, quarterlyToMonthly } from '../utils/formatters';
-import { BulletChart } from '../charts/BulletChart';
-import { ClosureSignalsBar } from '../charts/ClosureSignalsBar';
-import { ClosureRateHistoryChart } from '../charts/ClosureRateHistoryChart';
 import { SurvivalRateKpi } from '../charts/SurvivalRateKpi';
+import { ClosureRatePanel } from '../charts/ClosureRatePanel';
+import { ClosureRiskPanel } from '../charts/ClosureRiskPanel';
+
+// M8 호환: 기존에 `from '../../tabs/FinancialTab'` 으로 import 하던 외부 모듈을 위해 재수출.
+// 새 코드는 charts/ 에서 직접 import 하는 것을 권장.
+export { ClosureRatePanel } from '../charts/ClosureRatePanel';
+export { ClosureRiskPanel } from '../charts/ClosureRiskPanel';
 
 interface Props {
   simResult: SimulationOutput;
@@ -26,10 +33,6 @@ export function FinancialTab({ simResult }: Props) {
   const netProfit = ps?.net_profit ?? null;
   const margin = ps?.margin_rate ?? null;
   const bepMonths = ps?.bep_months ?? null;
-  const synthAttr = simResult.agent_attributions?.find((a) => a.id === 'synthesis');
-  // 실데이터 원칙: synthesis 에이전트 신뢰도가 없으면 null (이전 90% 기본값 제거)
-  const confidencePct =
-    synthAttr?.confidence != null ? Math.round(synthAttr.confidence * 100) : null;
 
   return (
     <div className="space-y-6">
@@ -39,7 +42,6 @@ export function FinancialTab({ simResult }: Props) {
         netProfit={netProfit}
         margin={margin}
         bepMonths={bepMonths}
-        confidencePct={confidencePct}
       />
 
       <SurvivalRateKpi
@@ -54,43 +56,12 @@ export function FinancialTab({ simResult }: Props) {
   );
 }
 
-export function ClosureRatePanel({ rate }: { rate: ClosureRate | null | undefined }) {
-  if (!rate || !rate.monthly_closure_rates || rate.monthly_closure_rates.length === 0) {
-    return null;
-  }
-  const avgPct = rate.closure_rate != null ? (rate.closure_rate * 100).toFixed(1) : '—';
-  return (
-    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
-          <History size={14} className="text-stone-400" /> 과거 폐업률 추이
-          <span className="text-[0.625rem] font-black text-stone-600 normal-case tracking-normal">
-            closure_rate · 실측
-          </span>
-        </h4>
-        <div className="flex items-center gap-2">
-          <span className="text-[0.6875rem] font-black text-stone-500 tabular-nums">
-            최근 4분기 평균 {avgPct}%
-          </span>
-        </div>
-      </div>
-      <ClosureRateHistoryChart rates={rate.monthly_closure_rates} />
-      <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
-        ※ 이 차트는 과거 데이터 기반 실측 폐업률입니다. 예측은 아래 LightGBM + TCN 폐업위험도 패널을
-        참고하세요.
-      </p>
-    </div>
-  );
-}
-
 interface ProfitPanelProps {
   monthlyRev: number | null | undefined;
   monthlyCost: number | null | undefined;
   netProfit: number | null | undefined;
   margin: number | null | undefined;
   bepMonths: number | null | undefined;
-  /** synthesis.confidence × 100. null이면 "미산정" empty state */
-  confidencePct: number | null;
 }
 
 function ProfitSimulationPanelFull({
@@ -99,7 +70,6 @@ function ProfitSimulationPanelFull({
   netProfit,
   margin,
   bepMonths,
-  confidencePct,
 }: ProfitPanelProps) {
   const rows = [
     { label: '추정 월매출', val: monthlyRev, accent: 'text-stone-100' },
@@ -136,140 +106,27 @@ function ProfitSimulationPanelFull({
         </p>
       )}
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-3">
-          {rows.map((item) => (
-            <div
-              key={item.label}
-              className="flex justify-between items-end border-b border-stone-800/50 pb-3"
-            >
-              <span className="text-xs font-bold text-stone-500">{item.label}</span>
-              <span className={`text-lg font-black tabular-nums ${item.accent}`}>
-                {item.val != null ? `₩${formatKrw(item.val)}` : '—'}
-              </span>
-            </div>
-          ))}
-          <div className="flex justify-between items-center pt-2">
-            <span className="text-sm font-black text-indigo-400 tracking-tighter">
-              예상 월 영업이익
-            </span>
-            <span className="text-3xl font-black text-indigo-400 tabular-nums tracking-tighter">
-              {netProfit != null ? `₩${formatKrw(netProfit)}` : '—'}
+      <div className="space-y-3">
+        {rows.map((item) => (
+          <div
+            key={item.label}
+            className="flex justify-between items-end border-b border-stone-800/50 pb-3"
+          >
+            <span className="text-xs font-bold text-stone-500">{item.label}</span>
+            <span className={`text-lg font-black tabular-nums ${item.accent}`}>
+              {item.val != null ? `₩${formatKrw(item.val)}` : '—'}
             </span>
           </div>
-        </div>
-
-        <div className="bg-stone-950/40 border border-stone-800 rounded-2xl p-5 flex flex-col justify-center">
-          <div className="flex items-center gap-2 mb-3">
-            <Gauge size={18} className="text-indigo-500" />
-            <span className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
-              분석 신뢰도
-            </span>
-          </div>
-          {confidencePct != null ? (
-            <>
-              <div className="text-3xl font-black text-indigo-400 tabular-nums mb-2">
-                {confidencePct}%
-              </div>
-              <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
-                <div
-                  className="bg-indigo-500 h-full transition-all"
-                  style={{ width: `${Math.min(100, Math.max(0, confidencePct))}%` }}
-                />
-              </div>
-              <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
-                synthesis 에이전트 판단 신뢰도 기반. TCN MAPE 제공 시 교체됩니다.
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="text-2xl font-black text-stone-500 tabular-nums mb-2">—</div>
-              <div className="w-full bg-stone-800 h-1.5 rounded-full" />
-              <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
-                synthesis 에이전트 신뢰도 미산정. 분석 완료 후 표시됩니다.
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function ClosureRiskPanel({ closure }: { closure: ClosureRisk | null | undefined }) {
-  if (!closure) {
-    return (
-      <div className="rounded-2xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
-        closure_risk 분석 대기
-      </div>
-    );
-  }
-  // 백엔드는 risk_score를 0~1 소수점으로 저장 (synthesis.py:209가 *100해서 표시).
-  // BulletChart는 0~100 스케일 기대 → 여기서 정규화.
-  const scoreRaw = closure.risk_score;
-  const score100 =
-    scoreRaw == null ? null : scoreRaw <= 1 ? Math.round(scoreRaw * 100) : Math.round(scoreRaw);
-  return (
-    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
-          폐업 위험도
-        </h4>
-        {closure.is_mock && (
-          <span className="text-[0.5625rem] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full uppercase">
-            MOCK
+        ))}
+        <div className="flex justify-between items-center pt-2">
+          <span className="text-sm font-black text-indigo-400 tracking-tighter">
+            예상 월 영업이익
           </span>
-        )}
+          <span className="text-3xl font-black text-indigo-400 tabular-nums tracking-tighter">
+            {netProfit != null ? `₩${formatKrw(netProfit)}` : '—'}
+          </span>
+        </div>
       </div>
-      <BulletChart
-        actual={score100}
-        target={30}
-        max={100}
-        label="위험 점수"
-        thresholds={[30, 60]}
-      />
-
-      {/* 2026-04-27: closure_risk가 LightGBM(과거 패턴) + TCN(시계열) 두 모델 결과를 별도 노출 */}
-      {closure.summary_lgbm && closure.summary_lgbm.length > 0 && (
-        <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[0.5625rem] font-black uppercase tracking-widest text-indigo-400 mb-1">
-            <span className="w-1 h-1 rounded-full bg-indigo-400" />
-            LightGBM · 과거 패턴
-          </div>
-          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">
-            {closure.summary_lgbm[0]}
-          </p>
-        </div>
-      )}
-      <ClosureSignalsBar
-        signals={closure.top_signals_lgbm}
-        title="LightGBM 기여 피처 (과거 패턴)"
-        accent="indigo"
-      />
-      {closure.summary_tcn && closure.summary_tcn.length > 0 && (
-        <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[0.5625rem] font-black uppercase tracking-widest text-cyan-400 mb-1">
-            <span className="w-1 h-1 rounded-full bg-cyan-400" />
-            TCN · 시계열 흐름
-          </div>
-          <p className="text-[0.6875rem] text-stone-300 leading-relaxed">
-            {closure.summary_tcn[0]}
-          </p>
-        </div>
-      )}
-      <ClosureSignalsBar
-        signals={closure.top_signals_tcn}
-        title="TCN 기여 피처 (시계열 흐름)"
-        accent="cyan"
-      />
-      {(!closure.summary_lgbm || closure.summary_lgbm.length === 0) &&
-        (!closure.summary_tcn || closure.summary_tcn.length === 0) &&
-        (!closure.top_signals_lgbm || closure.top_signals_lgbm.length === 0) &&
-        (!closure.top_signals_tcn || closure.top_signals_tcn.length === 0) && (
-          <p className="mt-3 text-[0.6875rem] text-stone-500 leading-relaxed">
-            폐업 위험도 모델 요약 미생성
-          </p>
-        )}
     </div>
   );
 }

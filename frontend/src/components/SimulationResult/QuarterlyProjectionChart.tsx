@@ -3,12 +3,13 @@
  *
  * TCN 모델 출력(quarterly_projection)을 동별로 시각화:
  * - 각 동별 별도 Line (indigo / cyan / amber / rose)
- * - winner 동: strokeWidth 3, dot r 5 강조
- * - 신뢰구간(Area): winner 동의 ci_95/80 또는 confidence_lower/upper 만 음영
- * - BEP 도달 시점(ReferenceLine): winner 동의 cumulative_profit >= 0 첫 분기
+ * - winner 동: strokeWidth 3, dot r 5 강조 (winnerDistrict prop)
+ * - 신뢰구간(Area): 첫 번째 동(series[0])의 ci_95/80 또는 confidence_lower/upper 만 음영
+ * - BEP 도달 시점(ReferenceLine): 첫 번째 동(series[0])의 cumulative_profit >= 0 첫 분기
  * - 범례: 동 이름
  *
  * Round 2 / B4 (2026-04-29): 단일 동 → 다중 동 시리즈 전환.
+ * M5 (2026-04-29): CI 음영/BEP 기준을 winnerDistrict → series[0] 으로 변경 (명세 충실).
  * 호출처에서 series 가 비어있거나 길이 0 이면 "데이터 없음" 표시.
  */
 
@@ -62,7 +63,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
     );
   }
 
-  // winner 동 결정 — 명시값 없으면 첫 시리즈
+  // winner 동 결정 — 명시값 없으면 첫 시리즈 (라인 강조용)
   const effectiveWinner = winnerDistrict ?? validSeries[0]!.district;
 
   // 각 동의 첫 4분기만 + quarter 1~4 강제 라벨
@@ -71,34 +72,33 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
     data: s.projection.slice(0, 4).map((d, i) => ({ ...d, quarter: i + 1 })),
   }));
 
-  // winner 시리즈 (CI 음영 / BEP 라인 / mock 배지 판단용)
-  const winnerSeries =
-    trimmedSeries.find((s) => s.district === effectiveWinner) ?? trimmedSeries[0]!;
+  // CI 음영 / BEP 라인 기준 시리즈 — 명세상 첫 번째 동(series[0])
+  const ciSourceSeries = trimmedSeries[0]!;
 
   // wide format 변환: row = { quarter, [동]_revenue, ci_high?, ci_low?, ... }
-  const has95Ci = winnerSeries.data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null);
-  const has80Ci = winnerSeries.data.some((d) => d.ci_80_upper != null && d.ci_80_lower != null);
+  const has95Ci = ciSourceSeries.data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null);
+  const has80Ci = ciSourceSeries.data.some((d) => d.ci_80_upper != null && d.ci_80_lower != null);
   const chartData = [1, 2, 3, 4].map((q) => {
     const row: Record<string, number | null | undefined> = { quarter: q };
     for (const s of trimmedSeries) {
       const point = s.data.find((p) => p.quarter === q);
       row[`${s.district}_revenue`] = point?.revenue ?? null;
     }
-    // winner 동의 CI 만 음영용으로 노출
-    const winnerPoint = winnerSeries.data.find((p) => p.quarter === q);
-    if (winnerPoint) {
-      row.ci_95_lower = winnerPoint.ci_95_lower ?? null;
-      row.ci_95_upper = winnerPoint.ci_95_upper ?? null;
-      row.ci_80_lower = winnerPoint.ci_80_lower ?? null;
-      row.ci_80_upper = winnerPoint.ci_80_upper ?? null;
-      row.confidence_lower = winnerPoint.confidence_lower ?? null;
-      row.confidence_upper = winnerPoint.confidence_upper ?? null;
+    // 첫 번째 동(series[0])의 CI 만 음영용으로 노출
+    const ciPoint = ciSourceSeries.data.find((p) => p.quarter === q);
+    if (ciPoint) {
+      row.ci_95_lower = ciPoint.ci_95_lower ?? null;
+      row.ci_95_upper = ciPoint.ci_95_upper ?? null;
+      row.ci_80_lower = ciPoint.ci_80_lower ?? null;
+      row.ci_80_upper = ciPoint.ci_80_upper ?? null;
+      row.confidence_lower = ciPoint.confidence_lower ?? null;
+      row.confidence_upper = ciPoint.confidence_upper ?? null;
     }
     return row;
   });
 
-  // BEP 도달 시점: winner 동 기준
-  const bepQuarter = winnerSeries.data.find((d) => d.cumulative_profit >= 0)?.quarter ?? null;
+  // BEP 도달 시점: 첫 번째 동(series[0]) 기준
+  const bepQuarter = ciSourceSeries.data.find((d) => d.cumulative_profit >= 0)?.quarter ?? null;
 
   // mock 배지 — 임의 동에 mock 분기가 하나라도 있으면 표시
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
@@ -166,7 +166,8 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
             iconType="circle"
           />
 
-          {/* 신뢰구간 — winner 동만 음영. 95/80 이중 또는 단일 confidence */}
+          {/* 신뢰구간 — 첫 번째 동(series[0]) 만 음영. 95/80 이중 또는 단일 confidence.
+              fill 색상은 COLORS[0] (indigo #818cf8) 로 series[0] 라인 색과 일치 */}
           {has95Ci ? (
             <>
               <Area
@@ -271,7 +272,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
             );
           })}
 
-          {/* BEP 도달 시점 — winner 동 기준, null이면 미렌더링 */}
+          {/* BEP 도달 시점 — 첫 번째 동(series[0]) 기준, null이면 미렌더링 */}
           {bepQuarter !== null && (
             <ReferenceLine
               x={bepQuarter}

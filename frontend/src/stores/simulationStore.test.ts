@@ -46,8 +46,8 @@ void MOCK_OUTPUT;
 
 /** Common helper — happy-path mocks for both endpoints. */
 function mockHappyPath() {
-  vi.spyOn(api, 'fetchPredict').mockResolvedValue(MOCK_PRED);
-  vi.spyOn(api, 'fetchAnalyzeLlm').mockResolvedValue(MOCK_ANALYSIS);
+  vi.spyOn(api, 'runPredict').mockResolvedValue(MOCK_PRED);
+  vi.spyOn(api, 'runAnalyzeLlm').mockResolvedValue(MOCK_ANALYSIS);
 }
 
 describe('simulationStore — 초기 상태', () => {
@@ -101,8 +101,8 @@ describe('simulationStore — 에러', () => {
   });
 
   it('두 API 모두 실패 시 status=error', async () => {
-    vi.spyOn(api, 'fetchPredict').mockRejectedValue(new Error('network down'));
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockRejectedValue(new Error('llm down'));
+    vi.spyOn(api, 'runPredict').mockRejectedValue(new Error('network down'));
+    vi.spyOn(api, 'runAnalyzeLlm').mockRejectedValue(new Error('llm down'));
     await useSimulationStore.getState().startSimulation(MOCK_INPUT);
     const s = useSimulationStore.getState();
     expect(s.status).toBe('error');
@@ -112,8 +112,8 @@ describe('simulationStore — 에러', () => {
 
   it('AbortError(양쪽) 는 error로 기록하지 않는다', async () => {
     const abortErr = new axios.Cancel('canceled');
-    vi.spyOn(api, 'fetchPredict').mockRejectedValue(abortErr);
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockRejectedValue(abortErr);
+    vi.spyOn(api, 'runPredict').mockRejectedValue(abortErr);
+    vi.spyOn(api, 'runAnalyzeLlm').mockRejectedValue(abortErr);
     await useSimulationStore.getState().startSimulation(MOCK_INPUT);
     const s = useSimulationStore.getState();
     expect(s.status).not.toBe('error');
@@ -128,12 +128,10 @@ describe('simulationStore — cancelSimulation', () => {
 
   it('running을 idle로 되돌린다', async () => {
     // 양쪽 다 영원히 pending → cancelSimulation 으로 abort
-    vi.spyOn(api, 'fetchPredict').mockImplementation(
+    vi.spyOn(api, 'runPredict').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockImplementation(
-      () => new Promise<AnalysisOutput>(() => {}),
-    );
+    vi.spyOn(api, 'runAnalyzeLlm').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     expect(useSimulationStore.getState().status).toBe('running');
@@ -154,12 +152,10 @@ describe('simulationStore — 교체 실행', () => {
   it('실행 중 startSimulation 재호출 시 이전 AbortController가 abort된다', async () => {
     const controllers: AbortController[] = [];
     // capture controllers via the global controller after startSimulation set
-    vi.spyOn(api, 'fetchPredict').mockImplementation(
+    vi.spyOn(api, 'runPredict').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockImplementation(
-      () => new Promise<AnalysisOutput>(() => {}),
-    );
+    vi.spyOn(api, 'runAnalyzeLlm').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     controllers.push(useSimulationStore.getState()._abortController!);
@@ -181,10 +177,10 @@ describe('simulationStore — 교체 실행', () => {
     const firstAnalysis = new Promise<AnalysisOutput>((res) => {
       resolveFirstAnalysis = res;
     });
-    vi.spyOn(api, 'fetchPredict')
+    vi.spyOn(api, 'runPredict')
       .mockImplementationOnce(() => firstPred)
       .mockResolvedValueOnce(MOCK_PRED);
-    vi.spyOn(api, 'fetchAnalyzeLlm')
+    vi.spyOn(api, 'runAnalyzeLlm')
       .mockImplementationOnce(() => firstAnalysis)
       .mockResolvedValueOnce(MOCK_ANALYSIS);
 
@@ -220,12 +216,10 @@ describe('simulationStore — 진행률 타이머', () => {
   });
 
   it('startSimulation 호출 후 시간에 따라 progress가 증가한다', async () => {
-    vi.spyOn(api, 'fetchPredict').mockImplementation(
+    vi.spyOn(api, 'runPredict').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockImplementation(
-      () => new Promise<AnalysisOutput>(() => {}),
-    );
+    vi.spyOn(api, 'runAnalyzeLlm').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     expect(useSimulationStore.getState().progress).toBe(0);
@@ -237,12 +231,10 @@ describe('simulationStore — 진행률 타이머', () => {
   });
 
   it('progress는 90%를 초과하지 않는다', async () => {
-    vi.spyOn(api, 'fetchPredict').mockImplementation(
+    vi.spyOn(api, 'runPredict').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockImplementation(
-      () => new Promise<AnalysisOutput>(() => {}),
-    );
+    vi.spyOn(api, 'runAnalyzeLlm').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     vi.advanceTimersByTime(200_000);
@@ -287,10 +279,10 @@ describe('simulationStore — Promise.allSettled', () => {
   });
 
   it('둘 다 성공 → status=done, 두 슬라이스 done', async () => {
-    vi.spyOn(api, 'fetchPredict').mockResolvedValue([
+    vi.spyOn(api, 'runPredict').mockResolvedValue([
       { district: '공덕동', is_excluded_combo: false } as unknown as DistrictPredictionResult,
     ]);
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockResolvedValue({
+    vi.spyOn(api, 'runAnalyzeLlm').mockResolvedValue({
       winner_district: '공덕동',
     } as unknown as AnalysisOutput);
 
@@ -307,8 +299,8 @@ describe('simulationStore — Promise.allSettled', () => {
   });
 
   it('predict 만 실패 → status=done (부분 성공), prediction.status=error', async () => {
-    vi.spyOn(api, 'fetchPredict').mockRejectedValue(new Error('predict 5xx'));
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockResolvedValue({
+    vi.spyOn(api, 'runPredict').mockRejectedValue(new Error('predict 5xx'));
+    vi.spyOn(api, 'runAnalyzeLlm').mockResolvedValue({
       winner_district: '공덕동',
     } as unknown as AnalysisOutput);
 
@@ -324,8 +316,8 @@ describe('simulationStore — Promise.allSettled', () => {
   });
 
   it('둘 다 실패 → status=error', async () => {
-    vi.spyOn(api, 'fetchPredict').mockRejectedValue(new Error('p fail'));
-    vi.spyOn(api, 'fetchAnalyzeLlm').mockRejectedValue(new Error('a fail'));
+    vi.spyOn(api, 'runPredict').mockRejectedValue(new Error('p fail'));
+    vi.spyOn(api, 'runAnalyzeLlm').mockRejectedValue(new Error('a fail'));
 
     await useSimulationStore
       .getState()
@@ -348,7 +340,7 @@ describe('simulationStore — Promise.allSettled', () => {
       },
       status: 'done',
     });
-    vi.spyOn(api, 'fetchPredict').mockResolvedValue([
+    vi.spyOn(api, 'runPredict').mockResolvedValue([
       { district: '공덕동', is_excluded_combo: false } as unknown as DistrictPredictionResult,
     ]);
 

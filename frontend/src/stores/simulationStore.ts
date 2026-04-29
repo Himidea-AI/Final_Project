@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { fetchAnalyzeLlm, fetchPredict } from '../api/client';
+import { runAnalyzeLlm, runPredict } from '../api/client';
 import type {
   AnalysisOutput,
   DistrictPredictionResult,
@@ -30,7 +30,7 @@ interface SimulationState {
   status: SimulationStatus;
   progress: number;
   stage: string;
-  /** @deprecated useCombinedSimResult() hook 으로 prediction + analysis 합성. legacy /simulate 응답 또는 history 복원 경로용. */
+  /** @deprecated useCombinedSimResult() hook 으로 prediction + analysis 합성. history 복원 경로용 (legacy 단일 SimulationOutput 호환). */
   result: SimulationOutput | null;
   error: string | null;
   params: SimulationInput | null;
@@ -153,8 +153,8 @@ export const useSimulationStore = create<SimulationState>()(
         // Promise.allSettled — /predict 와 /analyze/llm 부분 성공 허용.
         // 한쪽 실패해도 다른 쪽 결과를 그대로 노출 → 사용자는 retry* 액션으로 슬라이스 재시도 가능.
         const [predResult, analysisResult] = await Promise.allSettled([
-          fetchPredict(params),
-          fetchAnalyzeLlm(params),
+          runPredict(params, abortController.signal),
+          runAnalyzeLlm(params, abortController.signal),
         ]);
 
         // Stale response guard — 더 새로운 startSimulation 호출이 우리를 교체했다면 작업 중단.
@@ -218,7 +218,7 @@ export const useSimulationStore = create<SimulationState>()(
         if (!params) return;
         set({ prediction: { status: 'running', data: null, error: null } });
         try {
-          const data = await fetchPredict(params);
+          const data = await runPredict(params);
           set({ prediction: { status: 'done', data, error: null } });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '예측 재시도 실패';
@@ -231,7 +231,7 @@ export const useSimulationStore = create<SimulationState>()(
         if (!params) return;
         set({ analysis: { status: 'running', data: null, error: null } });
         try {
-          const data = await fetchAnalyzeLlm(params);
+          const data = await runAnalyzeLlm(params);
           set({ analysis: { status: 'done', data, error: null } });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '분석 재시도 실패';

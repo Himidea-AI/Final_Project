@@ -392,15 +392,28 @@ export interface SimulationOutput {
   predicted_monthly_revenue?: number | null;
 }
 
-/** /predict 응답의 동별 예측 entry. spec §3 + B1 schemas/simulation_output.py 의 DistrictPredictionResult 매칭. */
+/** /predict 응답의 동별 예측 entry. spec §3 + B1 schemas/simulation_output.py 의 DistrictPredictionResult 매칭.
+ * 2026-04-29 multi-district cycle: 11 필드 명세 적용 (수지니 c8ea31f 기준).
+ * backend 8 필드 구현, customer_segment / living_pop_forecast / emerging_signal 3 필드 미구현 → null 가능.
+ */
 export interface DistrictPredictionResult {
   district: string;
+  dong_code: string | null;
   is_excluded_combo: boolean;
-  quarterly_projection?: QuarterlyProjection;
-  closure_risk?: ClosureRisk;
-  shap_result?: ShapResult;
-  bep_months?: number | null;
-  predicted_monthly_revenue?: number | null;
+  is_mock: boolean;
+  quarterly_projection: QuarterlyProjection[];
+  scenarios: {
+    optimistic: { quarter: number; revenue: number }[];
+    base: { quarter: number; revenue: number }[];
+    pessimistic: { quarter: number; revenue: number }[];
+  } | null;
+  bep: Record<string, unknown> | null;
+  closure_rate: Record<string, unknown> | null;
+  closure_risk: Record<string, unknown> | null;
+  shap_result: ShapResult | null;
+  customer_segment: Record<string, unknown> | null;
+  living_pop_forecast: Record<string, unknown> | null;
+  emerging_signal: Record<string, unknown> | null;
 }
 
 /** /analyze/llm 응답. SimulationOutput 의 ML 필드 빠진 subset. spec §3. */

@@ -3,12 +3,15 @@
  *
  * 2026-04-27 사용자 결정: WaterfallChart 제거 + 자연어 카드로 대체.
  * 본부 영업팀에 "어떤 요인이 매출에 ±얼마 기여" 직관 전달이 목적.
+ * 2026-04-29 M9: district 옵셔널 prop 추가 — 동별 grid 호출용.
  */
 
 import type { ShapResult } from '../../../../types';
 
 interface Props {
   shap: ShapResult | null | undefined;
+  /** M9: 동별 grid 호출 시 카드 상단에 표시 (옵셔널) */
+  district?: string;
 }
 
 function formatKrw(value: number): string {
@@ -18,10 +21,11 @@ function formatKrw(value: number): string {
   return `${Math.round(abs).toLocaleString('ko-KR')}원`;
 }
 
-export function ShapInsightCard({ shap }: Props) {
+export function ShapInsightCard({ shap, district }: Props) {
   if (!shap) {
     return (
       <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-8 text-center text-xs text-stone-500">
+        {district && <div className="text-xs font-bold text-stone-400 mb-2">{district}</div>}
         SHAP 해석 데이터 없음 — 모델 예측 신뢰도가 확정되면 표시됩니다
       </div>
     );
@@ -33,6 +37,7 @@ export function ShapInsightCard({ shap }: Props) {
   if (top.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+        {district && <div className="text-xs font-bold text-stone-400 mb-2">{district}</div>}
         피처 기여도 산출 결과 없음
       </div>
     );
@@ -46,6 +51,7 @@ export function ShapInsightCard({ shap }: Props) {
           : 'border-stone-800/60 bg-stone-950/50'
       }`}
     >
+      {district && <div className="text-xs font-bold text-stone-400 mb-2">{district}</div>}
       <div className="flex items-center justify-between mb-4">
         <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
           기여도 상위 3개 피처
