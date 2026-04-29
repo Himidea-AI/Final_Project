@@ -1516,15 +1516,41 @@ export default function AbmPersonaMap({
       }
       ctx.clearRect(0, 0, W, H);
 
-      // ─── Full canvas dark mask (Orion 레퍼런스 — hex 만 시각) ─────────────
+      // ─── Mapo polygon 외부 dark mask (even-odd fill) ─────────────
+      // 이전: ctx.fillRect(0, 0, W, H) 전체 fill → zoom in 시 마포 외부도 검정 사각형
+      //       으로 덮여서 "큰 네모" 처럼 보이는 회귀.
+      // 현재: 외부 사각형 + 마포 polygon 들을 even-odd fill 로 외부만 mask.
+      //       zoom 무관하게 마포 형태 유지, hex 격자 빈 공간도 마포 안에서 자연스러움.
       if (
         hexGridRef.current.length > 0 &&
         densityGridRef.current &&
         trajectoryPathsRef.current.size > 0
       ) {
+        const polyPx = mapoPolyPixelsRef.current;
         ctx.save();
         ctx.fillStyle = 'rgba(7, 7, 9, 0.97)';
-        ctx.fillRect(0, 0, W, H);
+        if (polyPx.length > 0) {
+          ctx.beginPath();
+          // 1) 외부 사각형 (전체 canvas)
+          ctx.moveTo(0, 0);
+          ctx.lineTo(W, 0);
+          ctx.lineTo(W, H);
+          ctx.lineTo(0, H);
+          ctx.closePath();
+          // 2) 마포 16동 polygon → even-odd 로 외부만 fill 됨
+          for (const ring of polyPx) {
+            if (ring.length < 3) continue;
+            ctx.moveTo(ring[0].x, ring[0].y);
+            for (let i = 1; i < ring.length; i++) {
+              ctx.lineTo(ring[i].x, ring[i].y);
+            }
+            ctx.closePath();
+          }
+          ctx.fill('evenodd');
+        } else {
+          // polygon 미로드 시 fallback — 전체 fill (이전 동작)
+          ctx.fillRect(0, 0, W, H);
+        }
         ctx.restore();
       }
 

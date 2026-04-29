@@ -13,27 +13,22 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def _iter_csv_any_encoding(path: Path):
-    last_err: Exception | None = None
+def _detect_encoding(path: Path) -> str:
+    """파일 첫 4KB 를 각 인코딩으로 시도해 strict decode 가능한 첫 번째 반환."""
+    sample = path.open("rb").read(4096)
     for enc in ("utf-8-sig", "utf-8", "cp949", "euc-kr"):
         try:
-            f = path.open(encoding=enc, newline="")
-        except UnicodeDecodeError as e:
-            last_err = e
+            sample.decode(enc, errors="strict")
+            return enc
+        except UnicodeDecodeError:
             continue
-        try:
-            yield from csv.DictReader(f)
-            return
-        except UnicodeDecodeError as e:
-            last_err = e
-            f.close()
-            continue
-        finally:
-            try:
-                f.close()
-            except Exception:
-                pass
-    raise RuntimeError(f"unable to decode {path}: {last_err}")
+    return "cp949"  # fallback
+
+
+def _iter_csv_any_encoding(path: Path):
+    enc = _detect_encoding(path)
+    with path.open(encoding=enc, errors="replace", newline="") as f:
+        yield from csv.DictReader(f)
 
 
 def ingest_one_csv(
@@ -49,24 +44,60 @@ def ingest_one_csv(
     return_counts: dict[tuple[str, str], int] = defaultdict(int)
     master: dict[str, str] = {}
 
-    for r in _iter_csv_any_encoding(src):
-        rent_dt = (r.get("대여일시") or "").strip()
-        rent_id = (r.get("대여 대여소번호") or "").strip()
-        rent_name = (r.get("대여 대여소명") or "").strip()
-        ret_dt = (r.get("반납일시") or "").strip()
-        ret_id = (r.get("반납 대여소번호") or "").strip()
-        ret_name = (r.get("반납 대여소명") or "").strip()
+    # 형식 감지: peek first row to see columns
+    iterator = _iter_csv_any_encoding(src)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        raise RuntimeError(f"empty CSV: {src}")
+    cols = set(first.keys())
+    cols_stripped = {c.strip() for c in cols}
+    is_raw_history = ("대여일시" in cols) and ("반납일시" in cols)
+    is_daily_aggregate = ("대여일자" in cols_stripped) and ("이용건수" in cols_stripped)
 
-        if rent_dt and rent_id:
-            d = rent_dt[:10]
-            rent_counts[(d, rent_id)] += 1
-            if rent_id not in master:
-                master[rent_id] = rent_name
-        if ret_dt and ret_id:
-            d = ret_dt[:10]
-            return_counts[(d, ret_id)] += 1
-            if ret_id not in master:
-                master[ret_id] = ret_name
+    def process(r: dict) -> None:
+        if is_raw_history:
+            rent_dt = (r.get("대여일시") or "").strip()
+            rent_id = (r.get("대여 대여소번호") or "").strip()
+            rent_name = (r.get("대여 대여소명") or "").strip()
+            ret_dt = (r.get("반납일시") or "").strip()
+            ret_id = (r.get("반납 대여소번호") or "").strip()
+            ret_name = (r.get("반납 대여소명") or "").strip()
+            if rent_dt and rent_id:
+                d = rent_dt[:10]
+                rent_counts[(d, rent_id)] += 1
+                if rent_id not in master:
+                    master[rent_id] = rent_name
+            if ret_dt and ret_id:
+                d = ret_dt[:10]
+                return_counts[(d, ret_id)] += 1
+                if ret_id not in master:
+                    master[ret_id] = ret_name
+        elif is_daily_aggregate:
+            # OA-15246: 대여일자 / 대여소번호 / 대여소 / 대여구분코드 / 성별 / 연령대 / 이용건수
+            date_raw = (r.get("대여일자") or "").strip()
+            sid = (r.get("대여소번호") or "").strip()
+            name = (r.get("대여소") or "").strip()
+            cnt_raw = (r.get("이용건수") or r.get(" 이용건수") or "").strip()
+            try:
+                cnt = int(float(cnt_raw.replace(",", "")))
+            except (ValueError, TypeError):
+                cnt = 0
+            if not date_raw or not sid:
+                return
+            # date 정규화 (YYYY-MM-DD)
+            d = (
+                date_raw
+                if len(date_raw) == 10 and date_raw[4] == "-"
+                else (f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:8]}" if len(date_raw) == 8 else date_raw)
+            )
+            rent_counts[(d, sid)] += cnt
+            if sid not in master:
+                master[sid] = name
+
+    process(first)
+    for r in iterator:
+        process(r)
 
     keys = set(rent_counts.keys()) | set(return_counts.keys())
     rows = [
