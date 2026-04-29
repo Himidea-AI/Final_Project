@@ -57,7 +57,6 @@ export function InsightTab({ simResult, openModal }: Props) {
         {AGENTS_LIST.map((agent) => {
           const AgentIcon = agent.icon;
           const attr = getAttribution(agent.id);
-          const confidencePct = attr?.confidence != null ? Math.round(attr.confidence * 100) : null;
           const sources = attr?.sources ?? [];
           const verdict = attr?.verdict;
           const reasoning = attr?.reasoning;
@@ -88,16 +87,6 @@ export function InsightTab({ simResult, openModal }: Props) {
                     {agent.desc}
                   </span>
                 </div>
-                {confidencePct != null && (
-                  <div className="flex flex-col items-end shrink-0">
-                    <span className="text-[0.5rem] font-black text-stone-500 uppercase tracking-tighter">
-                      신뢰도
-                    </span>
-                    <span className="text-xs font-black text-indigo-400 tabular-nums">
-                      {confidencePct}%
-                    </span>
-                  </div>
-                )}
               </div>
 
               {/* verdict (한 줄 판정) */}
@@ -138,7 +127,6 @@ export function InsightTab({ simResult, openModal }: Props) {
                         verdict ? `판정\n${verdict}` : '',
                         reasoning ? `분석 근거 (원본)\n${reasoning}` : '',
                         sources.length > 0 ? `데이터 소스\n${sources.join(', ')}` : '',
-                        confidencePct != null ? `신뢰도\n${confidencePct}%` : '',
                       ]
                         .filter(Boolean)
                         .join('\n\n'),

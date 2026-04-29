@@ -1,15 +1,36 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { runSimulation } from '../api/client';
-import type { SimulationInput, SimulationOutput } from '../types';
+import { runAnalyzeLlm, runPredict } from '../api/client';
+import type {
+  AnalysisOutput,
+  DistrictPredictionResult,
+  SimulationInput,
+  SimulationOutput,
+} from '../types';
 
 export type SimulationStatus = 'idle' | 'running' | 'done' | 'error';
+
+/** 슬라이스(예측/분석)별 상태 — startSimulation 의 Promise.allSettled 부분 성공 표현용. */
+export type SliceStatus = 'idle' | 'running' | 'done' | 'error';
+
+export interface PredictionSlice {
+  status: SliceStatus;
+  data: DistrictPredictionResult[] | null;
+  error: string | null;
+}
+
+export interface AnalysisSlice {
+  status: SliceStatus;
+  data: AnalysisOutput | null;
+  error: string | null;
+}
 
 interface SimulationState {
   status: SimulationStatus;
   progress: number;
   stage: string;
+  /** @deprecated useCombinedSimResult() hook 으로 prediction + analysis 합성. history 복원 경로용 (legacy 단일 SimulationOutput 호환). */
   result: SimulationOutput | null;
   error: string | null;
   params: SimulationInput | null;
@@ -17,15 +38,25 @@ interface SimulationState {
   /** 매니저가 [저장] 버튼으로 저장한 이력 ID (SPTR-000142). null이면 DRAFT. R1: store = Single Source of Truth. */
   savedHistoryId: number | null;
 
+  /** /predict 응답 슬라이스 (IM3-259 분리 호출). */
+  prediction: PredictionSlice;
+  /** /analyze/llm 응답 슬라이스 (IM3-259 분리 호출). */
+  analysis: AnalysisSlice;
+
   _abortController: AbortController | null;
   _progressTimer: ReturnType<typeof setInterval> | null;
 
   startSimulation: (params: SimulationInput) => Promise<void>;
+  retryPrediction: () => Promise<void>;
+  retryAnalysis: () => Promise<void>;
   cancelSimulation: () => void;
   dismissResult: () => void;
   setSavedHistoryId: (id: number | null) => void;
   reset: () => void;
 }
+
+const initialPrediction: PredictionSlice = { status: 'idle', data: null, error: null };
+const initialAnalysis: AnalysisSlice = { status: 'idle', data: null, error: null };
 
 const INITIAL_STATE = {
   status: 'idle' as SimulationStatus,
@@ -36,6 +67,8 @@ const INITIAL_STATE = {
   params: null,
   startedAt: null,
   savedHistoryId: null,
+  prediction: initialPrediction,
+  analysis: initialAnalysis,
   _abortController: null,
   _progressTimer: null,
 };
@@ -101,6 +134,8 @@ export const useSimulationStore = create<SimulationState>()(
           params,
           startedAt,
           savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
+          prediction: { status: 'running', data: null, error: null },
+          analysis: { status: 'running', data: null, error: null },
           _abortController: abortController,
           _progressTimer: null,
         });
@@ -115,50 +150,95 @@ export const useSimulationStore = create<SimulationState>()(
         }, 500);
         set({ _progressTimer: timer });
 
+        // Promise.allSettled — /predict 와 /analyze/llm 부분 성공 허용.
+        // 한쪽 실패해도 다른 쪽 결과를 그대로 노출 → 사용자는 retry* 액션으로 슬라이스 재시도 가능.
+        const [predResult, analysisResult] = await Promise.allSettled([
+          runPredict(params, abortController.signal),
+          runAnalyzeLlm(params, abortController.signal),
+        ]);
+
+        // Stale response guard — 더 새로운 startSimulation 호출이 우리를 교체했다면 작업 중단.
+        if (get().startedAt !== startedAt) return;
+
+        // Abort 도 취소된 상태라면 cancelSimulation 이 이미 정리했으므로 손대지 않음.
+        const isAbortError = (e: unknown): boolean => {
+          const name = (e as { name?: string })?.name;
+          return name === 'CanceledError' || name === 'AbortError' || axios.isCancel(e);
+        };
+        const predAborted = predResult.status === 'rejected' && isAbortError(predResult.reason);
+        const analysisAborted =
+          analysisResult.status === 'rejected' && isAbortError(analysisResult.reason);
+        if (predAborted && analysisAborted) {
+          // 양쪽 모두 abort → cancelSimulation 이 처리. 여기서 더 set 안 함.
+          return;
+        }
+
+        const predSlice: PredictionSlice =
+          predResult.status === 'fulfilled'
+            ? { status: 'done', data: predResult.value, error: null }
+            : {
+                status: 'error',
+                data: null,
+                error:
+                  (predResult.reason as { message?: string })?.message ?? '예측(/predict) 실패',
+              };
+
+        const analysisSlice: AnalysisSlice =
+          analysisResult.status === 'fulfilled'
+            ? { status: 'done', data: analysisResult.value, error: null }
+            : {
+                status: 'error',
+                data: null,
+                error:
+                  (analysisResult.reason as { message?: string })?.message ??
+                  '분석(/analyze/llm) 실패',
+              };
+
+        const allFailed = predSlice.status === 'error' && analysisSlice.status === 'error';
+
+        const { _progressTimer } = get();
+        if (_progressTimer) clearInterval(_progressTimer);
+
+        set({
+          prediction: predSlice,
+          analysis: analysisSlice,
+          status: allFailed ? 'error' : 'done',
+          progress: 100,
+          stage: allFailed ? '시뮬 실패' : 'COMPLETE',
+          error: allFailed
+            ? `예측/분석 모두 실패: ${predSlice.error} | ${analysisSlice.error}`
+            : null,
+          _abortController: null,
+          _progressTimer: null,
+        });
+      },
+
+      retryPrediction: async () => {
+        const params = get().params;
+        if (!params) return;
+        set({ prediction: { status: 'running', data: null, error: null } });
         try {
-          const result = await runSimulation(params, abortController.signal);
-
-          // Stale response guard — if a newer start has replaced us, abandon.
-          if (get().startedAt !== startedAt) return;
-
-          const { _progressTimer } = get();
-          if (_progressTimer) clearInterval(_progressTimer);
-
-          set({
-            status: 'done',
-            progress: 100,
-            stage: 'COMPLETE',
-            result,
-            _abortController: null,
-            _progressTimer: null,
-          });
-        } catch (err: unknown) {
-          // Stale check — if replaced, don't touch state
-          if (get().startedAt !== startedAt) return;
-
-          const isAbort =
-            (err as { name?: string })?.name === 'CanceledError' ||
-            (err as { name?: string })?.name === 'AbortError' ||
-            axios.isCancel(err);
-
-          if (isAbort) {
-            // cancelSimulation already cleaned state; nothing to do here
-            return;
-          }
-
-          const { _progressTimer } = get();
-          if (_progressTimer) clearInterval(_progressTimer);
-
-          const message =
-            err instanceof Error ? err.message : typeof err === 'string' ? err : '알 수 없는 오류';
-          set({
-            status: 'error',
-            error: message,
-            _abortController: null,
-            _progressTimer: null,
-          });
+          const data = await runPredict(params);
+          set({ prediction: { status: 'done', data, error: null } });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : '예측 재시도 실패';
+          set({ prediction: { status: 'error', data: null, error: msg } });
         }
       },
+
+      retryAnalysis: async () => {
+        const params = get().params;
+        if (!params) return;
+        set({ analysis: { status: 'running', data: null, error: null } });
+        try {
+          const data = await runAnalyzeLlm(params);
+          set({ analysis: { status: 'done', data, error: null } });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : '분석 재시도 실패';
+          set({ analysis: { status: 'error', data: null, error: msg } });
+        }
+      },
+
       cancelSimulation: () => {
         const { status, _abortController, _progressTimer } = get();
         if (status !== 'running') return;
@@ -173,6 +253,8 @@ export const useSimulationStore = create<SimulationState>()(
           params: null,
           startedAt: null,
           savedHistoryId: null,
+          prediction: initialPrediction,
+          analysis: initialAnalysis,
           _abortController: null,
           _progressTimer: null,
         });
@@ -189,6 +271,8 @@ export const useSimulationStore = create<SimulationState>()(
           params: null,
           startedAt: null,
           savedHistoryId: null,
+          prediction: initialPrediction,
+          analysis: initialAnalysis,
         });
       },
       setSavedHistoryId: (id) => set({ savedHistoryId: id }),
@@ -213,6 +297,8 @@ export const useSimulationStore = create<SimulationState>()(
         stage: state.status === 'done' ? state.stage : '',
         progress: state.status === 'done' ? 100 : 0,
         error: null,
+        prediction: state.status === 'done' ? state.prediction : initialPrediction,
+        analysis: state.status === 'done' ? state.analysis : initialAnalysis,
       }),
     },
   ),

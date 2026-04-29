@@ -121,9 +121,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
       } else {
         // DB에 매칭되는 브랜드 없음 — 기업명 직접 입력 유도
         setBizVerified(false);
-        setBizError(
-          '등록된 브랜드를 찾을 수 없습니다. 기업명을 직접 입력해주세요.',
-        );
+        setBizError('등록된 브랜드를 찾을 수 없습니다. 기업명을 직접 입력해주세요.');
       }
     } catch {
       // API 실패 시 검증 생략 (사용자 직접 입력 유도)

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 
 _BACKEND = Path(__file__).resolve().parents[1] / "backend"
@@ -132,7 +133,7 @@ def test_simulate_abm_endpoint_passes_popularity_boost(monkeypatch):
     payload = {
         "target_district": "도화동",
         "business_type": "음식점",
-        "brand_name": "RegressionGuard",
+        "brand_name": f"RegressionGuard-{uuid.uuid4()}",
         "langgraph_result": {},
         "n_agents": 50,
         "days": 1,

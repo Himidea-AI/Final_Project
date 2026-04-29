@@ -34,8 +34,8 @@
  *
  * [백엔드 연동]
  *   - api/client.ts의 USE_MOCK = true → Mock 데이터 반환 (프론트 독립 동작)
- *   - USE_MOCK = false로 변경 시 → FastAPI /api/simulate, /api/analyze 호출
- *   - SimulatorDashboard.runSim()에서 runSimulation() 호출 (v12.4부터 /simulate 단일 호출)
+ *   - USE_MOCK = false로 변경 시 → FastAPI /api/predict, /api/analyze/llm 호출
+ *   - SimulatorDashboard.runSim() → simulationStore.startSimulation() (IM3-259: /predict + /analyze/llm 분리 호출, /simulate 제거됨)
  *
  * [팀원 참고]
  *   - A1/B1: api/client.ts의 Mock 응답 형태 = 실제 API 응답과 동일해야 함
@@ -50,7 +50,6 @@ import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
 import ManagerDetail from './pages/ManagerDetail';
 import SimulationHistoryDetail from './pages/SimulationHistoryDetail';
-import SimulationCompare from './pages/SimulationCompare';
 import LoginPage from './pages/LoginPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
@@ -80,6 +79,7 @@ import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
 import { getLivePopulation, type CustomerSegmentRequest } from './api/client';
 import { useCustomerSegmentPreview } from './hooks/useCustomerSegmentPreview';
+import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
 import NetworkBackground from './components/NetworkBackground';
 // Phase C Round 2 — PDF 묶음 + Dashboard 묶음 추출 (정적 import 유지)
 import {
@@ -748,9 +748,9 @@ function sortRows<T extends Record<string, string>>(
    result  → 하이엔드 대시보드 (StatCard, SVG 차트, 레이더, 테이블, AI 인사이트)
 
    [백엔드 연동 (api/client.ts)]
-   runSim() → runSimulation() 단일 호출 (v12.4: /simulate만 호출, /analyze 제거)
-   응답 → SimResult로 변환 → UI 바인딩
-   API 실패 시 fallback Mock 표시 (에러에도 화면 유지)
+   runSim() → simulationStore.startSimulation() (IM3-259: runPredict + runAnalyzeLlm 병렬, /simulate 제거)
+   응답 → useCombinedSimResult hook 으로 SimulationOutput 호환 합성 → UI 바인딩
+   부분 실패 시 retryPrediction/retryAnalysis 로 슬라이스 재시도
 
    [팀원 참고 — B1/A1]
    SimulationOutput.comparison 배열 → 동별 비교 테이블 데이터
@@ -890,7 +890,7 @@ function SimulatorDashboard({
   const [targetMonthlySales, setTargetMonthlySales] = useState<number | null>(null);
 
   // [customer_segment 미리보기] 좌측 패널 입력 변경 시 ~100ms MLP 호출.
-  // /simulate (10분 LLM 파이프라인)와 무관 — RUN 누르기 전 즉시 피드백.
+  // /predict + /analyze/llm (멀티에이전트 파이프라인)와 무관 — RUN 누르기 전 즉시 피드백.
   const previewReq = useMemo<CustomerSegmentRequest | null>(() => {
     if (!selectedDongs[0]) return null;
     return {
@@ -1047,7 +1047,7 @@ function SimulatorDashboard({
     : [];
   const sortedNeighborhoodRows = sortRows(dynamicNeighborhoodRows, sortKey, sortDir);
 
-  // 분기 매출 예측 차트 데이터 — /simulate 응답의 quarterly_projection을 Recharts time축 형식으로 변환
+  // 분기 매출 예측 차트 데이터 — /predict 응답(DistrictPredictionResult.quarterly_projection)을 Recharts time축 형식으로 변환
   const monthlyChartData = simResult?.quarterlyProjection?.length
     ? simResult.quarterlyProjection.map((q) => ({
         time: q.quarter, // X축: 분기 번호 (1~4)
@@ -1319,12 +1319,17 @@ function SimulatorDashboard({
   }, [reportState]);
 
   // [R2] 마운트 시 store 에서 복원 — 다른 페이지로 나갔다가 /simulator 복귀 시 결과 유지.
-  // store.result 가 있고 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
+  // buildCombinedResult 로 prediction + analysis 슬라이스를 합성. 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
   useEffect(() => {
     const s = useSimulationStore.getState();
-    if (reportState === 'idle' && s.status === 'done' && s.result) {
-      setRawSimResult(s.result);
-      setSimResult(toSimResultViewModel(s.result));
+    const combined = buildCombinedResult(
+      s.prediction.data,
+      s.analysis.data,
+      s.params?.target_district ?? undefined,
+    );
+    if (reportState === 'idle' && s.status === 'done' && combined) {
+      setRawSimResult(combined);
+      setSimResult(toSimResultViewModel(combined));
       setReportState('result');
     }
     // mount 1회만
@@ -1420,14 +1425,17 @@ function SimulatorDashboard({
       };
 
       // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
-      // [찬영 요청] /simulate 하나만 호출 (이전에는 /analyze와 중복 호출)
-      // /simulate 응답에 market_report 포함됨 (backend main.py:308)
+      // [IM3-259] /predict + /analyze/llm 분리 호출 (Promise.allSettled). market_report 는 analysis 슬라이스에 포함.
       await useSimulationStore.getState().startSimulation(payload);
       const storeState = useSimulationStore.getState();
-      if (storeState.status !== 'done' || !storeState.result) {
+      const simRes = buildCombinedResult(
+        storeState.prediction.data,
+        storeState.analysis.data,
+        storeState.params?.target_district ?? undefined,
+      );
+      if (storeState.status !== 'done' || !simRes) {
         throw new Error(storeState.error ?? 'Simulation failed');
       }
-      const simRes = storeState.result;
       // [R1] Zustand store.result 가 Single Source of Truth.
       // 아래 setRawSimResult/setSimResult 는 마운트 복원 로직과 동일 함수 사용.
       setRawSimResult(simRes);
@@ -2581,11 +2589,18 @@ function SimulatorDashboard({
                               {simResult?.quarterlyProjection &&
                                 simResult.quarterlyProjection.length > 0 && (
                                   <div className="mt-6">
-                                    <h3 className="text-lg font-semibold mb-3">
-                                      분기별 매출 예측 (TCN)
-                                    </h3>
+                                    <h3 className="text-lg font-semibold mb-3">분기별 예상 매출</h3>
                                     <QuarterlyProjectionChart
-                                      data={simResult.quarterlyProjection}
+                                      series={[
+                                        {
+                                          district:
+                                            simResult.winnerDistrict ??
+                                            rawSimResult?.target_district ??
+                                            '단일',
+                                          projection: simResult.quarterlyProjection,
+                                        },
+                                      ]}
+                                      winnerDistrict={simResult.winnerDistrict}
                                     />
                                   </div>
                                 )}
@@ -4309,7 +4324,7 @@ function pathToScene(
  * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
  */
 function DashboardOutlet() {
-  const simResult = useSimulationStore((s) => s.result);
+  const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
   const { user, brand } = useAuth();
   const brandName = user?.company_name || brand?.brand_name || '';
@@ -4335,7 +4350,7 @@ function DashboardOutlet() {
 /** Hub index 라우트 — DashboardOutlet 의 simResult 를 store 에서 다시 읽어 DashboardHub 렌더.
  *  DashboardOutlet 의 null guard 가 이미 통과한 시점에서만 마운트되므로 simResult 는 항상 non-null. */
 function DashboardHubRouteElement() {
-  const simResult = useSimulationStore((s) => s.result);
+  const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
   const { user, brand } = useAuth();
   if (!simResult) return <Navigate to="/simulator" replace />;
@@ -4583,15 +4598,6 @@ export default function App() {
                     element={
                       <ProtectedRoute>
                         <SimulationHistoryDetail />
-                      </ProtectedRoute>
-                    }
-                  />
-                  {/* 시뮬 이력 최대 4건 비교 + PDF export */}
-                  <Route
-                    path="/dashboard/compare"
-                    element={
-                      <ProtectedRoute>
-                        <SimulationCompare />
                       </ProtectedRoute>
                     }
                   />

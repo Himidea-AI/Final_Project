@@ -9,12 +9,21 @@
  *
  * [B1/A1 담당자 참고]
  * - Mock 응답의 구조 = 실제 API 응답 구조와 동일해야 함
- * - SimulationOutput: comparison[], legal_risks[], quarterly_projection[]
- * - AnalysisResult.data.market_report: 7개 항목 (floating_population 등)
+ * - DistrictPredictionResult: quarterly_projection, closure_risk, shap_result, bep_months, predicted_monthly_revenue, ...
+ * - AnalysisOutput: winner_district + market_report 7개 항목 (floating_population 등)
  * - 타입 정의는 src/types/index.ts 참고
+ *
+ * [IM3-259] /simulate 단일 엔드포인트는 제거됨. 신규 호출은 runPredict + runAnalyzeLlm.
  */
 import axios from 'axios';
-import type { SimulationInput, SimulationOutput, JobStatus, CustomerSegment } from '../types';
+import type {
+  SimulationInput,
+  SimulationOutput,
+  JobStatus,
+  CustomerSegment,
+  DistrictPredictionResult,
+  AnalysisOutput,
+} from '../types';
 import type {
   HistoryFilterParams,
   HistoryListResponse,
@@ -109,25 +118,44 @@ export async function healthCheck() {
   return response.data;
 }
 
-/** 시뮬레이션 실행 요청 — LLM 파이프라인이라 10분까지 대기 (전역 2분으로는 캐시 miss 시 timeout) */
-export async function runSimulation(
+/**
+ * ML 예측 — /predict (선택 동 1~4 병렬). 사용자 입력 그대로.
+ *
+ * 응답 포맷 (backend 수지니 c8ea31f):
+ *   { status: "success" | "error", data: DistrictPredictionResult[], message?: string }
+ *
+ * timeout 300_000 — 4동 병렬 ML 추론 + ECOS/외부 호출 여유.
+ */
+export async function runPredict(
   input: SimulationInput,
   signal?: AbortSignal,
-): Promise<SimulationOutput> {
-  const response = await apiClient.post('/simulate', input, {
-    signal,
-    timeout: 600_000,
-  });
-  // 백엔드 응답 포맷 변화 대응:
-  //   신규 (dev): {status: 'success', data: {...실제 결과...}}
-  //   구형:       {...실제 결과...}
-  // 양쪽 모두 호환되도록 언래핑. status=error이면 throw.
+): Promise<DistrictPredictionResult[]> {
+  const response = await apiClient.post('/predict', input, { signal, timeout: 300_000 });
   const body = response.data;
-  if (body && typeof body === 'object' && 'status' in body) {
-    if (body.status === 'success' && body.data) return body.data as SimulationOutput;
-    if (body.status === 'error') throw new Error(body.message || 'Simulation failed');
-  }
-  return body as SimulationOutput;
+  if (body && body.status === 'success' && Array.isArray(body.data)) return body.data;
+  if (body && body.status === 'error') throw new Error(body.message || 'Predict failed');
+  if (Array.isArray(body)) return body; // legacy
+  return [];
+}
+
+/**
+ * AI 분석 — /analyze/llm (winner 산출 + LLM 6 에이전트).
+ *
+ * timeout 300_000 — LLM 멀티에이전트 파이프라인.
+ *
+ * 응답 wrapper: backend (찬영 8223bfb contract 보강) 가 `{ status, data: AnalysisOutput }` 형태 반환.
+ *   - LLM_AGENTS_DISABLED=1 mock 도 동일 wrapper.
+ *   - error 시 `{ status: "error", message }`.
+ */
+export async function runAnalyzeLlm(
+  input: SimulationInput,
+  signal?: AbortSignal,
+): Promise<AnalysisOutput> {
+  const response = await apiClient.post('/analyze/llm', input, { signal, timeout: 300_000 });
+  const body = response.data;
+  if (body && body.status === 'success' && body.data) return body.data as AnalysisOutput;
+  if (body && body.status === 'error') throw new Error(body.message || 'Analyze LLM failed');
+  return body as AnalysisOutput; // legacy raw fallback
 }
 
 /** 시뮬레이션 리포트 조회 */

@@ -8,12 +8,6 @@ interface HistoryCardProps {
   onOpen: (id: number) => void;
   onDelete?: (id: number) => void;
   onDownloadPdf?: (id: number) => void;
-  /** 비교 선택 모드 — 지정되면 좌측 체크박스 노출 */
-  selectable?: {
-    checked: boolean;
-    disabled?: boolean;
-    onToggle: (id: number) => void;
-  };
 }
 
 const SIGNAL_CLS: Record<string, string> = {
@@ -48,13 +42,7 @@ function formatWhen(iso: string): string {
   }
 }
 
-export function HistoryCard({
-  item,
-  onOpen,
-  onDelete,
-  onDownloadPdf,
-  selectable,
-}: HistoryCardProps) {
+export function HistoryCard({ item, onOpen, onDelete, onDownloadPdf }: HistoryCardProps) {
   const { user } = useAuth();
   const isMaster = user?.role === 'master';
   const showManagerBadge = isMaster && item.manager_name && item.manager_id !== user?.id;
@@ -64,32 +52,8 @@ export function HistoryCard({
   const docId = formatDocumentId(item.id);
 
   return (
-    <div
-      className={`rounded-lg border p-4 transition-colors ${
-        selectable?.checked
-          ? 'border-indigo-500/60 bg-indigo-500/5 ring-1 ring-indigo-500/30'
-          : 'border-stone-700 bg-stone-800 hover:border-stone-600'
-      }`}
-    >
+    <div className="rounded-lg border border-stone-700 bg-stone-800 p-4 transition-colors hover:border-stone-600">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        {selectable && (
-          <label
-            className={`flex items-center pt-1 ${
-              selectable.disabled && !selectable.checked
-                ? 'cursor-not-allowed opacity-40'
-                : 'cursor-pointer'
-            }`}
-            aria-label="비교 선택"
-          >
-            <input
-              type="checkbox"
-              checked={selectable.checked}
-              disabled={selectable.disabled && !selectable.checked}
-              onChange={() => selectable.onToggle(item.id)}
-              className="h-4 w-4 accent-indigo-500"
-            />
-          </label>
-        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-xs text-stone-500">
             <span>📅</span>

@@ -20,6 +20,8 @@ export function DistrictRankings({ simResult }: Props) {
   const allRankings = simResult.district_rankings ?? [];
   const winner = simResult.winner_district;
   const selectedDongs = simResult.target_districts ?? [];
+  // [/predict 분리 호출] 동별 예측 결과 — is_excluded_combo:true 동은 ML 출력 없음 (회색 + "예측 불가" 배지)
+  const districtPredictions = simResult.district_predictions ?? [];
 
   // 사용자가 선택한 동(최대 4개)만 필터 + score 내림차순 + 자체 1~N위 재매김.
   // target_districts 비면 전체 표시 (안전 폴백).
@@ -76,7 +78,16 @@ export function DistrictRankings({ simResult }: Props) {
           <tbody>
             {rankings.map((r, i) => {
               const isWinner = r.district === winner;
-              const rowCls = isWinner ? 'bg-indigo-500/10' : i < 3 ? 'bg-indigo-500/5' : '';
+              // /predict 응답에서 동 매칭 — is_excluded_combo:true 면 ML 출력 없음
+              const pred = districtPredictions.find((p) => p.district === r.district);
+              const isExcluded = pred?.is_excluded_combo === true;
+              const rowCls = isExcluded
+                ? 'opacity-50 bg-stone-900/40'
+                : isWinner
+                  ? 'bg-indigo-500/10'
+                  : i < 3
+                    ? 'bg-indigo-500/5'
+                    : '';
               return (
                 <tr
                   key={r.district}
@@ -93,24 +104,33 @@ export function DistrictRankings({ simResult }: Props) {
                   </td>
                   <td className="p-3 text-sm font-semibold text-stone-100">
                     {r.district}
-                    {isWinner && (
+                    {isExcluded && (
+                      <span className="ml-2 rounded bg-stone-700 px-1.5 py-0.5 font-mono text-[10px] text-stone-400">
+                        예측 불가
+                      </span>
+                    )}
+                    {isWinner && !isExcluded && (
                       <span className="ml-2 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[0.625rem] font-bold text-indigo-400">
                         추천
                       </span>
                     )}
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-stone-100">
-                    {r.score.toFixed(1)}
+                    {isExcluded ? '—' : r.score.toFixed(1)}
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-stone-300">
                     {/* backend qoq_growth는 이미 percent 단위 (tools.py:300 *100 적용). 추가 ×100 금지 */}
-                    {r.sales_growth.toFixed(1)}%
+                    {isExcluded ? '—' : `${r.sales_growth.toFixed(1)}%`}
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-rose-400">
-                    {r.closure_rate != null ? `${(r.closure_rate * 100).toFixed(1)}%` : '—'}
+                    {isExcluded
+                      ? '—'
+                      : r.closure_rate != null
+                        ? `${(r.closure_rate * 100).toFixed(1)}%`
+                        : '—'}
                   </td>
                   <td className="p-3 text-right font-mono text-sm text-stone-300">
-                    {r.bep_quarters != null ? `${r.bep_quarters}분기` : '—'}
+                    {isExcluded ? '—' : r.bep_quarters != null ? `${r.bep_quarters}분기` : '—'}
                   </td>
                   <td
                     className={`p-3 text-center text-xs font-semibold ${

@@ -61,12 +61,14 @@
 | Method | Path | Auth | Purpose | Status |
 |---|---|---|---|---|
 | GET | `/health` | none | smoke test | active |
-| POST | `/simulate` | JWT | main simulation/dashboard API | active |
-| POST | `/analyze` | JWT | standalone map/location analysis | active, lower priority |
+| POST | `/predict` | JWT | ML-only district predictions | active |
+| POST | `/analyze/llm` | JWT | LLM analysis without ML prediction | active |
+| POST | `/simulate-abm` | JWT | ABM persona simulation | active |
+| POST | `/simulate` | JWT | legacy combined simulation/dashboard API | deprecated |
+| POST | `/analyze` | JWT | legacy standalone map/location analysis | deprecated, lower priority |
 | GET | `/report/{request_id}` | JWT | reserved report fetch | mock/reserved |
 | GET | `/status/{job_id}` | JWT | reserved async job polling | mock/reserved |
 | GET | `/population/live?dongs=` | JWT | realtime population | active/TBD UI |
-| POST | `/simulate-abm` | JWT | ABM persona simulation | active |
 | GET | `/mapo/spots/{dong_name}?limit=N` | JWT | Mapo spot pins | active |
 | POST | `/simulation-history` | JWT | save simulation result | active |
 | GET | `/simulation-history?...` | JWT | history list/compare tray | active |
@@ -82,7 +84,25 @@ Authorization: Bearer <token>
 X-Tenant-ID: spotter-demo-workspace-01
 ```
 
+## 2.1 Active Backend API Split
+
+New clients should call the split backend flow:
+
+- `POST /predict`: returns ML/TCP prediction data for 1-4 selected districts.
+- `POST /analyze/llm`: returns LLM analysis and `data.final_report`; it does not own ML prediction.
+- `POST /simulate-abm`: returns ABM persona simulation output and LLM decision stats.
+
+`POST /simulate` remains available only as a legacy compatibility route. The FastAPI route is marked deprecated and returns deprecation headers. Frontend migration handoff: use `/predict` + `/analyze/llm` for the main dashboard flow, then call `/simulate-abm` only when the user opens/runs ABM.
+
+`quarterly_projection[].revenue` is quarterly revenue. Monthly UI labels must divide it by 3.
+
+`POST /predict` `data[]` includes nullable ML extension fields: `customer_segment`, `living_pop_forecast`, `emerging_signal`.
+
+`POST /simulate-abm` accepts `enable_llm_decisions` (default `false`). When true, Tier S uses LLM decisions up to 50 agents, Tier A/B stay on policy decisions, and the response includes `tier_s_calls`, `tier_a_calls`, and `estimated_cost_usd`.
+
 ## 3. POST /simulate
+
+Legacy/deprecated. New clients should use `/predict` + `/analyze/llm`.
 
 ### 3.1 Request
 

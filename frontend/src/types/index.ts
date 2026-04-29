@@ -384,7 +384,48 @@ export interface SimulationOutput {
       density?: string;
     };
   } | null;
+  // [/predict 분리 호출] 동별 예측 entry 배열 — /predict 응답 합성 시 사용
+  district_predictions?: DistrictPredictionResult[];
+  // [/predict 분리 호출] BEP 도달까지 개월수
+  bep_months?: number | null;
+  // [/predict 분리 호출] 예측 월매출
+  predicted_monthly_revenue?: number | null;
 }
+
+/** /predict 응답의 동별 예측 entry. spec §3 + B1 schemas/simulation_output.py 의 DistrictPredictionResult 매칭.
+ * 2026-04-29 multi-district cycle: 11 필드 명세 적용 (수지니 c8ea31f 기준).
+ * backend 8 필드 구현, customer_segment / living_pop_forecast / emerging_signal 3 필드 미구현 → null 가능.
+ */
+export interface DistrictPredictionResult {
+  district: string;
+  dong_code: string | null;
+  is_excluded_combo: boolean;
+  is_mock: boolean;
+  quarterly_projection: QuarterlyProjection[];
+  scenarios: {
+    optimistic: { quarter: number; revenue: number }[];
+    base: { quarter: number; revenue: number }[];
+    pessimistic: { quarter: number; revenue: number }[];
+  } | null;
+  bep: Record<string, unknown> | null;
+  closure_rate: Record<string, unknown> | null;
+  closure_risk: Record<string, unknown> | null;
+  shap_result: ShapResult | null;
+  customer_segment: Record<string, unknown> | null;
+  living_pop_forecast: Record<string, unknown> | null;
+  emerging_signal: Record<string, unknown> | null;
+}
+
+/** /analyze/llm 응답. SimulationOutput 의 ML 필드 빠진 subset. spec §3. */
+export type AnalysisOutput = Omit<
+  SimulationOutput,
+  | 'quarterly_projection'
+  | 'closure_risk'
+  | 'shap_result'
+  | 'bep_months'
+  | 'predicted_monthly_revenue'
+  | 'district_predictions'
+>;
 
 /** 입지 랭킹 엔트리 (district_ranking_node 반환 형식) */
 export interface DistrictRanking {
@@ -495,7 +536,6 @@ export interface LegalChecklistItem {
 export type MainTab = 'predict' | 'analyze' | 'abm';
 
 export type PredictSubTab =
-  | 'summary'
   | 'sales_forecast'
   | 'financial_sim'
   | 'customer_flow'

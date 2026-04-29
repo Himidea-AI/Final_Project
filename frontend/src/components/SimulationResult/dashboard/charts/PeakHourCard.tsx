@@ -8,7 +8,7 @@
  *   models/living_pop_forecast/predict.predict_peak
  *     → models/interface.py generate (dict 래핑)
  *     → backend/src/main.py response_data.living_pop_forecast
- *     → DemographicTab → PeakHourCard
+ *     → PredictCustomerFlowTab → PeakHourCard
  */
 
 import { Activity, Clock } from 'lucide-react';

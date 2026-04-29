@@ -18,7 +18,6 @@ import { CoreDemographicDonut } from '../charts/CoreDemographicDonut';
 import { WeekdayWeekendBar } from '../charts/WeekdayWeekendBar';
 import { StackedAgeBar } from '../charts/StackedAgeBar';
 import { CustomerSegmentCard } from '../charts/CustomerSegmentCard';
-import { PeakHourCard } from '../charts/PeakHourCard';
 
 interface Props {
   simResult: SimulationOutput;
@@ -50,11 +49,7 @@ export function DemographicTab({ simResult }: Props) {
   const customerSegment = simResult.customer_segment ?? null;
   const hasCustomerSegment = Boolean(customerSegment);
 
-  // [D] 유동인구 피크 시간 예측 (TCN)
-  const livingPop = simResult.living_pop_forecast ?? null;
-  const hasLivingPop = Boolean(livingPop && livingPop.quarters && livingPop.quarters.length > 0);
-
-  if (!hasAnyComposition && !hasReport && !hasCustomerSegment && !hasLivingPop) {
+  if (!hasAnyComposition && !hasReport && !hasCustomerSegment) {
     return (
       <div className="bg-stone-900/30 border border-dashed border-stone-800 rounded-3xl p-10 text-center">
         <Users className="mx-auto mb-3 text-stone-600" size={22} />
@@ -141,9 +136,6 @@ export function DemographicTab({ simResult }: Props) {
 
       {/* [customer_revenue P1-C] 타겟 고객 매출 기여 카드 */}
       <CustomerSegmentCard segment={customerSegment} />
-
-      {/* [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN) */}
-      <PeakHourCard data={livingPop} />
     </div>
   );
 }
