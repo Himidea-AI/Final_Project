@@ -13,6 +13,7 @@ import json
 import os
 import random
 import re
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -110,6 +111,16 @@ class LLMBrain:
                 self.cfg.tier_s_model = self.cfg.ollama_model
             else:
                 self.cfg.mock_mode = True
+        # OpenAI provider 명시했지만 키 부재 → silent AuthenticationError 회피.
+        # ollama 가능하면 ollama 로, 아니면 mock_mode 강제 + 명시 로그.
+        elif self.cfg.tier_s_provider == "openai" and not self._key_ok("OPENAI_API_KEY"):
+            if ollama_ok:
+                print(f"[brain] OPENAI 키 없음 → Tier S를 Ollama {self.cfg.ollama_model}로 다운그레이드")
+                self.cfg.tier_s_provider = "ollama"
+                self.cfg.tier_s_model = self.cfg.ollama_model
+            else:
+                print("[brain] ⚠️ OPENAI_API_KEY 부재 → Tier S MOCK 모드. .env 확인 필요.")
+                self.cfg.mock_mode = True
 
         # Tier A
         if self.cfg.tier_a_provider == "gemini" and not (
@@ -123,6 +134,15 @@ class LLMBrain:
                 print("[brain] GEMINI 키 없음 → Tier A를 OpenAI gpt-4.1-nano로 다운그레이드")
                 self.cfg.tier_a_provider = "openai"
                 self.cfg.tier_a_model = "gpt-4.1-nano"
+        # Tier A 도 OpenAI 명시 + 키 부재 케이스 처리.
+        elif self.cfg.tier_a_provider == "openai" and not self._key_ok("OPENAI_API_KEY"):
+            if ollama_ok:
+                print(f"[brain] OPENAI 키 없음 → Tier A를 Ollama {self.cfg.ollama_model}로 다운그레이드")
+                self.cfg.tier_a_provider = "ollama"
+                self.cfg.tier_a_model = self.cfg.ollama_model
+            else:
+                print("[brain] ⚠️ OPENAI_API_KEY 부재 → Tier A MOCK 모드.")
+                self.cfg.mock_mode = True
 
     def _init_clients(self) -> None:
         # OpenAI (Tier S 또는 A에서 사용 가능)
@@ -267,10 +287,9 @@ class LLMBrain:
     def _smart_decide_openai(self, agent: "Agent", world: "World", ctx: str, persona: Persona) -> Decision:
         if self._openai is None:
             return self._mock_decide(agent, world, tier="S")
-        # 429 rate-limit 방어 — 짧은 backoff 로 3회 재시도. OpenAI 응답의 retry-after
-        # 헤더(혹은 메시지 내 ms 값)를 파싱해서 정확한 sleep 시간 적용.
-        import time as _time
-
+        # 429 rate-limit 방어 — 0.5/1/2s backoff 로 3회 재시도.
+        # ⚠️ ThreadPool worker 안에서 동기 sleep → 4 worker 동시 429 시 최대 7s pool 정지.
+        # 정상 RPM 한도 (concurrency=4 + Semaphore=4 → ~320 RPM < 500) 면 거의 안 걸림.
         delay = 0.5
         for attempt in range(3):
             try:
@@ -300,12 +319,13 @@ class LLMBrain:
                 msg = str(e)
                 is_rate_limit = "429" in msg or "rate_limit" in msg or "RateLimit" in type(e).__name__
                 if is_rate_limit and attempt < 2:
-                    _time.sleep(delay)
+                    time.sleep(delay)
                     delay *= 2  # 0.5 → 1 → 2s
                     continue
                 self.stats.failures += 1
                 print(f"[brain.S/openai] {agent.agent_id} 실패: {e}")
                 return self._mock_decide(agent, world, tier="S")
+        # 도달 불가 — for loop 의 모든 path 가 return. 정적 분석기 fallback 용.
         return self._mock_decide(agent, world, tier="S")
 
     # -----------------------------------------------------------
@@ -428,42 +448,44 @@ class LLMBrain:
     # 컨텍스트 빌더 (동적 부분 - 캐시 X)
     # -----------------------------------------------------------
     def _dynamic_context(self, agent: "Agent", world: "World") -> str:
-        nearby = [s.name for s in world.stores_in_dong(agent.current_dong)[:5]]
+        """매 hour 유저 프롬프트 — caveman ultra (~25 tok, 이전 40 tok).
+
+        토큰: prof_line 약어 (PS/CF), 시간 단위 'h', wkd→W/평, "JSON결정" 삭제 (system 에 명시).
+        """
+        nearby = [s.name for s in world.stores_in_dong(agent.current_dong)[:3]]
         memory_line = ""
         if self.memory_index is not None:
             try:
-                query = f"{world.current_hour}시 {agent.current_dong} 행동"
+                query = f"{world.current_hour}시 {agent.current_dong}"
                 hits = self.memory_index.search(agent.agent_id, query, k=2)
                 if hits:
-                    memory_line = " 과거: " + " | ".join(h.text for h in hits) + "."
+                    memory_line = f" 過:{' | '.join(h.text for h in hits)}"
             except Exception:
                 pass
         prof_line = ""
         if agent.profile is not None:
-            prof_line = f" [개인: {agent.profile.lifestyle_tag}, 가성비성향 {agent.profile.price_sensitivity:.1f}, 카페선호 {agent.profile.pref_cafe:.1f}]"
+            prof_line = f" [{agent.profile.lifestyle_tag} PS{agent.profile.price_sensitivity:.1f} CF{agent.profile.pref_cafe:.1f}]"
+        wkd = "W" if world.is_weekend else "평"
         return (
-            f"지금 {world.current_hour}시, "
-            f"{'주말' if world.is_weekend else '평일'}, "
-            f"{world.weather} {world.temperature:.0f}도.{prof_line} "
-            f"현재 {agent.current_dong}에 있고 오늘 {len(agent.visited_today)}곳 방문, "
-            f"{int(agent.spent_today):,}원 지출. "
-            f"근처 매장: {', '.join(nearby[:3])}.{memory_line} "
-            f"다음 행동을 JSON으로 결정하세요."
+            f"h{world.current_hour} {wkd} {world.weather}{world.temperature:.0f}도.{prof_line} "
+            f"{agent.current_dong} 방문{len(agent.visited_today)} 지출{int(agent.spent_today):,}원. "
+            f"근처:{','.join(nearby)}.{memory_line}"
         )
 
     def _compact_prompt(self, agent: "Agent", world: "World") -> str:
-        """Tier A용 압축 프롬프트 (페르소나 X, 200 tok)."""
+        """Tier A 압축 프롬프트 — caveman ultra (~50 tok, 이전 80 tok).
+
+        축약: 시→h, 평일→평/W, 가성비→PS, 카페→CF, JSON 스키마 keys 단축.
+        """
         tag = agent.profile.lifestyle_tag if agent.profile else agent.role.value
         extra = ""
         if agent.profile is not None:
-            extra = f" 가성비{agent.profile.price_sensitivity:.1f}, 카페선호{agent.profile.pref_cafe:.1f}."
+            extra = f" PS{agent.profile.price_sensitivity:.1f} CF{agent.profile.pref_cafe:.1f}."
+        wkd = "W" if world.is_weekend else "평"
         return (
-            f"마포 {tag} {agent.age}세, {agent.current_dong}, "
-            f"{world.current_hour}시 {'주말' if world.is_weekend else '평일'}.{extra} "
-            f"예산잔여 {int(agent.budget_today - agent.spent_today):,}원. "
-            f'행동 JSON: {{"action": "visit|move|rest", '
-            f'"category": "카페|음식점|편의점|주점|null", '
-            f'"spend": 원, "reason": "한문장"}}'
+            f"마포 {tag} {agent.age}{agent.current_dong} h{world.current_hour} {wkd}.{extra}"
+            f" 잔여{int(agent.budget_today - agent.spent_today):,}원."
+            f' JSON:{{"action":"visit|move|rest","category":"카페|음식점|편의점|주점|null","spend":원,"reason":"30자 fragment"}}'
         )
 
     # -----------------------------------------------------------
@@ -753,43 +775,32 @@ class LLMBrain:
 
 
 # ---------------------------------------------------------------------------
-# Thought generator system prompt (cache 대상 — 매 call 동일 텍스트로 90% discount)
+# Thought system prompt — caveman 압축 (~700 tok → ~280 tok, -60%).
+# 첫 cache write 비용 절감, dialog_templates.py 8 archetype 어휘 표 유지.
+# 출처: github.com/JuliusBrussee/caveman SKILL.md (drop articles, fragments OK).
 # ---------------------------------------------------------------------------
-_THOUGHT_SYSTEM_PROMPT = """당신은 마포구 시민 ABM 의 내적 독백 생성기입니다.
-주어진 페르소나(archetype) + 상황(hour, weather, mood, hunger) 에 따라
-12자 이내 한국어 1문장 (마침표 없이) 으로 "지금 뭐가 땡기는지" 출력.
+_THOUGHT_SYSTEM_PROMPT = """마포 ABM 내적독백. 12자 한국어 1문장, 마침표/따옴표 X.
 
-archetype (dialog_templates.py 8 종 일치 — 어휘를 archetype 에 강하게 맞출 것):
-- creative_freelancer: 라떼/감성 카페/와이파이/작업/디저트/사진/플레이리스트
-- office_worker: 회의/카페인/점심/회식/메일/김밥/가성비/팀
-- broadcasting_staff: 야식/편의점/촬영/대본/스튜디오/24시/컵라면
-- student_couple: 데이트/신상/SNS/인스타/홍대/카페투어/사진
-- retired_local: 단골/시장/된장/국밥/막걸리/벤치/산책/늘 가던
-- young_parent: 키즈/아이/주차/배달/주말/가족/유모차
-- tourist_foreign: 한식/포토스팟/시장/명물/구경/처음
-- f&b_owner: 매출/경쟁/직원/원가/회식/세무/벤치마킹
+archetype 어휘 (1개 이상 필수):
+creative_freelancer: 라떼/감성/카페/와이파이/작업/디저트/플레이리스트
+office_worker: 회의/카페인/점심/회식/메일/김밥/가성비/팀
+broadcasting_staff: 야식/편의점/촬영/대본/스튜디오/24시/컵라면
+student_couple: 데이트/신상/SNS/인스타/홍대/카페투어
+retired_local: 단골/시장/된장/국밥/막걸리/벤치/산책
+young_parent: 키즈/아이/주차/배달/주말/유모차
+tourist_foreign: 한식/포토스팟/시장/명물/구경
+f&b_owner: 매출/경쟁/직원/원가/세무/벤치마킹
 
-규칙 (반드시 지킬 것):
-- 12자 이내, 마침표/따옴표 없음
-- archetype 고유 어휘 1개 이상 포함 (위 vocab 참조)
-- weather/mood/hunger 변수가 출력에 반영되어야 함 (비→실내, mood low→짧게, hunger 0.7+→음식 명시)
-- **dong (현재 위치) 정보 일관성 — 매우 중요**:
-  * 입력으로 받은 `dong=공덕동` 같은 현재 위치를 자연스럽게 반영
-  * 그 동에서 활동하는 표현 우선 ("공덕 카페 가야지", "지금 있는 곳 근처")
-  * 다른 동 가고 싶을 땐 명시적 이동 표현 ("연남까지 가야겠다", "홍대 들를까")
-  * **금지: 현재 dong 과 모순되는 어휘** — 예: dong=공덕동 인데 "홍대 카페투어" (현재 공덕에 있는 student_couple → "공덕 카페 한 번", "연남까지 가볼까" 가 자연스러움)
-- 다양성 원칙 — 다음 패턴 금지:
-  * "따뜻한 ~ 한잔" 류 안전 답변 회피
-  * "땡기네/생각나네" 어미 반복 회피 — 다양한 어미 사용 (할까/먹자/가야지/들를까/시키자/단골 가자)
-  * 같은 명사 반복 금지 (커피 → 라떼/아메리카노/모카/콜드브루 등 구체화)
-- 출력 예시 (좋음):
-  * creative + 비 + 14시 + dong=합정동: "합정 카페 작업하자"
-  * office + 12시 + dong=공덕동: "공덕 김밥 먹자"
-  * retired + 19시 + dong=대흥동: "단골 국밥집 가야지"
-  * student_couple + 14시 + dong=서교동: "홍대 카페투어 가자"
-  * student_couple + 14시 + dong=공덕동: "연남까지 가볼까"  ← 다른 동 표현
-  * f&b_owner + 9시 + dong=상암동: "원가 점검 먼저"
-- 출력 예시 (나쁨, 회피):
-  * "따뜻한 국물이 땡기네" — 너무 일반적
-  * "달달한 커피 한잔" — archetype 어휘 부재
-  * dong=공덕동 인데 "홍대 카페투어 가자" — 현재 위치와 모순 (가려면 "홍대 가야지" 처럼 이동 표현)"""
+규칙:
+- weather/mood/hunger 반영: 비→실내, mood low→짧게, hunger0.7+→음식 명시
+- dong=현재위치 일치. 그 동 표현 우선 ("공덕 김밥"). 다른 동은 이동어 ("연남 가볼까")
+- 금지: dong 모순 (dong=공덕인데 "홍대 카페투어" X)
+- 어미 다양화 (할까/먹자/가야지/들를까/시키자). "땡기네/생각나네" 반복 X
+- 명사 구체화 (커피→라떼/콜드브루). "따뜻한 ~ 한잔" 안전답 X
+
+예시:
+creative+비14h+dong=합정: "합정 카페 작업하자"
+office+12h+dong=공덕: "공덕 김밥 먹자"
+retired+19h+dong=대흥: "단골 국밥집 가야지"
+student_couple+14h+dong=공덕: "연남까지 가볼까"
+f&b_owner+9h+dong=상암: "원가 점검 먼저\""""

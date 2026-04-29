@@ -55,6 +55,55 @@ def _cached(key: str, loader, ttl: float | None = None):
 # 5000 agent 가 정책 기반 의사결정으로 hour 별 위치 변함 → 이게 곧 유동인구.
 
 
+# 마포구 16개 행정동 면적 (km²) — 마포구청 통계연보 39회 (2023.12.31 기준).
+# 출처: 마포구청 「마포구 통계연보 2023」 p.46-47
+#   PDF: https://www.mapo.go.kr/site/main/file/download/uu/d5bbb44a9289414aa85f9c45addf4b6a
+# 용도: per-agent home Gaussian σ 동별 가변 산출.
+#   σ_xy = R / 2 (R = √(area/π) 등가반경, uniform circular 가정)
+#   상암동(8.40 km²)은 한강·하늘공원·DMC 비주거 영역 다수 → 주거밀도 편중,
+#   실효 σ 는 0.45 weight 로 보정 (전체 사용 시 dot 가 비주거 영역에 분산).
+_MAPO_DONG_AREA_KM2: dict[str, float] = {
+    "공덕동": 1.01,
+    "아현동": 0.76,
+    "도화동": 0.62,
+    "용강동": 0.84,
+    "대흥동": 0.88,
+    "염리동": 0.43,
+    "신수동": 0.78,
+    "서강동": 1.45,
+    "서교동": 1.65,
+    "합정동": 1.69,
+    "망원1동": 1.14,
+    "망원2동": 0.67,
+    "연남동": 0.65,
+    "성산1동": 0.80,
+    "성산2동": 2.07,
+    "상암동": 8.40,  # 비주거 영역 多 → _MAPO_DONG_RESIDENTIAL_WEIGHT 로 실효 면적 축소
+}
+_MAPO_DONG_RESIDENTIAL_WEIGHT: dict[str, float] = {
+    "상암동": 0.45,  # 한강·DMC·공원 제외, 실주거지(아파트단지) 추정 비율
+}
+
+
+def _dong_sigma_deg(dong_name: str, default: float = 0.0030) -> float:
+    """동별 면적 기반 거주 분산 σ (latitude/longitude 도 단위).
+
+    R = √(A_eff / π) [m], σ = R / 2 [m] → /111000 deg.
+    A_eff = area_km² × residential_weight × 1e6.
+    상암동 (8.40 km²) 의 경우 weight=0.45 → R≈1095m → σ≈547m → 0.0049°.
+    """
+    area = _MAPO_DONG_AREA_KM2.get(dong_name)
+    if area is None:
+        return default
+    weight = _MAPO_DONG_RESIDENTIAL_WEIGHT.get(dong_name, 1.0)
+    a_eff_m2 = area * weight * 1e6
+    import math
+
+    r_m = math.sqrt(a_eff_m2 / math.pi)
+    sigma_m = r_m / 2.0  # uniform circular → σ = R/2
+    return sigma_m / 111000.0
+
+
 def _load_dong_coords() -> dict[str, tuple[float, float]]:
     """dong_subway_access에서 동 중심 좌표 + 외부 가상 좌표."""
     import os
@@ -627,16 +676,18 @@ def run_simulation(
     brain = LLMBrain(cfg=cfg, seed=seed, memory_index=memory_index)
     brain.register_personas(personas)
 
-    if not cfg.mock_mode:
-        # 실제 API 모드면 mock 자동전환 여부 출력
-        if cfg.mock_mode:
-            print("  ⚠️ API 키 없음 → MOCK 모드로 fallback")
+    # brain._auto_downgrade 가 키 부재 시 cfg.mock_mode 를 True 로 바꾸므로 brain 생성 후 검사.
+    if brain.cfg.mock_mode:
+        print("  ⚠️ API 키 없음 → MOCK 모드 fallback (deterministic 결과)")
 
-    # 친구 네트워크 (Policy 모드에서도 동반 방문 기능으로 사용됨)
+    # 친구 네트워크 (Policy 모드에서도 동반 방문 기능으로 사용됨).
+    # 출처: Roberts & Dunbar (2011) — Layer 5 "support clique" = 평균 5명
+    # (사회적 상호작용 시간의 ~40% 를 이 5명에게 투자). 이전 k=3 은 보수적이었으나
+    # Dunbar Layer 5 표준에 맞춰 5 로 상향.
     if enable_chat or use_policy:
-        build_friends(agents, k_per_agent=3, seed=seed)
+        build_friends(agents, k_per_agent=5, seed=seed)
         if verbose:
-            print("  친구 네트워크 구축 (k=3)", flush=True)
+            print("  친구 네트워크 구축 (k=5, Dunbar Layer 5)", flush=True)
 
     # 대화 엔진 (chat 전용)
     conv = None
@@ -689,13 +740,15 @@ def run_simulation(
         _trajectory_sample_ids |= {a.agent_id for a in thought_agents}
 
     # 5000 agent 전체 위치 집계 (히트맵용) — 마포 polygon 실 bbox × 128×96 격자.
-    # bbox 는 frontend mapo-dong.geo.json 16동 polygon 의 min/max + 0.002 padding 과 일치.
+    # 출처: 한국민족문화대백과 「마포구」 (북위 37°31'~37°35' = 37.5167~37.5833,
+    #       동경 126°53'~126°57' = 126.8833~126.9500). 한강 경계·hex padding 위해
+    #       남쪽 약간 확장(37.515) + 동/서 0.005° 안전 여유.
     # 이전 80×64 (좁은 bbox) 에서 상암동 서쪽·아현동 동쪽 잘리던 문제 수정.
     # cell ~83m × ~76m. payload: 128×96 × 16h × 4byte = ~786KB (gzip 후 ~55KB).
-    DENSITY_MIN_LAT = 37.524
-    DENSITY_MIN_LON = 126.858
-    DENSITY_MAX_LAT = 37.590
-    DENSITY_MAX_LON = 126.967
+    DENSITY_MIN_LAT = 37.515  # 37°31' = 37.5167, 한강 보정 -0.002
+    DENSITY_MIN_LON = 126.880  # 126°53' = 126.8833
+    DENSITY_MAX_LAT = 37.590  # 37°35' = 37.5833 + 여유
+    DENSITY_MAX_LON = 126.965  # 126°57' = 126.9500 + 여유
     DENSITY_COLS = 128
     DENSITY_ROWS = 96
     _density_d_lat = (DENSITY_MAX_LAT - DENSITY_MIN_LAT) / DENSITY_ROWS
@@ -728,6 +781,10 @@ def run_simulation(
         if world.is_payday:
             print("  [PAY] 월급일 주간 (budget × 1.15, spend_tendency × 1.3)", flush=True)
         print(f"  [SEASON] 현재 월: {world.month}월 (계절 보정 적용)", flush=True)
+
+    # agent_id → Agent lookup — agents 리스트는 시뮬 중 변경 X 라 1회만 빌드.
+    # (이전엔 매 hour 재빌드 → 5000 entry × 20 hours 불필요 반복).
+    _agent_by_id = {a.agent_id: a for a in agents}
 
     # [v12] Warmup: 측정 전 N 일 시뮬 후 집계 초기화 — Layer 2/5 습관 형성
     total_loops = warmup_days + days
@@ -771,8 +828,6 @@ def run_simulation(
         for _ in range(time_cfg.total_steps):
             res = scheduler.step(brain)
             total_decisions += res.activated
-            # agent_id → Agent lookup (v11: Layer 2/3/5 업데이트용)
-            _agent_by_id = {a.agent_id: a for a in agents}
 
             for aid, dec in res.decisions:
                 target_str = str(dec.target_store_id or dec.target_dong or "")
@@ -787,15 +842,19 @@ def run_simulation(
                 if _a is not None and dec.action == "visit" and dec.target_store_id:
                     _store = world.stores.get(dec.target_store_id)
                     if _store is not None:
-                        # 만족도 — rating + price fit + congestion
+                        # 만족도 — DINESERV (Stevens, Knutson & Patton 1995, J. Hospitality
+                        # & Tourism Research) + Ryu & Han 한국 외식 연구 기반 heuristic.
+                        # food/service quality(rating proxy) 가 최대 영향, price fairness 중간,
+                        # atmospherics(혼잡) 보조. 절대 계수는 ABM calibration 값.
+                        # 이전 (0.1, -0.3, 0.15) → (0.15, -0.20, 0.15) — 학술 비율에 더 부합.
                         cong = min(1.0, _store.visits_today / max(_store.seats, 1))
                         sat = max(
                             0.0,
                             min(
                                 1.0,
                                 0.5
-                                + 0.1 * (_store.rating - 3.0)
-                                - 0.3 * cong
+                                + 0.15 * (_store.rating - 3.0)  # food/service (DINESERV 최대)
+                                - 0.20 * cong  # atmospherics 부영향 (학술 ~0.14, 보조 가중)
                                 + 0.15 * (1.0 if _store.price_level <= _a.income_level else -0.5),
                             ),
                         )
@@ -806,9 +865,13 @@ def run_simulation(
                         # 배고픔 리셋
                         if _store.category in ("음식점", "편의점"):
                             _a.hunger = max(0.0, _a.hunger - 0.8)
-                        # v11 Layer 5: 친구에게 추천 전파 (만족도 >0.7 일 때만)
-                        if sat > 0.7 and _a.friends:
-                            # 친한 친구 최대 2명에게 추천
+                        # v11 Layer 5: 친구 추천 전파.
+                        # 출처: Reichheld (HBR 2003) NPS — promoter 정의는 9-10/10
+                        # (정규화 0.9). 0.85 임계는 NPS promoter 의 보수적 근사 (이전 0.7 은
+                        # passive 까지 포함하던 오류).
+                        # Roberts & Dunbar (2011) Layer 5 "support clique" = 5명; 추천 대상
+                        # 친구 2명은 inner subset 으로 보수적 적정.
+                        if sat > 0.85 and _a.friends:
                             import random as _rnd
 
                             for fid in _a.friends[:2]:
@@ -907,11 +970,16 @@ def run_simulation(
                         d_coord = dong_coords.get(a.current_dong)
                         if not d_coord:
                             continue
-                        # per-agent stable Gaussian — 같은 agent 는 시간 무관 같은 home.
-                        # σ=0.0015° (~165m lat / 134m lon) → dong 안 자연 분산.
+                        # per-agent stable Gaussian — 동별 면적 기반 가변 σ.
+                        # 출처: 마포구청 「마포구 통계연보 2023」 p.46-47 — 16개 행정동
+                        # 면적 (km²). σ = R/2 where R=√(area/π), uniform circular 가정.
+                        # 상암동(8.40 km²) 은 한강·DMC·공원 등 비주거 영역 多 → weight 0.45.
+                        # 동별 σ 범위: 염리동(0.43km²) σ≈185m / 평균(1.0km²) σ≈282m /
+                        # 합정동(1.69km²) σ≈366m / 상암동(가중) σ≈547m.
+                        sigma_deg = _dong_sigma_deg(a.current_dong)
                         ag_rng = _agent_rng_lib.Random(a.agent_id * 0x9E3779B1)
-                        d_lat = d_coord[0] + ag_rng.gauss(0, 0.0015)
-                        d_lon = d_coord[1] + ag_rng.gauss(0, 0.0015)
+                        d_lat = d_coord[0] + ag_rng.gauss(0, sigma_deg)
+                        d_lon = d_coord[1] + ag_rng.gauss(0, sigma_deg)
                     d_r = int((DENSITY_MAX_LAT - d_lat) / _density_d_lat)
                     d_c = int((d_lon - DENSITY_MIN_LON) / _density_d_lon)
                     if 0 <= d_r < DENSITY_ROWS and 0 <= d_c < DENSITY_COLS:
@@ -1139,17 +1207,34 @@ def run_simulation(
         {r: round(v / profile_total, 3) for r, v in role_counts.items()} if profile_total else {}
     )
 
-    # cannibalization — 학술 기반 정밀 추정.
-    # 참고:
-    #   - Pancras, Sriram & Kumar (2012, Mgmt Sci): 신규 매장 매출의 86.7% incremental,
-    #     13.3% same-chain cannibalization. same-category cross-brand 보정 ~3x → 40%.
-    #   - Kim (2017, Wharton): 0.5mi(800m) 내 추가 매장 매출 감소 효과는 0.5~3mi 구간에서 1/5.
-    #   - Huff (1963) gravity model: visit_probability ∝ attractiveness / distance^β (β=2).
+    # cannibalization — 학술 + heuristic 결합 추정. 인용 정직성 위해 주석 정리:
+    #
+    # 직접 인용 (논문 결과):
+    #   - Pancras, Sriram & Kumar (2012, Mgmt Sci 58(11):2001-2018, DOI 10.1287/mnsc.1120.1540):
+    #     미국 fast-food chain 실증. 신규 매장 매출의 86.7%가 incremental,
+    #     13.3%가 same-chain (동일 브랜드 내) 인근 매장 잠식. 거리 1mi 증가 시
+    #     잠식 28.1% 감소, 10mi 에서 사실상 0.
+    #   - Glaeser (Kim), Fisher & Su (2019, M&SOM 21(1):86-102, DOI 10.1287/msom.2018.0759):
+    #     0.3/0.5/1/3/5/7/10mi ring 별 spatial cannibalization 추정 프레임워크.
+    #     (이전 주석의 "Kim 2017 Wharton" 은 워킹페이퍼 시점, 저자 정확명은 Chloe Kim Glaeser.)
+    #   - Huff (1963, Land Economics 39(1):81-90): P_ij ∝ A_j / D_ij^β. β 는 보통
+    #     1.5~2.0 범위에서 calibration; 외식·근거리 빈번소비는 β≈2 사용 관행.
+    #
+    # 한국 실증 (직접 calibration):
+    #   - 서경원·고사랑 (2023) "프랜차이즈 신규 가맹점 출점으로 인한 시장 자기 잠식
+    #     효과와 입지로 인한 조절 효과", 유통연구 28(3) (KCI):
+    #     강남 베이커리 49개 / 500m DiD 분석 → 신규점 출점 시 기존점 주간 매출 ~19% 감소.
+    #     역세권에서 유의, 비역세권 미미. 본 코드의 1차 영향권 잠식률(20%) 의 직접 근거.
+    #
+    # 휴리스틱 (논문 직접 도출 X — calibration 값):
+    #   - 2차 영향권 0.2 (1/5 decay): Glaeser et al. ring-decay 패턴 근사 (한국 실증 19% 와도 거의 일치).
+    #   - 50m floor 정규화: implementation 안정화용 (Huff 모델 일부 아님).
+    #   - 25% 상한 clamp: outlier 방지 (역세권 한국 실증 19% + 안전 여유 6%).
     #
     # 적용:
-    #   - 1차 영향권 0~500m: Huff β=2 거리 가중치 (50m 기준 정규화, max 1.0)
-    #   - 2차 영향권 500~1500m: Kim 1/5 효과 → primary × 0.2
-    #   - 잠식률 = (신규 visit / (신규 + weighted nearby)) × 40%, 0~25% clamp
+    #   - 1차 영향권 0~500m: inverse-square decay (β=2, Huff 1963 inspired)
+    #   - 2차 영향권 500~1500m: primary × 0.2 (Glaeser ring-decay 근사)
+    #   - 잠식률 = (신규 visit / (신규 + weighted nearby)) × 0.20 (서경원·고사랑 2023), 0~25% clamp
     cannibalization_val: dict = {}
     if scenario.new_store and scenario.new_store.get("district") and new_store_sim_id:
         target_dong = scenario.new_store.get("district")
@@ -1196,8 +1281,14 @@ def run_simulation(
             ns_visits = int(ns_in_world.visits_today)
             total_market = weighted_nearby + ns_visits
             if total_market > 0 and ns_visits > 0:
-                # 신규 visit share × 40% (Pancras 13.3% × 3x same-category cross-brand).
-                impact = (ns_visits / total_market) * 40.0
+                # 신규 visit share × 20% (한국 실증).
+                # 출처: 서경원·고사랑 (2023) "프랜차이즈 신규 가맹점 출점으로 인한 시장
+                # 자기 잠식 효과와 입지로 인한 조절 효과", 유통연구 28(3) (KCI).
+                # 강남 베이커리 49개 / 50만 고객 / 500만 거래 / DiD: 500m 반경 신규점 출점
+                # 시 기존점 주간 매출 ~78만원 감소 (baseline 409만원 대비 ~19%).
+                # 이전 40% (Pancras 13.3% × 임의 3x 보정) → 19% 한국 실측에 맞춰 하향.
+                # 단, 베이커리 단일 업종 → 카페·음식점 일반화 한계는 별도 검증 권장.
+                impact = (ns_visits / total_market) * 20.0
                 impact_pct = round(max(0.0, min(25.0, impact)), 2)
             else:
                 impact_pct = 0.0
@@ -1378,4 +1469,6 @@ def run_simulation(
                 flush=True,
             )
 
+    # ThreadPool 정리 — daemon thread 누수 방지.
+    scheduler.shutdown()
     return result

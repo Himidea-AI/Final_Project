@@ -11,7 +11,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from .agents import Agent, Tier
+from .agents import Agent, Decision, Tier
 from .conversation import ConversationEngine
 from .world import World
 from .world_loader import StoreHoursMap, store_open_at
@@ -22,7 +22,7 @@ class StepResult:
     hour: int
     activated: int  # 의사결정 수행한 에이전트 수
     skipped: int  # 이벤트 미발생으로 스킵
-    decisions: list  # Decision 리스트
+    decisions: list[tuple[int, Decision]]  # (agent_id, Decision) 튜플 리스트
 
 
 class Scheduler:
@@ -43,19 +43,62 @@ class Scheduler:
         self.hours_map = hours_map
         self.llm_concurrency = max(1, llm_concurrency)
         self.conversation = conversation
+        # ThreadPool 재사용 — 매 step 생성/소멸 비용 회피 (1일 시뮬 = 20 step).
+        self._executor: ThreadPoolExecutor | None = (
+            ThreadPoolExecutor(max_workers=self.llm_concurrency) if self.llm_concurrency > 1 else None
+        )
 
     # -----------------------------------------------------------
     def is_active(self, agent: Agent) -> bool:
-        """이벤트 기반 활성화 - 행동 분기점만 LLM 호출."""
+        """시간대별 활성률 — 통계청 「2024년 생활시간조사」 raw table 기반.
+
+        출처: 통계청 「2024년 생활시간조사 결과」 (보도자료 2025-07-28, PDF p.17, 23, 29)
+            kostat.go.kr/board.es?mid=a10301010000&bid=220&list_no=437764
+        시간별 일·근로 행위자 비율 (2024 전체):
+            18:00 25.0% / 18:30 22.1% / 19:00 17.4% / 19:30 16.3%
+            20:00 13.5% / 20:30 12.6% / 21:00 9.8%
+        시간별 수면 행위자 비율:
+            21:00 26.9% / 22:00 19.4% / 23:00 12.8% / 24:00 7.3%
+        18-21시 종합 (PDF p.17): 일·근로 15.3% + 식사 14.1% + 개인유지 6.1% +
+            가사 5.9% + TV 5.5% = ~47% (이동 제외)
+        → "활성" = 외출/이동/방문/근무 등 외부 활동. TV·식사·가사는 비활성으로 분류.
+
+        시간별 활성률 (외부 활동만):
+            새벽/심야 (0~6, 24+): 5% (수면 90%+)
+            아침 출근 (7, 8): 85% / 70% (출근 피크)
+            점심 (12, 13): 70% (외식·이동 빈번)
+            저녁 (18, 19): 75% / 50% (퇴근 → 19시 일·근로 17%)
+            늦저녁 (20, 21): 35% / 25% (TV·식사 비중 ↑, 일·근로 9.8%)
+            22, 23: 15% (수면 준비)
+            기타 주간: 30% (의무활동 30.6%)
+        """
         h = self.world.current_hour
-        # 휴식 시간대 (이른 새벽)는 95% 스킵
-        if h < 7 or h >= 25:
+        # 새벽/심야 — 수면
+        if h < 7 or h >= 24:
             return self.rng.random() < 0.05
-        # 분기점 시간대 (식사/이동)
-        if h in (8, 12, 13, 18, 19, 20, 21):
-            return True
-        # 그 외 시간대는 30% 활성화
-        return self.rng.random() < 0.3
+        # 출근 피크 (08시 일·근로 시작)
+        if h == 8:
+            return self.rng.random() < 0.85
+        if h == 7:
+            return self.rng.random() < 0.50
+        # 점심 (외식·이동)
+        if h in (12, 13):
+            return self.rng.random() < 0.70
+        # 퇴근/저녁 외출 (18시 일·근로 25% + 외출/식사)
+        if h == 18:
+            return self.rng.random() < 0.75
+        if h == 19:
+            return self.rng.random() < 0.50
+        # 늦저녁 — 일·근로 비율 급감
+        if h == 20:
+            return self.rng.random() < 0.35
+        if h == 21:
+            return self.rng.random() < 0.25
+        # 22-23: 수면 준비
+        if h in (22, 23):
+            return self.rng.random() < 0.15
+        # 기타 주간 (9~11, 14~17) — 의무활동
+        return self.rng.random() < 0.30
 
     # -----------------------------------------------------------
     def step(self, brain) -> StepResult:
@@ -106,9 +149,8 @@ class Scheduler:
             def _decide(a: Agent):
                 return (a, a.decide(self.world, brain, self.rng))
 
-            if self.llm_concurrency > 1:
-                with ThreadPoolExecutor(max_workers=self.llm_concurrency) as ex:
-                    llm_decisions = list(ex.map(_decide, llm_active))
+            if self._executor is not None:
+                llm_decisions = list(self._executor.map(_decide, llm_active))
             else:
                 llm_decisions = [_decide(a) for a in llm_active]
 
@@ -133,6 +175,13 @@ class Scheduler:
         )
         self.world.current_hour += 1
         return result
+
+    # -----------------------------------------------------------
+    def shutdown(self) -> None:
+        """시뮬 종료 시 ThreadPool 정리. run_simulation finally 에서 호출 권장."""
+        if self._executor is not None:
+            self._executor.shutdown(wait=False)
+            self._executor = None
 
     # -----------------------------------------------------------
     def end_of_day(self) -> None:

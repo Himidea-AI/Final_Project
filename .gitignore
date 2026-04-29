@@ -126,3 +126,6 @@ frontend/.claude/
 # 출처/용도 불명 디렉토리 (검토 후 commit 결정)
 data/seoul_card/
 test_frontend/
+
+# raw seed data — too large for github (>100MB)
+backend/data/seed/raw/ttareungi/
