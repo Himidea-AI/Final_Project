@@ -1612,17 +1612,20 @@ async def run_abm_simulation(req: AbmSimulationRequest):
 
     # PopulationMix — SGIS API 직접 회수 데이터 기반 재캘리브.
     # 출처: 통계청 SGIS Open API (sgisapi.mods.go.kr/OpenAPI3) — 2026-04-29 호출.
-    #   adm_cd=11140 (마포구) 인구주택총조사 2023 결과:
-    #     - 거주인구 (tot_ppltn): 361,380명
-    #     - 마포 사업체 종사자 (employee_cnt): 281,385명
-    #     - 인구밀도 15,155.5명/km² / 평균연령 42.2세 / 평균가구 2.1명
-    #   추정 비율 (거주노동인구 ~165K, 외부 통근 유입 ~110-130K 가정):
-    #     - 거주민 (마포 거주 + 마포 일상): ~60%
-    #     - 외부 통근자 (외부→마포 출근): ~25-30%
-    #     - 외부 방문 (홍대·연남 야간): ~5-10%
-    # 이전 (residents 12%, ext 80%) 은 강남·중구급 가정 → 과도. 본 보정으로 마포
-    # 실측 (주거+업무 혼합지구) 에 맞춤. 총 500 유지 (n_personas scale 동일).
-    # TODO: SGIS 통근 endpoint (/stats/move/*) 직접 회수 시 재보정.
+    #   adm_cd=11140 (마포구) 인구주택총조사 + 전국사업체조사 2023 회수:
+    #     /stats/population.json: 거주 361,380 / 가구 167,410 / 평균연령 42.2 /
+    #                             인구밀도 15,155.5/km² / 평균가구원 2.1
+    #     /stats/company.json:    사업체 52,888 / 종사자 281,385
+    #   통근 유입 추정 (SGIS /stats/move/* endpoint 부재 → 간접 추정):
+    #     - 마포 거주 노동인구 (15-64세 × 경활률 65%) ≈ 165K
+    #     - 마포 내 근무 거주민 (마포 통근율 30-40% 가정) ≈ 50-70K
+    #     - 외부 유입 통근 ≈ 281K - 60K = 221K (peak hour)
+    #     - 24h 평균 외부 비중 = 9h × 221K / (361K × 24) ≈ 18%
+    #     - Peak hour 활성 비중 ≈ 30-37%
+    #     → 본 코드 25% ext 는 평균과 peak 사이 적정값.
+    # 이전 (residents 12%, ext 80%) 은 강남(11230 종사자/거주=1.51)급 가정 →
+    # 마포(0.78) 실측 대비 과도. 25% 로 보정.
+    # TODO: SGIS jobmap API 또는 KOSIS DT_201004_O020021 직접 회수 시 추가 검증.
     pop = PopulationMix(
         residents=300,  # 60% — 마포 거주민 (SGIS 361,380 비례)
         commuters=50,  # 10% — 마포 내 통근 (거주+근무)
