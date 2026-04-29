@@ -1,19 +1,19 @@
 """
-operational_fit_score ↔ 실매출 상관 검증 스크립트 (Phase B 검증)
+inflow_score ↔ 실매출 상관 검증 스크립트 (Phase B 검증)
 
 목적:
     교통·집객 접근성 점수가 실제 마포 16동 매출과 얼마나 상관되는지 R²로 측정.
     심사에서 "왜 이 점수식이 타당한가"에 대한 실증 근거로 활용.
 
 방법:
-    1) score_all_districts()로 16동 operational_fit_score 계산
+    1) score_all_districts()로 16동 inflow_score 계산
     2) seoul_district_sales 최신 8분기 평균 monthly_sales 집계
     3) Pearson 상관 + 단순 선형회귀 R² 계산
     4) 서브점수(subway/bus/fclty) 각각에 대한 R²도 개별 리포트
 
 실행:
     cd backend
-    RUN_DB_TESTS=1 python -m tests.validate_operational_fit_r2
+    RUN_DB_TESTS=1 python -m tests.validate_inflow_r2
 
 이 스크립트는 pytest에 포함되지 않는다 (파일명이 test_* 아님).
 담당: A2 봉환
@@ -30,7 +30,7 @@ from sqlalchemy import func, select
 
 from src.agents.nodes.market_analyst import db_client
 from src.database.models import SeoulDistrictSales
-from src.services.operational_fit_scorer import score_all_districts
+from src.services.inflow_scorer import score_all_districts
 from src.services.population_api import MAPO_DONG_CODES
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -102,7 +102,7 @@ async def _load_mapo_sales(recent_n_quarters: int = 8) -> dict[str, float]:
 
 async def run_validation(recent_n_quarters: int = 8) -> None:
     logger.info("=" * 72)
-    logger.info("operational_fit_score ↔ 실매출 R² 검증 시작")
+    logger.info("inflow_score ↔ 실매출 R² 검증 시작")
     logger.info(f"매출 데이터 범위: 최신 {recent_n_quarters}개 분기 평균")
     logger.info("=" * 72)
 
@@ -121,7 +121,7 @@ async def run_validation(recent_n_quarters: int = 8) -> None:
         rows.append(
             (
                 dong,
-                of["operational_fit_score"],
+                of["inflow_score"],
                 of["subway_sub"],
                 of["bus_sub"],
                 of["fclty_sub"],

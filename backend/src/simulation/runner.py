@@ -549,7 +549,7 @@ def run_simulation(
     # 2.5++ OFS (Operational Fit Score) — 동 단위 입지 매력도 (Hansen+E2SFCA)
     # ext_visitor / ext_commuter 매장 선호 boost 로 활용 (Option E, role 차등)
     try:
-        from src.services.operational_fit import attach_ofs_to_world
+        from src.services.inflow import attach_ofs_to_world
 
         attach_ofs_to_world(world, verbose=verbose)
     except Exception as e:
