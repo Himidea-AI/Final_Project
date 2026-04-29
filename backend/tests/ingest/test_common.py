@@ -21,6 +21,7 @@ def test_parse_ym_handles_variants():
     assert C.parse_ym("202503") == 202503
     assert C.parse_ym("2025-03") == 202503
     assert C.parse_ym("2025/3") == 202503
+    assert C.parse_ym("2025.03") == 202503
     assert C.parse_ym(202503) == 202503
     with pytest.raises(ValueError):
         C.parse_ym("2025")

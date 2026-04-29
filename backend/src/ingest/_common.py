@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-_YM_RE = re.compile(r"^(\d{4})[-/]?(\d{1,2})$")
+_YM_RE = re.compile(r"^(\d{4})[-/.]?(\d{1,2})$")
 
 
 def normalize_dong_code(value) -> str | None:
