@@ -122,7 +122,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
             </svg>
             <h1 className="text-2xl font-black tracking-[0.2em] text-[#e2e8f0]">SPOTTER</h1>
           </button>
-          <p className="text-[#818cf8] font-mono text-[11px] tracking-widest uppercase">
+          <p className="text-[#818cf8] font-mono text-[0.6875rem] tracking-widest uppercase">
             AI Franchise Intelligence Platform
           </p>
         </div>
@@ -215,7 +215,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">
             <div className="flex-1 h-px bg-[#3a3633]" />
-            <span className="text-[10px] text-[#9ca3af]">또는</span>
+            <span className="text-[0.625rem] text-[#9ca3af]">또는</span>
             <div className="flex-1 h-px bg-[#3a3633]" />
           </div>
 
@@ -235,7 +235,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
             </button>
             <button
               onClick={() => showToast('info', '비밀번호 찾기 기능은 준비 중입니다.')}
-              className="text-[10px] text-[#9ca3af] hover:text-[#818cf8] transition-colors"
+              className="text-[0.625rem] text-[#9ca3af] hover:text-[#818cf8] transition-colors"
             >
               비밀번호를 잊으셨나요?
             </button>
@@ -243,7 +243,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[9px] text-[#9ca3af]/50 mt-6 font-mono">
+        <p className="text-center text-[0.5625rem] text-[#9ca3af]/50 mt-6 font-mono">
           &copy; PROJECT SPOTTER · AI FRANCHISE INTELLIGENCE
         </p>
       </motion.div>

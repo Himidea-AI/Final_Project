@@ -49,7 +49,7 @@ export default function VacancyStatsPanel({
         {dongLabel}
         {titleSuffix} 평가
       </h3>
-      <ul className="flex flex-col gap-1.5 text-[11px] leading-relaxed">
+      <ul className="flex flex-col gap-1.5 text-[0.6875rem] leading-relaxed">
         <li className="text-[#d1d5db]">
           <span className="text-[#9ca3af]">일 방문</span>{' '}
           <span className="text-emerald-300 font-bold">

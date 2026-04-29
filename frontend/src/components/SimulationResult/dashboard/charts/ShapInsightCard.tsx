@@ -47,11 +47,11 @@ export function ShapInsightCard({ shap }: Props) {
       }`}
     >
       <div className="flex items-center justify-between mb-4">
-        <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+        <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
           기여도 상위 3개 피처
         </div>
         {isMock && (
-          <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full uppercase">
+          <span className="text-[0.5625rem] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full uppercase">
             데이터 신뢰도 검증 중
           </span>
         )}
@@ -75,7 +75,7 @@ export function ShapInsightCard({ shap }: Props) {
           );
         })}
       </div>
-      <p className="mt-4 text-[10px] text-stone-500 leading-relaxed">
+      <p className="mt-4 text-[0.625rem] text-stone-500 leading-relaxed">
         모델이 매출을 예측할 때 각 요인이 기여한 영향. 양수는 매출 상승, 음수는 하락 요인.
       </p>
     </div>

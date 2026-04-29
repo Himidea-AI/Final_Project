@@ -58,11 +58,11 @@ function TrendCell({ icon, label, subLabel, value, unit, delta, deltaUnit, sampl
       <div className="flex items-center gap-2">
         {icon}
         <div className="flex-1 min-w-0">
-          <div className="text-[9px] font-black uppercase tracking-widest text-stone-500 truncate">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-stone-500 truncate">
             {label}
           </div>
           {subLabel && (
-            <div className="text-[10px] font-bold text-stone-400 truncate">{subLabel}</div>
+            <div className="text-[0.625rem] font-bold text-stone-400 truncate">{subLabel}</div>
           )}
         </div>
       </div>
@@ -70,11 +70,11 @@ function TrendCell({ icon, label, subLabel, value, unit, delta, deltaUnit, sampl
         <span className="text-2xl font-black tabular-nums text-stone-100 tracking-tighter">
           {value ?? '—'}
           {value && unit && (
-            <span className="text-[11px] font-bold text-stone-500 ml-1">{unit}</span>
+            <span className="text-[0.6875rem] font-bold text-stone-500 ml-1">{unit}</span>
           )}
         </span>
         {delta != null && (
-          <span className={`text-[11px] font-black tabular-nums ${deltaColor}`}>
+          <span className={`text-[0.6875rem] font-black tabular-nums ${deltaColor}`}>
             {deltaPositive ? '+' : ''}
             {delta.toFixed(1)}
             {deltaUnit ?? '%'}
@@ -85,7 +85,7 @@ function TrendCell({ icon, label, subLabel, value, unit, delta, deltaUnit, sampl
         {samples && samples.length > 1 ? (
           <Sparkline data={samples} height={28} />
         ) : (
-          <span className="text-[9px] text-stone-600">시계열 데이터 부족</span>
+          <span className="text-[0.5625rem] text-stone-600">시계열 데이터 부족</span>
         )}
       </div>
     </div>

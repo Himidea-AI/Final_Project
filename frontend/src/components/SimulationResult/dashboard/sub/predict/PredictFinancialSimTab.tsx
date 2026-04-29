@@ -87,12 +87,12 @@ function ProfitSimulationPanelFull({
         </h4>
         <div className="flex items-center gap-2">
           {margin != null && (
-            <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[11px] font-black text-indigo-400 tabular-nums">
+            <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[0.6875rem] font-black text-indigo-400 tabular-nums">
               마진 {formatPct(margin)}
             </div>
           )}
           {bepMonths != null && (
-            <div className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[11px] font-black text-cyan-400 tabular-nums">
+            <div className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[0.6875rem] font-black text-cyan-400 tabular-nums">
               BEP {bepMonths.toFixed(1)}개월
             </div>
           )}
@@ -100,7 +100,7 @@ function ProfitSimulationPanelFull({
       </div>
 
       {bepMonths != null && (
-        <p className="mb-4 text-[10px] text-stone-500 leading-relaxed">
+        <p className="mb-4 text-[0.625rem] text-stone-500 leading-relaxed">
           ※ 인건비 미포함 기준입니다. 실제 BEP는 운영 인원에 따라 길어질 수 있습니다.
         </p>
       )}
@@ -131,7 +131,7 @@ function ProfitSimulationPanelFull({
         <div className="bg-stone-950/40 border border-stone-800 rounded-2xl p-5 flex flex-col justify-center">
           <div className="flex items-center gap-2 mb-3">
             <Gauge size={18} className="text-indigo-500" />
-            <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+            <span className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
               분석 신뢰도
             </span>
           </div>

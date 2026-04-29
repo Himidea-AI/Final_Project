@@ -75,7 +75,7 @@ export function DemographicTab({ simResult }: Props) {
             <h3 className="text-sm font-black text-stone-100 uppercase tracking-tight">
               인구 구성 상세
             </h3>
-            <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+            <span className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
               demographic_depth
             </span>
           </div>
@@ -98,12 +98,12 @@ export function DemographicTab({ simResult }: Props) {
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic text-left tracking-tight">
               <Users size={22} className="text-indigo-400" /> 인구 심층 분석 리포트
-              <span className="text-[11px] font-black text-stone-500 uppercase tracking-widest not-italic">
+              <span className="text-[0.6875rem] font-black text-stone-500 uppercase tracking-widest not-italic">
                 demographic_report
               </span>
             </h3>
             {match != null && (
-              <div className="px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[11px] font-black text-indigo-400 tracking-widest tabular-nums">
+              <div className="px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[0.6875rem] font-black text-indigo-400 tracking-widest tabular-nums">
                 브랜드 적합도 {Math.round(match)}
               </div>
             )}

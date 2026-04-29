@@ -26,10 +26,10 @@ export function AgentMethodology({ agents, method }: AgentMethodologyProps) {
         ))}
       </div>
       <div className="flex flex-col text-left">
-        <span className="text-[9px] font-black text-stone-500 uppercase tracking-tighter leading-none">
+        <span className="text-[0.5625rem] font-black text-stone-500 uppercase tracking-tighter leading-none">
           분석 엔진
         </span>
-        <span className="text-[10px] font-bold text-stone-400 tracking-tight">{method}</span>
+        <span className="text-[0.625rem] font-bold text-stone-400 tracking-tight">{method}</span>
       </div>
     </div>
   );

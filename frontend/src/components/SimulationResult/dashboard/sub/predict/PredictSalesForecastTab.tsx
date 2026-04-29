@@ -30,7 +30,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
             <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
               <TrendingUp className="text-indigo-400" /> TCN-v2 분기별 매출 예측
             </h3>
-            <p className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+            <p className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
               Temporal Convolutional Network · P10~P90 신뢰 구간
             </p>
           </div>
@@ -63,7 +63,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
                     content: `SHAP (SHapley Additive exPlanations)은 각 피처가 예측값에 얼마나 기여했는지 정량화합니다.\n\nbase_value: ${shap.base_value.toLocaleString('ko-KR')}원\npredicted_value: ${shap.predicted_value.toLocaleString('ko-KR')}원${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다.' : ''}`,
                   })
                 }
-                className="text-[10px] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1"
+                className="text-[0.625rem] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1"
               >
                 <Maximize2 size={12} /> 해석 상세
               </button>
@@ -80,7 +80,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
               <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
                 <GitCompareArrows className="text-indigo-400" size={20} /> 시나리오 비교
               </h3>
-              <p className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+              <p className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
                 낙관 · 기본 · 비관 · 4분기 매출 envelope
               </p>
             </div>

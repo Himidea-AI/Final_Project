@@ -202,7 +202,7 @@ function GlobalLimelightNav() {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-[#e2e8f0]">최근 알림</span>
                 {totalUnread > 0 && (
-                  <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-500 text-[9px] font-black rounded-full">
+                  <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-500 text-[0.5625rem] font-black rounded-full">
                     {totalUnread}
                   </span>
                 )}
@@ -212,7 +212,7 @@ function GlobalLimelightNav() {
                   showToast('info', '모든 알림을 읽음 처리했습니다.');
                   setOpenDropdown(null);
                 }}
-                className="text-[10px] text-[#818cf8] font-bold hover:text-[#6366f1] transition-colors"
+                className="text-[0.625rem] text-[#818cf8] font-bold hover:text-[#6366f1] transition-colors"
               >
                 모두 읽음
               </button>
@@ -223,7 +223,7 @@ function GlobalLimelightNav() {
               {totalUnread === 0 ? (
                 <div className="px-4 py-10 text-center">
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-2 opacity-60" />
-                  <p className="text-[11px] text-[#9ca3af]">새 알림이 없습니다</p>
+                  <p className="text-[0.6875rem] text-[#9ca3af]">새 알림이 없습니다</p>
                 </div>
               ) : (
                 <>
@@ -237,7 +237,7 @@ function GlobalLimelightNav() {
                       }}
                       className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] flex gap-3 group"
                     >
-                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40 transition-colors">
+                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40 transition-colors flex items-center justify-center">
                         <ShieldAlert className="w-4 h-4 text-rose-500" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -245,7 +245,7 @@ function GlobalLimelightNav() {
                           <strong className="font-bold text-white mr-1">[권한 승인]</strong>
                           새로운 매니저 워크스페이스 승인 대기 ({m.contact_name} 님)
                         </p>
-                        <p className="text-[10px] text-[#9ca3af] mt-1.5 font-mono">
+                        <p className="text-[0.625rem] text-[#9ca3af] mt-1.5 font-mono">
                           {formatRelativeTime(m.created_at)} · {m.email}
                         </p>
                       </div>
@@ -287,7 +287,7 @@ function GlobalLimelightNav() {
                         className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] last:border-b-0 flex gap-3 group"
                       >
                         <div
-                          className={`shrink-0 mt-0.5 p-1.5 rounded-lg border transition-colors ${bgCls}`}
+                          className={`shrink-0 mt-0.5 p-1.5 rounded-lg border transition-colors flex items-center justify-center ${bgCls}`}
                         >
                           <Icon className={`w-4 h-4 ${iconColor}`} />
                         </div>
@@ -296,7 +296,7 @@ function GlobalLimelightNav() {
                             <strong className="font-bold text-white mr-1">{tag}</strong>
                             {body}
                           </p>
-                          <p className="text-[10px] text-[#9ca3af] mt-1.5 font-mono">{item.time}</p>
+                          <p className="text-[0.625rem] text-[#9ca3af] mt-1.5 font-mono">{item.time}</p>
                         </div>
                         <div className="shrink-0 flex items-center justify-center w-2">
                           <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />
@@ -315,7 +315,7 @@ function GlobalLimelightNav() {
                   showToast('info', '전체 알림 센터는 준비 중입니다.');
                   setOpenDropdown(null);
                 }}
-                className="w-full py-2 text-[10px] font-bold text-[#9ca3af] hover:text-white hover:bg-[#2c2825] rounded-lg transition-colors"
+                className="w-full py-2 text-[0.625rem] font-bold text-[#9ca3af] hover:text-white hover:bg-[#2c2825] rounded-lg transition-colors"
               >
                 알림 센터 전체 보기
               </button>

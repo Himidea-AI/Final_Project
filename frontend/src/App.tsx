@@ -776,7 +776,7 @@ function RechartsDarkTooltip(props: any) {
 
   return (
     <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl px-4 py-3 text-xs min-w-[180px]">
-      <div className="text-[10px] text-[#9ca3af] font-mono mb-2 tracking-widest uppercase">
+      <div className="text-[0.625rem] text-[#9ca3af] font-mono mb-2 tracking-widest uppercase">
         {title}
       </div>
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -1318,14 +1318,8 @@ function SimulatorDashboard({
   // 새 시뮬 완료 시 setRawSimResult(simRes) 로 reference 가 바뀌면 ref 비교 실패 → navigate 재발동.
   const navigatedForResultRef = useRef<SimulationOutput | null>(null);
   useEffect(() => {
-    console.log('[H4-debug] navigate effect', {
-      isSplitMode,
-      hasRawSimResult: !!rawSimResult,
-      refMatchesResult: navigatedForResultRef.current === rawSimResult,
-    });
     if (!isSplitMode && rawSimResult && navigatedForResultRef.current !== rawSimResult) {
       navigatedForResultRef.current = rawSimResult;
-      console.log('[H4-debug] -> navigate(/dashboard, replace)');
       navigate('/dashboard', { replace: true });
     }
   }, [rawSimResult, isSplitMode, navigate]);
@@ -1502,7 +1496,7 @@ function SimulatorDashboard({
                   {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
                   <div className="mb-2 px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18]/50 flex items-center justify-between">
                     <span className="text-sm text-[#e2e8f0]">{selectedGu}</span>
-                    <span className="text-[10px] text-[#9ca3af] uppercase tracking-wider opacity-70">
+                    <span className="text-[0.625rem] text-[#9ca3af] uppercase tracking-wider opacity-70">
                       선택됨
                     </span>
                   </div>
@@ -1729,7 +1723,7 @@ function SimulatorDashboard({
                         <button
                           key={range.value}
                           onClick={() => setTargetPrice(range.value)}
-                          className={`px-2 py-2 rounded-lg text-[11px] font-medium border transition-all ${
+                          className={`px-2 py-2 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                             active
                               ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                               : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -1746,7 +1740,7 @@ function SimulatorDashboard({
                 <div className="px-4 py-3 rounded-lg border border-white/5 bg-[#1e1b18]/40">
                   <div className="flex items-baseline justify-between">
                     <label className={`text-xs font-medium ${textSecondary}`}>주 타겟 시간대</label>
-                    <span className="text-[10px] text-[#9ca3af] opacity-60">복수 선택</span>
+                    <span className="text-[0.625rem] text-[#9ca3af] opacity-60">복수 선택</span>
                   </div>
                   <div className="grid grid-cols-4 gap-1.5 mt-2">
                     {OPERATING_HOURS_OPTIONS.map((hour) => {
@@ -1755,7 +1749,7 @@ function SimulatorDashboard({
                         <button
                           key={hour}
                           onClick={() => toggleOperatingHour(hour)}
-                          className={`py-2 rounded-lg text-[11px] font-medium border transition-all ${
+                          className={`py-2 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                             active
                               ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                               : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -1772,7 +1766,7 @@ function SimulatorDashboard({
                     좌측 분석 대상 박스 높이 매칭 + 공백 회피(2026-04-28). */}
               </div>
               <p
-                className={`text-[10px] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-white/5`}
+                className={`text-[0.625rem] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-white/5`}
               >
                 * 권리금/보증금 제외, 인테리어·초기 운영비 기준
               </p>
@@ -1783,14 +1777,14 @@ function SimulatorDashboard({
               <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
               <div>
                 <div className="flex items-baseline justify-end mb-3">
-                  <span className="text-[10px] text-[#9ca3af] opacity-60">
+                  <span className="text-[0.625rem] text-[#9ca3af] opacity-60">
                     미선택 시 전체 고객 기준
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* 연령대 — 복수 선택 */}
                   <div>
-                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
+                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>연령대</div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {[
                         { v: '10대', l: '10대' },
@@ -1806,7 +1800,7 @@ function SimulatorDashboard({
                             key={opt.v}
                             type="button"
                             onClick={() => toggleTargetAge(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
                                 ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                                 : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -1821,7 +1815,7 @@ function SimulatorDashboard({
 
                   {/* 성별 — 단일 선택 (null = 전체) */}
                   <div>
-                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
+                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {(
                         [
@@ -1836,7 +1830,7 @@ function SimulatorDashboard({
                             key={opt.l}
                             type="button"
                             onClick={() => setTargetGender(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
                                 ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                                 : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -1851,7 +1845,7 @@ function SimulatorDashboard({
 
                   {/* 방문 시간대 — 복수 선택 */}
                   <div>
-                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
+                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>
                       방문 시간대
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
@@ -1869,7 +1863,7 @@ function SimulatorDashboard({
                             key={opt.v}
                             type="button"
                             onClick={() => toggleTargetTime(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
                                 ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                                 : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -1884,7 +1878,7 @@ function SimulatorDashboard({
 
                   {/* 요일 — 단일 선택 */}
                   <div>
-                    <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
+                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {(
                         [
@@ -1899,7 +1893,7 @@ function SimulatorDashboard({
                             key={opt.l}
                             type="button"
                             onClick={() => setTargetDayType(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
                                 ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                                 : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -1915,7 +1909,7 @@ function SimulatorDashboard({
 
                 {/* 예상 월매출 — full-width */}
                 <div className="mt-4">
-                  <div className={`text-[10px] mb-1.5 ${textSecondary} opacity-70`}>
+                  <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>
                     예상 월매출 (선택)
                   </div>
                   <input
@@ -1928,7 +1922,7 @@ function SimulatorDashboard({
                     onChange={(e) => handleMonthlySalesChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg text-xs font-mono tabular-nums bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
                   />
-                  <p className="mt-1 text-[10px] text-[#9ca3af]/50">
+                  <p className="mt-1 text-[0.625rem] text-[#9ca3af]/50">
                     입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
                   </p>
                 </div>
@@ -1937,28 +1931,28 @@ function SimulatorDashboard({
                 {previewSegment && (
                   <div className="mt-4 px-4 py-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">
+                      <span className="text-[0.625rem] font-black text-indigo-300 uppercase tracking-widest">
                         실시간 미리보기 · {(previewSegment.segment_ratio * 100).toFixed(1)}% 기여
                       </span>
                       {isPreviewLoading && (
                         <Loader2 size={12} className="animate-spin text-indigo-400" />
                       )}
                     </div>
-                    <p className="text-[11px] text-stone-300 leading-relaxed">
+                    <p className="text-[0.6875rem] text-stone-300 leading-relaxed">
                       {previewSegment.profile_summary}
                     </p>
                     {previewSegment.segment_sales != null && (
-                      <p className="text-[10px] text-stone-500 tabular-nums">
+                      <p className="text-[0.625rem] text-stone-500 tabular-nums">
                         세그먼트 매출 추정: ₩{previewSegment.segment_sales.toLocaleString('ko-KR')}
                       </p>
                     )}
-                    <p className="text-[9px] text-stone-600 italic">
+                    <p className="text-[0.5625rem] text-stone-600 italic">
                       * 동·업종 단위 MLP 추정 — RUN SIMULATION 후 종합 결과로 검증
                     </p>
                   </div>
                 )}
                 {previewError && !isPreviewLoading && (
-                  <div className="mt-4 px-4 py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-[11px] text-rose-300">
+                  <div className="mt-4 px-4 py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-[0.6875rem] text-rose-300">
                     미리보기 실패: {previewError}
                   </div>
                 )}
@@ -1994,13 +1988,13 @@ function SimulatorDashboard({
                           상권 분석 리포트
                         </h1>
                         {simResult?.winnerDistrict && (
-                          <span className="ml-2 px-2.5 py-0.5 bg-[#818cf8]/10 border border-[#818cf8]/40 rounded-full text-[10px] font-bold text-[#818cf8] uppercase tracking-wider">
+                          <span className="ml-2 px-2.5 py-0.5 bg-[#818cf8]/10 border border-[#818cf8]/40 rounded-full text-[0.625rem] font-bold text-[#818cf8] uppercase tracking-wider">
                             AI 추천 1위 · {simResult.winnerDistrict}
                           </span>
                         )}
                         {simResult?.vacancyApplied === false && (
                           <span
-                            className="ml-2 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/40 rounded-full text-[10px] font-bold text-amber-400 uppercase tracking-wider"
+                            className="ml-2 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/40 rounded-full text-[0.625rem] font-bold text-amber-400 uppercase tracking-wider"
                             title="공실 DB 로드 실패 — 랭킹에 공실 페널티 미반영"
                           >
                             공실 미반영
@@ -2022,7 +2016,7 @@ function SimulatorDashboard({
                         <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
                           <button
                             onClick={() => setDashboardMode('data')}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
                               dashboardMode === 'data'
                                 ? 'bg-[#3a3633] text-[#818cf8] shadow-sm'
                                 : 'text-[#9ca3af] hover:text-white'
@@ -2033,7 +2027,7 @@ function SimulatorDashboard({
                           </button>
                           <button
                             onClick={() => setDashboardMode('map')}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
                               dashboardMode === 'map'
                                 ? 'bg-[#3a3633] text-[#818cf8] shadow-sm'
                                 : 'text-[#9ca3af] hover:text-white'
@@ -2044,7 +2038,7 @@ function SimulatorDashboard({
                           </button>
                           <button
                             onClick={() => setDashboardMode('abm')}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all duration-300 ${
+                            className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
                               dashboardMode === 'abm'
                                 ? 'bg-[#3a3633] text-emerald-400 shadow-sm'
                                 : 'text-[#9ca3af] hover:text-emerald-300'
@@ -2060,7 +2054,7 @@ function SimulatorDashboard({
                       )}
                       <button
                         onClick={() => setIsSplitMode(!isSplitMode)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold transition-all duration-300 border ${
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[0.6875rem] font-bold transition-all duration-300 border ${
                           isSplitMode
                             ? 'bg-amber-500 text-black border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
                             : 'bg-[#2c2825] text-[#9ca3af] border-[#3a3633] hover:text-white hover:bg-[#3a3633]'
@@ -2095,7 +2089,7 @@ function SimulatorDashboard({
                         <button
                           onClick={() => setIsDownloadOpen(!isDownloadOpen)}
                           disabled={isGeneratingPDF || isGeneratingExcel}
-                          className="flex items-center gap-2 px-3 py-2 bg-transparent border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex items-center gap-2 px-3 py-2 bg-transparent border border-indigo-500/60 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500 rounded-lg text-[0.6875rem] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Download className="w-3.5 h-3.5" />
                           {isGeneratingPDF || isGeneratingExcel ? '생성 중...' : '다운로드'}
@@ -2114,7 +2108,7 @@ function SimulatorDashboard({
                               >
                                 <FileText className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />{' '}
                                 PDF 리포트{' '}
-                                <span className="text-[10px] text-[#9ca3af] ml-auto">보고용</span>
+                                <span className="text-[0.625rem] text-[#9ca3af] ml-auto">보고용</span>
                               </button>
                               <button
                                 onClick={handleDownloadExcel}
@@ -2122,7 +2116,7 @@ function SimulatorDashboard({
                               >
                                 <Database className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />{' '}
                                 Raw Data{' '}
-                                <span className="text-[10px] text-[#d1d5db] ml-auto">XLSX</span>
+                                <span className="text-[0.625rem] text-[#d1d5db] ml-auto">XLSX</span>
                               </button>
                             </div>
                           </>
@@ -2399,7 +2393,7 @@ function SimulatorDashboard({
                                         ? '시간대별 유동인구 및 매출 (24H)'
                                         : 'LSTM 12개월 매출 추이 예측 (12M)'}
                                     </h2>
-                                    <p className="text-[11px] text-[#9ca3af]">
+                                    <p className="text-[0.6875rem] text-[#9ca3af]">
                                       {chartView === 'daily'
                                         ? '경쟁점 데이터 및 배후세대 동선 분석 기준'
                                         : 'AI 엔진을 통한 향후 1년간의 매출 예측값'}
@@ -2408,13 +2402,13 @@ function SimulatorDashboard({
                                   <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
                                     <button
                                       onClick={() => setChartView('daily')}
-                                      className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${chartView === 'daily' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'daily' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
                                     >
                                       24H 분석
                                     </button>
                                     <button
                                       onClick={() => setChartView('monthly')}
-                                      className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${chartView === 'monthly' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'monthly' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
                                     >
                                       12M 예측
                                     </button>
@@ -2433,7 +2427,7 @@ function SimulatorDashboard({
                                         <div className="text-xs font-semibold text-[#e2e8f0]">
                                           구현 예정
                                         </div>
-                                        <div className="mt-1 text-[10px] text-[#9ca3af] leading-relaxed">
+                                        <div className="mt-1 text-[0.625rem] text-[#9ca3af] leading-relaxed">
                                           {chartView === 'daily'
                                             ? '시간대별 매출·유동인구 API 연동 대기 중'
                                             : '분기 매출 예측 — 시뮬레이션 완료 후 표시됩니다'}
@@ -2880,7 +2874,7 @@ function SimulatorDashboard({
                                 <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
                                   <h2 className="text-sm font-bold text-white flex items-center gap-2">
                                     상세 데이터 테이블
-                                    <span className="hidden md:inline-block px-1.5 py-0.5 bg-[#3a3633] text-[#9ca3af] text-[9px] rounded uppercase font-mono">
+                                    <span className="hidden md:inline-block px-1.5 py-0.5 bg-[#3a3633] text-[#9ca3af] text-[0.5625rem] rounded uppercase font-mono">
                                       {tableDensity} view
                                     </span>
                                   </h2>
@@ -2913,13 +2907,13 @@ function SimulatorDashboard({
                                     <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
                                       <button
                                         onClick={() => handleTableViewChange('cannibalization')}
-                                        className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === 'cannibalization' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'cannibalization' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
                                       >
                                         가맹점 간섭도
                                       </button>
                                       <button
                                         onClick={() => handleTableViewChange('neighborhoods')}
-                                        className={`px-3 py-1 text-[10px] font-bold rounded transition-colors ${tableView === 'neighborhoods' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'neighborhoods' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
                                       >
                                         행정동 비교
                                       </button>
@@ -2929,7 +2923,7 @@ function SimulatorDashboard({
                                 <div>
                                   <table className="w-full text-left border-collapse">
                                     <thead className="sticky top-0 bg-[#1e1b18]/90 backdrop-blur-sm z-10">
-                                      <tr className="text-[11px] font-mono text-[#9ca3af] uppercase tracking-wider">
+                                      <tr className="text-[0.6875rem] font-mono text-[#9ca3af] uppercase tracking-wider">
                                         {tableView === 'cannibalization' ? (
                                           <>
                                             <th className="p-3 pl-5 font-medium">
@@ -3072,7 +3066,7 @@ function SimulatorDashboard({
                                   </table>
                                 </div>
                                 {/* Footer — 빈 공간을 채우는 메타 정보 */}
-                                <div className="px-5 py-3 border-t border-[#3a3633] flex justify-between items-center text-[10px] font-mono text-[#9ca3af]">
+                                <div className="px-5 py-3 border-t border-[#3a3633] flex justify-between items-center text-[0.625rem] font-mono text-[#9ca3af]">
                                   <span>
                                     총{' '}
                                     {tableView === 'cannibalization'
@@ -3096,7 +3090,7 @@ function SimulatorDashboard({
                                   <h2 className="text-sm font-bold text-white">
                                     상권 종합 지표 분석 (7 Core Metrics)
                                   </h2>
-                                  <p className="text-[11px] text-indigo-400">
+                                  <p className="text-[0.6875rem] text-indigo-400">
                                     에이전트 노드 분석 결과 통합 데이터
                                   </p>
                                 </div>
@@ -3105,10 +3099,10 @@ function SimulatorDashboard({
                                     <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
                                       <div className="text-center px-3">
                                         <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-[#3a3633]" />
-                                        <div className="text-[11px] font-semibold text-[#e2e8f0]">
+                                        <div className="text-[0.6875rem] font-semibold text-[#e2e8f0]">
                                           구현 예정
                                         </div>
-                                        <div className="mt-0.5 text-[9px] text-[#9ca3af]">
+                                        <div className="mt-0.5 text-[0.5625rem] text-[#9ca3af]">
                                           market_report 대기
                                         </div>
                                       </div>
@@ -3293,13 +3287,13 @@ function SimulatorDashboard({
                                             폐업 위험도
                                           </h2>
                                           {cr.is_mock && (
-                                            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded border border-slate-500/40 bg-slate-500/20 text-slate-300 uppercase tracking-wider">
+                                            <span className="text-[0.5rem] font-mono px-1.5 py-0.5 rounded border border-slate-500/40 bg-slate-500/20 text-slate-300 uppercase tracking-wider">
                                               MOCK
                                             </span>
                                           )}
                                         </div>
                                         <span
-                                          className={`inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full border ${levelConfig.badge}`}
+                                          className={`inline-flex items-center gap-1 text-[0.5625rem] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full border ${levelConfig.badge}`}
                                         >
                                           <span
                                             className={`w-1.5 h-1.5 rounded-full ${levelConfig.bar}`}
@@ -3309,12 +3303,12 @@ function SimulatorDashboard({
                                       </div>
                                       <div>
                                         <div className="flex items-baseline justify-between mb-1.5">
-                                          <span className="text-[10px] text-[#9ca3af]">
+                                          <span className="text-[0.625rem] text-[#9ca3af]">
                                             위험 점수
                                           </span>
                                           <span className="text-lg font-bold text-white font-mono tabular-nums">
                                             {pct}
-                                            <span className="text-[11px] text-[#9ca3af] ml-0.5">
+                                            <span className="text-[0.6875rem] text-[#9ca3af] ml-0.5">
                                               /100
                                             </span>
                                           </span>
@@ -3330,7 +3324,7 @@ function SimulatorDashboard({
                                         <div className="flex flex-col gap-3 pt-2 border-t border-[#3a3633]">
                                           {topLgbm.length > 0 && (
                                             <div className="flex flex-col gap-1.5">
-                                              <div className="text-[10px] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                              <div className="text-[0.625rem] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
                                                 <span className="w-1 h-1 rounded-full bg-indigo-400" />
                                                 LightGBM · 과거 패턴 기여 Top {topLgbm.length}
                                               </div>
@@ -3342,7 +3336,7 @@ function SimulatorDashboard({
                                                 return (
                                                   <div
                                                     key={`lgbm-${i}`}
-                                                    className="flex items-center gap-2 text-[10px]"
+                                                    className="flex items-center gap-2 text-[0.625rem]"
                                                   >
                                                     <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
                                                       {s.feature}
@@ -3366,7 +3360,7 @@ function SimulatorDashboard({
                                           )}
                                           {topTcn.length > 0 && (
                                             <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]/50">
-                                              <div className="text-[10px] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                              <div className="text-[0.625rem] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
                                                 <span className="w-1 h-1 rounded-full bg-cyan-400" />
                                                 TCN · 시계열 흐름 기여 Top {topTcn.length}
                                               </div>
@@ -3378,7 +3372,7 @@ function SimulatorDashboard({
                                                 return (
                                                   <div
                                                     key={`tcn-${i}`}
-                                                    className="flex items-center gap-2 text-[10px]"
+                                                    className="flex items-center gap-2 text-[0.625rem]"
                                                   >
                                                     <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
                                                       {s.feature}
@@ -3568,7 +3562,7 @@ function SimulatorDashboard({
                                   <h2 className="text-sm font-bold text-white">
                                     SPOTTER AI 인사이트
                                   </h2>
-                                  <span className="font-mono text-[9px] uppercase tracking-widest text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/30 px-2 py-0.5 rounded-full">
+                                  <span className="font-mono text-[0.5625rem] uppercase tracking-widest text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/30 px-2 py-0.5 rounded-full">
                                     3 INSIGHTS
                                   </span>
                                 </div>
@@ -3659,7 +3653,7 @@ function SimulatorDashboard({
                                               <span
                                                 className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`}
                                               />
-                                              <span className="text-[8px] font-mono uppercase tracking-wider text-[#9ca3af]">
+                                              <span className="text-[0.5rem] font-mono uppercase tracking-wider text-[#9ca3af]">
                                                 {topSev === 'critical' ? '필수이행' : '확인필요'}
                                               </span>
                                             </span>
@@ -3680,17 +3674,17 @@ function SimulatorDashboard({
                                               >
                                                 <div className="flex flex-col gap-0.5 flex-1 min-w-0 py-0.5">
                                                   <div className="flex items-center gap-1.5">
-                                                    <span className="text-[#e2e8f0] text-[11px] font-semibold">
+                                                    <span className="text-[#e2e8f0] text-[0.6875rem] font-semibold">
                                                       {TYPE_LABEL[risk.type] || risk.type}
                                                     </span>
                                                     <span
-                                                      className={`text-[8px] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-400/20 text-amber-400'}`}
+                                                      className={`text-[0.5rem] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-400/20 text-amber-400'}`}
                                                     >
                                                       {isCritical ? '필수이행' : '확인필요'}
                                                     </span>
                                                   </div>
                                                   {risk.detail && (
-                                                    <p className="text-[#9ca3af] text-[10px] leading-relaxed">
+                                                    <p className="text-[#9ca3af] text-[0.625rem] leading-relaxed">
                                                       {risk.detail}
                                                     </p>
                                                   )}
@@ -3732,7 +3726,7 @@ function SimulatorDashboard({
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                      <span className="text-[10px] font-mono text-[#818cf8]">
+                                      <span className="text-[0.625rem] font-mono text-[#818cf8]">
                                         LIVE
                                       </span>
                                     </div>
@@ -3985,7 +3979,7 @@ function SimulatorDashboard({
                 <span className={`text-sm font-bold tracking-wider ${textPrimary}`}>
                   시뮬레이션 실행
                 </span>
-                <span className={`text-[11px] ${textSecondary} leading-relaxed`}>
+                <span className={`text-[0.6875rem] ${textSecondary} leading-relaxed`}>
                   좌측 입력값을 바탕으로 AI 분석 엔진을 가동합니다 · 약 20초 소요
                 </span>
               </div>
@@ -4026,7 +4020,7 @@ function SimulatorDashboard({
                 <h2 className="text-sm font-bold text-white tracking-tight">
                   LangGraph Execution Log
                 </h2>
-                <p className="text-[10px] text-[#a3a3a3] font-mono mt-0.5">MULTI-AGENT PIPELINE</p>
+                <p className="text-[0.625rem] text-[#a3a3a3] font-mono mt-0.5">MULTI-AGENT PIPELINE</p>
               </div>
             </div>
             <button
@@ -4282,16 +4276,7 @@ function DashboardOutlet() {
   const [modalContent, setModalContent] = useState<DetailModalContent | null>(null);
   const openModal = (content: DetailModalContent) => setModalContent(content);
 
-  console.log('[H4-debug-Outlet] render', { hasSimResult: !!simResult });
-  useEffect(() => {
-    console.log('[H4-debug-Outlet] mount');
-    return () => console.log('[H4-debug-Outlet] unmount');
-  }, []);
-
-  if (!simResult) {
-    console.log('[H4-debug-Outlet] -> redirect /simulator (simResult null)');
-    return <Navigate to="/simulator" replace />;
-  }
+  if (!simResult) return <Navigate to="/simulator" replace />;
 
   return (
     <div
@@ -4811,7 +4796,7 @@ export default function App() {
                           {loadProgress}
                           <span className="text-3xl md:text-4xl text-indigo-400/60 ml-1">%</span>
                         </span>
-                        <span className="font-mono text-[10px] md:text-xs text-indigo-400/80 tracking-[0.3em] mt-2">
+                        <span className="font-mono text-[0.625rem] md:text-xs text-indigo-400/80 tracking-[0.3em] mt-2">
                           SYNCING...
                         </span>
                       </div>
@@ -4819,7 +4804,7 @@ export default function App() {
                   </div>
 
                   {/* Terminal logs */}
-                  <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[10px] md:text-xs text-[#9ca3af] max-w-md">
+                  <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[0.625rem] md:text-xs text-[#9ca3af] max-w-md">
                     <div className="flex flex-col gap-1.5">
                       {loadLogs.map((log, idx) => (
                         <div
