@@ -18,6 +18,7 @@
 import { MapPin, Trophy } from 'lucide-react';
 import type { SimulationOutput } from '../../../../../types';
 import { NarrativeText } from '../../shared/NarrativeText';
+import { SynthesisSections } from '../../shared/SynthesisSections';
 
 interface Props {
   simResult: SimulationOutput;
@@ -102,15 +103,13 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
         </div>
       )}
 
-      {/* ═══ synthesis 종합 분석 (최상단, 강조) ═══ */}
+      {/* ═══ synthesis 종합 분석 (최상단, 섹션별 블록 구조) ═══ */}
       {summary && (
-        <div className="rounded-3xl border border-stone-700/60 bg-stone-900/60 p-10">
+        <div className="rounded-3xl border border-stone-700/60 bg-stone-900/60 p-8">
           <h3 className="mb-6 text-base font-black uppercase tracking-widest text-stone-300">
             synthesis 종합 분석
           </h3>
-          <div className="text-base leading-relaxed">
-            <NarrativeText text={summary} />
-          </div>
+          <SynthesisSections text={summary} />
         </div>
       )}
 
