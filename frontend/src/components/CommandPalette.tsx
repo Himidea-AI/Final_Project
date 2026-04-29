@@ -44,13 +44,13 @@ function CommandPalette({
             placeholder="Type a command or search..."
             className="w-full bg-transparent border-none px-4 py-5 text-sm text-[#e2e8f0] placeholder-[#9ca3af] focus:outline-none"
           />
-          <kbd className="px-2 py-1 bg-[#2c2825] border border-[#3a3633] rounded text-[10px] font-mono text-[#9ca3af]">
+          <kbd className="px-2 py-1 bg-[#2c2825] border border-[#3a3633] rounded text-[0.625rem] font-mono text-[#9ca3af]">
             ESC
           </kbd>
         </div>
         {/* Commands */}
         <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
-          <div className="px-3 py-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">
+          <div className="px-3 py-2 text-[0.625rem] font-bold text-[#9ca3af] uppercase tracking-wider">
             Navigation
           </div>
           <button
@@ -102,7 +102,7 @@ function CommandPalette({
             <ArrowRight className="w-4 h-4 text-[#3a3633] group-hover:text-[#818cf8]" />
           </button>
 
-          <div className="px-3 py-2 mt-2 text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">
+          <div className="px-3 py-2 mt-2 text-[0.625rem] font-bold text-[#9ca3af] uppercase tracking-wider">
             Quick Actions
           </div>
           <button

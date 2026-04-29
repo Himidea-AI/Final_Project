@@ -47,7 +47,7 @@ export function StackedAgeBar({ groups }: Props) {
             <div
               key={g.age_group}
               onMouseEnter={() => setActiveIndex(i)}
-              className="flex items-center justify-center text-[10px] font-black text-stone-100 transition-all duration-200 cursor-default relative"
+              className="flex items-center justify-center text-[0.625rem] font-black text-stone-100 transition-all duration-200 cursor-default relative"
               style={{
                 width: `${g.share * 100}%`,
                 backgroundColor: COLORS[i] ?? COLORS[3],
@@ -63,7 +63,7 @@ export function StackedAgeBar({ groups }: Props) {
       </div>
 
       {/* Legend — 활성 세그먼트에 맞춰 스타일 동기화 */}
-      <div className="flex flex-wrap gap-3 text-[10px]">
+      <div className="flex flex-wrap gap-3 text-[0.625rem]">
         {normalized.map((g, i) => {
           const isActive = activeIndex === i;
           const isDimmed = activeIndex !== null && !isActive;

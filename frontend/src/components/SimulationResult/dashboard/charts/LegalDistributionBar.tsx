@@ -39,28 +39,28 @@ export function LegalDistributionBar({ risks }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex h-6 w-full overflow-hidden rounded-lg border border-stone-800">
         <div
-          className="flex items-center justify-center bg-rose-500/80 text-[9px] font-black text-white"
+          className="flex items-center justify-center bg-rose-500/80 text-[0.5625rem] font-black text-white"
           style={{ width: `${pct(counts.high)}%` }}
           title={`필수이행 ${counts.high}`}
         >
           {counts.high >= 1 && pct(counts.high) > 10 ? counts.high : ''}
         </div>
         <div
-          className="flex items-center justify-center bg-amber-500/80 text-[9px] font-black text-stone-950"
+          className="flex items-center justify-center bg-amber-500/80 text-[0.5625rem] font-black text-stone-950"
           style={{ width: `${pct(counts.medium)}%` }}
           title={`확인필요 ${counts.medium}`}
         >
           {counts.medium >= 1 && pct(counts.medium) > 10 ? counts.medium : ''}
         </div>
         <div
-          className="flex items-center justify-center bg-emerald-500/80 text-[9px] font-black text-stone-950"
+          className="flex items-center justify-center bg-emerald-500/80 text-[0.5625rem] font-black text-stone-950"
           style={{ width: `${pct(counts.low)}%` }}
           title={`참고사항 ${counts.low}`}
         >
           {counts.low >= 1 && pct(counts.low) > 10 ? counts.low : ''}
         </div>
       </div>
-      <div className="flex flex-wrap gap-4 text-[10px]">
+      <div className="flex flex-wrap gap-4 text-[0.625rem]">
         <LegendItem color="bg-rose-500" label={`필수이행 ${counts.high}`} />
         <LegendItem color="bg-amber-500" label={`확인필요 ${counts.medium}`} />
         <LegendItem color="bg-emerald-500" label={`참고사항 ${counts.low}`} />

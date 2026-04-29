@@ -79,7 +79,7 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
           <div className="mb-2 text-xs font-semibold text-slate-300">
             시간대별 생각 ({data.thoughts.length}건)
           </div>
-          <div className="grid grid-cols-12 gap-1 text-[10px]">
+          <div className="grid grid-cols-12 gap-1 text-[0.625rem]">
             {hours.map((h) => {
               const t = hourMap.get(h);
               const isNow = currentHour === h;
@@ -98,7 +98,7 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
                 >
                   <div
                     className={[
-                      'text-[9px] font-mono',
+                      'text-[0.5625rem] font-mono',
                       isNow ? 'text-amber-300' : 'text-slate-500',
                     ].join(' ')}
                   >
@@ -151,7 +151,7 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
           )}
         </div>
 
-        <div className="mt-4 border-t border-slate-800 pt-3 text-[10px] leading-relaxed text-slate-500">
+        <div className="mt-4 border-t border-slate-800 pt-3 text-[0.625rem] leading-relaxed text-slate-500">
           Tier S 50명만 LLM thought 생성됩니다 (gpt-4.1-mini, 한국어 ≤ 12자). Decision logic 은
           policy 기반이라 Pearson r=0.95 학술 검증은 보존됩니다.
         </div>

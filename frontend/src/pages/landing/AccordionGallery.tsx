@@ -311,7 +311,7 @@ export default function AccordionGallery({
                         <span>클릭하여 시뮬레이션 시작</span>
                       </div>
                     ) : (
-                      <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-bold tracking-wider">
+                      <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[0.5625rem] font-bold tracking-wider">
                         서비스 준비 중
                       </span>
                     )}

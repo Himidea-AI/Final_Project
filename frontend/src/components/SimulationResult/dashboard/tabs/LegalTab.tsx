@@ -38,7 +38,7 @@ export function LegalTab({ simResult, openModal }: Props) {
         <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
           <AlertTriangle size={16} className="text-rose-400" /> 법률·규제 검토
           {totalCount > 0 && (
-            <span className="text-[10px] font-black normal-case tracking-normal">
+            <span className="text-[0.625rem] font-black normal-case tracking-normal">
               <span className="text-rose-400">위험 {hazardCount}건</span>
               <span className="text-stone-600 mx-1">·</span>
               <span className="text-emerald-400/80">안전 {safeCount}건</span>
@@ -59,7 +59,7 @@ export function LegalTab({ simResult, openModal }: Props) {
                   .join('\n\n'),
               })
             }
-            className="text-[10px] font-black text-stone-500 hover:text-indigo-400 flex items-center gap-1 uppercase transition-colors"
+            className="text-[0.625rem] font-black text-stone-500 hover:text-indigo-400 flex items-center gap-1 uppercase transition-colors"
           >
             <Maximize2 size={12} /> 전체 리포트 보기
           </button>

@@ -106,7 +106,9 @@ export function IndicatorGrid({ simResult }: Props) {
           {values.map(({ key, label, val }) => (
             <div key={key} className={`rounded-lg border p-3 ${scoreBorder(val)} ${scoreBg(val)}`}>
               <div className="flex items-baseline justify-between gap-3">
-                <div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div>
+                <div className="text-[0.6875rem] uppercase tracking-wide text-stone-400">
+                  {label}
+                </div>
                 <div
                   className={`text-2xl font-bold font-mono tabular-nums leading-none ${scoreColor(val)}`}
                 >

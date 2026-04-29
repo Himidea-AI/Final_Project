@@ -215,7 +215,7 @@ export default function JoinUsPage({ onBack }: Props) {
                   <ArrowLeft size={14} />
                   가입 유형 재선택
                 </button>
-                <span className="text-[10px] font-mono text-emerald-400 tracking-wider uppercase px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
+                <span className="text-[0.625rem] font-mono text-emerald-400 tracking-wider uppercase px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
                   팀원 가입
                 </span>
               </div>

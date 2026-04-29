@@ -199,7 +199,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
           <button
             type="button"
             onClick={handleClearResult}
-            className="text-[11px] font-bold text-stone-400 hover:text-stone-100 uppercase tracking-widest"
+            className="text-[0.6875rem] font-bold text-stone-400 hover:text-stone-100 uppercase tracking-widest"
           >
             ← 지도로 돌아가기
           </button>
@@ -222,7 +222,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
               <span className="w-2 h-2 rounded-full bg-[#818cf8] animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
               Multi-Agent Geospatial Recommendations
             </h4>
-            <p className="text-[10px] text-stone-500 font-mono tracking-widest">
+            <p className="text-[0.625rem] text-stone-500 font-mono tracking-widest">
               AI AGENT TARGETING · {locations.length} VACANCY · {competitors.length} COMP
             </p>
           </div>

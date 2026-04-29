@@ -284,7 +284,7 @@ function SpotterAgentWorkflow() {
                           {task.dependencies.map((dep) => (
                             <span
                               key={dep}
-                              className="px-1.5 py-0.5 rounded bg-[#2c2825] border border-[#3a3633] text-[9px] font-mono text-[#9ca3af]"
+                              className="px-1.5 py-0.5 rounded bg-[#2c2825] border border-[#3a3633] text-[0.5625rem] font-mono text-[#9ca3af]"
                             >
                               Step {dep} 완료 후
                             </span>
@@ -292,7 +292,7 @@ function SpotterAgentWorkflow() {
                         </div>
                       )}
                       <span
-                        className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${isCompleted ? 'bg-emerald-500/10 text-emerald-500' : task.status === 'in-progress' ? 'bg-[#818cf8]/10 text-[#818cf8]' : 'bg-[#3a3633] text-[#9ca3af]'}`}
+                        className={`px-2 py-0.5 rounded text-[0.5625rem] font-bold uppercase tracking-wider ${isCompleted ? 'bg-emerald-500/10 text-emerald-500' : task.status === 'in-progress' ? 'bg-[#818cf8]/10 text-[#818cf8]' : 'bg-[#3a3633] text-[#9ca3af]'}`}
                       >
                         {task.status.replace('-', ' ')}
                       </span>
@@ -355,17 +355,17 @@ function SpotterAgentWorkflow() {
                                     exit="listHidden"
                                     layout
                                   >
-                                    <p className="text-[11px] text-[#9ca3af] mb-2 leading-relaxed">
+                                    <p className="text-[0.6875rem] text-[#9ca3af] mb-2 leading-relaxed">
                                       {subtask.description}
                                     </p>
                                     <div className="flex flex-wrap items-center gap-1.5">
-                                      <span className="text-[9px] font-mono text-[#6b7280] uppercase">
+                                      <span className="text-[0.5625rem] font-mono text-[#6b7280] uppercase">
                                         Tools:
                                       </span>
                                       {subtask.tools.map((tool) => (
                                         <span
                                           key={tool}
-                                          className="px-1.5 py-0.5 rounded bg-[#1e1b18] border border-[#3a3633] text-[9px] font-mono text-[#818cf8]"
+                                          className="px-1.5 py-0.5 rounded bg-[#1e1b18] border border-[#3a3633] text-[0.5625rem] font-mono text-[#818cf8]"
                                         >
                                           {tool}
                                         </span>

@@ -125,7 +125,7 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
               <span className="font-mono text-stone-100">{selectedIds.length}</span>
               <span className="text-stone-500">/{MAX_COMPARE}</span> 건 선택됨
               {selectionFull && (
-                <span className="ml-2 text-[10px] text-amber-400">· 최대 도달</span>
+                <span className="ml-2 text-[0.625rem] text-amber-400">· 최대 도달</span>
               )}
             </span>
             <button

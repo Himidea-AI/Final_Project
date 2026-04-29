@@ -116,12 +116,12 @@ function Header({ routeId, isSelf }: { routeId: string; isSelf: boolean }) {
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold text-stone-100">{displayName}</h1>
           {isSelf && (
-            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[0.625rem] font-bold text-amber-400">
               본인
             </span>
           )}
           {!isSelf && (
-            <span className="rounded bg-stone-700 px-2 py-0.5 text-[10px] font-mono text-stone-300">
+            <span className="rounded bg-stone-700 px-2 py-0.5 text-[0.625rem] font-mono text-stone-300">
               {routeId.slice(0, 8)}
             </span>
           )}
@@ -206,7 +206,7 @@ function AssignedDistricts({ isSelf }: { isSelf: boolean }) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-widest text-stone-500">{label}</div>
+      <div className="text-[0.625rem] uppercase tracking-widest text-stone-500">{label}</div>
       <div className="mt-0.5 text-stone-100">{value}</div>
     </div>
   );

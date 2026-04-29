@@ -141,7 +141,7 @@ function MasterCommandCenter() {
             >
               {user?.company_name || 'SPOTTER Workspace'}
             </span>
-            <span className="text-[9px] text-[#9ca3af] font-mono tracking-widest uppercase">
+            <span className="text-[0.5625rem] text-[#9ca3af] font-mono tracking-widest uppercase">
               SPOTTER-HQ
             </span>
           </div>
@@ -149,7 +149,7 @@ function MasterCommandCenter() {
 
         {/* 메뉴 리스트 */}
         <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-2">
-          <p className="px-2 text-[10px] font-bold text-[#9ca3af] mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mb-2 tracking-widest">
             COMMAND CENTER
           </p>
 
@@ -179,7 +179,7 @@ function MasterCommandCenter() {
             label="내 시뮬 이력"
           />
 
-          <p className="px-2 text-[10px] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
             SETTINGS
           </p>
           <MenuButton
@@ -208,11 +208,11 @@ function MasterCommandCenter() {
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-xs font-bold text-[#e2e8f0] flex items-center gap-1.5">
                 <span className="truncate">{user?.contact_name || '사용자'}</span>
-                <span className="text-[9px] font-mono text-[#9ca3af] uppercase shrink-0">
+                <span className="text-[0.5625rem] font-mono text-[#9ca3af] uppercase shrink-0">
                   · {user?.role === 'manager' ? '매니저' : '팀장'}
                 </span>
               </span>
-              <span className="text-[10px] text-[#818cf8] truncate">
+              <span className="text-[0.625rem] text-[#818cf8] truncate">
                 {user?.role === 'manager' ? 'Regional Access' : `${user?.plan || 'Pro'} Plan`}
               </span>
             </div>
@@ -322,7 +322,7 @@ function MenuButton({
         <span className="text-xs font-medium">{label}</span>
       </div>
       {badge && (
-        <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
+        <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[0.5625rem] font-black flex items-center justify-center animate-pulse">
           {badge}
         </span>
       )}
@@ -614,14 +614,14 @@ function ReassignRegionModal({
               <Pencil className="w-4 h-4 text-[#818cf8]" />
               담당 권역 변경
             </h3>
-            <p className="text-[11px] text-[#9ca3af] mt-1">
+            <p className="text-[0.6875rem] text-[#9ca3af] mt-1">
               {manager.contact_name} 매니저의 담당 구/행정동을 변경합니다.
             </p>
           </div>
 
           <div className="p-6 space-y-4">
             <div>
-              <label className="text-[10px] text-[#9ca3af] uppercase tracking-wider font-bold block mb-2">
+              <label className="text-[0.625rem] text-[#9ca3af] uppercase tracking-wider font-bold block mb-2">
                 담당 구
               </label>
               <RegionSelect
@@ -637,7 +637,7 @@ function ReassignRegionModal({
 
             {gu && (
               <div>
-                <p className="text-[10px] text-[#9ca3af] mb-2">{gu} 행정동 선택 (복수 가능)</p>
+                <p className="text-[0.625rem] text-[#9ca3af] mb-2">{gu} 행정동 선택 (복수 가능)</p>
                 <div className="flex flex-wrap gap-1.5">
                   {REGION_DATA[gu]?.map((dong) => {
                     const selected = dongs.includes(dong);
@@ -646,7 +646,7 @@ function ReassignRegionModal({
                         key={dong}
                         type="button"
                         onClick={() => toggleDong(dong)}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                        className={`px-2.5 py-1 rounded-full text-[0.625rem] font-medium border transition-all ${
                           selected
                             ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                             : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -658,7 +658,7 @@ function ReassignRegionModal({
                   })}
                 </div>
                 {dongs.length > 0 && (
-                  <p className="text-[10px] text-[#818cf8] mt-2 font-mono">
+                  <p className="text-[0.625rem] text-[#818cf8] mt-2 font-mono">
                     {dongs.length}개 동 선택됨
                   </p>
                 )}
@@ -742,7 +742,7 @@ function DeleteConfirmModal({
               매니저를 워크스페이스에서 제거하시겠습니까?
             </p>
             <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-lg">
-              <p className="text-[11px] text-rose-400 leading-relaxed">
+              <p className="text-[0.6875rem] text-rose-400 leading-relaxed">
                 해당 매니저는 즉시 비활성화되며 더 이상 로그인할 수 없습니다. 담당 권역 할당 정보는
                 보존되지만 복구하려면 재승인이 필요합니다.
               </p>
@@ -816,11 +816,11 @@ function PendingManagerCard({
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-base font-bold text-[#e2e8f0]">{manager.contact_name}</span>
-              <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded text-[9px] font-bold uppercase tracking-wider border border-rose-500/20">
+              <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded text-[0.5625rem] font-bold uppercase tracking-wider border border-rose-500/20">
                 Pending
               </span>
               {manager.position && (
-                <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[9px] font-bold uppercase tracking-wider">
+                <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[0.5625rem] font-bold uppercase tracking-wider">
                   {manager.position}
                 </span>
               )}
@@ -862,7 +862,7 @@ function PendingManagerCard({
 
       {/* 구 → 동 선택 */}
       <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg p-4">
-        <p className="text-[10px] text-[#9ca3af] uppercase tracking-wider font-bold mb-3">
+        <p className="text-[0.625rem] text-[#9ca3af] uppercase tracking-wider font-bold mb-3">
           담당 권역 할당
         </p>
         <div className="mb-3">
@@ -879,7 +879,9 @@ function PendingManagerCard({
 
         {pendingGu && (
           <div>
-            <p className="text-[10px] text-[#9ca3af] mb-2">{pendingGu} 행정동 선택 (복수 가능)</p>
+            <p className="text-[0.625rem] text-[#9ca3af] mb-2">
+              {pendingGu} 행정동 선택 (복수 가능)
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {REGION_DATA[pendingGu]?.map((dong) => {
                 const selected = pendingDongs.includes(dong);
@@ -887,7 +889,7 @@ function PendingManagerCard({
                   <button
                     key={dong}
                     onClick={() => toggleDong(dong)}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                    className={`px-2.5 py-1 rounded-full text-[0.625rem] font-medium border transition-all ${
                       selected
                         ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
                         : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
@@ -899,7 +901,7 @@ function PendingManagerCard({
               })}
             </div>
             {pendingDongs.length > 0 && (
-              <p className="text-[10px] text-[#818cf8] mt-2 font-mono">
+              <p className="text-[0.625rem] text-[#818cf8] mt-2 font-mono">
                 {pendingDongs.length}개 동 선택됨: {pendingDongs.join(', ')}
               </p>
             )}
@@ -1151,7 +1153,7 @@ function TeamManagementView({
                         <span className="text-base font-bold text-white truncate">
                           {m.contact_name}
                         </span>
-                        <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
+                        <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[0.5625rem] font-bold uppercase tracking-wider shrink-0">
                           {m.position || 'Regional Mgr'}
                         </span>
                       </div>
@@ -1166,16 +1168,16 @@ function TeamManagementView({
                     {/* Assigned Region */}
                     <div className="flex flex-col items-start md:items-end gap-1.5">
                       {m.assigned_gu ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded-md text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded-md text-[0.625rem] font-bold">
                           <MapPin className="w-3 h-3" />
                           {m.assigned_gu}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#3a3633]/50 text-[#a3a3a3] border border-[#3a3633] rounded-md text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#3a3633]/50 text-[#a3a3a3] border border-[#3a3633] rounded-md text-[0.625rem] font-bold">
                           <MapPin className="w-3 h-3" /> 미배정
                         </span>
                       )}
-                      <span className="text-[10px] text-[#6b7280]">{dongSummary}</span>
+                      <span className="text-[0.625rem] text-[#6b7280]">{dongSummary}</span>
                     </div>
 
                     {/* Activity Status (고정 Active) */}
@@ -1260,12 +1262,12 @@ function PipelineKanbanView() {
               <h4 className={`text-xs font-bold uppercase tracking-wider ${col.titleColor}`}>
                 {col.title}
               </h4>
-              <span className="w-5 h-5 rounded-full bg-[#1e1b18] flex items-center justify-center text-[10px] font-bold text-stone-600 border border-[#3a3633]">
+              <span className="w-5 h-5 rounded-full bg-[#1e1b18] flex items-center justify-center text-[0.625rem] font-bold text-stone-600 border border-[#3a3633]">
                 —
               </span>
             </div>
             <div className="flex-1 p-3 min-h-[140px] flex items-center justify-center">
-              <span className="text-[10px] font-mono text-stone-600 tracking-widest uppercase">
+              <span className="text-[0.625rem] font-mono text-stone-600 tracking-widest uppercase">
                 Awaiting backend
               </span>
             </div>
@@ -1328,7 +1330,7 @@ function BrandSubTabButton({
       {label}
       {badge && (
         <span
-          className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+          className={`text-[0.5625rem] font-mono px-1.5 py-0.5 rounded ${
             active ? 'bg-[#1e1b18]/20 text-[#1e1b18]' : 'bg-[#818cf8]/10 text-[#818cf8]'
           }`}
         >
@@ -1406,7 +1408,7 @@ function BrandProfileView() {
             </p>
           </div>
           {user?.role === 'master' && (
-            <span className="text-[9px] font-mono text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/30 px-2 py-1 rounded-md uppercase tracking-widest">
+            <span className="text-[0.5625rem] font-mono text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/30 px-2 py-1 rounded-md uppercase tracking-widest">
               Master
             </span>
           )}
@@ -1418,11 +1420,11 @@ function BrandProfileView() {
               key={f.label}
               className="p-4 bg-[#1e1b18] border border-[#3a3633] rounded-xl flex flex-col gap-1"
             >
-              <span className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest">
+              <span className="text-[0.625rem] font-bold text-[#9ca3af] uppercase tracking-widest">
                 {f.label}
               </span>
               <span className="text-lg font-black text-[#e2e8f0] tabular-nums">{f.value}</span>
-              {f.hint && <span className="text-[10px] text-[#57534e]">{f.hint}</span>}
+              {f.hint && <span className="text-[0.625rem] text-[#57534e]">{f.hint}</span>}
             </div>
           ))}
         </div>
@@ -1430,7 +1432,7 @@ function BrandProfileView() {
         <div className="flex flex-col gap-2">
           <label className="text-xs font-bold text-[#e2e8f0] flex items-center justify-between">
             <span>브랜드 메모</span>
-            <span className="text-[10px] font-normal text-[#57534e]">
+            <span className="text-[0.625rem] font-normal text-[#57534e]">
               이 브라우저에만 저장 · 팀 공유 X
             </span>
           </label>
@@ -1471,7 +1473,7 @@ function BrandTuningPhase2View() {
           <h3 className="text-lg font-bold text-[#818cf8] flex items-center gap-2">
             <Zap className="w-5 h-5" /> Brand AI Weights
           </h3>
-          <span className="text-[10px] font-mono text-[#f59e0b] bg-[#f59e0b]/10 border border-[#f59e0b]/30 px-2 py-1 rounded-md uppercase tracking-widest whitespace-nowrap">
+          <span className="text-[0.625rem] font-mono text-[#f59e0b] bg-[#f59e0b]/10 border border-[#f59e0b]/30 px-2 py-1 rounded-md uppercase tracking-widest whitespace-nowrap">
             Phase 2 · 2026 Q3
           </span>
         </div>
@@ -1482,7 +1484,7 @@ function BrandTuningPhase2View() {
 
         <div className="flex items-start gap-2 mb-8 p-3 bg-[#f59e0b]/10 border border-[#f59e0b]/30 rounded-xl">
           <AlertTriangle className="w-4 h-4 text-[#f59e0b] mt-0.5 shrink-0" />
-          <p className="text-[11px] text-[#f59e0b] leading-relaxed">
+          <p className="text-[0.6875rem] text-[#f59e0b] leading-relaxed">
             <strong>로드맵 프리뷰입니다.</strong> 현재 입력값은 AI 모델에 반영되지 않습니다. 2026 Q3
             백엔드 가중치 API 구축 완료 후 정식 활성화됩니다.
           </p>
@@ -1502,7 +1504,7 @@ function BrandTuningPhase2View() {
                 className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg pl-8 pr-4 py-2.5 text-sm font-mono text-[#e2e8f0] outline-none cursor-not-allowed"
               />
             </div>
-            <p className="text-[10px] text-[#9ca3af]">
+            <p className="text-[0.625rem] text-[#9ca3af]">
               유동인구 소비력 스코어 계산에 가중치로 작용합니다.
             </p>
           </div>
@@ -1518,7 +1520,7 @@ function BrandTuningPhase2View() {
               <option value="3040">3040 직장인 (회식/저녁)</option>
               <option value="family">주거 배후세대 (가족/배달)</option>
             </select>
-            <p className="text-[10px] text-[#9ca3af]">
+            <p className="text-[0.625rem] text-[#9ca3af]">
               선택한 타겟층의 해당 상권 거주/유동 비율을 우선 분석합니다.
             </p>
           </div>
@@ -1539,7 +1541,7 @@ function BrandTuningPhase2View() {
               />
             </div>
 
-            <div className="flex justify-between text-[10px] font-bold text-[#9ca3af]">
+            <div className="flex justify-between text-[0.625rem] font-bold text-[#9ca3af]">
               <span>Dine-in (입지/접근성 가중치 상승)</span>
               <span>Delivery (배후세대 가중치 상승)</span>
             </div>
@@ -1580,13 +1582,13 @@ function BillingManagementView() {
             </h3>
           </div>
           <div className="text-2xl font-black text-stone-500">—</div>
-          <p className="text-[11px] text-amber-200/70 leading-relaxed">
+          <p className="text-[0.6875rem] text-amber-200/70 leading-relaxed">
             결제/구독 API 미구축. 스펙 확정 후 현재 요금제·결제 주기·수단이 표시됩니다.
           </p>
           <button
             type="button"
             onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
-            className="mt-2 w-full py-2 bg-[#1e1b18] text-stone-500 border border-stone-800 text-[11px] font-bold rounded-lg cursor-not-allowed"
+            className="mt-2 w-full py-2 bg-[#1e1b18] text-stone-500 border border-stone-800 text-[0.6875rem] font-bold rounded-lg cursor-not-allowed"
             disabled
           >
             결제 수단 관리 (대기)
@@ -1601,7 +1603,7 @@ function BillingManagementView() {
             </h3>
           </div>
           <div className="text-2xl font-black text-stone-500">—</div>
-          <p className="text-[11px] text-amber-200/70 leading-relaxed">
+          <p className="text-[0.6875rem] text-amber-200/70 leading-relaxed">
             팀별 토큰 한도·사용량 API 미구축. 실측 LLM 비용은 하단 LangSmith 번레이트 참고.
           </p>
         </div>
@@ -1611,7 +1613,7 @@ function BillingManagementView() {
       <section className="mt-4">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-bold text-[#e2e8f0]">LLM 토큰 번레이트 (최근 30일)</h3>
-          <span className="text-[10px] text-[#9ca3af]">LangSmith 실데이터 기반</span>
+          <span className="text-[0.625rem] text-[#9ca3af]">LangSmith 실데이터 기반</span>
         </div>
         <TokenBurnrateSection />
       </section>
@@ -1655,18 +1657,18 @@ function BillingManagementView() {
               <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] flex flex-col p-6 transition-colors duration-500 border border-[#3a3633] group-hover:border-transparent">
                 {plan.isPopular && (
                   <div className="absolute top-4 right-4 inline-flex items-center justify-center h-5 px-2.5 bg-[#3a3633] border border-[#818cf8]/30 rounded-full">
-                    <span className="text-[9px] font-bold text-[#818cf8] tracking-wider leading-none">
+                    <span className="text-[0.5625rem] font-bold text-[#818cf8] tracking-wider leading-none">
                       MOST POPULAR
                     </span>
                   </div>
                 )}
                 <h4 className="text-lg font-bold text-white mb-1">{plan.id}</h4>
-                <p className="text-[10px] text-[#9ca3af] mb-4">{plan.target}</p>
+                <p className="text-[0.625rem] text-[#9ca3af] mb-4">{plan.target}</p>
                 <div className="flex items-end gap-1 mb-6 pb-6 border-b border-[#3a3633]">
                   <span className="text-2xl font-black text-white">{plan.price}</span>
-                  <span className="text-[10px] text-[#9ca3af] mb-1">/ month</span>
+                  <span className="text-[0.625rem] text-[#9ca3af] mb-1">/ month</span>
                 </div>
-                <ul className="text-[11px] text-[#9ca3af] space-y-3 mb-8">
+                <ul className="text-[0.6875rem] text-[#9ca3af] space-y-3 mb-8">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-[#818cf8]" /> {plan.tokens}
                   </li>
@@ -1853,7 +1855,9 @@ function MyPageView() {
           <div>
             <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
               이메일 (ID)
-              <span className="ml-2 text-[9px] font-mono text-[#6b7280] uppercase">Read-only</span>
+              <span className="ml-2 text-[0.5625rem] font-mono text-[#6b7280] uppercase">
+                Read-only
+              </span>
             </label>
             <input
               type="email"
@@ -2049,7 +2053,9 @@ function MyPageView() {
                 placeholder="비밀번호 입력"
                 className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#818cf8] mb-2 transition-colors"
               />
-              {passwordError && <p className="text-[11px] text-rose-400 mb-4">{passwordError}</p>}
+              {passwordError && (
+                <p className="text-[0.6875rem] text-rose-400 mb-4">{passwordError}</p>
+              )}
               {!passwordError && <div className="mb-4" />}
               <div className="flex gap-3 justify-end">
                 <button
@@ -2121,14 +2127,14 @@ function ManagerWorkspace() {
             <span className="font-black text-sm text-[#e2e8f0] truncate">
               {user?.contact_name || 'Manager'}
             </span>
-            <span className="text-[9px] text-[#818cf8] font-mono tracking-widest uppercase">
+            <span className="text-[0.5625rem] text-[#818cf8] font-mono tracking-widest uppercase">
               Regional Manager
             </span>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-2">
-          <p className="px-2 text-[10px] font-bold text-[#9ca3af] mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mb-2 tracking-widest">
             WORKSPACE
           </p>
           <MenuButton
@@ -2144,7 +2150,7 @@ function ManagerWorkspace() {
             label="내 시뮬 이력"
           />
 
-          <p className="px-2 text-[10px] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
             SETTINGS
           </p>
           <MenuButton
@@ -2167,7 +2173,7 @@ function ManagerWorkspace() {
               <span className="text-xs font-bold text-[#e2e8f0] truncate">
                 {user?.contact_name || '매니저'}
               </span>
-              <span className="text-[10px] text-[#818cf8] truncate">Regional Access</span>
+              <span className="text-[0.625rem] text-[#818cf8] truncate">Regional Access</span>
             </div>
           </div>
         </div>
@@ -2206,7 +2212,7 @@ function ManagerWorkspaceView() {
           <h3 className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-[#818cf8]" />내 시뮬레이션 기록
           </h3>
-          <span className="text-[10px] font-mono text-[#6b7280] uppercase tracking-widest">
+          <span className="text-[0.625rem] font-mono text-[#6b7280] uppercase tracking-widest">
             Recent Runs
           </span>
         </div>
@@ -2220,7 +2226,7 @@ function ManagerWorkspaceView() {
             <Users className="w-4 h-4 text-[#818cf8]" />
             시뮬레이션 의뢰 목록
           </h3>
-          <span className="text-[10px] font-mono text-[#6b7280] uppercase tracking-widest">
+          <span className="text-[0.625rem] font-mono text-[#6b7280] uppercase tracking-widest">
             Client Requests
           </span>
         </div>
@@ -2232,7 +2238,7 @@ function ManagerWorkspaceView() {
           <p className="text-xs text-[#6b7280] mb-4">
             팀장이 의뢰 요청을 배정하면 이 목록에 표시됩니다.
           </p>
-          <p className="text-[10px] font-mono text-[#818cf8]/60 uppercase tracking-wider">
+          <p className="text-[0.625rem] font-mono text-[#818cf8]/60 uppercase tracking-wider">
             [Backend 연동 대기 중 — IM3 Jira]
           </p>
         </div>

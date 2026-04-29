@@ -255,7 +255,7 @@ function DetailDrawer({
                               창업 체크리스트
                             </h3>
                             <span
-                              className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                              className={`text-[0.5625rem] font-mono px-1.5 py-0.5 rounded ${
                                 isCritical
                                   ? 'bg-rose-500/20 text-rose-400'
                                   : 'bg-amber-400/20 text-amber-400'
@@ -311,7 +311,7 @@ function DetailDrawer({
                       const pct = Math.round((d.daily_total / maxPop) * 100);
                       return (
                         <div key={d.dong_name} className="flex items-center gap-3">
-                          <span className="text-[11px] text-[#9ca3af] w-16 shrink-0">
+                          <span className="text-[0.6875rem] text-[#9ca3af] w-16 shrink-0">
                             {d.dong_name}
                           </span>
                           <div className="flex-1 bg-[#2c2825] rounded-full h-4 overflow-hidden">
@@ -320,17 +320,17 @@ function DetailDrawer({
                               style={{ width: `${pct}%` }}
                             />
                           </div>
-                          <span className="text-[11px] text-white font-mono w-20 text-right">
+                          <span className="text-[0.6875rem] text-white font-mono w-20 text-right">
                             {d.daily_total.toLocaleString()}
                           </span>
-                          <span className="text-[9px] text-[#9ca3af] w-10">
+                          <span className="text-[0.5625rem] text-[#9ca3af] w-10">
                             피크 {d.peak_hour}시
                           </span>
                         </div>
                       );
                     })}
                   </div>
-                  <p className="text-[9px] text-[#9ca3af] mt-3">
+                  <p className="text-[0.5625rem] text-[#9ca3af] mt-3">
                     ※ 서울시 생활인구 데이터 (KT 통신 기반) | {popData.data_delay_note}
                   </p>
                 </div>

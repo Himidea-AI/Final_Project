@@ -40,7 +40,7 @@ export function InsightTab({ simResult, openModal }: Props) {
         <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left">
           <BrainCircuit className="text-indigo-400" /> 8대 멀티 에이전트 상세 리포트
         </h3>
-        <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+        <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
           {attributions.length}/8 에이전트 분석 완료
         </div>
       </div>
@@ -84,13 +84,13 @@ export function InsightTab({ simResult, openModal }: Props) {
                   <h4 className="text-sm font-bold text-stone-200 leading-tight truncate">
                     {agent.name}
                   </h4>
-                  <span className="text-[9px] font-black text-stone-600 uppercase tracking-widest leading-none">
+                  <span className="text-[0.5625rem] font-black text-stone-600 uppercase tracking-widest leading-none">
                     {agent.desc}
                   </span>
                 </div>
                 {confidencePct != null && (
                   <div className="flex flex-col items-end shrink-0">
-                    <span className="text-[8px] font-black text-stone-500 uppercase tracking-tighter">
+                    <span className="text-[0.5rem] font-black text-stone-500 uppercase tracking-tighter">
                       신뢰도
                     </span>
                     <span className="text-xs font-black text-indigo-400 tabular-nums">
@@ -103,14 +103,14 @@ export function InsightTab({ simResult, openModal }: Props) {
               {/* verdict (한 줄 판정) */}
               {verdict && (
                 <div className="mb-3 px-2.5 py-1.5 rounded-md bg-stone-950/40 border border-stone-800/40">
-                  <span className="text-[11px] font-bold text-stone-300 leading-tight">
+                  <span className="text-[0.6875rem] font-bold text-stone-300 leading-tight">
                     {verdict}
                   </span>
                 </div>
               )}
 
               {/* reasoning (요약 3줄) */}
-              <p className="text-[11px] text-stone-500 leading-relaxed mb-4 flex-grow line-clamp-3">
+              <p className="text-[0.6875rem] text-stone-500 leading-relaxed mb-4 flex-grow line-clamp-3">
                 {reasoning ?? '해당 에이전트 분석 결과가 아직 수집되지 않았습니다.'}
               </p>
 
@@ -120,7 +120,7 @@ export function InsightTab({ simResult, openModal }: Props) {
                   {sources.slice(0, 3).map((src, i) => (
                     <span
                       key={`${src}-${i}`}
-                      className="text-[8px] font-black text-stone-500 bg-stone-900/50 px-1.5 py-0.5 rounded border border-stone-800 uppercase tracking-tighter"
+                      className="text-[0.5rem] font-black text-stone-500 bg-stone-900/50 px-1.5 py-0.5 rounded border border-stone-800 uppercase tracking-tighter"
                     >
                       {src}
                     </span>
@@ -144,7 +144,7 @@ export function InsightTab({ simResult, openModal }: Props) {
                         .join('\n\n'),
                     })
                   }
-                  className="w-full py-2.5 bg-stone-800 hover:bg-stone-700 text-[10px] font-black text-stone-400 rounded-xl flex items-center justify-center gap-2 tracking-widest uppercase transition-colors"
+                  className="w-full py-2.5 bg-stone-800 hover:bg-stone-700 text-[0.625rem] font-black text-stone-400 rounded-xl flex items-center justify-center gap-2 tracking-widest uppercase transition-colors"
                 >
                   <Maximize2 size={12} /> 상세 분석 결과
                 </button>
