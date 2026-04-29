@@ -44,7 +44,15 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
-import { Routes, Route, useNavigate, useLocation, Outlet, Navigate } from 'react-router-dom';
+import {
+  Routes,
+  Route,
+  useNavigate,
+  useLocation,
+  useSearchParams,
+  Outlet,
+  Navigate,
+} from 'react-router-dom';
 import { TransitionContext } from './contexts/TransitionContext';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
@@ -1296,7 +1304,15 @@ function SimulatorDashboard({
 
   // [R2] 마운트 시 store 에서 복원 — 다른 페이지로 나갔다가 /simulator 복귀 시 결과 유지.
   // store.result 가 있고 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
+  // 단 ?new=1 query param 이 있으면 mount-restore skip + store 초기화 (DashboardHub의
+  // "+ 새 시뮬레이션" 버튼이 사용 — 이전 결과 자동 복원으로 input UI 가 hidden 되는 회귀 방지).
+  const [searchParams] = useSearchParams();
   useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      // 명시적 새 시뮬 진입 — store 초기화하여 input UI 정상 노출
+      useSimulationStore.getState().dismissResult();
+      return;
+    }
     const s = useSimulationStore.getState();
     if (reportState === 'idle' && s.status === 'done' && s.result) {
       setRawSimResult(s.result);

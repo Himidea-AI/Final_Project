@@ -8,8 +8,10 @@
  *   - 함수: in-page state 전환 모드 (button onClick). HistoryDashboardView 에서 사용.
  */
 
+import { useNavigate } from 'react-router-dom';
 import type { SimulationOutput } from '../../../types';
 import { formatDocumentId } from '../../../types/simulationHistory';
+import { useSimulationStore } from '../../../stores/simulationStore';
 import { HubCard } from './HubCard';
 
 export type HubView = 'predict' | 'analyze' | 'abm';
@@ -36,6 +38,16 @@ export function DashboardHub({
   savedHistoryId,
   onSelect,
 }: Props) {
+  const navigate = useNavigate();
+  const dismissResult = useSimulationStore((s) => s.dismissResult);
+
+  const handleNewSimulation = () => {
+    // 이전 시뮬 결과 초기화 후 시뮬 입력 페이지로 이동
+    // ?new=1 query param: App.tsx의 mount-restore가 이전 결과 자동 복원하지 않도록 신호
+    dismissResult();
+    navigate('/simulator?new=1');
+  };
+
   const docId = formatDocumentId(savedHistoryId ?? null);
   const createdAt = new Date().toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -47,11 +59,20 @@ export function DashboardHub({
     <div className="mx-auto max-w-[1728px] px-8 pt-28 pb-12">
       <header className="mb-12 flex items-end justify-between border-b border-stone-800/60 pb-6">
         <h1 className="text-2xl font-black text-stone-100 tracking-tight">{brandName || '—'}</h1>
-        <div className="text-right">
-          <div className="text-[10px] font-mono uppercase tracking-widest text-stone-500">
-            {docId}
+        <div className="flex items-end gap-6">
+          <button
+            type="button"
+            onClick={handleNewSimulation}
+            className="rounded-lg border border-indigo-500/60 bg-indigo-500/10 px-4 py-2 text-sm font-bold text-indigo-300 transition hover:border-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-200"
+          >
+            + 새 시뮬레이션
+          </button>
+          <div className="text-right">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-stone-500">
+              {docId}
+            </div>
+            <div className="mt-1 text-[10px] font-mono text-stone-600">{createdAt}</div>
           </div>
-          <div className="mt-1 text-[10px] font-mono text-stone-600">{createdAt}</div>
         </div>
       </header>
 
