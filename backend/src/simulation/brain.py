@@ -448,42 +448,38 @@ class LLMBrain:
     # 컨텍스트 빌더 (동적 부분 - 캐시 X)
     # -----------------------------------------------------------
     def _dynamic_context(self, agent: "Agent", world: "World") -> str:
-        nearby = [s.name for s in world.stores_in_dong(agent.current_dong)[:5]]
+        """매 hour 유저 프롬프트 — caveman 압축 (~40 tok, 이전 100 tok)."""
+        nearby = [s.name for s in world.stores_in_dong(agent.current_dong)[:3]]
         memory_line = ""
         if self.memory_index is not None:
             try:
-                query = f"{world.current_hour}시 {agent.current_dong} 행동"
+                query = f"{world.current_hour}시 {agent.current_dong}"
                 hits = self.memory_index.search(agent.agent_id, query, k=2)
                 if hits:
-                    memory_line = " 과거: " + " | ".join(h.text for h in hits) + "."
+                    memory_line = f" 과거:{' | '.join(h.text for h in hits)}"
             except Exception:
                 pass
         prof_line = ""
         if agent.profile is not None:
-            prof_line = f" [개인: {agent.profile.lifestyle_tag}, 가성비성향 {agent.profile.price_sensitivity:.1f}, 카페선호 {agent.profile.pref_cafe:.1f}]"
+            prof_line = f" [{agent.profile.lifestyle_tag} 가성비{agent.profile.price_sensitivity:.1f} 카페{agent.profile.pref_cafe:.1f}]"
+        wkd = "주말" if world.is_weekend else "평일"
         return (
-            f"지금 {world.current_hour}시, "
-            f"{'주말' if world.is_weekend else '평일'}, "
-            f"{world.weather} {world.temperature:.0f}도.{prof_line} "
-            f"현재 {agent.current_dong}에 있고 오늘 {len(agent.visited_today)}곳 방문, "
-            f"{int(agent.spent_today):,}원 지출. "
-            f"근처 매장: {', '.join(nearby[:3])}.{memory_line} "
-            f"다음 행동을 JSON으로 결정하세요."
+            f"{world.current_hour}시 {wkd} {world.weather}{world.temperature:.0f}도.{prof_line} "
+            f"{agent.current_dong} 방문{len(agent.visited_today)} 지출{int(agent.spent_today):,}원. "
+            f"근처:{','.join(nearby)}.{memory_line} JSON결정."
         )
 
     def _compact_prompt(self, agent: "Agent", world: "World") -> str:
-        """Tier A용 압축 프롬프트 (페르소나 X, 200 tok)."""
+        """Tier A 압축 프롬프트 — caveman (~80 tok, 이전 200 tok)."""
         tag = agent.profile.lifestyle_tag if agent.profile else agent.role.value
         extra = ""
         if agent.profile is not None:
-            extra = f" 가성비{agent.profile.price_sensitivity:.1f}, 카페선호{agent.profile.pref_cafe:.1f}."
+            extra = f" 가성비{agent.profile.price_sensitivity:.1f} 카페{agent.profile.pref_cafe:.1f}."
+        wkd = "주말" if world.is_weekend else "평일"
         return (
-            f"마포 {tag} {agent.age}세, {agent.current_dong}, "
-            f"{world.current_hour}시 {'주말' if world.is_weekend else '평일'}.{extra} "
-            f"예산잔여 {int(agent.budget_today - agent.spent_today):,}원. "
-            f'행동 JSON: {{"action": "visit|move|rest", '
-            f'"category": "카페|음식점|편의점|주점|null", '
-            f'"spend": 원, "reason": "한문장"}}'
+            f"마포 {tag} {agent.age}{agent.current_dong} {world.current_hour}시 {wkd}.{extra}"
+            f" 예산잔여{int(agent.budget_today - agent.spent_today):,}원."
+            f' JSON:{{"action":"visit|move|rest","category":"카페|음식점|편의점|주점|null","spend":원,"reason":"30자 fragment"}}'
         )
 
     # -----------------------------------------------------------
