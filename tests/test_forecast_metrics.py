@@ -142,3 +142,36 @@ def test_evaluate_all_only_y_train():
     assert "MASE_in_sample" in result
     expected = float(np.mean(np.abs(y_true - y_pred))) / 1.0
     assert result["MASE_in_sample"] == pytest.approx(expected)
+
+
+def test_kl_divergence_identical_distributions_zero():
+    """동일 분포의 KL divergence = 0."""
+    import numpy as np
+
+    from validation.metrics.forecast_metrics import kl_divergence
+
+    p = np.array([0.3, 0.2, 0.5])
+    q = np.array([0.3, 0.2, 0.5])
+    assert abs(kl_divergence(p, q)) < 1e-9
+
+
+def test_kl_divergence_different_distributions_positive():
+    """다른 분포의 KL > 0."""
+    import numpy as np
+
+    from validation.metrics.forecast_metrics import kl_divergence
+
+    p = np.array([0.5, 0.3, 0.2])
+    q = np.array([0.3, 0.3, 0.4])
+    assert kl_divergence(p, q) > 0
+
+
+def test_mae_on_ratio_basic():
+    """ratio 입력에서 MAE 정상 계산."""
+    import numpy as np
+
+    from validation.metrics.forecast_metrics import mae_on_ratio
+
+    y_true = np.array([[0.3, 0.5, 0.2], [0.4, 0.4, 0.2]])
+    y_pred = np.array([[0.35, 0.45, 0.2], [0.4, 0.45, 0.15]])
+    assert abs(mae_on_ratio(y_true, y_pred) - 0.0333) < 1e-3

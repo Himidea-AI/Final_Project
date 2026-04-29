@@ -121,6 +121,22 @@ def mase_in_sample(
     return float(model_mae / train_diff_mae)
 
 
+def kl_divergence(p: ArrayLike, q: ArrayLike, eps: float = 1e-9) -> float:
+    """KL(P || Q) = sum(p * log(p / q)). 분포 p, q 모두 [0, 1] 합 1.0 가정."""
+    p_arr = np.asarray(p, dtype=float)
+    q_arr = np.asarray(q, dtype=float)
+    p_safe = np.maximum(p_arr, eps)
+    q_safe = np.maximum(q_arr, eps)
+    return float(np.sum(p_safe * np.log(p_safe / q_safe)))
+
+
+def mae_on_ratio(y_true: ArrayLike, y_pred: ArrayLike) -> float:
+    """ratio 행렬 (N, K) 의 element-wise MAE."""
+    y_true_arr = np.asarray(y_true, dtype=float)
+    y_pred_arr = np.asarray(y_pred, dtype=float)
+    return float(np.mean(np.abs(y_true_arr - y_pred_arr)))
+
+
 def evaluate_all(
     y_true: ArrayLike,
     y_pred: ArrayLike,
