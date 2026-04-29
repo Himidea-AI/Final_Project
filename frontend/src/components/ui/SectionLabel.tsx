@@ -17,10 +17,10 @@ export function SectionLabel({ icon: Icon, title, sub }: Props) {
         <Icon size={14} className="text-indigo-400" />
       </div>
       <div className="flex flex-col text-left">
-        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] leading-none">
+        <span className="text-[0.625rem] font-black text-indigo-400 uppercase tracking-[0.2em] leading-none">
           {title}
         </span>
-        <span className="text-[9px] font-bold text-stone-600 uppercase mt-1 leading-none">
+        <span className="text-[0.5625rem] font-bold text-stone-600 uppercase mt-1 leading-none">
           {sub}
         </span>
       </div>

@@ -60,7 +60,7 @@ export function DecisionCard({
       {/* 모서리 micro dot — 디자인 "완결감" */}
       <div className="absolute top-6 right-6 w-1 h-1 rounded-full bg-stone-800" />
 
-      <h3 className="text-[20px] font-black text-stone-100 mb-6 italic tracking-tighter leading-tight">
+      <h3 className="text-[1.25rem] font-black text-stone-100 mb-6 italic tracking-tighter leading-tight">
         {title}
       </h3>
 
@@ -70,7 +70,7 @@ export function DecisionCard({
         {heroBadge}
       </div>
 
-      <p className="text-[13px] text-stone-400 leading-relaxed mb-8 flex-grow font-medium">
+      <p className="text-[0.8125rem] text-stone-400 leading-relaxed mb-8 flex-grow font-medium">
         {description}
       </p>
 
@@ -87,7 +87,7 @@ export function DecisionCard({
               }`}
             />
             <span
-              className={`text-[13px] tracking-tight ${
+              className={`text-[0.8125rem] tracking-tight ${
                 item.highlight ? 'text-stone-100 font-bold' : 'text-stone-500'
               }`}
             >
@@ -113,7 +113,7 @@ export function DecisionCard({
       >
         <div className="flex items-center gap-2">
           <span
-            className={`text-[9px] font-black uppercase tracking-[0.2em] transition-colors ${
+            className={`text-[0.5625rem] font-black uppercase tracking-[0.2em] transition-colors ${
               footnoteInteractive ? 'text-stone-500 group-hover:text-cyan-400' : 'text-stone-600'
             }`}
           >
@@ -136,7 +136,7 @@ export function DecisionCard({
           </div>
         </div>
         <div
-          className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest truncate max-w-[180px] transition-colors ${
+          className={`flex items-center gap-1.5 text-[0.5625rem] font-black uppercase tracking-widest truncate max-w-[180px] transition-colors ${
             footnoteInteractive
               ? 'text-stone-500 group-hover:text-cyan-400'
               : 'text-stone-600 group-hover:text-stone-400'

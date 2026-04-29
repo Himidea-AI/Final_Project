@@ -68,10 +68,10 @@ function PDFPageHeader({
         <svg width="36" height="14" viewBox="0 0 78 30" fill="none">
           {SPOTTER_LOGO_PATHS}
         </svg>
-        <span className="text-[13px] font-black tracking-[0.18em] text-slate-900">SPOTTER</span>
-        <span className="text-[10px] text-slate-400 ml-1">/ {districtFull} 상권 분석 리포트</span>
+        <span className="text-[0.8125rem] font-black tracking-[0.18em] text-slate-900">SPOTTER</span>
+        <span className="text-[0.625rem] text-slate-400 ml-1">/ {districtFull} 상권 분석 리포트</span>
       </div>
-      <span className="text-[10px] text-slate-400 font-mono tracking-wider">
+      <span className="text-[0.625rem] text-slate-400 font-mono tracking-wider">
         PAGE {pageNumber} / {totalPages}
       </span>
     </div>
@@ -80,7 +80,7 @@ function PDFPageHeader({
 
 function PDFPageFooter({ reportDate }: { reportDate: string }) {
   return (
-    <div className="text-[9px] text-slate-400 font-mono border-t border-slate-200 pt-3 flex justify-between tracking-wider">
+    <div className="text-[0.5625rem] text-slate-400 font-mono border-t border-slate-200 pt-3 flex justify-between tracking-wider">
       <span>© PROJECT SPOTTER · CONFIDENTIAL</span>
       <span>GENERATED {reportDate}</span>
     </div>
@@ -124,10 +124,10 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             <svg width="200" height="78" viewBox="0 0 78 30" fill="none" className="mb-10">
               {SPOTTER_LOGO_PATHS}
             </svg>
-            <p className="text-[#6366f1] font-mono text-[11px] tracking-[0.3em] border border-[#6366f1] px-5 py-1.5 rounded-full bg-indigo-50 mb-16">
+            <p className="text-[#6366f1] font-mono text-[0.6875rem] tracking-[0.3em] border border-[#6366f1] px-5 py-1.5 rounded-full bg-indigo-50 mb-16">
               AI FRANCHISE INTELLIGENCE REPORT
             </p>
-            <h1 className="text-[44px] font-black text-slate-900 text-center leading-[1.2] tracking-tight">
+            <h1 className="text-[2.75rem] font-black text-slate-900 text-center leading-[1.2] tracking-tight">
               {districtFull}
               <br />
               상권 분석 결과
@@ -137,7 +137,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             </p>
           </div>
 
-          <div className="flex justify-between items-end font-mono text-[10px] text-slate-500 pt-6 border-t border-slate-200">
+          <div className="flex justify-between items-end font-mono text-[0.625rem] text-slate-500 pt-6 border-t border-slate-200">
             <div className="space-y-1.5">
               <p className="tracking-wider">GENERATED · {reportDate}</p>
               <p className="tracking-wider">REQUESTED BY · SPOTTER-HQ</p>
@@ -152,7 +152,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
           <PDFPageHeader pageNumber={2} totalPages={TOTAL_PAGES} districtFull={districtFull} />
 
           <div className="flex-1 pt-8">
-            <h2 className="text-[22px] font-black text-slate-900 mb-1">01. 상권 종합 요약</h2>
+            <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">01. 상권 종합 요약</h2>
             <p className="text-xs text-slate-500 mb-6">
               Executive Summary · 핵심 KPI 및 시계열 분석
             </p>
@@ -161,13 +161,13 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             <div className="grid grid-cols-4 gap-3 mb-8">
               {stats.map((s, i) => (
                 <div key={i} className="border border-slate-200 bg-slate-50 p-4 rounded-lg">
-                  <div className="text-[9px] text-slate-500 mb-2 uppercase tracking-wider">
+                  <div className="text-[0.5625rem] text-slate-500 mb-2 uppercase tracking-wider">
                     {s.title}
                   </div>
-                  <div className="text-[15px] font-black text-slate-900 leading-tight">
+                  <div className="text-[0.9375rem] font-black text-slate-900 leading-tight">
                     {s.value}
                   </div>
-                  <div className="text-[9px] text-emerald-600 mt-1.5 font-mono">{s.trend}</div>
+                  <div className="text-[0.5625rem] text-emerald-600 mt-1.5 font-mono">{s.trend}</div>
                 </div>
               ))}
             </div>
@@ -297,11 +297,11 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
 
           <div className="flex-1 pt-8 space-y-10">
             <div>
-              <h2 className="text-[22px] font-black text-slate-900 mb-1">02. 가맹점 간섭도 분석</h2>
+              <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">02. 가맹점 간섭도 분석</h2>
               <p className="text-xs text-slate-500 mb-4">
                 Cannibalization Analysis · 반경 내 동일 브랜드 영향도
               </p>
-              <table className="w-full text-[11px]">
+              <table className="w-full text-[0.6875rem]">
                 <thead>
                   <tr className="border-b-2 border-slate-300 text-slate-500 text-left uppercase tracking-wider">
                     <th className="py-2.5 font-medium">가맹점명</th>
@@ -318,7 +318,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                       <td className="py-3 font-mono font-bold text-slate-900">{r.impact}</td>
                       <td className="py-3">
                         <span
-                          className={`px-2 py-0.5 text-[9px] rounded-full border font-bold ${
+                          className={`px-2 py-0.5 text-[0.5625rem] rounded-full border font-bold ${
                             r.status === 'Safe'
                               ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
                               : 'bg-slate-100 text-slate-600 border-slate-300'
@@ -334,11 +334,11 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             </div>
 
             <div>
-              <h2 className="text-[22px] font-black text-slate-900 mb-1">03. 행정동 비교 분석</h2>
+              <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">03. 행정동 비교 분석</h2>
               <p className="text-xs text-slate-500 mb-4">
                 Neighborhood Comparison · 인근 동 AI 점수 / 폐업률 / 손익분기점
               </p>
-              <table className="w-full text-[11px]">
+              <table className="w-full text-[0.6875rem]">
                 <thead>
                   <tr className="border-b-2 border-slate-300 text-slate-500 text-left uppercase tracking-wider">
                     <th className="py-2.5 font-medium">행정동</th>
@@ -369,15 +369,15 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
           <PDFPageHeader pageNumber={4} totalPages={TOTAL_PAGES} districtFull={districtFull} />
 
           <div className="flex-1 pt-8">
-            <h2 className="text-[22px] font-black text-slate-900 mb-1">04. SPOTTER AI 인사이트</h2>
+            <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">04. SPOTTER AI 인사이트</h2>
             <p className="text-xs text-slate-500 mb-6">
               LangGraph Multi-Agent Analysis · 에이전트 노드별 인사이트
             </p>
 
             {insights.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
-                <p className="text-[12px] font-semibold text-slate-600">인사이트 데이터 없음</p>
-                <p className="mt-1 text-[10px] text-slate-500">
+                <p className="text-[0.75rem] font-semibold text-slate-600">인사이트 데이터 없음</p>
+                <p className="mt-1 text-[0.625rem] text-slate-500">
                   시뮬레이션 실행 후 법률/인구/경쟁 에이전트 결과가 준비되면 자동으로 채워집니다.
                 </p>
               </div>
@@ -388,17 +388,17 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                   return (
                     <div key={i} className={`border rounded-lg p-5 ${style.bg}`}>
                       <div className="flex items-start justify-between mb-3">
-                        <h3 className="text-[14px] font-bold text-slate-900 flex-1">
+                        <h3 className="text-[0.875rem] font-bold text-slate-900 flex-1">
                           {insight.title}
                         </h3>
                         <span className="inline-flex items-center gap-1.5 shrink-0 ml-3">
                           <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                          <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500">
+                          <span className="text-[0.5625rem] font-mono uppercase tracking-[0.15em] text-slate-500">
                             {insight.severity.toUpperCase()}
                           </span>
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-700 leading-relaxed">{insight.desc}</p>
+                      <p className="text-[0.6875rem] text-slate-700 leading-relaxed">{insight.desc}</p>
                     </div>
                   );
                 })}
@@ -406,17 +406,17 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             )}
 
             <div className="mt-10 pt-6 border-t border-slate-200">
-              <h4 className="text-[11px] font-bold text-slate-700 mb-2 uppercase tracking-wider">
+              <h4 className="text-[0.6875rem] font-bold text-slate-700 mb-2 uppercase tracking-wider">
                 분석 방법론 (Methodology)
               </h4>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
+              <p className="text-[0.625rem] text-slate-500 leading-relaxed">
                 본 리포트는 SPOTTER AI 멀티 에이전트 시스템(LangGraph 기반)의 시뮬레이션 결과입니다.
                 market_analyst, population_analyst, legal_advisor, financial_insight 4개 노드의 통합
                 분석 결과를 포함하며, KT 통신사 셀룰러 데이터,
                 공공데이터(상가정보·인구통계·임대시세), 그리고 A2 봉환 팀의 법률 RAG 시스템 (14개
                 영역 3,775 청크)을 교차 검증하여 도출되었습니다.
               </p>
-              <p className="text-[9px] text-slate-400 mt-3 font-mono">
+              <p className="text-[0.5625rem] text-slate-400 mt-3 font-mono">
                 DOC ID · {docId} · SPOTTER v3.9 · LangGraph 0.2.x
               </p>
             </div>
@@ -431,7 +431,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             <PDFPageHeader pageNumber={5} totalPages={TOTAL_PAGES} districtFull={districtFull} />
 
             <div className="flex-1 pt-8">
-              <h2 className="text-[22px] font-black text-slate-900 mb-1">
+              <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">
                 05. 타겟 고객 매출 분석
               </h2>
               <p className="text-xs text-slate-500 mb-6">
@@ -440,10 +440,10 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
 
               {customerSegment.profile_summary && (
                 <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  <div className="text-[0.625rem] font-bold text-slate-500 uppercase tracking-wider mb-2">
                     프로필 요약
                   </div>
-                  <p className="text-[12px] text-slate-800 leading-relaxed">
+                  <p className="text-[0.75rem] text-slate-800 leading-relaxed">
                     {customerSegment.profile_summary}
                   </p>
                 </div>
@@ -452,40 +452,40 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
               {/* KPI 4종 — 금액 없으면 비율만 표시 */}
               <div className="grid grid-cols-4 gap-3 mb-6">
                 <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                  <div className="text-[0.5625rem] text-slate-500 uppercase tracking-wider">
                     세그먼트 비율
                   </div>
-                  <div className="mt-1 text-[18px] font-black text-[#6366f1]">
+                  <div className="mt-1 text-[1.125rem] font-black text-[#6366f1]">
                     {typeof customerSegment.segment_ratio === 'number'
                       ? `${(customerSegment.segment_ratio * 100).toFixed(2)}%`
                       : '—'}
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                  <div className="text-[0.5625rem] text-slate-500 uppercase tracking-wider">
                     타겟 매출
                   </div>
-                  <div className="mt-1 text-[14px] font-bold text-emerald-600 font-mono">
+                  <div className="mt-1 text-[0.875rem] font-bold text-emerald-600 font-mono">
                     {customerSegment.segment_sales != null
                       ? `₩${customerSegment.segment_sales.toLocaleString('ko-KR')}`
                       : '—'}
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                  <div className="text-[0.5625rem] text-slate-500 uppercase tracking-wider">
                     식별 매출
                   </div>
-                  <div className="mt-1 text-[14px] font-bold text-sky-600 font-mono">
+                  <div className="mt-1 text-[0.875rem] font-bold text-sky-600 font-mono">
                     {customerSegment.identified_sales != null
                       ? `₩${customerSegment.identified_sales.toLocaleString('ko-KR')}`
                       : '—'}
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="text-[9px] text-slate-500 uppercase tracking-wider">
+                  <div className="text-[0.5625rem] text-slate-500 uppercase tracking-wider">
                     참조 월매출
                   </div>
-                  <div className="mt-1 text-[14px] font-bold text-slate-900 font-mono">
+                  <div className="mt-1 text-[0.875rem] font-bold text-slate-900 font-mono">
                     {customerSegment.total_sales_ref != null
                       ? `₩${customerSegment.total_sales_ref.toLocaleString('ko-KR')}`
                       : '—'}
@@ -537,7 +537,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                 />
               </div>
 
-              <div className="mt-6 text-[9px] text-slate-400 font-mono">
+              <div className="mt-6 text-[0.5625rem] text-slate-400 font-mono">
                 Analysis · customer_revenue MLP + living_population 실측 데이터 기반
               </div>
             </div>
@@ -569,7 +569,7 @@ function PDFRatioChart({
   );
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">
+      <div className="text-[0.625rem] font-bold text-slate-500 uppercase tracking-wider mb-3">
         {title}
       </div>
       <div className="space-y-1.5">
@@ -579,11 +579,11 @@ function PDFRatioChart({
           const width = Math.min(100, Math.round((v / maxRatio) * 100));
           return (
             <div key={it.key} className="flex items-center gap-2">
-              <div className="w-14 shrink-0 text-[10px] text-slate-700">{it.label}</div>
+              <div className="w-14 shrink-0 text-[0.625rem] text-slate-700">{it.label}</div>
               <div className="relative flex-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
                 <div className="h-full rounded-full bg-[#6366f1]" style={{ width: `${width}%` }} />
               </div>
-              <div className="w-12 shrink-0 text-right text-[10px] font-mono text-slate-700">
+              <div className="w-12 shrink-0 text-right text-[0.625rem] font-mono text-slate-700">
                 {(v * 100).toFixed(1)}%
               </div>
             </div>

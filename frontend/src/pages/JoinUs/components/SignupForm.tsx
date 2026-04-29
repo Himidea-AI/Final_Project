@@ -51,7 +51,7 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
 const fieldClass =
   'w-full px-4 py-3 rounded-xl bg-[#1e1b18] border text-[#e2e8f0] text-sm placeholder-[#9ca3af] outline-none transition-colors duration-200';
 const labelClass = 'block text-xs text-[#9ca3af] font-medium mb-1.5';
-const errorClass = 'text-[10px] text-red-400 mt-1';
+const errorClass = 'text-[0.625rem] text-red-400 mt-1';
 
 interface Props {
   planName: string;
@@ -300,7 +300,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
           </div>
           {f.error && <p className={errorClass}>{f.error}</p>}
           {f.key === 'storeCount' && storeNum >= 30 && (
-            <p className="text-[10px] text-[#a5b4fc] mt-1">
+            <p className="text-[0.625rem] text-[#a5b4fc] mt-1">
               30호점 이상 — Enterprise 요금제를 추천합니다
             </p>
           )}
@@ -340,7 +340,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
                 />
               ))}
             </div>
-            <span className="text-[10px] text-[#9ca3af]">{pwStrength.label}</span>
+            <span className="text-[0.625rem] text-[#9ca3af]">{pwStrength.label}</span>
           </div>
         )}
       </motion.div>
@@ -466,7 +466,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.55, duration: 0.4 }}
-                className="text-[10px] text-[#9ca3af] text-center mt-2 leading-relaxed"
+                className="text-[0.625rem] text-[#9ca3af] text-center mt-2 leading-relaxed"
               >
                 결제는 가입 후 HQ의{' '}
                 <span className="text-amber-400 font-mono">결제 및 API 토큰</span> 메뉴에서

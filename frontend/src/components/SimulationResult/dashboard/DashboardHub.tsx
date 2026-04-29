@@ -66,10 +66,10 @@ export function DashboardHub({
             새로운 시뮬레이션
           </button>
           <div className="text-right">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-stone-500">
+            <div className="text-[0.625rem] font-mono uppercase tracking-widest text-stone-500">
               {docId}
             </div>
-            <div className="mt-1 text-[10px] font-mono text-stone-600">{createdAt}</div>
+            <div className="mt-1 text-[0.625rem] font-mono text-stone-600">{createdAt}</div>
           </div>
         </div>
       </header>

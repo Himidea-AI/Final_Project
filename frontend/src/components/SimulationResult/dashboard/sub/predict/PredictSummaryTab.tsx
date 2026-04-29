@@ -96,7 +96,7 @@ function Kpi({ icon, label, value, color }: KpiProps) {
   const valueClass = VALUE_CLASS[color];
   return (
     <div className="rounded-3xl border border-stone-800/60 bg-stone-900/40 p-6">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-stone-500">
+      <div className="mb-3 flex items-center gap-2 text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
         {icon}
         <span>{label}</span>
       </div>

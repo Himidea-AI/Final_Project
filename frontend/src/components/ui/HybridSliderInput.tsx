@@ -79,7 +79,7 @@ export function HybridSliderInput({
           {infoText && (
             <div className="relative flex items-center">
               <Info className="w-3.5 h-3.5 text-[#6b7280] group-hover:text-[#818cf8] transition-colors" />
-              <div className="absolute left-6 top-4 w-48 p-2 bg-[#1e1b18] border border-[#3a3633] rounded-md shadow-xl text-[10px] text-[#a3a3a3] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              <div className="absolute left-6 top-4 w-48 p-2 bg-[#1e1b18] border border-[#3a3633] rounded-md shadow-xl text-[0.625rem] text-[#a3a3a3] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                 {infoText}
               </div>
             </div>
@@ -99,7 +99,7 @@ export function HybridSliderInput({
             className="w-16 bg-transparent text-right text-xs font-mono tabular-nums font-black text-[#818cf8] focus:outline-none placeholder-[#404040]"
             placeholder={String(min)}
           />
-          <span className="text-[10px] text-[#9ca3af] ml-1 font-bold">{unit}</span>
+          <span className="text-[0.625rem] text-[#9ca3af] ml-1 font-bold">{unit}</span>
         </div>
       </div>
 
@@ -120,7 +120,7 @@ export function HybridSliderInput({
         />
       </div>
 
-      <div className="flex justify-between text-[10px] text-[#6b7280] font-mono tabular-nums">
+      <div className="flex justify-between text-[0.625rem] text-[#6b7280] font-mono tabular-nums">
         <span>{renderMin}</span>
         <span>{renderMax}</span>
       </div>
