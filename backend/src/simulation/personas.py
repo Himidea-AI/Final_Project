@@ -161,12 +161,13 @@ def assign_personas(
 
 
 def _build_profile(agent: Agent, arc: dict) -> str:
-    """Anthropic prompt cache 정적 페르소나 — caveman 압축 (~150 tok, 이전 500 tok).
+    """Anthropic prompt cache 정적 페르소나 — caveman ultra (~110 tok, 이전 150 tok).
 
     토큰 절감: 50 agents × system prompt cache hit 시 입력 비용 -70%.
+    축약: 거주→@, 소득N/3→incN, 예산→bud, 특성→tr, 소비→spd, 선호동→pref.
     Decision 다양성 보존 위해 핵심 trait·spending·preferred_dongs 유지.
     """
-    return f"""마포 {agent.name} {agent.age}{agent.gender} 거주:{agent.home_dong} 소득{agent.income_level}/3 예산{int(agent.budget_today):,}원
-타입:{arc["label"]} 특성:{arc["traits"]} 소비:{arc["spending"]} 선호동:{",".join(arc["preferred_dongs"])}
-결정요인: 시간 위치 취향 예산 날씨. JSON 짧게:
-{{"action":"visit|move|rest|work","target_dong":"동|null","category":"카페|음식점|편의점|주점|null","spend":원,"reason":"30자 이내 fragment, 관사·조사 최소"}}"""
+    return f"""마포 {agent.name} {agent.age}{agent.gender} @{agent.home_dong} inc{agent.income_level}/3 bud{int(agent.budget_today):,}
+타입:{arc["label"]} tr:{arc["traits"]} spd:{arc["spending"]} pref:{",".join(arc["preferred_dongs"])}
+결정: 시간 위치 취향 예산 날씨. JSON:
+{{"action":"visit|move|rest|work","target_dong":"동|null","category":"카페|음식점|편의점|주점|null","spend":원,"reason":"30자 fragment"}}"""
