@@ -17,7 +17,7 @@ _AGENT_KEYS_ORDERED: list[tuple[str, str]] = [
     ("population_analyst", "population_analyst_result"),
     ("legal", "legal_result"),
     ("district_ranking", "district_ranking_result"),
-    ("operational_fit", "operational_fit_result"),
+    ("inflow", "inflow_result"),
     ("demographic_depth", "demographic_depth_result"),
     ("trend_forecaster", "trend_forecaster_result"),
     ("competitor_intel", "competitor_intel_result"),

@@ -33,7 +33,7 @@ import redis.asyncio as aioredis
 # LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
 # (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -56,7 +56,7 @@ if _lc_api_key:
     os.environ.setdefault("LANGCHAIN_PROJECT", os.environ.get("LANGCHAIN_PROJECT", "mapo-franchise-simulator"))
 
 from langchain_core.messages import HumanMessage
-from src.agents.graph import compile_workflow
+from src.agents.graph import compile_slow_graph, compile_workflow
 
 # 절대 경로 임포트로 통일 (uvicorn src.main:app 실행 대응)
 from src.config.settings import settings
@@ -108,6 +108,10 @@ app = FastAPI(
 
 # LangGraph 컴파일된 앱 초기화
 app_graph = compile_workflow()
+
+# IM3-259 — AI 분석 전용 slow_graph (inflow + ranking + LLM + synthesis)
+# /analyze/llm endpoint에서 사용. ml_prediction은 포함하지 않음 (그건 /predict 측 책임).
+slow_graph = compile_slow_graph()
 
 # CORS 설정: 프론트엔드(localhost:3000) 접근 허용 및 Docker nginx (localhost) 허용
 _cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost").split(
@@ -291,19 +295,15 @@ async def _collect_all_competitor_locations(
     return results
 
 
-async def _run_pipeline(input_data: Any) -> dict[str, Any]:
-    """파이프라인 실행. 동일 키로 이미 실행 중인 Task가 있으면 공유하여 대기."""
-    key = _pipeline_key(input_data)
+def _build_initial_state(input_data: Any) -> dict[str, Any]:
+    """SimulationInput에서 LangGraph initial state dict 생성.
 
-    if key in _pending_pipelines and not _pending_pipelines[key].done():
-        print(f"[DEDUP] 동일 요청 대기 중 - 기존 파이프라인 공유: {key}")
-        return await _pending_pipelines[key]
-
-    # 프론트엔드가 영문으로 보낼 경우 한국어로 정규화 (DB 쿼리 호환)
+    /simulate, /analyze, /analyze/llm 등 모든 그래프 진입점이 공유한다.
+    """
     normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
     normalized_brand = input_data.brand_name or "미지정 브랜드"
 
-    initial_state = {
+    return {
         "messages": [HumanMessage(content=f"{input_data.target_district} {normalized_brand} 분석 시작")],
         "business_type": normalized_biz,
         "brand_name": normalized_brand,
@@ -333,12 +333,23 @@ async def _run_pipeline(input_data: Any) -> dict[str, Any]:
         "errors": [],
         "competitor_intel_result": {},
         # [customer_revenue P1-C] 사용자 타겟 입력 → state 주입
-        "target_age_groups": input_data.target_age_groups or [],
-        "target_gender": input_data.target_gender,
-        "target_time_slots": input_data.target_time_slots or [],
-        "target_day_type": input_data.target_day_type,
-        "target_monthly_sales": input_data.target_monthly_sales,
+        "target_age_groups": getattr(input_data, "target_age_groups", None) or [],
+        "target_gender": getattr(input_data, "target_gender", None),
+        "target_time_slots": getattr(input_data, "target_time_slots", None) or [],
+        "target_day_type": getattr(input_data, "target_day_type", None),
+        "target_monthly_sales": getattr(input_data, "target_monthly_sales", None),
     }
+
+
+async def _run_pipeline(input_data: Any) -> dict[str, Any]:
+    """파이프라인 실행. 동일 키로 이미 실행 중인 Task가 있으면 공유하여 대기."""
+    key = _pipeline_key(input_data)
+
+    if key in _pending_pipelines and not _pending_pipelines[key].done():
+        print(f"[DEDUP] 동일 요청 대기 중 - 기존 파이프라인 공유: {key}")
+        return await _pending_pipelines[key]
+
+    initial_state = _build_initial_state(input_data)
 
     task: asyncio.Task[Any] = asyncio.create_task(asyncio.wait_for(app_graph.ainvoke(initial_state), timeout=600.0))
     _pending_pipelines[key] = task
@@ -525,7 +536,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
     # comparison[].score를 받는 프론트 DistrictComparison.score는 nullable로 동기화 완료.
     district_score = float(_target_row.get("score") or 0) if _target_row else None
 
-    accessibility_raw = metrics.get("operational_fit_score")
+    accessibility_raw = metrics.get("inflow_score")
     if accessibility_raw is None:
         accessibility_raw = metrics.get("accessibility_score")
 
@@ -536,7 +547,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "estimated_revenue": _estimated_rev_r,
         "survival_rate": _survival_r,
         "growth_potential": _growth_r,
-        # operational_fit_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백.
+        # inflow_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백.
         # 값이 없으면 임의 기본값(예: 75)을 만들지 않고 None으로 내려보낸다.
         "accessibility": (min(int(float(accessibility_raw)), 100) if accessibility_raw is not None else None),
     }
@@ -737,9 +748,18 @@ async def get_status(job_id: str):
 
 
 @app.post("/analyze")
-async def analyze_location(input_data: SimulationInput):
-    """상권 분석 및 지도 데이터 요청"""
+async def analyze_location(input_data: SimulationInput, response: Response):
+    """[DEPRECATED] 풀파이프 상권 분석 — 전환 기간 동안만 유지.
+
+    IM3-259로 endpoint를 분리(/predict + /analyze/llm)했으므로 신규 호출은
+    그쪽으로 옮길 것. 이 endpoint는 기존 프론트/테스트 호환을 위해 유지하다가
+    충분히 검증되면 제거 예정.
+    """
     from src.config.constants import MAPO_DISTRICTS
+
+    # IM3-259: deprecation 헤더 — 클라이언트가 /predict + /analyze/llm 으로 옮길 것을 알림
+    response.headers["Deprecation"] = "true"
+    response.headers["Link"] = '</predict>; rel="successor-version", </analyze/llm>; rel="successor-version"'
 
     if input_data.target_district not in MAPO_DISTRICTS:
         return {
@@ -748,7 +768,7 @@ async def analyze_location(input_data: SimulationInput):
         }
 
     request_id = str(uuid.uuid4())
-    print(f"--- [API] /analyze 요청 수신: {input_data.target_district} ({input_data.business_type}) ---")
+    print(f"--- [API] /analyze 요청 수신 [DEPRECATED]: {input_data.target_district} ({input_data.business_type}) ---")
 
     # 테스트 모드 — LLM 5 에이전트 분석 건너뛰기 (토큰 절약)
     if os.getenv("LLM_AGENTS_DISABLED", "").strip() == "1":
@@ -772,6 +792,73 @@ async def analyze_location(input_data: SimulationInput):
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
         return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# IM3-259 — /analyze/llm: AI 분석 전용 endpoint (TCN/ML 분리, LLM only)
+# ---------------------------------------------------------------------------
+# /predict (B2 단발 ML)와 독립 병렬 호출. inflow + ranking + LLM 6 +
+# synthesis 단계만 실행하며, ml_prediction은 포함하지 않는다 (그건 /predict 측).
+# 응답: AnalysisOutput
+# ---------------------------------------------------------------------------
+
+
+@app.post("/analyze/llm")
+async def analyze_llm(input_data: SimulationInput):
+    """AI 분석 전용 endpoint — slow_graph 실행 (~80-140초).
+
+    /predict와 독립 병렬 호출 가능. winner는 ranking 단계에서 자체 결정.
+    """
+    from src.config.constants import MAPO_DISTRICTS
+    from src.schemas.simulation_output import AnalysisOutput
+
+    if input_data.target_district not in MAPO_DISTRICTS:
+        return {
+            "status": "error",
+            "message": f"지원하지 않는 행정동입니다: {input_data.target_district}. 마포구 16개 동만 지원합니다.",
+        }
+
+    request_id = str(uuid.uuid4())
+    print(
+        f"--- [API] /analyze/llm 요청 수신: {input_data.target_district} "
+        f"({input_data.business_type}) | id={request_id} ---"
+    )
+
+    if os.getenv("LLM_AGENTS_DISABLED", "").strip() == "1":
+        print(f"[ANALYZE/LLM] LLM_AGENTS_DISABLED=1 — mock 반환 (target={input_data.target_district})")
+        return {"status": "success", "data": _mock_simulation_response(input_data.target_district, request_id)}
+
+    initial_state = _build_initial_state(input_data)
+    try:
+        final_state = await asyncio.wait_for(slow_graph.ainvoke(initial_state), timeout=600.0)
+    except Exception as e:
+        import traceback
+
+        print(f"!!! [ANALYZE/LLM ERROR] !!! {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return {"status": "error", "message": str(e)}
+
+    # 풀파이프와 동일한 매퍼 재사용 — AnalysisOutput에 해당하는 필드만 자동 추출됨.
+    full = map_state_to_simulation_output(final_state, request_id)
+
+    # 경쟁업체 좌표 수집 (지도 멀티핀용) — winner 기준
+    winner = full.get("winner_district") or input_data.target_district
+    top3 = full.get("top_3_candidates") or []
+    try:
+        full["all_competitor_locations"] = await _collect_all_competitor_locations(
+            winner, top3, input_data.business_type
+        )
+    except Exception as e:
+        print(f"[ANALYZE/LLM] all_competitor_locations 수집 실패 (무시): {e}")
+        full["all_competitor_locations"] = []
+
+    # AnalysisOutput에 정의된 필드만 추출하여 응답 (PR 후 추가/제거 시 schema가 source of truth)
+    analysis_keys = set(AnalysisOutput.model_fields.keys())
+    payload = {k: v for k, v in full.items() if k in analysis_keys}
+    payload["request_id"] = request_id
+    payload["target_district"] = full.get("target_district") or input_data.target_district
+
+    return {"status": "success", "data": payload}
 
 
 # ---------------------------------------------------------------------------
@@ -1157,6 +1244,19 @@ async def get_mapo_spots(dong_name: str, limit: int = 4):
     return {"dong_name": dong_name, "spots": spots}
 
 
+@app.get("/mapo/spots-all")
+async def get_mapo_spots_all(per_dong: int = 3):
+    """마포 16동 전체 spot pool (ABM 시각화 마포 전체 dot spread 용).
+
+    동 별 per_dong 개 spot (지하철 + 매장) 합집합 = 16 × per_dong spot.
+    AbmPersonaMap 가 마포 전체 spot 풀에서 agent source/target 분배.
+    """
+    from src.services.mapo_spots import get_all_mapo_spots
+
+    spots = get_all_mapo_spots(per_dong=per_dong)
+    return {"per_dong": per_dong, "spots": spots, "n_spots": len(spots)}
+
+
 @app.get("/population/live")
 async def get_live_population(dongs: str | None = None):
     """
@@ -1334,6 +1434,8 @@ class AbmSimulationRequest(BaseModel):
     # 공실 스팟 클릭 시 그 좌표 (optional) — 지도에 매장 정확히 찍기 위해
     spot_lat: float | None = None
     spot_lon: float | None = None
+    # Tier S 50 LLM thought 활성 (default off, 비용 발생 — demo 시나리오용)
+    enable_llm_thought: bool = False
 
 
 @app.post("/simulate-abm")
@@ -1365,6 +1467,13 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     analysis_metrics = lr.get("analysis_metrics", {})
     market_report = lr.get("market_report") or {}
 
+    # 신규 매장 popularity_boost — runner 내부 default 1.0 (중립) 은
+    # RDS 실데이터(도화동 음식점 115개 등) 환경에서 신규 매장 weight 가
+    # 기존 ~100개 이상 매장에 묻혀 visits=0 이 빈번. vacancy_inject.py
+    # 가 정의한 DEFAULT_POPULARITY_BOOST=5.0 (인스타·블로그 마케팅 효과
+    # 가정) 를 본 endpoint 에서도 동일하게 사용해 sample 신호 확보.
+    from src.simulation.vacancy_inject import DEFAULT_POPULARITY_BOOST as _NEW_STORE_BOOST
+
     new_store_spec = {
         "district": req.target_district,
         "brand": req.brand_name,
@@ -1377,6 +1486,8 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         # 공실 스팟 클릭 시 좌표 (Optional) — 지도에 정확한 위치 표시
         "lat": req.spot_lat,
         "lon": req.spot_lon,
+        # 신규 매장 weight 부스트 — 기존 매장 (~100+개) 와 경쟁할 수 있도록
+        "popularity_boost": _NEW_STORE_BOOST,
     }
 
     pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
@@ -1411,9 +1522,13 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "date": req.scenario.date_override,
         "weekend": req.scenario.weekend_force,
         "rent_shock": req.scenario.rent_shock_pct,
+        "enable_llm_thought": req.enable_llm_thought,
     }
+    # cache 버전 prefix — 응답 schema 변경(trajectory/thoughts 추가) 시 bump 해 기존 캐시 무효화.
+    # v2: collect_trajectory=True 회귀 fix + thoughts 필드 (2026-04-28).
+    # v3: 신규 매장 popularity_boost=5.0 적용 (visits=0 회귀 fix, 2026-04-28).
     cache_key = (
-        "abm_sim:"
+        "abm_sim:v3:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -1442,6 +1557,10 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             use_profiles=True,
             scenario=scenario,
             days=req.days,
+            enable_llm_thought=req.enable_llm_thought,
+            # ⚠️ 누락 시 trajectory=None 반환 → 프론트 trajectory 기반 렌더 전부 차단.
+            # vacancy_evaluation 엔드포인트는 정상 전달 중 — 여기만 누락된 회귀였음.
+            collect_trajectory=True,
         )
     except Exception as e:
         logger.error(f"[ABM] 시뮬레이션 실패: {e}")
@@ -1498,10 +1617,18 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "cannibalization": result.get("cannibalization", {}),
         "narrator_summary": target_narrator,
         "trajectory": result.get("trajectory"),  # 미로피쉬 재생용
+        # 5000 agent 전체 시간별 위치 집계 — frontend 히트맵 layer (28×24 격자, ~43KB).
+        "density_grid": result.get("density_grid"),
         # 신규 매장(공실 스팟 클릭) 지표 — 프론트 결과 카드용
         "new_store_visits": result.get("new_store_visits", 0),
         "new_store_revenue": result.get("new_store_revenue", 0.0),
         "new_store_visit_share_pct": result.get("new_store_visit_share_pct", 0.0),
+        # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채워짐
+        "thoughts": result.get("thoughts", []),
+        "thought_calls": result.get("thought_calls", 0),
+        "thought_input_tokens": result.get("thought_input_tokens", 0),
+        "thought_output_tokens": result.get("thought_output_tokens", 0),
+        "thought_cached_tokens": result.get("thought_cached_tokens", 0),
         # 캐시 여부 (cache miss 라 False)
         "cached": False,
         # 원본 LangGraph 분석 결과 — 수정 없음
