@@ -296,7 +296,9 @@ function GlobalLimelightNav() {
                             <strong className="font-bold text-white mr-1">{tag}</strong>
                             {body}
                           </p>
-                          <p className="text-[0.625rem] text-[#9ca3af] mt-1.5 font-mono">{item.time}</p>
+                          <p className="text-[0.625rem] text-[#9ca3af] mt-1.5 font-mono">
+                            {item.time}
+                          </p>
                         </div>
                         <div className="shrink-0 flex items-center justify-center w-2">
                           <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />

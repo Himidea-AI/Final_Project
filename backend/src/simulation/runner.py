@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -26,6 +27,32 @@ from .scheduler import Scheduler
 from .policy_generator import generate_policies
 from .world import World, seed_synthetic_world
 from .world_loader import StoreHoursMap, load_subway_inflow_csv, load_world_from_rds
+
+
+# ---------------------------------------------------------------------------
+# Module-level static-data cache — /simulate-abm 매 호출마다 재로드되던
+# 무거운 정적 데이터(파일/RDS aggregation) 를 첫 호출 후 메모리에 보관.
+# 첫 호출: 30~40s setup, 이후: ~0s setup. uvicorn 재시작 시 무효.
+# ---------------------------------------------------------------------------
+_STATIC_CACHE: dict = {}
+_WEATHER_TTL_SEC = 1800  # 날씨는 30분 TTL — 너무 오래 캐시하면 시뮬 부정확
+
+
+def _cached(key: str, loader, ttl: float | None = None):
+    """key 별 lazy load + 옵션 TTL. loader 는 인자 없는 함수."""
+    now = time.time()
+    entry = _STATIC_CACHE.get(key)
+    if entry is not None:
+        ts, val = entry
+        if ttl is None or (now - ts) < ttl:
+            return val
+    val = loader()
+    _STATIC_CACHE[key] = (now, val)
+    return val
+
+
+# KT prior helper 제거됨 — 순수 ABM 동적 유동인구로 회귀.
+# 5000 agent 가 정책 기반 의사결정으로 hour 별 위치 변함 → 이게 곧 유동인구.
 
 
 def _load_dong_coords() -> dict[str, tuple[float, float]]:
@@ -438,12 +465,15 @@ def run_simulation(
         ns_dong = scenario.new_store.get("district") or scenario.new_store.get("dong")
         if ns_dong and ns_dong in world.dongs:
             new_store_sim_id = f"new_spot_{scenario.new_store.get('brand') or 'candidate'}"
+            # seats — frontend store_area (평) 가 주어지면 평수×2, 아니면 30 default.
+            # capacity 모델링: 작은 매장은 일 visit cap 낮음 (10평 = 20 seats = 일 ~20 cap).
+            _ns_seats = int(scenario.new_store.get("seats") or 30)
             new_store = _Store(
                 store_id=new_store_sim_id,
                 name=str(scenario.new_store.get("brand") or "신규 스팟"),
                 dong=ns_dong,
                 category=ns_cat,
-                seats=30,
+                seats=_ns_seats,
                 rating=4.0,
                 price_level=int(scenario.new_store.get("price_level") or 2),
                 lat=scenario.new_store.get("lat"),
@@ -464,12 +494,12 @@ def run_simulation(
         if verbose:
             print(f"  시나리오 날씨 override: {world.weather}", flush=True)
 
-    # 지하철 외부유입 calibration 데이터 로드 (External 에이전트 시간/동 분포에 사용)
-    world.subway_inflow = load_subway_inflow_csv()
+    # 지하철 외부유입 calibration 데이터 — 모듈 캐시 (CSV 파일, 변경 X)
+    world.subway_inflow = _cached("subway_inflow", load_subway_inflow_csv)
     if verbose and world.subway_inflow:
         n_keys = len(world.subway_inflow)
         n_dongs = len({d for d, _ in world.subway_inflow})
-        print(f"  지하철 inflow: {n_keys}건 ({n_dongs}개 동) 로드", flush=True)
+        print(f"  지하철 inflow: {n_keys}건 ({n_dongs}개 동) 로드 (cached)", flush=True)
 
     # Policy Generator — use_policy=True면 11개 정책 로드 (캐시 있으면 재사용)
     if use_policy:
@@ -477,17 +507,19 @@ def run_simulation(
         if verbose:
             print(f"  정책 캐시: {len(world.policy_cache)}개 (LLM 호출 0회 모드)", flush=True)
 
-    # 날씨 + 휴일 RDS 주입 — weather_override 있으면 날씨는 건드리지 않음
-    weather_info = _load_weather_recent()
+    # 날씨 + 휴일 RDS 주입 — 모듈 캐시 (날씨 30min TTL, 휴일 24h TTL)
+    weather_info = _cached("weather_recent", _load_weather_recent, ttl=_WEATHER_TTL_SEC)
     if weather_info:
         if not scenario.weather_override:
             world.weather = weather_info.get("weather", world.weather)
         world.temperature = weather_info.get("temperature", world.temperature)
         world.rain_mm = weather_info.get("rain_mm", 0.0)
         if verbose:
-            print(f"  날씨: {world.weather} {world.temperature:.1f}도 (강수 {world.rain_mm:.1f}mm)", flush=True)
+            print(
+                f"  날씨: {world.weather} {world.temperature:.1f}도 (강수 {world.rain_mm:.1f}mm) (cached)", flush=True
+            )
 
-    holiday_map = _load_holidays()
+    holiday_map = _cached("holidays", _load_holidays, ttl=86400)
 
     if verbose:
         print("\n=== Simulation 시작 ===", flush=True)
@@ -527,31 +559,31 @@ def run_simulation(
     if verbose:
         print(f"  페르소나: {len(personas)}개 생성 (Tier S)")
 
-    # 2.5 실데이터 기반 시간×동×연령×요일 가중치 로드
+    # 2.5 실데이터 기반 시간×동×연령×요일 가중치 — 모듈 캐시 (RDS 집계, 변경 X)
     try:
         from .profile_builder import ProfileBuilder
 
-        _pb = ProfileBuilder(seed=seed)
-        world.time_age_boost = _pb.load_time_age_boost()
+        # ProfileBuilder 도 캐시 (seed 다른 인스턴스 만들지 않게 — load 함수만 결과 캐싱)
+        world.time_age_boost = _cached("time_age_boost", lambda: ProfileBuilder(seed=seed).load_time_age_boost())
     except Exception as e:
         print(f"  [warn] time_age_boost 로드 실패: {e}")
 
-    # 2.5+ seoul_adstrd_flpop 분기 안정 평균 boost (16동 전체 커버, time_age_boost 보완)
+    # 2.5+ seoul_adstrd_flpop 분기 평균 boost — 850K row 쿼리, 캐시 필수.
     try:
-        if "_pb" not in dir() or _pb is None:
-            from .profile_builder import ProfileBuilder
-
-            _pb = ProfileBuilder(seed=seed)
-        world.adstrd_flpop_boost = _pb.load_adstrd_flpop_boost()
+        world.adstrd_flpop_boost = _cached(
+            "adstrd_flpop_boost", lambda: ProfileBuilder(seed=seed).load_adstrd_flpop_boost()
+        )
     except Exception as e:
         print(f"  [warn] adstrd_flpop_boost 로드 실패: {e}")
 
-    # 2.5++ OFS (Operational Fit Score) — 동 단위 입지 매력도 (Hansen+E2SFCA)
-    # ext_visitor / ext_commuter 매장 선호 boost 로 활용 (Option E, role 차등)
+    # 2.5++ OFS (Operational Fit Score) — 동 단위 입지 매력도. 캐싱 필수.
     try:
-        from src.services.inflow import attach_ofs_to_world
+        from src.services.operational_fit import compute_ofs_scores
 
-        attach_ofs_to_world(world, verbose=verbose)
+        world.ofs_dong_score = _cached("ofs_scores", lambda: compute_ofs_scores())
+        if verbose:
+            top3 = sorted(world.ofs_dong_score.items(), key=lambda x: -x[1])[:3]
+            print(f"  [loader] OFS 16동 주입 (cached) — top3: {top3}")
     except Exception as e:
         print(f"  [warn] OFS 로드 실패: {e}")
 
@@ -637,15 +669,16 @@ def run_simulation(
     if enable_llm_thought and thought_agents:
         _trajectory_sample_ids |= {a.agent_id for a in thought_agents}
 
-    # 5000 agent 전체 위치 집계 (히트맵용) — 마포 bbox × 80×64 격자(셀 ~75m × ~70m).
-    # trajectory(300 sample) 와 별개로 모든 agent 합산 → 정확한 시간별 유동인구 시각화.
-    # cell payload: 80×64 × 16h × 4byte = ~328KB (gzip 후 ~30KB) — 가독성 ↑ 비용 ↓.
-    DENSITY_MIN_LAT = 37.535
-    DENSITY_MIN_LON = 126.888
-    DENSITY_MAX_LAT = 37.580
-    DENSITY_MAX_LON = 126.955
-    DENSITY_COLS = 80
-    DENSITY_ROWS = 64
+    # 5000 agent 전체 위치 집계 (히트맵용) — 마포 polygon 실 bbox × 128×96 격자.
+    # bbox 는 frontend mapo-dong.geo.json 16동 polygon 의 min/max + 0.002 padding 과 일치.
+    # 이전 80×64 (좁은 bbox) 에서 상암동 서쪽·아현동 동쪽 잘리던 문제 수정.
+    # cell ~83m × ~76m. payload: 128×96 × 16h × 4byte = ~786KB (gzip 후 ~55KB).
+    DENSITY_MIN_LAT = 37.524
+    DENSITY_MIN_LON = 126.858
+    DENSITY_MAX_LAT = 37.590
+    DENSITY_MAX_LON = 126.967
+    DENSITY_COLS = 128
+    DENSITY_ROWS = 96
     _density_d_lat = (DENSITY_MAX_LAT - DENSITY_MIN_LAT) / DENSITY_ROWS
     _density_d_lon = (DENSITY_MAX_LON - DENSITY_MIN_LON) / DENSITY_COLS
     density_hours: dict[str, list[int]] = {}
@@ -835,13 +868,17 @@ def run_simulation(
                         if st and st.lat and st.lon:
                             visited_now[aid] = (st.lat, st.lon)
 
-                # 히트맵 — 모든 agent (sample 무관) 의 hour 별 격자 셀 카운트.
-                # trajectory loop 와 별개. 외부 / 좌표 없음 skip.
+                # 히트맵 — 5000 agent 의 동적 위치 분포.
+                # 본질: 각 agent 가 정책 기반 의사결정으로 hour 마다 visit/work/rest 에
+                # 따라 위치가 변함 → emergent 유동인구 패턴.
+                # visit 시 store 좌표, 그 외엔 home dong 안 stable 위치 (Gaussian σ=165m).
                 abs_hour_key = str(day * 24 + res.hour)
                 density_cells = density_hours.get(abs_hour_key)
                 if density_cells is None:
                     density_cells = [0] * (DENSITY_COLS * DENSITY_ROWS)
                     density_hours[abs_hour_key] = density_cells
+                import random as _agent_rng_lib
+
                 for a in agents:
                     if a.current_dong == "외부":
                         continue
@@ -851,7 +888,11 @@ def run_simulation(
                         d_coord = dong_coords.get(a.current_dong)
                         if not d_coord:
                             continue
-                        d_lat, d_lon = d_coord
+                        # per-agent stable Gaussian — 같은 agent 는 시간 무관 같은 home.
+                        # σ=0.0015° (~165m lat / 134m lon) → dong 안 자연 분산.
+                        ag_rng = _agent_rng_lib.Random(a.agent_id * 0x9E3779B1)
+                        d_lat = d_coord[0] + ag_rng.gauss(0, 0.0015)
+                        d_lon = d_coord[1] + ag_rng.gauss(0, 0.0015)
                     d_r = int((DENSITY_MAX_LAT - d_lat) / _density_d_lat)
                     d_c = int((d_lon - DENSITY_MIN_LON) / _density_d_lon)
                     if 0 <= d_r < DENSITY_ROWS and 0 <= d_c < DENSITY_COLS:
@@ -1053,17 +1094,88 @@ def run_simulation(
         {r: round(v / profile_total, 3) for r, v in role_counts.items()} if profile_total else {}
     )
 
-    # cannibalization — 신규 매장 주변 기존 매장 매출 감소 추정 (scenario.new_store 있을 때만)
+    # cannibalization — 학술 기반 정밀 추정.
+    # 참고:
+    #   - Pancras, Sriram & Kumar (2012, Mgmt Sci): 신규 매장 매출의 86.7% incremental,
+    #     13.3% same-chain cannibalization. same-category cross-brand 보정 ~3x → 40%.
+    #   - Kim (2017, Wharton): 0.5mi(800m) 내 추가 매장 매출 감소 효과는 0.5~3mi 구간에서 1/5.
+    #   - Huff (1963) gravity model: visit_probability ∝ attractiveness / distance^β (β=2).
+    #
+    # 적용:
+    #   - 1차 영향권 0~500m: Huff β=2 거리 가중치 (50m 기준 정규화, max 1.0)
+    #   - 2차 영향권 500~1500m: Kim 1/5 효과 → primary × 0.2
+    #   - 잠식률 = (신규 visit / (신규 + weighted nearby)) × 40%, 0~25% clamp
     cannibalization_val: dict = {}
-    if scenario.new_store and scenario.new_store.get("district"):
+    if scenario.new_store and scenario.new_store.get("district") and new_store_sim_id:
         target_dong = scenario.new_store.get("district")
-        if target_dong in dong_totals_:
-            cannibalization_val = {
-                "target_dong": target_dong,
-                "cannibalize_radius_m": scenario.cannibalize_radius_m,
-                "estimated_impact_pct": 5.0,  # 간이 추정 (추후 반경 기반 정밀 계산)
-                "affected_stores": len(world.stores_by_dong.get(target_dong, [])),
-            }
+        ns_in_world = world.stores.get(new_store_sim_id)
+        # scenario.cannibalize_radius_m 은 1차 임계. 2차는 그 × 3.
+        primary_r = scenario.cannibalize_radius_m or 500
+        secondary_r = primary_r * 3
+        affected_count = 0
+        affected_visits_raw = 0
+        weighted_nearby = 0.0
+
+        def _huff_weight(dist_m: float, primary: float, secondary: float) -> float:
+            """Huff β=2 거리 가중 + tiered. 50m 기준 정규화 (max 1.0)."""
+            if dist_m <= 0:
+                return 1.0
+            base = min(1.0, (50.0 / max(dist_m, 50.0)) ** 2)
+            if dist_m <= primary:
+                return base
+            if dist_m <= secondary:
+                return base * 0.2  # Kim 2017 — 0.5~3mi 1/5
+            return 0.0
+
+        if ns_in_world and ns_in_world.lat and ns_in_world.lon:
+            ns_lat = float(ns_in_world.lat)
+            ns_lon = float(ns_in_world.lon)
+            ns_cat_eff = ns_in_world.category
+            # 단거리 평면 근사 (Seoul 위도): 1° lat ≈ 111km, 1° lon ≈ 89km.
+            for s in world.stores.values():
+                if s.store_id == new_store_sim_id:
+                    continue
+                if s.category != ns_cat_eff:
+                    continue
+                if not (s.lat and s.lon):
+                    continue
+                dlat_m = (float(s.lat) - ns_lat) * 111000.0
+                dlon_m = (float(s.lon) - ns_lon) * 89000.0
+                d_m = (dlat_m * dlat_m + dlon_m * dlon_m) ** 0.5
+                w = _huff_weight(d_m, primary_r, secondary_r)
+                if w <= 0:
+                    continue
+                affected_count += 1
+                affected_visits_raw += int(s.visits_today)
+                weighted_nearby += float(s.visits_today) * w
+            ns_visits = int(ns_in_world.visits_today)
+            total_market = weighted_nearby + ns_visits
+            if total_market > 0 and ns_visits > 0:
+                # 신규 visit share × 40% (Pancras 13.3% × 3x same-category cross-brand).
+                impact = (ns_visits / total_market) * 40.0
+                impact_pct = round(max(0.0, min(25.0, impact)), 2)
+            else:
+                impact_pct = 0.0
+        else:
+            # 좌표 없으면 fallback: dong 전체 같은 카테고리 매장
+            same_cat_in_dong = [
+                s
+                for s in world.stores_by_dong.get(target_dong, [])
+                if s.category == (scenario.new_store.get("category") or "음식점")
+            ]
+            affected_count = len(same_cat_in_dong)
+            affected_visits_raw = sum(int(s.visits_today) for s in same_cat_in_dong)
+            impact_pct = 5.0  # legacy fallback
+        cannibalization_val = {
+            "target_dong": target_dong,
+            "cannibalize_radius_m": primary_r,
+            "secondary_radius_m": secondary_r,
+            "estimated_impact_pct": impact_pct,
+            "affected_stores": affected_count,
+            "affected_visits": affected_visits_raw,
+            "model": "huff_b2_tiered_v1",
+            "rate_pct": 40.0,
+        }
 
     # 새벽 home stay trajectory 시도들 — 모두 실패로 revert.
     # Phase 5 (1K 단독): Δ -0.032. Phase B (5K + 새벽): Δ -0.025.

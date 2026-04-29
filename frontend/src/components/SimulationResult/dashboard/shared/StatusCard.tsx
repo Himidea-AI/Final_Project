@@ -37,7 +37,9 @@ export function StatusCard({ title, value, subValue, status, desc, drivers }: St
         {value}
       </div>
       {subValue && (
-        <div className="text-[0.6875rem] font-bold text-stone-500 tabular-nums mb-4">{subValue}</div>
+        <div className="text-[0.6875rem] font-bold text-stone-500 tabular-nums mb-4">
+          {subValue}
+        </div>
       )}
       <p className="text-[0.6875rem] text-stone-400 leading-relaxed mb-8 flex-grow font-medium">
         {desc}

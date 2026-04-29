@@ -341,7 +341,6 @@ export default function AgentMapVisualizer({
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
         </defs>
-
       </svg>
 
       {/* 범례 */}

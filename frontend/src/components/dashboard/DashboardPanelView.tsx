@@ -282,7 +282,9 @@ export function TableRow({
                   Counterfactual
                 </span>
                 <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex-1 flex flex-col justify-center gap-1">
-                  <p className="text-[0.625rem] text-[#9ca3af] leading-relaxed">이 매장이 없었다면</p>
+                  <p className="text-[0.625rem] text-[#9ca3af] leading-relaxed">
+                    이 매장이 없었다면
+                  </p>
                   <p className="text-lg font-black text-[#9ca3af] font-mono leading-none">—</p>
                   <p className="text-[0.5625rem] text-[#9ca3af]">월 매출 추가 예상</p>
                 </div>

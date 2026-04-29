@@ -44,11 +44,15 @@ export function CoreDemographicDonut({ core }: Props) {
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="text-[0.5625rem] font-black text-stone-500 uppercase tracking-widest">Core</span>
+        <span className="text-[0.5625rem] font-black text-stone-500 uppercase tracking-widest">
+          Core
+        </span>
         <span className="text-sm font-black text-stone-100 tabular-nums">
           {core.age} {mapGender(core.gender)}
         </span>
-        <span className="text-[0.6875rem] font-black text-indigo-400 tabular-nums">{sharePct}%</span>
+        <span className="text-[0.6875rem] font-black text-indigo-400 tabular-nums">
+          {sharePct}%
+        </span>
       </div>
     </div>
   );

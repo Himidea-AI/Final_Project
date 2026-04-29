@@ -68,8 +68,12 @@ function PDFPageHeader({
         <svg width="36" height="14" viewBox="0 0 78 30" fill="none">
           {SPOTTER_LOGO_PATHS}
         </svg>
-        <span className="text-[0.8125rem] font-black tracking-[0.18em] text-slate-900">SPOTTER</span>
-        <span className="text-[0.625rem] text-slate-400 ml-1">/ {districtFull} 상권 분석 리포트</span>
+        <span className="text-[0.8125rem] font-black tracking-[0.18em] text-slate-900">
+          SPOTTER
+        </span>
+        <span className="text-[0.625rem] text-slate-400 ml-1">
+          / {districtFull} 상권 분석 리포트
+        </span>
       </div>
       <span className="text-[0.625rem] text-slate-400 font-mono tracking-wider">
         PAGE {pageNumber} / {totalPages}
@@ -167,7 +171,9 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                   <div className="text-[0.9375rem] font-black text-slate-900 leading-tight">
                     {s.value}
                   </div>
-                  <div className="text-[0.5625rem] text-emerald-600 mt-1.5 font-mono">{s.trend}</div>
+                  <div className="text-[0.5625rem] text-emerald-600 mt-1.5 font-mono">
+                    {s.trend}
+                  </div>
                 </div>
               ))}
             </div>
@@ -297,7 +303,9 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
 
           <div className="flex-1 pt-8 space-y-10">
             <div>
-              <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">02. 가맹점 간섭도 분석</h2>
+              <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">
+                02. 가맹점 간섭도 분석
+              </h2>
               <p className="text-xs text-slate-500 mb-4">
                 Cannibalization Analysis · 반경 내 동일 브랜드 영향도
               </p>
@@ -334,7 +342,9 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             </div>
 
             <div>
-              <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">03. 행정동 비교 분석</h2>
+              <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">
+                03. 행정동 비교 분석
+              </h2>
               <p className="text-xs text-slate-500 mb-4">
                 Neighborhood Comparison · 인근 동 AI 점수 / 폐업률 / 손익분기점
               </p>
@@ -369,7 +379,9 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
           <PDFPageHeader pageNumber={4} totalPages={TOTAL_PAGES} districtFull={districtFull} />
 
           <div className="flex-1 pt-8">
-            <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">04. SPOTTER AI 인사이트</h2>
+            <h2 className="text-[1.375rem] font-black text-slate-900 mb-1">
+              04. SPOTTER AI 인사이트
+            </h2>
             <p className="text-xs text-slate-500 mb-6">
               LangGraph Multi-Agent Analysis · 에이전트 노드별 인사이트
             </p>
@@ -398,7 +410,9 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                           </span>
                         </span>
                       </div>
-                      <p className="text-[0.6875rem] text-slate-700 leading-relaxed">{insight.desc}</p>
+                      <p className="text-[0.6875rem] text-slate-700 leading-relaxed">
+                        {insight.desc}
+                      </p>
                     </div>
                   );
                 })}

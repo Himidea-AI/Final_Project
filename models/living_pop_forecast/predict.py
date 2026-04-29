@@ -1,14 +1,26 @@
 """
-생활인구 유동인구 TCN 추론 — 특정 동의 향후 n분기 시간대별 유동인구 예측
+생활인구 유동인구 D 모델 추론 — 특정 동의 향후 n분기 시간대별 유동인구 예측.
+
+Production status (2026-04-28):
+    학술 평가 6 라운드 결과 v2 / v3 / v4_residual / v5 (3 변형) / ARIMA / v6 / v7
+    모두 naive baseline (lag-1) 을 능가하지 못해 production endpoint 는 naive 채택.
+
+    - predict_peak() : naive baseline (lag-1) 사용 — backend 에서 호출하는 핵심 함수.
+                      기존 v2 TCN 가중치 로딩 로직은 archive (deprecated) 처리.
+    - predict()      : v2 TCN 추론 (legacy) — backend 미사용. 학술 비교용으로 보존.
+                      _v2_predict_legacy 로 위임.
+
+    가중치 파일 (v2/v4_residual/v7_daily_residual) 은 reference only 로 보존.
+    naive 정확도 (분기 lag-1): MAE 665, MAPE 2.62%, R² 0.9964.
 
 Usage:
     from models.living_pop_forecast.predict import predict, predict_peak
 
-    # 특정 동의 특정 시간대 예측
-    results = predict("합정동", time_zone=15, n_quarters=4)
-
-    # 특정 동의 피크 시간 예측 (전체 시간대 중 최대값 시간대 반환)
+    # 특정 동의 피크 시간 예측 (24h 모두 반환, naive baseline)
     peak = predict_peak("합정동", n_quarters=4)
+
+    # 특정 동의 특정 시간대 v2 TCN legacy (학술 비교용)
+    results = predict("합정동", time_zone=15, n_quarters=4)
 
 담당: B2 — 수지니
 참조: models/tcn_forecast/predict.py (구조 동일)
@@ -292,19 +304,21 @@ def predict_peak(
     n_quarters: int = 4,
     config: dict | None = None,
 ) -> list[dict]:
-    """특정 동의 향후 n분기 피크 시간대와 유동인구를 예측한다.
+    """특정 동의 향후 n분기 피크 시간대와 유동인구를 예측한다 (production naive baseline).
 
-    24시간대를 한꺼번에 예측하고 분기별로 최대값 시간대를 반환한다.
-    모델/데이터는 한 번만 로드한 뒤 24시간대에 재사용한다.
+    학술 평가 6 라운드 (v2/v3/v4_residual/v5 변형/ARIMA/v6/v7) 모두 naive lag-1 을
+    능가하지 못해 production 은 naive 채택. 본 함수는 backend 호환성을 위해
+    시그니처는 유지하되 내부 구현을 ``predict_peak_naive`` 로 위임한다.
 
     Parameters
     ----------
     dong_name : str
-        행정동명 (예: '합정동').
+        행정동명 (예: '합정동') 또는 dong_code (예: '11440680').
+        backward compat 을 위해 두 형식 모두 허용.
     n_quarters : int
         예측 분기 수.
     config : dict, optional
-        설정 오버라이드.
+        ``db_url`` / ``csv_path`` 오버라이드 (테스트용). 그 외 키는 무시됨.
 
     Returns
     -------
@@ -315,6 +329,26 @@ def predict_peak(
             "peak_pop": float,       # 피크 시간대 예측 유동인구
             "all_hours": list[dict], # 24시간 전체 예측
         }
+    """
+    from .predict_naive import predict_peak_naive
+
+    cfg = {**DEFAULT_PREDICT_CONFIG, **(config or {})}
+    return predict_peak_naive(
+        dong_name,
+        n_quarters=n_quarters,
+        db_url=cfg.get("db_url", DB_URL),
+        csv_path=cfg.get("csv_path"),
+    )
+
+
+def _v2_predict_peak_legacy(
+    dong_name: str,
+    n_quarters: int = 4,
+    config: dict | None = None,
+) -> list[dict]:
+    """[DEPRECATED — archive only] v2 TCN 24h × n_quarters 추론.
+
+    학술 비교용 보존. naive baseline 미달로 production 미사용.
     """
     cfg = {**DEFAULT_PREDICT_CONFIG, **(config or {})}
     device = torch.device("cpu")

@@ -82,7 +82,9 @@ export function CustomerSegmentCard({ segment }: Props) {
           <div className="space-y-2">
             {dimensions.map(({ key, value }) => (
               <div key={key} className="flex items-center gap-3">
-                <span className="text-[0.6875rem] font-bold text-stone-400 w-32 truncate">{key}</span>
+                <span className="text-[0.6875rem] font-bold text-stone-400 w-32 truncate">
+                  {key}
+                </span>
                 <div className="flex-1 bg-stone-800 h-1.5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-indigo-500 transition-all"
