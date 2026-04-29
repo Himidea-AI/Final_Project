@@ -2,7 +2,9 @@
 시뮬레이션 결과 출력 모델 — API에서 클라이언트로 반환하는 결과 스키마
 """
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QuarterlyProjection(BaseModel):
@@ -182,3 +184,67 @@ class DistrictPredictionResult(BaseModel):
     closure_rate: dict | None = None
     closure_risk: dict | None = None
     shap_result: ShapResult | None = None
+
+
+# ---------------------------------------------------------------------------
+# IM3-259 — AI 분석 응답 스키마 (/analyze/llm)
+# ---------------------------------------------------------------------------
+# /predict (TCN/ML 단발)와 독립적으로 호출되는 LLM 분석 endpoint 응답.
+# slow_graph(operational_fit + ranking + llm_analysis + synthesis) 산출물.
+# ml_prediction은 포함하지 않으며, 그 결과는 /predict의 DistrictPredictionResult로 분리.
+# ---------------------------------------------------------------------------
+
+
+class CompetitorIntel(BaseModel):
+    """competitor_intel_node 산출 — LLM 합성 + 정량 데이터 혼재.
+
+    핵심 필드만 strict하게 정의하고 nested(brand_benchmark, cannibalization,
+    competition_500m, industry_closure_trend)는 일단 dict로 유지.
+    extra='allow'로 미정의 필드도 통과시켜 점진적 strict typing 가능.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    market_entry_signal: Literal["green", "yellow", "red"] | None = None
+    differentiation_position: str | None = None
+    key_opportunities: list[str] = Field(default_factory=list)
+    key_risks: list[str] = Field(default_factory=list)
+    recommended_actions: list[str] = Field(default_factory=list)
+    narrative: str | None = None
+    cannibalization: dict | None = None
+    industry_closure_trend: dict | None = None
+    competition_500m: dict | None = None
+    brand_benchmark: dict | None = None
+    adjusted_estimated_revenue: float | None = None
+    meta: dict | None = None
+
+
+class AnalysisOutput(BaseModel):
+    """LLM 분석 결과 — POST /analyze/llm 응답.
+
+    operational_fit + ranking + LLM 6 에이전트 + synthesis 산출물.
+    /predict (DistrictPredictionResult list) 와 독립 병렬 호출 가능.
+    """
+
+    request_id: str
+    target_district: str
+    target_districts: list[str] = Field(default_factory=list)
+    winner_district: str | None = None
+    top_3_candidates: list[str] = Field(default_factory=list)
+    district_rankings: list[DistrictRanking] = Field(default_factory=list)
+    vacancy_applied: bool = False
+    vacancy_spots: list[dict] = Field(default_factory=list)
+    legal_risks: list[LegalRisk] = Field(default_factory=list)
+    overall_legal_risk: str | None = None
+    market_report: MarketReport | None = None
+    competitor_intel: CompetitorIntel | None = None
+    trend_forecast: dict | None = None
+    demographic_report: dict | None = None
+    agent_attributions: list[dict] = Field(default_factory=list)
+    all_competitor_locations: list[dict] = Field(default_factory=list)
+    analysis_report: str = ""
+    ai_recommendation: str = ""
+    final_report: dict | None = None
+    financial_report: dict = Field(default_factory=dict)
+    analysis_metrics: dict = Field(default_factory=dict)
+    map_data: MapData | None = None

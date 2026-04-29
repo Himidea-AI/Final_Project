@@ -288,3 +288,41 @@ def compile_graph():
 
 # 하위 호환성 유지
 compile_workflow = compile_graph
+
+
+# ---------------------------------------------------------------------------
+# IM3-259 — AI 분석 전용 slow_graph (TCN/ML 분리 후 LLM 단계만)
+# ---------------------------------------------------------------------------
+# /analyze/llm endpoint에서 사용. dev /predict (B2 단발 ML)와 독립적으로 호출되어
+# 사용자 입력만으로 ranking + LLM 6 에이전트 + synthesis를 실행한다.
+# ml_prediction은 포함하지 않는다 (그건 /predict 측 책임).
+#
+# 그래프 구성:
+#   operational_fit → ranking → llm_analysis → synthesis → END
+#
+# 시간 추정: ~80-140초 (LLM 6 병렬 + synthesis가 대부분)
+# 응답: AnalysisOutput (LLM 결과 + ranking + winner)
+# ---------------------------------------------------------------------------
+
+
+def build_slow_graph() -> StateGraph:
+    """AI 분석 전용 그래프 — operational_fit + ranking + llm_analysis + synthesis."""
+    workflow = StateGraph(AgentState)
+
+    workflow.add_node("operational_fit", operational_fit_node)
+    workflow.add_node("ranking_phase", ranking_phase_node)
+    workflow.add_node("llm_analysis_phase", llm_analysis_phase_node)
+    workflow.add_node("synthesis", synthesis_node)
+
+    workflow.set_entry_point("operational_fit")
+    workflow.add_edge("operational_fit", "ranking_phase")
+    workflow.add_edge("ranking_phase", "llm_analysis_phase")
+    workflow.add_edge("llm_analysis_phase", "synthesis")
+    workflow.add_edge("synthesis", END)
+
+    return workflow
+
+
+def compile_slow_graph():
+    """AI 분석 전용 그래프 컴파일 (ml_prediction 제외)."""
+    return build_slow_graph().compile()
