@@ -247,8 +247,18 @@ async def _batch_generate_thoughts(
     agents: list[Agent],
     world,
 ) -> list[str]:
-    """50 agents 동시 호출 (asyncio.gather). 직렬 0.86s × 50 → ~1s."""
-    tasks = [_generate_thought_with_retry(brain, a, world) for a in agents]
+    """N agents 동시 호출 — Semaphore 로 OpenAI org RPM(500) 보호.
+
+    smart_decide(ThreadPool) + thought(asyncio) 가 같은 org 풀 공유.
+    각각 4 동시성 cap → 합산 8 concurrent → 안전 마진. 직렬 0.86s × 50 / 4 ≈ 11s.
+    """
+    sem = asyncio.Semaphore(4)
+
+    async def _bounded(a):
+        async with sem:
+            return await _generate_thought_with_retry(brain, a, world)
+
+    tasks = [_bounded(a) for a in agents]
     return await asyncio.gather(*tasks, return_exceptions=False)
 
 
@@ -395,6 +405,7 @@ def run_simulation(
     warmup_days: int = 0,
     llm_base_cache: str | Path | None = None,
     enable_llm_thought: bool = False,
+    use_llm_decisions: bool = False,
 ) -> SimulationResult:
     pop = pop or PopulationMix()
     tier = tier or TierDistribution()
@@ -442,6 +453,12 @@ def run_simulation(
             # Policy 모드가 기본 ON (B1 호환)
             use_policy = True
 
+    # use_llm_decisions=True 면 Tier S 만 LLM(smart_decide), Tier A/B 는 policy_decide.
+    # use_policy=True 유지 → policy_cache 로드 → Tier A/B agents.py:decide 분기에서 사용.
+    # world.tier_s_llm_only 플래그로 agents.py 가 Tier S 만 brain.smart_decide 호출.
+    if use_llm_decisions and verbose:
+        print("  [CFG] Tier S 전용 LLM 모드 ON — Tier S→smart_decide(LLM), Tier A/B→policy", flush=True)
+
     if world is None:
         if use_rds:
             world, hours_map = load_world_from_rds()
@@ -453,6 +470,8 @@ def run_simulation(
     world.price_multiplier = scenario.price_multiplier
     world.use_dsl = use_dsl
     world.use_policy = use_policy
+    # Tier S 전용 LLM 모드 — agents.py:decide 가 이 플래그로 Tier S 만 smart_decide 라우팅.
+    world.tier_s_llm_only = use_llm_decisions
 
     # 신규 매장 주입 (공실 스팟 클릭 시뮬용) — 편의점 제외
     new_store_sim_id: str | None = None
@@ -963,35 +982,61 @@ def run_simulation(
                             }
                         )
 
-            # 매 시간 Tier S 50명 LLM thought 생성 (시각화용 풍선)
-            # ext_commuter/ext_visitor 가 외부에 있을 때는 skip (지도 표시 X)
-            # 주의: scheduler.step 이 world.current_hour 를 이미 +1 증가시킴 → res.hour 가
-            #       의미상 "방금 진행한 시간" 이므로 generate_thought 호출 시 임시로 복원했다
-            #       원복.
+            # 매 시간 Tier S 풍선 텍스트 수집.
+            # use_llm_decisions=True 면 smart_decide 가 이미 reason 필드를 채웠으므로
+            # 그걸 재활용 (LLM 호출 0회 추가). False 면 generate_thought 별도 호출.
+            # ext_commuter/ext_visitor 가 외부에 있을 때는 skip (지도 표시 X).
             if enable_llm_thought and thought_agents and not is_warmup:
-                _saved_hour = world.current_hour
-                world.current_hour = res.hour  # generate_thought 가 참조하는 시간 정합
-                try:
-                    active_thought_agents = [a for a in thought_agents if a.current_dong != "외부"]
-                    if active_thought_agents:
-                        thoughts = _run_thought_batch(brain, active_thought_agents, world)
-                        for a, thought in zip(active_thought_agents, thoughts):
-                            if not thought:
-                                continue
-                            coord = dong_coords.get(a.current_dong)
-                            thoughts_log.append(
-                                {
-                                    "day": day,
-                                    "hour": res.hour,
-                                    "agent_id": a.agent_id,
-                                    "archetype": a.persona_id or "office_worker",
-                                    "thought": thought,
-                                    "lat": coord[0] if coord else None,
-                                    "lon": coord[1] if coord else None,
-                                }
-                            )
-                finally:
-                    world.current_hour = _saved_hour
+                _thought_agent_ids = {a.agent_id for a in thought_agents}
+                if use_llm_decisions:
+                    # A 옵션 — smart_decide.reason 을 풍선으로 재활용. 중복 LLM 호출 제거.
+                    for aid, dec in res.decisions:
+                        if aid not in _thought_agent_ids:
+                            continue
+                        _a = _agent_by_id.get(aid)
+                        if _a is None or _a.current_dong == "외부":
+                            continue
+                        if not dec.reason:
+                            continue
+                        coord = dong_coords.get(_a.current_dong)
+                        thoughts_log.append(
+                            {
+                                "day": day,
+                                "hour": res.hour,
+                                "agent_id": aid,
+                                "archetype": _a.persona_id or "office_worker",
+                                # reason 은 최대 100자 — 풍선 가독성 위해 60자로 cap.
+                                "thought": dec.reason[:60],
+                                "lat": coord[0] if coord else None,
+                                "lon": coord[1] if coord else None,
+                            }
+                        )
+                else:
+                    # 기존 — 별도 generate_thought LLM 호출.
+                    # 주의: scheduler.step 이 world.current_hour 를 이미 +1 증가시킴.
+                    _saved_hour = world.current_hour
+                    world.current_hour = res.hour
+                    try:
+                        active_thought_agents = [a for a in thought_agents if a.current_dong != "외부"]
+                        if active_thought_agents:
+                            thoughts = _run_thought_batch(brain, active_thought_agents, world)
+                            for a, thought in zip(active_thought_agents, thoughts):
+                                if not thought:
+                                    continue
+                                coord = dong_coords.get(a.current_dong)
+                                thoughts_log.append(
+                                    {
+                                        "day": day,
+                                        "hour": res.hour,
+                                        "agent_id": a.agent_id,
+                                        "archetype": a.persona_id or "office_worker",
+                                        "thought": thought,
+                                        "lat": coord[0] if coord else None,
+                                        "lon": coord[1] if coord else None,
+                                    }
+                                )
+                    finally:
+                        world.current_hour = _saved_hour
 
             # 매 시간 trajectory 증분 덤프 (라이브 움직임 시각화)
             if trajectory_path and trajectory:

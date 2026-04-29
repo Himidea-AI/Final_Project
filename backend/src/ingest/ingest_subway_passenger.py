@@ -57,6 +57,29 @@ def _read_csv_any_encoding(path: Path) -> list[dict]:
     raise RuntimeError(f"unable to decode {path}: {last_err}")
 
 
+_HOUR_COLS_PREFIXES = ("06이전", "24이후")
+
+
+def _is_hour_col(name: str) -> bool:
+    if name in _HOUR_COLS_PREFIXES:
+        return True
+    # "06-07시간대", "07-08시간대" 등
+    if "시간대" in name and "-" in name:
+        return True
+    return False
+
+
+def _normalize_date(s: str) -> str | None:
+    """'2024-01-01' 또는 '20240101' → 'YYYY-MM-DD' (검증 실패 시 None)."""
+    s = s.strip()
+    if len(s) == 10 and s[4] == "-" and s[7] == "-":
+        if s[:4].isdigit() and s[5:7].isdigit() and s[8:10].isdigit():
+            return s
+    if len(s) == 8 and s.isdigit():
+        return f"{s[:4]}-{s[4:6]}-{s[6:8]}"
+    return None
+
+
 def ingest_one_csv(
     src: Path,
     *,
@@ -67,37 +90,68 @@ def ingest_one_csv(
     cleaned_dir.mkdir(parents=True, exist_ok=True)
     rows = _read_csv_any_encoding(src)
 
-    passenger_rows: list[dict] = []
+    # 형식 자동 감지
+    if not rows:
+        raise RuntimeError(f"empty CSV: {src}")
+    cols = set(rows[0].keys())
+    has_total_cols = "승차총승객수" in cols and "하차총승객수" in cols
+    has_indicator = "승하차구분" in cols
+    hour_cols = [c for c in rows[0].keys() if _is_hour_col(c)]
+
+    passenger_acc: dict[tuple[str, str], dict] = {}  # (date, code) -> row
     master_seen: dict[str, dict] = {}
     rejects: list[dict] = []
 
     for r in rows:
-        line = (r.get("호선명") or "").strip()
+        line = (r.get("호선명") or r.get("호선") or "").strip()
         name = (r.get("역명") or "").strip()
-        date_raw = (r.get("사용일자") or "").strip()
+        date_raw = (r.get("사용일자") or r.get("수송일자") or "").strip()
         if not name or not line or not date_raw:
             rejects.append({**r, "_reason": "missing line/name/date"})
             continue
         if line not in _VALID_LINES:
             rejects.append({"station_name": name, "line_name": line, "_reason": "unknown line"})
             continue
-        if len(date_raw) != 8 or not date_raw.isdigit():
+        date_iso = _normalize_date(date_raw)
+        if date_iso is None:
             rejects.append({**r, "_reason": "invalid date format"})
             continue
 
-        date_iso = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:8]}"
         code = _surrogate_code(name, line)
-        boarding = C.parse_int_safe(r.get("승차총승객수")) or 0
-        alighting = C.parse_int_safe(r.get("하차총승객수")) or 0
-
-        passenger_rows.append(
+        key = (date_iso, code)
+        cur = passenger_acc.setdefault(
+            key,
             {
                 "date": date_iso,
                 "station_code": code,
-                "boarding_cnt": boarding,
-                "alighting_cnt": alighting,
-            }
+                "boarding_cnt": 0,
+                "alighting_cnt": 0,
+            },
         )
+
+        if has_total_cols:
+            cur["boarding_cnt"] += C.parse_int_safe(r.get("승차총승객수")) or 0
+            cur["alighting_cnt"] += C.parse_int_safe(r.get("하차총승객수")) or 0
+        elif has_indicator and hour_cols:
+            indicator = (r.get("승하차구분") or "").strip()
+            cnt = sum(C.parse_int_safe(r.get(c)) or 0 for c in hour_cols)
+            if indicator in ("승차", "Boarding", "boarding", "BD", "B"):
+                cur["boarding_cnt"] += cnt
+            elif indicator in ("하차", "Alighting", "alighting", "AL", "A"):
+                cur["alighting_cnt"] += cnt
+            else:
+                rejects.append(
+                    {
+                        "station_name": name,
+                        "line_name": line,
+                        "_reason": f"unknown indicator: {indicator}",
+                    }
+                )
+                continue
+        else:
+            rejects.append({**r, "_reason": "no recognizable count columns"})
+            continue
+
         if code not in master_seen:
             master_seen[code] = {
                 "station_code": code,
@@ -107,6 +161,8 @@ def ingest_one_csv(
                 "lat": "",
                 "lon": "",
             }
+
+    passenger_rows = list(passenger_acc.values())
 
     out_passenger = cleaned_dir / f"seoul_subway_passenger_daily_{ym_tag}.csv"
     out_master = cleaned_dir / f"master_subway_station_{ym_tag}.csv"

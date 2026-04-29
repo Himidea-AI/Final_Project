@@ -1461,6 +1461,10 @@ class AbmSimulationRequest(BaseModel):
     store_area: float = 15.0
     # Tier S 50 LLM thought 활성 (default off, 비용 발생 — demo 시나리오용)
     enable_llm_thought: bool = False
+    # Tier S/A LLM 의사결정 활성 (default off, $0.5~2/sim, +60~180s)
+    # True 시 use_policy=False → Tier S→Haiku, Tier A→Gemini Flash, Tier B→rule
+    # False 시 전 Tier policy_decide (deterministic, $0)
+    enable_llm_decisions: bool = False
 
 
 @app.post("/simulate-abm")
@@ -1523,11 +1527,26 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     }
 
     pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
-    tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
-    # ModelConfig 기본값(tier_s=anthropic/haiku, tier_a=gemini) 사용.
-    # brain.py::_auto_downgrade 가 ANTHROPIC 키 없으면 OpenAI gpt-4o-mini 로 자동 전환.
-    # 이전에는 테스트 용도로 Ollama/qwen2.5 로 하드코딩했으나, 실제 API 호출로 복귀.
-    cfg = ModelConfig(n_personas=req.n_agents)
+    # Tier 분배 — enable_llm_decisions 시 Tier S 정확히 50명 고정 (시각화 풍선 50과 1:1).
+    # 미사용 시 5/20/75 비율로 두면 runner.py 가 n_personas 기준 자동 scale.
+    if req.enable_llm_decisions:
+        # tier_total == n_personas 면 runner.py 의 auto-scale 건너뜀 → 50 그대로 유지.
+        tier = TierDistribution(
+            tier_s=50,
+            tier_a=200,
+            tier_b=max(0, req.n_agents - 250),
+        )
+    else:
+        tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
+    # 전 Tier OpenAI gpt-4.1-mini 통일 — Anthropic/Gemini 키 분기 제거,
+    # 단일 provider 로 비용·rate-limit 단순화. generate_thought 도 동일 모델 사용 중.
+    cfg = ModelConfig(
+        n_personas=req.n_agents,
+        tier_s_provider="openai",
+        tier_s_model="gpt-4.1-mini",
+        tier_a_provider="openai",
+        tier_a_model="gpt-4.1-mini",
+    )
     # A1 Scenario dataclass — weather_override / date_override / weekend_force / rent_shock_pct
     scenario = Scenario(
         new_store=new_store_spec,
@@ -1555,12 +1574,16 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "weekend": req.scenario.weekend_force,
         "rent_shock": req.scenario.rent_shock_pct,
         "enable_llm_thought": req.enable_llm_thought,
+        "enable_llm_decisions": req.enable_llm_decisions,
     }
     # cache 버전 prefix — 응답 schema 변경(trajectory/thoughts 추가) 시 bump 해 기존 캐시 무효화.
     # v2: collect_trajectory=True 회귀 fix + thoughts 필드 (2026-04-28).
     # v3: 신규 매장 popularity_boost=5.0 적용 (visits=0 회귀 fix, 2026-04-28).
+    # v4: Tier S/A LLM decisions 도입 (use_llm_decisions, 2026-04-29).
+    # v5: 전 Tier OpenAI gpt-4.1-mini 통일 (Haiku/Gemini 제거, 2026-04-29).
+    # v6: Tier S 50 전용 LLM 모드 (Tier A/B → policy_decide, 2026-04-29).
     cache_key = (
-        "abm_sim:v3:"
+        "abm_sim:v6:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -1596,6 +1619,13 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             # 매 호출마다 5000 agent × 14일 가상 visit history 생성하던 cold-start
             # mitigation — /simulate-abm 시연용엔 불필요 (응답 2~5s 절감).
             seed_memory=False,
+            # Tier S/A LLM 의사결정 옵션 (A 모드) — True 면 use_policy=False 로 강제 전환,
+            # Tier S→Haiku smart_decide, Tier A→Gemini Flash fast_decide, Tier B→rule.
+            use_llm_decisions=req.enable_llm_decisions,
+            # LLM 의사결정 시 동시 호출 수 — OpenAI org RPM(500) 분배:
+            # smart_decide ThreadPool 4 + thought asyncio.Semaphore 4 = 합산 8 concurrent.
+            # 평균 1.5s/call → 320 RPM peak (500 한도 안). 429 시 _smart_decide_openai 재시도.
+            llm_concurrency=4,
         )
     except Exception as e:
         logger.error(f"[ABM] 시뮬레이션 실패: {e}")

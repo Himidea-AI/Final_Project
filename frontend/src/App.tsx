@@ -3814,6 +3814,8 @@ function SimulatorDashboard({
                                         },
                                         // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                         enable_llm_thought: true,
+                                        // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
+                                        enable_llm_decisions: true,
                                         // 신규 매장 평수 — backend seats(평×2) + capacity 모델링.
                                         store_area: storeArea,
                                       }),
@@ -3899,6 +3901,8 @@ function SimulatorDashboard({
                                   },
                                   // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                   enable_llm_thought: true,
+                                  // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
+                                  enable_llm_decisions: true,
                                   // 신규 매장 평수 — backend seats + capacity 모델링.
                                   store_area: storeArea,
                                 }),
@@ -3945,6 +3949,8 @@ function SimulatorDashboard({
                                   },
                                   // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                   enable_llm_thought: true,
+                                  // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
+                                  enable_llm_decisions: true,
                                   // 신규 매장 평수 — backend seats + capacity 모델링.
                                   store_area: storeArea,
                                 }),
