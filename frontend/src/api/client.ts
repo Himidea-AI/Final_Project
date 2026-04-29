@@ -142,13 +142,20 @@ export async function runPredict(
  * AI 분석 — /analyze/llm (winner 산출 + LLM 6 에이전트).
  *
  * timeout 300_000 — LLM 멀티에이전트 파이프라인.
+ *
+ * 응답 wrapper: backend (찬영 8223bfb contract 보강) 가 `{ status, data: AnalysisOutput }` 형태 반환.
+ *   - LLM_AGENTS_DISABLED=1 mock 도 동일 wrapper.
+ *   - error 시 `{ status: "error", message }`.
  */
 export async function runAnalyzeLlm(
   input: SimulationInput,
   signal?: AbortSignal,
 ): Promise<AnalysisOutput> {
   const response = await apiClient.post('/analyze/llm', input, { signal, timeout: 300_000 });
-  return response.data as AnalysisOutput;
+  const body = response.data;
+  if (body && body.status === 'success' && body.data) return body.data as AnalysisOutput;
+  if (body && body.status === 'error') throw new Error(body.message || 'Analyze LLM failed');
+  return body as AnalysisOutput; // legacy raw fallback
 }
 
 /** 시뮬레이션 리포트 조회 */
