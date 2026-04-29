@@ -1,16 +1,22 @@
 /**
- * QuarterlyProjectionChart — 분기별 매출 예측 차트
+ * QuarterlyProjectionChart — 분기별 매출 예측 차트 (다중 동)
  *
- * TCN 모델 출력(quarterly_projection)을 시각화:
- * - 신뢰구간(Area): confidence_lower ~ confidence_upper
- * - 분기 매출(Line): revenue
- * - BEP 도달 시점(ReferenceLine): cumulative_profit >= 0 첫 분기
+ * TCN 모델 출력(quarterly_projection)을 동별로 시각화:
+ * - 각 동별 별도 Line (indigo / cyan / amber / rose)
+ * - winner 동: strokeWidth 3, dot r 5 강조
+ * - 신뢰구간(Area): winner 동의 ci_95/80 또는 confidence_lower/upper 만 음영
+ * - BEP 도달 시점(ReferenceLine): winner 동의 cumulative_profit >= 0 첫 분기
+ * - 범례: 동 이름
+ *
+ * Round 2 / B4 (2026-04-29): 단일 동 → 다중 동 시리즈 전환.
+ * 호출처에서 series 가 비어있거나 길이 0 이면 "데이터 없음" 표시.
  */
 
 import {
   ComposedChart,
   Area,
   Line,
+  Legend,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -20,9 +26,20 @@ import {
 } from 'recharts';
 import type { QuarterlyProjection } from '../../types';
 
-interface Props {
-  data: QuarterlyProjection[];
+/** 동별 분기 매출 시리즈 1건 */
+export interface ChartSeries {
+  district: string;
+  projection: QuarterlyProjection[];
 }
+
+interface Props {
+  series: ChartSeries[];
+  /** 강조 + CI 음영 + BEP 라인 대상 동 (없으면 series[0] 사용) */
+  winnerDistrict?: string;
+}
+
+// indigo / cyan / amber / rose
+const COLORS = ['#818cf8', '#22d3ee', '#fbbf24', '#fb7185'] as const;
 
 // 값 크기에 따라 억원/만원 단위 자동 스위칭 — 0.1억원 같은 라벨 중복·정보 손실 방지
 const formatKRW = (value: number): string => {
@@ -36,20 +53,55 @@ const formatKRW = (value: number): string => {
   return `${Math.round(value).toLocaleString()}원`;
 };
 
-export function QuarterlyProjectionChart({ data }: Props) {
-  // 데이터 없거나 빈 배열이면 안내 메시지 표시
-  if (!data || data.length === 0) {
+export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
+  // 빈 series / 모든 series projection 비어있음 → 안내 메시지
+  const validSeries = (series ?? []).filter((s) => s.projection && s.projection.length > 0);
+  if (validSeries.length === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-gray-400 text-sm">데이터 없음</div>
     );
   }
 
-  // BEP 도달 시점: cumulative_profit이 처음으로 0 이상인 분기
-  const bepQuarter = data.find((d) => d.cumulative_profit >= 0)?.quarter ?? null;
+  // winner 동 결정 — 명시값 없으면 첫 시리즈
+  const effectiveWinner = winnerDistrict ?? validSeries[0]!.district;
 
-  // Critical #2 — is_mock 분기 시각 구분: 헤더 배지 + dot 색상/투명도
-  const hasMockQuarters = data.some((d) => d.is_mock === true);
-  const mockQuarterSet = new Set(data.filter((d) => d.is_mock === true).map((d) => d.quarter));
+  // 각 동의 첫 4분기만 + quarter 1~4 강제 라벨
+  const trimmedSeries = validSeries.map((s) => ({
+    district: s.district,
+    data: s.projection.slice(0, 4).map((d, i) => ({ ...d, quarter: i + 1 })),
+  }));
+
+  // winner 시리즈 (CI 음영 / BEP 라인 / mock 배지 판단용)
+  const winnerSeries =
+    trimmedSeries.find((s) => s.district === effectiveWinner) ?? trimmedSeries[0]!;
+
+  // wide format 변환: row = { quarter, [동]_revenue, ci_high?, ci_low?, ... }
+  const has95Ci = winnerSeries.data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null);
+  const has80Ci = winnerSeries.data.some((d) => d.ci_80_upper != null && d.ci_80_lower != null);
+  const chartData = [1, 2, 3, 4].map((q) => {
+    const row: Record<string, number | null | undefined> = { quarter: q };
+    for (const s of trimmedSeries) {
+      const point = s.data.find((p) => p.quarter === q);
+      row[`${s.district}_revenue`] = point?.revenue ?? null;
+    }
+    // winner 동의 CI 만 음영용으로 노출
+    const winnerPoint = winnerSeries.data.find((p) => p.quarter === q);
+    if (winnerPoint) {
+      row.ci_95_lower = winnerPoint.ci_95_lower ?? null;
+      row.ci_95_upper = winnerPoint.ci_95_upper ?? null;
+      row.ci_80_lower = winnerPoint.ci_80_lower ?? null;
+      row.ci_80_upper = winnerPoint.ci_80_upper ?? null;
+      row.confidence_lower = winnerPoint.confidence_lower ?? null;
+      row.confidence_upper = winnerPoint.confidence_upper ?? null;
+    }
+    return row;
+  });
+
+  // BEP 도달 시점: winner 동 기준
+  const bepQuarter = winnerSeries.data.find((d) => d.cumulative_profit >= 0)?.quarter ?? null;
+
+  // mock 배지 — 임의 동에 mock 분기가 하나라도 있으면 표시
+  const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
 
   return (
     <div className="relative">
@@ -60,7 +112,7 @@ export function QuarterlyProjectionChart({ data }: Props) {
         </div>
       )}
       <ResponsiveContainer width="100%" height={280}>
-        <ComposedChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+        <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
           {/* 격자선 — 수평만 (세로 노이즈 제거로 선 그래프 가독성↑) */}
           <CartesianGrid strokeDasharray="3 3" stroke="#3a3633" vertical={false} />
 
@@ -74,15 +126,27 @@ export function QuarterlyProjectionChart({ data }: Props) {
           {/* Y축 — 억원 단위 */}
           <YAxis tickFormatter={formatKRW} tick={{ fill: '#9ca3af', fontSize: 11 }} width={70} />
 
-          {/* Tooltip — 분기/매출/신뢰구간/누적손익 표시 */}
+          {/* Tooltip */}
           <Tooltip
             formatter={(value: number, name: string) => {
-              const labels: Record<string, string> = {
-                revenue: '분기 매출',
+              // ci_* / confidence_* 키는 라벨 보강
+              const ciLabels: Record<string, string> = {
+                ci_95_lower: '95% 하한',
+                ci_95_upper: '95% 상한',
+                ci_80_lower: '80% 하한',
+                ci_80_upper: '80% 상한',
                 confidence_lower: '예상 매출 범위 하한',
                 confidence_upper: '예상 매출 범위 상한',
               };
-              return [formatKRW(value), labels[name] ?? name];
+              if (name in ciLabels) {
+                return [formatKRW(value), ciLabels[name]];
+              }
+              // {동}_revenue → "{동} 매출"
+              if (name.endsWith('_revenue')) {
+                const district = name.replace(/_revenue$/, '');
+                return [formatKRW(value), `${district} 매출`];
+              }
+              return [formatKRW(value), name];
             }}
             labelFormatter={(q: number) => `${q}분기`}
             contentStyle={{
@@ -94,10 +158,16 @@ export function QuarterlyProjectionChart({ data }: Props) {
             itemStyle={{ color: '#9ca3af' }}
           />
 
-          {/* 범례는 차트 외부 미니 카드로 분리 (ForecastTab에서 렌더) */}
+          {/* 범례 — 동 이름. CI Area 는 legendType="none" 으로 숨김 */}
+          <Legend
+            verticalAlign="top"
+            height={28}
+            wrapperStyle={{ paddingBottom: 4, fontSize: 11 }}
+            iconType="circle"
+          />
 
-          {/* 신뢰구간 — Track B #107 2단계 CI 있으면 95/80 이중 밴드, 없으면 기존 단일 */}
-          {data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null) ? (
+          {/* 신뢰구간 — winner 동만 음영. 95/80 이중 또는 단일 confidence */}
+          {has95Ci ? (
             <>
               <Area
                 type="monotone"
@@ -117,36 +187,40 @@ export function QuarterlyProjectionChart({ data }: Props) {
                 stroke="none"
                 fill="#818cf8"
                 fillOpacity={0.08}
-                legendType="square"
+                legendType="none"
                 isAnimationActive={false}
                 dot={false}
                 activeDot={false}
                 name="95% 상한"
               />
-              <Area
-                type="monotone"
-                dataKey="ci_80_lower"
-                stroke="none"
-                fill="#818cf8"
-                fillOpacity={0}
-                legendType="none"
-                isAnimationActive={false}
-                dot={false}
-                activeDot={false}
-                name="80% 하한"
-              />
-              <Area
-                type="monotone"
-                dataKey="ci_80_upper"
-                stroke="none"
-                fill="#818cf8"
-                fillOpacity={0.22}
-                legendType="none"
-                isAnimationActive={false}
-                dot={false}
-                activeDot={false}
-                name="80% 상한"
-              />
+              {has80Ci && (
+                <>
+                  <Area
+                    type="monotone"
+                    dataKey="ci_80_lower"
+                    stroke="none"
+                    fill="#818cf8"
+                    fillOpacity={0}
+                    legendType="none"
+                    isAnimationActive={false}
+                    dot={false}
+                    activeDot={false}
+                    name="80% 하한"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="ci_80_upper"
+                    stroke="none"
+                    fill="#818cf8"
+                    fillOpacity={0.22}
+                    legendType="none"
+                    isAnimationActive={false}
+                    dot={false}
+                    activeDot={false}
+                    name="80% 상한"
+                  />
+                </>
+              )}
             </>
           ) : (
             <>
@@ -168,66 +242,36 @@ export function QuarterlyProjectionChart({ data }: Props) {
                 stroke="none"
                 fill="#818cf8"
                 fillOpacity={0.1}
-                name="예상 매출 범위 상한"
-                legendType="square"
+                legendType="none"
                 isAnimationActive={false}
                 dot={false}
                 activeDot={false}
+                name="예상 매출 범위 상한"
               />
             </>
           )}
 
-          {/* 분기 매출 라인 — 은은한 drop-shadow glow + 강조 activeDot */}
-          <defs>
-            <filter id="qp-line-glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="2.5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          <Line
-            type="monotone"
-            dataKey="revenue"
-            stroke="#818cf8"
-            strokeWidth={2}
-            // mock 분기는 amber dot + opacity 0.4로 시각 구분 (실데이터 기여도와 분리 인지용)
-            dot={(props: {
-              cx?: number;
-              cy?: number;
-              payload?: QuarterlyProjection;
-              index?: number;
-            }) => {
-              const { cx, cy, payload, index } = props;
-              if (cx == null || cy == null || !payload) {
-                return <g key={`qp-dot-${index ?? 0}`} />;
-              }
-              const isMock = mockQuarterSet.has(payload.quarter);
-              return (
-                <circle
-                  key={`qp-dot-${index ?? payload.quarter}`}
-                  cx={cx}
-                  cy={cy}
-                  r={3.5}
-                  fill={isMock ? '#f59e0b' : '#818cf8'}
-                  fillOpacity={isMock ? 0.4 : 1}
-                />
-              );
-            }}
-            activeDot={{
-              r: 5,
-              fill: '#818cf8',
-              stroke: '#fff',
-              strokeWidth: 2,
-              filter: 'drop-shadow(0 0 6px rgba(129,140,248,0.9))',
-            }}
-            name="revenue"
-            filter="url(#qp-line-glow)"
-            isAnimationActive={false}
-          />
+          {/* 동별 매출 라인 — winner 강조 (stroke 3, dot r 5) */}
+          {trimmedSeries.map((s, idx) => {
+            const color = COLORS[idx % COLORS.length]!;
+            const isWinner = s.district === effectiveWinner;
+            return (
+              <Line
+                key={s.district}
+                type="monotone"
+                dataKey={`${s.district}_revenue`}
+                name={s.district}
+                stroke={color}
+                strokeWidth={isWinner ? 3 : 2}
+                dot={{ r: isWinner ? 5 : 3, fill: color }}
+                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                isAnimationActive={false}
+                connectNulls
+              />
+            );
+          })}
 
-          {/* BEP 도달 시점 — null이면 미렌더링 */}
+          {/* BEP 도달 시점 — winner 동 기준, null이면 미렌더링 */}
           {bepQuarter !== null && (
             <ReferenceLine
               x={bepQuarter}

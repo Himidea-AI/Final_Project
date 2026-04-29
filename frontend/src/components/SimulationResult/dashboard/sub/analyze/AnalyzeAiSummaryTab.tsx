@@ -3,29 +3,60 @@
  *
  * 2026-04-28 IA 재구조 — SummaryTab 의 computeDecision + 창업 신호등 + synthesis 자연어 이관.
  * 2026-04-28 H6 — LLM 산출 "1등 추천 동" + Top 3 칩 카드 추가.
+ * 2026-04-29 B7 — EntrySignalLight 제거 (DecisionCard 와 정보 중복/모순). 레이아웃 재배치:
+ *   상단 = synthesis 종합 + 최종 권고 (영업팀장 결론 우선 흐름), 하단 = DecisionCard (보조).
  *
  * 데이터 출처:
  *   - 1등 추천 동: simResult.winner_district (district_ranking 에이전트 산출)
  *   - Top 3 후보: simResult.top_3_candidates (district_ranking 에이전트 산출)
  *   - decision verdict: legal × entry signal 2D 매트릭스 (decisionThresholds SSOT)
- *   - entry signal: simResult.competitor_intel.market_entry_signal (green/yellow/red)
  *   - synthesis 자연어: simResult.final_report.summary || simResult.analysis_report
  *   - 최종 권고: simResult.final_report.final_recommendation || simResult.ai_recommendation
  *
- * 실데이터 원칙: 신호가 없으면 EntrySignalLight 가 "분석 대기" placeholder 자동 표시 (mock 'yellow' 주입 금지).
- *   winner_district 가 없으면 추천 동 카드 자체를 hide (값 없으면 — 표시 정책 + 빈 자리 어색 회피).
+ * 실데이터 원칙: winner_district 가 없으면 추천 동 카드 자체를 hide (값 없으면 — 표시 정책 + 빈 자리 어색 회피).
  */
 
 import { BrainCircuit, ShieldAlert, AlertTriangle, MapPin, Trophy } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
 import type { SimulationOutput } from '../../../../../types';
-import { EntrySignalLight } from '../../charts/EntrySignalLight';
 import { DecisionCard } from '../../shared/DecisionCard';
-import { NarrativeText } from '../../shared/NarrativeText';
 import { computeDecision, DECISION_COPY } from '../../../../../constants/decisionThresholds';
 
 interface Props {
   simResult: SimulationOutput;
 }
+
+/**
+ * Markdown components mapping — backend 가 ## 헤더, **bold**, 리스트 등을 포함한 마크다운으로
+ * synthesis / final_recommendation 응답을 보낸다. Tailwind 토큰 (stone/indigo 톤) 으로 통일.
+ *
+ * NOTE: NarrativeText 의 숫자 자동 하이라이트는 마크다운 컨텍스트에서는 포기 — 마크다운 구조를
+ * 우선. 강조하고 싶은 수치는 backend 가 **bold** 로 감싸서 보내면 strong 노드로 렌더된다.
+ */
+const MARKDOWN_COMPONENTS: Components = {
+  h1: ({ node: _n, ...props }) => (
+    <h1 className="mb-3 mt-4 text-xl font-black text-stone-100" {...props} />
+  ),
+  h2: ({ node: _n, ...props }) => (
+    <h2 className="mb-2 mt-3 text-lg font-bold text-stone-100" {...props} />
+  ),
+  h3: ({ node: _n, ...props }) => (
+    <h3 className="mb-2 mt-2 text-base font-semibold text-stone-200" {...props} />
+  ),
+  p: ({ node: _n, ...props }) => (
+    <p className="mb-2 text-sm leading-relaxed text-stone-300" {...props} />
+  ),
+  strong: ({ node: _n, ...props }) => <strong className="font-bold text-stone-100" {...props} />,
+  ul: ({ node: _n, ...props }) => (
+    <ul className="mb-2 list-disc space-y-1 pl-5 text-sm text-stone-300" {...props} />
+  ),
+  ol: ({ node: _n, ...props }) => (
+    <ol className="mb-2 list-decimal space-y-1 pl-5 text-sm text-stone-300" {...props} />
+  ),
+  li: ({ node: _n, ...props }) => <li className="leading-relaxed" {...props} />,
+};
 
 const AGENT_ICON = {
   synthesis: { icon: BrainCircuit, color: 'text-white', borderCls: 'border-stone-300/60' },
@@ -41,9 +72,6 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
   const verdict = computeDecision(legalRaw, entryRaw);
   const verdictCopy = DECISION_COPY[verdict];
   const isVerdictUnknown = verdict === 'UNKNOWN';
-
-  // EntrySignalLight 는 null/undefined 를 "분석 대기" placeholder 로 자동 처리 — mock fallback 주입 금지.
-  const entrySignal = (ci?.market_entry_signal as 'green' | 'yellow' | 'red' | undefined) ?? null;
 
   const summary = simResult.final_report?.summary ?? simResult.analysis_report ?? '';
   const recommendation =
@@ -123,57 +151,15 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
         </div>
       )}
 
-      {/* ═══ Row 1: Decision verdict + Entry signal ═══ */}
-      <div className="grid grid-cols-3 gap-6">
-        <DecisionCard
-          title="LLM 출처 통합 판단"
-          heroBadge={isVerdictUnknown ? verdictCopy.label : `${verdict} · ${verdictCopy.label}`}
-          heroColor={verdictCopy.color}
-          description={
-            isVerdictUnknown
-              ? '법률 분석 또는 경쟁 진입 신호 중 일부가 아직 수신되지 않았습니다. 해당 에이전트 실행이 완료되면 판정이 산출됩니다.'
-              : '법률 리스크(safe/caution/danger) × 경쟁 진입 신호(green/yellow/red)의 2D 매트릭스로 GO / HOLD / STOP 3단계 판정을 도출합니다.'
-          }
-          items={[
-            {
-              text: `법률 리스크 ${legalRaw ?? '미수신'}`,
-              highlight: legalRaw === 'safe',
-            },
-            {
-              text: `진입 신호 ${entryRaw ?? '미수신'}`,
-              highlight: entryRaw === 'green',
-            },
-            {
-              text: `종합 판정 ${verdict}`,
-              highlight: verdict === 'GO',
-            },
-          ]}
-          footer={{
-            agents: [AGENT_ICON.synthesis, AGENT_ICON.legal, AGENT_ICON.competitor].map((a, i) => ({
-              id: `ai-summary-${i}`,
-              ...a,
-            })),
-            methodology: 'synthesis + legal + competitor',
-          }}
-        />
-
-        <div className="col-span-2 flex flex-col rounded-3xl border border-stone-800/60 bg-stone-900/40 p-6">
-          <div className="mb-3 text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
-            창업 진입 신호
-          </div>
-          <div className="flex flex-1 items-center">
-            <EntrySignalLight signal={entrySignal} />
-          </div>
-        </div>
-      </div>
-
-      {/* ═══ synthesis 자연어 종합 ═══ */}
+      {/* ═══ 상단: synthesis 자연어 종합 (영업팀장 결론 우선) ═══ */}
       {summary && (
         <div className="rounded-3xl border border-stone-800/60 bg-stone-900/40 p-8">
           <h4 className="mb-4 text-xs font-black uppercase tracking-widest text-stone-500">
             synthesis 종합 분석
           </h4>
-          <NarrativeText text={summary} />
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+            {summary}
+          </ReactMarkdown>
         </div>
       )}
 
@@ -183,9 +169,44 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
           <h4 className="mb-4 text-xs font-black uppercase tracking-widest text-indigo-400">
             최종 권고
           </h4>
-          <NarrativeText text={recommendation} />
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+            {recommendation}
+          </ReactMarkdown>
         </div>
       )}
+
+      {/* ═══ 하단: LLM 출처 통합 판단 (보조 카드) ═══ */}
+      <DecisionCard
+        title="LLM 출처 통합 판단"
+        heroBadge={isVerdictUnknown ? verdictCopy.label : `${verdict} · ${verdictCopy.label}`}
+        heroColor={verdictCopy.color}
+        description={
+          isVerdictUnknown
+            ? '법률 분석 또는 경쟁 진입 신호 중 일부가 아직 수신되지 않았습니다. 해당 에이전트 실행이 완료되면 판정이 산출됩니다.'
+            : '법률 리스크(safe/caution/danger) × 경쟁 진입 신호(green/yellow/red)의 2D 매트릭스로 GO / HOLD / STOP 3단계 판정을 도출합니다.'
+        }
+        items={[
+          {
+            text: `법률 리스크 ${legalRaw ?? '미수신'}`,
+            highlight: legalRaw === 'safe',
+          },
+          {
+            text: `진입 신호 ${entryRaw ?? '미수신'}`,
+            highlight: entryRaw === 'green',
+          },
+          {
+            text: `종합 판정 ${verdict}`,
+            highlight: verdict === 'GO',
+          },
+        ]}
+        footer={{
+          agents: [AGENT_ICON.synthesis, AGENT_ICON.legal, AGENT_ICON.competitor].map((a, i) => ({
+            id: `ai-summary-${i}`,
+            ...a,
+          })),
+          methodology: 'synthesis + legal + competitor',
+        }}
+      />
     </div>
   );
 }

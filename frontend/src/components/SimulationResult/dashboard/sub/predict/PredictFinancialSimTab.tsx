@@ -4,7 +4,7 @@
  * BEP 누적이익 + 과거 12개월 폐업률 + LightGBM/TCN 폐업위험도 + 생존률 KPI.
  */
 
-import { Activity, Gauge } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import type { SimulationOutput } from '../../../../../types';
 import { formatKrw, formatPct, quarterlyToMonthly } from '../../utils/formatters';
 import { BepCumulativeProfitChart } from '../../charts/BepCumulativeProfitChart';
@@ -23,9 +23,6 @@ export function PredictFinancialSimTab({ simResult }: Props) {
   const netProfit = ps?.net_profit ?? null;
   const margin = ps?.margin_rate ?? null;
   const bepMonths = ps?.bep_months ?? null;
-  const synthAttr = simResult.agent_attributions?.find((a) => a.id === 'synthesis');
-  const confidencePct =
-    synthAttr?.confidence != null ? Math.round(synthAttr.confidence * 100) : null;
 
   return (
     <div className="space-y-6">
@@ -35,7 +32,6 @@ export function PredictFinancialSimTab({ simResult }: Props) {
         netProfit={netProfit}
         margin={margin}
         bepMonths={bepMonths}
-        confidencePct={confidencePct}
       />
 
       {(simResult.quarterly_projection ?? []).length > 0 && (
@@ -64,7 +60,6 @@ interface ProfitPanelProps {
   netProfit: number | null | undefined;
   margin: number | null | undefined;
   bepMonths: number | null | undefined;
-  confidencePct: number | null;
 }
 
 function ProfitSimulationPanelFull({
@@ -73,7 +68,6 @@ function ProfitSimulationPanelFull({
   netProfit,
   margin,
   bepMonths,
-  confidencePct,
 }: ProfitPanelProps) {
   const rows = [
     { label: '추정 월매출', val: monthlyRev, accent: 'text-stone-100' },
@@ -105,51 +99,25 @@ function ProfitSimulationPanelFull({
         </p>
       )}
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-3">
-          {rows.map((item) => (
-            <div
-              key={item.label}
-              className="flex justify-between items-end border-b border-stone-800/50 pb-3"
-            >
-              <span className="text-xs font-bold text-stone-500">{item.label}</span>
-              <span className={`text-lg font-black tabular-nums ${item.accent}`}>
-                {item.val != null ? `₩${formatKrw(item.val)}` : '—'}
-              </span>
-            </div>
-          ))}
-          <div className="flex justify-between items-center pt-2">
-            <span className="text-sm font-black text-indigo-400 tracking-tighter">
-              예상 월 영업이익
-            </span>
-            <span className="text-3xl font-black text-indigo-400 tabular-nums tracking-tighter">
-              {netProfit != null ? `₩${formatKrw(netProfit)}` : '—'}
+      <div className="space-y-3">
+        {rows.map((item) => (
+          <div
+            key={item.label}
+            className="flex justify-between items-end border-b border-stone-800/50 pb-3"
+          >
+            <span className="text-xs font-bold text-stone-500">{item.label}</span>
+            <span className={`text-lg font-black tabular-nums ${item.accent}`}>
+              {item.val != null ? `₩${formatKrw(item.val)}` : '—'}
             </span>
           </div>
-        </div>
-
-        <div className="bg-stone-950/40 border border-stone-800 rounded-2xl p-5 flex flex-col justify-center">
-          <div className="flex items-center gap-2 mb-3">
-            <Gauge size={18} className="text-indigo-500" />
-            <span className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
-              분석 신뢰도
-            </span>
-          </div>
-          {confidencePct != null ? (
-            <>
-              <div className="text-3xl font-black text-indigo-400 tabular-nums mb-2">
-                {confidencePct}%
-              </div>
-              <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
-                <div
-                  className="bg-indigo-500 h-full transition-all"
-                  style={{ width: `${Math.min(100, Math.max(0, confidencePct))}%` }}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="text-2xl font-black text-stone-500 tabular-nums">—</div>
-          )}
+        ))}
+        <div className="flex justify-between items-center pt-2">
+          <span className="text-sm font-black text-indigo-400 tracking-tighter">
+            예상 월 영업이익
+          </span>
+          <span className="text-3xl font-black text-indigo-400 tabular-nums tracking-tighter">
+            {netProfit != null ? `₩${formatKrw(netProfit)}` : '—'}
+          </span>
         </div>
       </div>
     </div>

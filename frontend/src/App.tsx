@@ -2567,11 +2567,18 @@ function SimulatorDashboard({
                               {simResult?.quarterlyProjection &&
                                 simResult.quarterlyProjection.length > 0 && (
                                   <div className="mt-6">
-                                    <h3 className="text-lg font-semibold mb-3">
-                                      분기별 매출 예측 (TCN)
-                                    </h3>
+                                    <h3 className="text-lg font-semibold mb-3">분기별 예상 매출</h3>
                                     <QuarterlyProjectionChart
-                                      data={simResult.quarterlyProjection}
+                                      series={[
+                                        {
+                                          district:
+                                            simResult.winnerDistrict ??
+                                            rawSimResult?.target_district ??
+                                            '단일',
+                                          projection: simResult.quarterlyProjection,
+                                        },
+                                      ]}
+                                      winnerDistrict={simResult.winnerDistrict}
                                     />
                                   </div>
                                 )}

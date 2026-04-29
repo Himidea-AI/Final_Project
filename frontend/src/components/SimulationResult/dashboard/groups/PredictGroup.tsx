@@ -1,14 +1,15 @@
 /**
- * PredictGroup — 예측 결과 그룹 (5 서브탭 라우팅)
+ * PredictGroup — 예측 결과 그룹 (4 서브탭 라우팅)
  * 2026-04-28 IA 재구조 (T7) — URL ?sub=... query 기반 라우팅.
+ * 2026-04-28 (Task B2) — PredictSummaryTab 제거. ?sub=summary → ?sub=sales_forecast redirect.
  */
 
+import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Activity, TrendingUp, Gauge, Users, Sparkles } from 'lucide-react';
+import { TrendingUp, Gauge, Users, Sparkles } from 'lucide-react';
 import type { SimulationOutput, PredictSubTab } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { TabButton } from '../shared/TabButton';
-import { PredictSummaryTab } from '../sub/predict/PredictSummaryTab';
 import { PredictSalesForecastTab } from '../sub/predict/PredictSalesForecastTab';
 import { PredictFinancialSimTab } from '../sub/predict/PredictFinancialSimTab';
 import { PredictCustomerFlowTab } from '../sub/predict/PredictCustomerFlowTab';
@@ -20,7 +21,6 @@ interface Props {
 }
 
 const VALID: PredictSubTab[] = [
-  'summary',
   'sales_forecast',
   'financial_sim',
   'customer_flow',
@@ -29,9 +29,21 @@ const VALID: PredictSubTab[] = [
 
 export function PredictGroup({ simResult, openModal }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const subFromUrl = searchParams.get('sub') as PredictSubTab | null;
+  const subFromUrl = searchParams.get('sub');
+
+  // Legacy ?sub=summary → ?sub=sales_forecast redirect (B2 — summary 탭 제거)
+  useEffect(() => {
+    if (subFromUrl === 'summary') {
+      const next = new URLSearchParams(searchParams);
+      next.set('sub', 'sales_forecast');
+      setSearchParams(next, { replace: true });
+    }
+  }, [subFromUrl, searchParams, setSearchParams]);
+
   const activeSub: PredictSubTab =
-    subFromUrl && VALID.includes(subFromUrl) ? subFromUrl : 'summary';
+    subFromUrl && VALID.includes(subFromUrl as PredictSubTab)
+      ? (subFromUrl as PredictSubTab)
+      : 'sales_forecast';
 
   const setSub = (sub: string) => {
     const next = new URLSearchParams(searchParams);
@@ -42,13 +54,6 @@ export function PredictGroup({ simResult, openModal }: Props) {
   return (
     <div className="space-y-6">
       <nav className="flex border-b border-stone-800/60 overflow-x-auto scrollbar-hide">
-        <TabButton
-          id="summary"
-          label="예측 요약"
-          icon={Activity}
-          active={activeSub === 'summary'}
-          onClick={setSub}
-        />
         <TabButton
           id="sales_forecast"
           label="매출 예측"
@@ -79,12 +84,11 @@ export function PredictGroup({ simResult, openModal }: Props) {
         />
       </nav>
 
-      {activeSub === 'summary' && <PredictSummaryTab simResult={simResult} />}
       {activeSub === 'sales_forecast' && (
         <PredictSalesForecastTab simResult={simResult} openModal={openModal} />
       )}
       {activeSub === 'financial_sim' && <PredictFinancialSimTab simResult={simResult} />}
-      {activeSub === 'customer_flow' && <PredictCustomerFlowTab />}
+      {activeSub === 'customer_flow' && <PredictCustomerFlowTab simResult={simResult} />}
       {activeSub === 'emerging_district' && <PredictEmergingDistrictTab />}
     </div>
   );

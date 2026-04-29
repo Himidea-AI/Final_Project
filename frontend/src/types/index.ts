@@ -523,7 +523,6 @@ export interface LegalChecklistItem {
 export type MainTab = 'predict' | 'analyze' | 'abm';
 
 export type PredictSubTab =
-  | 'summary'
   | 'sales_forecast'
   | 'financial_sim'
   | 'customer_flow'
