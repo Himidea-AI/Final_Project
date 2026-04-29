@@ -80,6 +80,7 @@ import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
 import { getLivePopulation, type CustomerSegmentRequest } from './api/client';
 import { useCustomerSegmentPreview } from './hooks/useCustomerSegmentPreview';
+import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
 import NetworkBackground from './components/NetworkBackground';
 // Phase C Round 2 — PDF 묶음 + Dashboard 묶음 추출 (정적 import 유지)
 import {
@@ -1295,12 +1296,17 @@ function SimulatorDashboard({
   }, [reportState]);
 
   // [R2] 마운트 시 store 에서 복원 — 다른 페이지로 나갔다가 /simulator 복귀 시 결과 유지.
-  // store.result 가 있고 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
+  // buildCombinedResult 로 prediction + analysis 슬라이스를 합성. 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
   useEffect(() => {
     const s = useSimulationStore.getState();
-    if (reportState === 'idle' && s.status === 'done' && s.result) {
-      setRawSimResult(s.result);
-      setSimResult(toSimResultViewModel(s.result));
+    const combined = buildCombinedResult(
+      s.prediction.data,
+      s.analysis.data,
+      s.params?.target_district ?? undefined,
+    );
+    if (reportState === 'idle' && s.status === 'done' && combined) {
+      setRawSimResult(combined);
+      setSimResult(toSimResultViewModel(combined));
       setReportState('result');
     }
     // mount 1회만
@@ -1400,10 +1406,14 @@ function SimulatorDashboard({
       // /simulate 응답에 market_report 포함됨 (backend main.py:308)
       await useSimulationStore.getState().startSimulation(payload);
       const storeState = useSimulationStore.getState();
-      if (storeState.status !== 'done' || !storeState.result) {
+      const simRes = buildCombinedResult(
+        storeState.prediction.data,
+        storeState.analysis.data,
+        storeState.params?.target_district ?? undefined,
+      );
+      if (storeState.status !== 'done' || !simRes) {
         throw new Error(storeState.error ?? 'Simulation failed');
       }
-      const simRes = storeState.result;
       // [R1] Zustand store.result 가 Single Source of Truth.
       // 아래 setRawSimResult/setSimResult 는 마운트 복원 로직과 동일 함수 사용.
       setRawSimResult(simRes);
@@ -4279,7 +4289,7 @@ function pathToScene(
  * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
  */
 function DashboardOutlet() {
-  const simResult = useSimulationStore((s) => s.result);
+  const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
   const { user, brand } = useAuth();
   const brandName = user?.company_name || brand?.brand_name || '';
@@ -4305,7 +4315,7 @@ function DashboardOutlet() {
 /** Hub index 라우트 — DashboardOutlet 의 simResult 를 store 에서 다시 읽어 DashboardHub 렌더.
  *  DashboardOutlet 의 null guard 가 이미 통과한 시점에서만 마운트되므로 simResult 는 항상 non-null. */
 function DashboardHubRouteElement() {
-  const simResult = useSimulationStore((s) => s.result);
+  const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
   const { user, brand } = useAuth();
   if (!simResult) return <Navigate to="/simulator" replace />;
