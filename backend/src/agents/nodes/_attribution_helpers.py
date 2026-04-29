@@ -21,8 +21,8 @@ def build_attribution(
         display_name=display_name,
         kind=kind,  # type: ignore[arg-type]
         sources=sources,
-        verdict=verdict[:80],  # 80자 제한
-        reasoning=reasoning[:400],  # 안전 제한
+        verdict=verdict,
+        reasoning=reasoning,
         confidence=confidence,
         status=status,  # type: ignore[arg-type]
     )

@@ -98,7 +98,7 @@ async def synthesis_node(state: AgentState) -> dict:
                 kind="LLM",
                 sources=[f"{len(cached_attributions)}개 에이전트 결과"],
                 verdict=f"종합 판단 · 법률 {cached_overall}",
-                reasoning=str(cached_summary_text)[:300] if cached_summary_text else "전략 종합 (캐시)",
+                reasoning=str(cached_summary_text) if cached_summary_text else "전략 종합 (캐시)",
                 confidence=0.85,
             )
             cached_attributions.append(cached_synth_attr)
@@ -276,6 +276,19 @@ async def synthesis_node(state: AgentState) -> dict:
         "4. 분기별 매출 흐름(성수기·비수기)을 창업 타이밍 제안에 활용\n"
         "5. FinalStrategyResult 스키마로 응답\n"
         f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
+        "8. [중요] final_recommendation 출력 형식 — 가독성을 위해 반드시 아래 마크다운 구조로 작성:\n"
+        "   - 각 섹션은 '## 섹션제목' 형식의 H2 헤더로 시작 (프론트에서 큰 글씨로 렌더됨)\n"
+        "   - 섹션 사이는 빈 줄(\\n\\n) 두 번 들여 문단 분리\n"
+        "   - 한 섹션 안에서도 논점이 바뀌면 빈 줄로 문단을 나눌 것\n"
+        "   - 핵심 수치·근거는 '- ' bullet 또는 **굵게** 강조\n"
+        "   - 필수 섹션 (이 순서대로):\n"
+        f"     ## 추천 입지 ({winner_district})\n"
+        "     ## 핵심 근거\n"
+        "     ## 수익성 전망\n"
+        "     ## 리스크 및 대응\n"
+        "     ## 창업 타이밍 제언\n"
+        "   - 한 줄에 모든 내용을 몰아쓰지 말 것. 줄글이라도 2~3 문장마다 문단 분리\n"
+        "9. summary 는 한 줄(80자 내) 짧은 헤드라인으로 작성 — final_recommendation 과 중복 금지\n"
         + (
             "7. profit_simulation에 ML 실측 수치를 반드시 사용:\n"
             + (f"   - monthly_revenue = {_tcn_rev:,.0f}원 (TCN 점포평균 월매출, 변경 금지)\n" if _tcn_rev else "")
@@ -375,7 +388,7 @@ async def synthesis_node(state: AgentState) -> dict:
         kind="LLM",
         sources=[f"{len(agent_attributions)}개 에이전트 결과"],
         verdict=f"종합 판단 · 법률 {overall_legal_risk}",
-        reasoning=str(final_strategy.summary if final_strategy else "")[:300],
+        reasoning=str(final_strategy.summary if final_strategy else ""),
         confidence=0.85,
     )
     agent_attributions.append(synthesis_attr)
