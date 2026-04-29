@@ -1610,16 +1610,27 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "seats": _seats,
     }
 
-    # PopulationMix — n=5000 시 ext 80% (ext_commuters=300, ext_visitors=100 default).
-    # ⚠️ KOSIS DT_201004_O020021 (자치구별 주간/야간 인구) 원본 verification 미완.
-    # 마포구 주민등록 ~360,000 (2024 행안부) + 사업체 ~63,000개 (2025 마포구 사업체조사)
-    # 고려 시 ext 80% 는 강남·중구급 가정으로 과도 가능성.
-    # TODO: 공공데이터포털 「자치구별 연령별 주간 야간 인구 2020」 데이터셋
-    #   (https://www.data.go.kr/data/15124242/fileData.do) 다운로드 후 마포구 행
-    #   실측값으로 ext_commuters / ext_visitors 재캘리브레이션. 잠정 권장:
-    #   residents 48% / commuters 10% / ext_commuters 30% / visitors 4% /
-    #   ext_visitors 7% / owners 1% (n=5000 기준).
-    pop = PopulationMix(residents=60, commuters=25, visitors=10, owners=5)
+    # PopulationMix — SGIS API 직접 회수 데이터 기반 재캘리브.
+    # 출처: 통계청 SGIS Open API (sgisapi.mods.go.kr/OpenAPI3) — 2026-04-29 호출.
+    #   adm_cd=11140 (마포구) 인구주택총조사 2023 결과:
+    #     - 거주인구 (tot_ppltn): 361,380명
+    #     - 마포 사업체 종사자 (employee_cnt): 281,385명
+    #     - 인구밀도 15,155.5명/km² / 평균연령 42.2세 / 평균가구 2.1명
+    #   추정 비율 (거주노동인구 ~165K, 외부 통근 유입 ~110-130K 가정):
+    #     - 거주민 (마포 거주 + 마포 일상): ~60%
+    #     - 외부 통근자 (외부→마포 출근): ~25-30%
+    #     - 외부 방문 (홍대·연남 야간): ~5-10%
+    # 이전 (residents 12%, ext 80%) 은 강남·중구급 가정 → 과도. 본 보정으로 마포
+    # 실측 (주거+업무 혼합지구) 에 맞춤. 총 500 유지 (n_personas scale 동일).
+    # TODO: SGIS 통근 endpoint (/stats/move/*) 직접 회수 시 재보정.
+    pop = PopulationMix(
+        residents=300,  # 60% — 마포 거주민 (SGIS 361,380 비례)
+        commuters=50,  # 10% — 마포 내 통근 (거주+근무)
+        visitors=20,  # 4% — 마포 거주 단기 방문
+        owners=5,  # 1% — 점주
+        ext_commuters=100,  # 20% — 외부→마포 통근 (사업체 종사 281,385 일부)
+        ext_visitors=25,  # 5% — 외부 방문 (홍대·연남 야간)
+    )
     # Tier 분배 — enable_llm_decisions 시 Tier S 정확히 50명 고정 (시각화 풍선 50과 1:1).
     # 미사용 시 5/20/75 비율로 두면 runner.py 가 n_personas 기준 자동 scale.
     if req.enable_llm_decisions:
