@@ -24,6 +24,51 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+
+def _time_based_split(
+    df: pd.DataFrame,
+    train_ratio: float = 0.70,
+    val_ratio: float = 0.15,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """quarter 기준 시간순 train/val/test 3분할.
+
+    같은 quarter 데이터는 한 split 에만 들어감 (boundary 명확).
+    train + val + test 합 = 100% (남은 부분 = test).
+
+    Args:
+        df: "quarter" 컬럼 포함 (예: "2020Q1", "2024Q4").
+        train_ratio: 0~1, train 비율.
+        val_ratio: 0~1, val 비율. test_ratio = 1 - train_ratio - val_ratio.
+
+    Returns:
+        (train_df, val_df, test_df).
+
+    Raises:
+        ValueError: 분기 수 < 7 (train 5 / val 1 / test 1 최소 보장 X).
+
+    학술 근거:
+        Bergmeir & Benítez (2012) "On the use of cross-validation for time series".
+        시계열 random split 은 temporal leakage → val_AUC 부풀림.
+    """
+    quarters = sorted(df["quarter"].unique())
+    n_q = len(quarters)
+    if n_q < 7:
+        raise ValueError(
+            f"분기 수 부족 ({n_q}). 최소 7분기 필요 (train 5 / val 1 / test 1). split_strategy='random' 사용 권장."
+        )
+
+    train_end_idx = int(n_q * train_ratio) - 1
+    val_end_idx = int(n_q * (train_ratio + val_ratio)) - 1
+    train_end = quarters[train_end_idx]
+    val_end = quarters[val_end_idx]
+
+    train = df[df["quarter"] <= train_end].copy()
+    val = df[(df["quarter"] > train_end) & (df["quarter"] <= val_end)].copy()
+    test = df[df["quarter"] > val_end].copy()
+
+    return train, val, test
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
@@ -48,10 +93,10 @@ LGBM_FEATURES = [
     "quarter_num",  # 계절성 (1~4)
     # 임대료/공실 — build_timeseries()가 RDS(seoul_golmok_rent)에서 실제 로드
     "rent_1f_lag1",  # 직전 분기 1층 환산임대료 (고정비용 지표)
-    "rent_change",   # 임대료 변화율 (임대료 상승 → 폐업 위험 ↑)
+    "rent_change",  # 임대료 변화율 (임대료 상승 → 폐업 위험 ↑)
     "vacancy_rate",  # 공실률 (상권 경기 침체 신호)
     # 상권 수요 — 실제 데이터 존재 확인 (null 0%, zero 9.3%)
-    "trend_score",   # 네이버 검색 트렌드 (업종 관심도 감소 → 수요 감소 신호)
+    "trend_score",  # 네이버 검색 트렌드 (업종 관심도 감소 → 수요 감소 신호)
     # 유동인구 — adstrd_flpop(null 0%, zero 0%)이 bus_flpop(zero 49%)보다 완전
     "adstrd_flpop",  # 행정동 전체 유동인구
 ]
