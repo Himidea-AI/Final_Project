@@ -107,6 +107,10 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
           // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 시각화에 필요.
           // backend default False 라 명시적으로 true 전달.
           enable_llm_thought: true,
+          // Tier S/A LLM 의사결정 (A 옵션) — Tier 별 행동 차별화 활성.
+          // Tier S → Haiku smart_decide, Tier A → Gemini Flash fast_decide, Tier B → rule.
+          // 비용 ~$0.7/sim, 시간 +60~180s. False 면 전 Tier policy_decide ($0).
+          enable_llm_decisions: true,
           // 신규 매장 평수 — props 우선, 없으면 simResult.storeArea, 둘다 없으면 15.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           store_area: storeArea ?? (r as any)?.storeArea ?? (r as any)?.store_area ?? 15,

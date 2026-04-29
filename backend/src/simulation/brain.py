@@ -267,33 +267,46 @@ class LLMBrain:
     def _smart_decide_openai(self, agent: "Agent", world: "World", ctx: str, persona: Persona) -> Decision:
         if self._openai is None:
             return self._mock_decide(agent, world, tier="S")
-        try:
-            resp = self._openai.chat.completions.create(
-                model=self.cfg.tier_s_model,
-                max_tokens=self.cfg.tier_s_max_tokens,
-                temperature=0.3,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": persona.full_profile},
-                    {"role": "user", "content": ctx},
-                ],
-            )
-            usage = resp.usage
-            self.stats.tier_s_input_tokens += getattr(usage, "prompt_tokens", 0) or 0
-            self.stats.tier_s_output_tokens += getattr(usage, "completion_tokens", 0) or 0
-            # OpenAI cached tokens
-            cached = 0
+        # 429 rate-limit 방어 — 짧은 backoff 로 3회 재시도. OpenAI 응답의 retry-after
+        # 헤더(혹은 메시지 내 ms 값)를 파싱해서 정확한 sleep 시간 적용.
+        import time as _time
+
+        delay = 0.5
+        for attempt in range(3):
             try:
-                cached = usage.prompt_tokens_details.cached_tokens or 0
-            except Exception:
-                pass
-            self.stats.tier_s_cache_read += cached
-            text = resp.choices[0].message.content or ""
-            return self._parse_decision(text, agent, world)
-        except Exception as e:
-            self.stats.failures += 1
-            print(f"[brain.S/openai] {agent.agent_id} 실패: {e}")
-            return self._mock_decide(agent, world, tier="S")
+                resp = self._openai.chat.completions.create(
+                    model=self.cfg.tier_s_model,
+                    max_tokens=self.cfg.tier_s_max_tokens,
+                    temperature=0.3,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": persona.full_profile},
+                        {"role": "user", "content": ctx},
+                    ],
+                )
+                usage = resp.usage
+                self.stats.tier_s_input_tokens += getattr(usage, "prompt_tokens", 0) or 0
+                self.stats.tier_s_output_tokens += getattr(usage, "completion_tokens", 0) or 0
+                # OpenAI cached tokens
+                cached = 0
+                try:
+                    cached = usage.prompt_tokens_details.cached_tokens or 0
+                except Exception:
+                    pass
+                self.stats.tier_s_cache_read += cached
+                text = resp.choices[0].message.content or ""
+                return self._parse_decision(text, agent, world)
+            except Exception as e:
+                msg = str(e)
+                is_rate_limit = "429" in msg or "rate_limit" in msg or "RateLimit" in type(e).__name__
+                if is_rate_limit and attempt < 2:
+                    _time.sleep(delay)
+                    delay *= 2  # 0.5 → 1 → 2s
+                    continue
+                self.stats.failures += 1
+                print(f"[brain.S/openai] {agent.agent_id} 실패: {e}")
+                return self._mock_decide(agent, world, tier="S")
+        return self._mock_decide(agent, world, tier="S")
 
     # -----------------------------------------------------------
     # Tier A: Gemini Flash 또는 OpenAI nano
