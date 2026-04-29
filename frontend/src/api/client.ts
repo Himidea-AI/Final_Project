@@ -124,13 +124,13 @@ export async function healthCheck() {
  * 응답 포맷 (backend 수지니 c8ea31f):
  *   { status: "success" | "error", data: DistrictPredictionResult[], message?: string }
  *
- * timeout 300_000 — 4동 병렬 ML 추론 + ECOS/외부 호출 여유.
+ * timeout 120_000 — 4동 병렬 ML 추론 (~10~30s 실측, 명세 일치).
  */
 export async function runPredict(
   input: SimulationInput,
   signal?: AbortSignal,
 ): Promise<DistrictPredictionResult[]> {
-  const response = await apiClient.post('/predict', input, { signal, timeout: 300_000 });
+  const response = await apiClient.post('/predict', input, { signal, timeout: 120_000 });
   const body = response.data;
   if (body && body.status === 'success' && Array.isArray(body.data)) return body.data;
   if (body && body.status === 'error') throw new Error(body.message || 'Predict failed');
@@ -141,7 +141,7 @@ export async function runPredict(
 /**
  * AI 분석 — /analyze/llm (winner 산출 + LLM 6 에이전트).
  *
- * timeout 300_000 — LLM 멀티에이전트 파이프라인.
+ * timeout 600_000 — LLM 멀티에이전트 파이프라인 (~80~140s 실측, retry 여유 포함, 명세 일치).
  *
  * 응답 wrapper: backend (찬영 8223bfb contract 보강) 가 `{ status, data: AnalysisOutput }` 형태 반환.
  *   - LLM_AGENTS_DISABLED=1 mock 도 동일 wrapper.
@@ -151,7 +151,7 @@ export async function runAnalyzeLlm(
   input: SimulationInput,
   signal?: AbortSignal,
 ): Promise<AnalysisOutput> {
-  const response = await apiClient.post('/analyze/llm', input, { signal, timeout: 300_000 });
+  const response = await apiClient.post('/analyze/llm', input, { signal, timeout: 600_000 });
   const body = response.data;
   if (body && body.status === 'success' && body.data) return body.data as AnalysisOutput;
   if (body && body.status === 'error') throw new Error(body.message || 'Analyze LLM failed');
