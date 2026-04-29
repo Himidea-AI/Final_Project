@@ -1,5 +1,5 @@
 """
-operational_fit_node — 교통·집객 접근성 에이전트 (Python 전용, LLM 없음)
+inflow_node — 교통·집객 접근성 에이전트 (Python 전용, LLM 없음)
 
 역할:
     마포 16동의 교통(지하철·버스)·집객시설 인프라 접근성을 0~100 점수화하여
@@ -30,12 +30,12 @@ import time
 
 from src.agents.nodes._attribution_helpers import build_attribution
 from src.schemas.state import AgentState
-from src.services.operational_fit_scorer import score_all_districts
+from src.services.inflow_scorer import score_all_districts
 
 logger = logging.getLogger(__name__)
 
 
-async def operational_fit_node(state: AgentState) -> dict:
+async def inflow_node(state: AgentState) -> dict:
     """교통·집객 접근성 판단 에이전트 (LLM 없음, ~50ms)."""
     t_start = time.perf_counter()
     logger.info("--- [OPERATIONAL_FIT] 시작 ---")
@@ -43,19 +43,19 @@ async def operational_fit_node(state: AgentState) -> dict:
     try:
         results = await score_all_districts()
     except Exception as exc:
-        logger.warning(f"[operational_fit] 점수 계산 실패 (빈 결과로 진행): {exc}")
+        logger.warning(f"[inflow] 점수 계산 실패 (빈 결과로 진행): {exc}")
         results = {}
 
     # 판정 대상 동: winner_district 우선, 없으면 target_district
     target = state.get("winner_district") or state.get("target_district") or ""
     target_fit = results.get(target, {}) if results else {}
 
-    score_vals = [r["operational_fit_score"] for r in results.values()] if results else []
+    score_vals = [r["inflow_score"] for r in results.values()] if results else []
     elapsed = time.perf_counter() - t_start
 
     if results:
         verdict = (
-            f"{target or '-'} {target_fit.get('operational_fit_score', 0):.0f}/100"
+            f"{target or '-'} {target_fit.get('inflow_score', 0):.0f}/100"
             if target_fit
             else f"16동 점수 범위 {min(score_vals):.1f}~{max(score_vals):.1f}"
         )
@@ -70,7 +70,7 @@ async def operational_fit_node(state: AgentState) -> dict:
         confidence = 0.0
 
     attr = build_attribution(
-        agent_id="operational_fit",
+        agent_id="inflow",
         display_name="교통·집객 접근성",
         kind="Python",
         sources=["dong_subway_access", "bus_boarding_daily", "seoul_adstrd_fclty"],
@@ -89,15 +89,15 @@ async def operational_fit_node(state: AgentState) -> dict:
         logger.warning(f"--- [OPERATIONAL_FIT] 완료 ({elapsed:.2f}s) | 결과 없음 ---")
 
     _analysis = dict(state.get("analysis_results", {}))
-    _analysis["operational_fit_result"] = {
+    _analysis["inflow_result"] = {
         "agent_attribution": attr,
         "target_district": target,
-        "target_score": target_fit.get("operational_fit_score"),
+        "target_score": target_fit.get("inflow_score"),
         "target_evidence": target_fit.get("evidence"),
     }
 
     return {
-        "operational_fit_results": results,
+        "inflow_results": results,
         "analysis_results": _analysis,
-        "current_agent": "operational_fit",
+        "current_agent": "inflow",
     }

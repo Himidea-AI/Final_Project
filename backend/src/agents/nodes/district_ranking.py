@@ -27,7 +27,7 @@ from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MA
 from src.config.settings import settings
 from src.database.models import NaverVacancy, StoreQuarterly
 from src.schemas.state import AgentState
-from src.services.operational_fit_scorer import score_all_districts as _score_operational_fit
+from src.services.inflow_scorer import score_all_districts as _score_inflow
 from src.services.population_api import MAPO_DONG_CODES
 
 logger = logging.getLogger(__name__)
@@ -297,7 +297,7 @@ def _normalize_and_rank(
     monthly_rent_budget > 0 : 예산 초과 동에 페널티 적용
     vacancy_rate_map        : 공실률 높은 동 추가 패널티 (5~10%: -15%, 10%+: -30%)
     business_type           : 용도지역 규제 패널티 판정용 업종 코드
-    operfit_map             : operational_fit_scorer 결과 (dict[dong, OperationalFitResult])
+    operfit_map             : inflow_scorer 결과 (dict[dong, InflowResult])
                               Hansen(1959) + E2SFCA(2009) 교통·집객 접근성 점수
     """
     if not raw:
@@ -357,9 +357,9 @@ def _normalize_and_rank(
     has_trend = any(v is not None for v in trend_vals)
     trend_norm = _minmax(trend_vals) if has_trend else None
 
-    # operational_fit — 교통·집객 접근성 (Hansen 1959 + E2SFCA 2009, 0~100 사전 정규화)
+    # inflow — 교통·집객 접근성 (Hansen 1959 + E2SFCA 2009, 0~100 사전 정규화)
     operfit_vals = [
-        operfit_map.get(r["district"], {}).get("operational_fit_score") if operfit_map else None for r in raw
+        operfit_map.get(r["district"], {}).get("inflow_score") if operfit_map else None for r in raw
     ]
     has_operfit = any(v is not None for v in operfit_vals)
     operfit_norm = _minmax(operfit_vals, floor=10.0) if has_operfit else None
@@ -377,7 +377,7 @@ def _normalize_and_rank(
         f"접근성:{operfit_hit}/16"
     )
 
-    # 가중치 재분배: 경쟁밀도 15%, 트렌드 5%, operational_fit 15%
+    # 가중치 재분배: 경쟁밀도 15%, 트렌드 5%, inflow 15%
     # 전부 매출에서 차감 — 인구/임대료 가중치는 유지. 매출 최소 5% 보장.
     w_density = 0.15 if has_density else 0.0
     w_trend = 0.05 if has_trend else 0.0
@@ -436,10 +436,10 @@ def _normalize_and_rank(
                 "rent_score": round(rent_norm[i], 1),
                 "density_score": round(density_norm[i], 1) if density_norm else None,
                 "trend_score": round(trend_norm[i], 1) if trend_norm else None,
-                "operational_fit_score": _operfit_entry.get("operational_fit_score"),
-                "operational_fit_subway": _operfit_entry.get("subway_sub"),
-                "operational_fit_bus": _operfit_entry.get("bus_sub"),
-                "operational_fit_fclty": _operfit_entry.get("fclty_sub"),
+                "inflow_score": _operfit_entry.get("inflow_score"),
+                "inflow_subway": _operfit_entry.get("subway_sub"),
+                "inflow_bus": _operfit_entry.get("bus_sub"),
+                "inflow_fclty": _operfit_entry.get("fclty_sub"),
                 "semas_density": r.get("semas_density"),
                 "naver_trend": r.get("naver_trend"),
                 "vacancy_rate": vacancy_rate,
@@ -482,7 +482,7 @@ async def district_ranking_node(state: AgentState) -> dict:
     # Redis 캐시 조회 — 동일 조건 재요청 시 DB 쿼리 없이 즉시 반환 (DEBUG=true 시 스킵)
     # v5: target_districts를 캐시 키에 포함 — 선택 동이 다르면 별도 캐시 (v4 무효화)
     # v6: top_3도 선택 동 내로 제한 (v5 잘못된 top_3 캐시 무효화)
-    # v7: operational_fit(교통·집객 접근성) 점수 추가 — Hansen/E2SFCA (v6 무효화)
+    # v7: inflow(교통·집객 접근성) 점수 추가 — Hansen/E2SFCA (v6 무효화)
     cache_key = (
         f"v7:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
     )
@@ -527,7 +527,7 @@ async def district_ranking_node(state: AgentState) -> dict:
             )
             _cached_analysis = dict(state.get("analysis_results", {}))
             _cached_analysis["district_ranking_result"] = {"agent_attribution": cached_ranking_attr}
-            _cached_operfit = cached_data.get("operational_fit_results") or {}
+            _cached_operfit = cached_data.get("inflow_results") or {}
             _cached_winner_operfit = _cached_operfit.get(_cached_winner, {}) if _cached_winner else {}
             return {
                 "scouting_results": cached_data["scouting_results"],
@@ -538,13 +538,13 @@ async def district_ranking_node(state: AgentState) -> dict:
                 "current_agent": "district_ranking",
                 "analysis_results": _cached_analysis,
                 "analysis_metrics": {
-                    "operational_fit_score": _cached_winner_operfit.get("operational_fit_score"),
-                    "operational_fit_subway": _cached_winner_operfit.get("subway_sub"),
-                    "operational_fit_bus": _cached_winner_operfit.get("bus_sub"),
-                    "operational_fit_fclty": _cached_winner_operfit.get("fclty_sub"),
-                    "operational_fit_evidence": _cached_winner_operfit.get("evidence"),
+                    "inflow_score": _cached_winner_operfit.get("inflow_score"),
+                    "inflow_subway": _cached_winner_operfit.get("subway_sub"),
+                    "inflow_bus": _cached_winner_operfit.get("bus_sub"),
+                    "inflow_fclty": _cached_winner_operfit.get("fclty_sub"),
+                    "inflow_evidence": _cached_winner_operfit.get("evidence"),
                 },
-                "operational_fit_results": _cached_operfit,
+                "inflow_results": _cached_operfit,
                 "agent_attribution": cached_ranking_attr,
             }
     except Exception as e:
@@ -577,17 +577,17 @@ async def district_ranking_node(state: AgentState) -> dict:
 
     tasks = [_guarded_score(dong) for dong in MAPO_DISTRICTS]
 
-    # operational_fit은 Phase 0 (operational_fit_node)에서 미리 계산되어 state에 주입됨.
+    # inflow은 Phase 0 (inflow_node)에서 미리 계산되어 state에 주입됨.
     # 그래프 우회 호출(/analyze/quick)에서는 state에 없을 수 있어 fallback 실행.
-    operfit_map: dict[str, dict] = state.get("operational_fit_results") or {}
+    operfit_map: dict[str, dict] = state.get("inflow_results") or {}
 
     if not operfit_map:
 
         async def _fallback_operfit() -> dict[str, dict]:
             try:
-                return await _score_operational_fit()
+                return await _score_inflow()
             except Exception as exc:
-                logger.warning(f"[district_ranking] operational_fit fallback 실패 (무시하고 계속): {exc}")
+                logger.warning(f"[district_ranking] inflow fallback 실패 (무시하고 계속): {exc}")
                 return {}
 
         raw_scores, vacancy_result, operfit_map = await asyncio.gather(
@@ -641,7 +641,7 @@ async def district_ranking_node(state: AgentState) -> dict:
                         "top_3_candidates": top_3,
                         "vacancy_applied": vacancy_applied,
                         "vacancy_spots": vacancy_spots,
-                        "operational_fit_results": operfit_map,
+                        "inflow_results": operfit_map,
                     },
                     ensure_ascii=False,
                 ),
@@ -681,7 +681,7 @@ async def district_ranking_node(state: AgentState) -> dict:
     _analysis = dict(state.get("analysis_results", {}))
     _analysis["district_ranking_result"] = {"agent_attribution": ranking_attr}
 
-    # winner 동의 operational_fit_score를 analysis_metrics에 주입 (main.py가 market_report.accessibility로 사용)
+    # winner 동의 inflow_score를 analysis_metrics에 주입 (main.py가 market_report.accessibility로 사용)
     winner_operfit = operfit_map.get(winner, {}) if operfit_map else {}
 
     return {
@@ -693,12 +693,12 @@ async def district_ranking_node(state: AgentState) -> dict:
         "current_agent": "district_ranking",
         "analysis_results": _analysis,
         "analysis_metrics": {
-            "operational_fit_score": winner_operfit.get("operational_fit_score"),
-            "operational_fit_subway": winner_operfit.get("subway_sub"),
-            "operational_fit_bus": winner_operfit.get("bus_sub"),
-            "operational_fit_fclty": winner_operfit.get("fclty_sub"),
-            "operational_fit_evidence": winner_operfit.get("evidence"),
+            "inflow_score": winner_operfit.get("inflow_score"),
+            "inflow_subway": winner_operfit.get("subway_sub"),
+            "inflow_bus": winner_operfit.get("bus_sub"),
+            "inflow_fclty": winner_operfit.get("fclty_sub"),
+            "inflow_evidence": winner_operfit.get("evidence"),
         },
-        "operational_fit_results": operfit_map,
+        "inflow_results": operfit_map,
         "agent_attribution": ranking_attr,
     }

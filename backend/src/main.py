@@ -109,7 +109,7 @@ app = FastAPI(
 # LangGraph 컴파일된 앱 초기화
 app_graph = compile_workflow()
 
-# IM3-259 — AI 분석 전용 slow_graph (operational_fit + ranking + LLM + synthesis)
+# IM3-259 — AI 분석 전용 slow_graph (inflow + ranking + LLM + synthesis)
 # /analyze/llm endpoint에서 사용. ml_prediction은 포함하지 않음 (그건 /predict 측 책임).
 slow_graph = compile_slow_graph()
 
@@ -536,7 +536,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
     # comparison[].score를 받는 프론트 DistrictComparison.score는 nullable로 동기화 완료.
     district_score = float(_target_row.get("score") or 0) if _target_row else None
 
-    accessibility_raw = metrics.get("operational_fit_score")
+    accessibility_raw = metrics.get("inflow_score")
     if accessibility_raw is None:
         accessibility_raw = metrics.get("accessibility_score")
 
@@ -547,7 +547,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
         "estimated_revenue": _estimated_rev_r,
         "survival_rate": _survival_r,
         "growth_potential": _growth_r,
-        # operational_fit_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백.
+        # inflow_score (Hansen 1959 + E2SFCA 2009) 우선, 구형 accessibility_score 폴백.
         # 값이 없으면 임의 기본값(예: 75)을 만들지 않고 None으로 내려보낸다.
         "accessibility": (min(int(float(accessibility_raw)), 100) if accessibility_raw is not None else None),
     }
@@ -797,7 +797,7 @@ async def analyze_location(input_data: SimulationInput, response: Response):
 # ---------------------------------------------------------------------------
 # IM3-259 — /analyze/llm: AI 분석 전용 endpoint (TCN/ML 분리, LLM only)
 # ---------------------------------------------------------------------------
-# /predict (B2 단발 ML)와 독립 병렬 호출. operational_fit + ranking + LLM 6 +
+# /predict (B2 단발 ML)와 독립 병렬 호출. inflow + ranking + LLM 6 +
 # synthesis 단계만 실행하며, ml_prediction은 포함하지 않는다 (그건 /predict 측).
 # 응답: AnalysisOutput
 # ---------------------------------------------------------------------------

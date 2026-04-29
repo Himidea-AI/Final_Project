@@ -190,7 +190,7 @@ class DistrictPredictionResult(BaseModel):
 # IM3-259 — AI 분석 응답 스키마 (/analyze/llm)
 # ---------------------------------------------------------------------------
 # /predict (TCN/ML 단발)와 독립적으로 호출되는 LLM 분석 endpoint 응답.
-# slow_graph(operational_fit + ranking + llm_analysis + synthesis) 산출물.
+# slow_graph(inflow + ranking + llm_analysis + synthesis) 산출물.
 # ml_prediction은 포함하지 않으며, 그 결과는 /predict의 DistrictPredictionResult로 분리.
 # ---------------------------------------------------------------------------
 
@@ -222,7 +222,7 @@ class CompetitorIntel(BaseModel):
 class AnalysisOutput(BaseModel):
     """LLM 분석 결과 — POST /analyze/llm 응답.
 
-    operational_fit + ranking + LLM 6 에이전트 + synthesis 산출물.
+    inflow + ranking + LLM 6 에이전트 + synthesis 산출물.
     /predict (DistrictPredictionResult list) 와 독립 병렬 호출 가능.
     """
 

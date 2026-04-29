@@ -10,7 +10,7 @@ from src.agents.nodes.market_analyst import market_analyst_node
 from src.agents.nodes.population import population_analyst_node
 from src.agents.nodes.synthesis import synthesis_node
 from src.agents.nodes.trend_forecaster import trend_forecaster_node
-from src.agents.nodes.operational_fit import operational_fit_node
+from src.agents.nodes.inflow import inflow_node
 from src.agents.tools import MarketDataTool as _MarketDataTool
 from src.schemas.state import AgentState
 
@@ -66,7 +66,7 @@ async def ranking_phase_node(state: AgentState) -> dict:
         "vacancy_spots": ranking_result.get("vacancy_spots", []),
         "analysis_results": ranking_result.get("analysis_results", {}),
         "analysis_metrics": ranking_result.get("analysis_metrics", {}),
-        "operational_fit_results": ranking_result.get("operational_fit_results", {}),
+        "inflow_results": ranking_result.get("inflow_results", {}),
         "current_agent": "ranking_phase",
     }
 
@@ -250,11 +250,11 @@ def build_graph() -> StateGraph:
     """
     상권분석 워크플로우 그래프 빌드 (2단계 실행)
 
-    Phase 0: operational_fit (Python, LLM 없음, ~50ms)
-      → 교통·집객 인프라 16동 점수 계산 → state.operational_fit_results
+    Phase 0: inflow (Python, LLM 없음, ~50ms)
+      → 교통·집객 인프라 16동 점수 계산 → state.inflow_results
 
     Phase 1: ranking_phase (district_ranking, LLM 없음, ~5-10초)
-      → winner_district 확정 (operational_fit 결과 15% 반영)
+      → winner_district 확정 (inflow 결과 15% 반영)
 
     Phase 2: llm_analysis_phase (6개 LLM 에이전트 병렬, winner 동 기준)
       → 시장/인구/법률 등 분석 데이터가 winner 동에서 생성
@@ -265,14 +265,14 @@ def build_graph() -> StateGraph:
     """
     workflow = StateGraph(AgentState)
 
-    workflow.add_node("operational_fit", operational_fit_node)
+    workflow.add_node("inflow", inflow_node)
     workflow.add_node("ranking_phase", ranking_phase_node)
     workflow.add_node("llm_analysis_phase", llm_analysis_phase_node)
     workflow.add_node("ml_prediction_phase", ml_prediction_phase_node)
     workflow.add_node("synthesis", synthesis_node)
 
-    workflow.set_entry_point("operational_fit")
-    workflow.add_edge("operational_fit", "ranking_phase")
+    workflow.set_entry_point("inflow")
+    workflow.add_edge("inflow", "ranking_phase")
     workflow.add_edge("ranking_phase", "llm_analysis_phase")
     workflow.add_edge("llm_analysis_phase", "ml_prediction_phase")
     workflow.add_edge("ml_prediction_phase", "synthesis")
@@ -298,7 +298,7 @@ compile_workflow = compile_graph
 # ml_prediction은 포함하지 않는다 (그건 /predict 측 책임).
 #
 # 그래프 구성:
-#   operational_fit → ranking → llm_analysis → synthesis → END
+#   inflow → ranking → llm_analysis → synthesis → END
 #
 # 시간 추정: ~80-140초 (LLM 6 병렬 + synthesis가 대부분)
 # 응답: AnalysisOutput (LLM 결과 + ranking + winner)
@@ -306,16 +306,16 @@ compile_workflow = compile_graph
 
 
 def build_slow_graph() -> StateGraph:
-    """AI 분석 전용 그래프 — operational_fit + ranking + llm_analysis + synthesis."""
+    """AI 분석 전용 그래프 — inflow + ranking + llm_analysis + synthesis."""
     workflow = StateGraph(AgentState)
 
-    workflow.add_node("operational_fit", operational_fit_node)
+    workflow.add_node("inflow", inflow_node)
     workflow.add_node("ranking_phase", ranking_phase_node)
     workflow.add_node("llm_analysis_phase", llm_analysis_phase_node)
     workflow.add_node("synthesis", synthesis_node)
 
-    workflow.set_entry_point("operational_fit")
-    workflow.add_edge("operational_fit", "ranking_phase")
+    workflow.set_entry_point("inflow")
+    workflow.add_edge("inflow", "ranking_phase")
     workflow.add_edge("ranking_phase", "llm_analysis_phase")
     workflow.add_edge("llm_analysis_phase", "synthesis")
     workflow.add_edge("synthesis", END)
