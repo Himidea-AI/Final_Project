@@ -55,7 +55,7 @@ export default function IntroScene({
           className="absolute top-6 right-6 z-40 flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#e2e8f0] hover:text-[#818cf8]"
           title={`${user?.role === 'master' ? 'HQ 지휘소' : '시뮬레이터'}로 이동`}
         >
-          <span className="text-[11px] font-medium tracking-wide">
+          <span className="text-[0.6875rem] font-medium tracking-wide">
             {brandName && <span className="text-[#818cf8]">{brandName}</span>}
             {brandName && personName && <span className="text-[#9ca3af]"> · </span>}
             {personName && (
@@ -73,7 +73,7 @@ export default function IntroScene({
           title="Login"
         >
           <LogIn className="w-3 h-3" />
-          <span className="text-[11px] font-bold tracking-wider uppercase">Login</span>
+          <span className="text-[0.6875rem] font-bold tracking-wider uppercase">Login</span>
         </button>
       )}
 
@@ -159,7 +159,7 @@ export default function IntroScene({
           {[...Array(2)].map((_, k) => (
             <div
               key={k}
-              className="flex items-center gap-12 px-6 font-mono text-[10px] uppercase tracking-[0.3em] shrink-0"
+              className="flex items-center gap-12 px-6 font-mono text-[0.625rem] uppercase tracking-[0.3em] shrink-0"
             >
               <span className="text-[#9ca3af]">AI Market Intelligence</span>
               <span className="text-[#3a3633]">●</span>

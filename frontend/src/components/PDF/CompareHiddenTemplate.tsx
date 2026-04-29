@@ -102,15 +102,15 @@ const CompareHiddenTemplate = forwardRef<HTMLDivElement, Props>(({ items, report
               {SPOTTER_LOGO_PATHS}
             </svg>
             <div>
-              <h1 className="text-[20px] font-black text-slate-900 leading-none tracking-tight">
+              <h1 className="text-[1.25rem] font-black text-slate-900 leading-none tracking-tight">
                 SPOTTER 입지 비교 리포트
               </h1>
-              <p className="text-[11px] text-slate-500 mt-1">
+              <p className="text-[0.6875rem] text-slate-500 mt-1">
                 Side-by-side Comparison · {n}건 · AI Multi-Agent Analysis
               </p>
             </div>
           </div>
-          <div className="text-right font-mono text-[10px] text-slate-500">
+          <div className="text-right font-mono text-[0.625rem] text-slate-500">
             <p>GENERATED · {reportDate}</p>
             <p>REQUESTED BY · SPOTTER-HQ</p>
             <p className="text-rose-500 font-bold tracking-[0.2em] mt-1">CONFIDENTIAL</p>
@@ -125,7 +125,7 @@ const CompareHiddenTemplate = forwardRef<HTMLDivElement, Props>(({ items, report
         </div>
 
         {/* Footer */}
-        <div className="mt-4 flex justify-between border-t border-slate-200 pt-3 font-mono text-[9px] text-slate-400 tracking-wider">
+        <div className="mt-4 flex justify-between border-t border-slate-200 pt-3 font-mono text-[0.5625rem] text-slate-400 tracking-wider">
           <span>© PROJECT SPOTTER · CONFIDENTIAL · LangGraph Multi-Agent</span>
           <span>PAGE 1 / 1</span>
         </div>
@@ -185,32 +185,32 @@ function ComparisonColumn({ item }: { item: CompareItem }) {
       {/* Column header */}
       <div className="border-b border-slate-200 pb-2">
         <div className="flex items-center gap-2 mb-1">
-          <span className="rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[9px] font-mono font-bold text-indigo-700">
+          <span className="rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[0.5625rem] font-mono font-bold text-indigo-700">
             {docId}
           </span>
-          <span className="text-[9px] font-mono text-slate-400">{formatDate(item.createdAt)}</span>
+          <span className="text-[0.5625rem] font-mono text-slate-400">{formatDate(item.createdAt)}</span>
         </div>
-        <div className="text-[14px] font-black text-slate-900 leading-tight truncate">
+        <div className="text-[0.875rem] font-black text-slate-900 leading-tight truncate">
           {item.clientName}
         </div>
-        <div className="text-[10px] text-slate-600">
+        <div className="text-[0.625rem] text-slate-600">
           {item.brandName}
           {item.businessType && <span className="text-slate-400"> · {item.businessType}</span>}
         </div>
-        <div className="text-[10px] text-indigo-600 font-bold mt-0.5">마포구 {item.district}</div>
+        <div className="text-[0.625rem] text-indigo-600 font-bold mt-0.5">마포구 {item.district}</div>
       </div>
 
       {/* Entry signal */}
       {sig ? (
         <div className={`rounded border ${sig.bg} p-2 text-center`}>
-          <div className={`text-[8px] font-black uppercase tracking-widest ${sig.text}`}>
+          <div className={`text-[0.5rem] font-black uppercase tracking-widest ${sig.text}`}>
             Entry Signal
           </div>
-          <div className={`text-[12px] font-black ${sig.text} leading-tight`}>{sig.label}</div>
+          <div className={`text-[0.75rem] font-black ${sig.text} leading-tight`}>{sig.label}</div>
         </div>
       ) : (
         <div className="rounded border border-slate-200 bg-slate-50 p-2 text-center">
-          <span className="text-[10px] text-slate-500">신호 미판정</span>
+          <span className="text-[0.625rem] text-slate-500">신호 미판정</span>
         </div>
       )}
 
@@ -224,7 +224,7 @@ function ComparisonColumn({ item }: { item: CompareItem }) {
       {/* SHAP top 3 */}
       {item.shapTop.length > 0 && (
         <div className="border-t border-slate-200 pt-2">
-          <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">
+          <div className="text-[0.5rem] font-black uppercase tracking-widest text-slate-500 mb-1">
             매출 기여 Top {item.shapTop.length}
           </div>
           <div className="flex flex-col gap-0.5">
@@ -232,9 +232,9 @@ function ComparisonColumn({ item }: { item: CompareItem }) {
               const pos = s.value >= 0;
               return (
                 <div key={`${s.label}-${i}`} className="flex items-center justify-between">
-                  <span className="text-[9px] text-slate-700 truncate mr-1">{s.label}</span>
+                  <span className="text-[0.5625rem] text-slate-700 truncate mr-1">{s.label}</span>
                   <span
-                    className={`font-mono font-bold text-[9px] tabular-nums ${
+                    className={`font-mono font-bold text-[0.5625rem] tabular-nums ${
                       pos ? 'text-indigo-600' : 'text-rose-600'
                     }`}
                   >
@@ -250,7 +250,7 @@ function ComparisonColumn({ item }: { item: CompareItem }) {
 
       {/* Winner / Recommendation */}
       {item.winnerDistrict && (
-        <div className="text-[9px] text-slate-600">
+        <div className="text-[0.5625rem] text-slate-600">
           <span className="text-slate-400">추천 동:</span>{' '}
           <span className="font-bold text-indigo-700">{item.winnerDistrict}</span>
         </div>
@@ -278,8 +278,8 @@ function ComparisonRow({
           : 'text-slate-900';
   return (
     <div className="flex items-center justify-between border-b border-slate-100 py-0.5">
-      <span className="text-[9px] text-slate-500">{label}</span>
-      <span className={`text-[10px] font-black tabular-nums ${toneCls}`}>{value}</span>
+      <span className="text-[0.5625rem] text-slate-500">{label}</span>
+      <span className={`text-[0.625rem] font-black tabular-nums ${toneCls}`}>{value}</span>
     </div>
   );
 }

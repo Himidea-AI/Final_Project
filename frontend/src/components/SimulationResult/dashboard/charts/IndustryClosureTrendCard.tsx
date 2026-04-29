@@ -76,15 +76,15 @@ export function IndustryClosureTrendCard({ trend }: Props) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Activity size={14} className="text-stone-400" />
-          <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+          <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
             동 업종 폐업률 추세
           </span>
-          <span className="text-[9px] font-bold text-stone-600 normal-case tracking-normal">
+          <span className="text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
             8 분기
           </span>
         </div>
         <span
-          className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${tinfo.color} ${tinfo.bg} uppercase tracking-widest`}
+          className={`text-[0.625rem] font-black px-2 py-0.5 rounded-full border ${tinfo.color} ${tinfo.bg} uppercase tracking-widest`}
         >
           {tinfo.label}
         </span>
@@ -92,7 +92,7 @@ export function IndustryClosureTrendCard({ trend }: Props) {
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="rounded-lg border border-stone-800/60 bg-stone-900/40 p-3">
-          <div className="text-[9px] font-black uppercase tracking-widest text-stone-500 mb-1">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-stone-500 mb-1">
             현재 분기
           </div>
           <div className="text-xl font-black tabular-nums text-stone-100 tracking-tighter">
@@ -100,7 +100,7 @@ export function IndustryClosureTrendCard({ trend }: Props) {
           </div>
         </div>
         <div className="rounded-lg border border-stone-800/60 bg-stone-900/40 p-3">
-          <div className="text-[9px] font-black uppercase tracking-widest text-stone-500 mb-1">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-stone-500 mb-1">
             과거 평균
           </div>
           <div className="text-xl font-black tabular-nums text-stone-300 tracking-tighter">
@@ -113,7 +113,7 @@ export function IndustryClosureTrendCard({ trend }: Props) {
         {numericSamples.length > 1 ? (
           <Sparkline data={numericSamples} height={48} />
         ) : (
-          <span className="text-[9px] text-stone-600">시계열 데이터 부족</span>
+          <span className="text-[0.5625rem] text-stone-600">시계열 데이터 부족</span>
         )}
       </div>
     </div>

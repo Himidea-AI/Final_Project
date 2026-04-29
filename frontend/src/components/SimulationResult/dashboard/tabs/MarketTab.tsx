@@ -76,7 +76,7 @@ export function MarketTab({ simResult }: Props) {
             <div className="min-w-0">
               <h3 className="text-lg font-black text-stone-100 flex items-center gap-3 italic text-left">
                 <MapPin className="text-indigo-400" size={20} /> 상권 지리 정보
-                <span className="text-[11px] font-black text-stone-500 tracking-widest not-italic truncate">
+                <span className="text-[0.6875rem] font-black text-stone-500 tracking-widest not-italic truncate">
                   {winnerDistrict ?? '—'} · 반경 500m
                 </span>
               </h3>
@@ -86,11 +86,11 @@ export function MarketTab({ simResult }: Props) {
             </div>
             <div className="flex gap-2 shrink-0">
               {vacancyApplied && (
-                <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[9px] font-black text-amber-500 flex items-center gap-1.5 uppercase">
+                <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[0.5625rem] font-black text-amber-500 flex items-center gap-1.5 uppercase">
                   <AlertTriangle size={10} /> 공실 페널티 반영
                 </div>
               )}
-              <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[9px] font-black text-indigo-500 flex items-center gap-1.5">
+              <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[0.5625rem] font-black text-indigo-500 flex items-center gap-1.5">
                 <MapPin size={10} /> 500m 반경
               </div>
             </div>
@@ -125,7 +125,7 @@ export function MarketTab({ simResult }: Props) {
           <h4 className="text-sm font-black text-stone-100 mb-6 flex items-center gap-2 uppercase tracking-tight">
             <Layers size={16} className="text-indigo-400" /> 마포구 동별 랭킹
             {winnerDistrict && (
-              <span className="ml-auto text-[10px] font-bold text-indigo-400 normal-case tracking-normal">
+              <span className="ml-auto text-[0.625rem] font-bold text-indigo-400 normal-case tracking-normal">
                 {winnerDistrict} 추천
               </span>
             )}
@@ -199,7 +199,7 @@ export function MarketTab({ simResult }: Props) {
       {samples.length > 0 && (
         <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6 grid grid-cols-3 gap-6">
           <div className="text-left">
-            <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-2">
+            <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest mb-2">
               HHI 집중도 지수
             </div>
             <div className="text-3xl font-black text-stone-100 tabular-nums tracking-tighter">
@@ -210,7 +210,7 @@ export function MarketTab({ simResult }: Props) {
             </div>
           </div>
           <div className="text-left">
-            <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-2">
+            <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest mb-2">
               시장 다양성 지수
             </div>
             <div className="text-3xl font-black text-stone-100 tabular-nums tracking-tighter">
@@ -224,7 +224,7 @@ export function MarketTab({ simResult }: Props) {
             </div>
           </div>
           <div className="text-left">
-            <div className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-2">
+            <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest mb-2">
               반경 포화도
             </div>
             <div className="text-3xl font-black text-stone-100 tabular-nums tracking-tighter">
@@ -288,13 +288,13 @@ function MarketAnalysisSidebar({
     <aside className="col-span-1 bg-[#141210]/60 border border-stone-800/40 rounded-[32px] p-6 flex flex-col gap-5 min-w-0">
       {/* ─ 섹션 1: 분석 결과 ─ */}
       <section>
-        <h4 className="text-[10px] font-black text-stone-600 uppercase tracking-[0.2em] mb-4">
+        <h4 className="text-[0.625rem] font-black text-stone-600 uppercase tracking-[0.2em] mb-4">
           분석 결과
         </h4>
         <ul className="space-y-3">
           {metrics.map((m) => (
             <li key={m.label} className="flex items-center justify-between gap-3 min-w-0">
-              <span className="text-[11px] font-bold text-stone-500 truncate">{m.label}</span>
+              <span className="text-[0.6875rem] font-bold text-stone-500 truncate">{m.label}</span>
               <span className="text-sm font-black text-stone-100 tabular-nums tracking-tight shrink-0">
                 {m.value}
               </span>
@@ -307,7 +307,7 @@ function MarketAnalysisSidebar({
 
       {/* ─ 섹션 2: 분석 근거 ─ */}
       <section>
-        <h4 className="text-[10px] font-black text-stone-600 uppercase tracking-[0.2em] mb-3">
+        <h4 className="text-[0.625rem] font-black text-stone-600 uppercase tracking-[0.2em] mb-3">
           분석 근거
         </h4>
         <div className="flex items-center gap-3">
@@ -319,7 +319,7 @@ function MarketAnalysisSidebar({
               <ShieldAlert size={12} className="text-amber-400" />
             </div>
           </div>
-          <span className="text-[9px] font-bold text-stone-500 leading-snug">
+          <span className="text-[0.5625rem] font-bold text-stone-500 leading-snug">
             Python 집계 + 상권 데이터
           </span>
         </div>
@@ -329,11 +329,11 @@ function MarketAnalysisSidebar({
 
       {/* ─ 섹션 3: 주요 경쟁점 ─ */}
       <section className="flex-1 min-h-0">
-        <h4 className="text-[10px] font-black text-stone-600 uppercase tracking-[0.2em] mb-3">
+        <h4 className="text-[0.625rem] font-black text-stone-600 uppercase tracking-[0.2em] mb-3">
           주요 경쟁점
         </h4>
         {topCompetitors.length === 0 ? (
-          <p className="text-[11px] text-stone-600 font-medium leading-snug">
+          <p className="text-[0.6875rem] text-stone-600 font-medium leading-snug">
             반경 500m 경쟁 매장 데이터 없음
           </p>
         ) : (
@@ -344,12 +344,12 @@ function MarketAnalysisSidebar({
                 className="flex items-center justify-between gap-3 min-w-0"
               >
                 <span
-                  className="text-[12px] font-bold text-stone-300 truncate"
+                  className="text-[0.75rem] font-bold text-stone-300 truncate"
                   title={c.place_name ?? ''}
                 >
                   {c.place_name ?? '—'}
                 </span>
-                <span className="text-[11px] font-mono text-stone-500 tabular-nums shrink-0">
+                <span className="text-[0.6875rem] font-mono text-stone-500 tabular-nums shrink-0">
                   {c.distance_m != null ? `${Math.round(c.distance_m)}m` : '—'}
                 </span>
               </li>

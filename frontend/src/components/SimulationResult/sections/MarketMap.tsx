@@ -206,29 +206,48 @@ export function MarketMap({
       infoWindowRef.current = null;
     }
 
-    // Layer 1 — 500m Circle
-    const circle = new maps.Circle({
-      center: new maps.LatLng(center.lat, center.lng),
-      radius,
-      strokeWeight: 2,
-      strokeColor: '#f59e0b',
-      strokeOpacity: 0.8,
-      strokeStyle: 'dash',
-      fillColor: '#f59e0b',
-      fillOpacity: 0.05,
-    });
-    circle.setMap(mapInstance);
-    overlayLayersRef.current.push(circle);
+    // Circle + amber pulse marker 의 좌표 = winner polygon 의 geometric centroid 가 정답.
+    // GeoJSON fetch 후 centroid 계산 → 그 좌표로 layer 생성. fetch 실패 또는 winner
+    // 미발견 시 center prop 으로 fallback (DONG_COORDS 하드코딩이 마지막 안전장치).
+    const fallbackCenter = new maps.LatLng(center.lat, center.lng);
+    const buildCenterLayers = (latLng: unknown) => {
+      const circle = new maps.Circle({
+        center: latLng,
+        radius,
+        strokeWeight: 2,
+        strokeColor: '#f59e0b',
+        strokeOpacity: 0.8,
+        strokeStyle: 'dash',
+        fillColor: '#f59e0b',
+        fillOpacity: 0.05,
+      });
+      circle.setMap(mapInstance);
+      overlayLayersRef.current.push(circle);
 
-    // Layer — (bonus) 16동 choropleth (GeoJSON fetch 비동기)
+      const targetOverlay = new maps.CustomOverlay({
+        position: latLng,
+        content: buildTargetOverlayContent(),
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 5,
+      });
+      targetOverlay.setMap(mapInstance);
+      overlayLayersRef.current.push(targetOverlay);
+    };
+
+    // Layer — (bonus) 16동 choropleth + winner centroid 계산
     fetch('/mapo-dong.geo.json')
       .then((r) => {
         if (!r.ok) throw new Error(`GeoJSON fetch ${r.status}`);
         return r.json() as Promise<GeoCollection>;
       })
       .then((geo) => {
-        if (!geo.features) return;
+        if (!geo.features) {
+          buildCenterLayers(fallbackCenter);
+          return;
+        }
         const rankingMap = new Map(rankings.map((r) => [r.district, r]));
+        let winnerCentroid: { lat: number; lng: number } | null = null;
         geo.features.forEach((f) => {
           const dong = f.properties.dong_name;
           const ranking = rankingMap.get(dong);
@@ -242,6 +261,21 @@ export function MarketMap({
             f.geometry.type === 'MultiPolygon'
               ? (f.geometry.coordinates as number[][][][]).flatMap((p) => p)
               : (f.geometry.coordinates as number[][][]);
+
+          if (isWinner) {
+            // winner polygon 의 모든 좌표 평균 = geometric centroid (단순 평균이라
+            // 비대칭 모양에선 약간 어긋날 수 있지만 시각상 박스 내부에 항상 위치).
+            const allCoords = polygons.flat();
+            if (allCoords.length > 0) {
+              const lngSum = allCoords.reduce((s, [lng]) => s + lng, 0);
+              const latSum = allCoords.reduce((s, [, lat]) => s + lat, 0);
+              winnerCentroid = {
+                lat: latSum / allCoords.length,
+                lng: lngSum / allCoords.length,
+              };
+            }
+          }
+
           polygons.forEach((ring) => {
             const path = ring.map(([lng, lat]) => new maps.LatLng(lat, lng));
             const poly = new maps.Polygon({
@@ -256,10 +290,15 @@ export function MarketMap({
             overlayLayersRef.current.push(poly);
           });
         });
+
+        const wc = winnerCentroid as { lat: number; lng: number } | null;
+        const finalCenter = wc ? new maps.LatLng(wc.lat, wc.lng) : fallbackCenter;
+        buildCenterLayers(finalCenter);
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : 'GeoJSON 로드 실패';
         setGeoError(msg);
+        buildCenterLayers(fallbackCenter);
       });
 
     // Layer 2 — 경쟁점 마커 (빨간 삼각형, 반경 내/외 불투명도 구분 + 클릭 InfoWindow)
@@ -296,17 +335,6 @@ export function MarketMap({
       overlayLayersRef.current.push(overlay);
     });
 
-    // Layer 3 — 타겟 pulse CustomOverlay
-    const targetOverlay = new maps.CustomOverlay({
-      position: new maps.LatLng(center.lat, center.lng),
-      content: buildTargetOverlayContent(),
-      xAnchor: 0.5,
-      yAnchor: 0.5,
-      zIndex: 5,
-    });
-    targetOverlay.setMap(mapInstance);
-    overlayLayersRef.current.push(targetOverlay);
-
     return () => {
       overlayLayersRef.current.forEach((layer) => layer.setMap(null));
       overlayLayersRef.current = [];
@@ -340,7 +368,7 @@ export function MarketMap({
         </div>
       )}
       {geoError && (
-        <div className="absolute right-4 top-4 rounded bg-stone-900/80 px-2 py-1 text-[10px] text-rose-400">
+        <div className="absolute right-4 top-4 rounded bg-stone-900/80 px-2 py-1 text-[0.625rem] text-rose-400">
           GeoJSON: {geoError}
         </div>
       )}

@@ -65,7 +65,7 @@ export function DistrictRankings({ simResult }: Props) {
               </th>
               <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
                 폐업위험
-                <span className="ml-1 text-[9px] font-normal text-stone-600">(ML예측)</span>
+                <span className="ml-1 text-[0.5625rem] font-normal text-stone-600">(ML예측)</span>
               </th>
               <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">BEP</th>
               <th className="p-3 text-center text-xs font-semibold uppercase text-stone-400">
@@ -86,7 +86,7 @@ export function DistrictRankings({ simResult }: Props) {
                     {/* 자체 1~N위 (정렬 후 인덱스). 전체 마포 16동 중 순위는 작게 보조 표시. */}
                     {i + 1}
                     {selectedDongs.length > 0 && r.rank != null && r.rank !== i + 1 && (
-                      <span className="ml-1 text-[9px] font-normal text-stone-500">
+                      <span className="ml-1 text-[0.5625rem] font-normal text-stone-500">
                         (전체 {r.rank}위)
                       </span>
                     )}
@@ -94,7 +94,7 @@ export function DistrictRankings({ simResult }: Props) {
                   <td className="p-3 text-sm font-semibold text-stone-100">
                     {r.district}
                     {isWinner && (
-                      <span className="ml-2 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-bold text-indigo-400">
+                      <span className="ml-2 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[0.625rem] font-bold text-indigo-400">
                         추천
                       </span>
                     )}

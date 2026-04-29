@@ -56,20 +56,20 @@ export function BepCumulativeProfitChart({ data, height = 200 }: Props) {
   return (
     <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[10px] font-black uppercase tracking-widest text-stone-500 flex items-center gap-2">
+        <div className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500 flex items-center gap-2">
           <span>분기별 투자 회수 곡선</span>
-          <span className="text-[9px] font-bold text-stone-600 normal-case tracking-normal">
+          <span className="text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
             cumulative_profit · BEP 도달 시점 강조
           </span>
           {hasMockQuarters && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold normal-case tracking-normal text-amber-300">
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[0.5625rem] font-bold normal-case tracking-normal text-amber-300">
               <span className="h-1 w-1 rounded-full bg-amber-400" />
               일부 분기 mock
             </span>
           )}
         </div>
         {bep && (
-          <span className="text-[10px] font-black tabular-nums text-emerald-400">
+          <span className="text-[0.625rem] font-black tabular-nums text-emerald-400">
             BEP Q{bep.quarter}
           </span>
         )}

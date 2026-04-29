@@ -29,7 +29,7 @@ interface Props {
 
 export function Sparkline({ data, width, height = 24 }: Props) {
   if (!data || data.length === 0) {
-    return <span className="text-[10px] text-stone-500">—</span>;
+    return <span className="text-[0.625rem] text-stone-500">—</span>;
   }
   const dir = computeTrendDirection(data);
   const points = data.map((v, i) => ({ i, v }));

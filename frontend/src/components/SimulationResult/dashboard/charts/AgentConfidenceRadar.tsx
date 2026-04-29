@@ -68,7 +68,7 @@ export function AgentConfidenceRadar({ attributions }: Props) {
           </RadarChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest">
+      <div className="flex items-center justify-center gap-2 text-[0.625rem] font-black uppercase tracking-widest">
         <span className="text-stone-500">
           실행 <span className="text-cyan-400 tabular-nums">{executedCount}</span>
           <span className="text-stone-600">/{data.length}</span>

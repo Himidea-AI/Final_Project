@@ -25,7 +25,7 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
 
   return (
     <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
-      <div className={`text-[10px] font-black uppercase tracking-widest mb-3 ${accentClass}`}>
+      <div className={`text-[0.625rem] font-black uppercase tracking-widest mb-3 ${accentClass}`}>
         {title}
       </div>
       <div className="space-y-2">
@@ -36,7 +36,7 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
           const labelColor = positive ? 'text-rose-400' : 'text-emerald-400';
           return (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-[11px] text-stone-400 font-bold w-24 truncate">
+              <span className="text-[0.6875rem] text-stone-400 font-bold w-24 truncate">
                 {s.feature}
               </span>
               <div className="flex-1 relative h-3 rounded-sm overflow-hidden">
@@ -53,7 +53,7 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
                   />
                 )}
               </div>
-              <span className={`text-[11px] font-black tabular-nums w-14 text-right ${labelColor}`}>
+              <span className={`text-[0.6875rem] font-black tabular-nums w-14 text-right ${labelColor}`}>
                 {positive ? '+' : ''}
                 {s.contribution.toFixed(2)}
               </span>
@@ -61,7 +61,7 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
           );
         })}
       </div>
-      <p className="mt-3 text-[10px] text-stone-500 leading-relaxed">
+      <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
         양수(빨강) = 폐업 위험을 높이는 요인, 음수(초록) = 낮추는 요인
       </p>
     </div>

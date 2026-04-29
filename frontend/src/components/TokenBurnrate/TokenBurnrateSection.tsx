@@ -68,10 +68,10 @@ export function TokenBurnrateSection() {
               준비되어 있습니다. B1(예진)이 엔드포인트를 추가하면 이 섹션은 자동으로 활성화됩니다.
             </p>
             <details className="mt-2">
-              <summary className="cursor-pointer text-[11px] font-bold text-amber-300 hover:text-amber-200">
+              <summary className="cursor-pointer text-[0.6875rem] font-bold text-amber-300 hover:text-amber-200">
                 응답 스키마 (B1 참고)
               </summary>
-              <pre className="mt-2 rounded-md bg-[#1e1b18] p-3 text-[10px] leading-relaxed text-stone-400 overflow-x-auto">{`GET /api/ops/token-usage?from=YYYY-MM-DD&to=YYYY-MM-DD
+              <pre className="mt-2 rounded-md bg-[#1e1b18] p-3 text-[0.625rem] leading-relaxed text-stone-400 overflow-x-auto">{`GET /api/ops/token-usage?from=YYYY-MM-DD&to=YYYY-MM-DD
 Authorization: Bearer <JWT>
 
 {
@@ -139,10 +139,10 @@ Authorization: Bearer <JWT>
       {/* 일별 번레이트 바 */}
       <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+          <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
             일별 토큰 소진
           </span>
-          <span className="text-[10px] text-stone-600">peak {formatInt(maxDaily)} tokens/day</span>
+          <span className="text-[0.625rem] text-stone-600">peak {formatInt(maxDaily)} tokens/day</span>
         </div>
         {data.daily.length === 0 ? (
           <div className="py-8 text-center text-xs text-stone-500">해당 기간 기록 없음</div>
@@ -172,7 +172,7 @@ Authorization: Bearer <JWT>
         <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
           <div className="mb-3 flex items-center gap-2">
             <Users className="h-4 w-4 text-[#818cf8]" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
               매니저별 Top 5
             </span>
           </div>
@@ -184,9 +184,9 @@ Authorization: Bearer <JWT>
                 const pct = (m.tokens / totalManagerTokens) * 100;
                 return (
                   <div key={m.manager_id} className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center justify-between text-[0.6875rem]">
                       <span className="flex items-center gap-2 text-stone-300">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-[9px] font-mono text-stone-400">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-[0.5625rem] font-mono text-stone-400">
                           {i + 1}
                         </span>
                         <span className="truncate">
@@ -214,7 +214,7 @@ Authorization: Bearer <JWT>
         <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
           <div className="mb-3 flex items-center gap-2">
             <Cpu className="h-4 w-4 text-[#818cf8]" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
               모델별 소진
             </span>
           </div>
@@ -228,16 +228,16 @@ Authorization: Bearer <JWT>
                   className="flex items-center justify-between border-b border-stone-800/60 pb-2 last:border-0"
                 >
                   <div className="flex flex-col">
-                    <span className="font-mono text-[11px] text-stone-300">{m.model}</span>
-                    <span className="text-[9px] text-stone-500">
+                    <span className="font-mono text-[0.6875rem] text-stone-300">{m.model}</span>
+                    <span className="text-[0.5625rem] text-stone-500">
                       {m.run_count.toLocaleString()} runs
                     </span>
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-[11px] tabular-nums text-indigo-400">
+                    <div className="font-mono text-[0.6875rem] tabular-nums text-indigo-400">
                       {formatInt(m.tokens)}
                     </div>
-                    <div className="text-[9px] text-emerald-400">{formatUsd(m.cost_usd)}</div>
+                    <div className="text-[0.5625rem] text-emerald-400">{formatUsd(m.cost_usd)}</div>
                   </div>
                 </div>
               ))}
@@ -265,7 +265,7 @@ function KpiCard({
   return (
     <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+        <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
           {label}
         </span>
         {icon}
@@ -275,7 +275,7 @@ function KpiCard({
       >
         {value}
       </div>
-      {sub && <div className="mt-1 text-[10px] text-stone-500">{sub}</div>}
+      {sub && <div className="mt-1 text-[0.625rem] text-stone-500">{sub}</div>}
     </div>
   );
 }

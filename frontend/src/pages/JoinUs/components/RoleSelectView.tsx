@@ -40,7 +40,7 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
           <div className="flex-1">
             <h3 className="text-base font-bold text-white mb-1.5">
               새 워크스페이스 개설
-              <span className="ml-2 text-[10px] text-[#818cf8] font-mono uppercase tracking-wider">
+              <span className="ml-2 text-[0.625rem] text-[#818cf8] font-mono uppercase tracking-wider">
                 팀장
               </span>
             </h3>
@@ -64,7 +64,7 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
           <div className="flex-1">
             <h3 className="text-base font-bold text-white mb-1.5">
               초대 코드로 합류
-              <span className="ml-2 text-[10px] text-emerald-400 font-mono uppercase tracking-wider">
+              <span className="ml-2 text-[0.625rem] text-emerald-400 font-mono uppercase tracking-wider">
                 팀원
               </span>
             </h3>

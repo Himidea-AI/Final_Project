@@ -47,9 +47,9 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
 
   return (
     <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
-      <div className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-3">
+      <div className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500 mb-3">
         과거 12개월 폐업률 추이
-        <span className="ml-2 text-[9px] font-bold text-stone-600 normal-case tracking-normal">
+        <span className="ml-2 text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
           monthly_closure_rates · 실측 (예측 아님)
         </span>
       </div>

@@ -30,7 +30,7 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
         <h4 className="text-xs font-black uppercase tracking-widest text-stone-500">
           차별화 포지셔닝
         </h4>
-        <span className="text-[10px] font-black text-stone-600 normal-case tracking-normal">
+        <span className="text-[0.625rem] font-black text-stone-600 normal-case tracking-normal">
           competitor_intel
         </span>
       </div>
@@ -46,7 +46,7 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3">
           <div className="flex items-center gap-1.5 mb-2">
             <Lightbulb size={12} className="text-emerald-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-emerald-400">
               핵심 기회
             </span>
           </div>
@@ -55,7 +55,7 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
               {opportunities!.map((o, i) => (
                 <li
                   key={i}
-                  className="text-[11px] text-stone-200 leading-relaxed flex items-start gap-1.5"
+                  className="text-[0.6875rem] text-stone-200 leading-relaxed flex items-start gap-1.5"
                 >
                   <span className="text-emerald-500 mt-0.5">•</span>
                   <span>{o}</span>
@@ -63,7 +63,7 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
               ))}
             </ul>
           ) : (
-            <span className="text-[10px] text-stone-500">식별된 기회 없음</span>
+            <span className="text-[0.625rem] text-stone-500">식별된 기회 없음</span>
           )}
         </div>
 
@@ -71,7 +71,7 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
         <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-3">
           <div className="flex items-center gap-1.5 mb-2">
             <ShieldAlert size={12} className="text-rose-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-rose-400">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-rose-400">
               핵심 리스크
             </span>
           </div>
@@ -80,7 +80,7 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
               {risks!.map((r, i) => (
                 <li
                   key={i}
-                  className="text-[11px] text-stone-200 leading-relaxed flex items-start gap-1.5"
+                  className="text-[0.6875rem] text-stone-200 leading-relaxed flex items-start gap-1.5"
                 >
                   <span className="text-rose-500 mt-0.5">•</span>
                   <span>{r}</span>
@@ -88,7 +88,7 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
               ))}
             </ul>
           ) : (
-            <span className="text-[10px] text-stone-500">식별된 리스크 없음</span>
+            <span className="text-[0.625rem] text-stone-500">식별된 리스크 없음</span>
           )}
         </div>
       </div>

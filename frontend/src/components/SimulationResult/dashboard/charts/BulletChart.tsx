@@ -25,7 +25,7 @@ export function BulletChart({ actual, target, max = 100, label, thresholds = [40
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between">
         {label && (
-          <span className="text-[9px] font-bold text-stone-500 uppercase tracking-widest">
+          <span className="text-[0.5625rem] font-bold text-stone-500 uppercase tracking-widest">
             {label}
           </span>
         )}

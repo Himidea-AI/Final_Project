@@ -190,7 +190,7 @@ function DetailHeader({
           <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-mono font-bold text-amber-400">
             {formatDocumentId(id)}
           </span>
-          <span className="text-[10px] uppercase tracking-widest text-stone-500">읽기 전용</span>
+          <span className="text-[0.625rem] uppercase tracking-widest text-stone-500">읽기 전용</span>
         </div>
         <h1 className="mt-2 text-xl font-semibold text-stone-100">
           {clientName} 고객님 · {brandName} — {district}
