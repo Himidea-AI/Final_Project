@@ -184,6 +184,9 @@ class DistrictPredictionResult(BaseModel):
     closure_rate: dict | None = None
     closure_risk: dict | None = None
     shap_result: ShapResult | None = None
+    customer_segment: dict | None = None
+    living_pop_forecast: dict | None = None
+    emerging_signal: dict | None = None
 
 
 
