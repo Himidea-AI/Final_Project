@@ -219,6 +219,12 @@ class Agent:
     # DSL 모드면 모든 Tier가 brain.dsl_decide() 호출
     # -----------------------------------------------------------
     def decide(self, world: "World", brain: "LLMBrain", rng: random.Random) -> Decision:
+        # Tier S 만 LLM 모드 — 시각화 풍선 50명 (thought_agents) 와 1:1 매칭.
+        # Tier S → smart_decide(LLM), 나머지(A/B) → policy_decide.
+        # use_policy 도 True 로 유지 → policy_cache 로드 후 Tier A/B 가 그대로 사용.
+        if getattr(world, "tier_s_llm_only", False) and self.tier == Tier.S:
+            return brain.smart_decide(self, world)
+
         # Policy Generator 모드 — LLM 호출 0회, 순수 Python 점수 함수
         if getattr(world, "use_policy", False):
             from .policy_executor import policy_decide

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.ingest import _common as C
+from src.ingest import _common as C
 
 
 def test_normalize_dong_code_pads_8_digits():
@@ -21,6 +21,7 @@ def test_parse_ym_handles_variants():
     assert C.parse_ym("202503") == 202503
     assert C.parse_ym("2025-03") == 202503
     assert C.parse_ym("2025/3") == 202503
+    assert C.parse_ym("2025.03") == 202503
     assert C.parse_ym(202503) == 202503
     with pytest.raises(ValueError):
         C.parse_ym("2025")

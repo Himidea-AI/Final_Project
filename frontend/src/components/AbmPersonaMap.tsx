@@ -120,7 +120,7 @@ export interface AbmThought {
   hour: number;
   day: number;
   archetype: string;
-  thought: string; // 한국어 ≤ 12자
+  thought: string; // 한국어 — generate_thought 12자 / smart_decide.reason 최대 60자
   lat: number | null; // backend 가 null 가능
   lon: number | null;
 }
@@ -451,6 +451,20 @@ export default function AbmPersonaMap({
   const currentDisplayHourRef = useRef<number>(0);
   // 선택된 Tier S 페르소나 카드 (모달).
   const [selectedPersona, setSelectedPersona] = useState<PersonaCardData | null>(null);
+  // hover 중인 Tier S agent_id — 풍선은 hover 한 명만 표시 (지도 클러터 방지).
+  // 50명 모두 풍선은 가독성 ↓ → 사이드 thought feed 가 전체 흐름 담당.
+  const hoveredTierSAgentRef = useRef<number | null>(null);
+  // hex grid lat/lng 캐시 — zoom level 별 pointInPolygon 결과 amortize.
+  // pan 마다 12,288 셀 × 16 dong polygon 검사 (≈ 7M 연산) → 캐시 후 첫 1회만.
+  // pan 시 픽셀만 재투영 (~1300 calls), zoom 변경 시만 재빌드.
+  const hexLatLngCacheRef = useRef<
+    Map<number, Array<{ lat: number; lon: number; dr: number; dc: number }>>
+  >(new Map());
+  // pan 추적 — drag 시작 시 중심 latLng + 픽셀 저장. drag 중 CSS transform 으로 캔버스 추종.
+  const panStartLatLngRef = useRef<any | null>(null);
+  const panStartPxRef = useRef<{ x: number; y: number } | null>(null);
+  // 모드 구분 — pan 만이면 CSS transform, zoom 이면 takeSnapshot 경로.
+  const isPanModeRef = useRef(false);
 
   const [mapLoaded, setMapLoaded] = useState(false);
   // Kakao 맵 이벤트 리스너가 항상 최신 함수 참조하도록 (stale closure 방지)
@@ -571,7 +585,8 @@ export default function AbmPersonaMap({
         hour: Number(t.hour) || 0,
         day: Number(t.day) || 0,
         archetype: String(t.archetype || ''),
-        thought: String(t.thought || '').slice(0, 12),
+        // smart_decide.reason 도 동일 필드 사용 (최대 60자) → 80자 cap 으로 여유.
+        thought: String(t.thought || '').slice(0, 80),
         lat: typeof t.lat === 'number' ? t.lat : null,
         lon: typeof t.lon === 'number' ? t.lon : null,
       });
@@ -601,6 +616,8 @@ export default function AbmPersonaMap({
         hours: dg.hours,
         max_count: typeof dg.max_count === 'number' ? dg.max_count : undefined,
       };
+      // density_grid 변경 → 캐시 무효화 (bbox/cols/rows 가 다르면 hex 분포도 다름).
+      hexLatLngCacheRef.current.clear();
       recomputeNodePixelsRef.current?.();
       return;
     }
@@ -654,7 +671,8 @@ export default function AbmPersonaMap({
       hours,
       max_count: maxCount,
     };
-    // density_grid 갱신 → hex 격자 재계산 (recomputeNodePixels 가 hex 도 생성).
+    // density_grid 갱신 → hex 캐시 무효화 + 격자 재계산.
+    hexLatLngCacheRef.current.clear();
     recomputeNodePixelsRef.current?.();
   }, [abmResult]);
 
@@ -796,61 +814,69 @@ export default function AbmPersonaMap({
       return { x: pixel.x, y: pixel.y };
     });
 
-    // 헥사 격자 hex 중심 픽셀 + density cell 매핑 — pan/zoom 변할 때만 재계산.
-    // hex size 8px (셀 ~14px wide), 1100~1300개 hex (마포 bbox 한정).
+    // 헥사 격자 hex 중심 픽셀 + density cell 매핑.
+    // ★ B 최적화: zoom level 별 lat/lng 캐시 → pan 마다 pointInPolygon 재실행 회피.
+    //   캐시 미스(첫 렌더 또는 zoom 변경) 시만 7M 연산. pan 시 cached lat/lng → pixel 재투영만 (~1300 calls).
     const dg = densityGridRef.current;
     if (dg && dg.cols > 0 && dg.rows > 0) {
-      const [minLat, minLon, maxLat, maxLon] = dg.bbox;
-      const topLeft = proj.containerPointFromCoords(new kakao.maps.LatLng(maxLat, minLon));
-      const bottomRight = proj.containerPointFromCoords(new kakao.maps.LatLng(minLat, maxLon));
-      const HEX_SIZE = 8; // hex 외접원 반지름 (px)
-      const xStep = HEX_SIZE * Math.sqrt(3); // 가로 간격
-      const yStep = HEX_SIZE * 1.5; // 세로 간격
-      const dLatPx = bottomRight.y - topLeft.y;
-      const dLonPx = bottomRight.x - topLeft.x;
-      const cols = Math.ceil(dLonPx / xStep) + 1;
-      const rows = Math.ceil(dLatPx / yStep) + 1;
-      // pointInPolygon — ray casting (lat/lon 공간).
-      const polys = mapoPolygonsRef.current;
-      const inMapo = (lat: number, lon: number): boolean => {
-        if (polys.length === 0) return true; // geo 미로드 시 마스킹 X (전체 통과)
-        for (const p of polys) {
-          const ring = p.ring;
-          let inside = false;
-          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-            const xi = ring[i][0], // lon
-              yi = ring[i][1]; // lat
-            const xj = ring[j][0],
-              yj = ring[j][1];
-            const intersect =
-              yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
-            if (intersect) inside = !inside;
+      const zoomLvl = typeof map.getLevel === 'function' ? map.getLevel() : 0;
+      let cached = hexLatLngCacheRef.current.get(zoomLvl);
+      if (!cached) {
+        // 캐시 미스 — 무거운 빌드 1회.
+        const [minLat, minLon, maxLat, maxLon] = dg.bbox;
+        const topLeft = proj.containerPointFromCoords(new kakao.maps.LatLng(maxLat, minLon));
+        const bottomRight = proj.containerPointFromCoords(new kakao.maps.LatLng(minLat, maxLon));
+        const HEX_SIZE = 8;
+        const xStep = HEX_SIZE * Math.sqrt(3);
+        const yStep = HEX_SIZE * 1.5;
+        const dLatPx = bottomRight.y - topLeft.y;
+        const dLonPx = bottomRight.x - topLeft.x;
+        const cols = Math.ceil(dLonPx / xStep) + 1;
+        const rows = Math.ceil(dLatPx / yStep) + 1;
+        const polys = mapoPolygonsRef.current;
+        const inMapo = (lat: number, lon: number): boolean => {
+          if (polys.length === 0) return true;
+          for (const p of polys) {
+            const ring = p.ring;
+            let inside = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+              const xi = ring[i][0],
+                yi = ring[i][1];
+              const xj = ring[j][0],
+                yj = ring[j][1];
+              const intersect =
+                yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+              if (intersect) inside = !inside;
+            }
+            if (inside) return true;
           }
-          if (inside) return true; // 어느 한 dong polygon 안이면 마포 안.
+          return false;
+        };
+        const built: { lat: number; lon: number; dr: number; dc: number }[] = [];
+        for (let rr = 0; rr < rows; rr++) {
+          for (let cc = 0; cc < cols; cc++) {
+            const offsetX = rr % 2 === 0 ? 0 : xStep / 2;
+            const px = topLeft.x + cc * xStep + offsetX;
+            const py = topLeft.y + rr * yStep;
+            const latRatio = (py - topLeft.y) / (dLatPx || 1);
+            const lonRatio = (px - topLeft.x) / (dLonPx || 1);
+            const hexLat = maxLat - latRatio * (maxLat - minLat);
+            const hexLon = minLon + lonRatio * (maxLon - minLon);
+            const dr = Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dg.rows);
+            const dc = Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dg.cols);
+            if (dr < 0 || dr >= dg.rows || dc < 0 || dc >= dg.cols) continue;
+            if (!inMapo(hexLat, hexLon)) continue;
+            built.push({ lat: hexLat, lon: hexLon, dr, dc });
+          }
         }
-        return false;
-      };
-      const newGrid: { x: number; y: number; dr: number; dc: number }[] = [];
-      for (let rr = 0; rr < rows; rr++) {
-        for (let cc = 0; cc < cols; cc++) {
-          const offsetX = rr % 2 === 0 ? 0 : xStep / 2;
-          const px = topLeft.x + cc * xStep + offsetX;
-          const py = topLeft.y + rr * yStep;
-          // pixel → lat/lon 역산: 선형 보간 (Kakao map 단거리 근사 OK)
-          const latRatio = (py - topLeft.y) / (dLatPx || 1);
-          const lonRatio = (px - topLeft.x) / (dLonPx || 1);
-          const hexLat = maxLat - latRatio * (maxLat - minLat);
-          const hexLon = minLon + lonRatio * (maxLon - minLon);
-          // density cell index
-          const dr = Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dg.rows);
-          const dc = Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dg.cols);
-          if (dr < 0 || dr >= dg.rows || dc < 0 || dc >= dg.cols) continue;
-          // 마포 polygon 안에 있는 hex 만 (한강·외부 자동 컷).
-          if (!inMapo(hexLat, hexLon)) continue;
-          newGrid.push({ x: px, y: py, dr, dc });
-        }
+        cached = built;
+        hexLatLngCacheRef.current.set(zoomLvl, built);
       }
-      hexGridRef.current = newGrid;
+      // 캐시 hit/miss 무관 — 픽셀로 재투영 (zoom 동일 시 cached 그대로, ~1300 calls).
+      hexGridRef.current = cached.map((h) => {
+        const pt = proj.containerPointFromCoords(new kakao.maps.LatLng(h.lat, h.lon));
+        return { x: pt.x, y: pt.y, dr: h.dr, dc: h.dc };
+      });
     } else {
       hexGridRef.current = [];
     }
@@ -1215,6 +1241,18 @@ export default function AbmPersonaMap({
             hoveredDongName ? { name: hoveredDongName, mouseX: mPx.x, mouseY: mPx.y } : null,
           );
 
+          // ─── Tier S dot hover hit-test (풍선 표시 트리거) ───────────────
+          // 50명 모두 풍선 → 클러터. hover 한 명만 풍선, 나머지는 사이드 패널 feed.
+          let hoveredTS: number | null = null;
+          const TS_HOVER_R2 = 14 * 14; // dot 반경 ~7, 클릭 영역은 좀 더 크게.
+          tierSPixelsRef.current.forEach((pix, aid) => {
+            if (hoveredTS !== null) return;
+            const dx = pix.x - mPx.x;
+            const dy = pix.y - mPx.y;
+            if (dx * dx + dy * dy < TS_HOVER_R2) hoveredTS = aid;
+          });
+          hoveredTierSAgentRef.current = hoveredTS;
+
           // ─── hex hover hit-test ──────────────────────────────────────────
           const dg = densityGridRef.current;
           const hexes = hexGridRef.current;
@@ -1259,12 +1297,73 @@ export default function AbmPersonaMap({
         setHoveredHex(null);
         setHoveredDong(null);
         hoveredDongRingRef.current = null;
+        hoveredTierSAgentRef.current = null;
       });
 
-      kakao.maps.event.addListener(map, 'zoom_start', takeSnapshot);
-      kakao.maps.event.addListener(map, 'dragstart', takeSnapshot);
+      // ZOOM — 무거운 takeSnapshot 경로 유지 (zoom 은 픽셀 비선형 재투영 필요).
+      kakao.maps.event.addListener(map, 'zoom_start', () => {
+        isPanModeRef.current = false;
+        takeSnapshot();
+      });
+
+      // PAN — 캔버스 frozen (redraw 중단) + CSS transform 으로 카카오맵 base 와 함께 이동.
+      // 5000회 lat/lng snapshot 회피, frozen 프레임이 부드럽게 따라가서 끊김 사라짐.
+      kakao.maps.event.addListener(map, 'dragstart', () => {
+        isPanModeRef.current = true;
+        isMapMovingRef.current = true; // draw 루프 freeze → 마지막 프레임 유지.
+        const proj = map.getProjection();
+        const center = map.getCenter();
+        panStartLatLngRef.current = center;
+        panStartPxRef.current = proj.containerPointFromCoords(center);
+      });
+
+      // drag 중 — 매 프레임 transform 갱신. 같은 latLng 의 새 pixel 위치 - 시작 pixel = pan 델타.
+      kakao.maps.event.addListener(map, 'drag', () => {
+        if (!isPanModeRef.current) return;
+        const start = panStartLatLngRef.current;
+        const startPx = panStartPxRef.current;
+        const canvasEl = canvasRef.current;
+        if (!start || !startPx || !canvasEl) return;
+        const proj = map.getProjection();
+        const nowPx = proj.containerPointFromCoords(start);
+        const dx = nowPx.x - startPx.x;
+        const dy = nowPx.y - startPx.y;
+        canvasEl.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      });
+
       kakao.maps.event.addListener(map, 'idle', () => {
-        if (snapshots.length > 0) {
+        const canvasEl = canvasRef.current;
+        if (isPanModeRef.current) {
+          // PAN 종료 — CSS transform 의 델타만큼 persona x/y 를 영구 갱신, transform 리셋.
+          const start = panStartLatLngRef.current;
+          const startPx = panStartPxRef.current;
+          if (start && startPx) {
+            const proj = map.getProjection();
+            const finalPx = proj.containerPointFromCoords(start);
+            const dx = finalPx.x - startPx.x;
+            const dy = finalPx.y - startPx.y;
+            if (dx !== 0 || dy !== 0) {
+              personasRef.current.forEach((p) => {
+                p.x += dx;
+                p.y += dy;
+                p.mx = p.x;
+                p.my = p.y;
+                p.trail = [];
+              });
+              paymentEffectsRef.current = [];
+              paymentBouncesRef.current = [];
+              spawnEffectsRef.current = [];
+            }
+          }
+          if (canvasEl) canvasEl.style.transform = '';
+          isPanModeRef.current = false;
+          panStartLatLngRef.current = null;
+          panStartPxRef.current = null;
+          // recomputeNodePixels 는 hex 캐시 hit (zoom 동일) 이라 빠름 (~1300 projections).
+          recomputeNodePixelsRef.current();
+          isMapMovingRef.current = false; // freeze 해제 → 다음 frame 부터 재draw.
+        } else if (snapshots.length > 0) {
+          // ZOOM — 기존 경로 (5000 lat/lng → 새 pixel 재투영).
           remapAgents();
         } else {
           recomputeNodePixelsRef.current();
@@ -1395,13 +1494,14 @@ export default function AbmPersonaMap({
       const W = canvas.width;
       const H = canvas.height;
 
-      ctx.clearRect(0, 0, W, H);
-
-      // 맵 drag/zoom 중엔 아무것도 그리지 않음 (이전 픽셀 잔상 방지)
+      // 맵 drag/zoom 중엔 캔버스 frozen — clearRect 안 함 + redraw 안 함.
+      // pan: CSS transform 으로 frozen 프레임이 카카오맵과 함께 부드럽게 이동.
+      // zoom: 그대로 멈춤 (non-linear projection 으로 transform 부적합).
       if (isMapMovingRef.current) {
         rafRef.current = requestAnimationFrame(draw);
         return;
       }
+      ctx.clearRect(0, 0, W, H);
 
       // ─── Full canvas dark mask (Orion 레퍼런스 — hex 만 시각) ─────────────
       if (
@@ -1799,55 +1899,46 @@ export default function AbmPersonaMap({
             drawn++;
           });
 
-          // Tier S 풍선 layer — 별도 패스로 dot 위에 그려서 가독성 보장.
-          // T4 Step 3: fade in/out (3 tick spawn, 15 tick fade out at end of hour).
-          // 매 hour 경계마다 새 thought 가 시작 → tickInHour 0~3 fade-in, 마지막 15 tick fade-out.
-          if (tierSPixelsRef.current.size > 0 && thoughtsByAgentRef.current.size > 0) {
-            const tickInHour = Math.floor((virtualHour - displayHour) * ticksPerHour);
-            const FADE_IN = 3;
-            const FADE_OUT_START = ticksPerHour - 15;
-            let bubbleAlpha = 1;
-            if (tickInHour < FADE_IN) bubbleAlpha = tickInHour / FADE_IN;
-            else if (tickInHour >= FADE_OUT_START)
-              bubbleAlpha = Math.max(0, 1 - (tickInHour - FADE_OUT_START) / 15);
-
-            if (bubbleAlpha > 0.02) {
+          // Tier S 풍선 — hover 한 명만 표시 (지도 클러터 방지).
+          // 전체 50개는 우측 thought feed 패널에서 보임.
+          // smart_decide.reason 은 최대 60자 → 풍선이 길어질 수 있으므로 30자 cap + ellipsis.
+          const hoveredAid = hoveredTierSAgentRef.current;
+          if (hoveredAid !== null && tierSPixelsRef.current.size > 0) {
+            const pix = tierSPixelsRef.current.get(hoveredAid);
+            const th = thoughtsByAgentRef.current.get(hoveredAid)?.get(displayHour);
+            if (pix && th && th.thought) {
+              const raw = th.thought;
+              const text = raw.length > 30 ? raw.slice(0, 30) + '…' : raw;
               ctx.font = 'bold 11px "Apple SD Gothic Neo", monospace';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              tierSPixelsRef.current.forEach((pix, aid) => {
-                const th = thoughtsByAgentRef.current.get(aid)?.get(displayHour);
-                if (!th || !th.thought) return;
-                const text = th.thought;
-                const tw = ctx.measureText(text).width;
-                const bx = pix.x;
-                const by = pix.y - 18;
-                const padX = 6;
-                const padY = 4;
-                ctx.globalAlpha = bubbleAlpha;
-                // 말풍선 박스
-                ctx.fillStyle = 'rgba(15,23,42,0.88)';
-                ctx.beginPath();
-                roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY, 5);
-                ctx.fill();
-                ctx.strokeStyle = '#FCD34D';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY, 5);
-                ctx.stroke();
-                // 꼬리
-                ctx.fillStyle = 'rgba(15,23,42,0.88)';
-                ctx.beginPath();
-                ctx.moveTo(bx - 3, by + 4);
-                ctx.lineTo(bx + 3, by + 4);
-                ctx.lineTo(bx, by + 9);
-                ctx.closePath();
-                ctx.fill();
-                // 텍스트
-                ctx.fillStyle = '#FEF3C7';
-                ctx.fillText(text, bx, by);
-              });
+              const tw = ctx.measureText(text).width;
+              const bx = pix.x;
+              const by = pix.y - 22;
+              const padX = 8;
+              const padY = 5;
               ctx.globalAlpha = 1;
+              // 말풍선 박스
+              ctx.fillStyle = 'rgba(15,23,42,0.95)';
+              ctx.beginPath();
+              roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
+              ctx.fill();
+              ctx.strokeStyle = '#FCD34D';
+              ctx.lineWidth = 1.5;
+              ctx.beginPath();
+              roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
+              ctx.stroke();
+              // 꼬리
+              ctx.fillStyle = 'rgba(15,23,42,0.95)';
+              ctx.beginPath();
+              ctx.moveTo(bx - 4, by + 8);
+              ctx.lineTo(bx + 4, by + 8);
+              ctx.lineTo(bx, by + 14);
+              ctx.closePath();
+              ctx.fill();
+              // 텍스트
+              ctx.fillStyle = '#FEF3C7';
+              ctx.fillText(text, bx, by);
               ctx.textBaseline = 'alphabetic';
             }
           }
@@ -2559,6 +2650,67 @@ export default function AbmPersonaMap({
                     </span>
                   </div>
                 </div>
+                {/* Tier S Thought Feed — 50명 LLM reason 시간순 스크롤 피드.
+                    풍선 클러터 대신 여기서 전체 흐름 표시. 행 클릭 → PersonaCard 모달. */}
+                {Array.isArray(abmResult.thoughts) && abmResult.thoughts.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest">
+                        Tier S · LLM Thoughts
+                      </span>
+                      <span className="text-[9px] font-mono text-stone-600">
+                        {abmResult.thoughts.length}
+                      </span>
+                    </div>
+                    <div className="relative max-h-[280px] overflow-y-auto rounded-xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.04] to-transparent">
+                      {[...(abmResult.thoughts as AbmThought[])]
+                        .sort((a, b) => a.day * 24 + a.hour - (b.day * 24 + b.hour))
+                        .map((th, idx) => {
+                          const aid = th.agent_id;
+                          const archetype = th.archetype || '';
+                          return (
+                            <button
+                              key={`thought-${idx}-${aid}-${th.hour}`}
+                              type="button"
+                              onClick={() => {
+                                if (aid == null) return;
+                                const all = Array.from(
+                                  thoughtsByAgentRef.current.get(aid)?.values() ?? [],
+                                );
+                                if (onPersonaClick) {
+                                  onPersonaClick(aid, all);
+                                } else {
+                                  setSelectedPersona({
+                                    agentId: aid,
+                                    archetype,
+                                    thoughts: all,
+                                  });
+                                }
+                              }}
+                              className="w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 hover:bg-amber-500/[0.06] transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-[9px] font-mono text-amber-400/80 tracking-wider tabular-nums">
+                                  {String(th.hour % 24).padStart(2, '0')}:00
+                                </span>
+                                <span className="text-[9px] font-mono text-stone-500 tabular-nums">
+                                  #{aid}
+                                </span>
+                              </div>
+                              <p className="text-[11px] leading-snug text-stone-300 font-medium break-keep">
+                                {th.thought}
+                              </p>
+                              {archetype && (
+                                <p className="mt-0.5 text-[8.5px] font-mono text-stone-600 tracking-wide uppercase">
+                                  {archetype}
+                                </p>
+                              )}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
                 {/* 메인 지표 4칸 — 1열 (narrow column) */}
                 <div className="grid grid-cols-1 gap-3">
                   {[
