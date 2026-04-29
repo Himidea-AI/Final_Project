@@ -3816,6 +3816,8 @@ function SimulatorDashboard({
                                         },
                                         // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                         enable_llm_thought: true,
+                                        // 신규 매장 평수 — backend seats(평×2) + capacity 모델링.
+                                        store_area: storeArea,
                                       }),
                                     });
                                     const data = await res.json();
@@ -3899,6 +3901,8 @@ function SimulatorDashboard({
                                   },
                                   // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                   enable_llm_thought: true,
+                                  // 신규 매장 평수 — backend seats + capacity 모델링.
+                                  store_area: storeArea,
                                 }),
                               });
                               const data = await res.json();
@@ -3943,6 +3947,8 @@ function SimulatorDashboard({
                                   },
                                   // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
                                   enable_llm_thought: true,
+                                  // 신규 매장 평수 — backend seats + capacity 모델링.
+                                  store_area: storeArea,
                                 }),
                               });
                               const data = await res.json();

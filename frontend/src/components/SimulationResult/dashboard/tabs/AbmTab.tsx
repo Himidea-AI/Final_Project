@@ -22,6 +22,8 @@ interface Props {
   brandName?: string;
   /** 업종 (cafe/restaurant/…) — 저장된 이력이면 props로 전달, 라이브 시뮬이면 undefined 가능 */
   businessType?: string | null;
+  /** 신규 매장 평수 — backend seats=storeArea*2 + 잠식 계산에 사용. 미지정 시 simResult 에서 추출 또는 15. */
+  storeArea?: number;
 }
 
 interface FocusSpot {
@@ -39,7 +41,7 @@ interface AbmScenario {
 
 type DashboardMode = 'map' | 'abm';
 
-export function AbmTab({ simResult, brandName, businessType }: Props) {
+export function AbmTab({ simResult, brandName, businessType, storeArea }: Props) {
   const [mode, setMode] = useState<DashboardMode>('map');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [abmResult, setAbmResult] = useState<any>(null);
@@ -105,6 +107,9 @@ export function AbmTab({ simResult, brandName, businessType }: Props) {
           // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 시각화에 필요.
           // backend default False 라 명시적으로 true 전달.
           enable_llm_thought: true,
+          // 신규 매장 평수 — props 우선, 없으면 simResult.storeArea, 둘다 없으면 15.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          store_area: storeArea ?? (r as any)?.storeArea ?? (r as any)?.store_area ?? 15,
         }),
       });
       const data = await res.json();
