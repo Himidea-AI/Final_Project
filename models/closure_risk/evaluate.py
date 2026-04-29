@@ -36,7 +36,7 @@ def _precision_recall_at_k(
     Args:
         y_true: 실제 label (0/1).
         proba: 예측 확률.
-        k_pct: 상위 K% (예: 10 → top 10%).
+        k_pct: 상위 K% (1~100). >100 시 자동 clamp (n 으로 cap).
 
     Returns:
         (precision_at_k, recall_at_k). 둘 다 [0,1].
@@ -48,7 +48,8 @@ def _precision_recall_at_k(
     top_idx = np.argsort(-proba)[:k]
     y_top = y_true[top_idx]
 
-    precision = float(y_top.sum() / k)
+    actual_k = len(top_idx)  # k > n 이면 n, 아니면 k
+    precision = float(y_top.sum() / actual_k) if actual_k > 0 else 0.0
     n_pos = int(y_true.sum())
     recall = float(y_top.sum() / n_pos) if n_pos > 0 else 0.0
     return precision, recall
@@ -77,7 +78,7 @@ def _calibration_curve(
         if n > 0:
             actual_freq.append(float(y_true[mask].mean()))
         else:
-            actual_freq.append(float("nan"))
+            actual_freq.append(None)  # JSON null 로 직렬화 (RFC 8259 compliant)
     return {
         "bin_centers": bin_centers,
         "actual_freq": actual_freq,
@@ -149,7 +150,9 @@ def save_metrics_and_plot(
     """metrics.json + calibration_curve.png 저장.
 
     Args:
-        metrics: evaluate_model 또는 multi-model 결과 dict.
+        metrics: 두 가지 형태 지원
+            - single model: evaluate_model() 직접 결과 (auc/calibration/... 키)
+            - multi-model: {"ensemble": {"val": {...}, "test": {...}}, "lgbm": {...}, ...}
         metrics_path: JSON 저장 경로.
         plot_path: PNG 저장 경로 (None 이면 plot skip).
     """
@@ -177,14 +180,27 @@ def save_metrics_and_plot(
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.plot([0, 1], [0, 1], "k--", label="perfect calibration")
 
-    for model_name in ["ensemble", "lgbm", "tcn"]:
-        if model_name in metrics and "val" in metrics[model_name]:
-            cal = metrics[model_name]["val"].get("calibration", {})
-            bc = cal.get("bin_centers", [])
-            af = cal.get("actual_freq", [])
-            if bc and af:
-                af_clean = [v if not np.isnan(v) else 0.0 for v in af]
-                ax.plot(bc, af_clean, marker="o", label=f"{model_name} (val)")
+    plotted = False
+    if "auc" in metrics and "calibration" in metrics:
+        # single model dict — calibration 직접 사용
+        cal = metrics.get("calibration", {})
+        bc = cal.get("bin_centers", [])
+        af = cal.get("actual_freq", [])
+        if bc and af:
+            af_clean = [v if v is not None else 0.0 for v in af]
+            ax.plot(bc, af_clean, marker="o", label="single model")
+            plotted = True
+    else:
+        # multi-model dict (ensemble/lgbm/tcn × val/test)
+        for model_name in ["ensemble", "lgbm", "tcn"]:
+            if model_name in metrics and "val" in metrics[model_name]:
+                cal = metrics[model_name]["val"].get("calibration", {})
+                bc = cal.get("bin_centers", [])
+                af = cal.get("actual_freq", [])
+                if bc and af:
+                    af_clean = [v if v is not None else 0.0 for v in af]
+                    ax.plot(bc, af_clean, marker="o", label=f"{model_name} (val)")
+                    plotted = True
 
     ax.set_xlabel("Predicted probability")
     ax.set_ylabel("Actual frequency")
@@ -194,4 +210,4 @@ def save_metrics_and_plot(
     fig.tight_layout()
     fig.savefig(plot_path, dpi=120)
     plt.close(fig)
-    logger.info("calibration plot 저장: %s", plot_path)
+    logger.info("calibration plot 저장: %s (plotted=%s)", plot_path, plotted)

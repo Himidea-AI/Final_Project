@@ -44,17 +44,30 @@ def _time_based_split(
         (train_df, val_df, test_df).
 
     Raises:
-        ValueError: 분기 수 < 7 (train 5 / val 1 / test 1 최소 보장 X).
+        ValueError:
+            - 분기 수 < 7 (기본 비율 0.70/0.15 기준 train 4 / val 1 / test 2 최소).
+            - train_ratio + val_ratio >= 1.0 (test set 비어있음).
+            - quarter 컬럼에 null 값 존재.
 
     학술 근거:
         Bergmeir & Benítez (2012) "On the use of cross-validation for time series".
         시계열 random split 은 temporal leakage → val_AUC 부풀림.
     """
+    null_count = int(df["quarter"].isna().sum())
+    if null_count > 0:
+        raise ValueError(f"quarter 컬럼에 null {null_count}건. dropna(subset=['quarter']) 또는 fillna() 후 호출하세요.")
+
     quarters = sorted(df["quarter"].unique())
     n_q = len(quarters)
     if n_q < 7:
         raise ValueError(
             f"분기 수 부족 ({n_q}). 최소 7분기 필요 (train 5 / val 1 / test 1). split_strategy='random' 사용 권장."
+        )
+
+    if train_ratio + val_ratio >= 1.0:
+        raise ValueError(
+            f"train_ratio({train_ratio}) + val_ratio({val_ratio}) >= 1.0: "
+            f"test set 이 비어있음. 합 < 1.0 으로 조정 필요."
         )
 
     train_end_idx = int(n_q * train_ratio) - 1

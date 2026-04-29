@@ -65,3 +65,18 @@ def test_time_based_split_preserves_dong_industry_grouping():
     assert "d0" in train["dong_code"].values
     assert "d0" in val["dong_code"].values
     assert "d0" in test["dong_code"].values
+
+
+def test_time_based_split_raises_on_invalid_ratios():
+    """train_ratio + val_ratio >= 1.0 → ValueError (test set 비어있음)."""
+    df = _make_quarterly_df(n_quarters=20)
+    with pytest.raises(ValueError, match="test set 이 비어있음"):
+        _time_based_split(df, train_ratio=0.70, val_ratio=0.40)
+
+
+def test_time_based_split_raises_on_null_quarter():
+    """quarter 컬럼에 NaN 포함 → ValueError."""
+    df = _make_quarterly_df(n_quarters=20)
+    df.loc[0, "quarter"] = None
+    with pytest.raises(ValueError, match="null"):
+        _time_based_split(df)

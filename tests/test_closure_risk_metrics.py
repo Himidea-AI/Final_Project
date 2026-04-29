@@ -103,3 +103,38 @@ def test_precision_at_k_correctness():
     metrics = evaluate_model(y_true=y_true, proba=proba, k_pct=20)
     assert abs(metrics["p_at_k"] - 1.0) < 1e-6
     assert abs(metrics["r_at_k"] - 1.0) < 1e-6
+
+
+def test_calibration_empty_bins_use_none_not_nan():
+    """empty bin 의 actual_freq 가 None (NaN X) — JSON 호환."""
+    # proba 가 한 bin 에만 몰려 다른 bin 들 비도록
+    n = 100
+    y_true = np.random.default_rng(0).choice([0, 1], size=n)
+    proba = np.full(n, 0.05)  # 모두 첫 bin (0.0~0.1)
+
+    metrics = evaluate_model(y_true=y_true, proba=proba)
+    cal = metrics["calibration"]
+
+    # 첫 bin 외 9 bin 은 모두 None (이전: NaN)
+    for i, freq in enumerate(cal["actual_freq"]):
+        if cal["n_per_bin"][i] == 0:
+            assert freq is None, f"bin {i}: expected None, got {freq}"
+        else:
+            assert isinstance(freq, float)
+
+    # JSON dump round-trip 가능 — NaN 이면 strict parser 실패
+    import json
+
+    s = json.dumps(metrics, allow_nan=False)  # strict
+    loaded = json.loads(s)
+    assert loaded["calibration"]["actual_freq"] == cal["actual_freq"]
+
+
+def test_precision_at_k_clamps_when_k_exceeds_n():
+    """k_pct=150 (n=10 → k=15 요청) → 실제 분모는 n=10 으로 clamp."""
+    y_true = np.array([0, 0, 1, 0, 0, 0, 0, 0, 0, 1])
+    proba = np.array([0.05, 0.1, 0.95, 0.2, 0.3, 0.15, 0.4, 0.35, 0.5, 0.6])
+    # k_pct=150 → k=int(10*1.5)=15. 실제 top 은 n=10 개. precision 분모 10 으로 clamp.
+    metrics = evaluate_model(y_true=y_true, proba=proba, k_pct=150)
+    # 모든 양성 (2/10) 이 top 10 에 포함 → precision = 2/10 = 0.2
+    assert abs(metrics["p_at_k"] - 0.2) < 1e-6, f"got {metrics['p_at_k']}"
