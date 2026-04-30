@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase
@@ -430,6 +431,27 @@ class User(Base):
         server_default=func.now(),
         comment="가입 일시",
     )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="레코드 최종 수정 시각",
+    )
+    last_login_at = Column(
+        DateTime(timezone=True),
+        comment="마지막 로그인 시각 (auth.login 에서 갱신)",
+    )
+    is_active = Column(
+        Boolean,
+        server_default=text("true"),
+        default=True,
+        comment="계정 활성 여부 (소프트 삭제: false=탈퇴)",
+    )
+    email_verified = Column(
+        Boolean,
+        server_default=text("false"),
+        default=False,
+        comment="이메일 인증 완료 여부",
+    )
 
 
 class FtcBrandFranchise(Base):
@@ -583,10 +605,25 @@ class ManagerUser(Base):
     password_hash = Column(String(255), nullable=False, comment="비밀번호 해시")
     is_active = Column(Boolean, default=True, comment="활성 여부")
     is_approved = Column(Boolean, default=False, comment="팀장 승인 여부")
+    email_verified = Column(
+        Boolean,
+        server_default=text("false"),
+        default=False,
+        comment="이메일 인증 완료 여부",
+    )
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
         comment="가입 일시",
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="레코드 최종 수정 시각",
+    )
+    last_login_at = Column(
+        DateTime(timezone=True),
+        comment="마지막 로그인 시각 (auth.manager_login 에서 갱신)",
     )
 
 
