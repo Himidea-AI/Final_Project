@@ -27,9 +27,7 @@ from models.lstm_forecast.data_prep import (
     DB_URL,
     EXCLUDE_COMBOS,
     ExcludedComboError,
-    build_timeseries,
-    load_sales_data,
-    load_store_data,
+    load_timeseries,
 )
 
 from .model import WEIGHTS_DIR, TCNForecaster
@@ -158,13 +156,9 @@ def predict(
         feature_cols = ALL_FEATURES
     input_size = len(feat_scaler.scale_)
 
-    # 과거 데이터 로드 — 마포구 동 코드 앞 5자리로 필터링
+    # 과거 데이터 로드 + 시계열 빌드 (캐시 우선)
     dong_prefix = dong_code[:5] if len(dong_code) >= 5 else dong_code
-    sales_df = load_sales_data(db_url=cfg["db_url"], dong_prefix=dong_prefix)
-    store_df = load_store_data(db_url=cfg["db_url"], dong_prefix=dong_prefix)
-
-    # 해당 동x업종 시계열 추출 (guide-density Hot Deck 보간 포함)
-    ts = build_timeseries(sales_df, store_df)
+    ts = load_timeseries(db_url=cfg["db_url"], dong_prefix=dong_prefix)
     group = ts[(ts["dong_code"] == dong_code) & (ts["industry_code"] == industry_code)]
 
     if group.empty:
