@@ -22,14 +22,24 @@ def test_time_based_split_used_in_train_config():
     assert test_ratio > 0
 
 
-def test_predict_py_interface_unchanged():
-    """predict.py 의 _classify, RISK_LEVELS 변경 X (회귀 안전)."""
+def test_predict_py_interface_unchanged(tmp_path, monkeypatch):
+    """predict.py 의 _classify, RISK_LEVELS 변경 X (회귀 안전).
+
+    D layer fix (2026-05-01) 후 _classify 가 metrics.json 의 fit threshold 를
+    동적 load — 회귀 검증을 위해 monkeypatch 로 WEIGHTS_DIR=tmp 격리하여
+    default fallback (0.65/0.40) 모드에서 검증.
+    """
+    from models.closure_risk import predict as predict_mod
     from models.closure_risk.predict import RISK_LEVELS, _classify
 
     assert len(RISK_LEVELS) == 3
     for thr, lvl in RISK_LEVELS:
         assert 0.0 <= thr <= 1.0
         assert lvl in ("danger", "caution", "safe")
+
+    # default fallback 모드 격리 — metrics.json 미존재 → 0.65/0.40
+    predict_mod._load_risk_levels.cache_clear()
+    monkeypatch.setattr(predict_mod, "WEIGHTS_DIR", tmp_path)
 
     assert _classify(0.7) == "danger"
     assert _classify(0.5) == "caution"
