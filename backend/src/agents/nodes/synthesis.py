@@ -82,6 +82,18 @@ async def synthesis_node(state: AgentState) -> dict:
             # [#3] 캐시 히트 시 legal_risks 복원 (캐시에 저장된 값 우선, 없으면 state에서 유지)
             if "legal_risks" in cached_data:
                 analysis["legal_risks"] = cached_data["legal_risks"]
+            # ranking 결과는 캐시되지 않음 — Phase 1 ranking_phase가 state top-level에 둔 값을 analysis_results로 승격.
+            # 누락 시 main.py 응답의 district_rankings/winner_district/top_3_candidates 가 비어 프론트에서
+            # "입지 랭킹 데이터가 없습니다" 가 표시되던 회귀를 막는다.
+            _state_scouting = state.get("scouting_results") or []
+            if _state_scouting or not analysis.get("district_rankings"):
+                analysis["district_rankings"] = _state_scouting or analysis.get("district_rankings", [])
+            _state_winner = state.get("winner_district")
+            if _state_winner or not analysis.get("winner_district"):
+                analysis["winner_district"] = _state_winner or analysis.get("winner_district")
+            _state_top3 = state.get("top_3_candidates") or []
+            if _state_top3 or not analysis.get("top_3_candidates"):
+                analysis["top_3_candidates"] = _state_top3 or analysis.get("top_3_candidates", [])
             await _redis.aclose()
 
             # 캐시 히트 시에도 agent_attributions 집계 — 다른 에이전트의 attribution은 state/analysis에서 수집
