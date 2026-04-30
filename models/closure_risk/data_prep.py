@@ -148,6 +148,15 @@ LGBM_FEATURES = [
     "trend_score",  # 네이버 검색 트렌드 (업종 관심도 감소 → 수요 감소 신호)
     # 유동인구 — adstrd_flpop(null 0%, zero 0%)이 bus_flpop(zero 49%)보다 완전
     "adstrd_flpop",  # 행정동 전체 유동인구
+    # B-1 신규 8개 (2026-05-01)
+    "weekday_sales_yoy",
+    "weekend_sales_yoy",
+    "age_20_sales_ratio",
+    "age_60_sales_ratio",
+    "open_close_ratio_lag1",
+    "total_pop_yoy",
+    "holiday_count",
+    "cpi_index_yoy",
 ]
 
 # TCN 브랜치는 data_prep.ALL_FEATURES 34개 시계열 그대로 사용
@@ -272,6 +281,45 @@ def _engineer_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["rent_1f_lag1"] = 0.0
         df["rent_change"] = 0.0
+
+    # B-1 신규 feature 8종 (2026-05-01) — 기존 build_timeseries 가 load 하지만 LGBM 미사용 신호 활용
+    if "weekday_sales" in df.columns:
+        wd_lag4 = df.groupby(gk)["weekday_sales"].shift(4)
+        df["weekday_sales_yoy"] = (df["weekday_sales"] - wd_lag4) / (wd_lag4.abs() + 1)
+    else:
+        df["weekday_sales_yoy"] = 0.0
+
+    if "weekend_sales" in df.columns:
+        we_lag4 = df.groupby(gk)["weekend_sales"].shift(4)
+        df["weekend_sales_yoy"] = (df["weekend_sales"] - we_lag4) / (we_lag4.abs() + 1)
+    else:
+        df["weekend_sales_yoy"] = 0.0
+
+    monthly = df["monthly_sales"].clip(lower=1)
+    df["age_20_sales_ratio"] = df.get("age_20_sales", pd.Series(0.0, index=df.index)) / monthly
+    df["age_60_sales_ratio"] = df.get("age_60_above_sales", pd.Series(0.0, index=df.index)) / monthly
+
+    if "open_count" in df.columns and "close_count" in df.columns:
+        open_lag1 = df.groupby(gk)["open_count"].shift(1)
+        close_lag1 = df.groupby(gk)["close_count"].shift(1)
+        df["open_close_ratio_lag1"] = open_lag1 / close_lag1.clip(lower=1)
+    else:
+        df["open_close_ratio_lag1"] = 1.0
+
+    if "total_pop" in df.columns:
+        pop_lag4 = df.groupby(gk)["total_pop"].shift(4)
+        df["total_pop_yoy"] = (df["total_pop"] - pop_lag4) / (pop_lag4.abs() + 1)
+    else:
+        df["total_pop_yoy"] = 0.0
+
+    if "holiday_count" not in df.columns:
+        df["holiday_count"] = 0
+
+    if "cpi_index" in df.columns:
+        cpi_lag4 = df.groupby(gk)["cpi_index"].shift(4)
+        df["cpi_index_yoy"] = (df["cpi_index"] - cpi_lag4) / (cpi_lag4.abs() + 1)
+    else:
+        df["cpi_index_yoy"] = 0.0
 
     return df
 

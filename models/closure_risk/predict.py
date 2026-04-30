@@ -147,6 +147,15 @@ _FEATURE_KO = {
     "vacancy_rate": "공실률",
     "trend_score": "네이버 검색 트렌드",
     "adstrd_flpop": "행정동 유동인구",
+    # B-1 신규 (2026-05-01)
+    "weekday_sales_yoy": "평일 매출 전년동기 변화율",
+    "weekend_sales_yoy": "주말 매출 전년동기 변화율",
+    "age_20_sales_ratio": "20대 매출 비중",
+    "age_60_sales_ratio": "60대+ 매출 비중",
+    "open_close_ratio_lag1": "직전 분기 창업/폐업 비율",
+    "total_pop_yoy": "거주인구 전년동기 변화율",
+    "holiday_count": "분기 공휴일 수",
+    "cpi_index_yoy": "물가 전년동기 변화율",
 }
 
 _RISK_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
@@ -209,6 +218,39 @@ _RISK_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
     "adstrd_flpop": {
         "positive": "유동인구가 많아 경쟁 환경이 치열합니다.",
         "negative": "유동인구 감소로 고객 유입이 줄고 있습니다.",
+    },
+    # B-1 신규
+    "weekday_sales_yoy": {
+        "positive": "평일 매출이 전년 대비 감소해 직장 상권 위험 신호가 나타납니다.",
+        "negative": "평일 매출이 전년 대비 증가해 직장 상권이 활성화되고 있습니다.",
+    },
+    "weekend_sales_yoy": {
+        "positive": "주말 매출이 전년 대비 감소해 주거 상권 위험 신호가 나타납니다.",
+        "negative": "주말 매출이 전년 대비 증가해 주거 상권이 활성화되고 있습니다.",
+    },
+    "age_20_sales_ratio": {
+        "positive": "20대 매출 비중이 높아 트렌드 의존도가 큽니다.",
+        "negative": "20대 매출 비중이 낮아 변동성이 적습니다.",
+    },
+    "age_60_sales_ratio": {
+        "positive": "60대+ 매출 비중이 높아 안정적이나 성장 한계가 있습니다.",
+        "negative": "60대+ 매출 비중이 낮아 젊은 고객 유입이 활발합니다.",
+    },
+    "open_close_ratio_lag1": {
+        "positive": "창업이 폐업보다 많아 상권 활성화 흐름입니다.",
+        "negative": "폐업이 창업보다 많아 상권 위축 신호입니다.",
+    },
+    "total_pop_yoy": {
+        "positive": "거주인구가 증가해 잠재 수요가 늘고 있습니다.",
+        "negative": "거주인구가 감소해 수요 기반이 약해지고 있습니다.",
+    },
+    "holiday_count": {
+        "positive": "공휴일 수가 많아 외식/소비 기회가 증가합니다.",
+        "negative": "공휴일 수가 적어 평상 영업일 의존도가 큽니다.",
+    },
+    "cpi_index_yoy": {
+        "positive": "물가 상승으로 비용 압박이 커지고 있습니다.",
+        "negative": "물가 안정으로 비용 부담이 적습니다.",
     },
 }
 
