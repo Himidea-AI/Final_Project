@@ -284,42 +284,28 @@ def _engineer_lag_features(df: pd.DataFrame) -> pd.DataFrame:
 def build_closure_risk_dataset(
     db_url: str = DB_URL,
     dong_prefix: str = "11440",
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
-    """폐업위험도 학습용 데이터셋 빌드.
+) -> pd.DataFrame:
+    """폐업위험도 학습용 데이터셋 빌드 — load + lag feature 까지만.
+
+    label 은 split 이후 별도로 `_make_labels(train_quarters=...)` 호출.
 
     Returns
     -------
-    df_full : pd.DataFrame
-        전체 데이터 (시계열 포함 — TCN 브랜치 시퀀스 생성용)
-    X_lgbm : pd.DataFrame
-        LightGBM 브랜치 입력 피처
-    y : pd.Series
-        레이블 (0/1)
-    """
-    logger.info("폐업위험도 데이터셋 빌드 중...")
-    df = load_base_data(db_url=db_url, dong_prefix=dong_prefix)
+    df : pd.DataFrame
+        lag feature 적용 + LGBM_FEATURES 누락 컬럼 0 채움. label/industry_p75 미포함.
 
-    # lag 피처 계산
+    Note:
+        시그니처 변경 (3-tuple → single df). 호출자 (`train.py`) 에서
+        split → `_make_labels(train_quarters=...)` → X/y 추출 순으로 처리.
+    """
+    logger.info("폐업위험도 데이터셋 빌드 중 (label 미생성, split 이후 별도)...")
+    df = load_base_data(db_url=db_url, dong_prefix=dong_prefix)
     df = _engineer_lag_features(df)
 
-    # 레이블 생성
-    df = _make_labels(df)
-
-    logger.info(
-        "레이블 분포 — 고위험(1): %d / 저위험(0): %d (총 %d)",
-        df["label"].sum(),
-        (df["label"] == 0).sum(),
-        len(df),
-    )
-
-    # LightGBM 입력 피처 추출
     missing = [f for f in LGBM_FEATURES if f not in df.columns]
     if missing:
         logger.warning("누락 피처 (0으로 채움): %s", missing)
         for f in missing:
             df[f] = 0.0
 
-    X_lgbm = df[LGBM_FEATURES].fillna(0).astype(float)
-    y = df["label"].astype(int)
-
-    return df, X_lgbm, y
+    return df

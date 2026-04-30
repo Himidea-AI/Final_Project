@@ -166,3 +166,32 @@ def test_make_labels_label_boundary():
         on=["dong_code", "industry_code", "quarter"],
     )
     assert (merged["label"] == merged["expected_label"]).all()
+
+
+def test_build_closure_risk_dataset_returns_df_only(monkeypatch):
+    """build_closure_risk_dataset 가 단일 df (lag feature 까지) 반환 — label 미포함."""
+    from models.closure_risk import data_prep as dp
+
+    rng = np.random.default_rng(3)
+    rows = []
+    for ind in ["I001", "I002"]:
+        for d in range(5):
+            for q in [20191, 20192, 20193, 20194, 20201, 20202, 20203, 20204]:
+                rows.append(
+                    {
+                        "dong_code": f"114403{d:02d}",
+                        "industry_code": ind,
+                        "quarter": q,
+                        "closure_rate": float(rng.uniform(0, 0.5)),
+                        "store_count": 10,
+                        "monthly_sales": 1_000_000.0,
+                        "franchise_count": 2,
+                    }
+                )
+    fake_ts = pd.DataFrame(rows)
+    monkeypatch.setattr(dp, "load_base_data", lambda **kwargs: fake_ts.copy())
+
+    df = dp.build_closure_risk_dataset()
+    assert "label" not in df.columns
+    assert "closure_rate_lag1" in df.columns
+    assert "industry_code" in df.columns

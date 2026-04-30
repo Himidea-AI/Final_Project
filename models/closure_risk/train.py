@@ -301,24 +301,64 @@ def train_tcn(
 
 
 def train(config: dict | None = None) -> None:
-
     cfg = {**DEFAULT_CONFIG, **(config or {})}
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. 데이터 준비
-    df_full, X_lgbm, y = build_closure_risk_dataset(db_url=cfg["db_url"], dong_prefix=cfg["dong_prefix"])
-    logger.info("데이터셋: %d 샘플, 고위험 비율=%.1f%%", len(y), y.mean() * 100)
+    from models.closure_risk.data_prep import LGBM_FEATURES, _make_labels
 
-    # df_full 에 X_lgbm + y 컬럼이 함께 있어야 split 가능 → align
-    df_full_aligned = df_full.loc[X_lgbm.index].copy()
-    # index 기준 align — build_closure_risk_dataset 의 X_lgbm/y/df_full 행 순서 일치 보장 X
-    df_full_aligned["__y__"] = y.loc[df_full_aligned.index]
-    X_lgbm_aligned = X_lgbm.loc[df_full_aligned.index]
-    df_full_aligned[X_lgbm_aligned.columns] = X_lgbm_aligned
+    # 1. 데이터 준비 (label 미생성, lag feature 까지)
+    df_unlabeled = build_closure_risk_dataset(db_url=cfg["db_url"], dong_prefix=cfg["dong_prefix"])
+    logger.info("데이터셋 (unlabeled): %d 샘플", len(df_unlabeled))
 
-    # split
+    # 2. split (label 없이) — quarter 기준
     if cfg["split_strategy"] == "time":
-        train_df, val_df, test_df = _time_based_split(df_full_aligned, cfg["train_ratio"], cfg["val_ratio"])
+        train_df_raw, val_df_raw, test_df_raw = _time_based_split(df_unlabeled, cfg["train_ratio"], cfg["val_ratio"])
+    elif cfg["split_strategy"] == "random":
+        logger.warning("random split — temporal leakage 위험 (deprecated). split_strategy='time' 권장")
+        from sklearn.model_selection import train_test_split
+
+        test_ratio = 1 - cfg["train_ratio"] - cfg["val_ratio"]
+        train_df_raw, temp_df = train_test_split(
+            df_unlabeled,
+            test_size=(cfg["val_ratio"] + test_ratio),
+            random_state=cfg["random_state"],
+        )
+        val_df_raw, test_df_raw = train_test_split(
+            temp_df,
+            test_size=test_ratio / (cfg["val_ratio"] + test_ratio),
+            random_state=cfg["random_state"] + 1,
+        )
+    else:
+        raise ValueError(f"unknown split_strategy: {cfg['split_strategy']}")
+
+    train_quarters = set(train_df_raw["quarter"].unique())
+    val_quarters = set(val_df_raw["quarter"].unique())
+    test_quarters = set(test_df_raw["quarter"].unique())
+
+    # 3. label 생성 — train_quarters 만으로 industry_p75 fit
+    df_labeled = _make_labels(df_unlabeled, train_quarters=train_quarters)
+    logger.info(
+        "레이블 분포 — 고위험(1): %d / 저위험(0): %d (총 %d, pos_ratio=%.3f)",
+        int(df_labeled["label"].sum()),
+        int((df_labeled["label"] == 0).sum()),
+        len(df_labeled),
+        float(df_labeled["label"].mean()),
+    )
+
+    # 4. label 적용 후 split 별 row 재추출
+    train_df = df_labeled[df_labeled["quarter"].isin(train_quarters)].copy()
+    val_df = df_labeled[df_labeled["quarter"].isin(val_quarters)].copy()
+    test_df = df_labeled[df_labeled["quarter"].isin(test_quarters)].copy()
+
+    if len(train_df) == 0 or len(val_df) == 0 or len(test_df) == 0:
+        raise ValueError(
+            f"split 결과 비어있는 set 존재 — "
+            f"train={len(train_df)}, val={len(val_df)}, test={len(test_df)}. "
+            f"train_ratio({cfg['train_ratio']}) + val_ratio({cfg['val_ratio']}) 또는 "
+            f"label drop (unseen industry) 결과 확인 필요."
+        )
+
+    if cfg["split_strategy"] == "time":
         logger.info(
             "time-based split: train=%d (<=%s), val=%d (<=%s), test=%d (>%s)",
             len(train_df),
@@ -328,39 +368,14 @@ def train(config: dict | None = None) -> None:
             len(test_df),
             val_df["quarter"].max(),
         )
-    elif cfg["split_strategy"] == "random":
-        logger.warning("random split — temporal leakage 위험 (deprecated). split_strategy='time' 권장")
-        from sklearn.model_selection import train_test_split
 
-        test_ratio = 1 - cfg["train_ratio"] - cfg["val_ratio"]
-        train_df, temp_df = train_test_split(
-            df_full_aligned,
-            test_size=(cfg["val_ratio"] + test_ratio),
-            random_state=cfg["random_state"],
-        )
-        val_df, test_df = train_test_split(
-            temp_df,
-            test_size=test_ratio / (cfg["val_ratio"] + test_ratio),
-            random_state=cfg["random_state"] + 1,
-        )
-    else:
-        raise ValueError(f"unknown split_strategy: {cfg['split_strategy']}")
-
-    # 빈 split 방어 — train_test_split 의 부동소수점 오차 또는 _time_based_split 의 비율 misconfiguration 시
-    if len(train_df) == 0 or len(val_df) == 0 or len(test_df) == 0:
-        raise ValueError(
-            f"split 결과 비어있는 set 존재 — "
-            f"train={len(train_df)}, val={len(val_df)}, test={len(test_df)}. "
-            f"train_ratio({cfg['train_ratio']}) + val_ratio({cfg['val_ratio']}) 조정 필요."
-        )
-
-    # LightGBM 입력 추출 (인덱스 기준)
-    X_lgbm_tr = train_df[X_lgbm.columns].values
-    X_lgbm_val = val_df[X_lgbm.columns].values
-    X_lgbm_test = test_df[X_lgbm.columns].values
-    y_tr_arr = train_df["__y__"].values
-    y_val_arr = val_df["__y__"].values
-    y_test_arr = test_df["__y__"].values
+    # 5. X_lgbm / y 추출
+    X_lgbm_tr = train_df[LGBM_FEATURES].fillna(0).values
+    X_lgbm_val = val_df[LGBM_FEATURES].fillna(0).values
+    X_lgbm_test = test_df[LGBM_FEATURES].fillna(0).values
+    y_tr_arr = train_df["label"].values
+    y_val_arr = val_df["label"].values
+    y_test_arr = test_df["label"].values
 
     # 2. LightGBM 학습
     lgbm_model = train_lgbm(X_lgbm_tr, y_tr_arr, cfg)
@@ -371,18 +386,18 @@ def train(config: dict | None = None) -> None:
 
     # 3. TCN 학습 (전이학습)
     pretrained_path = TCN_WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"
-    train_quarters = set(train_df["quarter"].unique()) if cfg["split_strategy"] == "time" else None
-    val_quarters = set(val_df["quarter"].unique()) if cfg["split_strategy"] == "time" else None
-    test_quarters = set(test_df["quarter"].unique()) if cfg["split_strategy"] == "time" else None
+    tcn_train_quarters = train_quarters if cfg["split_strategy"] == "time" else None
+    tcn_val_quarters = val_quarters if cfg["split_strategy"] == "time" else None
+    tcn_test_quarters = test_quarters if cfg["split_strategy"] == "time" else None
 
     tcn_model, tcn_val_auc, tcn_val_proba, tcn_test_proba, y_val_tcn, y_test_tcn, tcn_scaler = train_tcn(
-        df_full,
-        y,
+        df_labeled,
+        df_labeled["label"],
         cfg,
         pretrained_path,
-        train_quarters=train_quarters,
-        val_quarters=val_quarters,
-        test_quarters=test_quarters,
+        train_quarters=tcn_train_quarters,
+        val_quarters=tcn_val_quarters,
+        test_quarters=tcn_test_quarters,
     )
 
     # 4. 앙상블 가중치 결정 (AUC 비례)
