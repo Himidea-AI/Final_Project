@@ -150,67 +150,55 @@ export const useSimulationStore = create<SimulationState>()(
         }, 500);
         set({ _progressTimer: timer });
 
-        // Promise.allSettled — /predict 와 /analyze/llm 부분 성공 허용.
-        // 한쪽 실패해도 다른 쪽 결과를 그대로 노출 → 사용자는 retry* 액션으로 슬라이스 재시도 가능.
-        const [predResult, analysisResult] = await Promise.allSettled([
-          runPredict(params, abortController.signal),
-          runAnalyzeLlm(params, abortController.signal),
-        ]);
-
-        // Stale response guard — 더 새로운 startSimulation 호출이 우리를 교체했다면 작업 중단.
-        if (get().startedAt !== startedAt) return;
-
-        // Abort 도 취소된 상태라면 cancelSimulation 이 이미 정리했으므로 손대지 않음.
         const isAbortError = (e: unknown): boolean => {
           const name = (e as { name?: string })?.name;
           return name === 'CanceledError' || name === 'AbortError' || axios.isCancel(e);
         };
-        const predAborted = predResult.status === 'rejected' && isAbortError(predResult.reason);
-        const analysisAborted =
-          analysisResult.status === 'rejected' && isAbortError(analysisResult.reason);
-        if (predAborted && analysisAborted) {
-          // 양쪽 모두 abort → cancelSimulation 이 처리. 여기서 더 set 안 함.
-          return;
+
+        // /analyze/llm — 백그라운드 실행. /predict 완료 후 대시보드 진입, 분석 완료 시 자동 갱신.
+        runAnalyzeLlm(params, abortController.signal)
+          .then((data) => {
+            if (get().startedAt !== startedAt) return;
+            const { _progressTimer: t } = get();
+            if (t) clearInterval(t);
+            set({
+              analysis: { status: 'done', data, error: null },
+              status: 'done',
+              progress: 100,
+              stage: 'COMPLETE',
+              _progressTimer: null,
+            });
+          })
+          .catch((err) => {
+            if (get().startedAt !== startedAt) return;
+            if (isAbortError(err)) return;
+            const { _progressTimer: t } = get();
+            if (t) clearInterval(t);
+            const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
+            // prediction 이 이미 done 이면 status 도 done 유지 (부분 성공).
+            const predDone = get().prediction.status === 'done';
+            set({
+              analysis: { status: 'error', data: null, error: msg },
+              ...(predDone
+                ? { status: 'done', progress: 100, stage: 'COMPLETE' }
+                : { status: 'error', stage: '시뮬 실패', error: msg }),
+              _progressTimer: null,
+            });
+          });
+
+        // /predict — await 후 즉시 prediction 슬라이스 확정 → App.tsx 게이트 통과 → 대시보드 진입 (≈15s).
+        // analyze 는 백그라운드에서 계속 실행 중이므로 status 는 아직 'running' 유지.
+        // (analyze .then()/.catch() 에서 'done'/'error' 로 전환 + 타이머 정리)
+        try {
+          const data = await runPredict(params, abortController.signal);
+          if (get().startedAt !== startedAt) return; // stale guard
+          set({ prediction: { status: 'done', data, error: null } });
+        } catch (err) {
+          if (get().startedAt !== startedAt) return;
+          if (isAbortError(err)) return;
+          const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
+          set({ prediction: { status: 'error', data: null, error: msg } });
         }
-
-        const predSlice: PredictionSlice =
-          predResult.status === 'fulfilled'
-            ? { status: 'done', data: predResult.value, error: null }
-            : {
-                status: 'error',
-                data: null,
-                error:
-                  (predResult.reason as { message?: string })?.message ?? '예측(/predict) 실패',
-              };
-
-        const analysisSlice: AnalysisSlice =
-          analysisResult.status === 'fulfilled'
-            ? { status: 'done', data: analysisResult.value, error: null }
-            : {
-                status: 'error',
-                data: null,
-                error:
-                  (analysisResult.reason as { message?: string })?.message ??
-                  '분석(/analyze/llm) 실패',
-              };
-
-        const allFailed = predSlice.status === 'error' && analysisSlice.status === 'error';
-
-        const { _progressTimer } = get();
-        if (_progressTimer) clearInterval(_progressTimer);
-
-        set({
-          prediction: predSlice,
-          analysis: analysisSlice,
-          status: allFailed ? 'error' : 'done',
-          progress: 100,
-          stage: allFailed ? '시뮬 실패' : 'COMPLETE',
-          error: allFailed
-            ? `예측/분석 모두 실패: ${predSlice.error} | ${analysisSlice.error}`
-            : null,
-          _abortController: null,
-          _progressTimer: null,
-        });
       },
 
       retryPrediction: async () => {

@@ -250,7 +250,7 @@ def predict(
         }
     """
     cfg = {**DEFAULT_PREDICT_CONFIG, **(config or {})}
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model, feat_scaler, tgt_scaler = _load_model_and_scalers(cfg)
     model.to(device)
@@ -351,7 +351,7 @@ def _v2_predict_peak_legacy(
     학술 비교용 보존. naive baseline 미달로 production 미사용.
     """
     cfg = {**DEFAULT_PREDICT_CONFIG, **(config or {})}
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 모델·스케일러·데이터를 한 번만 로드 (24시간대 공용)
     model, feat_scaler, tgt_scaler = _load_model_and_scalers(cfg)

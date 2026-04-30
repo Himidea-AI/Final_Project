@@ -90,24 +90,20 @@ def build_quarterly_projection(
 
     # quarterly_predictions를 quarter_offset 기준으로 딕셔너리화
     quarterly_map: dict[int, dict] = {row["quarter_offset"]: row for row in quarterly_predictions}
+    # bep_quarterly_simulation을 quarter 기준으로 딕셔너리화 (BEP는 달성 시까지만 존재)
+    bep_map: dict[int, dict] = {int(row["quarter"]): row for row in bep_quarterly_simulation}
 
     results: list[dict] = []
+    divisor = max(store_count, 1)
 
-    for q_idx, bep_row in enumerate(bep_quarterly_simulation, start=1):
+    # TCN 기준으로 항상 4분기 — BEP simulation 길이에 무관하게 고정
+    for q_idx in range(1, len(quarterly_predictions) + 1):
+        tcn_row = quarterly_map.get(q_idx, {})
+        bep_row = bep_map.get(q_idx, {})
+
+        revenue = int(tcn_row.get(revenue_key, 0) / divisor)
+        # BEP simulation에 해당 분기 없으면 cumulative_profit=0 (BEP 이미 달성)
         cumulative_profit = int(bep_row.get("cumulative_profit", 0))
-
-        # Q1~Q4: TCN 예측값 사용 (confidence 반영) → 점포 1개 기준으로 환산
-        # Q5+: BEP 시뮬레이션값 그대로 (이미 _run_bep 내부에서 /store_count 처리됨)
-        divisor = max(store_count, 1)
-        if q_idx <= 4:
-            tcn_row = quarterly_map.get(q_idx, {})
-            revenue = int(tcn_row.get(revenue_key, 0) / divisor)
-        else:
-            revenue = int(bep_row.get("revenue", 0))
-
-        # 신뢰구간은 Q4까지만 존재 — Q5+ 는 Q4 값 재사용, 점포 1개 기준으로 환산
-        quarter_for_ci = min(q_idx, 4)
-        tcn_row = quarterly_map.get(quarter_for_ci, {})
         confidence_lower = int(tcn_row.get("confidence_lower", 0) / divisor)
         confidence_upper = int(tcn_row.get("confidence_upper", 0) / divisor)
 

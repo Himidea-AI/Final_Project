@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import sys
 import uuid
@@ -357,6 +358,37 @@ async def _run_pipeline(input_data: Any) -> dict[str, Any]:
         return await task
     finally:
         _pending_pipelines.pop(key, None)
+
+
+def _safe_json(obj: Any) -> Any:
+    """numpy 타입 / NaN / Inf → JSON-safe Python 기본 타입으로 재귀 변환.
+
+    FastAPI ASGI 직렬화 단계에서 numpy.float64, numpy.int64, float('nan') 등이
+    포함된 dict를 JSONResponse로 반환할 때 발생하는 직렬화 오류를 방지한다.
+    """
+    try:
+        import numpy as np  # numpy가 없는 환경 방어
+        _has_numpy = True
+    except ImportError:
+        _has_numpy = False
+
+    if isinstance(obj, dict):
+        return {k: _safe_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_safe_json(v) for v in obj]
+    if _has_numpy:
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            v = float(obj)
+            return None if (math.isnan(v) or math.isinf(v)) else v
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return [_safe_json(x) for x in obj.tolist()]
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
 
 
 def _build_segment_profile(input_data: SimulationInput) -> dict[str, Any] | None:
@@ -1381,34 +1413,43 @@ async def predict_districts(input_data: SimulationInput):
     if not target_districts:
         return {"status": "error", "message": "유효한 마포구 행정동이 없습니다."}
 
-    normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
-    industry_code = _BIZ_TO_INDUSTRY_CODE.get(normalized_biz, "CS100010")
-
-    cost_config = BEPCalculator.get_default_costs(
-        normalized_biz,
-        initial_capital=getattr(input_data, "initial_capital", 50_000_000),
-        monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
-    )
-
-    print(f"--- [/predict] {target_districts} / {normalized_biz} 병렬 ML 예측 시작 ---")
-
-    segment_profile = _build_segment_profile(input_data)
-
-    results: list[DistrictPredictionResult] = list(
-        await asyncio.gather(
-            *[
-                _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
-                for dong in target_districts
-            ]
+    try:
+        normalized_biz = _BIZ_TYPE_NORMALIZE.get(
+            (input_data.business_type or "").lower(), input_data.business_type or "커피-음료"
         )
-    )
+        industry_code = _BIZ_TO_INDUSTRY_CODE.get(normalized_biz, "CS100010")
 
-    print(f"--- [/predict] 완료 ({len(results)}개 동) ---")
+        cost_config = BEPCalculator.get_default_costs(
+            normalized_biz,
+            initial_capital=getattr(input_data, "initial_capital", 50_000_000),
+            monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
+        )
 
-    return {
-        "status": "success",
-        "data": [r.model_dump() for r in results],
-    }
+        print(f"--- [/predict] {target_districts} / {normalized_biz} 병렬 ML 예측 시작 ---")
+
+        segment_profile = _build_segment_profile(input_data)
+
+        results: list[DistrictPredictionResult] = list(
+            await asyncio.gather(
+                *[
+                    _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
+                    for dong in target_districts
+                ]
+            )
+        )
+
+        print(f"--- [/predict] 완료 ({len(results)}개 동) ---")
+
+        payload = _safe_json({"status": "success", "data": [r.model_dump() for r in results]})
+        return JSONResponse(content=payload)
+
+    except Exception as e:
+        import traceback
+        print(f"[/predict] 예상치 못한 오류: {e}\n{traceback.format_exc()}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"예측 처리 중 오류가 발생했습니다: {e}"},
+        )
 
 
 @app.post("/simulate", deprecated=True)
