@@ -838,7 +838,9 @@ function SimulatorDashboard({
   );
   const [dashboardMode, setDashboardMode] = useState<'data' | 'map' | 'abm'>('data');
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
-  const [selectedGu] = useState('마포구');
+  // 마포구 외 다른 자치구 미지원 — useState 트릭 제거하고 const 로 노출.
+  // 향후 다른 구 확장 시 useState<GuName>('마포구') + setter 로 복원.
+  const selectedGu = '마포구' as const;
   // [UX] 동 선택 1~4개 제한 — 파이프라인 성능 + 레이더 차트 가독성 한계
   const [selectedDongs, setSelectedDongs] = useState<string[]>(() =>
     DONG_DATA['마포구'].slice(0, 4),
