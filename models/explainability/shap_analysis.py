@@ -291,9 +291,7 @@ def explain_tcn_prediction(
     from models.lstm_forecast.data_prep import (
         ALL_FEATURES,
         DB_URL,
-        build_timeseries,
-        load_sales_data,
-        load_store_data,
+        load_timeseries,
     )
     from models.tcn_forecast.model import WEIGHTS_DIR, TCNForecaster
     from models.tcn_forecast.train import load_scalers
@@ -361,9 +359,7 @@ def explain_tcn_prediction(
 
     try:
         dong_prefix = dong_code[:5] if len(dong_code) >= 5 else dong_code
-        sales_df = load_sales_data(db_url=DB_URL, dong_prefix=dong_prefix)
-        store_df = load_store_data(db_url=DB_URL, dong_prefix=dong_prefix)
-        ts = build_timeseries(sales_df, store_df)
+        ts = load_timeseries(db_url=DB_URL, dong_prefix=dong_prefix)
         group = ts[(ts["dong_code"] == dong_code) & (ts["industry_code"] == industry_code)]
 
         if group.empty:
