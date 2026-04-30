@@ -124,6 +124,10 @@ def predict_industry_prior(
     agg["industry_prior_pred"] = model.predict(X)
 
     df = df.copy()
+    # build_closure_risk_dataset 가 LGBM_FEATURES 누락 컬럼 0 으로 채움 →
+    # df 에 이미 industry_prior_pred 존재 가능. merge 시 _x/_y 충돌 방지.
+    if "industry_prior_pred" in df.columns:
+        df = df.drop(columns=["industry_prior_pred"])
     df = df.merge(
         agg[["industry_code", "quarter", "industry_prior_pred"]],
         on=["industry_code", "quarter"],
