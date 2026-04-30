@@ -1,0 +1,80 @@
+"""train.py + evaluate.py 통합 + 기존 predict.py 인터페이스 보존 검증."""
+
+from __future__ import annotations
+
+import json
+
+import numpy as np
+import pandas as pd
+
+from models.closure_risk.data_prep import _time_based_split
+from models.closure_risk.evaluate import evaluate_model, save_metrics_and_plot
+
+
+def test_time_based_split_used_in_train_config():
+    """DEFAULT_CONFIG 가 time-based split 을 default 로 사용."""
+    from models.closure_risk.train import DEFAULT_CONFIG
+
+    assert DEFAULT_CONFIG["split_strategy"] == "time"
+    assert 0.5 <= DEFAULT_CONFIG["train_ratio"] <= 0.9
+    assert 0.05 <= DEFAULT_CONFIG["val_ratio"] <= 0.3
+    test_ratio = 1 - DEFAULT_CONFIG["train_ratio"] - DEFAULT_CONFIG["val_ratio"]
+    assert test_ratio > 0
+
+
+def test_predict_py_interface_unchanged():
+    """predict.py 의 _classify, RISK_LEVELS 변경 X (회귀 안전)."""
+    from models.closure_risk.predict import RISK_LEVELS, _classify
+
+    assert len(RISK_LEVELS) == 3
+    for thr, lvl in RISK_LEVELS:
+        assert 0.0 <= thr <= 1.0
+        assert lvl in ("danger", "caution", "safe")
+
+    assert _classify(0.7) == "danger"
+    assert _classify(0.5) == "caution"
+    assert _classify(0.1) == "safe"
+
+
+def test_full_pipeline_with_synthetic_data(tmp_path):
+    """build_dataset 거치지 않고 _time_based_split + evaluate 통합 동작 확인."""
+    rng = np.random.default_rng(7)
+    n_per_q = 30
+    quarters = [f"2020Q{(i % 4) + 1}" if i < 4 else f"202{1 + (i - 4) // 4}Q{((i - 4) % 4) + 1}" for i in range(20)]
+    rows = []
+    for q in quarters:
+        for _ in range(n_per_q):
+            rows.append(
+                {
+                    "quarter": q,
+                    "dong_code": f"d{rng.integers(0, 5)}",
+                    "industry_code": "x",
+                    "label": int(rng.choice([0, 1], p=[0.8, 0.2])),
+                    "feature1": rng.normal(),
+                }
+            )
+    df = pd.DataFrame(rows)
+
+    train_df, val_df, test_df = _time_based_split(df)
+    assert len(train_df) + len(val_df) + len(test_df) == len(df)
+
+    val_proba = np.clip(val_df["label"].values * 0.5 + rng.normal(0.3, 0.15, size=len(val_df)), 0, 1)
+    test_proba = np.clip(test_df["label"].values * 0.5 + rng.normal(0.3, 0.15, size=len(test_df)), 0, 1)
+
+    val_metrics = evaluate_model(val_df["label"].values, val_proba)
+    test_metrics = evaluate_model(test_df["label"].values, test_proba)
+
+    summary = {
+        "split_strategy": "time",
+        "ensemble": {"val": val_metrics, "test": test_metrics},
+    }
+
+    json_path = tmp_path / "metrics.json"
+    save_metrics_and_plot(summary, json_path, plot_path=None)
+    assert json_path.exists()
+
+    with open(json_path, encoding="utf-8") as f:
+        loaded = json.load(f)
+    assert loaded["split_strategy"] == "time"
+    assert "ensemble" in loaded
+    assert loaded["ensemble"]["val"]["auc"] > 0.5
