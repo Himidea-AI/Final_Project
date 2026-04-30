@@ -68,6 +68,45 @@ DEFAULT_CONFIG: dict = {
 
 
 # ---------------------------------------------------------------------------
+# A-1: LGBM/TCN inner-join alignment helper (2026-05-01)
+# ---------------------------------------------------------------------------
+
+
+def _align_predictions(
+    lgbm_proba: np.ndarray,
+    lgbm_keys: list[tuple],
+    tcn_proba: np.ndarray,
+    tcn_keys: list[tuple],
+    label_dict: dict[tuple, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple]]:
+    """LGBM/TCN proba 를 (dong, industry, quarter) inner-join.
+
+    A-1 (2026-05-01): 기존 [:n] trim 의 순서 보장 X 문제 해결.
+
+    Args:
+        lgbm_proba: LGBM 예측 확률 array.
+        lgbm_keys: LGBM 의 (dong_code, industry_code, quarter) tuple list.
+        tcn_proba: TCN 예측 확률 array.
+        tcn_keys: TCN 의 키 tuple list.
+        label_dict: {(dong, industry, quarter): label} dict.
+
+    Returns:
+        (aligned_lgbm, aligned_tcn, aligned_y, common_keys)
+        common_keys 는 sorted intersection. 모두 빈 경우 빈 array 반환.
+    """
+    lgbm_dict = dict(zip(lgbm_keys, lgbm_proba))
+    tcn_dict = dict(zip(tcn_keys, tcn_proba))
+    common = sorted(set(lgbm_dict) & set(tcn_dict))
+    if not common:
+        empty = np.array([], dtype=float)
+        return empty, empty, np.array([], dtype=int), []
+    aligned_lgbm = np.array([lgbm_dict[k] for k in common], dtype=float)
+    aligned_tcn = np.array([tcn_dict[k] for k in common], dtype=float)
+    aligned_y = np.array([label_dict[k] for k in common], dtype=int)
+    return aligned_lgbm, aligned_tcn, aligned_y, common
+
+
+# ---------------------------------------------------------------------------
 # LightGBM 학습
 # ---------------------------------------------------------------------------
 
@@ -110,7 +149,8 @@ def _build_tcn_sequences(
 ) -> tuple:
     """(dong_code, industry_code) 그룹별 sliding window 시퀀스 + 시간 분할.
 
-    Returns: (X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler).
+    Returns: (X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler, val_keys, test_keys).
+    val_keys/test_keys 는 (dong, industry, quarter) tuple list (A-1 inner-join 용).
     train_quarters/val_quarters/test_quarters 가 주어지면 label 분기 기준 분할.
     Lookback (window) 의 분기는 어떤 split 에 있어도 OK — label 분기만 분리하면 leakage X.
     """
@@ -128,6 +168,8 @@ def _build_tcn_sequences(
     X_tr_list, y_tr_list = [], []
     X_val_list, y_val_list = [], []
     X_test_list, y_test_list = [], []
+    val_keys: list[tuple] = []
+    test_keys: list[tuple] = []
     gk = ["dong_code", "industry_code"]
 
     use_split = train_quarters is not None and val_quarters is not None and test_quarters is not None
@@ -146,15 +188,22 @@ def _build_tcn_sequences(
             label_quarter = quarters_arr[i + window_size]
 
             if use_split:
+                label_key = (
+                    str(group_sorted["dong_code"].iloc[i + window_size]),
+                    str(group_sorted["industry_code"].iloc[i + window_size]),
+                    int(label_quarter),
+                )
                 if label_quarter in train_quarters:
                     X_tr_list.append(x_seq)
                     y_tr_list.append(y_label)
                 elif label_quarter in val_quarters:
                     X_val_list.append(x_seq)
                     y_val_list.append(y_label)
+                    val_keys.append(label_key)
                 elif label_quarter in test_quarters:
                     X_test_list.append(x_seq)
                     y_test_list.append(y_label)
+                    test_keys.append(label_key)
             else:
                 X_tr_list.append(x_seq)
                 y_tr_list.append(y_label)
@@ -185,7 +234,7 @@ def _build_tcn_sequences(
         y_test = np.zeros(0, dtype=np.float32)
         X_tr, y_tr = X_tr[:-n_val], y_tr[:-n_val]
 
-    return X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler
+    return X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler, val_keys, test_keys
 
 
 # ---------------------------------------------------------------------------
@@ -202,12 +251,16 @@ def train_tcn(
     val_quarters: set[str] | None = None,
     test_quarters: set[str] | None = None,
 ) -> tuple:
-    """TCNClassifier fine-tune. (model, val_AUC, val/test proba, y_val/y_test, feat_scaler) 반환."""
+    """TCNClassifier fine-tune.
+
+    Returns: (model, val_AUC, val_proba, test_proba, y_val, y_test, feat_scaler, val_keys, test_keys).
+    val_keys/test_keys 는 A-1 inner-join 용 (dong, industry, quarter) tuple list.
+    """
 
     feature_cols = list(ALL_FEATURES)
     input_size = len(feature_cols)
 
-    X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler = _build_tcn_sequences(
+    X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler, val_keys, test_keys = _build_tcn_sequences(
         df_full,
         y,
         config["window_size"],
@@ -292,7 +345,7 @@ def train_tcn(
         )
 
     logger.info("TCNClassifier 학습 완료 (best_val_AUC=%.4f)", best_auc)
-    return model, best_auc, val_proba, test_proba, y_val, y_test, feat_scaler
+    return model, best_auc, val_proba, test_proba, y_val, y_test, feat_scaler, val_keys, test_keys
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +443,17 @@ def train(config: dict | None = None) -> None:
     tcn_val_quarters = val_quarters if cfg["split_strategy"] == "time" else None
     tcn_test_quarters = test_quarters if cfg["split_strategy"] == "time" else None
 
-    tcn_model, tcn_val_auc, tcn_val_proba, tcn_test_proba, y_val_tcn, y_test_tcn, tcn_scaler = train_tcn(
+    (
+        tcn_model,
+        tcn_val_auc,
+        tcn_val_proba,
+        tcn_test_proba,
+        y_val_tcn,
+        y_test_tcn,
+        tcn_scaler,
+        tcn_val_keys,
+        tcn_test_keys,
+    ) = train_tcn(
         df_labeled,
         df_labeled["label"],
         cfg,
@@ -433,15 +496,40 @@ def train(config: dict | None = None) -> None:
     logger.info("학습 완료 — 예상 앙상블 AUC: %.4f", max(lgbm_val_auc, tcn_val_auc))
 
     # 6. Evaluate val + test (5 metric + calibration)
-    # ensemble proba: w_lgbm * lgbm + w_tcn * tcn
-    # LGBM 와 TCN 의 sample 길이가 다를 수 있음 (TCN 시퀀스 손실 분기) — TCN 길이 기준 trim
-    n_val = min(len(lgbm_val_proba), len(tcn_val_proba)) if len(tcn_val_proba) > 0 else len(lgbm_val_proba)
-    if n_val > 0 and len(tcn_val_proba) > 0:
-        ensemble_val_proba = w_lgbm * lgbm_val_proba[:n_val] + w_tcn * tcn_val_proba[:n_val]
-        y_val_common = y_val_arr[:n_val]
+    # A-1 (2026-05-01): inner-join alignment 으로 [:n] trim 대체.
+    # ensemble proba: w_lgbm * lgbm + w_tcn * tcn — common (dong, industry, quarter) 만.
+    lgbm_val_keys = [
+        (str(d), str(i), int(q)) for d, i, q in zip(val_df["dong_code"], val_df["industry_code"], val_df["quarter"])
+    ]
+    lgbm_test_keys = [
+        (str(d), str(i), int(q)) for d, i, q in zip(test_df["dong_code"], test_df["industry_code"], test_df["quarter"])
+    ]
+    label_dict = {
+        (str(row["dong_code"]), str(row["industry_code"]), int(row["quarter"])): int(row["label"])
+        for _, row in df_labeled.iterrows()
+    }
+
+    aligned_lgbm_val, aligned_tcn_val, aligned_y_val, val_common = _align_predictions(
+        lgbm_val_proba, lgbm_val_keys, tcn_val_proba, tcn_val_keys, label_dict
+    )
+    aligned_lgbm_test, aligned_tcn_test, aligned_y_test, test_common = _align_predictions(
+        lgbm_test_proba, lgbm_test_keys, tcn_test_proba, tcn_test_keys, label_dict
+    )
+
+    logger.info("A-1 inner-join: val common=%d, test common=%d", len(val_common), len(test_common))
+
+    if len(val_common) > 0:
+        ensemble_val_proba = w_lgbm * aligned_lgbm_val + w_tcn * aligned_tcn_val
+        y_val_common = aligned_y_val
     else:
-        ensemble_val_proba = lgbm_val_proba
-        y_val_common = y_val_arr
+        logger.warning("inner-join val common=0, fallback to trim")
+        n_val = min(len(lgbm_val_proba), len(tcn_val_proba)) if len(tcn_val_proba) > 0 else len(lgbm_val_proba)
+        if n_val > 0 and len(tcn_val_proba) > 0:
+            ensemble_val_proba = w_lgbm * lgbm_val_proba[:n_val] + w_tcn * tcn_val_proba[:n_val]
+            y_val_common = y_val_arr[:n_val]
+        else:
+            ensemble_val_proba = lgbm_val_proba
+            y_val_common = y_val_arr
 
     # threshold fit (val proba quantile) — D layer fix
     DANGER_Q = 0.90
@@ -475,15 +563,20 @@ def train(config: dict | None = None) -> None:
         "ensemble": evaluate_model(y_val_common, ensemble_val_proba, k_pct=10),
     }
 
-    # Test set (final unbiased)
+    # Test set (final unbiased) — A-1 inner-join
     if cfg["split_strategy"] == "time" and len(y_test_arr) > 0:
-        n_test = min(len(lgbm_test_proba), len(tcn_test_proba)) if len(tcn_test_proba) > 0 else len(lgbm_test_proba)
-        if n_test > 0 and len(tcn_test_proba) > 0:
-            ensemble_test_proba = w_lgbm * lgbm_test_proba[:n_test] + w_tcn * tcn_test_proba[:n_test]
-            y_test_common = y_test_arr[:n_test]
+        if len(test_common) > 0:
+            ensemble_test_proba = w_lgbm * aligned_lgbm_test + w_tcn * aligned_tcn_test
+            y_test_common = aligned_y_test
         else:
-            ensemble_test_proba = lgbm_test_proba
-            y_test_common = y_test_arr
+            logger.warning("inner-join test common=0, fallback to trim")
+            n_test = min(len(lgbm_test_proba), len(tcn_test_proba)) if len(tcn_test_proba) > 0 else len(lgbm_test_proba)
+            if n_test > 0 and len(tcn_test_proba) > 0:
+                ensemble_test_proba = w_lgbm * lgbm_test_proba[:n_test] + w_tcn * tcn_test_proba[:n_test]
+                y_test_common = y_test_arr[:n_test]
+            else:
+                ensemble_test_proba = lgbm_test_proba
+                y_test_common = y_test_arr
 
         test_metrics = {
             "lgbm": evaluate_model(y_test_arr, lgbm_test_proba, k_pct=10),
