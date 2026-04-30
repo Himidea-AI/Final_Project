@@ -19,6 +19,7 @@ import logging
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -80,6 +81,41 @@ def _time_based_split(
     test = df[df["quarter"] > val_end].copy()
 
     return train, val, test
+
+
+def _compute_industry_p75_train(
+    df: pd.DataFrame,
+    train_quarters: set[int],
+    min_samples: int = 4,
+) -> tuple[pd.Series, float]:
+    """Train rows 의 industry 별 closure_rate 75 percentile 계산.
+
+    Args:
+        df: 전체 dataset (lag feature 까지 적용된 상태).
+        train_quarters: train split 분기 set (e.g. {20191, ...}).
+        min_samples: industry 별 최소 sample 수. 미만 시 NaN (fallback 대상).
+
+    Returns:
+        (industry_p75 Series indexed by industry_code, global_p75 float).
+        Sample 부족한 industry 는 industry_p75 에 NaN, 호출자가 fallback 처리.
+
+    Raises:
+        ValueError: train_quarters 에 해당 row 0건.
+
+    학술 근거:
+        Bergmeir & Benítez (2012) 시계열 leakage 차단 — train-only quantile fit.
+    """
+    train_df = df[df["quarter"].isin(train_quarters)]
+    if len(train_df) == 0:
+        raise ValueError(f"train_quarters={train_quarters} 에 해당 row 0건")
+
+    global_p75 = float(train_df["closure_rate"].quantile(0.75))
+
+    counts = train_df.groupby("industry_code")["closure_rate"].size()
+    p75 = train_df.groupby("industry_code")["closure_rate"].quantile(0.75)
+    p75 = p75.where(counts >= min_samples, np.nan)
+
+    return p75, global_p75
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
