@@ -26,7 +26,14 @@ interface Props {
 }
 
 // 거리가 가까울수록 빨강 (잠식 위험 색상 시멘틱)
-const BIN_COLORS = ['#ef4444', '#f59e0b', '#eab308', '#84cc16', '#22c55e'];
+// 룰 §9: danger → warning → decor-yellow → decor-cyan → success
+const BIN_COLORS = [
+  'var(--danger)',
+  'var(--warning)',
+  'var(--decor-yellow)',
+  'var(--decor-cyan)',
+  'var(--success)',
+];
 
 export function CannibalizationDistanceChart({ bins, closestM, impactPct, height = 180 }: Props) {
   if (!bins || Object.keys(bins).length === 0) {
@@ -70,24 +77,25 @@ export function CannibalizationDistanceChart({ bins, closestM, impactPct, height
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={entries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#292524" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="bin"
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
           />
           <YAxis
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
             allowDecimals={false}
           />
           <Tooltip
             cursor={{ fill: 'rgba(168,162,158,0.05)' }}
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #44403c',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
               fontSize: 12,
+              color: 'var(--card-foreground)',
             }}
             formatter={(v: number) => [`${v}개`, '자사 매장']}
           />

@@ -81,14 +81,14 @@ export default function SimulationHistoryDetail() {
 
   if (!id || !Number.isFinite(id)) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-[#1e1b18] text-sm text-rose-400">
+      <div className="flex min-h-[60vh] items-center justify-center bg-card text-sm text-rose-400">
         잘못된 경로입니다.
       </div>
     );
   }
 
   return (
-    <div className="h-screen overflow-y-auto custom-scrollbar bg-[#0C0B0A] pb-16 text-stone-100">
+    <div className="h-screen overflow-y-auto custom-scrollbar bg-background pb-16 text-foreground">
       <div className="mx-auto max-w-[1600px] px-6 pt-20">
         <button
           type="button"
@@ -187,7 +187,7 @@ function DetailHeader({
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
       <div>
         <div className="flex items-center gap-2">
-          <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-mono font-bold text-amber-400">
+          <span className="rounded bg-warning/15 px-2 py-0.5 text-xs font-mono font-bold text-warning">
             {formatDocumentId(id)}
           </span>
           <span className="text-[0.625rem] uppercase tracking-widest text-stone-500">
@@ -216,7 +216,7 @@ function DetailHeader({
         <button
           type="button"
           onClick={onRerun}
-          className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-amber-400"
+          className="inline-flex items-center gap-2 rounded-md bg-warning px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-warning"
         >
           <RotateCw className="h-4 w-4" />
           시뮬레이터로 이동

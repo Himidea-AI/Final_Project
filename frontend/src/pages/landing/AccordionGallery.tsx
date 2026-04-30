@@ -142,7 +142,7 @@ export default function AccordionGallery({
       onMouseLeave={handleMouseLeaveTrack}
     >
       {/* Top bar — 3-column: Logo+Back | Indicator | Guide */}
-      <div className="w-full h-24 border-b border-[#3a3633]/50 flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/80 backdrop-blur-md z-50 shrink-0">
+      <div className="w-full h-24 border-b border-border/50 flex items-center px-8 md:px-16 justify-between bg-card/80 backdrop-blur-md z-50 shrink-0">
         {/* Left — Logo + Back */}
         <div className="flex items-center gap-3 min-w-[180px]">
           <button
@@ -150,12 +150,12 @@ export default function AccordionGallery({
             className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
           >
             <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">SPOTTER</span>
+            <span className="text-sm font-bold tracking-wider text-foreground">SPOTTER</span>
           </button>
-          <span className="text-[#3a3633]">/</span>
+          <span className="text-border">/</span>
           <button
             onClick={onLogoClick}
-            className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-white transition-colors duration-300"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-white transition-colors duration-300"
           >
             <ChevronRight size={14} className="rotate-180" />
             BACK
@@ -205,7 +205,7 @@ export default function AccordionGallery({
           return (
             <div
               key={d.eng}
-              className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden bg-[#3a3633] transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
+              className={`group/panel relative h-[65vh] shrink-0 rounded-2xl overflow-hidden bg-muted transition-all duration-[1200ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${
                 isMapo ? 'cursor-pointer' : 'cursor-not-allowed'
               } ${
                 isHovered
@@ -229,7 +229,7 @@ export default function AccordionGallery({
               />
 
               {/* Gradient mask */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18] via-[#1e1b18]/60 to-transparent opacity-90 transition-opacity duration-1000" />
+              <div className="absolute inset-0 bg-gradient-to-t from-card via-card/60 to-transparent opacity-90 transition-opacity duration-1000" />
 
               {/* English name (shown on hover) */}
               <div
@@ -264,7 +264,7 @@ export default function AccordionGallery({
                     {d.name.split('').map((char, ci) => (
                       <span
                         key={ci}
-                        className={`font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-[#a3a3a3] transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                        className={`font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-muted-foreground transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
                           isHovered
                             ? 'text-4xl md:text-5xl opacity-100 translate-y-0 blur-0'
                             : 'text-4xl md:text-5xl opacity-0 translate-y-10 blur-[4px]'
@@ -283,7 +283,7 @@ export default function AccordionGallery({
                     {d.name.split('').map((char, ci) => (
                       <span
                         key={ci}
-                        className={`font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-[#a3a3a3] leading-none transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
+                        className={`font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-muted-foreground leading-none transition-all duration-700 ease-[cubic-bezier(0.19,1,0.22,1)] ${
                           isHovered
                             ? 'text-2xl md:text-3xl opacity-0 -translate-y-10 blur-[4px]'
                             : 'text-2xl md:text-3xl opacity-60 translate-y-0 blur-0'
@@ -311,7 +311,7 @@ export default function AccordionGallery({
                         <span>클릭하여 시뮬레이션 시작</span>
                       </div>
                     ) : (
-                      <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[0.5625rem] font-bold tracking-wider">
+                      <span className="px-2.5 py-1 rounded-full bg-warning/15 border border-warning/30 text-warning text-[0.5625rem] font-bold tracking-wider">
                         서비스 준비 중
                       </span>
                     )}

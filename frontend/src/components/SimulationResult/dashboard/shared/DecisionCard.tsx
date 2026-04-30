@@ -56,7 +56,7 @@ export function DecisionCard({
   const FootnoteEl = onFootnoteClick ? 'button' : 'div';
   const footnoteInteractive = onFootnoteClick != null;
   return (
-    <div className="relative bg-[#141210] border border-stone-800/60 rounded-3xl p-8 flex flex-col h-full hover:border-stone-700 hover:shadow-[0_20px_50px_-25px_rgba(34,211,238,0.15)] transition-all group overflow-hidden">
+    <div className="relative bg-card border border-stone-800/60 rounded-3xl p-8 flex flex-col h-full hover:border-stone-700 hover:shadow-[0_20px_50px_-25px_rgba(34,211,238,0.15)] transition-all group overflow-hidden">
       {/* 모서리 micro dot — 디자인 "완결감" */}
       <div className="absolute top-6 right-6 w-1 h-1 rounded-full bg-stone-800" />
 
@@ -126,7 +126,7 @@ export function DecisionCard({
                 <div
                   key={agent.id}
                   className={`w-6 h-6 rounded-full bg-stone-900 border-2 flex items-center justify-center shadow-md ${
-                    agent.borderCls ?? 'border-[#141210]'
+                    agent.borderCls ?? 'border-card'
                   }`}
                 >
                   <AgentIcon size={11} className={agent.color} />

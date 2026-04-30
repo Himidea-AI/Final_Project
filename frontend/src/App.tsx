@@ -27,10 +27,10 @@
  *   /contact     → ContactPage      (디지털 명함)
  *
  * [테마 시스템]
- *   - CSS Variables (index.css) + Tailwind darkMode:"class"
- *   - isDark state → <div className="dark"> 토글
- *   - SkyThemeToggle 컴포넌트로 Light/Dark 전환
- *   - 시맨틱 클래스: bg-background, text-foreground, bg-card, text-primary 등
+ *   - CSS Variables (index.css :root) — 라이트 모드 단일 (v5.0 2026-04-30 다크 폐기)
+ *   - System A 배경/구조 6색 (warm-white #FAF9F5 / 카드 #FFFFFF / cream #F8F7E8 등 중립 인프라)
+ *   - System B 12색 팔레트 (모든 유의미한 색 — 데이터/상태/액센트/장식 단일 진실)
+ *   - 시맨틱 클래스: bg-background, text-foreground, bg-card, text-primary, bg-success/warning/danger, var(--chart-1..4) 등
  *
  * [백엔드 연동]
  *   - api/client.ts의 USE_MOCK = true → Mock 데이터 반환 (프론트 독립 동작)
@@ -775,8 +775,8 @@ function RechartsDarkTooltip(props: any) {
       : `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
 
   return (
-    <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl px-4 py-3 text-xs min-w-[180px]">
-      <div className="text-[0.625rem] text-[#9ca3af] font-mono mb-2 tracking-widest uppercase">
+    <div className="bg-card border border-border rounded-lg shadow-2xl px-4 py-3 text-xs min-w-[180px]">
+      <div className="text-[0.625rem] text-muted-foreground font-mono mb-2 tracking-widest uppercase">
         {title}
       </div>
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -786,7 +786,7 @@ function RechartsDarkTooltip(props: any) {
           <div key={p.dataKey} className="flex items-center justify-between gap-3 py-0.5">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ background: p.stroke }} />
-              <span className="text-[#9ca3af]">{isRevenue ? '예상 매출' : '유동인구'}</span>
+              <span className="text-muted-foreground">{isRevenue ? '예상 매출' : '유동인구'}</span>
             </div>
             <span className="text-white font-bold font-mono tabular-nums">
               {isRevenue
@@ -1492,20 +1492,20 @@ function SimulatorDashboard({
   // 로딩 UI 제거(2026-04-28)와 함께 store progress/stage 미러 useEffect도 dead → 제거.
   // SimulationFloatingWidget이 store를 직접 구독해 진행 상태 표시.
 
-  // Dark theme only
-  const textPrimary = 'text-[#e2e8f0]';
-  const textSecondary = 'text-[#9ca3af]';
-  const accent = 'text-[#818cf8]';
-  const accentBg = 'bg-[#818cf8]';
-  const panel = 'bg-[#2c2825] border-[#3a3633] shadow-2xl';
+  // Light theme tokens (semantic, dark-mode hex retired)
+  const textPrimary = 'text-foreground';
+  const textSecondary = 'text-muted-foreground';
+  const accent = 'text-primary';
+  const accentBg = 'bg-primary';
+  const panel = 'bg-card border-border shadow-2xl';
 
   return (
     <div
       ref={dashboardRef}
-      className="relative z-10 h-full w-full bg-[#1e1b18] overflow-y-auto custom-scrollbar"
+      className="relative z-10 h-full w-full bg-card overflow-y-auto custom-scrollbar"
     >
       {/* Top bar — 타이틀만. "내 이력" 버튼은 상단 4아이콘 바의 User 아이콘으로 이관 */}
-      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-14 bg-[#1e1b18]/80 backdrop-blur-xl">
+      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-14 bg-card/80 backdrop-blur-xl">
         <span className={`text-xs font-medium tracking-wider ${textSecondary}`}>
           마포구 시뮬레이터
         </span>
@@ -1531,16 +1531,16 @@ function SimulatorDashboard({
               <SectionLabel icon={MapPin} title="핵심 파라미터" sub="Core Parameters · 필수 항목" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 분석 대상 박스 — 강조 */}
-                <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
+                <div className="space-y-2 text-left p-4 bg-card border border-primary/20 rounded-2xl shadow-xl shadow-primary/5">
                   <div className="flex items-center gap-2 mb-2">
                     <MapPin size={13} className={accent} />
                     <label className={`text-xs font-medium ${textSecondary}`}>분석 대상</label>
                   </div>
 
                   {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
-                  <div className="mb-2 px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18]/50 flex items-center justify-between">
-                    <span className="text-sm text-[#e2e8f0]">{selectedGu}</span>
-                    <span className="text-[0.625rem] text-[#9ca3af] uppercase tracking-wider opacity-70">
+                  <div className="mb-2 px-3 py-2.5 rounded-lg border border-white/5 bg-card/50 flex items-center justify-between">
+                    <span className="text-sm text-foreground">{selectedGu}</span>
+                    <span className="text-[0.625rem] text-muted-foreground uppercase tracking-wider opacity-70">
                       선택됨
                     </span>
                   </div>
@@ -1552,23 +1552,23 @@ function SimulatorDashboard({
                         setDongDropdownOpen(!dongDropdownOpen);
                         setBusinessTypeOpen(false);
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
                     >
                       <span className="truncate">
                         {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
                       </span>
                       <ChevronRight
                         size={14}
-                        className={`text-[#9ca3af] transition-transform duration-200 shrink-0 ${
+                        className={`text-muted-foreground transition-transform duration-200 shrink-0 ${
                           dongDropdownOpen ? 'rotate-90' : ''
                         }`}
                       />
                     </button>
                     {dongDropdownOpen && (
-                      <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                      <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
                         <button
                           onClick={toggleAllDongs}
-                          className="w-full text-left px-3 py-2 text-xs font-medium border-b border-[#3a3633] transition-colors text-[#818cf8] hover:bg-[#818cf8]/10"
+                          className="w-full text-left px-3 py-2 text-xs font-medium border-b border-border transition-colors text-primary hover:bg-primary/10"
                         >
                           {selectedDongs.length >= MAX_DONGS
                             ? `전체 해제 (1개만 유지)`
@@ -1582,15 +1582,15 @@ function SimulatorDashboard({
                               onClick={() => toggleDong(dong)}
                               className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
                                 checked
-                                  ? 'text-[#e2e8f0] hover:bg-[#3a3633]'
-                                  : 'text-[#666666] hover:bg-[#3a3633] hover:text-[#9ca3af]'
+                                  ? 'text-foreground hover:bg-muted'
+                                  : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
                               }`}
                             >
                               <div
                                 className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
                                   checked
-                                    ? 'bg-[#818cf8] border-[#818cf8]'
-                                    : 'border-[#3a3633] bg-transparent'
+                                    ? 'bg-primary border-primary'
+                                    : 'border-border bg-transparent'
                                 }`}
                               >
                                 {checked && (
@@ -1618,7 +1618,7 @@ function SimulatorDashboard({
                     좌측 분석 대상(구+동) 박스 높이를 두 박스 합으로 매칭, 공백 회피. */}
                 <div className="flex flex-col gap-4">
                   {/* 업종 박스 — 강조 동일 */}
-                  <div className="space-y-2 text-left p-4 bg-[#1a1816] border border-indigo-500/20 rounded-2xl shadow-xl shadow-indigo-500/5">
+                  <div className="space-y-2 text-left p-4 bg-card border border-primary/20 rounded-2xl shadow-xl shadow-primary/5">
                     <div className="flex items-center gap-2 mb-2">
                       <Store size={13} className={accent} />
                       <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
@@ -1629,18 +1629,18 @@ function SimulatorDashboard({
                           setBusinessTypeOpen(!businessTypeOpen);
                           setDongDropdownOpen(false);
                         }}
-                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-[#1e1b18] text-sm text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors"
+                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
                       >
                         <span>{businessType}</span>
                         <ChevronRight
                           size={14}
-                          className={`text-[#9ca3af] transition-transform duration-200 ${
+                          className={`text-muted-foreground transition-transform duration-200 ${
                             businessTypeOpen ? 'rotate-90' : ''
                           }`}
                         />
                       </button>
                       {businessTypeOpen && (
-                        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl custom-scrollbar">
+                        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
                           {BUSINESS_TYPES.map((type) => (
                             <button
                               key={type}
@@ -1650,8 +1650,8 @@ function SimulatorDashboard({
                               }}
                               className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                                 type === businessType
-                                  ? 'text-[#818cf8] bg-[#818cf8]/10'
-                                  : 'text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]'
+                                  ? 'text-primary bg-primary/10'
+                                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                               }`}
                             >
                               {type}
@@ -1664,13 +1664,13 @@ function SimulatorDashboard({
 
                   {/* 유동인구 가중치 토글 — 섹션 2에서 옮겨옴. flex-1로 남은 공간 채워
                       좌측 분석 대상 박스 높이와 자연 매칭. */}
-                  <div className="flex-1 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-white/5 bg-[#1e1b18]/40">
+                  <div className="flex-1 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-white/5 bg-card/40">
                     <label
                       className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
                     >
                       유동인구 가중치
                       <span
-                        className="text-[#818cf8] cursor-help shrink-0"
+                        className="text-primary cursor-help shrink-0"
                         title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
                       >
                         &#9432;
@@ -1680,7 +1680,7 @@ function SimulatorDashboard({
                       onClick={() => setWeighted(!weighted)}
                       aria-label="유동인구 가중치 토글"
                       className={`relative w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${
-                        weighted ? accentBg : 'bg-[#3a3633]'
+                        weighted ? accentBg : 'bg-muted'
                       }`}
                     >
                       <div
@@ -1756,7 +1756,7 @@ function SimulatorDashboard({
                 />
 
                 {/* 5. 목표 객단가 — col-span-1 (P3: 박스 wrap) */}
-                <div className="px-4 py-3 rounded-lg border border-white/5 bg-[#1e1b18]/40">
+                <div className="px-4 py-3 rounded-lg border border-white/5 bg-card/40">
                   <label className={`block text-xs font-medium ${textSecondary}`}>
                     목표 객단가
                   </label>
@@ -1769,8 +1769,8 @@ function SimulatorDashboard({
                           onClick={() => setTargetPrice(range.value)}
                           className={`px-2 py-2 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                             active
-                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                              ? 'bg-primary/15 border-primary text-primary'
+                              : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                           }`}
                         >
                           {range.label}
@@ -1781,10 +1781,12 @@ function SimulatorDashboard({
                 </div>
 
                 {/* 6. 주 타겟 시간대 — col-span-1 (P3: 박스 wrap) */}
-                <div className="px-4 py-3 rounded-lg border border-white/5 bg-[#1e1b18]/40">
+                <div className="px-4 py-3 rounded-lg border border-white/5 bg-card/40">
                   <div className="flex items-baseline justify-between">
                     <label className={`text-xs font-medium ${textSecondary}`}>주 타겟 시간대</label>
-                    <span className="text-[0.625rem] text-[#9ca3af] opacity-60">복수 선택</span>
+                    <span className="text-[0.625rem] text-muted-foreground opacity-60">
+                      복수 선택
+                    </span>
                   </div>
                   <div className="grid grid-cols-4 gap-1.5 mt-2">
                     {OPERATING_HOURS_OPTIONS.map((hour) => {
@@ -1795,8 +1797,8 @@ function SimulatorDashboard({
                           onClick={() => toggleOperatingHour(hour)}
                           className={`py-2 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                             active
-                              ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                              : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                              ? 'bg-primary/15 border-primary text-primary'
+                              : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                           }`}
                         >
                           {hour}
@@ -1821,7 +1823,7 @@ function SimulatorDashboard({
               <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
               <div>
                 <div className="flex items-baseline justify-end mb-3">
-                  <span className="text-[0.625rem] text-[#9ca3af] opacity-60">
+                  <span className="text-[0.625rem] text-muted-foreground opacity-60">
                     미선택 시 전체 고객 기준
                   </span>
                 </div>
@@ -1848,8 +1850,8 @@ function SimulatorDashboard({
                             onClick={() => toggleTargetAge(opt.v)}
                             className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
-                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                                : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                                ? 'bg-primary/15 border-primary text-primary'
+                                : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             }`}
                           >
                             {opt.l}
@@ -1878,8 +1880,8 @@ function SimulatorDashboard({
                             onClick={() => setTargetGender(opt.v)}
                             className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
-                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                                : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                                ? 'bg-primary/15 border-primary text-primary'
+                                : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             }`}
                           >
                             {opt.l}
@@ -1911,8 +1913,8 @@ function SimulatorDashboard({
                             onClick={() => toggleTargetTime(opt.v)}
                             className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
-                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                                : 'bg-transparent border-white/5 text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                                ? 'bg-primary/15 border-primary text-primary'
+                                : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             }`}
                           >
                             {opt.l}
@@ -1941,8 +1943,8 @@ function SimulatorDashboard({
                             onClick={() => setTargetDayType(opt.v)}
                             className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
                               active
-                                ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                                : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                                ? 'bg-primary/15 border-primary text-primary'
+                                : 'bg-transparent border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
                             }`}
                           >
                             {opt.l}
@@ -1966,9 +1968,9 @@ function SimulatorDashboard({
                       targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
                     }
                     onChange={(e) => handleMonthlySalesChange(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg text-xs font-mono tabular-nums bg-transparent border border-[#3a3633] text-[#e2e8f0] placeholder:text-[#9ca3af]/50 focus:border-[#818cf8] focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg text-xs font-mono tabular-nums bg-transparent border border-border text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
                   />
-                  <p className="mt-1 text-[0.625rem] text-[#9ca3af]/50">
+                  <p className="mt-1 text-[0.625rem] text-muted-foreground/50">
                     입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
                   </p>
                 </div>
@@ -2023,7 +2025,7 @@ function SimulatorDashboard({
                 결과 도착 시 runSim 함수가 setReportState('result')로 자동 전환. */}
 
             {reportState === 'result' && (
-              <div className="absolute inset-0 z-40 bg-[#1e1b18] text-[#e2e8f0] font-sans p-4 md:p-6 pt-24 md:pt-28 overflow-y-auto custom-scrollbar flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
+              <div className="absolute inset-0 z-40 bg-card text-foreground font-sans p-4 md:p-6 pt-24 md:pt-28 overflow-y-auto custom-scrollbar flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
                 <div className="max-w-[1920px] w-full mx-auto flex flex-col gap-4 xl:px-10 2xl:px-16 transition-all duration-500 pb-12">
                   {/* Header & Nav */}
                   <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
@@ -2034,7 +2036,7 @@ function SimulatorDashboard({
                           상권 분석 리포트
                         </h1>
                         {simResult?.winnerDistrict && (
-                          <span className="ml-2 px-2.5 py-0.5 bg-[#818cf8]/10 border border-[#818cf8]/40 rounded-full text-[0.625rem] font-bold text-[#818cf8] uppercase tracking-wider">
+                          <span className="ml-2 px-2.5 py-0.5 bg-primary/10 border border-primary/40 rounded-full text-[0.625rem] font-bold text-primary uppercase tracking-wider">
                             AI 추천 1위 · {simResult.winnerDistrict}
                           </span>
                         )}
@@ -2047,10 +2049,10 @@ function SimulatorDashboard({
                           </span>
                         )}
                       </div>
-                      <p className="text-[#9ca3af] text-sm">
+                      <p className="text-muted-foreground text-sm">
                         서울특별시 마포구 {selectedDongs[0] || '연남동'} 일대 시뮬레이션 결과
                         {simResult?.topCandidates && simResult.topCandidates.length > 0 && (
-                          <span className="ml-2 text-[#6b7280]">
+                          <span className="ml-2 text-muted-foreground">
                             · Top 3: {simResult.topCandidates.join(', ')}
                           </span>
                         )}
@@ -2059,13 +2061,13 @@ function SimulatorDashboard({
                     <div className="flex items-center gap-3">
                       {/* v4.2 리디자인 — 통합/상세 뷰 토글 제거, TabbedDashboard 단일 뷰 */}
                       {!isSplitMode && viewMode === 'legacy' && (
-                        <div className="flex bg-[#1e1b18] rounded-lg border border-[#3a3633] p-1 shadow-inner">
+                        <div className="flex bg-card rounded-lg border border-border p-1 shadow-inner">
                           <button
                             onClick={() => setDashboardMode('data')}
                             className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
                               dashboardMode === 'data'
-                                ? 'bg-[#3a3633] text-[#818cf8] shadow-sm'
-                                : 'text-[#9ca3af] hover:text-white'
+                                ? 'bg-muted text-primary shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
                             }`}
                           >
                             <BarChartBig className="w-3.5 h-3.5" />
@@ -2075,8 +2077,8 @@ function SimulatorDashboard({
                             onClick={() => setDashboardMode('map')}
                             className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
                               dashboardMode === 'map'
-                                ? 'bg-[#3a3633] text-[#818cf8] shadow-sm'
-                                : 'text-[#9ca3af] hover:text-white'
+                                ? 'bg-muted text-primary shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
                             }`}
                           >
                             <MapIcon className="w-3.5 h-3.5" />
@@ -2086,8 +2088,8 @@ function SimulatorDashboard({
                             onClick={() => setDashboardMode('abm')}
                             className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
                               dashboardMode === 'abm'
-                                ? 'bg-[#3a3633] text-emerald-400 shadow-sm'
-                                : 'text-[#9ca3af] hover:text-emerald-300'
+                                ? 'bg-muted text-emerald-400 shadow-sm'
+                                : 'text-muted-foreground hover:text-emerald-300'
                             }`}
                           >
                             <Activity className="w-3.5 h-3.5" />
@@ -2103,7 +2105,7 @@ function SimulatorDashboard({
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[0.6875rem] font-bold transition-all duration-300 border ${
                           isSplitMode
                             ? 'bg-amber-500 text-black border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                            : 'bg-[#2c2825] text-[#9ca3af] border-[#3a3633] hover:text-white hover:bg-[#3a3633]'
+                            : 'bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted'
                         }`}
                       >
                         {isSplitMode ? (
@@ -2115,9 +2117,10 @@ function SimulatorDashboard({
                       </button>
                       <button
                         onClick={() => showToast('info', '과거 데이터 조회 기능은 준비 중입니다.')}
-                        className="flex items-center gap-2 px-3 py-1.5 border border-[#3a3633] bg-[#2c2825] hover:bg-[#3a3633] rounded-md text-xs font-medium transition-colors"
+                        className="flex items-center gap-2 px-3 py-1.5 border border-border bg-card hover:bg-muted rounded-md text-xs font-medium transition-colors"
                       >
-                        <Calendar className="w-3.5 h-3.5 text-[#9ca3af]" /> {reportMonthLabel}
+                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />{' '}
+                        {reportMonthLabel}
                       </button>
                       {/* [시뮬 이력 저장] — 저장 성공 시 Document ID가 정식 번호로 격상됨 */}
                       {rawSimResult && (
@@ -2147,24 +2150,26 @@ function SimulatorDashboard({
                               className="fixed inset-0 z-40"
                               onClick={() => setIsDownloadOpen(false)}
                             />
-                            <div className="absolute right-0 mt-2 w-48 bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl py-1.5 z-50 flex flex-col gap-0.5">
+                            <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-2xl py-1.5 z-50 flex flex-col gap-0.5">
                               <button
                                 onClick={handleDownloadPDF}
-                                className="w-full text-left px-3 py-2 text-xs text-white hover:bg-[#2c2825] flex items-center gap-2 transition-colors group"
+                                className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted flex items-center gap-2 transition-colors group"
                               >
                                 <FileText className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />{' '}
                                 PDF 리포트{' '}
-                                <span className="text-[0.625rem] text-[#9ca3af] ml-auto">
+                                <span className="text-[0.625rem] text-muted-foreground ml-auto">
                                   보고용
                                 </span>
                               </button>
                               <button
                                 onClick={handleDownloadExcel}
-                                className="w-full text-left px-3 py-2 text-xs text-[#9ca3af] hover:text-white hover:bg-[#2c2825] flex items-center gap-2 transition-colors group"
+                                className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted flex items-center gap-2 transition-colors group"
                               >
                                 <Database className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />{' '}
                                 Raw Data{' '}
-                                <span className="text-[0.625rem] text-[#d1d5db] ml-auto">XLSX</span>
+                                <span className="text-[0.625rem] text-muted-foreground ml-auto">
+                                  XLSX
+                                </span>
                               </button>
                             </div>
                           </>
@@ -2321,11 +2326,11 @@ function SimulatorDashboard({
                             ? rec.slice(oneLiner.length).trim()
                             : rec;
 
-                        const borderCls = cfg ? cfg.border : 'border-[#3a3633]';
+                        const borderCls = cfg ? cfg.border : 'border-border';
 
                         return (
                           <div
-                            className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-[#2c2825] p-5 shadow-xl`}
+                            className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-card p-5 shadow-xl`}
                           >
                             <div className="flex items-start gap-4">
                               {cfg && (
@@ -2337,7 +2342,7 @@ function SimulatorDashboard({
                               )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                  <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
                                     AI VERDICT
                                   </h3>
                                   {cfg && (
@@ -2349,7 +2354,7 @@ function SimulatorDashboard({
                                   )}
                                 </div>
                                 {oneLiner && (
-                                  <p className="mt-2 text-base font-semibold leading-snug text-[#e2e8f0]">
+                                  <p className="mt-2 text-base font-semibold leading-snug text-foreground">
                                     {oneLiner}
                                   </p>
                                 )}
@@ -2358,7 +2363,7 @@ function SimulatorDashboard({
                                     <summary className="cursor-pointer text-xs text-cyan-400 hover:text-cyan-300 font-mono select-none">
                                       상세보기
                                     </summary>
-                                    <p className="mt-2 text-sm leading-relaxed text-[#e2e8f0]">
+                                    <p className="mt-2 text-sm leading-relaxed text-foreground">
                                       {tailOfRec}
                                     </p>
                                   </details>
@@ -2438,7 +2443,7 @@ function SimulatorDashboard({
                             {/* Left Column */}
                             <div className="lg:flex-[2] flex flex-col gap-4">
                               {/* Chart */}
-                              <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 pb-10 shadow-xl flex flex-col h-[320px]">
+                              <div className="bg-card border border-border rounded-xl p-5 pb-10 shadow-xl flex flex-col h-[320px]">
                                 <div className="flex justify-between items-end mb-4">
                                   <div>
                                     <h2 className="text-sm font-bold text-white">
@@ -2446,22 +2451,22 @@ function SimulatorDashboard({
                                         ? '시간대별 유동인구 및 매출 (24H)'
                                         : 'LSTM 12개월 매출 추이 예측 (12M)'}
                                     </h2>
-                                    <p className="text-[0.6875rem] text-[#9ca3af]">
+                                    <p className="text-[0.6875rem] text-muted-foreground">
                                       {chartView === 'daily'
                                         ? '경쟁점 데이터 및 배후세대 동선 분석 기준'
                                         : 'AI 엔진을 통한 향후 1년간의 매출 예측값'}
                                     </p>
                                   </div>
-                                  <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
+                                  <div className="flex bg-card rounded-md border border-border p-0.5">
                                     <button
                                       onClick={() => setChartView('daily')}
-                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'daily' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'daily' ? 'bg-border text-indigo-400' : 'text-muted-foreground hover:text-white'}`}
                                     >
                                       24H 분석
                                     </button>
                                     <button
                                       onClick={() => setChartView('monthly')}
-                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'monthly' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'monthly' ? 'bg-border text-indigo-400' : 'text-muted-foreground hover:text-white'}`}
                                     >
                                       12M 예측
                                     </button>
@@ -2469,18 +2474,18 @@ function SimulatorDashboard({
                                 </div>
                                 <div
                                   onClick={() => setActiveDrawer('traffic')}
-                                  className="flex-1 relative w-full cursor-pointer group/chart hover:bg-[#818cf8]/[0.03] rounded-lg transition-colors min-h-0"
+                                  className="flex-1 relative w-full cursor-pointer group/chart hover:bg-primary/[0.03] rounded-lg transition-colors min-h-0"
                                 >
                                   {/* empty state — 24H 시간대 분석은 백엔드 미구현, 12M 예측은 quarterly_projection 없을 때 */}
                                   {(chartView === 'daily' ||
                                     (chartView === 'monthly' && monthlyChartData.length === 0)) && (
-                                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
+                                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-border bg-card/60 backdrop-blur-[2px]">
                                       <div className="text-center max-w-xs px-4">
-                                        <div className="mx-auto mb-2 h-6 w-6 animate-pulse rounded-full bg-[#3a3633]" />
-                                        <div className="text-xs font-semibold text-[#e2e8f0]">
+                                        <div className="mx-auto mb-2 h-6 w-6 animate-pulse rounded-full bg-border" />
+                                        <div className="text-xs font-semibold text-foreground">
                                           구현 예정
                                         </div>
-                                        <div className="mt-1 text-[0.625rem] text-[#9ca3af] leading-relaxed">
+                                        <div className="mt-1 text-[0.625rem] text-muted-foreground leading-relaxed">
                                           {chartView === 'daily'
                                             ? '시간대별 매출·유동인구 API 연동 대기 중'
                                             : '분기 매출 예측 — 시뮬레이션 완료 후 표시됩니다'}
@@ -2510,12 +2515,12 @@ function SimulatorDashboard({
                                           >
                                             <stop
                                               offset="0%"
-                                              stopColor="#818cf8"
+                                              stopColor="var(--primary)"
                                               stopOpacity={0.5}
                                             />
                                             <stop
                                               offset="100%"
-                                              stopColor="#818cf8"
+                                              stopColor="var(--primary)"
                                               stopOpacity={0}
                                             />
                                           </linearGradient>
@@ -2528,12 +2533,12 @@ function SimulatorDashboard({
                                           >
                                             <stop
                                               offset="0%"
-                                              stopColor="#9ca3af"
+                                              stopColor="var(--muted-foreground)"
                                               stopOpacity={0.2}
                                             />
                                             <stop
                                               offset="100%"
-                                              stopColor="#9ca3af"
+                                              stopColor="var(--muted-foreground)"
                                               stopOpacity={0}
                                             />
                                           </linearGradient>
@@ -2553,16 +2558,16 @@ function SimulatorDashboard({
                                               ? `${t}Q`
                                               : `${new Date(t).getMonth() + 1}월`;
                                           }}
-                                          stroke="#9ca3af"
+                                          stroke="var(--muted-foreground)"
                                           fontSize={10}
                                           tickLine={false}
                                           axisLine={false}
-                                          tick={{ fill: '#d1d5db' }}
+                                          tick={{ fill: 'var(--muted-foreground)' }}
                                         />
                                         <RechartsTooltipWrapper
                                           content={<RechartsDarkTooltip chartMode={chartView} />}
                                           cursor={{
-                                            stroke: '#818cf8',
+                                            stroke: 'var(--primary)',
                                             strokeWidth: 1,
                                             strokeDasharray: '4 4',
                                           }}
@@ -2570,7 +2575,7 @@ function SimulatorDashboard({
                                         <Area
                                           type="monotone"
                                           dataKey="traffic"
-                                          stroke="#d1d5db"
+                                          stroke="var(--muted-foreground)"
                                           strokeWidth={2}
                                           fill="url(#rcTrafficGradient)"
                                           isAnimationActive={false}
@@ -2578,7 +2583,7 @@ function SimulatorDashboard({
                                         <Area
                                           type="monotone"
                                           dataKey="revenue"
-                                          stroke="#818cf8"
+                                          stroke="var(--primary)"
                                           strokeWidth={3}
                                           fill="url(#rcRevenueGradient)"
                                           isAnimationActive={false}
@@ -2589,7 +2594,7 @@ function SimulatorDashboard({
                                             <Area
                                               type="monotone"
                                               dataKey="confidence_upper"
-                                              stroke="#818cf8"
+                                              stroke="var(--primary)"
                                               strokeWidth={1}
                                               strokeDasharray="3 3"
                                               fill="none"
@@ -2690,16 +2695,16 @@ function SimulatorDashboard({
                                         ? '→ 보합'
                                         : 'N/A';
                                 return (
-                                  <div className="mt-6 rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
+                                  <div className="mt-6 rounded-xl border border-border bg-card p-5 shadow-xl">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
-                                        <TrendingUp className="h-4 w-4 text-[#818cf8]" />
-                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        <TrendingUp className="h-4 w-4 text-primary" />
+                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
                                           향후 12개월 전망
                                         </h3>
                                       </div>
                                       {confidence && (
-                                        <span className="text-xs text-[#9ca3af]">
+                                        <span className="text-xs text-muted-foreground">
                                           신뢰도: {confidence}
                                         </span>
                                       )}
@@ -2709,10 +2714,12 @@ function SimulatorDashboard({
                                       <div className="mt-3 flex items-baseline gap-3 flex-wrap">
                                         {score != null && (
                                           <>
-                                            <span className="text-4xl font-bold font-mono tabular-nums text-[#e2e8f0]">
+                                            <span className="text-4xl font-bold font-mono tabular-nums text-foreground">
                                               {Math.round(score)}
                                             </span>
-                                            <span className="text-sm text-[#9ca3af]">/100</span>
+                                            <span className="text-sm text-muted-foreground">
+                                              /100
+                                            </span>
                                           </>
                                         )}
                                         {dirBadge && (
@@ -2726,22 +2733,22 @@ function SimulatorDashboard({
                                     )}
 
                                     <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                        <div className="text-[#9ca3af]">업종 트렌드</div>
-                                        <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                      <div className="rounded-lg bg-card/50 p-3">
+                                        <div className="text-muted-foreground">업종 트렌드</div>
+                                        <div className="mt-1 font-semibold text-foreground">
                                           {industryDirLabel}
                                         </div>
                                       </div>
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                        <div className="text-[#9ca3af]">상권 분류</div>
-                                        <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                      <div className="rounded-lg bg-card/50 p-3">
+                                        <div className="text-muted-foreground">상권 분류</div>
+                                        <div className="mt-1 font-semibold text-foreground">
                                           {changeIxLabel ?? 'N/A'}
                                         </div>
                                       </div>
                                     </div>
 
                                     {narrative && (
-                                      <p className="mt-4 text-sm leading-relaxed text-[#e2e8f0]">
+                                      <p className="mt-4 text-sm leading-relaxed text-foreground">
                                         {narrative}
                                       </p>
                                     )}
@@ -2805,11 +2812,11 @@ function SimulatorDashboard({
                                   ? (SATURATION_KO[comp.saturation_level] ?? comp.saturation_level)
                                   : 'N/A';
                                 return (
-                                  <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
+                                  <div className="rounded-xl border border-border bg-card p-5 shadow-xl">
                                     <div className="flex items-center justify-between flex-wrap gap-2">
                                       <div className="flex items-center gap-2">
-                                        <Crosshair className="h-4 w-4 text-[#818cf8]" />
-                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        <Crosshair className="h-4 w-4 text-primary" />
+                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
                                           경쟁 + 잠식 분석
                                         </h3>
                                       </div>
@@ -2823,17 +2830,21 @@ function SimulatorDashboard({
                                     </div>
 
                                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                        <div className="text-xs text-[#9ca3af]">500m 경쟁 밀도</div>
-                                        <div className="mt-1 text-base font-semibold text-[#e2e8f0]">
+                                      <div className="rounded-lg bg-card/50 p-3">
+                                        <div className="text-xs text-muted-foreground">
+                                          500m 경쟁 밀도
+                                        </div>
+                                        <div className="mt-1 text-base font-semibold text-foreground">
                                           {satKo}
                                         </div>
                                         <div className="text-xs text-slate-500">
                                           총 {comp?.total_competitors ?? 0}개 매장
                                         </div>
                                       </div>
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                        <div className="text-xs text-[#9ca3af]">자기잠식 영향</div>
+                                      <div className="rounded-lg bg-card/50 p-3">
+                                        <div className="text-xs text-muted-foreground">
+                                          자기잠식 영향
+                                        </div>
                                         <div className="mt-1 text-lg font-semibold text-rose-300">
                                           {cannImpactPct != null
                                             ? `매출 ${cannImpactPct}% 감소`
@@ -2843,11 +2854,11 @@ function SimulatorDashboard({
                                           500m 내 동일 브랜드 기준
                                         </div>
                                       </div>
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-3">
-                                        <div className="text-xs text-[#9ca3af]">
+                                      <div className="rounded-lg bg-card/50 p-3">
+                                        <div className="text-xs text-muted-foreground">
                                           프랜차이즈 / 개인점
                                         </div>
-                                        <div className="mt-1 text-lg font-semibold text-[#e2e8f0]">
+                                        <div className="mt-1 text-lg font-semibold text-foreground">
                                           {comp?.franchise_count ?? 0}개 /{' '}
                                           {comp?.independent_count ?? 0}개
                                         </div>
@@ -2858,11 +2869,11 @@ function SimulatorDashboard({
                                     </div>
 
                                     {diff && (
-                                      <div className="mt-4 rounded-lg bg-[#818cf8]/10 p-3 ring-1 ring-[#818cf8]/30">
-                                        <div className="text-xs uppercase tracking-wider text-[#a5b4fc]">
+                                      <div className="mt-4 rounded-lg bg-primary/10 p-3 ring-1 ring-primary/30">
+                                        <div className="text-xs uppercase tracking-wider text-primary">
                                           차별화 포지션
                                         </div>
-                                        <p className="mt-1 text-sm text-[#e2e8f0]">{diff}</p>
+                                        <p className="mt-1 text-sm text-foreground">{diff}</p>
                                       </div>
                                     )}
 
@@ -2876,7 +2887,7 @@ function SimulatorDashboard({
                                             </div>
                                             <ul className="mt-2 space-y-1">
                                               {opps.map((o, i) => (
-                                                <li key={i} className="text-xs text-[#e2e8f0]">
+                                                <li key={i} className="text-xs text-foreground">
                                                   • {o}
                                                 </li>
                                               ))}
@@ -2891,7 +2902,7 @@ function SimulatorDashboard({
                                             </div>
                                             <ul className="mt-2 space-y-1">
                                               {risks.map((r, i) => (
-                                                <li key={i} className="text-xs text-[#e2e8f0]">
+                                                <li key={i} className="text-xs text-foreground">
                                                   • {r}
                                                 </li>
                                               ))}
@@ -2909,7 +2920,7 @@ function SimulatorDashboard({
                                         </div>
                                         <ul className="mt-2 space-y-1">
                                           {actions.map((a, i) => (
-                                            <li key={i} className="text-xs text-[#e2e8f0]">
+                                            <li key={i} className="text-xs text-foreground">
                                               <span className="font-bold text-amber-300">
                                                 {i + 1}.
                                               </span>{' '}
@@ -2921,7 +2932,7 @@ function SimulatorDashboard({
                                     )}
 
                                     {narrative && (
-                                      <p className="mt-4 text-xs leading-relaxed text-[#9ca3af]">
+                                      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
                                         {narrative}
                                       </p>
                                     )}
@@ -2930,50 +2941,50 @@ function SimulatorDashboard({
                               })()}
 
                               {/* Table */}
-                              <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl shadow-xl flex flex-col">
-                                <div className="p-5 border-b border-[#3a3633] flex justify-between items-center">
+                              <div className="bg-card border border-border rounded-xl shadow-xl flex flex-col">
+                                <div className="p-5 border-b border-border flex justify-between items-center">
                                   <h2 className="text-sm font-bold text-white flex items-center gap-2">
                                     상세 데이터 테이블
-                                    <span className="hidden md:inline-block px-1.5 py-0.5 bg-[#3a3633] text-[#9ca3af] text-[0.5625rem] rounded uppercase font-mono">
+                                    <span className="hidden md:inline-block px-1.5 py-0.5 bg-border text-muted-foreground text-[0.5625rem] rounded uppercase font-mono">
                                       {tableDensity} view
                                     </span>
                                   </h2>
                                   <div className="flex items-center gap-3">
                                     {/* 밀도 조절 */}
-                                    <div className="hidden sm:flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
+                                    <div className="hidden sm:flex bg-card rounded-md border border-border p-0.5">
                                       <button
                                         onClick={() => setTableDensity('comfortable')}
                                         title="넓게 보기"
-                                        className={`p-1 rounded transition-colors ${tableDensity === 'comfortable' ? 'bg-[#3a3633] text-[#818cf8]' : 'text-[#9ca3af] hover:text-white'}`}
+                                        className={`p-1 rounded transition-colors ${tableDensity === 'comfortable' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-white'}`}
                                       >
                                         <Rows3 className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={() => setTableDensity('standard')}
                                         title="보통"
-                                        className={`p-1 rounded transition-colors ${tableDensity === 'standard' ? 'bg-[#3a3633] text-[#818cf8]' : 'text-[#9ca3af] hover:text-white'}`}
+                                        className={`p-1 rounded transition-colors ${tableDensity === 'standard' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-white'}`}
                                       >
                                         <AlignJustify className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={() => setTableDensity('compact')}
                                         title="좁게 보기"
-                                        className={`p-1 rounded transition-colors ${tableDensity === 'compact' ? 'bg-[#3a3633] text-[#818cf8]' : 'text-[#9ca3af] hover:text-white'}`}
+                                        className={`p-1 rounded transition-colors ${tableDensity === 'compact' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-white'}`}
                                       >
                                         <List className="w-3.5 h-3.5" />
                                       </button>
                                     </div>
                                     {/* 테이블 종류 토글 */}
-                                    <div className="flex bg-[#1e1b18] rounded-md border border-[#3a3633] p-0.5">
+                                    <div className="flex bg-card rounded-md border border-border p-0.5">
                                       <button
                                         onClick={() => handleTableViewChange('cannibalization')}
-                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'cannibalization' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'cannibalization' ? 'bg-border text-indigo-400' : 'text-muted-foreground hover:text-white'}`}
                                       >
                                         가맹점 간섭도
                                       </button>
                                       <button
                                         onClick={() => handleTableViewChange('neighborhoods')}
-                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'neighborhoods' ? 'bg-[#3a3633] text-indigo-400' : 'text-[#9ca3af] hover:text-white'}`}
+                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'neighborhoods' ? 'bg-border text-indigo-400' : 'text-muted-foreground hover:text-white'}`}
                                       >
                                         행정동 비교
                                       </button>
@@ -2982,8 +2993,8 @@ function SimulatorDashboard({
                                 </div>
                                 <div>
                                   <table className="w-full text-left border-collapse">
-                                    <thead className="sticky top-0 bg-[#1e1b18]/90 backdrop-blur-sm z-10">
-                                      <tr className="text-[0.6875rem] font-mono text-[#9ca3af] uppercase tracking-wider">
+                                    <thead className="sticky top-0 bg-card/90 backdrop-blur-sm z-10">
+                                      <tr className="text-[0.6875rem] font-mono text-muted-foreground uppercase tracking-wider">
                                         {tableView === 'cannibalization' ? (
                                           <>
                                             <th className="p-3 pl-5 font-medium">
@@ -3065,13 +3076,13 @@ function SimulatorDashboard({
                                         )}
                                       </tr>
                                     </thead>
-                                    <tbody className="text-xs divide-y divide-[#3a3633]">
+                                    <tbody className="text-xs divide-y divide-border">
                                       {tableView === 'cannibalization' ? (
                                         sortedCannRows.length === 0 ? (
                                           <tr>
                                             <td
                                               colSpan={4}
-                                              className="py-8 text-center text-xs text-[#9ca3af]"
+                                              className="py-8 text-center text-xs text-muted-foreground"
                                             >
                                               카니발리제이션 데이터 없음 — 500m 반경 내 경쟁 매장이
                                               없거나 분석 대상 지역 밖입니다.
@@ -3099,7 +3110,7 @@ function SimulatorDashboard({
                                         <tr>
                                           <td
                                             colSpan={4}
-                                            className="py-8 text-center text-xs text-[#9ca3af]"
+                                            className="py-8 text-center text-xs text-muted-foreground"
                                           >
                                             행정동 비교 데이터 없음 — 시뮬레이션을 실행해 주세요.
                                           </td>
@@ -3126,7 +3137,7 @@ function SimulatorDashboard({
                                   </table>
                                 </div>
                                 {/* Footer — 빈 공간을 채우는 메타 정보 */}
-                                <div className="px-5 py-3 border-t border-[#3a3633] flex justify-between items-center text-[0.625rem] font-mono text-[#9ca3af]">
+                                <div className="px-5 py-3 border-t border-border flex justify-between items-center text-[0.625rem] font-mono text-muted-foreground">
                                   <span>
                                     총{' '}
                                     {tableView === 'cannibalization'
@@ -3145,7 +3156,7 @@ function SimulatorDashboard({
                             {/* Right Column */}
                             <div className="lg:flex-[1] flex flex-col gap-4">
                               {/* Radar Chart */}
-                              <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center">
+                              <div className="bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col items-center justify-center">
                                 <div className="w-full text-left mb-2">
                                   <h2 className="text-sm font-bold text-white">
                                     상권 종합 지표 분석 (7 Core Metrics)
@@ -3156,13 +3167,13 @@ function SimulatorDashboard({
                                 </div>
                                 <div className="relative w-[180px] h-[180px] my-2">
                                   {!hasMarketReport && (
-                                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
+                                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-border bg-card/60 backdrop-blur-[2px]">
                                       <div className="text-center px-3">
-                                        <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-[#3a3633]" />
-                                        <div className="text-[0.6875rem] font-semibold text-[#e2e8f0]">
+                                        <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-border" />
+                                        <div className="text-[0.6875rem] font-semibold text-foreground">
                                           구현 예정
                                         </div>
-                                        <div className="mt-0.5 text-[0.5625rem] text-[#9ca3af]">
+                                        <div className="mt-0.5 text-[0.5625rem] text-muted-foreground">
                                           market_report 대기
                                         </div>
                                       </div>
@@ -3186,30 +3197,72 @@ function SimulatorDashboard({
                                     {/* Grid + axis (항상 표시) */}
                                     <polygon
                                       points="100,40 147,63 158,113 126,154 74,154 42,113 53,63"
-                                      fill="#1e1b18"
-                                      stroke="#3a3633"
+                                      fill="var(--card)"
+                                      stroke="var(--border)"
                                       strokeWidth="1"
                                     />
                                     <polygon
                                       points="100,70 123.5,81.5 129,106.5 113,127 87,127 71,106.5 76.5,81.5"
                                       fill="none"
-                                      stroke="#3a3633"
+                                      stroke="var(--border)"
                                       strokeWidth="1"
                                       strokeDasharray="2 2"
                                     />
-                                    <line x1="100" y1="100" x2="100" y2="40" stroke="#3a3633" />
-                                    <line x1="100" y1="100" x2="147" y2="63" stroke="#3a3633" />
-                                    <line x1="100" y1="100" x2="158" y2="113" stroke="#3a3633" />
-                                    <line x1="100" y1="100" x2="126" y2="154" stroke="#3a3633" />
-                                    <line x1="100" y1="100" x2="74" y2="154" stroke="#3a3633" />
-                                    <line x1="100" y1="100" x2="42" y2="113" stroke="#3a3633" />
-                                    <line x1="100" y1="100" x2="53" y2="63" stroke="#3a3633" />
+                                    <line
+                                      x1="100"
+                                      y1="100"
+                                      x2="100"
+                                      y2="40"
+                                      stroke="var(--border)"
+                                    />
+                                    <line
+                                      x1="100"
+                                      y1="100"
+                                      x2="147"
+                                      y2="63"
+                                      stroke="var(--border)"
+                                    />
+                                    <line
+                                      x1="100"
+                                      y1="100"
+                                      x2="158"
+                                      y2="113"
+                                      stroke="var(--border)"
+                                    />
+                                    <line
+                                      x1="100"
+                                      y1="100"
+                                      x2="126"
+                                      y2="154"
+                                      stroke="var(--border)"
+                                    />
+                                    <line
+                                      x1="100"
+                                      y1="100"
+                                      x2="74"
+                                      y2="154"
+                                      stroke="var(--border)"
+                                    />
+                                    <line
+                                      x1="100"
+                                      y1="100"
+                                      x2="42"
+                                      y2="113"
+                                      stroke="var(--border)"
+                                    />
+                                    <line
+                                      x1="100"
+                                      y1="100"
+                                      x2="53"
+                                      y2="63"
+                                      stroke="var(--border)"
+                                    />
                                     {/* Data polygon + dots — market_report 기반 동적 계산 */}
                                     <g clipPath="url(#radarReveal)">
                                       <polygon
                                         points={radarPointsStr}
                                         fill="rgba(99,102,241,0.4)"
-                                        stroke="#818cf8"
+                                        stroke="var(--primary)"
                                         strokeWidth="2"
                                         className="drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]"
                                       />
@@ -3219,10 +3272,10 @@ function SimulatorDashboard({
                                     </g>
                                     <text
                                       onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[#818cf8] transition-colors"
+                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
                                       x="100"
                                       y="32"
-                                      fill="#e5e5e5"
+                                      fill="var(--muted-foreground)"
                                       fontSize="10"
                                       fontWeight="bold"
                                       textAnchor="middle"
@@ -3231,10 +3284,10 @@ function SimulatorDashboard({
                                     </text>
                                     <text
                                       onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[#818cf8] transition-colors"
+                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
                                       x="157"
                                       y="60"
-                                      fill="#a3a3a3"
+                                      fill="var(--muted-foreground)"
                                       fontSize="10"
                                       textAnchor="start"
                                     >
@@ -3242,10 +3295,10 @@ function SimulatorDashboard({
                                     </text>
                                     <text
                                       onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[#818cf8] transition-colors"
+                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
                                       x="168"
                                       y="117"
-                                      fill="#a3a3a3"
+                                      fill="var(--muted-foreground)"
                                       fontSize="10"
                                       textAnchor="start"
                                     >
@@ -3253,10 +3306,10 @@ function SimulatorDashboard({
                                     </text>
                                     <text
                                       onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[#818cf8] transition-colors"
+                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
                                       x="133"
                                       y="166"
-                                      fill="#a3a3a3"
+                                      fill="var(--muted-foreground)"
                                       fontSize="10"
                                       textAnchor="middle"
                                     >
@@ -3264,10 +3317,10 @@ function SimulatorDashboard({
                                     </text>
                                     <text
                                       onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[#818cf8] transition-colors"
+                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
                                       x="67"
                                       y="166"
-                                      fill="#a3a3a3"
+                                      fill="var(--muted-foreground)"
                                       fontSize="10"
                                       textAnchor="middle"
                                     >
@@ -3275,10 +3328,10 @@ function SimulatorDashboard({
                                     </text>
                                     <text
                                       onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[#818cf8] transition-colors"
+                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
                                       x="32"
                                       y="117"
-                                      fill="#a3a3a3"
+                                      fill="var(--muted-foreground)"
                                       fontSize="10"
                                       textAnchor="end"
                                     >
@@ -3286,10 +3339,10 @@ function SimulatorDashboard({
                                     </text>
                                     <text
                                       onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[#818cf8] transition-colors"
+                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
                                       x="43"
                                       y="60"
-                                      fill="#a3a3a3"
+                                      fill="var(--muted-foreground)"
                                       fontSize="10"
                                       textAnchor="end"
                                     >
@@ -3337,7 +3390,7 @@ function SimulatorDashboard({
                                   );
                                   return (
                                     <div
-                                      className={`bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col gap-3 ${
+                                      className={`bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col gap-3 ${
                                         cr.is_mock ? 'opacity-60' : ''
                                       }`}
                                     >
@@ -3363,17 +3416,17 @@ function SimulatorDashboard({
                                       </div>
                                       <div>
                                         <div className="flex items-baseline justify-between mb-1.5">
-                                          <span className="text-[0.625rem] text-[#9ca3af]">
+                                          <span className="text-[0.625rem] text-muted-foreground">
                                             위험 점수
                                           </span>
                                           <span className="text-lg font-bold text-white font-mono tabular-nums">
                                             {pct}
-                                            <span className="text-[0.6875rem] text-[#9ca3af] ml-0.5">
+                                            <span className="text-[0.6875rem] text-muted-foreground ml-0.5">
                                               /100
                                             </span>
                                           </span>
                                         </div>
-                                        <div className="w-full h-2 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                        <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border">
                                           <div
                                             className={`h-full ${levelConfig.bar} transition-all duration-700`}
                                             style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
@@ -3381,10 +3434,10 @@ function SimulatorDashboard({
                                         </div>
                                       </div>
                                       {(topLgbm.length > 0 || topTcn.length > 0) && (
-                                        <div className="flex flex-col gap-3 pt-2 border-t border-[#3a3633]">
+                                        <div className="flex flex-col gap-3 pt-2 border-t border-border">
                                           {topLgbm.length > 0 && (
                                             <div className="flex flex-col gap-1.5">
-                                              <div className="text-[0.625rem] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                              <div className="text-[0.625rem] text-muted-foreground mb-0.5 flex items-center gap-1.5">
                                                 <span className="w-1 h-1 rounded-full bg-indigo-400" />
                                                 LightGBM · 과거 패턴 기여 Top {topLgbm.length}
                                               </div>
@@ -3398,10 +3451,10 @@ function SimulatorDashboard({
                                                     key={`lgbm-${i}`}
                                                     className="flex items-center gap-2 text-[0.625rem]"
                                                   >
-                                                    <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
+                                                    <span className="w-28 shrink-0 text-foreground truncate">
                                                       {s.feature}
                                                     </span>
-                                                    <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                                    <div className="flex-1 h-1.5 bg-card rounded-full overflow-hidden border border-border">
                                                       <div
                                                         className={`h-full ${positive ? 'bg-rose-400' : 'bg-emerald-400'}`}
                                                         style={{ width: `${w}%` }}
@@ -3419,8 +3472,8 @@ function SimulatorDashboard({
                                             </div>
                                           )}
                                           {topTcn.length > 0 && (
-                                            <div className="flex flex-col gap-1.5 pt-2 border-t border-[#3a3633]/50">
-                                              <div className="text-[0.625rem] text-[#9ca3af] mb-0.5 flex items-center gap-1.5">
+                                            <div className="flex flex-col gap-1.5 pt-2 border-t border-border/50">
+                                              <div className="text-[0.625rem] text-muted-foreground mb-0.5 flex items-center gap-1.5">
                                                 <span className="w-1 h-1 rounded-full bg-cyan-400" />
                                                 TCN · 시계열 흐름 기여 Top {topTcn.length}
                                               </div>
@@ -3434,10 +3487,10 @@ function SimulatorDashboard({
                                                     key={`tcn-${i}`}
                                                     className="flex items-center gap-2 text-[0.625rem]"
                                                   >
-                                                    <span className="w-28 shrink-0 text-[#e2e8f0] truncate">
+                                                    <span className="w-28 shrink-0 text-foreground truncate">
                                                       {s.feature}
                                                     </span>
-                                                    <div className="flex-1 h-1.5 bg-[#1e1b18] rounded-full overflow-hidden border border-[#3a3633]">
+                                                    <div className="flex-1 h-1.5 bg-card rounded-full overflow-hidden border border-border">
                                                       <div
                                                         className={`h-full ${positive ? 'bg-cyan-400' : 'bg-emerald-400'}`}
                                                         style={{ width: `${w}%` }}
@@ -3460,8 +3513,8 @@ function SimulatorDashboard({
                                   );
                                 })()
                               ) : (
-                                <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col items-center justify-center min-h-[120px]">
-                                  <span className="text-xs text-[#9ca3af]">
+                                <div className="bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col items-center justify-center min-h-[120px]">
+                                  <span className="text-xs text-muted-foreground">
                                     폐업 위험도 데이터 없음
                                   </span>
                                 </div>
@@ -3492,33 +3545,33 @@ function SimulatorDashboard({
                                 const top3 = d.top_3_age_groups ?? [];
                                 const peakHours = d.peak_consumption_hours ?? [];
                                 return (
-                                  <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-5 shadow-xl">
+                                  <div className="rounded-xl border border-border bg-card p-5 shadow-xl">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
-                                        <Users className="h-4 w-4 text-[#818cf8]" />
-                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-[#9ca3af]">
+                                        <Users className="h-4 w-4 text-primary" />
+                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
                                           핵심 소비층 분석
                                         </h3>
                                       </div>
                                       {d.elderly_ratio != null && (
-                                        <span className="text-xs font-mono tabular-nums text-[#9ca3af]">
+                                        <span className="text-xs font-mono tabular-nums text-muted-foreground">
                                           고령: {d.elderly_ratio.toFixed(1)}%
                                         </span>
                                       )}
                                     </div>
 
                                     {core && (core.age || core.gender) && (
-                                      <div className="mt-3 rounded-lg bg-[#818cf8]/10 p-3 ring-1 ring-[#818cf8]/30">
-                                        <div className="text-xs uppercase tracking-wider text-[#a5b4fc]">
+                                      <div className="mt-3 rounded-lg bg-primary/10 p-3 ring-1 ring-primary/30">
+                                        <div className="text-xs uppercase tracking-wider text-primary">
                                           주 소비층
                                         </div>
                                         <div className="mt-1 flex items-baseline gap-2 flex-wrap">
-                                          <span className="text-2xl font-bold text-[#e2e8f0]">
+                                          <span className="text-2xl font-bold text-foreground">
                                             {core.age ? `${core.age}대` : ''}{' '}
                                             {genderKo(core.gender ?? '')}
                                           </span>
                                           {typeof core.share === 'number' && (
-                                            <span className="text-sm text-[#9ca3af]">
+                                            <span className="text-sm text-muted-foreground">
                                               {(core.share * 100).toFixed(1)}% 매출 기여
                                             </span>
                                           )}
@@ -3528,7 +3581,7 @@ function SimulatorDashboard({
 
                                     {top3.length > 0 && (
                                       <div className="mt-4 space-y-2">
-                                        <div className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af]">
+                                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                           연령대 TOP 3
                                         </div>
                                         {top3.map((a) => (
@@ -3536,18 +3589,18 @@ function SimulatorDashboard({
                                             key={a.age_group}
                                             className="flex items-center gap-2 text-xs"
                                           >
-                                            <span className="w-12 text-[#e2e8f0]">
+                                            <span className="w-12 text-foreground">
                                               {a.age_group}대
                                             </span>
-                                            <div className="flex-1 rounded-full bg-[#1e1b18]/50">
+                                            <div className="flex-1 rounded-full bg-card/50">
                                               <div
-                                                className="h-2 rounded-full bg-[#818cf8]"
+                                                className="h-2 rounded-full bg-primary"
                                                 style={{
                                                   width: `${Math.min(100, Math.max(0, a.share * 100))}%`,
                                                 }}
                                               />
                                             </div>
-                                            <span className="w-12 text-right font-mono tabular-nums text-[#9ca3af]">
+                                            <span className="w-12 text-right font-mono tabular-nums text-muted-foreground">
                                               {(a.share * 100).toFixed(1)}%
                                             </span>
                                           </div>
@@ -3556,30 +3609,30 @@ function SimulatorDashboard({
                                     )}
 
                                     <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-2">
-                                        <div className="text-[#9ca3af]">피크</div>
-                                        <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                      <div className="rounded-lg bg-card/50 p-2">
+                                        <div className="text-muted-foreground">피크</div>
+                                        <div className="mt-1 font-semibold text-foreground">
                                           {peakHours.slice(0, 2).join(' · ') || 'N/A'}
                                         </div>
                                       </div>
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-2">
-                                        <div className="text-[#9ca3af]">평/주말</div>
-                                        <div className="mt-1 font-semibold font-mono tabular-nums text-[#e2e8f0]">
+                                      <div className="rounded-lg bg-card/50 p-2">
+                                        <div className="text-muted-foreground">평/주말</div>
+                                        <div className="mt-1 font-semibold font-mono tabular-nums text-foreground">
                                           {typeof d.weekday_weekend_ratio === 'number'
                                             ? d.weekday_weekend_ratio.toFixed(2)
                                             : 'N/A'}
                                         </div>
                                       </div>
-                                      <div className="rounded-lg bg-[#1e1b18]/50 p-2">
-                                        <div className="text-[#9ca3af]">소득</div>
-                                        <div className="mt-1 font-semibold text-[#e2e8f0]">
+                                      <div className="rounded-lg bg-card/50 p-2">
+                                        <div className="text-muted-foreground">소득</div>
+                                        <div className="mt-1 font-semibold text-foreground">
                                           {incomeLevelKo(d.area_income_level ?? 'unknown')}
                                         </div>
                                       </div>
                                     </div>
 
                                     {d.resident_visitor_ratio != null && (
-                                      <div className="mt-3 flex items-center gap-1.5 text-xs text-[#9ca3af]">
+                                      <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
                                         <MapPin className="h-3 w-3 text-slate-400" />
                                         <span>
                                           외부 방문객 비율:{' '}
@@ -3599,7 +3652,7 @@ function SimulatorDashboard({
                                           </span>
                                         </div>
                                         {d.match_rationale && (
-                                          <p className="mt-1 text-xs text-[#e2e8f0]">
+                                          <p className="mt-1 text-xs text-foreground">
                                             {d.match_rationale}
                                           </p>
                                         )}
@@ -3607,7 +3660,7 @@ function SimulatorDashboard({
                                     )}
 
                                     {d.narrative && (
-                                      <p className="mt-4 text-xs leading-relaxed text-[#9ca3af]">
+                                      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
                                         {d.narrative}
                                       </p>
                                     )}
@@ -3616,13 +3669,13 @@ function SimulatorDashboard({
                               })()}
 
                               {/* Insights */}
-                              <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-xl flex flex-col flex-1">
+                              <div className="bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col flex-1">
                                 {/* Header with dynamic counter */}
                                 <div className="flex items-center justify-between mb-3">
                                   <h2 className="text-sm font-bold text-white">
                                     SPOTTER AI 인사이트
                                   </h2>
-                                  <span className="font-mono text-[0.5625rem] uppercase tracking-widest text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/30 px-2 py-0.5 rounded-full">
+                                  <span className="font-mono text-[0.5625rem] uppercase tracking-widest text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded-full">
                                     3 INSIGHTS
                                   </span>
                                 </div>
@@ -3699,27 +3752,27 @@ function SimulatorDashboard({
                                     return (
                                       <div
                                         onClick={() => openLegalDrawer(null)}
-                                        className="flex flex-col gap-2 p-3 rounded-lg bg-[#1e1b18] border border-[#3a3633] cursor-pointer hover:border-[#818cf8] hover:bg-[#818cf8]/[0.05] transition-all group"
+                                        className="flex flex-col gap-2 p-3 rounded-lg bg-card border border-border cursor-pointer hover:border-primary hover:bg-primary/[0.05] transition-all group"
                                       >
                                         <div className="flex items-center gap-3">
                                           <Scale
                                             className={`w-4 h-4 shrink-0 ${topSev === 'critical' ? 'text-rose-500' : 'text-amber-400'}`}
                                           />
                                           <div className="flex-1 flex items-center justify-between gap-2">
-                                            <h4 className="text-[#e2e8f0] font-bold text-xs">
+                                            <h4 className="text-foreground font-bold text-xs">
                                               법률 리스크 종합
                                             </h4>
                                             <span className="inline-flex items-center gap-1 shrink-0">
                                               <span
                                                 className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-rose-500' : 'bg-amber-400'}`}
                                               />
-                                              <span className="text-[0.5rem] font-mono uppercase tracking-wider text-[#9ca3af]">
+                                              <span className="text-[0.5rem] font-mono uppercase tracking-wider text-muted-foreground">
                                                 {topSev === 'critical' ? '필수이행' : '확인필요'}
                                               </span>
                                             </span>
                                           </div>
                                         </div>
-                                        <div className="flex flex-col gap-2 border-t border-[#3a3633] pt-2">
+                                        <div className="flex flex-col gap-2 border-t border-border pt-2">
                                           {dangerRisks.map((risk, i) => {
                                             const sev = severityOf(risk.risk_level);
                                             const isCritical = sev === 'critical';
@@ -3730,11 +3783,11 @@ function SimulatorDashboard({
                                                   e.stopPropagation();
                                                   openLegalDrawer(risk.type);
                                                 }}
-                                                className={`flex gap-2.5 pl-2.5 border-l-2 cursor-pointer rounded-r hover:bg-[#818cf8]/[0.08] transition-colors ${isCritical ? 'border-rose-500' : 'border-amber-400'}`}
+                                                className={`flex gap-2.5 pl-2.5 border-l-2 cursor-pointer rounded-r hover:bg-primary/[0.08] transition-colors ${isCritical ? 'border-rose-500' : 'border-primary'}`}
                                               >
                                                 <div className="flex flex-col gap-0.5 flex-1 min-w-0 py-0.5">
                                                   <div className="flex items-center gap-1.5">
-                                                    <span className="text-[#e2e8f0] text-[0.6875rem] font-semibold">
+                                                    <span className="text-foreground text-[0.6875rem] font-semibold">
                                                       {TYPE_LABEL[risk.type] || risk.type}
                                                     </span>
                                                     <span
@@ -3744,7 +3797,7 @@ function SimulatorDashboard({
                                                     </span>
                                                   </div>
                                                   {risk.detail && (
-                                                    <p className="text-[#9ca3af] text-[0.625rem] leading-relaxed">
+                                                    <p className="text-muted-foreground text-[0.625rem] leading-relaxed">
                                                       {risk.detail}
                                                     </p>
                                                   )}
@@ -3778,15 +3831,15 @@ function SimulatorDashboard({
                                 <div className="flex flex-col gap-2 mt-3 shrink-0">
                                   <button
                                     onClick={() => setIsWorkflowOpen(true)}
-                                    className="w-full py-2.5 bg-gradient-to-r from-[#818cf8]/20 to-transparent hover:from-[#818cf8]/40 border border-[#818cf8]/30 rounded-md text-xs font-bold text-[#e2e8f0] transition-all flex items-center justify-between px-4 group shadow-[0_0_15px_rgba(129,140,248,0.1)] hover:shadow-[0_0_20px_rgba(129,140,248,0.25)]"
+                                    className="w-full py-2.5 bg-gradient-to-r from-primary/20 to-transparent hover:from-primary/40 border border-primary/30 rounded-md text-xs font-bold text-foreground transition-all flex items-center justify-between px-4 group shadow-[0_0_15px_rgba(129,140,248,0.1)] hover:shadow-[0_0_20px_rgba(129,140,248,0.25)]"
                                   >
                                     <div className="flex items-center gap-2">
-                                      <Network className="w-4 h-4 text-[#818cf8] group-hover:scale-110 transition-transform" />
+                                      <Network className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
                                       <span>AI 에이전트 워크플로우 보기</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                      <span className="text-[0.625rem] font-mono text-[#818cf8]">
+                                      <span className="text-[0.625rem] font-mono text-primary">
                                         LIVE
                                       </span>
                                     </div>
@@ -3799,14 +3852,14 @@ function SimulatorDashboard({
                       ) : dashboardMode === 'map' ? (
                         /* 🗺️ AI 에이전트 맵 뷰 — KPI 없이 화면 꽉 채움 */
                         <div className="flex-1 w-full h-full min-h-[700px] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
-                          <div className="flex-1 bg-[#1e1b18] border border-[#3a3633] rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
+                          <div className="flex-1 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
                             {/* 맵 헤더 */}
-                            <div className="h-14 bg-[#171717]/90 backdrop-blur-md border-b border-[#3a3633] flex justify-between items-center px-6 shrink-0 z-50">
+                            <div className="h-14 bg-muted/90 backdrop-blur-md border-b border-border flex justify-between items-center px-6 shrink-0 z-50">
                               <h3 className="text-sm font-black text-white flex items-center gap-3">
-                                <span className="w-2.5 h-2.5 rounded-full bg-[#818cf8] animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
+                                <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
                                 Multi-Agent Geospatial Recommendations
                               </h3>
-                              <p className="text-xs text-[#9ca3af] font-mono tracking-widest">
+                              <p className="text-xs text-muted-foreground font-mono tracking-widest">
                                 AI AGENT TARGETING SYSTEM
                               </p>
                             </div>
@@ -4062,7 +4115,7 @@ function SimulatorDashboard({
                   reportState === 'loading'
                     ? 'opacity-50 cursor-not-allowed'
                     : 'hover:scale-[1.02] active:scale-[0.98]'
-                } bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:from-[#4f46e5] hover:to-[#6366f1]`}
+                } bg-primary text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:bg-primary/90`}
               >
                 <Play size={16} />
                 RUN SIMULATION
@@ -4077,34 +4130,34 @@ function SimulatorDashboard({
           ========================================== */}
       <>
         <div
-          className={`fixed inset-0 z-[100] bg-[#050505]/70 backdrop-blur-sm transition-opacity duration-500 ${isWorkflowOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+          className={`fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm transition-opacity duration-500 ${isWorkflowOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
           onClick={() => setIsWorkflowOpen(false)}
         />
         <div
-          className={`fixed top-0 right-0 w-full md:w-[600px] h-full bg-[#1e1b18] border-l border-[#3a3633] z-[101] shadow-2xl flex flex-col transition-transform duration-[800ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isWorkflowOpen ? 'translate-x-0' : 'translate-x-full'}`}
+          className={`fixed top-0 right-0 w-full md:w-[600px] h-full bg-card border-l border-border z-[101] shadow-2xl flex flex-col transition-transform duration-[800ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${isWorkflowOpen ? 'translate-x-0' : 'translate-x-full'}`}
         >
-          <div className="flex justify-between items-center p-6 border-b border-[#3a3633] bg-[#2c2825]">
+          <div className="flex justify-between items-center p-6 border-b border-border bg-card">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#818cf8]/10 border border-[#818cf8]/20 flex items-center justify-center">
-                <Terminal className="w-4 h-4 text-[#818cf8]" />
+              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Terminal className="w-4 h-4 text-primary" />
               </div>
               <div>
                 <h2 className="text-sm font-bold text-white tracking-tight">
                   LangGraph Execution Log
                 </h2>
-                <p className="text-[0.625rem] text-[#a3a3a3] font-mono mt-0.5">
+                <p className="text-[0.625rem] text-muted-foreground font-mono mt-0.5">
                   MULTI-AGENT PIPELINE
                 </p>
               </div>
             </div>
             <button
               onClick={() => setIsWorkflowOpen(false)}
-              className="p-2 text-[#a3a3a3] hover:text-white hover:bg-[#3a3633] rounded-lg transition-colors"
+              className="p-2 text-muted-foreground hover:text-white hover:bg-border rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-6 bg-[#171717] custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-6 bg-muted custom-scrollbar">
             {/* drawer 닫혀있으면 unmount — lazy chunk fetch 지연 + 내부 setTimeout 3개가
                 보이지 않을 때 시작되는 것을 방지 (code-review #4) */}
             {isWorkflowOpen && (
@@ -4304,13 +4357,13 @@ function SimulatorDashboard({
    App — Root (전체 앱 진입점)
    ═══════════════════════════════════════════════════════
    [글로벌 상태]
-   - isDark: Light/Dark 테마 토글 (SkyThemeToggle 연결)
    - isTransitioning: 씬 전환 시 800ms 암전 오버레이
    - isAppLoaded: 프리로더 완료 여부
+   (다크 토글은 v5.0 폐기 — 라이트 단일)
 
    [글로벌 헤더]
    - 인트로 제외 모든 씬에 공통 표시
-   - 좌: 로고+BACK / 우: SkyThemeToggle + GlobalLimelightNav
+   - 좌: 로고+BACK / 우: GlobalLimelightNav
    - ※ AccordionGallery는 자체 3열 헤더를 사용 (중앙 인디케이터 포함)
 
    [프리로더]
@@ -4355,7 +4408,7 @@ function DashboardOutlet() {
   return (
     <div
       data-dashboard-scroll
-      className="relative h-screen overflow-y-scroll custom-scrollbar bg-[#0C0B0A] pb-16 text-stone-100"
+      className="relative h-screen overflow-y-scroll custom-scrollbar bg-background pb-16 text-stone-100"
       style={{ overscrollBehaviorY: 'contain' }}
     >
       <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
@@ -4632,7 +4685,7 @@ export default function App() {
 
               {/* Global header — all scenes except intro */}
               {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
-                <header className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633] flex items-center px-8 md:px-16 justify-between bg-[#1e1b18]/90 backdrop-blur-md z-50 transition-colors duration-500">
+                <header className="fixed top-0 left-0 w-full h-24 border-b border-border flex items-center px-8 md:px-16 justify-between bg-card/90 backdrop-blur-md z-50 transition-colors duration-500">
                   <div className="flex items-center gap-4">
                     <button
                       onClick={() => transitionTo('intro')}
@@ -4700,7 +4753,7 @@ export default function App() {
               {/* 3D Hologram Preloader */}
               {!isAppLoaded && (
                 <div
-                  className="absolute inset-0 z-[99999] bg-[#1e1b18] flex flex-col items-center justify-center"
+                  className="absolute inset-0 z-[99999] bg-card flex flex-col items-center justify-center"
                   style={{
                     animation:
                       loadProgress === 100
@@ -4736,7 +4789,7 @@ export default function App() {
                           cy="100"
                           r="95"
                           fill="none"
-                          stroke="#818cf8"
+                          stroke="var(--primary)"
                           strokeWidth="0.5"
                           strokeDasharray="2 6"
                         />
@@ -4745,7 +4798,7 @@ export default function App() {
                           cy="100"
                           r="90"
                           fill="none"
-                          stroke="#818cf8"
+                          stroke="var(--primary)"
                           strokeWidth="2"
                           strokeDasharray="10 40 30 20"
                         />
@@ -4765,12 +4818,12 @@ export default function App() {
                           cy="100"
                           r="85"
                           fill="none"
-                          stroke="#6366f1"
+                          stroke="var(--primary)"
                           strokeWidth="3"
                           strokeDasharray="60 30 10 30"
                           strokeLinecap="round"
                         />
-                        <circle cx="100" cy="15" r="5" fill="#818cf8" />
+                        <circle cx="100" cy="15" r="5" fill="var(--primary)" />
                       </svg>
 
                       {/* Ring 3 */}
@@ -4787,7 +4840,7 @@ export default function App() {
                           cy="100"
                           r="75"
                           fill="none"
-                          stroke="#a5b4fc"
+                          stroke="var(--primary)"
                           strokeWidth="1"
                           strokeDasharray="4 8"
                         />
@@ -4796,7 +4849,7 @@ export default function App() {
                           cy="100"
                           r="70"
                           fill="none"
-                          stroke="#818cf8"
+                          stroke="var(--primary)"
                           strokeWidth="1.5"
                           strokeDasharray="40 80"
                         />
@@ -4816,9 +4869,9 @@ export default function App() {
                           cy="100"
                           r="88"
                           fill="none"
-                          stroke="#a5b4fc"
+                          stroke="var(--primary)"
                           strokeWidth="1"
-                          style={{ filter: 'drop-shadow(0 0 8px #a5b4fc)' }}
+                          style={{ filter: 'drop-shadow(0 0 8px var(--primary))' }}
                         />
                         <circle cx="100" cy="12" r="3" fill="#ffffff" />
                         <circle cx="100" cy="188" r="3" fill="#ffffff" />
@@ -4838,7 +4891,7 @@ export default function App() {
                           cy="100"
                           r="98"
                           fill="none"
-                          stroke="#818cf8"
+                          stroke="var(--primary)"
                           strokeWidth="1"
                           strokeDasharray="4 16"
                         />
@@ -4847,7 +4900,7 @@ export default function App() {
                           cy="100"
                           r="94"
                           fill="none"
-                          stroke="#6366f1"
+                          stroke="var(--primary)"
                           strokeWidth="0.5"
                         />
                       </svg>
@@ -4869,7 +4922,7 @@ export default function App() {
                   </div>
 
                   {/* Terminal logs */}
-                  <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[0.625rem] md:text-xs text-[#9ca3af] max-w-md">
+                  <div className="absolute bottom-10 left-10 md:bottom-16 md:left-16 font-mono text-[0.625rem] md:text-xs text-muted-foreground max-w-md">
                     <div className="flex flex-col gap-1.5">
                       {loadLogs.map((log, idx) => (
                         <div

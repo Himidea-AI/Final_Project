@@ -52,24 +52,24 @@ export default function IntroScene({
       {showWelcome ? (
         <button
           onClick={handleWelcomeClick}
-          className="absolute top-6 right-6 z-40 flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#e2e8f0] hover:text-[#818cf8]"
+          className="absolute top-6 right-6 z-40 flex items-center gap-2 px-4 py-1.5 rounded-full bg-card/70 backdrop-blur-md border border-border hover:border-primary hover:bg-card hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-foreground hover:text-primary"
           title={`${user?.role === 'master' ? 'HQ 지휘소' : '시뮬레이터'}로 이동`}
         >
           <span className="text-[0.6875rem] font-medium tracking-wide">
-            {brandName && <span className="text-[#818cf8]">{brandName}</span>}
-            {brandName && personName && <span className="text-[#9ca3af]"> · </span>}
+            {brandName && <span className="text-primary">{brandName}</span>}
+            {brandName && personName && <span className="text-muted-foreground"> · </span>}
             {personName && (
               <span>
                 {personName} {roleTitle}
               </span>
             )}
-            <span className="text-[#9ca3af]">님 환영합니다</span>
+            <span className="text-muted-foreground">님 환영합니다</span>
           </span>
         </button>
       ) : (
         <button
           onClick={onLoginClick}
-          className="absolute top-6 right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1e1b18]/70 backdrop-blur-md border border-[#3a3633] hover:border-[#818cf8] hover:bg-[#1e1b18] hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-[#9ca3af] hover:text-[#818cf8]"
+          className="absolute top-6 right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/70 backdrop-blur-md border border-border hover:border-primary hover:bg-card hover:shadow-[0_0_15px_rgba(129,140,248,0.25)] transition-all duration-200 text-muted-foreground hover:text-primary"
           title="Login"
         >
           <LogIn className="w-3 h-3" />
@@ -85,7 +85,7 @@ export default function IntroScene({
       {/* Right section — Floating Logo with Glow (원래 위치 복원) */}
       <div className="absolute right-[10%] top-1/2 -translate-y-1/2 p-10 cursor-pointer group hidden md:flex flex-col items-center pointer-events-auto z-30">
         <div className="relative animate-float-logo">
-          <div className="absolute inset-0 bg-[#818cf8] blur-[50px] opacity-0 group-hover:opacity-30 transition-all duration-700 ease-out scale-75 group-hover:scale-125" />
+          <div className="absolute inset-0 bg-primary blur-[50px] opacity-0 group-hover:opacity-30 transition-all duration-700 ease-out scale-75 group-hover:scale-125" />
           <img
             src="/logo.svg"
             alt="SPOTTER"
@@ -93,10 +93,10 @@ export default function IntroScene({
           />
         </div>
         <div className="mt-8 text-center transition-all duration-500 group-hover:scale-105">
-          <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] text-[#e2e8f0]">
+          <h1 className="text-4xl md:text-5xl font-black tracking-[0.2em] text-foreground">
             SPOTTER
           </h1>
-          <p className="text-[#818cf8] font-mono text-xs tracking-widest mt-3 uppercase opacity-60 transition-opacity duration-500 group-hover:opacity-100">
+          <p className="text-primary font-mono text-xs tracking-widest mt-3 uppercase opacity-60 transition-opacity duration-500 group-hover:opacity-100">
             AI Franchise Simulator
           </p>
         </div>
@@ -134,15 +134,15 @@ export default function IntroScene({
               >
                 {/* Indicator bar */}
                 <div
-                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-[#818cf8] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
+                  className={`absolute -left-10 top-1/2 -translate-y-1/2 w-1.5 h-[80%] bg-primary rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
                     isActive ? 'scale-x-100' : 'scale-x-0'
                   }`}
                 />
                 <span
                   className={`inline-block ${sizeClasses} font-black uppercase tracking-tight leading-none whitespace-nowrap origin-left transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                     isActive
-                      ? 'text-[#e2e8f0] translate-x-0'
-                      : 'text-[#3a3633] -translate-x-2 group-hover:text-[#9ca3af]'
+                      ? 'text-foreground translate-x-0'
+                      : 'text-border -translate-x-2 group-hover:text-muted-foreground'
                   }`}
                 >
                   {item}
@@ -154,29 +154,29 @@ export default function IntroScene({
       </div>
 
       {/* Bottom Marquee Strip (idea 4) — 화면 하단 가로 스크롤 데이터 띠 */}
-      <div className="absolute bottom-0 left-0 w-full overflow-hidden border-t border-[#3a3633]/40 py-3 pointer-events-none z-20 bg-[#1e1b18]/50 backdrop-blur-sm">
+      <div className="absolute bottom-0 left-0 w-full overflow-hidden border-t border-border/40 py-3 pointer-events-none z-20 bg-card/50 backdrop-blur-sm">
         <div className="flex animate-marquee whitespace-nowrap">
           {[...Array(2)].map((_, k) => (
             <div
               key={k}
               className="flex items-center gap-12 px-6 font-mono text-[0.625rem] uppercase tracking-[0.3em] shrink-0"
             >
-              <span className="text-[#9ca3af]">AI Market Intelligence</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#818cf8]">Mapo-Gu MVP</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">Cannibalization Analysis</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">12-Month Forecast</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#818cf8]">Live Data · 19 Sources</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">25 Districts</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#9ca3af]">LangGraph Multi-Agent</span>
-              <span className="text-[#3a3633]">●</span>
-              <span className="text-[#818cf8]">Project SPOTTER v3.8</span>
-              <span className="text-[#3a3633]">●</span>
+              <span className="text-muted-foreground">AI Market Intelligence</span>
+              <span className="text-border">●</span>
+              <span className="text-primary">Mapo-Gu MVP</span>
+              <span className="text-border">●</span>
+              <span className="text-muted-foreground">Cannibalization Analysis</span>
+              <span className="text-border">●</span>
+              <span className="text-muted-foreground">12-Month Forecast</span>
+              <span className="text-border">●</span>
+              <span className="text-primary">Live Data · 19 Sources</span>
+              <span className="text-border">●</span>
+              <span className="text-muted-foreground">25 Districts</span>
+              <span className="text-border">●</span>
+              <span className="text-muted-foreground">LangGraph Multi-Agent</span>
+              <span className="text-border">●</span>
+              <span className="text-primary">Project SPOTTER v3.8</span>
+              <span className="text-border">●</span>
             </div>
           ))}
         </div>

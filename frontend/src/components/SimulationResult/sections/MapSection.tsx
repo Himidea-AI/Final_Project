@@ -172,7 +172,7 @@ export function MapSection({ simResult }: Props) {
                   height: 0,
                   borderLeft: '6px solid transparent',
                   borderRight: '6px solid transparent',
-                  borderBottom: '11px solid #ef4444',
+                  borderBottom: '11px solid var(--danger)',
                   display: 'inline-block',
                 }}
               />
@@ -185,7 +185,7 @@ export function MapSection({ simResult }: Props) {
                   height: 0,
                   borderLeft: '5px solid transparent',
                   borderRight: '5px solid transparent',
-                  borderBottom: '9px solid #ef4444',
+                  borderBottom: '9px solid var(--danger)',
                   opacity: 0.45,
                   display: 'inline-block',
                 }}

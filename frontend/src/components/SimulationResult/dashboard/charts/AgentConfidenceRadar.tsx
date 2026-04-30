@@ -48,19 +48,22 @@ export function AgentConfidenceRadar({ attributions }: Props) {
       <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={data} outerRadius="70%">
-            <PolarGrid stroke="#292524" />
-            <PolarAngleAxis dataKey="label" tick={{ fontSize: 10, fill: '#a8a29e' }} />
+            <PolarGrid stroke="var(--border)" />
+            <PolarAngleAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            />
             <PolarRadiusAxis
               angle={90}
               domain={[0, 100]}
-              tick={{ fontSize: 9, fill: '#57534e' }}
+              tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }}
               axisLine={false}
             />
             {/* Recharts Radar는 null 값에서 vertex를 건너뜀 → 미실행 축은 그래프에서 자연스럽게 빠짐 */}
             <Radar
               dataKey="score"
-              stroke="#818cf8"
-              fill="#818cf8"
+              stroke="var(--primary)"
+              fill="var(--primary)"
               fillOpacity={0.25}
               isAnimationActive={false}
               connectNulls={false}

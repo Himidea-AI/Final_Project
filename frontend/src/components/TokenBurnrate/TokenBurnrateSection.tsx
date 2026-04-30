@@ -39,10 +39,10 @@ export function TokenBurnrateSection() {
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-6">
+      <div className="rounded-2xl border border-stone-800 bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Zap className="h-4 w-4 text-[#818cf8]" />
-          <h3 className="text-sm font-bold text-[#e2e8f0]">LLM 토큰 번레이트</h3>
+          <Zap className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-bold text-foreground">LLM 토큰 번레이트</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -55,23 +55,23 @@ export function TokenBurnrateSection() {
 
   if (notImplemented) {
     return (
-      <div className="rounded-2xl border border-dashed border-amber-500/30 bg-amber-500/5 p-6">
+      <div className="rounded-2xl border border-dashed border-warning/30 bg-warning/5 p-6">
         <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5" />
+          <AlertCircle className="h-5 w-5 text-warning mt-0.5" />
           <div className="flex-1">
-            <h3 className="text-sm font-bold text-amber-300 mb-1">
+            <h3 className="text-sm font-bold text-warning mb-1">
               LLM 토큰 번레이트 — 백엔드 연동 대기
             </h3>
-            <p className="text-xs text-amber-200/80 leading-relaxed mb-3">
+            <p className="text-xs text-warning/80 leading-relaxed mb-3">
               LangSmith API 키는 백엔드 <code className="font-mono">.env</code>에 있고, 프론트는
               <code className="font-mono"> /api/ops/token-usage</code> 엔드포인트를 호출하도록 이미
               준비되어 있습니다. B1(예진)이 엔드포인트를 추가하면 이 섹션은 자동으로 활성화됩니다.
             </p>
             <details className="mt-2">
-              <summary className="cursor-pointer text-[0.6875rem] font-bold text-amber-300 hover:text-amber-200">
+              <summary className="cursor-pointer text-[0.6875rem] font-bold text-warning hover:text-warning">
                 응답 스키마 (B1 참고)
               </summary>
-              <pre className="mt-2 rounded-md bg-[#1e1b18] p-3 text-[0.625rem] leading-relaxed text-stone-400 overflow-x-auto">{`GET /api/ops/token-usage?from=YYYY-MM-DD&to=YYYY-MM-DD
+              <pre className="mt-2 rounded-md bg-card p-3 text-[0.625rem] leading-relaxed text-stone-400 overflow-x-auto">{`GET /api/ops/token-usage?from=YYYY-MM-DD&to=YYYY-MM-DD
 Authorization: Bearer <JWT>
 
 {
@@ -119,7 +119,7 @@ Authorization: Bearer <JWT>
           label="총 토큰 소진"
           value={formatInt(data.total_tokens)}
           sub={`${data.total_runs.toLocaleString()} runs`}
-          icon={<Activity className="h-4 w-4 text-[#818cf8]" />}
+          icon={<Activity className="h-4 w-4 text-primary" />}
         />
         <KpiCard
           label="총 비용"
@@ -131,13 +131,13 @@ Authorization: Bearer <JWT>
           label="LangSmith Project"
           value={data.langsmith_project ?? '—'}
           sub={`fetched ${new Date(data.fetched_at).toLocaleTimeString('ko-KR')}`}
-          icon={<Zap className="h-4 w-4 text-amber-400" />}
+          icon={<Zap className="h-4 w-4 text-warning" />}
           mono
         />
       </div>
 
       {/* 일별 번레이트 바 */}
-      <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
+      <div className="rounded-2xl border border-stone-800 bg-card p-5">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
             일별 토큰 소진
@@ -159,7 +159,7 @@ Authorization: Bearer <JWT>
                   title={`${d.date}: ${formatInt(d.tokens)} tokens · ${formatUsd(d.cost_usd)}`}
                 >
                   <div
-                    className="w-full rounded-t bg-gradient-to-t from-[#6366f1] to-[#818cf8] transition-all"
+                    className="w-full rounded-t bg-gradient-to-t from-primary to-primary transition-all"
                     style={{ height: `${pct}%`, minHeight: d.tokens > 0 ? '2px' : '0' }}
                   />
                 </div>
@@ -171,9 +171,9 @@ Authorization: Bearer <JWT>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 매니저별 Top 5 */}
-        <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
+        <div className="rounded-2xl border border-stone-800 bg-card p-5">
           <div className="mb-3 flex items-center gap-2">
-            <Users className="h-4 w-4 text-[#818cf8]" />
+            <Users className="h-4 w-4 text-primary" />
             <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
               매니저별 Top 5
             </span>
@@ -201,7 +201,7 @@ Authorization: Bearer <JWT>
                     </div>
                     <div className="h-1 w-full rounded bg-stone-900 overflow-hidden">
                       <div
-                        className="h-full bg-[#818cf8] transition-all"
+                        className="h-full bg-primary transition-all"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -213,9 +213,9 @@ Authorization: Bearer <JWT>
         </div>
 
         {/* 모델별 */}
-        <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
+        <div className="rounded-2xl border border-stone-800 bg-card p-5">
           <div className="mb-3 flex items-center gap-2">
-            <Cpu className="h-4 w-4 text-[#818cf8]" />
+            <Cpu className="h-4 w-4 text-primary" />
             <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
               모델별 소진
             </span>
@@ -265,7 +265,7 @@ function KpiCard({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-stone-800 bg-[#2c2825] p-5">
+    <div className="rounded-2xl border border-stone-800 bg-card p-5">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
           {label}

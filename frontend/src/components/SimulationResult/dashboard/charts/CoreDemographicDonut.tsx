@@ -38,8 +38,8 @@ export function CoreDemographicDonut({ core }: Props) {
             dataKey="value"
             stroke="none"
           >
-            <Cell fill="#818cf8" />
-            <Cell fill="#292524" />
+            <Cell fill="var(--primary)" />
+            <Cell fill="var(--border)" />
           </Pie>
         </PieChart>
       </ResponsiveContainer>

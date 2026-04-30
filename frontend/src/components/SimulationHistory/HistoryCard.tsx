@@ -12,7 +12,7 @@ interface HistoryCardProps {
 
 const SIGNAL_CLS: Record<string, string> = {
   green: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
-  yellow: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/40',
+  yellow: 'bg-warning/15 text-warning border-warning/40',
   red: 'bg-rose-500/15 text-rose-300 border-rose-500/40',
 };
 

@@ -21,10 +21,10 @@ interface MetricChartsProps {
 }
 
 const GRADE_COLORS = {
-  EXCELLENT: '#10B981', // Emerald-500
-  GOOD: '#3B82F6', // Blue-500
-  NORMAL: '#EAB308', // Yellow-500
-  RISKY: '#EF4444', // Red-500
+  EXCELLENT: 'var(--success)', // Emerald
+  GOOD: '#3B82F6', // Blue-500 — UNMAPPED, see phase-2-2-report
+  NORMAL: 'var(--warning)', // Yellow
+  RISKY: 'var(--danger)', // Red
 };
 
 const GRADE_LABELS = {

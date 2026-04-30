@@ -21,12 +21,12 @@ export default function VacancyStatsPanel({
 
   if (loading || !summary) {
     return (
-      <div className="vacancy-stats-panel bg-[#0d1117]/90 backdrop-blur-sm border border-violet-500/30 rounded-xl p-4 text-white text-xs font-mono w-72">
+      <div className="vacancy-stats-panel bg-background/90 backdrop-blur-sm border border-violet-500/30 rounded-xl p-4 text-white text-xs font-mono w-72">
         <h3 className="text-sm font-black text-violet-300 mb-2">
           {dongLabel}
           {titleSuffix} 평가
         </h3>
-        <p className="text-[#9ca3af]">시뮬 진행 중...</p>
+        <p className="text-muted-foreground">시뮬 진행 중...</p>
       </div>
     );
   }
@@ -43,67 +43,67 @@ export default function VacancyStatsPanel({
   const revenuePerYear = revenueMean * 365;
 
   return (
-    <div className="vacancy-stats-panel bg-[#0d1117]/90 backdrop-blur-sm border border-violet-500/30 rounded-xl p-4 text-white text-xs font-mono w-72 shadow-2xl">
+    <div className="vacancy-stats-panel bg-background/90 backdrop-blur-sm border border-violet-500/30 rounded-xl p-4 text-white text-xs font-mono w-72 shadow-2xl">
       <h3 className="text-sm font-black text-violet-300 mb-3 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
         {dongLabel}
         {titleSuffix} 평가
       </h3>
       <ul className="flex flex-col gap-1.5 text-[0.6875rem] leading-relaxed">
-        <li className="text-[#d1d5db]">
-          <span className="text-[#9ca3af]">일 방문</span>{' '}
+        <li className="text-muted-foreground">
+          <span className="text-muted-foreground">일 방문</span>{' '}
           <span className="text-emerald-300 font-bold">
             {visitsMean.toFixed(1)} ± {visitsCi.toFixed(1)}
           </span>{' '}
-          <span className="text-[#6b7280]">명</span>
+          <span className="text-muted-foreground">명</span>
         </li>
-        <li className="text-[#d1d5db]">
-          <span className="text-[#9ca3af]">일 매출</span>{' '}
+        <li className="text-muted-foreground">
+          <span className="text-muted-foreground">일 매출</span>{' '}
           <span className="text-emerald-300 font-bold">
             {(revenueMean / 10000).toFixed(0)} ± {(revenueCi / 10000).toFixed(0)}
           </span>{' '}
-          <span className="text-[#6b7280]">만원</span>
+          <span className="text-muted-foreground">만원</span>
         </li>
-        <li className="text-[#d1d5db]">
-          <span className="text-[#9ca3af]">분기 방문</span>{' '}
+        <li className="text-muted-foreground">
+          <span className="text-muted-foreground">분기 방문</span>{' '}
           <span className="text-violet-300 font-bold">{visitsPerQuarter.toFixed(0)}</span>{' '}
-          <span className="text-[#6b7280]">명</span>
+          <span className="text-muted-foreground">명</span>
         </li>
-        <li className="text-[#d1d5db]">
-          <span className="text-[#9ca3af]">분기 매출</span>{' '}
+        <li className="text-muted-foreground">
+          <span className="text-muted-foreground">분기 매출</span>{' '}
           <span className="text-violet-300 font-bold">{(revenuePerQuarter / 1e8).toFixed(2)}</span>{' '}
-          <span className="text-[#6b7280]">억원</span>
+          <span className="text-muted-foreground">억원</span>
         </li>
-        <li className="text-[#d1d5db]">
-          <span className="text-[#9ca3af]">연 매출</span>{' '}
+        <li className="text-muted-foreground">
+          <span className="text-muted-foreground">연 매출</span>{' '}
           <span className="text-violet-300 font-bold">{(revenuePerYear / 1e8).toFixed(2)}</span>{' '}
-          <span className="text-[#6b7280]">억원</span>
+          <span className="text-muted-foreground">억원</span>
         </li>
-        <li className="text-[#d1d5db]">
-          <span className="text-[#9ca3af]">동 평균 대비</span>{' '}
-          <span className="text-amber-300 font-bold">
+        <li className="text-muted-foreground">
+          <span className="text-muted-foreground">동 평균 대비</span>{' '}
+          <span className="text-warning font-bold">
             {ratioMean.toFixed(1)} ± {ratioCi.toFixed(1)}
           </span>{' '}
-          <span className="text-[#6b7280]">배</span>
+          <span className="text-muted-foreground">배</span>
         </li>
         {summary.cannibalization_pct && (
-          <li className="text-[#d1d5db]">
-            <span className="text-[#9ca3af]">카니발 (500m)</span>{' '}
+          <li className="text-muted-foreground">
+            <span className="text-muted-foreground">카니발 (500m)</span>{' '}
             <span className="text-rose-300 font-bold">
               {summary.cannibalization_pct.mean.toFixed(1)} ±{' '}
               {summary.cannibalization_pct.ci95.toFixed(1)}
             </span>{' '}
-            <span className="text-[#6b7280]">%</span>
+            <span className="text-muted-foreground">%</span>
           </li>
         )}
         {summary.dong_net_growth_pct && (
-          <li className="text-[#d1d5db]">
-            <span className="text-[#9ca3af]">동 시장 성장</span>{' '}
+          <li className="text-muted-foreground">
+            <span className="text-muted-foreground">동 시장 성장</span>{' '}
             <span className="text-emerald-300 font-bold">
               {summary.dong_net_growth_pct.mean.toFixed(2)} ±{' '}
               {summary.dong_net_growth_pct.ci95.toFixed(2)}
             </span>{' '}
-            <span className="text-[#6b7280]">%</span>
+            <span className="text-muted-foreground">%</span>
           </li>
         )}
       </ul>

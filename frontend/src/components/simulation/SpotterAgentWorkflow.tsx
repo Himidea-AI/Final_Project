@@ -235,7 +235,7 @@ function SpotterAgentWorkflow() {
   };
 
   return (
-    <div className="w-full font-sans text-[#e2e8f0]">
+    <div className="w-full font-sans text-foreground">
       <LayoutGroup>
         <ul className="space-y-1">
           {tasks.map((task, index) => {
@@ -244,13 +244,13 @@ function SpotterAgentWorkflow() {
             return (
               <motion.li
                 key={task.id}
-                className={index !== 0 ? 'mt-2 pt-2 border-t border-[#3a3633]' : ''}
+                className={index !== 0 ? 'mt-2 pt-2 border-t border-border' : ''}
                 initial="hidden"
                 animate="visible"
                 variants={variants}
               >
                 <motion.div
-                  className="group flex items-center px-3 py-2.5 rounded-lg hover:bg-[#2c2825] transition-colors cursor-pointer"
+                  className="group flex items-center px-3 py-2.5 rounded-lg hover:bg-card transition-colors cursor-pointer"
                   onClick={() => toggleTaskExpansion(task.id)}
                 >
                   <div className="mr-3 shrink-0">
@@ -263,9 +263,9 @@ function SpotterAgentWorkflow() {
                         {task.status === 'completed' ? (
                           <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                         ) : task.status === 'in-progress' ? (
-                          <CircleDotDashed className="w-5 h-5 text-[#818cf8] animate-spin-slow" />
+                          <CircleDotDashed className="w-5 h-5 text-primary animate-spin-slow" />
                         ) : (
-                          <Circle className="w-5 h-5 text-[#404040]" />
+                          <Circle className="w-5 h-5 text-muted-foreground" />
                         )}
                       </motion.div>
                     </AnimatePresence>
@@ -273,7 +273,7 @@ function SpotterAgentWorkflow() {
                   <div className="flex-1 flex justify-between items-center min-w-0">
                     <div className="truncate pr-4">
                       <span
-                        className={`text-sm font-bold ${isCompleted ? 'text-[#9ca3af] line-through decoration-[#3a3633]' : 'text-[#e2e8f0]'}`}
+                        className={`text-sm font-bold ${isCompleted ? 'text-muted-foreground line-through decoration-border' : 'text-foreground'}`}
                       >
                         {task.title}
                       </span>
@@ -284,7 +284,7 @@ function SpotterAgentWorkflow() {
                           {task.dependencies.map((dep) => (
                             <span
                               key={dep}
-                              className="px-1.5 py-0.5 rounded bg-[#2c2825] border border-[#3a3633] text-[0.5625rem] font-mono text-[#9ca3af]"
+                              className="px-1.5 py-0.5 rounded bg-card border border-border text-[0.5625rem] font-mono text-muted-foreground"
                             >
                               Step {dep} 완료 후
                             </span>
@@ -292,7 +292,7 @@ function SpotterAgentWorkflow() {
                         </div>
                       )}
                       <span
-                        className={`px-2 py-0.5 rounded text-[0.5625rem] font-bold uppercase tracking-wider ${isCompleted ? 'bg-emerald-500/10 text-emerald-500' : task.status === 'in-progress' ? 'bg-[#818cf8]/10 text-[#818cf8]' : 'bg-[#3a3633] text-[#9ca3af]'}`}
+                        className={`px-2 py-0.5 rounded text-[0.5625rem] font-bold uppercase tracking-wider ${isCompleted ? 'bg-success/10 text-success' : task.status === 'in-progress' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}
                       >
                         {task.status.replace('-', ' ')}
                       </span>
@@ -302,7 +302,7 @@ function SpotterAgentWorkflow() {
                 <AnimatePresence mode="wait">
                   {isExpanded && task.subtasks.length > 0 && (
                     <motion.div
-                      className="relative overflow-hidden ml-[22px] pl-4 border-l-2 border-dashed border-[#3a3633] mt-2 mb-3"
+                      className="relative overflow-hidden ml-[22px] pl-4 border-l-2 border-dashed border-border mt-2 mb-3"
                       variants={variants}
                       initial="listHidden"
                       animate="listVisible"
@@ -321,7 +321,7 @@ function SpotterAgentWorkflow() {
                               layout
                             >
                               <div
-                                className="flex items-center p-1.5 rounded-md hover:bg-[#2c2825] cursor-pointer transition-colors"
+                                className="flex items-center p-1.5 rounded-md hover:bg-card cursor-pointer transition-colors"
                                 onClick={() => toggleSubtaskExpansion(task.id, subtask.id)}
                               >
                                 <div
@@ -334,13 +334,13 @@ function SpotterAgentWorkflow() {
                                   {subtask.status === 'completed' ? (
                                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                   ) : subtask.status === 'in-progress' ? (
-                                    <CircleDotDashed className="w-4 h-4 text-[#818cf8] animate-spin-slow" />
+                                    <CircleDotDashed className="w-4 h-4 text-primary animate-spin-slow" />
                                   ) : (
-                                    <Circle className="w-4 h-4 text-[#404040]" />
+                                    <Circle className="w-4 h-4 text-muted-foreground" />
                                   )}
                                 </div>
                                 <span
-                                  className={`text-xs ${subtask.status === 'completed' ? 'text-[#6b7280] line-through' : 'text-[#d1d5db]'}`}
+                                  className={`text-xs ${subtask.status === 'completed' ? 'text-muted-foreground line-through' : 'text-muted-foreground'}`}
                                 >
                                   {subtask.title}
                                 </span>
@@ -348,24 +348,24 @@ function SpotterAgentWorkflow() {
                               <AnimatePresence mode="wait">
                                 {isSubExp && (
                                   <motion.div
-                                    className="ml-6 pl-3 border-l border-dashed border-[#404040] py-2"
+                                    className="ml-6 pl-3 border-l border-dashed border-border py-2"
                                     variants={variants}
                                     initial="listHidden"
                                     animate="listVisible"
                                     exit="listHidden"
                                     layout
                                   >
-                                    <p className="text-[0.6875rem] text-[#9ca3af] mb-2 leading-relaxed">
+                                    <p className="text-[0.6875rem] text-muted-foreground mb-2 leading-relaxed">
                                       {subtask.description}
                                     </p>
                                     <div className="flex flex-wrap items-center gap-1.5">
-                                      <span className="text-[0.5625rem] font-mono text-[#6b7280] uppercase">
+                                      <span className="text-[0.5625rem] font-mono text-muted-foreground uppercase">
                                         Tools:
                                       </span>
                                       {subtask.tools.map((tool) => (
                                         <span
                                           key={tool}
-                                          className="px-1.5 py-0.5 rounded bg-[#1e1b18] border border-[#3a3633] text-[0.5625rem] font-mono text-[#818cf8]"
+                                          className="px-1.5 py-0.5 rounded bg-card border border-border text-[0.5625rem] font-mono text-primary"
                                         >
                                           {tool}
                                         </span>

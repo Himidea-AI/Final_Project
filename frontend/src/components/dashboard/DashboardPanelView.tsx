@@ -44,15 +44,17 @@ export function StatCard({
   return (
     <div
       onClick={onClick}
-      className="bg-[#2c2825] border border-[#3a3633] p-6 rounded-xl flex flex-col justify-between gap-3 group cursor-pointer hover:border-[#818cf8] hover:shadow-[0_0_20px_rgba(129,140,248,0.2)] transition-all min-h-[130px]"
+      className="bg-card border border-border p-6 rounded-xl flex flex-col justify-between gap-3 group cursor-pointer hover:border-primary hover:shadow-[0_0_20px_rgba(129,140,248,0.2)] transition-all min-h-[130px]"
     >
       <div className="flex justify-between items-start">
-        <p className="text-[#9ca3af] text-xs font-medium">{title}</p>
+        <p className="text-muted-foreground text-xs font-medium">{title}</p>
         <div className="flex items-center gap-1.5">
           {subtitle && (
-            <span className="text-[0.5625rem] text-[#9ca3af] opacity-50 font-mono">{subtitle}</span>
+            <span className="text-[0.5625rem] text-muted-foreground opacity-50 font-mono">
+              {subtitle}
+            </span>
           )}
-          <div className="text-[#9ca3af] opacity-50 group-hover:opacity-100 group-hover:text-indigo-400 transition-colors">
+          <div className="text-muted-foreground opacity-50 group-hover:opacity-100 group-hover:text-indigo-400 transition-colors">
             {React.cloneElement(icon, {
               className: 'w-4 h-4',
             } as React.HTMLAttributes<HTMLElement>)}
@@ -75,7 +77,7 @@ export function StatCard({
             <path
               d={sparkline}
               fill="none"
-              stroke={trendUp ? '#10b981' : '#f43f5e'}
+              stroke={trendUp ? 'var(--success)' : 'var(--danger)'}
               strokeWidth="2"
               strokeLinecap="round"
             />
@@ -107,15 +109,15 @@ export function SortHeader({
     <span
       onClick={() => onSort(sortField)}
       className={`inline-flex items-center gap-1 cursor-pointer transition-colors select-none ${
-        isActive ? 'text-[#818cf8]' : 'hover:text-[#e2e8f0]'
+        isActive ? 'text-primary' : 'hover:text-foreground'
       }`}
     >
       {label}
       {isActive ? (
         sortDir === 'asc' ? (
-          <ChevronUp className="w-3 h-3 text-[#818cf8]" />
+          <ChevronUp className="w-3 h-3 text-primary" />
         ) : (
-          <ChevronDown className="w-3 h-3 text-[#818cf8]" />
+          <ChevronDown className="w-3 h-3 text-primary" />
         )
       ) : (
         <ChevronsUpDown className="w-3 h-3 opacity-60" />
@@ -148,7 +150,7 @@ export function TableRow({
     if (s === 'Safe') return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
     if (s === 'Warning') return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
     if (s.includes('개월')) return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
-    return 'bg-[#1e1b18] text-[#9ca3af] border-[#3a3633]';
+    return 'bg-card text-muted-foreground border-border';
   };
   const dc =
     density === 'compact'
@@ -162,24 +164,24 @@ export function TableRow({
       <tr
         onClick={onToggle}
         className={`cursor-pointer transition-colors group ${
-          expanded ? 'bg-[#818cf8]/[0.06]' : 'hover:bg-[#3a3633]/50'
+          expanded ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
         }`}
       >
-        <td className={`${dc} pl-5 font-medium text-[#e2e8f0]`}>
+        <td className={`${dc} pl-5 font-medium text-foreground`}>
           <span className="inline-flex items-center gap-2">
             <ChevronRight
               size={12}
-              className={`text-[#9ca3af] transition-transform duration-300 ${
-                expanded ? 'rotate-90 text-[#818cf8]' : ''
+              className={`text-muted-foreground transition-transform duration-300 ${
+                expanded ? 'rotate-90 text-primary' : ''
               }`}
             />
-            <span className="text-[#9ca3af] group-hover:text-indigo-400 transition-colors">
+            <span className="text-muted-foreground group-hover:text-indigo-400 transition-colors">
               {icon}
             </span>
             {col1}
           </span>
         </td>
-        <td className={`${dc} text-[#9ca3af] font-mono`}>{col2}</td>
+        <td className={`${dc} text-muted-foreground font-mono`}>{col2}</td>
         <td className={`${dc} font-mono font-bold text-white`}>{col3}</td>
         <td className={dc}>
           <span
@@ -190,22 +192,22 @@ export function TableRow({
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-[#1e1b18]">
-          <td colSpan={4} className="p-5 border-l-2 border-[#818cf8]">
+        <tr className="bg-card">
+          <td colSpan={4} className="p-5 border-l-2 border-primary">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* 1. Mini Map — 상권 겹침 (Venn) */}
               <div className="flex flex-col gap-2">
-                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-[#9ca3af]">
+                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-muted-foreground">
                   상권 겹침
                 </span>
-                <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex items-center justify-center">
+                <div className="bg-card rounded-lg border border-border p-3 flex items-center justify-center">
                   <svg viewBox="0 0 120 70" className="w-full max-w-[160px] h-16">
                     <circle
                       cx="42"
                       cy="35"
                       r="22"
                       fill="rgba(129,140,248,0.2)"
-                      stroke="#818cf8"
+                      stroke="var(--primary)"
                       strokeWidth="1.5"
                     />
                     <circle
@@ -213,14 +215,14 @@ export function TableRow({
                       cy="35"
                       r="22"
                       fill="rgba(244,63,94,0.2)"
-                      stroke="#f43f5e"
+                      stroke="var(--danger)"
                       strokeWidth="1.5"
                     />
                     <text
                       x="42"
                       y="38"
                       fontSize="6"
-                      fill="#818cf8"
+                      fill="var(--primary)"
                       textAnchor="middle"
                       fontWeight="bold"
                     >
@@ -230,7 +232,7 @@ export function TableRow({
                       x="78"
                       y="38"
                       fontSize="6"
-                      fill="#f43f5e"
+                      fill="var(--danger)"
                       textAnchor="middle"
                       fontWeight="bold"
                     >
@@ -240,7 +242,7 @@ export function TableRow({
                       x="60"
                       y="38"
                       fontSize="5"
-                      fill="#e2e8f0"
+                      fill="var(--foreground)"
                       textAnchor="middle"
                       opacity="0.6"
                     >
@@ -253,40 +255,42 @@ export function TableRow({
               {/* 2. 시간대별 영향도 — 실데이터 필드 미정의 (DistrictComparison/MarketReport에 없음).
                   mock %값 노출(거짓 양성) 제거하고 모두 '—' 표시. backend 보강 시 실값 매핑. */}
               <div className="flex flex-col gap-2">
-                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-[#9ca3af]">
+                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-muted-foreground">
                   시간대별 영향도
                 </span>
-                <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex flex-col gap-1.5 text-[0.625rem] font-mono">
+                <div className="bg-card rounded-lg border border-border p-3 flex flex-col gap-1.5 text-[0.625rem] font-mono">
                   <div className="flex justify-between">
-                    <span className="text-[#9ca3af]">오전 (06-11)</span>
-                    <span className="text-[#9ca3af]">—</span>
+                    <span className="text-muted-foreground">오전 (06-11)</span>
+                    <span className="text-muted-foreground">—</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[#9ca3af]">점심 (11-14)</span>
-                    <span className="text-[#9ca3af]">—</span>
+                    <span className="text-muted-foreground">점심 (11-14)</span>
+                    <span className="text-muted-foreground">—</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[#9ca3af]">저녁 (17-21)</span>
-                    <span className="text-[#9ca3af]">—</span>
+                    <span className="text-muted-foreground">저녁 (17-21)</span>
+                    <span className="text-muted-foreground">—</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[#9ca3af]">심야 (21-02)</span>
-                    <span className="text-[#9ca3af]">—</span>
+                    <span className="text-muted-foreground">심야 (21-02)</span>
+                    <span className="text-muted-foreground">—</span>
                   </div>
                 </div>
               </div>
 
               {/* 3. Counterfactual — 실데이터 필드 미정의. mock '+18.4%' 제거하고 '—' 표시. */}
               <div className="flex flex-col gap-2">
-                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-[#9ca3af]">
+                <span className="text-[0.625rem] font-mono uppercase tracking-wider text-muted-foreground">
                   Counterfactual
                 </span>
-                <div className="bg-[#2c2825] rounded-lg border border-[#3a3633] p-3 flex-1 flex flex-col justify-center gap-1">
-                  <p className="text-[0.625rem] text-[#9ca3af] leading-relaxed">
+                <div className="bg-card rounded-lg border border-border p-3 flex-1 flex flex-col justify-center gap-1">
+                  <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
                     이 매장이 없었다면
                   </p>
-                  <p className="text-lg font-black text-[#9ca3af] font-mono leading-none">—</p>
-                  <p className="text-[0.5625rem] text-[#9ca3af]">월 매출 추가 예상</p>
+                  <p className="text-lg font-black text-muted-foreground font-mono leading-none">
+                    —
+                  </p>
+                  <p className="text-[0.5625rem] text-muted-foreground">월 매출 추가 예상</p>
                 </div>
               </div>
             </div>
@@ -313,28 +317,28 @@ export function InsightCard({
   const { showToast } = useToast();
   const severityStyle = {
     critical: { dot: 'bg-rose-500', label: 'CRITICAL' },
-    advisory: { dot: 'bg-[#818cf8]', label: 'ADVISORY' },
+    advisory: { dot: 'bg-primary', label: 'ADVISORY' },
     opportunity: { dot: 'bg-emerald-500', label: 'OPPORTUNITY' },
   }[severity];
 
   return (
     <div
       onClick={onClick}
-      className="flex flex-col gap-2 p-3 rounded-lg bg-[#1e1b18] border border-[#3a3633] cursor-pointer hover:border-[#818cf8] hover:bg-[#818cf8]/[0.05] transition-all group"
+      className="flex flex-col gap-2 p-3 rounded-lg bg-card border border-border cursor-pointer hover:border-primary hover:bg-primary/[0.05] transition-all group"
     >
       <div className="flex items-start gap-3">
         <div className="shrink-0 mt-0.5">{icon}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
-            <h4 className="text-[#e2e8f0] font-bold text-xs">{title}</h4>
+            <h4 className="text-foreground font-bold text-xs">{title}</h4>
             <span className="inline-flex items-center gap-1 shrink-0">
               <span className={`w-1.5 h-1.5 rounded-full ${severityStyle.dot}`} />
-              <span className="text-[0.5rem] font-mono uppercase tracking-wider text-[#9ca3af]">
+              <span className="text-[0.5rem] font-mono uppercase tracking-wider text-muted-foreground">
                 {severityStyle.label}
               </span>
             </span>
           </div>
-          <p className="text-[#9ca3af] text-[0.625rem] leading-relaxed">{desc}</p>
+          <p className="text-muted-foreground text-[0.625rem] leading-relaxed">{desc}</p>
         </div>
       </div>
 
@@ -345,7 +349,7 @@ export function InsightCard({
             e.stopPropagation();
             showToast('success', '소중한 피드백이 전달되었습니다. AI 학습에 반영됩니다.');
           }}
-          className="p-1 rounded hover:bg-[#818cf8]/10 hover:text-[#818cf8] text-[#9ca3af] transition-colors"
+          className="p-1 rounded hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
           aria-label="유용함"
         >
           <ThumbsUp className="w-3 h-3" />
@@ -355,7 +359,7 @@ export function InsightCard({
             e.stopPropagation();
             showToast('info', '소중한 피드백이 전달되었습니다. AI 학습에 반영됩니다.');
           }}
-          className="p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-[#9ca3af] transition-colors"
+          className="p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-muted-foreground transition-colors"
           aria-label="유용하지 않음"
         >
           <ThumbsDown className="w-3 h-3" />
@@ -497,15 +501,15 @@ function DashboardPanelView({
         ]
       : [
           {
-            icon: <TrendingUp className="w-3.5 h-3.5 text-[#9ca3af] shrink-0 mt-0.5" />,
+            icon: <TrendingUp className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />,
             text: `${dongName ?? '선택한 동'}에 대한 분석 데이터가 아직 없습니다.`,
           },
           {
-            icon: <Scale className="w-3.5 h-3.5 text-[#9ca3af] shrink-0 mt-0.5" />,
+            icon: <Scale className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />,
             text: '시뮬레이션 실행 후 다시 확인해주세요.',
           },
           {
-            icon: <Users className="w-3.5 h-3.5 text-[#9ca3af] shrink-0 mt-0.5" />,
+            icon: <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />,
             text: '각 동은 districtRankings에서 매칭됩니다.',
           },
         ];
@@ -526,8 +530,8 @@ function DashboardPanelView({
     >
       {/* 구역 타이틀 — winner면 indigo 외곽선으로 강조 */}
       <div
-        className={`bg-[#2c2825] rounded-xl p-3 flex items-center justify-between border ${
-          isWinner ? 'border-indigo-500/40' : 'border-[#3a3633]'
+        className={`bg-card rounded-xl p-3 flex items-center justify-between border ${
+          isWinner ? 'border-indigo-500/40' : 'border-border'
         }`}
       >
         <div className="flex items-center gap-2">
@@ -541,32 +545,32 @@ function DashboardPanelView({
 
       {/* 4 Stats Cards */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[0.625rem] text-[#9ca3af] mb-1">예상 월 매출</p>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[0.625rem] text-muted-foreground mb-1">예상 월 매출</p>
           <p className="text-lg font-black text-white">{revenue}</p>
           {/* trend는 DistrictComparison에 명시 필드 없음 → 항상 '—' + 중립 회색. */}
-          <p className="text-[0.625rem] mt-1 text-[#9ca3af]">{revenueTrend}</p>
+          <p className="text-[0.625rem] mt-1 text-muted-foreground">{revenueTrend}</p>
         </div>
-        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[0.625rem] text-[#9ca3af] mb-1">상권 매력도</p>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[0.625rem] text-muted-foreground mb-1">상권 매력도</p>
           <p className="text-lg font-black text-white">{score}</p>
-          <p className="text-[0.625rem] mt-1 text-[#9ca3af]">{scoreTrend}</p>
+          <p className="text-[0.625rem] mt-1 text-muted-foreground">{scoreTrend}</p>
         </div>
-        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[0.625rem] text-[#9ca3af] mb-1">일 유동인구</p>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[0.625rem] text-muted-foreground mb-1">일 유동인구</p>
           <p className="text-lg font-black text-white">{traffic}</p>
-          <p className="text-[0.625rem] mt-1 text-[#9ca3af]">
+          <p className="text-[0.625rem] mt-1 text-muted-foreground">
             {dongPop ? `피크 ${dongPop.peak_hour}시 · ${popData?.date}` : 'KT 통신망 기준'}
           </p>
         </div>
-        <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-4">
-          <p className="text-[0.625rem] text-[#9ca3af] mb-1">카니발리제이션</p>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[0.625rem] text-muted-foreground mb-1">카니발리제이션</p>
           <p className="text-lg font-black text-white">{risk}</p>
           {/* 위험 등급 — 실데이터(closureRateNum) 기반. mock '주의/안전 권역' 제거. */}
           <p
             className={`text-[0.625rem] mt-1 ${
               closureRateNum == null
-                ? 'text-[#9ca3af]'
+                ? 'text-muted-foreground'
                 : closureRateNum > 0.3
                   ? 'text-rose-400'
                   : closureRateNum > 0.15
@@ -586,15 +590,15 @@ function DashboardPanelView({
       </div>
 
       {/* 레이더 차트 */}
-      <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 flex flex-col items-center">
+      <div className="bg-card border border-border rounded-xl p-5 flex flex-col items-center">
         <h3 className="text-xs font-bold text-white mb-3 self-start">7대 지표 분석</h3>
         <div className="relative w-[200px] h-[200px]">
           {radarValues.length === 0 && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-[#3a3633] bg-[#1e1b18]/60 backdrop-blur-[2px]">
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-border bg-card/60 backdrop-blur-[2px]">
               <div className="text-center px-3">
-                <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-[#3a3633]" />
-                <div className="text-[0.6875rem] font-semibold text-[#e2e8f0]">구현 예정</div>
-                <div className="mt-0.5 text-[0.5625rem] text-[#9ca3af]">
+                <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-muted" />
+                <div className="text-[0.6875rem] font-semibold text-foreground">구현 예정</div>
+                <div className="mt-0.5 text-[0.5625rem] text-muted-foreground">
                   market_report · {dongName || '해당 동'} 대기
                 </div>
               </div>
@@ -609,14 +613,14 @@ function DashboardPanelView({
                   return `${100 + r * 0.7 * Math.cos(a)},${100 + r * 0.7 * Math.sin(a)}`;
                 }).join(' ')}
                 fill="none"
-                stroke="#3a3633"
+                stroke="var(--border)"
                 strokeWidth="0.5"
               />
             ))}
             <polygon
               points={radarPoints}
               fill={isVariantB ? 'rgba(16,185,129,0.15)' : 'rgba(129,140,248,0.15)'}
-              stroke={isVariantB ? '#10b981' : '#818cf8'}
+              stroke={isVariantB ? 'var(--success)' : 'var(--primary)'}
               strokeWidth="2"
             />
             {radarValues.map((v, i) => {
@@ -628,7 +632,7 @@ function DashboardPanelView({
                   cx={100 + r * Math.cos(angle)}
                   cy={100 + r * Math.sin(angle)}
                   r="3"
-                  fill={isVariantB ? '#10b981' : '#818cf8'}
+                  fill={isVariantB ? 'var(--success)' : 'var(--primary)'}
                 />
               );
             })}
@@ -641,7 +645,7 @@ function DashboardPanelView({
                   key={i}
                   x={lx}
                   y={ly}
-                  fill="#9ca3af"
+                  fill="var(--muted-foreground)"
                   fontSize="9"
                   textAnchor="middle"
                   dominantBaseline="middle"
@@ -655,11 +659,11 @@ function DashboardPanelView({
       </div>
 
       {/* AI 인사이트 요약 — 실데이터 기반 동적 문장 (동 고정 mock 제거) */}
-      <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5">
+      <div className="bg-card border border-border rounded-xl p-5">
         <h3 className="text-xs font-bold text-white mb-3">AI 인사이트</h3>
         <div className="space-y-2">
           {insights.map((ins, i) => (
-            <div key={i} className="flex items-start gap-2 text-xs text-[#d1d5db]">
+            <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
               {ins.icon}
               <span>{ins.text}</span>
             </div>

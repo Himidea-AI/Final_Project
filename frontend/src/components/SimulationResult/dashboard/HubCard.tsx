@@ -47,21 +47,21 @@ type Props = LinkProps | ButtonProps;
 const ACCENT_CLASS: Record<Accent, { laser: string; arrow: string; ring: string }> = {
   indigo: {
     laser:
-      'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
-    arrow: 'text-indigo-400',
-    ring: 'focus-visible:ring-indigo-400',
+      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
+    arrow: 'text-primary',
+    ring: 'focus-visible:ring-primary',
   },
   cyan: {
     laser:
-      'conic-gradient(from 0deg, transparent 0%, transparent 40%, #22d3ee 50%, #67e8f9 60%, transparent 100%)',
+      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--chart-2) 50%, var(--chart-2) 60%, transparent 100%)',
     arrow: 'text-cyan-400',
     ring: 'focus-visible:ring-cyan-400',
   },
   amber: {
     laser:
-      'conic-gradient(from 0deg, transparent 0%, transparent 40%, #f59e0b 50%, #fbbf24 60%, transparent 100%)',
-    arrow: 'text-amber-400',
-    ring: 'focus-visible:ring-amber-400',
+      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--warning) 50%, var(--warning) 60%, transparent 100%)',
+    arrow: 'text-warning',
+    ring: 'focus-visible:ring-warning',
   },
 };
 
@@ -73,7 +73,7 @@ export function HubCard(props: Props) {
   // disabled 일 때: grayscale + opacity-50 + 호버/transition 제거 + cursor-not-allowed.
   const commonCls = disabled
     ? 'group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm grayscale opacity-50 cursor-not-allowed pointer-events-none select-none'
-    : `group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-2xl hover:shadow-indigo-500/10 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1e1b18] ${a.ring}`;
+    : `group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-2xl hover:shadow-indigo-500/10 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card ${a.ring}`;
 
   const inner = (
     <>

@@ -36,7 +36,7 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
       onClick={onClose}
     >
       <div
-        className="relative w-[460px] max-w-[92vw] max-h-[88vh] overflow-y-auto rounded-xl border border-amber-500/30 bg-slate-900 p-5 text-slate-100 shadow-2xl"
+        className="relative w-[460px] max-w-[92vw] max-h-[88vh] overflow-y-auto rounded-xl border border-warning/30 bg-slate-900 p-5 text-slate-100 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close 버튼 */}
@@ -50,11 +50,11 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
 
         {/* 헤더 — Tier S 마커 + agent_id + archetype */}
         <div className="mb-4 flex items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-500/20 text-amber-300">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-warning bg-warning/20 text-warning">
             <span className="text-lg font-bold">⭐</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-amber-400">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-warning">
               <span>Tier S</span>
               <span className="text-slate-500">·</span>
               <span className="text-slate-400">Agent #{data.agentId}</span>
@@ -89,7 +89,7 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
                   className={[
                     'flex flex-col items-center rounded border px-1 py-1.5',
                     isNow
-                      ? 'border-amber-400 bg-amber-500/15'
+                      ? 'border-warning bg-warning/15'
                       : t
                         ? 'border-slate-700 bg-slate-800/60'
                         : 'border-slate-800/50 bg-slate-900/40 opacity-50',
@@ -99,13 +99,13 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
                   <div
                     className={[
                       'text-[0.5625rem] font-mono',
-                      isNow ? 'text-amber-300' : 'text-slate-500',
+                      isNow ? 'text-warning' : 'text-slate-500',
                     ].join(' ')}
                   >
                     {String(h).padStart(2, '0')}
                   </div>
                   {t ? (
-                    <div className="mt-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                    <div className="mt-0.5 h-2 w-2 rounded-full bg-warning" />
                   ) : (
                     <div className="mt-0.5 h-2 w-2 rounded-full bg-slate-700" />
                   )}
@@ -127,15 +127,13 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
                   key={`${t.day}-${t.hour}-${i}`}
                   className={[
                     'flex items-start gap-2 rounded border px-2.5 py-1.5 text-xs',
-                    isNow
-                      ? 'border-amber-400/60 bg-amber-500/10'
-                      : 'border-slate-800 bg-slate-800/40',
+                    isNow ? 'border-warning/60 bg-warning/10' : 'border-slate-800 bg-slate-800/40',
                   ].join(' ')}
                 >
                   <span
                     className={[
                       'shrink-0 font-mono',
-                      isNow ? 'text-amber-300' : 'text-slate-500',
+                      isNow ? 'text-warning' : 'text-slate-500',
                     ].join(' ')}
                   >
                     {String(t.hour).padStart(2, '0')}:00

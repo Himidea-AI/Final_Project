@@ -131,25 +131,25 @@ export function IndicatorGrid({ simResult }: Props) {
         <div className="flex items-center justify-center rounded-lg border border-stone-700 bg-stone-800 p-4 lg:w-60">
           <ResponsiveContainer width="100%" height={220}>
             <RadarChart data={radarData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-              <PolarGrid stroke="#44403c" />
+              <PolarGrid stroke="var(--border)" />
               <PolarAngleAxis
                 dataKey="subject"
-                tick={{ fill: '#a8a29e', fontSize: 10, fontWeight: 600 }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 10, fontWeight: 600 }}
               />
               <Radar
                 dataKey="value"
-                stroke="#6366f1"
-                fill="#6366f1"
+                stroke="var(--primary)"
+                fill="var(--primary)"
                 fillOpacity={0.15}
                 strokeWidth={1.5}
               />
               <Tooltip
                 contentStyle={{
-                  background: 'rgba(24,24,27,0.95)',
-                  border: '1px solid #3f3f46',
+                  background: 'var(--card)',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
                   fontSize: 12,
-                  color: '#e4e4e7',
+                  color: 'var(--card-foreground)',
                 }}
                 formatter={(v: number) => [Math.round(v), '점수']}
               />

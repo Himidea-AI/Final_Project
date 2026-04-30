@@ -225,7 +225,7 @@ function StatCard({
     tone === 'good'
       ? 'text-emerald-400'
       : tone === 'warn'
-        ? 'text-amber-400'
+        ? 'text-warning'
         : tone === 'bad'
           ? 'text-rose-400'
           : 'text-stone-100';

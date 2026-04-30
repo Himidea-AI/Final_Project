@@ -63,30 +63,37 @@ export function FlowVsRevenueScatter({ rankings, winnerDistrict }: Props) {
     <div className="h-[320px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <ScatterChart margin={{ top: 16, right: 24, left: 16, bottom: 24 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             type="number"
             dataKey="x"
             name="유동인구 점수"
             domain={[0, 100]}
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            label={{ value: '유동인구', fill: '#57534e', fontSize: 10, dy: 20 }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            label={{ value: '유동인구', fill: 'var(--muted-foreground)', fontSize: 10, dy: 20 }}
           />
           <YAxis
             type="number"
             dataKey="y"
             name="매출 점수"
             domain={[0, 100]}
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            label={{ value: '매출', angle: -90, fill: '#57534e', fontSize: 10, dx: -10 }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            label={{
+              value: '매출',
+              angle: -90,
+              fill: 'var(--muted-foreground)',
+              fontSize: 10,
+              dx: -10,
+            }}
           />
           <Tooltip
-            cursor={{ strokeDasharray: '3 3', stroke: '#818cf8' }}
+            cursor={{ strokeDasharray: '3 3', stroke: 'var(--primary)' }}
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #44403c',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
               fontSize: 11,
+              color: 'var(--card-foreground)',
             }}
             formatter={(_v, _n, item) => {
               const p = item?.payload as (typeof points)[0];
@@ -97,14 +104,18 @@ export function FlowVsRevenueScatter({ rankings, winnerDistrict }: Props) {
           {regLine && (
             <ReferenceLine
               segment={regLine}
-              stroke="#818cf8"
+              stroke="var(--primary)"
               strokeDasharray="4 4"
               strokeOpacity={0.5}
             />
           )}
           <Scatter data={points} isAnimationActive={false}>
             {points.map((p, i) => (
-              <Cell key={i} fill={p.isWinner ? '#818cf8' : '#a8a29e'} r={p.isWinner ? 8 : 4} />
+              <Cell
+                key={i}
+                fill={p.isWinner ? 'var(--primary)' : 'var(--muted-foreground)'}
+                r={p.isWinner ? 8 : 4}
+              />
             ))}
           </Scatter>
         </ScatterChart>

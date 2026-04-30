@@ -19,8 +19,8 @@ export function WeekdayWeekendBar({ ratio }: Props) {
     );
   }
   const data = [
-    { label: '주중', value: Math.round(n * 100), color: '#818cf8' },
-    { label: '주말', value: Math.round((1 - n) * 100), color: '#a8a29e' },
+    { label: '주중', value: Math.round(n * 100), color: 'var(--primary)' },
+    { label: '주말', value: Math.round((1 - n) * 100), color: 'var(--muted-foreground)' },
   ];
   return (
     <div className="h-[120px]">
@@ -30,7 +30,7 @@ export function WeekdayWeekendBar({ ratio }: Props) {
           <YAxis
             type="category"
             dataKey="label"
-            tick={{ fontSize: 11, fill: '#a8a29e' }}
+            tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
             axisLine={false}
             tickLine={false}
           />

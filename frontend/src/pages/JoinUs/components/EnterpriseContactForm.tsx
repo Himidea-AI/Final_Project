@@ -27,8 +27,8 @@ function formatPhone(v: string) {
 }
 
 const fieldClass =
-  'w-full px-4 py-3 rounded-xl bg-[#1e1b18] border border-[#3a3633] text-[#e2e8f0] text-sm placeholder-[#9ca3af] outline-none transition-colors duration-200 focus:border-[#818cf8]';
-const labelClass = 'block text-xs text-[#9ca3af] font-medium mb-1.5';
+  'w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground text-sm placeholder-muted-foreground outline-none transition-colors duration-200 focus:border-primary';
+const labelClass = 'block text-xs text-muted-foreground font-medium mb-1.5';
 
 interface Props {
   onSuccess: () => void;
@@ -99,9 +99,9 @@ export default function EnterpriseContactForm({ onSuccess }: Props) {
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, duration: 0.4 }}
-        className="mt-1 p-3 rounded-lg bg-[#818cf8]/5 border border-[#818cf8]/20"
+        className="mt-1 p-3 rounded-lg bg-primary/5 border border-primary/20"
       >
-        <p className="text-xs text-[#a5b4fc]">영업팀이 1영업일 내 연락드립니다.</p>
+        <p className="text-xs text-primary/60">영업팀이 1영업일 내 연락드립니다.</p>
       </motion.div>
 
       <motion.button
@@ -112,8 +112,8 @@ export default function EnterpriseContactForm({ onSuccess }: Props) {
         disabled={!allValid}
         className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
           allValid
-            ? 'bg-gradient-to-r from-[#6366f1] to-[#818cf8] text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]'
-            : 'bg-[#2c2825] text-[#9ca3af] cursor-not-allowed'
+            ? 'bg-gradient-to-r from-primary to-primary text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]'
+            : 'bg-card text-muted-foreground cursor-not-allowed'
         }`}
       >
         문의 제출

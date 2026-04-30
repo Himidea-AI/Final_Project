@@ -18,7 +18,14 @@ export function normalizeAgeGroups(raw: AgeGroup[] | null | undefined): AgeGroup
   return raw;
 }
 
-const COLORS = ['#818cf8', '#a5b4fc', '#c7d2fe', '#a8a29e'];
+// indigo gradient → primary 단색 (opacity 변형으로 단계 표현)
+// 4번째는 muted-foreground (기타)
+const COLORS = [
+  'var(--primary)',
+  'color-mix(in oklch, var(--primary) 60%, transparent)',
+  'color-mix(in oklch, var(--primary) 35%, transparent)',
+  'var(--muted-foreground)',
+];
 
 interface Props {
   groups: AgeGroup[] | null | undefined;

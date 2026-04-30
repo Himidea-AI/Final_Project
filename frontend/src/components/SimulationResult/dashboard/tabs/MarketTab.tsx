@@ -71,7 +71,7 @@ export function MarketTab({ simResult }: Props) {
       {/* ═══ 상단 2:1 분할: Kakao 지도 (좌) + 분석 사이드바 (우) ═══ */}
       <div className="grid grid-cols-3 gap-6">
         {/* ── 좌측: 지도 영역 (col-span-2 ≈ 67%) ── */}
-        <div className="col-span-2 bg-[#111113] border border-stone-800/60 rounded-[40px] p-6 relative">
+        <div className="col-span-2 bg-card border border-stone-800/60 rounded-[40px] p-6 relative">
           <div className="flex justify-between items-start mb-4">
             <div className="min-w-0">
               <h3 className="text-lg font-black text-stone-100 flex items-center gap-3 italic text-left">
@@ -285,7 +285,7 @@ function MarketAnalysisSidebar({
   ];
 
   return (
-    <aside className="col-span-1 bg-[#141210]/60 border border-stone-800/40 rounded-[32px] p-6 flex flex-col gap-5 min-w-0">
+    <aside className="col-span-1 bg-card/60 border border-stone-800/40 rounded-[32px] p-6 flex flex-col gap-5 min-w-0">
       {/* ─ 섹션 1: 분석 결과 ─ */}
       <section>
         <h4 className="text-[0.625rem] font-black text-stone-600 uppercase tracking-[0.2em] mb-4">

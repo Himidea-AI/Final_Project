@@ -57,8 +57,8 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
 }
 
 const fieldClass =
-  'w-full px-4 py-3 rounded-xl bg-[#1e1b18] border text-[#e2e8f0] text-sm placeholder-[#9ca3af] outline-none transition-colors duration-200';
-const labelClass = 'block text-xs text-[#9ca3af] font-medium mb-1.5';
+  'w-full px-4 py-3 rounded-xl bg-card border text-foreground text-sm placeholder-muted-foreground outline-none transition-colors duration-200';
+const labelClass = 'block text-xs text-muted-foreground font-medium mb-1.5';
 const errorClass = 'text-[0.625rem] text-red-400 mt-1';
 
 export default function ManagerSignupForm({ onSuccess }: Props) {
@@ -176,9 +176,9 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="p-5 bg-[#1e1b18] border border-[#3a3633] rounded-2xl"
+        className="p-5 bg-card border border-border rounded-2xl"
       >
-        <label className="block text-xs font-bold text-[#e2e8f0] mb-2">
+        <label className="block text-xs font-bold text-foreground mb-2">
           워크스페이스 초대 코드
         </label>
         <div className="flex gap-2">
@@ -195,8 +195,8 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               workspace
                 ? 'border-emerald-500/40 text-emerald-400'
                 : verifyError
-                  ? 'border-red-500 text-amber-400'
-                  : 'border-[#3a3633] text-amber-400 focus:border-amber-500'
+                  ? 'border-red-500 text-warning'
+                  : 'border-border text-warning focus:border-warning'
             } disabled:opacity-60`}
           />
           {!workspace ? (
@@ -205,8 +205,8 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               disabled={inviteCode.trim().length < 4 || verifyLoading}
               className={`px-5 rounded-xl text-xs font-bold transition-colors ${
                 inviteCode.trim().length >= 4 && !verifyLoading
-                  ? 'bg-[#3a3633] text-white hover:bg-[#4a4641]'
-                  : 'bg-[#2c2825] text-[#9ca3af] cursor-not-allowed'
+                  ? 'bg-muted text-foreground hover:bg-muted/80'
+                  : 'bg-card text-muted-foreground cursor-not-allowed'
               }`}
             >
               {verifyLoading ? <Loader2 size={14} className="animate-spin" /> : '검증'}
@@ -259,7 +259,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             value={form.contactName}
             onChange={(e) => set('contactName', e.target.value)}
             placeholder="홍길동"
-            className={`${fieldClass} border-[#3a3633] focus:border-emerald-500`}
+            className={`${fieldClass} border-border focus:border-emerald-500`}
           />
         </motion.div>
 
@@ -275,7 +275,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             value={form.position}
             onChange={(e) => set('position', e.target.value)}
             placeholder="권역 매니저"
-            className={`${fieldClass} border-[#3a3633] focus:border-emerald-500`}
+            className={`${fieldClass} border-border focus:border-emerald-500`}
           />
         </motion.div>
 
@@ -295,7 +295,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             className={`${fieldClass} ${
               touched.has('email') && form.email && !emailValid
                 ? 'border-red-500'
-                : 'border-[#3a3633] focus:border-emerald-500'
+                : 'border-border focus:border-emerald-500'
             }`}
           />
           {touched.has('email') && form.email && !emailValid && (
@@ -315,7 +315,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             value={form.phone}
             onChange={(e) => set('phone', formatPhone(e.target.value))}
             placeholder="010-0000-0000"
-            className={`${fieldClass} border-[#3a3633] focus:border-emerald-500`}
+            className={`${fieldClass} border-border focus:border-emerald-500`}
           />
         </motion.div>
 
@@ -332,29 +332,29 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               value={form.password}
               onChange={(e) => set('password', e.target.value)}
               placeholder="영문+숫자+특수문자 8자 이상"
-              className={`${fieldClass} border-[#3a3633] focus:border-emerald-500 pr-10`}
+              className={`${fieldClass} border-border focus:border-emerald-500 pr-10`}
             />
             <button
               type="button"
               onClick={() => setShowPw(!showPw)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#e2e8f0]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
           {form.password && (
             <div className="flex items-center gap-2 mt-2">
-              <div className="flex-1 h-1 rounded-full bg-[#2c2825] overflow-hidden flex gap-0.5">
+              <div className="flex-1 h-1 rounded-full bg-card overflow-hidden flex gap-0.5">
                 {[1, 2, 3, 4].map((n) => (
                   <div
                     key={n}
                     className={`flex-1 rounded-full transition-colors ${
-                      n <= pwStrength.level ? pwStrength.color : 'bg-[#2c2825]'
+                      n <= pwStrength.level ? pwStrength.color : 'bg-card'
                     }`}
                   />
                 ))}
               </div>
-              <span className="text-[0.625rem] text-[#9ca3af]">{pwStrength.label}</span>
+              <span className="text-[0.625rem] text-muted-foreground">{pwStrength.label}</span>
             </div>
           )}
         </motion.div>
@@ -378,13 +378,13 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
                   ? pwMatch
                     ? 'border-emerald-500'
                     : 'border-red-500'
-                  : 'border-[#3a3633] focus:border-emerald-500'
+                  : 'border-border focus:border-emerald-500'
               }`}
             />
             <button
               type="button"
               onClick={() => setShowPwC(!showPwC)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#e2e8f0]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               {showPwC ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
@@ -423,8 +423,8 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           disabled={!allValid || isSubmitting}
           className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
             allValid && !isSubmitting
-              ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-[#1e1b18] shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:scale-[1.02] active:scale-[0.98]'
-              : 'bg-[#2c2825] text-[#9ca3af] cursor-not-allowed'
+              ? 'bg-gradient-to-r from-success to-success text-success-foreground shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:scale-[1.02] active:scale-[0.98]'
+              : 'bg-card text-muted-foreground cursor-not-allowed'
           }`}
         >
           {isSubmitting ? '가입 처리 중...' : '팀원으로 합류하기'}

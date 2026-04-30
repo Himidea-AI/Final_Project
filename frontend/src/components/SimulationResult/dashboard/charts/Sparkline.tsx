@@ -15,9 +15,9 @@ export function computeTrendDirection(data: number[]): TrendDirection {
 }
 
 const TREND_COLOR: Record<TrendDirection, string> = {
-  up: '#22c55e',
-  down: '#ef4444',
-  flat: '#a8a29e',
+  up: 'var(--success)',
+  down: 'var(--danger)',
+  flat: 'var(--muted-foreground)',
 };
 
 interface Props {

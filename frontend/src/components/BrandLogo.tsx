@@ -49,7 +49,7 @@ export function BrandLogo({
         src={logoUrl}
         alt={`${name ?? ''} logo`}
         title={title}
-        className={`object-contain bg-white border border-[#3a3633] shrink-0 ${className}`}
+        className={`object-contain bg-white border border-border shrink-0 ${className}`}
         onError={() => setImgError(true)}
       />
     );
@@ -60,9 +60,9 @@ export function BrandLogo({
 
     const toneClass = isUser
       ? tone === 'accent'
-        ? 'bg-[#818cf8]/20 border-[#818cf8]/50 text-[#818cf8]'
-        : 'bg-[#2c2825] border-[#3a3633] text-[#9ca3af]'
-      : 'bg-[#818cf8]/20 border-[#818cf8]/50 text-[#818cf8]';
+        ? 'bg-primary/20 border-primary/50 text-primary'
+        : 'bg-card border-border text-muted-foreground'
+      : 'bg-primary/20 border-primary/50 text-primary';
 
     return (
       <div
@@ -77,7 +77,7 @@ export function BrandLogo({
   return (
     <div
       title={title}
-      className={`flex items-center justify-center shrink-0 bg-[#2c2825] border border-[#3a3633] text-[#9ca3af] ${className}`}
+      className={`flex items-center justify-center shrink-0 bg-card border border-border text-muted-foreground ${className}`}
     >
       <Building2 className="w-1/2 h-1/2" />
     </div>

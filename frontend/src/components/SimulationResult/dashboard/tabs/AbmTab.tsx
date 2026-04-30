@@ -221,9 +221,9 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       {/* 지도 / ABM 뷰 */}
       {mode === 'map' ? (
         <div className="bg-stone-900/30 border border-stone-800 rounded-3xl p-4">
-          <div className="h-14 bg-[#171717]/90 backdrop-blur-md border border-[#3a3633] rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">
+          <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">
             <h4 className="text-xs font-black text-stone-100 flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-[#818cf8] animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
               Multi-Agent Geospatial Recommendations
             </h4>
             <p className="text-[0.625rem] text-stone-500 font-mono tracking-widest">
