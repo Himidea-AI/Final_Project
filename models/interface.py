@@ -159,7 +159,12 @@ def _run_gru_forecast(dong_code: str, industry_code: str) -> dict:
 
 
 def _get_latest_store_count(dong_code: str, industry_code: str) -> int:
-    """해당 동×업종의 최신 분기 store_count 반환. 조회 실패 시 1."""
+    """해당 동×업종의 최신 분기 점포 수 반환. 조회 실패 시 1.
+
+    store_count와 franchise_count 중 큰 값을 사용한다.
+    공식 통계에서 franchise_count > store_count 인 데이터 오류(주로 치킨·호프 업종)가
+    존재하므로, MAX로 하한선을 보정한다.
+    """
     try:
         from models.lstm_forecast.data_prep import load_store_data
 
@@ -172,7 +177,9 @@ def _get_latest_store_count(dong_code: str, industry_code: str) -> int:
         if subset.empty:
             return 1
         latest = subset.sort_values("quarter").iloc[-1]
-        return max(int(latest.get("store_count", 1)), 1)
+        store_cnt = int(latest.get("store_count", 1) or 1)
+        franchise_cnt = int(latest.get("franchise_count", 0) or 0)
+        return max(store_cnt, franchise_cnt, 1)
     except Exception as exc:
         logger.warning("store_count 조회 실패 (1로 대체): %s", exc)
         return 1
