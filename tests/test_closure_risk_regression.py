@@ -36,6 +36,21 @@ def test_predict_py_interface_unchanged():
     assert _classify(0.1) == "safe"
 
 
+def test_predict_does_not_use_label_pipeline():
+    """predict.py 가 _make_labels / build_closure_risk_dataset 를 호출하지 않음.
+
+    predict.py 는 학습된 weight 파일만 load → label 생성 layer 변경에 무영향.
+    C layer (label) fix 회귀 격리 검증.
+    """
+    import inspect
+
+    from models.closure_risk import predict as predict_mod
+
+    src = inspect.getsource(predict_mod)
+    assert "_make_labels" not in src, "predict.py 가 _make_labels 호출하면 안 됨"
+    assert "build_closure_risk_dataset" not in src, "predict.py 가 dataset builder 호출하면 안 됨"
+
+
 def test_full_pipeline_with_synthetic_data(tmp_path):
     """build_dataset 거치지 않고 _time_based_split + evaluate 통합 동작 확인."""
     rng = np.random.default_rng(7)
