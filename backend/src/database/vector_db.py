@@ -21,7 +21,7 @@ _POOL_PRE_PING = True  # 끊긴 커넥션 자동 재연결
 
 load_dotenv()
 
-_LOCAL_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+_LOCAL_EMBEDDING_MODEL = "BAAI/bge-m3"
 
 
 # 모듈 레벨 싱글톤 — 매 요청마다 엔진/임베딩 재생성 방지

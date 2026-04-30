@@ -77,6 +77,7 @@ import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
+import { useAbmStore } from './stores/abmStore';
 import { getLivePopulation, type CustomerSegmentRequest } from './api/client';
 import { useCustomerSegmentPreview } from './hooks/useCustomerSegmentPreview';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
@@ -924,16 +925,23 @@ function SimulatorDashboard({
   const [popData, setPopData] = useState<any>(null);
   const [popLoading, setPopLoading] = useState(false);
 
-  // [ABM] 행동 시뮬레이션 — 분석 에이전트와 독립, 결과에 영향 없음
-  const [abmResult, setAbmResult] = useState<any>(null);
-  const [abmLoading, setAbmLoading] = useState(false);
-  const [abmError, setAbmError] = useState<string | null>(null);
-  // 대시보드에서 선택해 ABM 탭으로 진입한 공실 스팟 — 지도에 이 스팟만 하이라이트
-  const [abmFocusSpot, setAbmFocusSpot] = useState<{
-    lat: number;
-    lon: number;
-    label?: string;
-  } | null>(null);
+  // [ABM] 행동 시뮬레이션 — useAbmStore (zustand+persist+AbortController) 로 이관.
+  // 새로고침/탭 이동/dashboardMode 토글에도 in-flight 시뮬 결과를 잃지 않음.
+  const abmResult = useAbmStore((s) => s.result);
+  const abmStatus = useAbmStore((s) => s.status);
+  const abmError = useAbmStore((s) => s.error);
+  const abmFocusSpot = useAbmStore((s) => s.focusSpot);
+  const startAbm = useAbmStore((s) => s.startAbm);
+  const dismissAbmResult = useAbmStore((s) => s.dismissResult);
+  const setAbmFocusSpot = useAbmStore((s) => s.setFocusSpot);
+  const resumeAbmPolling = useAbmStore((s) => s.resumePollingIfNeeded);
+  const abmLoading = abmStatus === 'running';
+
+  // mount 시 persist 복원된 running jobId 가 있으면 polling 재개.
+  useEffect(() => {
+    resumeAbmPolling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (reportState !== 'result') return;
@@ -3843,59 +3851,30 @@ function SimulatorDashboard({
                                   // 공실 번호 마커 클릭 → ABM 탭 전환 + 해당 스팟만 5000 에이전트 시뮬
                                   if (!simResult || abmLoading) return;
                                   setDashboardMode('abm');
-                                  setAbmFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
-                                  setAbmLoading(true);
-                                  setAbmError(null);
-                                  setAbmResult(null);
-                                  try {
-                                    const res = await fetch('/api/simulate-abm', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        target_district: loc.name,
-                                        business_type: businessType,
-                                        brand_name:
-                                          brand?.brand_name || user?.company_name || '신규 매장',
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        langgraph_result: (simResult as any)._raw ?? simResult,
-                                        n_agents: 5000,
-                                        days: 1,
-                                        spot_lat: loc.lat,
-                                        spot_lon: loc.lng,
-                                        scenario: {
-                                          weather_override: null,
-                                          date_override: null,
-                                          weekend_force: false,
-                                          rent_shock_pct: 0.0,
-                                        },
-                                        // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
-                                        enable_llm_thought: true,
-                                        // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
-                                        enable_llm_decisions: true,
-                                        // 신규 매장 평수 — backend seats(평×2) + capacity 모델링.
-                                        store_area: storeArea,
-                                      }),
-                                    });
-                                    const data = await res.json();
-                                    if (!res.ok) {
-                                      setAbmError(
-                                        data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`,
-                                      );
-                                    } else if (data.status === 'error') {
-                                      setAbmError(
-                                        data?.message ||
-                                          'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
-                                      );
-                                    } else {
-                                      setAbmResult(data);
-                                    }
-                                  } catch (err) {
-                                    setAbmError(
-                                      `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
-                                    );
-                                  } finally {
-                                    setAbmLoading(false);
-                                  }
+                                  await startAbm(
+                                    {
+                                      target_district: loc.name,
+                                      business_type: businessType,
+                                      brand_name:
+                                        brand?.brand_name || user?.company_name || '신규 매장',
+                                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                      langgraph_result: (simResult as any)._raw ?? simResult,
+                                      n_agents: 5000,
+                                      days: 1,
+                                      spot_lat: loc.lat,
+                                      spot_lon: loc.lng,
+                                      scenario: {
+                                        weather_override: null,
+                                        date_override: null,
+                                        weekend_force: false,
+                                        rent_shock_pct: 0.0,
+                                      },
+                                      enable_llm_thought: true,
+                                      enable_llm_decisions: true,
+                                      store_area: storeArea,
+                                    },
+                                    { lat: loc.lat, lon: loc.lng, label: loc.name },
+                                  );
                                 }}
                               />
                             </div>
@@ -3920,118 +3899,58 @@ function SimulatorDashboard({
                                 [])) as any
                           }
                           onClearResult={() => {
-                            setAbmResult(null);
-                            setAbmError(null);
+                            dismissAbmResult();
                             setAbmFocusSpot(null);
                             setDashboardMode('map');
                           }}
                           onSpotClick={async (spot) => {
                             if (!simResult || abmLoading) return;
-                            setAbmFocusSpot({
-                              lat: spot.lat,
-                              lon: spot.lon,
-                              label: spot.dong_name,
-                            });
-                            setAbmLoading(true);
-                            setAbmError(null);
-                            try {
-                              const res = await fetch('/api/simulate-abm', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  // 클릭한 스팟의 동을 target 으로 강제 (선택된 동과 다를 수 있음)
-                                  target_district: spot.dong_name,
-                                  business_type: businessType,
-                                  brand_name:
-                                    brand?.brand_name || user?.company_name || '신규 매장',
-                                  langgraph_result: (simResult as any)._raw ?? simResult,
-                                  n_agents: 5000,
-                                  days: 1,
-                                  spot_lat: spot.lat,
-                                  spot_lon: spot.lon,
-                                  scenario: {
-                                    weather_override: null,
-                                    date_override: null,
-                                    weekend_force: false,
-                                    rent_shock_pct: 0.0,
-                                  },
-                                  // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
-                                  enable_llm_thought: true,
-                                  // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
-                                  enable_llm_decisions: true,
-                                  // 신규 매장 평수 — backend seats + capacity 모델링.
-                                  store_area: storeArea,
-                                }),
-                              });
-                              const data = await res.json();
-                              if (!res.ok) {
-                                setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
-                              } else if (data.status === 'error') {
-                                setAbmError(
-                                  data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
-                                );
-                              } else {
-                                setAbmResult(data);
-                              }
-                            } catch (err) {
-                              setAbmError(
-                                `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
-                              );
-                            } finally {
-                              setAbmLoading(false);
-                            }
+                            await startAbm(
+                              {
+                                // 클릭한 스팟의 동을 target 으로 강제 (선택된 동과 다를 수 있음)
+                                target_district: spot.dong_name,
+                                business_type: businessType,
+                                brand_name: brand?.brand_name || user?.company_name || '신규 매장',
+                                langgraph_result: (simResult as any)._raw ?? simResult,
+                                n_agents: 5000,
+                                days: 1,
+                                spot_lat: spot.lat,
+                                spot_lon: spot.lon,
+                                scenario: {
+                                  weather_override: null,
+                                  date_override: null,
+                                  weekend_force: false,
+                                  rent_shock_pct: 0.0,
+                                },
+                                enable_llm_thought: true,
+                                enable_llm_decisions: true,
+                                store_area: storeArea,
+                              },
+                              { lat: spot.lat, lon: spot.lon, label: spot.dong_name },
+                            );
                           }}
                           onRunSimulation={async (scenario) => {
                             if (!simResult) return;
-                            setAbmLoading(true);
-                            setAbmError(null);
-                            try {
-                              const res = await fetch('/api/simulate-abm', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  target_district: selectedDongs[0] || '서교동',
-                                  business_type: businessType,
-                                  brand_name:
-                                    brand?.brand_name || user?.company_name || '신규 매장',
-                                  langgraph_result: (simResult as any)._raw ?? simResult,
-                                  n_agents: 5000,
-                                  days: 1,
-                                  scenario: {
-                                    weather_override: scenario.weather_override,
-                                    date_override: scenario.date_override,
-                                    weekend_force: scenario.weekend_force,
-                                    rent_shock_pct: scenario.rent_shock_pct,
-                                  },
-                                  // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
-                                  enable_llm_thought: true,
-                                  // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
-                                  enable_llm_decisions: true,
-                                  // 신규 매장 평수 — backend seats + capacity 모델링.
-                                  store_area: storeArea,
-                                }),
-                              });
-                              const data = await res.json();
-                              if (!res.ok) {
-                                setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
-                              } else if (data.status === 'unavailable') {
-                                setAbmError(
-                                  'ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)',
-                                );
-                              } else if (data.status === 'error') {
-                                setAbmError(
-                                  data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
-                                );
-                              } else {
-                                setAbmResult(data);
-                              }
-                            } catch (err) {
-                              setAbmError(
-                                `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
-                              );
-                            } finally {
-                              setAbmLoading(false);
-                            }
+                            await startAbm(
+                              {
+                                target_district: selectedDongs[0] || '서교동',
+                                business_type: businessType,
+                                brand_name: brand?.brand_name || user?.company_name || '신규 매장',
+                                langgraph_result: (simResult as any)._raw ?? simResult,
+                                n_agents: 5000,
+                                days: 1,
+                                scenario: {
+                                  weather_override: scenario.weather_override,
+                                  date_override: scenario.date_override,
+                                  weekend_force: scenario.weekend_force,
+                                  rent_shock_pct: scenario.rent_shock_pct,
+                                },
+                                enable_llm_thought: true,
+                                enable_llm_decisions: true,
+                                store_area: storeArea,
+                              },
+                              abmFocusSpot,
+                            );
                           }}
                         />
                       )}

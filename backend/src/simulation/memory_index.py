@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+_EMBEDDING_MODEL = "BAAI/bge-m3"
 _COLLECTION = "sim_agent_memory"
 
 

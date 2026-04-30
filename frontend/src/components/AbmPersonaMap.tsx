@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Activity, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import VacancySpotMarker from './VacancySpotMarker';
 import VacancyStatsPanel from './VacancyStatsPanel';
 import PersonaCard, { type PersonaCardData } from './PersonaCard';
+import AbmProgressPanel from './AbmProgressPanel';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -454,12 +455,8 @@ export default function AbmPersonaMap({
   // hover 중인 Tier S agent_id — 풍선은 hover 한 명만 표시 (지도 클러터 방지).
   // 50명 모두 풍선은 가독성 ↓ → 사이드 thought feed 가 전체 흐름 담당.
   const hoveredTierSAgentRef = useRef<number | null>(null);
-  // hex grid lat/lng 캐시 — zoom level 별 pointInPolygon 결과 amortize.
-  // pan 마다 12,288 셀 × 16 dong polygon 검사 (≈ 7M 연산) → 캐시 후 첫 1회만.
-  // pan 시 픽셀만 재투영 (~1300 calls), zoom 변경 시만 재빌드.
-  const hexLatLngCacheRef = useRef<
-    Map<number, Array<{ lat: number; lon: number; dr: number; dc: number }>>
-  >(new Map());
+  // (제거) hex grid lat/lng 캐시 — 줌인 시 lat/lng 재투영 비선형성으로 격자 어긋남
+  // 사용자 피드백 ("벌집이 네모모양으로 퍼짐") → 픽셀 공간 직접 빌드로 변경.
   // pan 추적 — drag 시작 시 중심 latLng + 픽셀 저장. drag 중 CSS transform 으로 캔버스 추종.
   const panStartLatLngRef = useRef<any | null>(null);
   const panStartPxRef = useRef<{ x: number; y: number } | null>(null);
@@ -594,12 +591,29 @@ export default function AbmPersonaMap({
     }
   }, [abmResult]);
 
-  // thought feed 정렬 캐시 — abmResult.thoughts 참조 동일 시 sort 재실행 회피.
-  // 부모 re-render (hover state 변경, simTick) 마다 [...].sort() 매번 돌던 문제 해결.
+  // thought feed 정렬 + dedup 캐시.
+  // 1) 시간순 sort.
+  // 2) 같은 (agent_id, thought) 가 연속으로 등장하면 첫 항목만 유지.
+  //    caveman 압축 system prompt 가 출력 다양성을 줄여서 같은 archetype 이
+  //    같은 문구를 1~3시간 연속으로 내보내는 케이스 발생 → feed 중복으로 보임.
+  // 3) 동일 thought 가 다른 agent 한테서 나오는 건 보존 (서로 다른 사람 의사결정).
   const sortedThoughts = useMemo(() => {
     const arr = abmResult?.thoughts;
     if (!Array.isArray(arr) || arr.length === 0) return [] as AbmThought[];
-    return [...(arr as AbmThought[])].sort((a, b) => a.day * 24 + a.hour - (b.day * 24 + b.hour));
+    const sorted = [...(arr as AbmThought[])].sort(
+      (a, b) => a.day * 24 + a.hour - (b.day * 24 + b.hour),
+    );
+    // agent_id 별로 직전 thought 텍스트 추적 → 동일하면 skip.
+    const lastByAgent = new Map<number, string>();
+    const deduped: AbmThought[] = [];
+    for (const th of sorted) {
+      const text = (th.thought || '').trim();
+      if (!text) continue;
+      if (lastByAgent.get(th.agent_id) === text) continue;
+      lastByAgent.set(th.agent_id, text);
+      deduped.push(th);
+    }
+    return deduped;
   }, [abmResult?.thoughts]);
 
   // 히트맵 grid 구성 — 우선순위:
@@ -624,8 +638,7 @@ export default function AbmPersonaMap({
         hours: dg.hours,
         max_count: typeof dg.max_count === 'number' ? dg.max_count : undefined,
       };
-      // density_grid 변경 → 캐시 무효화 (bbox/cols/rows 가 다르면 hex 분포도 다름).
-      hexLatLngCacheRef.current.clear();
+      // density_grid 변경 → 격자 재계산.
       recomputeNodePixelsRef.current?.();
       return;
     }
@@ -679,8 +692,7 @@ export default function AbmPersonaMap({
       hours,
       max_count: maxCount,
     };
-    // density_grid 갱신 → hex 캐시 무효화 + 격자 재계산.
-    hexLatLngCacheRef.current.clear();
+    // density_grid 갱신 → 격자 재계산.
     recomputeNodePixelsRef.current?.();
   }, [abmResult]);
 
@@ -822,69 +834,61 @@ export default function AbmPersonaMap({
       return { x: pixel.x, y: pixel.y };
     });
 
-    // 헥사 격자 hex 중심 픽셀 + density cell 매핑.
-    // ★ B 최적화: zoom level 별 lat/lng 캐시 → pan 마다 pointInPolygon 재실행 회피.
-    //   캐시 미스(첫 렌더 또는 zoom 변경) 시만 7M 연산. pan 시 cached lat/lng → pixel 재투영만 (~1300 calls).
+    // 헥사 격자 — 매 recompute 마다 픽셀 공간에서 직접 8px 격자 재구성.
+    // 이전: lat/lng 역변환 후 캐시 → 줌인 시 카카오 projection 비선형성 때문에
+    //       재투영 픽셀이 원래 8px 격자와 어긋나 사각형 패턴 발생 (사용자 보고).
+    // 현재: 픽셀 격자를 그대로 유지, 4 모서리 lat/lng 만 사용해 pointInPolygon.
+    //       줌·팬 모두에서 일관된 hex 타일링 보장.
     const dg = densityGridRef.current;
     if (dg && dg.cols > 0 && dg.rows > 0) {
-      const zoomLvl = typeof map.getLevel === 'function' ? map.getLevel() : 0;
-      let cached = hexLatLngCacheRef.current.get(zoomLvl);
-      if (!cached) {
-        // 캐시 미스 — 무거운 빌드 1회.
-        const [minLat, minLon, maxLat, maxLon] = dg.bbox;
-        const topLeft = proj.containerPointFromCoords(new kakao.maps.LatLng(maxLat, minLon));
-        const bottomRight = proj.containerPointFromCoords(new kakao.maps.LatLng(minLat, maxLon));
-        const HEX_SIZE = 8;
-        const xStep = HEX_SIZE * Math.sqrt(3);
-        const yStep = HEX_SIZE * 1.5;
-        const dLatPx = bottomRight.y - topLeft.y;
-        const dLonPx = bottomRight.x - topLeft.x;
-        const cols = Math.ceil(dLonPx / xStep) + 1;
-        const rows = Math.ceil(dLatPx / yStep) + 1;
-        const polys = mapoPolygonsRef.current;
-        const inMapo = (lat: number, lon: number): boolean => {
-          if (polys.length === 0) return true;
-          for (const p of polys) {
-            const ring = p.ring;
-            let inside = false;
-            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-              const xi = ring[i][0],
-                yi = ring[i][1];
-              const xj = ring[j][0],
-                yj = ring[j][1];
-              const intersect =
-                yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
-              if (intersect) inside = !inside;
-            }
-            if (inside) return true;
+      const [minLat, minLon, maxLat, maxLon] = dg.bbox;
+      const topLeft = proj.containerPointFromCoords(new kakao.maps.LatLng(maxLat, minLon));
+      const bottomRight = proj.containerPointFromCoords(new kakao.maps.LatLng(minLat, maxLon));
+      const HEX_SIZE = 8;
+      const xStep = HEX_SIZE * Math.sqrt(3);
+      const yStep = HEX_SIZE * 1.5;
+      const dLatPx = bottomRight.y - topLeft.y;
+      const dLonPx = bottomRight.x - topLeft.x;
+      const cols = Math.ceil(dLonPx / xStep) + 1;
+      const rows = Math.ceil(dLatPx / yStep) + 1;
+      const polys = mapoPolygonsRef.current;
+      const inMapo = (lat: number, lon: number): boolean => {
+        if (polys.length === 0) return true;
+        for (const p of polys) {
+          const ring = p.ring;
+          let inside = false;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0],
+              yi = ring[i][1];
+            const xj = ring[j][0],
+              yj = ring[j][1];
+            const intersect =
+              yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+            if (intersect) inside = !inside;
           }
-          return false;
-        };
-        const built: { lat: number; lon: number; dr: number; dc: number }[] = [];
-        for (let rr = 0; rr < rows; rr++) {
-          for (let cc = 0; cc < cols; cc++) {
-            const offsetX = rr % 2 === 0 ? 0 : xStep / 2;
-            const px = topLeft.x + cc * xStep + offsetX;
-            const py = topLeft.y + rr * yStep;
-            const latRatio = (py - topLeft.y) / (dLatPx || 1);
-            const lonRatio = (px - topLeft.x) / (dLonPx || 1);
-            const hexLat = maxLat - latRatio * (maxLat - minLat);
-            const hexLon = minLon + lonRatio * (maxLon - minLon);
-            const dr = Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dg.rows);
-            const dc = Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dg.cols);
-            if (dr < 0 || dr >= dg.rows || dc < 0 || dc >= dg.cols) continue;
-            if (!inMapo(hexLat, hexLon)) continue;
-            built.push({ lat: hexLat, lon: hexLon, dr, dc });
-          }
+          if (inside) return true;
         }
-        cached = built;
-        hexLatLngCacheRef.current.set(zoomLvl, built);
+        return false;
+      };
+      const built: { x: number; y: number; dr: number; dc: number }[] = [];
+      for (let rr = 0; rr < rows; rr++) {
+        for (let cc = 0; cc < cols; cc++) {
+          const offsetX = rr % 2 === 0 ? 0 : xStep / 2;
+          const px = topLeft.x + cc * xStep + offsetX;
+          const py = topLeft.y + rr * yStep;
+          // bbox 픽셀 비율 → lat/lng (1차 근사). 줌 무관하게 가까운 셀에 매핑됨.
+          const latRatio = (py - topLeft.y) / (dLatPx || 1);
+          const lonRatio = (px - topLeft.x) / (dLonPx || 1);
+          const hexLat = maxLat - latRatio * (maxLat - minLat);
+          const hexLon = minLon + lonRatio * (maxLon - minLon);
+          const dr = Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dg.rows);
+          const dc = Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dg.cols);
+          if (dr < 0 || dr >= dg.rows || dc < 0 || dc >= dg.cols) continue;
+          if (!inMapo(hexLat, hexLon)) continue;
+          built.push({ x: px, y: py, dr, dc });
+        }
       }
-      // 캐시 hit/miss 무관 — 픽셀로 재투영 (zoom 동일 시 cached 그대로, ~1300 calls).
-      hexGridRef.current = cached.map((h) => {
-        const pt = proj.containerPointFromCoords(new kakao.maps.LatLng(h.lat, h.lon));
-        return { x: pt.x, y: pt.y, dr: h.dr, dc: h.dc };
-      });
+      hexGridRef.current = built;
     } else {
       hexGridRef.current = [];
     }
@@ -2969,14 +2973,7 @@ export default function AbmPersonaMap({
                 )}
               </div>
             ) : abmLoading ? (
-              <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-emerald-500/30 rounded-xl px-6 py-3 flex items-center gap-3">
-                <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-                <span className="text-sm text-emerald-300 font-mono">
-                  {scenario.weather_override ?? '현재날씨'} ·{' '}
-                  {scenario.weekend_force ? '주말' : '평일'} · 임대료 +
-                  {Math.round(scenario.rent_shock_pct * 100)}% — 시뮬 실행 중...
-                </span>
-              </div>
+              <AbmProgressPanel />
             ) : abmError ? (
               <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-amber-500/30 rounded-xl px-6 py-3">
                 <p className="text-sm text-amber-400">{abmError}</p>

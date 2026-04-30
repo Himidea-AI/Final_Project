@@ -568,16 +568,41 @@ class ModelOutput:
             logger.warning("유동인구 피크 예측 실패 (건너뜀): %s", exc)
             living_pop_result = None
 
-        # ---- 7) [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder) ----
+        # ---- 7) [E — emerging_district P1-E] 신흥 상권 조기 감지 ----
+        # Production: 4-tier fallback (change_ix → classifier → B1 trend → slope)
+        # 가 signal 판정의 1차 소스 (change_ix=서울시 공식 ground truth, classifier F1=0.87).
+        # autoencoder는 anomaly_score / consecutive_anomaly_quarters 보강용 (프론트 호환).
         emerging_result: dict | None = None
         try:
-            from models.emerging_district.predict import predict as _predict_emerging
+            from models.emerging_district.predict import predict as _predict_ae
+            from models.emerging_district.predict_fallback import predict_emerging_4tier
 
-            emerging_result = dict(_predict_emerging(dong_code, industry_code))
+            fallback = predict_emerging_4tier(dong_code, industry_code)
+
+            try:
+                ae_raw = _predict_ae(dong_code, industry_code)
+            except Exception as ae_exc:
+                logger.warning("autoencoder anomaly_score 보강 실패 (mock 사용): %s", ae_exc)
+                from models.emerging_district.predict import _mock_result as _ae_mock
+
+                ae_raw = _ae_mock(dong_code, industry_code)
+
+            emerging_result = {
+                "dong_code": dong_code,
+                "industry_code": industry_code,
+                "signal": fallback["signal"],
+                "anomaly_score": float(ae_raw.get("anomaly_score", 0.5)),
+                "consecutive_anomaly_quarters": int(ae_raw.get("consecutive_anomaly_quarters", 0)),
+                "summary": fallback["summary"],
+                "tier": fallback["tier"],
+                "raw": fallback["raw"],
+                "is_mock": fallback["tier"] == "none",
+            }
             logger.info(
-                "신흥 상권 감지 완료 — signal=%s anomaly=%.3f",
-                emerging_result.get("signal"),
-                emerging_result.get("anomaly_score", 0.0),
+                "신흥 상권 감지 완료 — tier=%s signal=%s anomaly=%.3f",
+                fallback["tier"],
+                fallback["signal"],
+                emerging_result["anomaly_score"],
             )
         except Exception as exc:
             logger.warning("신흥 상권 감지 실패 (건너뜀): %s", exc)

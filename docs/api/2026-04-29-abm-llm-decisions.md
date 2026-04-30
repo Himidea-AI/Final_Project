@@ -49,7 +49,7 @@
 - `TierDistribution(tier_s=50, tier_a=200, tier_b=n_agents-250)` 강제 (auto-scale 우회)
 - `world.tier_s_llm_only = True` 플래그 설정 → `agents.py:decide()` 가 Tier S 만 `smart_decide` 라우팅
 - `cfg.tier_s_provider="openai"`, `cfg.tier_s_model="gpt-4.1-mini"`, `cfg.tier_a_*` 동일
-- `llm_concurrency=4` (OpenAI 500 RPM 보호)
+- `llm_concurrency=8` (OpenAI 500 RPM 보호; 8×1.5s/call ≈ 320 RPM)
 
 `False` 시 (기본):
 - `TierDistribution(5, 20, 75)` 비율 → runner.py 가 n_personas 기준 비례 scale
@@ -166,7 +166,7 @@ if enable_llm_thought and thought_agents and not is_warmup:
 
 ### 5.1 OpenAI Tier 1 한도
 - gpt-4.1-mini: **500 RPM**
-- 동시 호출: smart_decide(ThreadPool 4) + thought batch(asyncio.Semaphore 4) = 합산 8 concurrent
+- 동시 호출: 모드별 단일 메커니즘 8 concurrent (decisions=True → ThreadPool 8 / decisions=False+thought=True → Semaphore 8)
 - 평균 RPM: ~320 (한도 내)
 
 ### 5.2 429 자동 재시도
@@ -188,7 +188,7 @@ for attempt in range(3):
 ### 5.3 Thought 배치 동시성 제한
 **`runner.py:_batch_generate_thoughts`**:
 ```python
-sem = asyncio.Semaphore(4)
+sem = asyncio.Semaphore(8)
 async def _bounded(a):
     async with sem:
         return await _generate_thought_with_retry(brain, a, world)
@@ -306,7 +306,7 @@ SHA256 해시 32자 + 버전 prefix.
 ### 9.2 한계
 - Pan 중 hover hit-test 부정확 (canvas frozen, mouse 좌표 신선 → 미스매치). drag 끝나면 정상.
 - Zoom 은 여전히 freeze (비선형 재투영 필요, transform 부적합).
-- OpenAI Tier 1 (500 RPM) 가정. Tier 2 이상이면 `llm_concurrency=16` 으로 상향 가능.
+- OpenAI Tier 1 (500 RPM) 가정. Tier 2 이상이면 `llm_concurrency=16` 으로 상향 가능 (현재 기본 8).
 
 ---
 
