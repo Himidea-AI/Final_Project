@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import pickle
 from functools import lru_cache
 
@@ -454,3 +455,74 @@ def _mock_result() -> dict:
         "model": "lgbm_tcn_ensemble",
         "is_mock": True,
     }
+
+
+def predict_topk(
+    targets: list[tuple[str, str]],
+    k_pct: int = 10,
+    config: dict | None = None,
+) -> list[dict]:
+    """다수 (dong, industry) 조합에서 위험도 top K% 추천.
+
+    Args:
+        targets: (dong_code, industry_code) tuple list. EXCLUDE_COMBOS 자동 제외.
+            빈 list 입력 → [] 반환.
+        k_pct: 상위 K% (1~100). 1 미만 → 1, 100 초과 → 100 으로 clamp.
+        config: db_url 등 override (predict() 의 config 와 동일).
+
+    Returns:
+        list[dict] — 각 dict 키:
+            "dong_code": str,
+            "industry_code": str,
+            "risk_score": float | None,
+            "risk_level": str,
+            "rank": int (1부터, top=1),
+            "top_signals_lgbm": list[dict],
+            "top_signals_tcn": list[dict],
+            "summary_lgbm": list[str],
+            "summary_tcn": list[str],
+            "is_mock": bool,
+            "model": str,
+
+        길이 = max(1, ceil(n_valid * k_pct / 100)).
+        risk_score=None (is_mock=True) 결과는 sort 시 마지막.
+
+    Note:
+        - EXCLUDE_COMBOS 의 target 은 자동 제외 + log info
+        - cache (`_load_models`) 재사용 — N=160 (마포 16동 × 10업종) 도 1회 model load
+    """
+    if not targets:
+        return []
+
+    k_pct = max(1, min(100, k_pct))
+
+    valid = [(d, i) for (d, i) in targets if (d, i) not in EXCLUDE_COMBOS]
+    excluded_n = len(targets) - len(valid)
+    if excluded_n > 0:
+        logger.info("predict_topk: EXCLUDE_COMBOS %d targets 제외", excluded_n)
+
+    if not valid:
+        return []
+
+    results = []
+    for dong, industry in valid:
+        try:
+            res = predict(dong, industry, config=config)
+        except ExcludedComboError:
+            continue
+        results.append({"dong_code": dong, "industry_code": industry, **res})
+
+    def _sort_key(r):
+        score = r.get("risk_score")
+        return (1 if score is None else 0, -(score if score is not None else 0))
+
+    results.sort(key=_sort_key)
+
+    n = len(results)
+    k = max(1, math.ceil(n * k_pct / 100))
+    top = results[:k]
+
+    for i, r in enumerate(top, start=1):
+        r["rank"] = i
+
+    return top

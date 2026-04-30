@@ -114,3 +114,139 @@ def test_train_writes_thresholds_to_metrics():
         f"threshold 정렬 위반: caution={t['caution']}, danger={t['danger']}"
     )
     assert t["danger_quantile"] >= t["caution_quantile"]
+
+
+def test_predict_topk_returns_top_k_pct(monkeypatch):
+    """len = ceil(n × k_pct / 100). EXCLUDE_COMBOS 제외 후 카운트."""
+    from models.closure_risk import predict as predict_mod
+
+    def fake_predict(dong, industry, config=None):
+        score = 0.1 + (int(dong[-3:]) % 10) * 0.05  # 0.1~0.55 결정적 분포
+        return {
+            "risk_score": score,
+            "risk_level": "safe",
+            "top_signals_lgbm": [],
+            "summary_lgbm": [],
+            "top_signals_tcn": [],
+            "summary_tcn": [],
+            "model": "test",
+            "is_mock": False,
+        }
+
+    monkeypatch.setattr(predict_mod, "predict", fake_predict)
+    monkeypatch.setattr(predict_mod, "EXCLUDE_COMBOS", set())
+
+    targets = [(f"114403{i:02d}", "CS100001") for i in range(20)]
+    result = predict_mod.predict_topk(targets, k_pct=10)
+
+    assert len(result) == max(1, int(20 * 10 / 100))  # = 2
+    assert all("rank" in r for r in result)
+    assert result[0]["rank"] == 1
+
+
+def test_predict_topk_sorted_desc(monkeypatch):
+    """risk_score 내림차순 정렬."""
+    from models.closure_risk import predict as predict_mod
+
+    scores_map = {
+        ("d1", "i1"): 0.5,
+        ("d2", "i1"): 0.2,
+        ("d3", "i1"): 0.8,
+        ("d4", "i1"): 0.1,
+    }
+
+    def fake_predict(dong, industry, config=None):
+        return {
+            "risk_score": scores_map[(dong, industry)],
+            "risk_level": "safe",
+            "top_signals_lgbm": [],
+            "summary_lgbm": [],
+            "top_signals_tcn": [],
+            "summary_tcn": [],
+            "model": "test",
+            "is_mock": False,
+        }
+
+    monkeypatch.setattr(predict_mod, "predict", fake_predict)
+    monkeypatch.setattr(predict_mod, "EXCLUDE_COMBOS", set())
+
+    targets = list(scores_map.keys())
+    result = predict_mod.predict_topk(targets, k_pct=100)
+
+    scores = [r["risk_score"] for r in result]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_predict_topk_empty_targets():
+    """빈 list 입력 → 빈 list 반환."""
+    from models.closure_risk import predict as predict_mod
+
+    assert predict_mod.predict_topk([], k_pct=10) == []
+
+
+def test_predict_topk_excludes_excluded_combos(monkeypatch):
+    """EXCLUDE_COMBOS 의 target 자동 필터."""
+    from models.closure_risk import predict as predict_mod
+
+    def fake_predict(dong, industry, config=None):
+        return {
+            "risk_score": 0.5,
+            "risk_level": "caution",
+            "top_signals_lgbm": [],
+            "summary_lgbm": [],
+            "top_signals_tcn": [],
+            "summary_tcn": [],
+            "model": "test",
+            "is_mock": False,
+        }
+
+    monkeypatch.setattr(predict_mod, "predict", fake_predict)
+    monkeypatch.setattr(predict_mod, "EXCLUDE_COMBOS", {("d_excluded", "i_excluded")})
+
+    targets = [("d_excluded", "i_excluded"), ("d1", "i1"), ("d2", "i1")]
+    result = predict_mod.predict_topk(targets, k_pct=100)
+
+    excluded = [
+        (r["dong_code"], r["industry_code"])
+        for r in result
+        if (r["dong_code"], r["industry_code"]) == ("d_excluded", "i_excluded")
+    ]
+    assert len(excluded) == 0
+    assert len(result) == 2
+
+
+def test_predict_topk_handles_mock_results(monkeypatch):
+    """is_mock=True 결과의 risk_score=None 도 graceful (sort 시 마지막)."""
+    from models.closure_risk import predict as predict_mod
+
+    def fake_predict(dong, industry, config=None):
+        if dong == "d_mock":
+            return {
+                "risk_score": None,
+                "risk_level": "unknown",
+                "top_signals_lgbm": [],
+                "summary_lgbm": [],
+                "top_signals_tcn": [],
+                "summary_tcn": [],
+                "model": "test",
+                "is_mock": True,
+            }
+        return {
+            "risk_score": 0.5,
+            "risk_level": "caution",
+            "top_signals_lgbm": [],
+            "summary_lgbm": [],
+            "top_signals_tcn": [],
+            "summary_tcn": [],
+            "model": "test",
+            "is_mock": False,
+        }
+
+    monkeypatch.setattr(predict_mod, "predict", fake_predict)
+    monkeypatch.setattr(predict_mod, "EXCLUDE_COMBOS", set())
+
+    targets = [("d_mock", "i1"), ("d1", "i1"), ("d2", "i1")]
+    result = predict_mod.predict_topk(targets, k_pct=100)
+
+    assert result[-1]["is_mock"] is True
+    assert result[-1]["risk_score"] is None
