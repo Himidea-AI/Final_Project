@@ -21,6 +21,47 @@ from .agents import Decision
 from .config import ModelConfig
 from .personas import Persona
 
+# LangSmith 토큰/비용 추적 — LANGCHAIN_TRACING_V2=true 일 때만 동작.
+# langsmith 미설치 / 환경변수 OFF 면 no-op 데코레이터로 graceful degrade.
+try:
+    from langsmith import traceable as _ls_traceable
+
+    def traceable(*dargs, **dkwargs):
+        return _ls_traceable(*dargs, **dkwargs)
+except Exception:
+
+    def traceable(*dargs, **dkwargs):
+        def _decorator(fn):
+            return fn
+
+        if dargs and callable(dargs[0]):
+            return dargs[0]
+        return _decorator
+
+
+# Gemini 등 wrap_*가 미지원인 SDK는 함수 안에서 직접 토큰 정보를 현재 run에 첨부.
+# LangSmith UI는 usage_metadata 의 input_tokens / output_tokens / total_tokens 키를 인식해
+# 토큰·비용 칼럼에 표시한다. (Anthropic SDK schema 와 동일)
+def _ls_attach_usage(input_tokens: int = 0, output_tokens: int = 0, model: str | None = None) -> None:
+    try:
+        from langsmith.run_helpers import get_current_run_tree
+
+        rt = get_current_run_tree()
+        if rt is None:
+            return
+        rt.add_metadata(
+            {
+                "usage_metadata": {
+                    "input_tokens": int(input_tokens),
+                    "output_tokens": int(output_tokens),
+                    "total_tokens": int(input_tokens) + int(output_tokens),
+                },
+                **({"ls_model_name": model} if model else {}),
+            }
+        )
+    except Exception:
+        pass
+
 if TYPE_CHECKING:
     from .agents import Agent
     from .memory_index import PgVectorMemory
@@ -145,12 +186,24 @@ class LLMBrain:
                 self.cfg.mock_mode = True
 
     def _init_clients(self) -> None:
+        # LangSmith wrapper — 자동 토큰/비용 추적용. 없으면 identity passthrough.
+        try:
+            from langsmith.wrappers import wrap_openai as _wrap_openai
+        except Exception:
+            def _wrap_openai(c):
+                return c
+        try:
+            from langsmith.wrappers import wrap_anthropic as _wrap_anthropic
+        except Exception:
+            def _wrap_anthropic(c):
+                return c
+
         # OpenAI (Tier S 또는 A에서 사용 가능)
         if "openai" in (self.cfg.tier_s_provider, self.cfg.tier_a_provider):
             try:
                 from openai import OpenAI
 
-                self._openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                self._openai = _wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
             except Exception as e:
                 print(f"[brain] OpenAI 초기화 실패: {e}")
                 self.cfg.mock_mode = True
@@ -161,9 +214,11 @@ class LLMBrain:
             try:
                 from openai import OpenAI
 
-                self._ollama = OpenAI(
-                    base_url=self.cfg.ollama_base_url,
-                    api_key="ollama",  # 더미 (Ollama 검사 안 함)
+                self._ollama = _wrap_openai(
+                    OpenAI(
+                        base_url=self.cfg.ollama_base_url,
+                        api_key="ollama",  # 더미 (Ollama 검사 안 함)
+                    )
                 )
             except Exception as e:
                 print(f"[brain] Ollama 클라이언트 초기화 실패: {e}")
@@ -174,7 +229,7 @@ class LLMBrain:
             try:
                 import anthropic
 
-                self._anth = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+                self._anth = _wrap_anthropic(anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")))
             except Exception as e:
                 print(f"[brain] Anthropic 초기화 실패: {e}")
                 self.cfg.mock_mode = True
@@ -204,6 +259,7 @@ class LLMBrain:
     # -----------------------------------------------------------
     # Tier S: Haiku + Prompt Cache
     # -----------------------------------------------------------
+    @traceable(run_type="chain", name="brain.tier_s.smart_decide")
     def smart_decide(self, agent: "Agent", world: "World") -> Decision:
         self.stats.tier_s_calls += 1
         ctx = self._dynamic_context(agent, world)
@@ -255,6 +311,7 @@ class LLMBrain:
     # -----------------------------------------------------------
     # Tier S Gemini 경로 (페르소나 전체 컨텍스트)
     # -----------------------------------------------------------
+    @traceable(run_type="llm", name="brain.tier_s.gemini")
     def _smart_decide_gemini(self, agent: "Agent", world: "World", ctx: str, persona: Persona) -> Decision:
         if self._gemini_s is None:
             return self._mock_decide(agent, world, tier="S")
@@ -273,6 +330,11 @@ class LLMBrain:
                 u = resp.usage_metadata
                 self.stats.tier_s_input_tokens += u.prompt_token_count
                 self.stats.tier_s_output_tokens += u.candidates_token_count
+                _ls_attach_usage(
+                    input_tokens=u.prompt_token_count,
+                    output_tokens=u.candidates_token_count,
+                    model=self.cfg.tier_s_model,
+                )
             except Exception:
                 pass
             return self._parse_decision(text, agent, world)
@@ -284,6 +346,7 @@ class LLMBrain:
     # -----------------------------------------------------------
     # Tier S OpenAI 경로
     # -----------------------------------------------------------
+    @traceable(run_type="llm", name="brain.tier_s.openai")
     def _smart_decide_openai(self, agent: "Agent", world: "World", ctx: str, persona: Persona) -> Decision:
         if self._openai is None:
             return self._mock_decide(agent, world, tier="S")
@@ -331,6 +394,7 @@ class LLMBrain:
     # -----------------------------------------------------------
     # Tier A: Gemini Flash 또는 OpenAI nano
     # -----------------------------------------------------------
+    @traceable(run_type="chain", name="brain.tier_a.fast_decide")
     def fast_decide(self, agent: "Agent", world: "World") -> Decision:
         self.stats.tier_a_calls += 1
 
@@ -362,6 +426,11 @@ class LLMBrain:
                 u = resp.usage_metadata
                 self.stats.tier_a_input_tokens += u.prompt_token_count
                 self.stats.tier_a_output_tokens += u.candidates_token_count
+                _ls_attach_usage(
+                    input_tokens=u.prompt_token_count,
+                    output_tokens=u.candidates_token_count,
+                    model=self.cfg.tier_a_model,
+                )
             except Exception:
                 pass
             return self._parse_decision(text, agent, world)
@@ -373,6 +442,7 @@ class LLMBrain:
     # -----------------------------------------------------------
     # Tier S/A Ollama (Qwen) 경로 - OpenAI 호환 endpoint
     # -----------------------------------------------------------
+    @traceable(run_type="llm", name="brain.tier_s.ollama")
     def _smart_decide_ollama(self, agent: "Agent", world: "World", ctx: str, persona: Persona) -> Decision:
         if self._ollama is None:
             return self._mock_decide(agent, world, tier="S")
@@ -397,6 +467,7 @@ class LLMBrain:
             print(f"[brain.S/ollama] {agent.agent_id} 실패: {e}")
             return self._mock_decide(agent, world, tier="S")
 
+    @traceable(run_type="llm", name="brain.tier_a.ollama")
     def _fast_decide_ollama(self, agent: "Agent", world: "World") -> Decision:
         if self._ollama is None:
             return self._mock_decide(agent, world, tier="A")
@@ -422,6 +493,7 @@ class LLMBrain:
     # -----------------------------------------------------------
     # Tier A OpenAI 경로
     # -----------------------------------------------------------
+    @traceable(run_type="llm", name="brain.tier_a.openai")
     def _fast_decide_openai(self, agent: "Agent", world: "World") -> Decision:
         if self._openai is None:
             return self._mock_decide(agent, world, tier="A")
@@ -687,6 +759,7 @@ class LLMBrain:
     # Thought generator — Tier S 50명만 시각화용 한국어 내적 독백
     # 의사결정과 분리: trajectory 풍선/페르소나 카드 demo 용
     # -----------------------------------------------------------
+    @traceable(run_type="llm", name="brain.thought.openai")
     def generate_thought(
         self,
         agent: "Agent",

@@ -838,7 +838,9 @@ function SimulatorDashboard({
   );
   const [dashboardMode, setDashboardMode] = useState<'data' | 'map' | 'abm'>('data');
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
-  const [selectedGu] = useState('마포구');
+  // 마포구 외 다른 자치구 미지원 — useState 트릭 제거하고 const 로 노출.
+  // 향후 다른 구 확장 시 useState<GuName>('마포구') + setter 로 복원.
+  const selectedGu = '마포구' as const;
   // [UX] 동 선택 1~4개 제한 — 파이프라인 성능 + 레이더 차트 가독성 한계
   const [selectedDongs, setSelectedDongs] = useState<string[]>(() =>
     DONG_DATA['마포구'].slice(0, 4),
@@ -1357,17 +1359,25 @@ function SimulatorDashboard({
 
   const toggleDong = useCallback(
     (dong: string) => {
+      // setState updater 함수는 순수해야 함. side effect (showToast) 를 안에 두면
+      // React 18 StrictMode/concurrent mode 가 updater 를 여러 번 호출할 때
+      // toast 가 여러 번 떠 "무한 에러 메시지" 처럼 보임.
+      // → flag 로 의도 기록, setSelectedDongs 호출 후 외부에서 showToast 한 번만.
+      let hitLimit = false;
       setSelectedDongs((prev) => {
         if (prev.includes(dong)) {
           if (prev.length <= 1) return prev; // 최소 1개
           return prev.filter((d) => d !== dong);
         }
         if (prev.length >= MAX_DONGS) {
-          showToast('info', `동은 최대 ${MAX_DONGS}개까지 선택할 수 있습니다.`);
+          hitLimit = true;
           return prev;
         }
         return [...prev, dong];
       });
+      if (hitLimit) {
+        showToast('info', `동은 최대 ${MAX_DONGS}개까지 선택할 수 있습니다.`);
+      }
     },
     [showToast],
   );
@@ -1425,7 +1435,7 @@ function SimulatorDashboard({
       };
 
       // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
-      // [IM3-259] /predict + /analyze/llm 분리 호출 (Promise.allSettled). market_report 는 analysis 슬라이스에 포함.
+      // [IM3-259] /predict + /analyze/llm 독립 비동기 호출. predict 완료 즉시 대시보드 진입, analyze 는 백그라운드 완료 후 자동 갱신.
       await useSimulationStore.getState().startSimulation(payload);
       const storeState = useSimulationStore.getState();
       const simRes = buildCombinedResult(
@@ -1433,7 +1443,9 @@ function SimulatorDashboard({
         storeState.analysis.data,
         storeState.params?.target_district ?? undefined,
       );
-      if (storeState.status !== 'done' || !simRes) {
+      // prediction 슬라이스만 done 이면 대시보드 진입 허용.
+      // analysis 는 백그라운드에서 계속 실행 — DashboardOutlet 이 store 구독으로 자동 갱신.
+      if (storeState.prediction.status !== 'done' || !simRes) {
         throw new Error(storeState.error ?? 'Simulation failed');
       }
       // [R1] Zustand store.result 가 Single Source of Truth.
@@ -2207,8 +2219,13 @@ function SimulatorDashboard({
                     </div>
                   )}
 
-                  {/* Single Mode: 기존 대시보드 */}
-                  {!isSplitMode && (viewMode === 'legacy' || !rawSimResult) && (
+                  {/* Single Mode: 기존 (legacy) 대시보드 — 사실상 dead code.
+                    · viewMode 는 line 828 에서 'integrated' 로 고정 → 'legacy' 절대 true 아님.
+                    · 2026-04-30 fix: `|| !rawSimResult` 제거. hydration 중 일시 null 일 때
+                      이 블록이 렌더되어 H7 후 삭제됐어야 할 옛 디자인이 새로고침/홈 이동 후
+                      다시 노출되던 회귀 버그(약 1,800줄 옛 JSX) 해소.
+                    · 옛 JSX 블록 자체 (line 2222~) 는 별도 cycle 에서 완전 제거 예정. */}
+                  {!isSplitMode && viewMode === 'legacy' && (
                     <>
                       {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단
                         · map 뷰에서는 숨김 (AI 에이전트 맵 화면 간결성)

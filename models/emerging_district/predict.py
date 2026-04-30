@@ -60,12 +60,15 @@ def _load_model() -> tuple[LSTMAutoencoder, dict]:
     with open(meta_path, "rb") as f:
         meta = pickle.load(f)  # noqa: S301
 
+    import torch as _torch
+    _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
     model = LSTMAutoencoder(
         input_size=meta["input_size"],
         hidden_size=meta["hidden_size"],
         num_layers=meta["num_layers"],
     )
     model.load_weights(weights_path)
+    model.to(_device)
     model.eval()
 
     _cache.update({"model": model, "meta": meta})
@@ -122,7 +125,8 @@ def _count_consecutive_anomalies(
 
     for i in range(len(feat_scaled) - window_size, -1, -1):
         seq = feat_scaled[i : i + window_size]
-        x_t = torch.from_numpy(seq).unsqueeze(0)  # (1, window, features)
+        _dev = next(model.parameters()).device
+        x_t = torch.from_numpy(seq).unsqueeze(0).to(_dev)  # (1, window, features)
         with torch.no_grad():
             recon = model(x_t)
         err = float(((recon - x_t) ** 2).mean().item())
@@ -195,7 +199,8 @@ def predict(
 
     # 최근 window_size 분기로 reconstruction error 계산
     recent_seq = feat_scaled[-window_size:]
-    x_t = torch.from_numpy(recent_seq).unsqueeze(0)
+    _dev = next(model.parameters()).device
+    x_t = torch.from_numpy(recent_seq).unsqueeze(0).to(_dev)
     with torch.no_grad():
         recon = model(x_t)
     reconstruction_error = float(((recon - x_t) ** 2).mean().item())
