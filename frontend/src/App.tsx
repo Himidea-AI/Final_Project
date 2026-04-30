@@ -2217,8 +2217,13 @@ function SimulatorDashboard({
                     </div>
                   )}
 
-                  {/* Single Mode: 기존 대시보드 */}
-                  {!isSplitMode && (viewMode === 'legacy' || !rawSimResult) && (
+                  {/* Single Mode: 기존 (legacy) 대시보드 — 사실상 dead code.
+                    · viewMode 는 line 828 에서 'integrated' 로 고정 → 'legacy' 절대 true 아님.
+                    · 2026-04-30 fix: `|| !rawSimResult` 제거. hydration 중 일시 null 일 때
+                      이 블록이 렌더되어 H7 후 삭제됐어야 할 옛 디자인이 새로고침/홈 이동 후
+                      다시 노출되던 회귀 버그(약 1,800줄 옛 JSX) 해소.
+                    · 옛 JSX 블록 자체 (line 2222~) 는 별도 cycle 에서 완전 제거 예정. */}
+                  {!isSplitMode && viewMode === 'legacy' && (
                     <>
                       {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단
                         · map 뷰에서는 숨김 (AI 에이전트 맵 화면 간결성)
