@@ -67,7 +67,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
                     "ecos_timeseries",
                 ],
                 verdict=f"12개월 전망 {_cached_forecast.get('score', 0)}/100 · {_cached_forecast.get('direction', 'N/A')}",
-                reasoning=str(_cached_narr)[:300] if _cached_narr else "추세 예측 (캐시)",
+                reasoning=str(_cached_narr) if _cached_narr else "추세 예측 (캐시)",
                 confidence=0.75,
             )
             _cached_analysis = {
@@ -272,7 +272,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
             "ecos_timeseries",
         ],
         verdict=f"12개월 전망 {parsed.forecast_score}/100 · {parsed.forecast_direction}",
-        reasoning=str(parsed.narrative)[:300] if parsed and parsed.narrative else "추세 예측 데이터 기반",
+        reasoning=str(parsed.narrative) if parsed and parsed.narrative else "추세 예측 데이터 기반",
         confidence=0.75,
     )
 

@@ -323,7 +323,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
         _cached_narr = cached.get("narrative", "") if isinstance(cached, dict) else ""
         _cached_attr = _make_competitor_attr(
             f"진입 신호 {_cached_signal} · 포화 {_cached_sat}",
-            str(_cached_narr)[:300] if _cached_narr else "경쟁 인텔 (캐시 · Pancras 2013 decay 모델 반영)",
+            str(_cached_narr) if _cached_narr else "경쟁 인텔 (캐시 · Pancras 2013 decay 모델 반영)",
             0.8,
         )
         cached_with_attr = dict(cached) if isinstance(cached, dict) else {"cached": cached}
@@ -402,7 +402,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
 
     competitor_attr = _make_competitor_attr(
         f"진입 신호 {llm_parsed.get('market_entry_signal', 'N/A')} · 포화 {(data.get('competition_500m') or {}).get('saturation_level', 'N/A')}",
-        str(llm_parsed.get("narrative") or "")[:300]
+        str(llm_parsed.get("narrative") or "")
         or "경쟁 인텔 종합 (Pancras 2013 distance-decay 기반 카니발 보정).",
         0.8,
         status=llm_status,
