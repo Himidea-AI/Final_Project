@@ -188,48 +188,51 @@ def load_base_data(db_url: str = DB_URL, dong_prefix: str = "11440") -> pd.DataF
 # ---------------------------------------------------------------------------
 
 
-def _make_labels(df: pd.DataFrame) -> pd.DataFrame:
-    """다음 분기 기준 3중 조건 고위험 레이블 생성.
+def _make_labels(
+    df: pd.DataFrame,
+    train_quarters: set[int] | None,
+    *,
+    drop_unseen_industry: bool = True,
+) -> pd.DataFrame:
+    """단일 quantile 기반 label 생성 (C-B1).
 
-    조건 (하나라도 해당 → 1):
-        ① 다음 분기 closure_rate > 업종 전체 평균 × 1.5
-        ② 다음 2분기 연속 store_count 감소
-        ③ 다음 분기 monthly_sales 전년동기 대비 -25% 이상
+    label = 1 ⟺ next_closure_rate > industry_p75_train.
+    train_quarters 의 closure_rate 만으로 p75 fit (leakage 차단).
+
+    Args:
+        df: lag feature 까지 적용된 dataset.
+        train_quarters: train split 분기 set. None / 빈 set → ValueError.
+        drop_unseen_industry: True (default) 이면 train 에 없거나 sample 부족
+            (min_samples<4) 인 industry row drop. False 이면 global_p75 fallback.
+
+    Returns:
+        df + ["label", "industry_p75"] 컬럼. 마지막 분기 (next 없음) row drop.
+
+    Raises:
+        ValueError: train_quarters 가 None 또는 빈 set.
     """
+    if not train_quarters:
+        raise ValueError("train_quarters 필수 — leakage 차단 위해 None / 빈 set 금지")
+
     df = df.copy().sort_values(["dong_code", "industry_code", "quarter"])
     gk = ["dong_code", "industry_code"]
 
-    # 다음 분기 값 shift
     df["next_closure_rate"] = df.groupby(gk)["closure_rate"].shift(-1)
-    df["next_store_count"] = df.groupby(gk)["store_count"].shift(-1)
-    df["next2_store_count"] = df.groupby(gk)["store_count"].shift(-2)
-    df["next_monthly_sales"] = df.groupby(gk)["monthly_sales"].shift(-1)
 
-    # 전년동기 매출 (4분기 전)
-    df["sales_4q_ago"] = df.groupby(gk)["monthly_sales"].shift(4)
+    p75_series, global_p75 = _compute_industry_p75_train(df, train_quarters)
+    df["industry_p75"] = df["industry_code"].map(p75_series)
 
-    # 업종별 평균 closure_rate (분기 전체 기준)
-    # 업종별 전 분기 통합 평균 (시계열 leakage 아님 — 임계값 기준선으로만 사용)
-    industry_avg = df.groupby("industry_code")["closure_rate"].transform("mean")
+    if drop_unseen_industry:
+        unseen_count = int(df["industry_p75"].isna().sum())
+        if unseen_count > 0:
+            logger.warning("train 에 없거나 sample 부족 industry → %d row drop", unseen_count)
+        df = df[df["industry_p75"].notna()].copy()
+    else:
+        df["industry_p75"] = df["industry_p75"].fillna(global_p75)
 
-    # 조건 ①: 다음 분기 폐업률 > 업종 평균 × 1.5
-    cond1 = df["next_closure_rate"] > industry_avg * 1.5
-
-    # 조건 ②: 다음 2분기 연속 store_count 감소
-    cond2 = (df["next_store_count"] < df["store_count"]) & (df["next2_store_count"] < df["next_store_count"])
-
-    # 조건 ③: 다음 분기 매출 전년동기 -25% 이상 하락
-    yoy_change = (df["next_monthly_sales"] - df["sales_4q_ago"]) / (df["sales_4q_ago"].abs() + 1e-6)
-    cond3 = yoy_change < -0.25
-
-    df["label"] = (cond1 | cond2 | cond3).astype(int)
-
-    # 다음 분기 데이터 없는 마지막 행 제거
+    df["label"] = (df["next_closure_rate"] > df["industry_p75"]).astype(int)
     df = df[df["next_closure_rate"].notna()].copy()
-
-    # 임시 컬럼 제거
-    drop_cols = ["next_closure_rate", "next_store_count", "next2_store_count", "next_monthly_sales", "sales_4q_ago"]
-    df = df.drop(columns=[c for c in drop_cols if c in df.columns])
+    df = df.drop(columns=["next_closure_rate"])
 
     return df
 
