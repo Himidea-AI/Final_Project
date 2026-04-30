@@ -38,6 +38,11 @@ from .train import load_scalers
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# 프로세스 단위 모델 캐시 — 같은 가중치 경로는 한 번만 로드
+# ---------------------------------------------------------------------------
+_MODEL_CACHE: dict = {}
+
+# ---------------------------------------------------------------------------
 # 기본 설정
 # ---------------------------------------------------------------------------
 
@@ -106,7 +111,7 @@ def predict(
             f"dong_code={dong_code}, industry_code={industry_code}"
         )
 
-    device = torch.device("cpu")  # 추론은 CPU에서 수행
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     weights_path = Path(cfg["weights_path"])
     scalers_path = Path(cfg["scalers_path"])
@@ -124,25 +129,34 @@ def predict(
     if not scalers_path.exists():
         raise FileNotFoundError(f"스케일러 파일을 찾을 수 없습니다: {scalers_path}")
 
-    # 스케일러 로드 — 역변환(inverse_transform)에 사용
-    feat_scaler, tgt_scaler = load_scalers(scalers_path)
+    # 모델+스케일러 싱글턴 캐시 — 동일 가중치 경로는 프로세스 내 한 번만 로드
+    _cache_key = (str(weights_path), str(scalers_path))
+    if _cache_key in _MODEL_CACHE:
+        feat_scaler, tgt_scaler, model = _MODEL_CACHE[_cache_key]
+        logger.debug("모델 캐시 히트 — TCNForecaster (%s)", weights_path.name)
+    else:
+        # 스케일러 로드 — 역변환(inverse_transform)에 사용
+        feat_scaler, tgt_scaler = load_scalers(scalers_path)
+        input_size = len(feat_scaler.scale_)
 
-    # 피처 컬럼 결정 — 스케일러에서 실제 사용된 피처 수 추론
+        # TCN 모델 로드
+        model = TCNForecaster(
+            input_size=input_size,
+            n_channels=cfg["n_channels"],
+            kernel_size=cfg["kernel_size"],
+            dilations=cfg["dilations"],
+            dropout=cfg["dropout"],
+        )
+        model.load_weights(weights_path)
+        model.to(device)
+        model.eval()
+        _MODEL_CACHE[_cache_key] = (feat_scaler, tgt_scaler, model)
+        logger.info("TCNForecaster 로드 완료 → 캐시 저장 (%s)", weights_path.name)
+
+    # 피처 컬럼 결정 (캐시 히트 시에도 필요)
     if feature_cols is None:
         feature_cols = ALL_FEATURES
     input_size = len(feat_scaler.scale_)
-
-    # TCN 모델 로드
-    model = TCNForecaster(
-        input_size=input_size,
-        n_channels=cfg["n_channels"],
-        kernel_size=cfg["kernel_size"],
-        dilations=cfg["dilations"],
-        dropout=cfg["dropout"],
-    )
-    model.load_weights(weights_path)
-    model.to(device)
-    model.eval()
 
     # 과거 데이터 로드 — 마포구 동 코드 앞 5자리로 필터링
     dong_prefix = dong_code[:5] if len(dong_code) >= 5 else dong_code

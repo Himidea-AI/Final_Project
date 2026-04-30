@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,12 @@ from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# 프로세스 단위 DB 데이터 캐시 (TTL 5분)
+# ---------------------------------------------------------------------------
+_DATA_CACHE: dict = {}
+_CACHE_TTL: int = 300  # seconds
 
 # ---------------------------------------------------------------------------
 # 기본 경로 / DB 접속 정보
@@ -163,7 +170,13 @@ def load_sales_data(
             df = df[df["dong_code"].astype(str).str.startswith(dong_prefix)]
         return df
 
-    # 1) DB에서 로드 시도
+    # 1) DB에서 로드 시도 (캐시 우선)
+    _sales_key = ("sales", db_url, str(dong_prefix))
+    if _sales_key in _DATA_CACHE:
+        _cached_df, _cached_ts = _DATA_CACHE[_sales_key]
+        if time.monotonic() - _cached_ts < _CACHE_TTL:
+            logger.debug("캐시 히트 — sales data (%s)", dong_prefix)
+            return _cached_df.copy()
     try:
         # dong_prefix가 없으면 서울 전체 테이블, 있으면 마포구 등 필터링
         table = "seoul_district_sales" if dong_prefix is None else "district_sales"
@@ -171,6 +184,7 @@ def load_sales_data(
         query = f"SELECT * FROM {table}{where} ORDER BY quarter, dong_code"  # noqa: S608
         df = _load_from_db(query, db_url)
         logger.info("DB에서 %s 로드 완료: %d rows", table, len(df))
+        _DATA_CACHE[_sales_key] = (df, time.monotonic())
     except Exception as exc:
         logger.warning("DB 접속 실패, CSV fallback 시도: %s", exc)
 
@@ -201,13 +215,20 @@ def load_store_data(
     """store_quarterly 데이터를 로드한다."""
     df = None
 
-    # 1) DB에서 로드 시도
+    # 1) DB에서 로드 시도 (캐시 우선)
+    _store_key = ("store", db_url, str(dong_prefix))
+    if _store_key in _DATA_CACHE:
+        _cached_df, _cached_ts = _DATA_CACHE[_store_key]
+        if time.monotonic() - _cached_ts < _CACHE_TTL:
+            logger.debug("캐시 히트 — store data (%s)", dong_prefix)
+            return _cached_df.copy()
     try:
         table = "seoul_district_stores" if dong_prefix is None else "store_quarterly"
         where = f" WHERE dong_code LIKE '{dong_prefix}%'" if dong_prefix else ""
         query = f"SELECT * FROM {table}{where} ORDER BY quarter, dong_code"  # noqa: S608
         df = _load_from_db(query, db_url)
         logger.info("DB에서 %s 로드 완료: %d rows", table, len(df))
+        _DATA_CACHE[_store_key] = (df, time.monotonic())
     except Exception as exc:
         logger.warning("DB 접속 실패, CSV fallback 시도: %s", exc)
 

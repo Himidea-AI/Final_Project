@@ -1425,7 +1425,7 @@ function SimulatorDashboard({
       };
 
       // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
-      // [IM3-259] /predict + /analyze/llm 분리 호출 (Promise.allSettled). market_report 는 analysis 슬라이스에 포함.
+      // [IM3-259] /predict + /analyze/llm 독립 비동기 호출. predict 완료 즉시 대시보드 진입, analyze 는 백그라운드 완료 후 자동 갱신.
       await useSimulationStore.getState().startSimulation(payload);
       const storeState = useSimulationStore.getState();
       const simRes = buildCombinedResult(
@@ -1433,7 +1433,9 @@ function SimulatorDashboard({
         storeState.analysis.data,
         storeState.params?.target_district ?? undefined,
       );
-      if (storeState.status !== 'done' || !simRes) {
+      // prediction 슬라이스만 done 이면 대시보드 진입 허용.
+      // analysis 는 백그라운드에서 계속 실행 — DashboardOutlet 이 store 구독으로 자동 갱신.
+      if (storeState.prediction.status !== 'done' || !simRes) {
         throw new Error(storeState.error ?? 'Simulation failed');
       }
       // [R1] Zustand store.result 가 Single Source of Truth.
