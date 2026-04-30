@@ -398,6 +398,26 @@ def train(config: dict | None = None) -> None:
         float(df_labeled["label"].mean()),
     )
 
+    # A-2 Stage 1: industry prior model 학습 + df_labeled 에 industry_prior_pred 컬럼 추가
+    from models.closure_risk.stage1_industry_prior import (
+        predict_industry_prior,
+        train_industry_prior_stage1,
+    )
+
+    stage1_model, stage1_agg = train_industry_prior_stage1(df_labeled, train_quarters)
+    df_labeled = predict_industry_prior(df_labeled, stage1_model, stage1_agg)
+    logger.info(
+        "A-2 Stage 1 prior 추가 완료. industry_prior_pred range: [%.4f, %.4f]",
+        float(df_labeled["industry_prior_pred"].min()),
+        float(df_labeled["industry_prior_pred"].max()),
+    )
+
+    # Stage 1 model + agg 저장 (predict.py 가 load)
+    stage1_path = WEIGHTS_DIR / "stage1_industry_prior.pkl"
+    with open(stage1_path, "wb") as f:
+        pickle.dump({"model": stage1_model, "agg": stage1_agg}, f)
+    logger.info("Stage 1 model 저장: %s", stage1_path)
+
     # 4. label 적용 후 split 별 row 재추출
     train_df = df_labeled[df_labeled["quarter"].isin(train_quarters)].copy()
     val_df = df_labeled[df_labeled["quarter"].isin(val_quarters)].copy()

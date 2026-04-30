@@ -101,14 +101,14 @@ def test_open_close_ratio_handles_zero_close():
 
 
 def test_LGBM_FEATURES_count_after_b1_rollback():
-    """B-1 production rollback 후 LGBM_FEATURES = 15 (D layer baseline).
+    """B-1 rollback + A-2 Stage 1 추가 후 LGBM_FEATURES = 16.
 
-    B-1 retrain 결과 AUC -0.024 degradation → LGBM_FEATURES 에서 신규 8 제거.
-    derivation 코드는 _engineer_lag_features 에 보존 (미래 sprint 활용).
+    B-1 rollback: 신규 8 feature 제거 (15 baseline 유지).
+    A-2 Stage 1: industry_prior_pred 1개 추가 → 15 + 1 = 16.
     """
-    assert len(LGBM_FEATURES) == 15, f"LGBM_FEATURES 길이 mismatch: {len(LGBM_FEATURES)}"
-    # 신규 8 feature 는 LGBM_FEATURES 에 없어야 함 (rollback)
-    new_cols = {
+    assert len(LGBM_FEATURES) == 16, f"LGBM_FEATURES 길이 mismatch: {len(LGBM_FEATURES)}"
+    # B-1 신규 8 feature 는 LGBM_FEATURES 에 없어야 함 (rollback 유지)
+    b1_cols = {
         "weekday_sales_yoy",
         "weekend_sales_yoy",
         "age_20_sales_ratio",
@@ -118,4 +118,6 @@ def test_LGBM_FEATURES_count_after_b1_rollback():
         "holiday_count",
         "cpi_index_yoy",
     }
-    assert new_cols.isdisjoint(set(LGBM_FEATURES))
+    assert b1_cols.isdisjoint(set(LGBM_FEATURES))
+    # A-2 Stage 1 feature 는 포함
+    assert "industry_prior_pred" in LGBM_FEATURES

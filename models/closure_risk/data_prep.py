@@ -148,6 +148,8 @@ LGBM_FEATURES = [
     "trend_score",  # 네이버 검색 트렌드 (업종 관심도 감소 → 수요 감소 신호)
     # 유동인구 — adstrd_flpop(null 0%, zero 0%)이 bus_flpop(zero 49%)보다 완전
     "adstrd_flpop",  # 행정동 전체 유동인구
+    # A-2 Stage 1 hierarchical (2026-05-01) — Wolpert 1992 two-stage stacking
+    "industry_prior_pred",  # industry-level prior model 예측 (broadcast per (industry, quarter))
     # B-1 신규 8 derivation (2026-05-01) — production rollback (commit 9b09cd1)
     # AUC -0.024 degradation 으로 LGBM 입력 미사용. derivation 코드는 _engineer_lag_features
     # 에 보존되어 미래 sprint (B-2 spillover, B-3 hierarchical) 와 결합 시 활용 가능.

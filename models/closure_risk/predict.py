@@ -83,11 +83,21 @@ _cache: dict = {}
 
 
 def _load_models() -> tuple:
-    """LightGBM, TCNClassifier, 앙상블 가중치 로드 (캐시)."""
+    """LightGBM, TCNClassifier, 앙상블 가중치, scaler, Stage 1 prior 로드 (캐시).
+
+    Returns 5-tuple: (lgbm, tcn, ensemble_w, scaler, stage1_data)
+    stage1_data is dict {"model": LGBMRegressor, "agg": pd.DataFrame} or None if pkl missing.
+    """
     global _cache  # noqa: PLW0603
 
     if _cache:
-        return _cache["lgbm"], _cache["tcn"], _cache["weights"], _cache["scaler"]
+        return (
+            _cache["lgbm"],
+            _cache["tcn"],
+            _cache["weights"],
+            _cache["scaler"],
+            _cache.get("stage1"),
+        )
 
     lgbm_path = WEIGHTS_DIR / "closure_risk_lgbm.pkl"
     tcn_path = WEIGHTS_DIR / "closure_risk_tcn.pt"
@@ -109,7 +119,6 @@ def _load_models() -> tuple:
         with open(ew_path, "rb") as f:
             ensemble_w = pickle.load(f)  # noqa: S301
 
-    # TCN 모델 — input_size는 ensemble_weights에 저장된 값 사용 (기본 34)
     import torch as _torch
 
     _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
@@ -119,12 +128,31 @@ def _load_models() -> tuple:
     tcn.to(_device)
     tcn.eval()
 
-    # TCN 스케일러 — 학습 시 저장된 스케일러 로드 (위에서 존재 보장됨)
     with open(scaler_path, "rb") as f:
         tcn_scaler = pickle.load(f)  # noqa: S301
 
-    _cache.update({"lgbm": lgbm, "tcn": tcn, "weights": ensemble_w, "scaler": tcn_scaler})
-    return lgbm, tcn, ensemble_w, tcn_scaler
+    # A-2 Stage 1 prior — graceful fallback if missing
+    stage1_path = WEIGHTS_DIR / "stage1_industry_prior.pkl"
+    stage1_data = None
+    if stage1_path.exists():
+        try:
+            with open(stage1_path, "rb") as f:
+                stage1_data = pickle.load(f)  # noqa: S301
+            logger.info("Stage 1 industry prior 로드: %s", stage1_path)
+        except Exception as e:
+            logger.warning("Stage 1 pkl load 실패 — fallback 0.0: %s", e)
+            stage1_data = None
+
+    _cache.update(
+        {
+            "lgbm": lgbm,
+            "tcn": tcn,
+            "weights": ensemble_w,
+            "scaler": tcn_scaler,
+            "stage1": stage1_data,
+        }
+    )
+    return lgbm, tcn, ensemble_w, tcn_scaler, stage1_data
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +440,7 @@ def predict(
     window_size = 4
 
     try:
-        lgbm_model, tcn_model, ensemble_w, tcn_scaler = _load_models()
+        lgbm_model, tcn_model, ensemble_w, tcn_scaler, stage1_data = _load_models()
     except FileNotFoundError as e:
         logger.warning("모델 없음 — mock 반환: %s", e)
         return _mock_result()
@@ -445,7 +473,27 @@ def predict(
         return _mock_result()
 
     latest = grp_eng.iloc[-1]
-    x_lgbm = np.array([latest.get(f, 0.0) for f in LGBM_FEATURES], dtype=np.float32)
+
+    # A-2 Stage 1 prior lookup
+    industry_prior_pred = 0.0
+    if stage1_data is not None:
+        agg = stage1_data["agg"]
+        latest_quarter = int(latest["quarter"])
+        matching = agg[(agg["industry_code"] == industry_code) & (agg["quarter"] == latest_quarter)]
+        if len(matching) > 0:
+            if "industry_prior_pred" in matching.columns:
+                industry_prior_pred = float(matching["industry_prior_pred"].iloc[0])
+            else:
+                # agg 에 prediction 미저장 → on-the-fly
+                from models.closure_risk.stage1_industry_prior import STAGE1_FEATURES
+
+                X_stage1 = matching[STAGE1_FEATURES].fillna(0).values
+                industry_prior_pred = float(stage1_data["model"].predict(X_stage1)[0])
+
+    x_lgbm = np.array(
+        [latest.get(f, 0.0) if f != "industry_prior_pred" else industry_prior_pred for f in LGBM_FEATURES],
+        dtype=np.float32,
+    )
     p_lgbm = float(lgbm_model.predict_proba(x_lgbm.reshape(1, -1))[0, 1])
 
     # --- TCN 브랜치 ---
