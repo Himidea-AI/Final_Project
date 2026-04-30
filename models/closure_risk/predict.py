@@ -83,10 +83,11 @@ _cache: dict = {}
 
 
 def _load_models() -> tuple:
-    """LightGBM, TCNClassifier, 앙상블 가중치, scaler, Stage 1 prior 로드 (캐시).
+    """LightGBM, TCNClassifier, 앙상블 가중치, scaler, Stage 1 prior, calibrator 로드 (캐시).
 
-    Returns 5-tuple: (lgbm, tcn, ensemble_w, scaler, stage1_data)
+    Returns 6-tuple: (lgbm, tcn, ensemble_w, scaler, stage1_data, calibrator)
     stage1_data is dict {"model": LGBMRegressor, "agg": pd.DataFrame} or None if pkl missing.
+    calibrator is sklearn.isotonic.IsotonicRegression or None (D-3, 2026-05-01).
     """
     global _cache  # noqa: PLW0603
 
@@ -97,6 +98,7 @@ def _load_models() -> tuple:
             _cache["weights"],
             _cache["scaler"],
             _cache.get("stage1"),
+            _cache.get("calibrator"),
         )
 
     lgbm_path = WEIGHTS_DIR / "closure_risk_lgbm.pkl"
@@ -143,6 +145,19 @@ def _load_models() -> tuple:
             logger.warning("Stage 1 pkl load 실패 — fallback 0.0: %s", e)
             stage1_data = None
 
+    # D-3 isotonic calibrator — graceful fallback (2026-05-01)
+    cal_path = WEIGHTS_DIR / "ensemble_calibrator.pkl"
+    calibrator = None
+    if cal_path.exists():
+        try:
+            with open(cal_path, "rb") as f:
+                calibrator = pickle.load(f)  # noqa: S301
+            if calibrator is not None:
+                logger.info("ensemble calibrator 로드: %s", cal_path)
+        except Exception as e:
+            logger.warning("calibrator pkl load 실패 — raw proba 사용: %s", e)
+            calibrator = None
+
     _cache.update(
         {
             "lgbm": lgbm,
@@ -150,9 +165,10 @@ def _load_models() -> tuple:
             "weights": ensemble_w,
             "scaler": tcn_scaler,
             "stage1": stage1_data,
+            "calibrator": calibrator,
         }
     )
-    return lgbm, tcn, ensemble_w, tcn_scaler, stage1_data
+    return lgbm, tcn, ensemble_w, tcn_scaler, stage1_data, calibrator
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +456,7 @@ def predict(
     window_size = 4
 
     try:
-        lgbm_model, tcn_model, ensemble_w, tcn_scaler, stage1_data = _load_models()
+        lgbm_model, tcn_model, ensemble_w, tcn_scaler, stage1_data, calibrator = _load_models()
     except FileNotFoundError as e:
         logger.warning("모델 없음 — mock 반환: %s", e)
         return _mock_result()
@@ -516,7 +532,14 @@ def predict(
     # --- 앙상블 ---
     w_lgbm = ensemble_w.get("w_lgbm", 0.5)
     w_tcn = ensemble_w.get("w_tcn", 0.5)
-    risk_score = round((w_lgbm * p_lgbm + w_tcn * p_tcn) / (w_lgbm + w_tcn), 4)
+    raw_score = (w_lgbm * p_lgbm + w_tcn * p_tcn) / (w_lgbm + w_tcn)
+
+    # D-3 isotonic calibration (2026-05-01) — graceful fallback if calibrator None
+    if calibrator is not None:
+        risk_score = float(calibrator.transform([raw_score])[0])
+    else:
+        risk_score = raw_score
+    risk_score = round(risk_score, 4)
 
     # --- SHAP (LightGBM + TCN 분리) ---
     lgbm_signals = _top_signals(lgbm_model, x_lgbm, LGBM_FEATURES)

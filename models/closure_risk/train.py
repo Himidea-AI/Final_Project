@@ -57,6 +57,10 @@ DEFAULT_CONFIG: dict = {
     "lgbm_num_leaves": 31,
     "lgbm_n_estimators": 200,
     "lgbm_learning_rate": 0.05,
+    # D-3 isotonic calibration (default False) — 2026-05-01 retrain 시 test AUC -0.038
+    # degradation + threshold collapse (danger==caution) 로 rollback. 코드는 보존되어 미래
+    # 변형 (Platt scaling, CV calibration 등) 또는 데이터 추가 후 재시도 가능.
+    "enable_d3_calibration": False,
     # 저장 경로
     "tcn_weights_path": str(WEIGHTS_DIR / "closure_risk_tcn.pt"),
     "tcn_scaler_path": str(WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"),
@@ -551,7 +555,44 @@ def train(config: dict | None = None) -> None:
             ensemble_val_proba = lgbm_val_proba
             y_val_common = y_val_arr
 
-    # threshold fit (val proba quantile) — D layer fix
+    # D-3: isotonic calibration fit on val ensemble proba (2026-05-01)
+    # Niculescu-Mizil & Caruana (2005) — proba calibration 으로 confidence 회복.
+    # 기본 disabled (cfg["enable_d3_calibration"]=False) — 2026-05-01 retrain 시 test AUC
+    # -0.038 degradation + threshold collapse (danger==caution) 로 rollback. 코드는 보존.
+    calibrator = None
+    calibration_info = None
+    _d3_on = cfg.get("enable_d3_calibration", False)
+    if _d3_on and len(ensemble_val_proba) >= 10 and len(np.unique(y_val_common)) >= 2:
+        from sklearn.isotonic import IsotonicRegression
+
+        calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+        raw_val = ensemble_val_proba.copy()
+        calibrator.fit(raw_val, y_val_common)
+        ensemble_val_proba = calibrator.transform(ensemble_val_proba)
+        calibration_info = {
+            "method": "isotonic",
+            "val_raw_range": [float(raw_val.min()), float(raw_val.max())],
+            "val_calibrated_range": [float(ensemble_val_proba.min()), float(ensemble_val_proba.max())],
+        }
+        logger.info(
+            "D-3 isotonic calibration — val raw [%.3f, %.3f] → calibrated [%.3f, %.3f]",
+            calibration_info["val_raw_range"][0],
+            calibration_info["val_raw_range"][1],
+            calibration_info["val_calibrated_range"][0],
+            calibration_info["val_calibrated_range"][1],
+        )
+    elif _d3_on:
+        logger.warning("D-3 calibration skip — val sample %d (<10) 또는 단일 class", len(ensemble_val_proba))
+    else:
+        logger.info("D-3 calibration disabled (cfg.enable_d3_calibration=False)")
+
+    # calibrator 저장 (None 도 저장 — predict.py 가 graceful fallback)
+    cal_path = WEIGHTS_DIR / "ensemble_calibrator.pkl"
+    with open(cal_path, "wb") as f:
+        pickle.dump(calibrator, f)
+    logger.info("calibrator 저장: %s (calibrator=%s)", cal_path, type(calibrator).__name__ if calibrator else "None")
+
+    # threshold fit (val proba quantile) — D layer fix. D-3 후 calibrated proba 기준.
     DANGER_Q = 0.90
     CAUTION_Q = 0.70
     if len(ensemble_val_proba) > 0:
@@ -598,6 +639,10 @@ def train(config: dict | None = None) -> None:
                 ensemble_test_proba = lgbm_test_proba
                 y_test_common = y_test_arr
 
+        # D-3: calibrator transform test (val 에서 fit 된 calibrator 적용)
+        if calibrator is not None and len(ensemble_test_proba) > 0:
+            ensemble_test_proba = calibrator.transform(ensemble_test_proba)
+
         test_metrics = {
             "lgbm": evaluate_model(y_test_arr, lgbm_test_proba, k_pct=10),
             "tcn": evaluate_model(y_test_tcn, tcn_test_proba, k_pct=10) if len(tcn_test_proba) > 0 else None,
@@ -613,6 +658,7 @@ def train(config: dict | None = None) -> None:
         "test_quarters": sorted(set(test_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
         "ensemble_weights": {"w_lgbm": w_lgbm, "w_tcn": w_tcn},
         "thresholds": thresholds,
+        "calibration_info": calibration_info,
         "lgbm": {"val": val_metrics["lgbm"], "test": (test_metrics or {}).get("lgbm")},
         "tcn": {"val": val_metrics["tcn"], "test": (test_metrics or {}).get("tcn")},
         "ensemble": {"val": val_metrics["ensemble"], "test": (test_metrics or {}).get("ensemble")},
