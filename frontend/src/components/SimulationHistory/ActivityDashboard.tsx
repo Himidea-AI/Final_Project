@@ -71,10 +71,7 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
     return (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-24 animate-pulse rounded-xl border border-stone-800 bg-stone-900/40"
-          />
+          <div key={i} className="h-24 animate-pulse rounded-xl border border-border bg-card/40" />
         ))}
       </div>
     );
@@ -118,7 +115,7 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
           label="총 시뮬 건수"
           value={total.toLocaleString()}
           sub={`최근 7일 ${last7Days}건`}
-          icon={<BarChart3 className="h-4 w-4 text-indigo-400" />}
+          icon={<BarChart3 className="h-4 w-4 text-primary" />}
         />
 
         {/* Green 비율 */}
@@ -127,7 +124,7 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
           value={`${greenPct}%`}
           sub={`Y ${yellowPct}% · R ${redPct}%`}
           tone={greenPct >= 50 ? 'good' : greenPct >= 30 ? 'warn' : 'bad'}
-          icon={<TrendingUp className="h-4 w-4 text-emerald-400" />}
+          icon={<TrendingUp className="h-4 w-4 text-success" />}
         />
 
         {/* Top 동 */}
@@ -135,7 +132,7 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
           label="최다 분석 동"
           value={topDistricts[0]?.key ?? '—'}
           sub={topDistricts[0] ? `${topDistricts[0].count}건` : '데이터 없음'}
-          icon={<MapPin className="h-4 w-4 text-indigo-400" />}
+          icon={<MapPin className="h-4 w-4 text-primary" />}
         />
 
         {/* 최근 활동 */}
@@ -143,18 +140,18 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
           label="최근 활동"
           value={latest ? formatRelative(latest.created_at) : '—'}
           sub={latest ? `${latest.client_name} · ${latest.district}` : '데이터 없음'}
-          icon={<Activity className="h-4 w-4 text-indigo-400" />}
+          icon={<Activity className="h-4 w-4 text-primary" />}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {/* 주간 시뮬 수 스파크 바 */}
-        <div className="md:col-span-2 rounded-xl border border-stone-800 bg-stone-900/40 p-4">
+        <div className="md:col-span-2 rounded-xl border border-border bg-card/40 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
               최근 8주 주간 시뮬 수
             </span>
-            <span className="text-[0.625rem] text-stone-600">
+            <span className="text-[0.625rem] text-muted-foreground">
               {startOfDay(new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000)) > 0 ? '' : ''}
               {items.length}건 집계 · peak {maxWeek}
             </span>
@@ -165,11 +162,11 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
               return (
                 <div key={i} className="flex flex-1 flex-col items-center justify-end gap-1">
                   <div
-                    className="w-full rounded-t bg-indigo-500/80 transition-all"
+                    className="w-full rounded-t bg-primary/80 transition-all"
                     style={{ height: `${pct}%`, minHeight: w.count > 0 ? '4px' : '0' }}
                     title={`${w.week}: ${w.count}건`}
                   />
-                  <span className="text-[0.5625rem] font-mono text-stone-600">{w.week}</span>
+                  <span className="text-[0.5625rem] font-mono text-muted-foreground">{w.week}</span>
                 </div>
               );
             })}
@@ -177,25 +174,25 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
         </div>
 
         {/* Top 브랜드 */}
-        <div className="rounded-xl border border-stone-800 bg-stone-900/40 p-4">
+        <div className="rounded-xl border border-border bg-card/40 p-4">
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
               최다 분석 브랜드
             </span>
           </div>
           <div className="space-y-2">
             {topBrands.length === 0 ? (
-              <span className="text-xs text-stone-500">데이터 없음</span>
+              <span className="text-xs text-muted-foreground">데이터 없음</span>
             ) : (
               topBrands.map((b, i) => (
                 <div key={b.key} className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-xs text-stone-300">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-[0.5625rem] font-mono text-stone-400">
+                  <span className="flex items-center gap-2 text-xs text-foreground">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[0.5625rem] font-mono text-muted-foreground">
                       {i + 1}
                     </span>
                     <span className="truncate">{b.key}</span>
                   </span>
-                  <span className="font-mono text-[0.6875rem] text-indigo-400 tabular-nums">
+                  <span className="font-mono text-[0.6875rem] text-primary tabular-nums">
                     {b.count}건
                   </span>
                 </div>
@@ -223,22 +220,22 @@ function StatCard({
 }) {
   const toneCls =
     tone === 'good'
-      ? 'text-emerald-400'
+      ? 'text-success'
       : tone === 'warn'
         ? 'text-warning'
         : tone === 'bad'
-          ? 'text-rose-400'
-          : 'text-stone-100';
+          ? 'text-danger'
+          : 'text-foreground';
   return (
-    <div className="rounded-xl border border-stone-800 bg-stone-900/40 p-4">
+    <div className="rounded-xl border border-border bg-card/40 p-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
+        <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
           {label}
         </span>
         {icon}
       </div>
       <div className={`text-xl font-black tabular-nums ${toneCls}`}>{value}</div>
-      {sub && <div className="mt-1 text-[0.625rem] text-stone-500">{sub}</div>}
+      {sub && <div className="mt-1 text-[0.625rem] text-muted-foreground">{sub}</div>}
     </div>
   );
 }

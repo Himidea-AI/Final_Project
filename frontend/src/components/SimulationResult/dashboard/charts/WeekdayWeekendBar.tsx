@@ -13,7 +13,7 @@ export function WeekdayWeekendBar({ ratio }: Props) {
   const n = normalizeRatio(ratio);
   if (n == null) {
     return (
-      <div className="flex h-[120px] items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+      <div className="flex h-[120px] items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
         demographic_depth 분석 대기
       </div>
     );

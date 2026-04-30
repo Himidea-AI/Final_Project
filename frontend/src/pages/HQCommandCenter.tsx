@@ -322,7 +322,7 @@ function MenuButton({
         <span className="text-xs font-medium">{label}</span>
       </div>
       {badge && (
-        <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[0.5625rem] font-black flex items-center justify-center animate-pulse">
+        <span className="w-4 h-4 rounded-full bg-danger text-white text-[0.5625rem] font-black flex items-center justify-center animate-pulse">
           {badge}
         </span>
       )}
@@ -544,7 +544,7 @@ function ManagerActionsMenu({
                       onDelete();
                       setOpen(false);
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors"
+                    className="w-full text-left px-3.5 py-2 text-xs text-danger hover:bg-danger/10 flex items-center gap-2.5 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     매니저 제거 (퇴사)
@@ -731,7 +731,7 @@ function DeleteConfirmModal({
         >
           <div className="px-6 py-5 border-b border-border">
             <h3 className="text-sm font-black text-white flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-500" />
+              <AlertTriangle className="w-4 h-4 text-danger" />
               매니저 제거 (퇴사 처리)
             </h3>
           </div>
@@ -743,8 +743,8 @@ function DeleteConfirmModal({
               <br />
               매니저를 워크스페이스에서 제거하시겠습니까?
             </p>
-            <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-lg">
-              <p className="text-[0.6875rem] text-rose-400 leading-relaxed">
+            <div className="p-3 bg-danger/5 border border-danger/20 rounded-lg">
+              <p className="text-[0.6875rem] text-danger leading-relaxed">
                 해당 매니저는 즉시 비활성화되며 더 이상 로그인할 수 없습니다. 담당 권역 할당 정보는
                 보존되지만 복구하려면 재승인이 필요합니다.
               </p>
@@ -764,7 +764,7 @@ function DeleteConfirmModal({
               type="button"
               onClick={() => onConfirm(manager.id)}
               disabled={isBusy}
-              className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-danger hover:bg-danger/90 text-white text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isBusy ? (
                 <>
@@ -818,7 +818,7 @@ function PendingManagerCard({
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-base font-bold text-foreground">{manager.contact_name}</span>
-              <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded text-[0.5625rem] font-bold uppercase tracking-wider border border-rose-500/20">
+              <span className="px-1.5 py-0.5 bg-danger/10 text-danger rounded text-[0.5625rem] font-bold uppercase tracking-wider border border-danger/20">
                 Pending
               </span>
               {manager.position && (
@@ -846,7 +846,7 @@ function PendingManagerCard({
               )
             }
             disabled={isBusy}
-            className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50 disabled:cursor-wait"
+            className="p-2 bg-success/10 text-success hover:bg-success hover:text-white rounded-lg transition-colors border border-success/20 disabled:opacity-50 disabled:cursor-wait"
             title="승인"
           >
             <CheckCircle2 className="w-5 h-5" />
@@ -854,7 +854,7 @@ function PendingManagerCard({
           <button
             onClick={() => onReject(manager.id)}
             disabled={isBusy}
-            className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50 disabled:cursor-wait"
+            className="p-2 bg-danger/10 text-danger hover:bg-danger hover:text-white rounded-lg transition-colors border border-danger/20 disabled:opacity-50 disabled:cursor-wait"
             title="거절"
           >
             <XCircle className="w-5 h-5" />
@@ -1066,7 +1066,7 @@ function TeamManagementView({
         <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${
-              pending.length > 0 ? 'bg-rose-500 animate-pulse' : 'bg-muted'
+              pending.length > 0 ? 'bg-danger animate-pulse' : 'bg-muted'
             }`}
           />
           승인 대기 중인 매니저 ({pending.length})
@@ -1186,8 +1186,8 @@ function TeamManagementView({
 
                     {/* Activity Status (고정 Active) */}
                     <div className="w-20 flex justify-end shrink-0">
-                      <span className="flex items-center gap-1.5 text-xs text-emerald-500 font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="flex items-center gap-1.5 text-xs text-success font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                         Active
                       </span>
                     </div>
@@ -1236,7 +1236,7 @@ function PipelineKanbanView() {
     { title: '상권 분석 중', borderColor: 'border-border', titleColor: 'text-muted-foreground' },
     { title: '임원 보고 대기', borderColor: 'border-warning/50', titleColor: 'text-warning' },
     { title: '가맹점주 제안', borderColor: 'border-primary/50', titleColor: 'text-primary' },
-    { title: '출점 확정', borderColor: 'border-emerald-500/50', titleColor: 'text-emerald-500' },
+    { title: '출점 확정', borderColor: 'border-success/50', titleColor: 'text-success' },
   ];
 
   return (
@@ -1266,12 +1266,12 @@ function PipelineKanbanView() {
               <h4 className={`text-xs font-bold uppercase tracking-wider ${col.titleColor}`}>
                 {col.title}
               </h4>
-              <span className="w-5 h-5 rounded-full bg-card flex items-center justify-center text-[0.625rem] font-bold text-stone-600 border border-border">
+              <span className="w-5 h-5 rounded-full bg-card flex items-center justify-center text-[0.625rem] font-bold text-muted-foreground border border-border">
                 —
               </span>
             </div>
             <div className="flex-1 p-3 min-h-[140px] flex items-center justify-center">
-              <span className="text-[0.625rem] font-mono text-stone-600 tracking-widest uppercase">
+              <span className="text-[0.625rem] font-mono text-muted-foreground tracking-widest uppercase">
                 Awaiting backend
               </span>
             </div>
@@ -1587,14 +1587,14 @@ function BillingManagementView() {
               Current Plan
             </h3>
           </div>
-          <div className="text-2xl font-black text-stone-500">—</div>
+          <div className="text-2xl font-black text-muted-foreground">—</div>
           <p className="text-[0.6875rem] text-warning/70 leading-relaxed">
             결제/구독 API 미구축. 스펙 확정 후 현재 요금제·결제 주기·수단이 표시됩니다.
           </p>
           <button
             type="button"
             onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
-            className="mt-2 w-full py-2 bg-card text-stone-500 border border-stone-800 text-[0.6875rem] font-bold rounded-lg cursor-not-allowed"
+            className="mt-2 w-full py-2 bg-card text-muted-foreground border border-border text-[0.6875rem] font-bold rounded-lg cursor-not-allowed"
             disabled
           >
             결제 수단 관리 (대기)
@@ -1608,7 +1608,7 @@ function BillingManagementView() {
               API Tokens Usage (가상 집계)
             </h3>
           </div>
-          <div className="text-2xl font-black text-stone-500">—</div>
+          <div className="text-2xl font-black text-muted-foreground">—</div>
           <p className="text-[0.6875rem] text-warning/70 leading-relaxed">
             팀별 토큰 한도·사용량 API 미구축. 실측 LLM 비용은 하단 LangSmith 번레이트 참고.
           </p>
@@ -1925,11 +1925,11 @@ function MyPageView() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.08, ease: [0.19, 1, 0.22, 1] }}
-          className="bg-card border border-rose-500/30 rounded-2xl p-8 shadow-lg"
+          className="bg-card border border-danger/30 rounded-2xl p-8 shadow-lg"
         >
           <div className="flex items-center gap-2 mb-2">
-            <Shield className="w-4 h-4 text-rose-500" />
-            <h3 className="text-lg font-bold text-rose-500">Danger Zone</h3>
+            <Shield className="w-4 h-4 text-danger" />
+            <h3 className="text-lg font-bold text-danger">Danger Zone</h3>
           </div>
           <p className="text-xs text-muted-foreground mb-6">
             워크스페이스를 탈퇴하고 모든 데이터를 DB에서 영구적으로 파기합니다. 이 작업은 되돌릴 수
@@ -1937,7 +1937,7 @@ function MyPageView() {
           </p>
           <button
             onClick={() => handleActionRequest('delete')}
-            className="px-6 py-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/30 hover:bg-rose-500 hover:text-white text-sm font-bold rounded-lg transition-colors"
+            className="px-6 py-2.5 bg-danger/10 text-danger border border-danger/30 hover:bg-danger hover:text-white text-sm font-bold rounded-lg transition-colors"
           >
             회원 탈퇴 및 워크스페이스 삭제
           </button>
@@ -1982,14 +1982,14 @@ function MyPageView() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
-              className="relative bg-card border border-rose-500/50 rounded-2xl p-8 shadow-[0_0_50px_rgba(244,63,94,0.15)] max-w-md w-full"
+              className="relative bg-card border border-danger/50 rounded-2xl p-8 shadow-[0_0_50px_rgba(244,63,94,0.15)] max-w-md w-full"
             >
-              <div className="w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center mb-4 border border-rose-500/20">
-                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mb-4 border border-danger/20">
+                <AlertTriangle className="w-6 h-6 text-danger" />
               </div>
               <h3 className="text-xl font-black text-white mb-2">정말로 탈퇴하시겠습니까?</h3>
-              <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-lg mb-6">
-                <p className="text-sm text-rose-400 font-bold leading-relaxed">
+              <div className="bg-danger/10 border border-danger/20 p-4 rounded-lg mb-6">
+                <p className="text-sm text-danger font-bold leading-relaxed">
                   구독 후 1회 이상 시뮬레이션을 실행한 경우, 중간에 탈퇴하더라도 남은 기간에 대한
                   환불이 불가합니다.
                 </p>
@@ -2010,7 +2010,7 @@ function MyPageView() {
                     setShowDeleteAlert(false);
                     setShowPasswordModal(true);
                   }}
-                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-lg transition-colors shadow-[0_0_15px_rgba(244,63,94,0.4)]"
+                  className="px-4 py-2 bg-danger hover:bg-danger/90 text-white text-sm font-bold rounded-lg transition-colors shadow-[0_0_15px_rgba(244,63,94,0.4)]"
                 >
                   탈퇴합니다
                 </button>
@@ -2060,7 +2060,7 @@ function MyPageView() {
                 className="w-full bg-card border border-border rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-primary mb-2 transition-colors"
               />
               {passwordError && (
-                <p className="text-[0.6875rem] text-rose-400 mb-4">{passwordError}</p>
+                <p className="text-[0.6875rem] text-danger mb-4">{passwordError}</p>
               )}
               {!passwordError && <div className="mb-4" />}
               <div className="flex gap-3 justify-end">
@@ -2076,7 +2076,7 @@ function MyPageView() {
                   disabled={isSaving || passwordInput.length < 8}
                   className={`px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                     actionType === 'delete'
-                      ? 'bg-rose-500 hover:bg-rose-600'
+                      ? 'bg-danger hover:bg-danger/90'
                       : 'bg-primary hover:bg-primary'
                   }`}
                 >

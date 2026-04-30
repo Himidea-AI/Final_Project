@@ -190,7 +190,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
               aria-live="assertive"
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-5 px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 text-center"
+              className="mb-5 px-4 py-3 bg-danger/10 border border-danger/30 rounded-xl text-xs text-danger text-center"
             >
               {error}
             </motion.div>
@@ -233,7 +233,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
             </button>
             <button
               onClick={() => nav('/joinus?role=manager')}
-              className="w-full py-3 rounded-xl text-xs font-bold text-emerald-400/80 border border-emerald-500/20 hover:border-emerald-500/60 hover:text-emerald-400 hover:bg-emerald-500/5 transition-colors"
+              className="w-full py-3 rounded-xl text-xs font-bold text-success/80 border border-success/20 hover:border-success/60 hover:text-success hover:bg-success/5 transition-colors"
             >
               초대 코드로 팀원에 합류하기
             </button>

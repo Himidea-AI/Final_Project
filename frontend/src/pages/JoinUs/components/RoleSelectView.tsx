@@ -56,15 +56,15 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.25, duration: 0.5 }}
           onClick={onSelectManager}
-          className="w-full bg-card border border-border hover:border-emerald-500/60 rounded-2xl p-6 flex items-start gap-5 text-left group transition-all duration-300 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)]"
+          className="w-full bg-card border border-border hover:border-success/60 rounded-2xl p-6 flex items-start gap-5 text-left group transition-all duration-300 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)]"
         >
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-emerald-500/20 transition-all">
-            <Key className="w-6 h-6 text-emerald-400" />
+          <div className="w-12 h-12 rounded-xl bg-success/10 border border-success/30 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-success/20 transition-all">
+            <Key className="w-6 h-6 text-success" />
           </div>
           <div className="flex-1">
             <h3 className="text-base font-bold text-white mb-1.5">
               초대 코드로 합류
-              <span className="ml-2 text-[0.625rem] text-emerald-400 font-mono uppercase tracking-wider">
+              <span className="ml-2 text-[0.625rem] text-success font-mono uppercase tracking-wider">
                 팀원
               </span>
             </h3>

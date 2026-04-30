@@ -35,7 +35,7 @@ export function ShapChart({ data }: Props) {
   // data 없으면 안내 메시지 표시
   if (!data || !data.feature_importance || data.feature_importance.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
         SHAP 분석 데이터 없음
       </div>
     );
@@ -56,7 +56,7 @@ export function ShapChart({ data }: Props) {
     <div>
       {/* mock 데이터 안내 배지 */}
       {data.is_mock && (
-        <div className="mb-2 inline-block px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded">
+        <div className="mb-2 inline-block px-2 py-0.5 bg-warning/20 text-warning text-xs rounded">
           참고용 데이터 (모델 가중치 미로드)
         </div>
       )}

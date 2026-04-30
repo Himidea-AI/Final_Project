@@ -54,7 +54,7 @@ export function StatCard({
               {subtitle}
             </span>
           )}
-          <div className="text-muted-foreground opacity-50 group-hover:opacity-100 group-hover:text-indigo-400 transition-colors">
+          <div className="text-muted-foreground opacity-50 group-hover:opacity-100 group-hover:text-primary transition-colors">
             {React.cloneElement(icon, {
               className: 'w-4 h-4',
             } as React.HTMLAttributes<HTMLElement>)}
@@ -62,10 +62,12 @@ export function StatCard({
         </div>
       </div>
       <div>
-        <h3 className="text-xl md:text-2xl font-black text-white tracking-tight mb-1">{value}</h3>
+        <h3 className="text-xl md:text-2xl font-black text-foreground tracking-tight mb-1">
+          {value}
+        </h3>
         <div className="flex items-center justify-between">
           <span
-            className={`text-[0.625rem] font-bold flex items-center gap-0.5 ${trendUp ? 'text-emerald-500' : 'text-rose-500'}`}
+            className={`text-[0.625rem] font-bold flex items-center gap-0.5 ${trendUp ? 'text-success' : 'text-danger'}`}
           >
             {trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}{' '}
             {trend}
@@ -147,9 +149,9 @@ export function TableRow({
   density?: 'comfortable' | 'standard' | 'compact';
 }) {
   const getStatusColor = (s: string) => {
-    if (s === 'Safe') return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-    if (s === 'Warning') return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
-    if (s.includes('개월')) return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
+    if (s === 'Safe') return 'bg-success/10 text-success border-success/20';
+    if (s === 'Warning') return 'bg-primary/10 text-primary border-primary/20';
+    if (s.includes('개월')) return 'bg-primary/10 text-primary border-primary/20';
     return 'bg-card text-muted-foreground border-border';
   };
   const dc =
@@ -175,14 +177,14 @@ export function TableRow({
                 expanded ? 'rotate-90 text-primary' : ''
               }`}
             />
-            <span className="text-muted-foreground group-hover:text-indigo-400 transition-colors">
+            <span className="text-muted-foreground group-hover:text-primary transition-colors">
               {icon}
             </span>
             {col1}
           </span>
         </td>
         <td className={`${dc} text-muted-foreground font-mono`}>{col2}</td>
-        <td className={`${dc} font-mono font-bold text-white`}>{col3}</td>
+        <td className={`${dc} font-mono font-bold text-foreground`}>{col3}</td>
         <td className={dc}>
           <span
             className={`px-2 py-0.5 ${statusSize} font-bold rounded-full border whitespace-nowrap ${getStatusColor(status)}`}
@@ -316,9 +318,9 @@ export function InsightCard({
 }) {
   const { showToast } = useToast();
   const severityStyle = {
-    critical: { dot: 'bg-rose-500', label: 'CRITICAL' },
+    critical: { dot: 'bg-danger', label: 'CRITICAL' },
     advisory: { dot: 'bg-primary', label: 'ADVISORY' },
-    opportunity: { dot: 'bg-emerald-500', label: 'OPPORTUNITY' },
+    opportunity: { dot: 'bg-success', label: 'OPPORTUNITY' },
   }[severity];
 
   return (
@@ -359,7 +361,7 @@ export function InsightCard({
             e.stopPropagation();
             showToast('info', '소중한 피드백이 전달되었습니다. AI 학습에 반영됩니다.');
           }}
-          className="p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-muted-foreground transition-colors"
+          className="p-1 rounded hover:bg-danger/10 hover:text-danger text-muted-foreground transition-colors"
           aria-label="유용하지 않음"
         >
           <ThumbsDown className="w-3 h-3" />
@@ -442,15 +444,15 @@ function DashboardPanelView({
   })();
   const radarValues: number[] = realRadar ?? [];
   const radarLabels = ['유동인구', '임대료', '경쟁강도', '매출추정', '폐업률', '성장성', '접근성'];
-  const colorMap = ['text-amber-500', 'text-emerald-500', 'text-sky-500', 'text-rose-500'];
+  const colorMap = ['text-warning', 'text-success', 'text-primary', 'text-danger'];
   const badgeColorMap = [
-    'bg-amber-500/10 text-amber-500 border-amber-500/20',
-    'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-    'bg-sky-500/10 text-sky-500 border-sky-500/20',
-    'bg-rose-500/10 text-rose-500 border-rose-500/20',
+    'bg-warning/10 text-warning border-warning/20',
+    'bg-success/10 text-success border-success/20',
+    'bg-primary/10 text-primary border-primary/20',
+    'bg-danger/10 text-danger border-danger/20',
   ];
   const panelLabels = ['기준', '비교 A', '비교 B', '비교 C'];
-  const accentColor = accentOverride || colorMap[panelIndex] || 'text-amber-500';
+  const accentColor = accentOverride || colorMap[panelIndex] || 'text-warning';
   const badgeColor = badgeColorMap[panelIndex] || badgeColorMap[0];
 
   // 레이더 차트 좌표 계산
@@ -470,7 +472,7 @@ function DashboardPanelView({
     hasRealData && dongRanking
       ? [
           {
-            icon: <TrendingUp className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />,
+            icon: <TrendingUp className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />,
             text:
               scoreNum != null
                 ? `${dongName}의 종합 점수는 ${scoreNum}점으로 마포 평균 대비 ${
@@ -479,7 +481,7 @@ function DashboardPanelView({
                 : `${dongName}의 분석 점수가 집계되지 않았습니다.`,
           },
           {
-            icon: <Scale className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />,
+            icon: <Scale className="w-3.5 h-3.5 text-danger shrink-0 mt-0.5" />,
             text:
               closureRateNum != null
                 ? `폐업률 ${(closureRateNum * 100).toFixed(1)}% — ${
@@ -492,7 +494,7 @@ function DashboardPanelView({
                 : `폐업률 데이터가 부족합니다.`,
           },
           {
-            icon: <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />,
+            icon: <Users className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />,
             text:
               bepQuarters != null
                 ? `손익분기까지 약 ${bepQuarters}분기 소요 예상.`
@@ -517,11 +519,9 @@ function DashboardPanelView({
   // winner 패널 시각 강조 — DistrictRankings의 indigo 톤(메모리 project_persona_pivot 본부 영업팀)
   // 톤 재사용. 외곽선/링/glow로 추천 동임을 즉시 인지하게 한다.
   const winnerWrapCls = isWinner
-    ? 'ring-1 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.15)] rounded-xl'
+    ? 'ring-1 ring-primary/30 shadow-[0_0_20px_rgba(99,102,241,0.15)] rounded-xl'
     : '';
-  const winnerBadgeCls = isWinner
-    ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
-    : badgeColor;
+  const winnerBadgeCls = isWinner ? 'bg-primary/20 text-primary border-primary/30' : badgeColor;
   const winnerLabel = isWinner ? '추천 1위' : panelLabels[panelIndex];
 
   return (
@@ -531,12 +531,12 @@ function DashboardPanelView({
       {/* 구역 타이틀 — winner면 indigo 외곽선으로 강조 */}
       <div
         className={`bg-card rounded-xl p-3 flex items-center justify-between border ${
-          isWinner ? 'border-indigo-500/40' : 'border-border'
+          isWinner ? 'border-primary/40' : 'border-border'
         }`}
       >
         <div className="flex items-center gap-2">
-          <MapPin className={`w-4 h-4 ${isWinner ? 'text-indigo-400' : accentColor}`} />
-          <span className="font-bold text-white text-sm">{districtName}</span>
+          <MapPin className={`w-4 h-4 ${isWinner ? 'text-primary' : accentColor}`} />
+          <span className="font-bold text-foreground text-sm">{districtName}</span>
         </div>
         <span className={`px-2 py-0.5 text-[0.625rem] font-bold rounded border ${winnerBadgeCls}`}>
           {winnerLabel}
@@ -547,35 +547,35 @@ function DashboardPanelView({
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[0.625rem] text-muted-foreground mb-1">예상 월 매출</p>
-          <p className="text-lg font-black text-white">{revenue}</p>
+          <p className="text-lg font-black text-foreground">{revenue}</p>
           {/* trend는 DistrictComparison에 명시 필드 없음 → 항상 '—' + 중립 회색. */}
           <p className="text-[0.625rem] mt-1 text-muted-foreground">{revenueTrend}</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[0.625rem] text-muted-foreground mb-1">상권 매력도</p>
-          <p className="text-lg font-black text-white">{score}</p>
+          <p className="text-lg font-black text-foreground">{score}</p>
           <p className="text-[0.625rem] mt-1 text-muted-foreground">{scoreTrend}</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[0.625rem] text-muted-foreground mb-1">일 유동인구</p>
-          <p className="text-lg font-black text-white">{traffic}</p>
+          <p className="text-lg font-black text-foreground">{traffic}</p>
           <p className="text-[0.625rem] mt-1 text-muted-foreground">
             {dongPop ? `피크 ${dongPop.peak_hour}시 · ${popData?.date}` : 'KT 통신망 기준'}
           </p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[0.625rem] text-muted-foreground mb-1">카니발리제이션</p>
-          <p className="text-lg font-black text-white">{risk}</p>
+          <p className="text-lg font-black text-foreground">{risk}</p>
           {/* 위험 등급 — 실데이터(closureRateNum) 기반. mock '주의/안전 권역' 제거. */}
           <p
             className={`text-[0.625rem] mt-1 ${
               closureRateNum == null
                 ? 'text-muted-foreground'
                 : closureRateNum > 0.3
-                  ? 'text-rose-400'
+                  ? 'text-danger'
                   : closureRateNum > 0.15
-                    ? 'text-amber-400'
-                    : 'text-emerald-400'
+                    ? 'text-warning'
+                    : 'text-success'
             }`}
           >
             {closureRateNum == null
@@ -591,7 +591,7 @@ function DashboardPanelView({
 
       {/* 레이더 차트 */}
       <div className="bg-card border border-border rounded-xl p-5 flex flex-col items-center">
-        <h3 className="text-xs font-bold text-white mb-3 self-start">7대 지표 분석</h3>
+        <h3 className="text-xs font-bold text-foreground mb-3 self-start">7대 지표 분석</h3>
         <div className="relative w-[200px] h-[200px]">
           {radarValues.length === 0 && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-border bg-card/60 backdrop-blur-[2px]">
@@ -660,7 +660,7 @@ function DashboardPanelView({
 
       {/* AI 인사이트 요약 — 실데이터 기반 동적 문장 (동 고정 mock 제거) */}
       <div className="bg-card border border-border rounded-xl p-5">
-        <h3 className="text-xs font-bold text-white mb-3">AI 인사이트</h3>
+        <h3 className="text-xs font-bold text-foreground mb-3">AI 인사이트</h3>
         <div className="space-y-2">
           {insights.map((ins, i) => (
             <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">

@@ -45,7 +45,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
             className="lg:col-span-5 flex flex-col justify-center"
             style={{ animation: 'fadeSlideIn 1s ease-out' }}
           >
-            <span className="font-mono text-indigo-400 tracking-widest mb-4 text-xs">
+            <span className="font-mono text-primary tracking-widest mb-4 text-xs">
               PROJECT SPOTTER
             </span>
             <h1 className="text-5xl lg:text-7xl xl:text-8xl font-black uppercase leading-none mb-8">
@@ -241,7 +241,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                   Location
                 </span>
                 <div className="flex items-center gap-3">
-                  <MapPin className="text-indigo-400 w-6 h-6 shrink-0" />
+                  <MapPin className="text-primary w-6 h-6 shrink-0" />
                   <span className="text-lg font-bold text-white leading-tight">
                     강남 하이미디어
                     <br />
@@ -270,14 +270,14 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                 <div className="flex flex-wrap gap-8">
                   <a
                     href="mailto:bat981120@gmail.com"
-                    className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
+                    className="text-xl md:text-2xl font-black hover:text-primary transition-colors flex items-center gap-3"
                   >
                     <Mail className="w-5 h-5 text-muted-foreground shrink-0" />
                     bat981120@gmail.com
                   </a>
                   <a
                     href="tel:01067790080"
-                    className="text-xl md:text-2xl font-black hover:text-indigo-400 transition-colors flex items-center gap-3"
+                    className="text-xl md:text-2xl font-black hover:text-primary transition-colors flex items-center gap-3"
                   >
                     <Phone className="w-5 h-5 text-muted-foreground shrink-0" />
                     010.6779.0080

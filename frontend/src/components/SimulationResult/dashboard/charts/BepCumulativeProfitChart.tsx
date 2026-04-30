@@ -47,7 +47,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const validSeries = (series ?? []).filter((s) => s.projection && s.projection.length > 0);
   if (validSeries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
         투자 회수 데이터 없음
       </div>
     );
@@ -77,11 +77,11 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
 
   return (
-    <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
+    <div className="mt-3 rounded-lg border border-border/60 bg-card/40 p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500 flex items-center gap-2">
+        <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
           <span>분기별 투자 회수 곡선</span>
-          <span className="text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
+          <span className="text-[0.5625rem] font-bold text-muted-foreground normal-case tracking-normal">
             cumulative_profit · BEP 도달 시점 강조 (기준: {trimmedSeries[0]?.district ?? '—'})
           </span>
           {hasMockQuarters && (
@@ -92,7 +92,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
           )}
         </div>
         {bepQuarter !== null && (
-          <span className="text-[0.625rem] font-black tabular-nums text-emerald-400">
+          <span className="text-[0.625rem] font-black tabular-nums text-success">
             BEP Q{bepQuarter}
           </span>
         )}

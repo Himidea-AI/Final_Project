@@ -120,11 +120,11 @@ function CommandPalette({
             onClick={() =>
               handleAction(() => showToast('info', '로그아웃은 우측 상단 메뉴를 이용해주세요.'))
             }
-            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-rose-500/10 group transition-colors"
+            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-danger/10 group transition-colors"
           >
             <div className="flex items-center gap-3">
-              <LogOut className="w-4 h-4 text-muted-foreground group-hover:text-rose-500" />
-              <span className="text-sm font-medium text-muted-foreground group-hover:text-rose-500">
+              <LogOut className="w-4 h-4 text-muted-foreground group-hover:text-danger" />
+              <span className="text-sm font-medium text-muted-foreground group-hover:text-danger">
                 로그아웃
               </span>
             </div>

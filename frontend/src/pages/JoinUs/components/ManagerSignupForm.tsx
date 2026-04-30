@@ -48,10 +48,10 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
   if (/[0-9]/.test(pw)) score++;
   if (/[^a-zA-Z0-9]/.test(pw)) score++;
   const map = [
-    { level: 1, label: '약함', color: 'bg-red-500' },
-    { level: 2, label: '보통', color: 'bg-indigo-500' },
-    { level: 3, label: '강함', color: 'bg-emerald-400' },
-    { level: 4, label: '매우 강함', color: 'bg-emerald-500' },
+    { level: 1, label: '약함', color: 'bg-danger' },
+    { level: 2, label: '보통', color: 'bg-primary' },
+    { level: 3, label: '강함', color: 'bg-success' },
+    { level: 4, label: '매우 강함', color: 'bg-success' },
   ];
   return map[Math.min(score, 4) - 1] || map[0];
 }
@@ -59,7 +59,7 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
 const fieldClass =
   'w-full px-4 py-3 rounded-xl bg-card border text-foreground text-sm placeholder-muted-foreground outline-none transition-colors duration-200';
 const labelClass = 'block text-xs text-muted-foreground font-medium mb-1.5';
-const errorClass = 'text-[0.625rem] text-red-400 mt-1';
+const errorClass = 'text-[0.625rem] text-danger mt-1';
 
 export default function ManagerSignupForm({ onSuccess }: Props) {
   const { showToast } = useToast();
@@ -193,9 +193,9 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             placeholder="예: SPOTTER-2026"
             className={`flex-1 ${fieldClass} font-mono ${
               workspace
-                ? 'border-emerald-500/40 text-emerald-400'
+                ? 'border-success/40 text-success'
                 : verifyError
-                  ? 'border-red-500 text-warning'
+                  ? 'border-danger text-warning'
                   : 'border-border text-warning focus:border-warning'
             } disabled:opacity-60`}
           />
@@ -214,7 +214,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           ) : (
             <button
               onClick={resetVerification}
-              className="px-5 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25 flex items-center gap-1.5 transition-colors"
+              className="px-5 rounded-xl text-xs font-bold bg-success/15 border border-success/40 text-success hover:bg-success/25 flex items-center gap-1.5 transition-colors"
             >
               <CheckCircle2 size={14} />
               확인됨
@@ -222,17 +222,17 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           )}
         </div>
 
-        {verifyError && <p className="text-[0.625rem] text-red-400 mt-2">{verifyError}</p>}
+        {verifyError && <p className="text-[0.625rem] text-danger mt-2">{verifyError}</p>}
 
         {workspace && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3 }}
-            className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex items-center gap-3"
+            className="mt-3 p-3 bg-success/10 border border-success/25 rounded-xl flex items-center gap-3"
           >
-            <Building2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="text-xs font-bold text-emerald-400">
+            <Building2 className="w-4 h-4 text-success shrink-0" />
+            <span className="text-xs font-bold text-success">
               {workspace.company_name} 팀원으로 합류합니다
             </span>
           </motion.div>
@@ -259,7 +259,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             value={form.contactName}
             onChange={(e) => set('contactName', e.target.value)}
             placeholder="홍길동"
-            className={`${fieldClass} border-border focus:border-emerald-500`}
+            className={`${fieldClass} border-border focus:border-success`}
           />
         </motion.div>
 
@@ -275,7 +275,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             value={form.position}
             onChange={(e) => set('position', e.target.value)}
             placeholder="권역 매니저"
-            className={`${fieldClass} border-border focus:border-emerald-500`}
+            className={`${fieldClass} border-border focus:border-success`}
           />
         </motion.div>
 
@@ -294,8 +294,8 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             placeholder="name@company.com"
             className={`${fieldClass} ${
               touched.has('email') && form.email && !emailValid
-                ? 'border-red-500'
-                : 'border-border focus:border-emerald-500'
+                ? 'border-danger'
+                : 'border-border focus:border-success'
             }`}
           />
           {touched.has('email') && form.email && !emailValid && (
@@ -315,7 +315,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             value={form.phone}
             onChange={(e) => set('phone', formatPhone(e.target.value))}
             placeholder="010-0000-0000"
-            className={`${fieldClass} border-border focus:border-emerald-500`}
+            className={`${fieldClass} border-border focus:border-success`}
           />
         </motion.div>
 
@@ -332,7 +332,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               value={form.password}
               onChange={(e) => set('password', e.target.value)}
               placeholder="영문+숫자+특수문자 8자 이상"
-              className={`${fieldClass} border-border focus:border-emerald-500 pr-10`}
+              className={`${fieldClass} border-border focus:border-success pr-10`}
             />
             <button
               type="button"
@@ -376,9 +376,9 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               className={`${fieldClass} pr-10 ${
                 touched.has('passwordConfirm') && form.passwordConfirm
                   ? pwMatch
-                    ? 'border-emerald-500'
-                    : 'border-red-500'
-                  : 'border-border focus:border-emerald-500'
+                    ? 'border-success'
+                    : 'border-danger'
+                  : 'border-border focus:border-success'
               }`}
             />
             <button
@@ -391,9 +391,9 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             {touched.has('passwordConfirm') && form.passwordConfirm && (
               <div className="absolute right-10 top-1/2 -translate-y-1/2">
                 {pwMatch ? (
-                  <CheckCircle size={14} className="text-emerald-400" />
+                  <CheckCircle size={14} className="text-success" />
                 ) : (
-                  <XCircle size={14} className="text-red-400" />
+                  <XCircle size={14} className="text-danger" />
                 )}
               </div>
             )}
@@ -408,7 +408,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           <motion.div
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
-            className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 text-center"
+            className="px-4 py-3 bg-danger/10 border border-danger/30 rounded-xl text-xs text-danger text-center"
           >
             {submitError}
           </motion.div>

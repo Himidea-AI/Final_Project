@@ -108,7 +108,7 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
             ].map((q, i) => (
               <div
                 key={i}
-                className="border-l-2 border-indigo-500 pl-6 py-2"
+                className="border-l-2 border-primary pl-6 py-2"
                 style={{ animationDelay: `${i * 150 + 300}ms` }}
               >
                 <p className="text-xl md:text-2xl font-medium text-foreground/80 italic">"{q}"</p>
@@ -164,7 +164,7 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
                   {c.old}
                 </span>
                 <span className="text-border font-mono mx-6 shrink-0">{c.arrow}</span>
-                <span className="text-indigo-400 font-bold text-lg flex-1 text-right">{c.now}</span>
+                <span className="text-primary font-bold text-lg flex-1 text-right">{c.now}</span>
               </div>
             ))}
           </div>
@@ -187,7 +187,7 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
               {DATA_SOURCES.map((src) => (
                 <span
                   key={src}
-                  className="px-4 py-2 rounded-full border border-border bg-card text-sm text-muted-foreground hover:border-indigo-500/50 hover:text-foreground transition-colors cursor-default"
+                  className="px-4 py-2 rounded-full border border-border bg-card text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors cursor-default"
                 >
                   {src}
                 </span>
@@ -206,7 +206,7 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col gap-8">
               {ROADMAP.map((r, i) => (
                 <div key={i} className="flex items-start gap-6">
-                  <span className="font-mono text-indigo-400 w-24 shrink-0 text-sm font-bold pt-0.5">
+                  <span className="font-mono text-primary w-24 shrink-0 text-sm font-bold pt-0.5">
                     {r.phase}
                   </span>
                   <div className="flex items-start gap-4">

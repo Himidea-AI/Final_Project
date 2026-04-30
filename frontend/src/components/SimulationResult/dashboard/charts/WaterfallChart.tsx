@@ -113,7 +113,7 @@ export function WaterfallChart({
 }: Props) {
   if (!steps || steps.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-stone-500 text-xs">
+      <div className="flex items-center justify-center h-48 text-muted-foreground text-xs">
         Waterfall 데이터 없음
       </div>
     );

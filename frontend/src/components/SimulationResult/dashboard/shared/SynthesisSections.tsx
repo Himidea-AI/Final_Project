@@ -139,7 +139,7 @@ function HighlightedText({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.highlight ? (
-          <span key={i} className="font-bold text-cyan-400">
+          <span key={i} className="font-bold text-primary">
             {p.text}
           </span>
         ) : (
@@ -160,7 +160,7 @@ export function SynthesisSections({ text, fallbackIcon = BookOpen }: Props) {
   if (!hasAnyHeader) {
     return (
       <p
-        className="text-base text-stone-300"
+        className="text-base text-foreground"
         style={{
           lineHeight: '1.75',
           whiteSpace: 'normal',
@@ -180,7 +180,7 @@ export function SynthesisSections({ text, fallbackIcon = BookOpen }: Props) {
         return (
           <section
             key={`${section.title || 'intro'}-${idx}`}
-            className="rounded-2xl border border-stone-700/50 bg-stone-900/50 p-6"
+            className="rounded-2xl border border-border/50 bg-card/50 p-6"
             style={{
               height: 'auto',
               wordBreak: 'keep-all',
@@ -188,8 +188,8 @@ export function SynthesisSections({ text, fallbackIcon = BookOpen }: Props) {
           >
             {section.title && (
               <header className="mb-4 flex items-center gap-2.5">
-                <Icon className="h-4 w-4 shrink-0 text-cyan-400" />
-                <h4 className="text-sm font-black tracking-tight text-stone-100">
+                <Icon className="h-4 w-4 shrink-0 text-primary" />
+                <h4 className="text-sm font-black tracking-tight text-foreground">
                   {section.title}
                 </h4>
               </header>
@@ -200,7 +200,7 @@ export function SynthesisSections({ text, fallbackIcon = BookOpen }: Props) {
                 {section.paragraphs.map((p, i) => (
                   <p
                     key={i}
-                    className="text-sm text-stone-300"
+                    className="text-sm text-foreground"
                     style={{
                       lineHeight: '1.75',
                       whiteSpace: 'normal',
@@ -218,14 +218,14 @@ export function SynthesisSections({ text, fallbackIcon = BookOpen }: Props) {
                 {section.bullets.map((b, i) => (
                   <li
                     key={i}
-                    className="flex gap-2.5 text-sm text-stone-300"
+                    className="flex gap-2.5 text-sm text-foreground"
                     style={{
                       lineHeight: '1.7',
                       whiteSpace: 'normal',
                       wordBreak: 'keep-all',
                     }}
                   >
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-cyan-400/70" />
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary/70" />
                     <span className="flex-1">
                       <HighlightedText text={b} />
                     </span>

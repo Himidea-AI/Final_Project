@@ -8,20 +8,20 @@ const SIGNAL_META: Record<
 > = {
   green: {
     label: '진입 권장',
-    colorBg: 'bg-emerald-500/10 border-emerald-500/40',
-    colorText: 'text-emerald-400',
+    colorBg: 'bg-success/10 border-success/40',
+    colorText: 'text-success',
     Icon: CheckCircle2,
   },
   yellow: {
     label: '조건부 진입',
-    colorBg: 'bg-amber-500/10 border-amber-500/40',
-    colorText: 'text-amber-400',
+    colorBg: 'bg-warning/10 border-warning/40',
+    colorText: 'text-warning',
     Icon: AlertCircle,
   },
   red: {
     label: '진입 비권장',
-    colorBg: 'bg-rose-500/10 border-rose-500/40',
-    colorText: 'text-rose-400',
+    colorBg: 'bg-danger/10 border-danger/40',
+    colorText: 'text-danger',
     Icon: XCircle,
   },
 };
@@ -33,7 +33,7 @@ interface Props {
 export function EntrySignalLight({ signal }: Props) {
   if (!signal || !(signal in SIGNAL_META)) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-stone-700 bg-stone-900/40 text-stone-500 text-xs">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-border bg-card/40 text-muted-foreground text-xs">
         <HelpCircle size={14} />
         <span>competitor_intel 분석 대기 — 데이터 부재</span>
       </div>

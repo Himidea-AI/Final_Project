@@ -59,7 +59,9 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   const validSeries = (series ?? []).filter((s) => s.projection && s.projection.length > 0);
   if (validSeries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-400 text-sm">데이터 없음</div>
+      <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
+        데이터 없음
+      </div>
     );
   }
 
@@ -106,8 +108,8 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   return (
     <div className="relative">
       {hasMockQuarters && (
-        <div className="absolute right-2 top-0 z-10 flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-amber-300">
-          <span className="h-1 w-1 rounded-full bg-amber-400" />
+        <div className="absolute right-2 top-0 z-10 flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning">
+          <span className="h-1 w-1 rounded-full bg-warning" />
           일부 분기 mock
         </div>
       )}

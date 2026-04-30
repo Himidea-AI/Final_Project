@@ -79,14 +79,14 @@ export function SaveDialog({
             aria-modal="true"
             aria-labelledby="save-dialog-title"
             onClick={(e) => e.stopPropagation()}
-            className="w-[min(92vw,440px)] rounded-xl border border-stone-700 bg-stone-900 p-6 shadow-2xl"
+            className="w-[min(92vw,440px)] rounded-xl border border-border bg-card p-6 shadow-2xl"
           >
             <div className="flex items-start justify-between">
               <div>
-                <h2 id="save-dialog-title" className="text-lg font-semibold text-stone-100">
+                <h2 id="save-dialog-title" className="text-lg font-semibold text-foreground">
                   시뮬레이션 결과 저장
                 </h2>
-                <p className="mt-1 text-sm text-stone-400">
+                <p className="mt-1 text-sm text-muted-foreground">
                   이 시뮬레이션을 상담한 고객님의 성함을 입력해주세요.
                 </p>
               </div>
@@ -95,7 +95,7 @@ export function SaveDialog({
                 onClick={onClose}
                 disabled={isSaving}
                 aria-label="닫기"
-                className="text-stone-400 transition-colors hover:text-stone-100 disabled:opacity-40"
+                className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -105,7 +105,7 @@ export function SaveDialog({
               <div>
                 <label
                   htmlFor="client-name-input"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-stone-400"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-muted-foreground"
                 >
                   고객님 성함
                 </label>
@@ -119,29 +119,29 @@ export function SaveDialog({
                   disabled={isSaving}
                   placeholder="예: 김철수"
                   maxLength={100}
-                  className="w-full rounded-md border border-stone-700 bg-stone-800 px-3 py-2 text-sm text-stone-100 placeholder:text-stone-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/60 disabled:opacity-50"
+                  className="w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/60 disabled:opacity-50"
                 />
               </div>
 
-              <div className="rounded-md border border-stone-700 bg-stone-800/50 p-3 text-xs text-stone-400">
+              <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <span>📅 저장 날짜</span>
-                  <span className="text-stone-300">{nowLabel}</span>
+                  <span className="text-foreground">{nowLabel}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span>🏪 브랜드</span>
-                  <span className="text-stone-300">
+                  <span className="text-foreground">
                     {meta.brandName} — {meta.district}
                   </span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span>👤 매니저</span>
-                  <span className="text-stone-300">{meta.managerName}</span>
+                  <span className="text-foreground">{meta.managerName}</span>
                 </div>
               </div>
 
               {errorMessage && (
-                <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
                   {errorMessage}
                 </div>
               )}
@@ -152,7 +152,7 @@ export function SaveDialog({
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-md border border-stone-700 bg-stone-800 px-4 py-2 text-sm font-medium text-stone-300 hover:bg-stone-700 disabled:opacity-40"
+                className="rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/80 disabled:opacity-40"
               >
                 취소
               </button>
@@ -160,7 +160,7 @@ export function SaveDialog({
                 type="button"
                 onClick={handleSubmit}
                 disabled={!canSubmit}
-                className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-stone-900 hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {isSaving ? '저장 중…' : '저장'}
               </button>

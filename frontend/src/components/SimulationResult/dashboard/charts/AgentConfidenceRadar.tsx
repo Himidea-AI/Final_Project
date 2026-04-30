@@ -72,14 +72,16 @@ export function AgentConfidenceRadar({ attributions }: Props) {
         </ResponsiveContainer>
       </div>
       <div className="flex items-center justify-center gap-2 text-[0.625rem] font-black uppercase tracking-widest">
-        <span className="text-stone-500">
-          실행 <span className="text-cyan-400 tabular-nums">{executedCount}</span>
-          <span className="text-stone-600">/{data.length}</span>
+        <span className="text-muted-foreground">
+          실행 <span className="text-primary tabular-nums">{executedCount}</span>
+          <span className="text-muted-foreground">/{data.length}</span>
         </span>
         {missingAgents.length > 0 && (
-          <span className="text-stone-600">
+          <span className="text-muted-foreground">
             · 미실행:{' '}
-            <span className="text-stone-400">{missingAgents.map((a) => a.label).join(', ')}</span>
+            <span className="text-muted-foreground">
+              {missingAgents.map((a) => a.label).join(', ')}
+            </span>
           </span>
         )}
       </div>

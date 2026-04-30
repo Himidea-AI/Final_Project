@@ -261,7 +261,7 @@ function SpotterAgentWorkflow() {
                         animate={{ scale: 1, opacity: 1 }}
                       >
                         {task.status === 'completed' ? (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                          <CheckCircle2 className="w-5 h-5 text-success" />
                         ) : task.status === 'in-progress' ? (
                           <CircleDotDashed className="w-5 h-5 text-primary animate-spin-slow" />
                         ) : (
@@ -332,7 +332,7 @@ function SpotterAgentWorkflow() {
                                   }}
                                 >
                                   {subtask.status === 'completed' ? (
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                    <CheckCircle2 className="w-4 h-4 text-success" />
                                   ) : subtask.status === 'in-progress' ? (
                                     <CircleDotDashed className="w-4 h-4 text-primary animate-spin-slow" />
                                   ) : (

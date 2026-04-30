@@ -215,7 +215,7 @@ export default function JoinUsPage({ onBack }: Props) {
                   <ArrowLeft size={14} />
                   가입 유형 재선택
                 </button>
-                <span className="text-[0.625rem] font-mono text-emerald-400 tracking-wider uppercase px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
+                <span className="text-[0.625rem] font-mono text-success tracking-wider uppercase px-2 py-1 rounded bg-success/10 border border-success/30">
                   팀원 가입
                 </span>
               </div>
@@ -240,12 +240,12 @@ export default function JoinUsPage({ onBack }: Props) {
             >
               <div
                 className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
-                  selectedRole === 'manager' ? 'bg-emerald-500/10' : 'bg-primary/10'
+                  selectedRole === 'manager' ? 'bg-success/10' : 'bg-primary/10'
                 }`}
               >
                 <CheckCircle2
                   size={40}
-                  className={selectedRole === 'manager' ? 'text-emerald-400' : 'text-primary'}
+                  className={selectedRole === 'manager' ? 'text-success' : 'text-primary'}
                 />
               </div>
               <h2 className="text-3xl font-black mb-3">

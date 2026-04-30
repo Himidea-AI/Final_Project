@@ -37,7 +37,7 @@ export function StackedAgeBar({ groups }: Props) {
 
   if (normalized.length === 0) {
     return (
-      <div className="flex h-[100px] items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+      <div className="flex h-[100px] items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
         demographic_depth 분석 대기
       </div>
     );
@@ -46,7 +46,7 @@ export function StackedAgeBar({ groups }: Props) {
   return (
     <div className="flex flex-col gap-3" onMouseLeave={() => setActiveIndex(null)}>
       {/* Stacked bar — hover dim 인터랙션 (Linear 패턴: 활성 외 opacity 30%, 활성은 stroke cyan) */}
-      <div className="flex h-9 w-full overflow-hidden rounded-xl border border-stone-800 shadow-inner">
+      <div className="flex h-9 w-full overflow-hidden rounded-xl border border-border shadow-inner">
         {normalized.map((g, i) => {
           const isActive = activeIndex === i;
           const isDimmed = activeIndex !== null && !isActive;
@@ -54,7 +54,7 @@ export function StackedAgeBar({ groups }: Props) {
             <div
               key={g.age_group}
               onMouseEnter={() => setActiveIndex(i)}
-              className="flex items-center justify-center text-[0.625rem] font-black text-stone-100 transition-all duration-200 cursor-default relative"
+              className="flex items-center justify-center text-[0.625rem] font-black text-foreground transition-all duration-200 cursor-default relative"
               style={{
                 width: `${g.share * 100}%`,
                 backgroundColor: COLORS[i] ?? COLORS[3],
@@ -86,11 +86,13 @@ export function StackedAgeBar({ groups }: Props) {
                 className={`h-2 w-2 rounded-sm transition-transform ${isActive ? 'scale-150' : ''}`}
                 style={{ backgroundColor: COLORS[i] ?? COLORS[3] }}
               />
-              <span className={`font-bold ${isActive ? 'text-stone-100' : 'text-stone-400'}`}>
+              <span
+                className={`font-bold ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
+              >
                 {g.age_group}
               </span>
               <span
-                className={`tabular-nums ${isActive ? 'text-cyan-400 font-bold' : 'text-stone-500'}`}
+                className={`tabular-nums ${isActive ? 'text-primary font-bold' : 'text-muted-foreground'}`}
               >
                 {Math.round(g.share * 100)}%
               </span>

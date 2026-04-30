@@ -52,16 +52,18 @@ const ACCENT_CLASS: Record<Accent, { laser: string; arrow: string; ring: string 
     ring: 'focus-visible:ring-primary',
   },
   cyan: {
+    // AI 분석 카드 — chart-4 (Vibrant Purple, AI 톤). indigo(Deep Blue)/amber(Teal Green) 와 hue 280° 위치로 시각 분리.
     laser:
-      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--chart-2) 50%, var(--chart-2) 60%, transparent 100%)',
-    arrow: 'text-cyan-400',
-    ring: 'focus-visible:ring-cyan-400',
+      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--chart-4) 50%, var(--chart-4) 60%, transparent 100%)',
+    arrow: 'text-chart-4',
+    ring: 'focus-visible:ring-chart-4',
   },
   amber: {
+    // ABM 시뮬레이터 — chart-3 (Teal Green, 행동/분포 톤). indigo/cyan 와 hue 160° 위치로 시각 분리.
     laser:
-      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--warning) 50%, var(--warning) 60%, transparent 100%)',
-    arrow: 'text-warning',
-    ring: 'focus-visible:ring-warning',
+      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--chart-3) 50%, var(--chart-3) 60%, transparent 100%)',
+    arrow: 'text-chart-3',
+    ring: 'focus-visible:ring-chart-3',
   },
 };
 
@@ -72,8 +74,8 @@ export function HubCard(props: Props) {
   // Link/button 양 모드 공통 className — focus ring, hover lift, transition.
   // disabled 일 때: grayscale + opacity-50 + 호버/transition 제거 + cursor-not-allowed.
   const commonCls = disabled
-    ? 'group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm grayscale opacity-50 cursor-not-allowed pointer-events-none select-none'
-    : `group relative flex flex-col overflow-hidden rounded-3xl border border-stone-800/60 bg-stone-900/60 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-2xl hover:shadow-indigo-500/10 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card ${a.ring}`;
+    ? 'group relative flex flex-col overflow-hidden rounded-3xl border border-border/60 bg-card/60 shadow-sm grayscale opacity-50 cursor-not-allowed pointer-events-none select-none'
+    : `group relative flex flex-col overflow-hidden rounded-3xl border border-border/60 bg-card/60 shadow-sm transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10 motion-reduce:transition-none motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card ${a.ring}`;
 
   const inner = (
     <>
@@ -85,7 +87,7 @@ export function HubCard(props: Props) {
         />
       )}
 
-      <div className="relative z-10 flex h-full flex-col rounded-3xl bg-stone-900/95">
+      <div className="relative z-10 flex h-full flex-col rounded-3xl bg-card/95">
         <div className="aspect-video overflow-hidden rounded-t-3xl">
           <img
             src={imgSrc}
@@ -102,18 +104,18 @@ export function HubCard(props: Props) {
         </div>
 
         <div className="flex flex-1 flex-col p-8">
-          <h3 className="text-2xl font-black text-stone-100 tracking-tight">{title}</h3>
-          <p className="mt-3 flex-1 text-sm text-stone-400 leading-relaxed">{description}</p>
+          <h3 className="text-2xl font-black text-foreground tracking-tight">{title}</h3>
+          <p className="mt-3 flex-1 text-sm text-muted-foreground leading-relaxed">{description}</p>
 
           {disabled ? (
-            <div className="mt-6 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-[0.6875rem] text-rose-300">
+            <div className="mt-6 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3 text-[0.6875rem] text-danger">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div>
                 <div className="font-bold uppercase tracking-widest">분석 실패</div>
                 {disabledReason && (
-                  <div className="mt-1 text-rose-200/80 leading-relaxed">{disabledReason}</div>
+                  <div className="mt-1 text-danger/80 leading-relaxed">{disabledReason}</div>
                 )}
-                <div className="mt-1 text-rose-300/60">우측 위젯에서 재시도하세요</div>
+                <div className="mt-1 text-danger/60">우측 위젯에서 재시도하세요</div>
               </div>
             </div>
           ) : (

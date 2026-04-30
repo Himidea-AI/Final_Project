@@ -58,7 +58,7 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
 
   if (validScenarios.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
         시나리오 비교 데이터 없음
       </div>
     );
@@ -86,14 +86,14 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest">
+        <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest">
           낙관/기본/비관 시나리오
         </h4>
         {validScenarios.length > 1 ? (
           <select
             value={selectedDistrict}
             onChange={(e) => setSelectedDistrict(e.target.value)}
-            className="bg-stone-900 border border-stone-700 rounded-lg text-xs text-stone-200 px-3 py-1.5 focus:outline-none focus:border-indigo-500"
+            className="bg-card border border-border rounded-lg text-xs text-foreground px-3 py-1.5 focus:outline-none focus:border-primary"
           >
             {validScenarios.map((s) => (
               <option key={s.district} value={s.district}>
@@ -102,7 +102,9 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
             ))}
           </select>
         ) : (
-          <span className="text-[0.625rem] text-stone-500">{validScenarios[0]!.district}</span>
+          <span className="text-[0.625rem] text-muted-foreground">
+            {validScenarios[0]!.district}
+          </span>
         )}
       </div>
 

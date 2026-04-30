@@ -40,10 +40,10 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
   if (/[0-9]/.test(pw)) score++;
   if (/[^a-zA-Z0-9]/.test(pw)) score++;
   const map = [
-    { level: 1, label: '약함', color: 'bg-red-500' },
-    { level: 2, label: '보통', color: 'bg-indigo-500' },
-    { level: 3, label: '강함', color: 'bg-emerald-400' },
-    { level: 4, label: '매우 강함', color: 'bg-emerald-500' },
+    { level: 1, label: '약함', color: 'bg-danger' },
+    { level: 2, label: '보통', color: 'bg-primary' },
+    { level: 3, label: '강함', color: 'bg-success' },
+    { level: 4, label: '매우 강함', color: 'bg-success' },
   ];
   return map[Math.min(score, 4) - 1] || map[0];
 }
@@ -51,7 +51,7 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
 const fieldClass =
   'w-full px-4 py-3 rounded-xl bg-card border text-foreground text-sm placeholder-muted-foreground outline-none transition-colors duration-200';
 const labelClass = 'block text-xs text-muted-foreground font-medium mb-1.5';
-const errorClass = 'text-[0.625rem] text-red-400 mt-1';
+const errorClass = 'text-[0.625rem] text-danger mt-1';
 
 interface Props {
   planName: string;
@@ -201,9 +201,9 @@ export default function SignupForm({ planName, onSuccess }: Props) {
       suffix: bizLoading ? (
         <Loader2 size={14} className="animate-spin text-primary" />
       ) : bizVerified === true ? (
-        <CheckCircle size={14} className="text-emerald-400" />
+        <CheckCircle size={14} className="text-success" />
       ) : bizVerified === false ? (
-        <XCircle size={14} className="text-rose-400" />
+        <XCircle size={14} className="text-danger" />
       ) : null,
     },
     {
@@ -221,7 +221,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
       suffix: bizLoading ? (
         <Loader2 size={14} className="animate-spin text-primary" />
       ) : bizVerified === true ? (
-        <CheckCircle size={14} className="text-emerald-400" />
+        <CheckCircle size={14} className="text-success" />
       ) : null,
     },
     {
@@ -289,7 +289,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
               }}
               placeholder={f.placeholder}
               className={`${fieldClass} ${
-                f.error ? 'border-red-500' : 'border-border focus:border-primary'
+                f.error ? 'border-danger' : 'border-border focus:border-primary'
               }`}
             />
             {f.suffix && (
@@ -360,8 +360,8 @@ export default function SignupForm({ planName, onSuccess }: Props) {
             className={`${fieldClass} pr-10 ${
               touched.has('passwordConfirm') && form.passwordConfirm
                 ? pwMatch
-                  ? 'border-emerald-500'
-                  : 'border-red-500'
+                  ? 'border-success'
+                  : 'border-danger'
                 : 'border-border focus:border-primary'
             }`}
           />
@@ -375,9 +375,9 @@ export default function SignupForm({ planName, onSuccess }: Props) {
           {touched.has('passwordConfirm') && form.passwordConfirm && (
             <div className="absolute right-10 top-1/2 -translate-y-1/2">
               {pwMatch ? (
-                <CheckCircle size={14} className="text-emerald-400" />
+                <CheckCircle size={14} className="text-success" />
               ) : (
-                <XCircle size={14} className="text-red-400" />
+                <XCircle size={14} className="text-danger" />
               )}
             </div>
           )}
@@ -425,7 +425,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
         <motion.div
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
-          className="px-4 py-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 text-center"
+          className="px-4 py-3 bg-danger/10 border border-danger/30 rounded-xl text-xs text-danger text-center"
         >
           {submitError}
         </motion.div>

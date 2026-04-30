@@ -15,7 +15,7 @@ export function TabButton({ id, label, icon: Icon, active, onClick }: TabButtonP
       type="button"
       onClick={() => onClick(id)}
       className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all relative ${
-        active ? 'text-indigo-400' : 'text-stone-500 hover:text-stone-300'
+        active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
       }`}
     >
       <Icon size={16} />
@@ -23,7 +23,7 @@ export function TabButton({ id, label, icon: Icon, active, onClick }: TabButtonP
       {active && (
         <motion.div
           layoutId="activeTabIndicator"
-          className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.85)]"
+          className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_12px_rgba(99,102,241,0.85)]"
         />
       )}
     </button>

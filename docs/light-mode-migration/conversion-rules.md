@@ -144,6 +144,87 @@ InsightsGrid.tsx 가 핵심 (1줄 수정으로 전부 해결):
 | `HiddenPDFTemplate.tsx` | **수정 금지** (PDF 인쇄용, Q6 결정대로 제외) |
 | 테스트 파일 (`*.test.tsx`) | hex가 있어도 일단 *건드리지 않음* (스냅샷 영향) |
 
+## ★ Phase 4 — 명명 Tailwind 컬러 클래스 매핑 (Phase 2 누락 보강)
+
+Phase 2 가 hex (`bg-[#xxx]`) 만 처리하고 *명명 색 클래스* 를 누락. 1,860 인스턴스 잔여.
+
+### Stone (다크 배경/텍스트 시스템 — 가장 큰 비중)
+
+| from | to (Tailwind) | 맥락 |
+|---|---|---|
+| `text-stone-500` `text-stone-400` `text-stone-600` | `text-muted-foreground` | 보조 텍스트 |
+| `text-stone-300` `text-stone-200` `text-stone-100` | `text-foreground` | 본문 (다크 배경 위 라이트 → 라이트 배경 위 다크) |
+| `text-stone-50` `text-white` (다크 위 강조) | `text-foreground` | |
+| `border-stone-800` `border-stone-700` `border-stone-800/60` `border-stone-700/60` | `border-border` | 다크 테두리 |
+| `border-stone-300` `border-stone-200` (이미 라이트) | `border-border` | 그대로 |
+| `bg-stone-950` `bg-stone-900` `bg-stone-800` (`/40` `/60` `/95` 포함) | `bg-card` 또는 `bg-muted` (큰 패널/모달이면 card, secondary면 muted) | 다크 배경 |
+| `bg-stone-100` `bg-stone-50` (이미 라이트) | `bg-muted` | |
+| `divide-stone-800` `divide-stone-700` | `divide-border` | |
+| `ring-stone-*`, `outline-stone-*` | `ring-border` | |
+
+### Slate / Zinc / Gray / Neutral — Stone과 동일 매핑
+
+색 이름만 다르고 의미 같음. 위 Stone 매핑 그대로 적용.
+
+### Indigo / Sky / Blue → Primary
+
+| from | to |
+|---|---|
+| `text-indigo-400` `text-indigo-500` `text-indigo-300` | `text-primary` |
+| `bg-indigo-500` `bg-indigo-600` | `bg-primary` |
+| `bg-indigo-500/10` `bg-indigo-500/20` | `bg-primary/10` `bg-primary/20` |
+| `border-indigo-500` `border-indigo-400` | `border-primary` |
+| `hover:bg-indigo-500` 등 모든 prefix 변형 | 동일하게 `hover:bg-primary` |
+| `focus-visible:ring-indigo-*` | `focus-visible:ring-primary` |
+| `from-indigo-*` `to-indigo-*` (gradient) | `from-primary` `to-primary` |
+| `text-sky-*` `text-blue-*` (보통 indigo 통합) | `text-primary` |
+
+### Rose / Red / Pink → Danger
+
+| from | to |
+|---|---|
+| `text-rose-400` `text-rose-500` `text-rose-300` `text-red-*` | `text-danger` |
+| `bg-rose-500` `bg-red-500` | `bg-danger` |
+| `bg-rose-500/10` `bg-rose-500/20` | `bg-danger/10` `bg-danger/20` |
+| `border-rose-500` `border-rose-500/30` | `border-danger` `border-danger/30` |
+| `text-pink-*` (의미 위험이면) | `text-danger` |
+| `bg-pink-*` (의미 위험이면) | `bg-danger` |
+| (단, decor-pink/light-pink 자리는 §13 따라) | |
+
+### Emerald / Green / Teal-success → Success
+
+| from | to |
+|---|---|
+| `text-emerald-400` `text-emerald-500` `text-emerald-300` `text-green-*` | `text-success` |
+| `bg-emerald-500` `bg-green-500` | `bg-success` |
+| `bg-emerald-500/10` `bg-emerald-500/20` | `bg-success/10` `bg-success/20` |
+| `border-emerald-*` `border-green-*` | `border-success` |
+
+### Amber / Yellow / Orange → Warning
+
+| from | to |
+|---|---|
+| `text-amber-400` `text-amber-500` `text-yellow-*` `text-orange-400` `text-orange-500` | `text-warning` |
+| `bg-amber-500` `bg-yellow-500` `bg-orange-500` | `bg-warning` |
+| `bg-amber-500/10` 등 | `bg-warning/10` |
+| `border-amber-*` `border-yellow-*` | `border-warning` |
+
+### Cyan / Teal-cool — 케이스별
+
+`text-cyan-400` `bg-cyan-500/10` 등은 의미에 따라:
+- 차트 색이면 → `text-chart-2` 또는 `text-chart-3` (4동 비교에 포함되었으면)
+- 큰 면적 장식이면 → `var(--decor-cyan)` (라이트에서 안 보이는 자리는 피할 것)
+- 강조 액센트 → `text-primary` 통합
+
+룰 표에 없는 cyan/teal 발견 시 → unmapped 보고.
+
+### Violet / Purple / Fuchsia — Vibrant Purple
+
+| from | to (CSS var) |
+|---|---|
+| `text-violet-*` `text-purple-*` `text-fuchsia-*` | 그대로 두고 unmapped 보고 (chart-4 자리거나 decor) |
+| `bg-violet-*` `bg-purple-*` | unmapped (의미 검토) |
+
 ## 15. 절차
 
 각 영역 subagent 작업 흐름:

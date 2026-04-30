@@ -81,7 +81,7 @@ export default function SimulationHistoryDetail() {
 
   if (!id || !Number.isFinite(id)) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-card text-sm text-rose-400">
+      <div className="flex min-h-[60vh] items-center justify-center bg-card text-sm text-danger">
         잘못된 경로입니다.
       </div>
     );
@@ -93,23 +93,23 @@ export default function SimulationHistoryDetail() {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-100"
+          className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           목록으로
         </button>
 
         {isLoading && (
-          <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-500">
+          <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
             불러오는 중…
           </div>
         )}
 
         {error && !isLoading && (
-          <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-6 text-center text-sm text-rose-300">
+          <div className="rounded-lg border border-danger/40 bg-danger/10 p-6 text-center text-sm text-danger">
             {error}
             {notFound && (
-              <div className="mt-2 text-xs text-stone-500">
+              <div className="mt-2 text-xs text-muted-foreground">
                 다른 매니저의 이력은 조회할 수 없습니다.
               </div>
             )}
@@ -184,27 +184,29 @@ function DetailHeader({
   isGeneratingPDF,
 }: DetailHeaderProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-muted p-5">
       <div>
         <div className="flex items-center gap-2">
           <span className="rounded bg-warning/15 px-2 py-0.5 text-xs font-mono font-bold text-warning">
             {formatDocumentId(id)}
           </span>
-          <span className="text-[0.625rem] uppercase tracking-widest text-stone-500">
+          <span className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
             읽기 전용
           </span>
         </div>
-        <h1 className="mt-2 text-xl font-semibold text-stone-100">
+        <h1 className="mt-2 text-xl font-semibold text-foreground">
           {clientName} 고객님 · {brandName} — {district}
         </h1>
-        <div className="mt-1 font-mono text-xs text-stone-500">저장 {formatWhen(createdAt)}</div>
+        <div className="mt-1 font-mono text-xs text-muted-foreground">
+          저장 {formatWhen(createdAt)}
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onDownloadPDF}
           disabled={isGeneratingPDF}
-          className="inline-flex items-center gap-2 rounded-md border border-indigo-500/60 bg-indigo-500/10 px-3 py-2 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-md border border-primary/60 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isGeneratingPDF ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -216,7 +218,7 @@ function DetailHeader({
         <button
           type="button"
           onClick={onRerun}
-          className="inline-flex items-center gap-2 rounded-md bg-warning px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-warning"
+          className="inline-flex items-center gap-2 rounded-md bg-warning px-3 py-2 text-xs font-semibold text-warning-foreground hover:bg-warning"
         >
           <RotateCw className="h-4 w-4" />
           시뮬레이터로 이동

@@ -205,7 +205,7 @@ function DetailDrawer({
                   {data.trend && (
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-muted-foreground">추세</span>
-                      <span className="text-sm font-bold text-emerald-400">{data.trend}</span>
+                      <span className="text-sm font-bold text-success">{data.trend}</span>
                     </div>
                   )}
                   {data.peakTime && (
@@ -224,7 +224,7 @@ function DetailDrawer({
                   )}
                   {data.warning && (
                     <div className="pt-3 border-t border-border">
-                      <span className="text-xs text-rose-400 leading-relaxed block">
+                      <span className="text-xs text-danger leading-relaxed block">
                         {data.warning}
                       </span>
                     </div>
@@ -257,7 +257,7 @@ function DetailDrawer({
                             <span
                               className={`text-[0.5625rem] font-mono px-1.5 py-0.5 rounded ${
                                 isCritical
-                                  ? 'bg-rose-500/20 text-rose-400'
+                                  ? 'bg-danger/20 text-danger'
                                   : 'bg-warning/20 text-warning'
                               }`}
                             >
@@ -279,7 +279,7 @@ function DetailDrawer({
                           <ul className="space-y-2">
                             {normalizedArticles.map((a, ai) => (
                               <li key={ai} className="rounded border border-border bg-muted/60 p-3">
-                                <div className="text-xs font-bold text-cyan-300 mb-1 font-mono">
+                                <div className="text-xs font-bold text-primary mb-1 font-mono">
                                   {a.article_ref || '조문 번호 없음'}
                                 </div>
                                 <div className="text-xs text-muted-foreground leading-relaxed">
@@ -315,7 +315,7 @@ function DetailDrawer({
                           </span>
                           <div className="flex-1 bg-card rounded-full h-4 overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-700"
+                              className="h-full bg-gradient-to-r from-primary to-primary rounded-full transition-all duration-700"
                               style={{ width: `${pct}%` }}
                             />
                           </div>

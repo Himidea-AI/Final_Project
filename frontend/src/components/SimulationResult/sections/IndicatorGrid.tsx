@@ -21,42 +21,42 @@ const INDICATORS: Array<{
   color: string;
   scale?: number;
 }> = [
-  { key: 'floating_population', label: '유동인구', shortLabel: '유동', color: 'bg-sky-500' },
-  { key: 'rent_index', label: '임대료 지수', shortLabel: '임대', color: 'bg-indigo-500' },
-  { key: 'competition_intensity', label: '경쟁강도', shortLabel: '경쟁', color: 'bg-rose-500' },
-  { key: 'estimated_revenue', label: '예상 매출', shortLabel: '매출', color: 'bg-emerald-500' },
-  { key: 'survival_rate', label: '생존율', shortLabel: '생존', color: 'bg-violet-500' },
-  { key: 'closure_rate', label: '폐업률', shortLabel: '폐업', color: 'bg-pink-500', scale: 100 },
-  { key: 'growth_potential', label: '성장 잠재력', shortLabel: '성장', color: 'bg-cyan-500' },
-  { key: 'accessibility', label: '접근성', shortLabel: '접근', color: 'bg-blue-500' },
+  { key: 'floating_population', label: '유동인구', shortLabel: '유동', color: 'bg-primary' },
+  { key: 'rent_index', label: '임대료 지수', shortLabel: '임대', color: 'bg-primary' },
+  { key: 'competition_intensity', label: '경쟁강도', shortLabel: '경쟁', color: 'bg-danger' },
+  { key: 'estimated_revenue', label: '예상 매출', shortLabel: '매출', color: 'bg-success' },
+  { key: 'survival_rate', label: '생존율', shortLabel: '생존', color: 'bg-primary' },
+  { key: 'closure_rate', label: '폐업률', shortLabel: '폐업', color: 'bg-danger', scale: 100 },
+  { key: 'growth_potential', label: '성장 잠재력', shortLabel: '성장', color: 'bg-primary' },
+  { key: 'accessibility', label: '접근성', shortLabel: '접근', color: 'bg-primary' },
 ] as const;
 
 // null 시 중립 회색 — 0 fallback 회피(거짓 양성 방지, api-contract §3.7).
 function scoreColor(v: number | null): string {
-  if (v == null) return 'text-stone-500';
-  if (v >= 70) return 'text-emerald-400';
-  if (v >= 45) return 'text-amber-400';
-  return 'text-rose-400';
+  if (v == null) return 'text-muted-foreground';
+  if (v >= 70) return 'text-success';
+  if (v >= 45) return 'text-warning';
+  return 'text-danger';
 }
 
 function scoreBorder(v: number | null): string {
-  if (v == null) return 'border-stone-700/50';
-  if (v >= 70) return 'border-emerald-500/30';
-  if (v >= 45) return 'border-amber-500/30';
-  return 'border-rose-500/30';
+  if (v == null) return 'border-border';
+  if (v >= 70) return 'border-success/30';
+  if (v >= 45) return 'border-warning/30';
+  return 'border-danger/30';
 }
 
 function scoreBg(v: number | null): string {
-  if (v == null) return 'bg-stone-800/40';
-  if (v >= 70) return 'bg-emerald-500/10';
-  if (v >= 45) return 'bg-amber-500/10';
-  return 'bg-rose-500/10';
+  if (v == null) return 'bg-muted';
+  if (v >= 70) return 'bg-success/10';
+  if (v >= 45) return 'bg-warning/10';
+  return 'bg-danger/10';
 }
 
 function barColor(v: number): string {
-  if (v >= 70) return 'bg-emerald-500';
-  if (v >= 45) return 'bg-amber-500';
-  return 'bg-rose-500';
+  if (v >= 70) return 'bg-success';
+  if (v >= 45) return 'bg-warning';
+  return 'bg-danger';
 }
 
 export function IndicatorGrid({ simResult }: Props) {
@@ -66,7 +66,7 @@ export function IndicatorGrid({ simResult }: Props) {
     return (
       <section>
         <SectionLabel label="INDICATOR GRID" subtitle="8개 핵심 상권 지표" />
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-6 text-center text-sm text-zinc-400">
+        <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
           상권 지표 데이터 없음
         </div>
       </section>
@@ -106,7 +106,7 @@ export function IndicatorGrid({ simResult }: Props) {
           {values.map(({ key, label, val }) => (
             <div key={key} className={`rounded-lg border p-3 ${scoreBorder(val)} ${scoreBg(val)}`}>
               <div className="flex items-baseline justify-between gap-3">
-                <div className="text-[0.6875rem] uppercase tracking-wide text-stone-400">
+                <div className="text-[0.6875rem] uppercase tracking-wide text-muted-foreground">
                   {label}
                 </div>
                 <div
@@ -115,7 +115,7 @@ export function IndicatorGrid({ simResult }: Props) {
                   {val == null ? '—' : Math.round(val)}
                 </div>
               </div>
-              <div className="mt-2.5 h-1 w-full rounded-full bg-stone-700/50">
+              <div className="mt-2.5 h-1 w-full rounded-full bg-muted">
                 {val != null && (
                   <div
                     className={`h-full rounded-full ${barColor(val)}`}
@@ -128,7 +128,7 @@ export function IndicatorGrid({ simResult }: Props) {
         </div>
 
         {/* 레이더 차트 — w-72(288px) → w-60(240px)로 줄여 좌측 KPI 그리드 공간 확보 */}
-        <div className="flex items-center justify-center rounded-lg border border-stone-700 bg-stone-800 p-4 lg:w-60">
+        <div className="flex items-center justify-center rounded-lg border border-border bg-card p-4 lg:w-60">
           <ResponsiveContainer width="100%" height={220}>
             <RadarChart data={radarData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
               <PolarGrid stroke="var(--border)" />

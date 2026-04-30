@@ -170,13 +170,13 @@ export default function AccordionGallery({
                 key={d.eng}
                 className={`w-1 h-3 rounded-full transition-all duration-300 ${
                   hoveredIdx === i
-                    ? 'bg-indigo-400 scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]'
+                    ? 'bg-primary scale-y-150 shadow-[0_0_10px_rgba(99,102,241,0.5)]'
                     : 'bg-white/20'
                 }`}
               />
             ))}
           </div>
-          <span className="ml-3 text-xs text-gray-400 font-mono tabular-nums min-w-[80px]">
+          <span className="ml-3 text-xs text-muted-foreground font-mono tabular-nums min-w-[80px]">
             {hoveredIdx !== null
               ? `${DISTRICTS[hoveredIdx].name} ${hoveredIdx + 1}`
               : '25 Districts'}{' '}
@@ -186,7 +186,7 @@ export default function AccordionGallery({
 
         {/* Right — Guide text */}
         <div className="min-w-[180px] text-right">
-          <span className="text-xs text-gray-600 tracking-widest">SCROLL TO EXPLORE</span>
+          <span className="text-xs text-muted-foreground tracking-widest">SCROLL TO EXPLORE</span>
         </div>
       </div>
 
@@ -237,7 +237,7 @@ export default function AccordionGallery({
                   isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                 }`}
               >
-                <span className="text-xs tracking-[0.3em] text-gray-400 font-light uppercase">
+                <span className="text-xs tracking-[0.3em] text-muted-foreground font-light uppercase">
                   {d.eng}-GU
                 </span>
               </div>
@@ -249,7 +249,7 @@ export default function AccordionGallery({
                     isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                   }`}
                 >
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs">
                     <Activity size={12} />
                     분석 가능
                   </span>
@@ -306,7 +306,7 @@ export default function AccordionGallery({
                     }`}
                   >
                     {isMapo ? (
-                      <div className="flex items-center gap-2 text-indigo-300 text-sm">
+                      <div className="flex items-center gap-2 text-primary text-sm">
                         <Play size={14} />
                         <span>클릭하여 시뮬레이션 시작</span>
                       </div>

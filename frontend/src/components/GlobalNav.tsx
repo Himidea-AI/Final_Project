@@ -31,7 +31,7 @@ export function LogoutButton() {
         logout();
         nav('/login');
       }}
-      className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded-full text-xs font-medium transition-colors border border-transparent hover:border-rose-500/30"
+      className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-muted-foreground hover:text-danger hover:bg-danger/10 rounded-full text-xs font-medium transition-colors border border-transparent hover:border-danger/30"
       title="로그아웃"
     >
       <LogOut className="w-3.5 h-3.5" />
@@ -182,8 +182,8 @@ function GlobalLimelightNav() {
 
             {item.hasNoti && (
               <span className="absolute top-2 right-2 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
               </span>
             )}
           </button>
@@ -202,7 +202,7 @@ function GlobalLimelightNav() {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-foreground">최근 알림</span>
                 {totalUnread > 0 && (
-                  <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-500 text-[0.5625rem] font-black rounded-full">
+                  <span className="px-1.5 py-0.5 bg-danger/20 text-danger text-[0.5625rem] font-black rounded-full">
                     {totalUnread}
                   </span>
                 )}
@@ -222,7 +222,7 @@ function GlobalLimelightNav() {
             <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
               {totalUnread === 0 ? (
                 <div className="px-4 py-10 text-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-2 opacity-60" />
+                  <CheckCircle2 className="w-5 h-5 text-success mx-auto mb-2 opacity-60" />
                   <p className="text-[0.6875rem] text-muted-foreground">새 알림이 없습니다</p>
                 </div>
               ) : (
@@ -237,8 +237,8 @@ function GlobalLimelightNav() {
                       }}
                       className="px-4 py-3 hover:bg-card cursor-pointer transition-colors border-b border-border flex gap-3 group"
                     >
-                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40 transition-colors flex items-center justify-center">
-                        <ShieldAlert className="w-4 h-4 text-rose-500" />
+                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-danger/10 border-danger/20 group-hover:border-danger/40 transition-colors flex items-center justify-center">
+                        <ShieldAlert className="w-4 h-4 text-danger" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-foreground leading-snug group-hover:text-white transition-colors">
@@ -261,10 +261,10 @@ function GlobalLimelightNav() {
                     const body = item.title.split(']').slice(1).join(']').trim();
                     const bgCls =
                       item.type === 'critical'
-                        ? 'bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40'
+                        ? 'bg-danger/10 border-danger/20 group-hover:border-danger/40'
                         : item.type === 'warning'
                           ? 'bg-warning/10 border-warning/20 group-hover:border-warning/40'
-                          : 'bg-emerald-500/10 border-emerald-500/20 group-hover:border-emerald-500/40';
+                          : 'bg-success/10 border-success/20 group-hover:border-success/40';
                     const Icon =
                       item.iconType === 'legal'
                         ? Scale
@@ -273,10 +273,10 @@ function GlobalLimelightNav() {
                           : CheckCircle2;
                     const iconColor =
                       item.type === 'critical'
-                        ? 'text-rose-500'
+                        ? 'text-danger'
                         : item.type === 'warning'
                           ? 'text-warning'
-                          : 'text-emerald-500';
+                          : 'text-success';
                     return (
                       <div
                         key={item.id}

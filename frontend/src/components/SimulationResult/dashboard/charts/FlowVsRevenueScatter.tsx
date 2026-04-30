@@ -44,7 +44,7 @@ export function FlowVsRevenueScatter({ rankings, winnerDistrict }: Props) {
 
   if (points.length === 0) {
     return (
-      <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+      <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
         district_rankings 분석 대기
       </div>
     );

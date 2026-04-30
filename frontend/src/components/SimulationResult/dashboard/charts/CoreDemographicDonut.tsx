@@ -14,7 +14,7 @@ interface Props {
 export function CoreDemographicDonut({ core }: Props) {
   if (!core || typeof core.share !== 'number') {
     return (
-      <div className="flex h-[140px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+      <div className="flex h-[140px] flex-col items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
         <span>demographic_depth 분석 대기</span>
       </div>
     );
@@ -44,15 +44,13 @@ export function CoreDemographicDonut({ core }: Props) {
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="text-[0.5625rem] font-black text-stone-500 uppercase tracking-widest">
+        <span className="text-[0.5625rem] font-black text-muted-foreground uppercase tracking-widest">
           Core
         </span>
-        <span className="text-sm font-black text-stone-100 tabular-nums">
+        <span className="text-sm font-black text-foreground tabular-nums">
           {core.age} {mapGender(core.gender)}
         </span>
-        <span className="text-[0.6875rem] font-black text-indigo-400 tabular-nums">
-          {sharePct}%
-        </span>
+        <span className="text-[0.6875rem] font-black text-primary tabular-nums">{sharePct}%</span>
       </div>
     </div>
   );

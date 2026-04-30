@@ -105,8 +105,8 @@ export default function IntroScene({
       {/* Left section — Typography menu (uniform single column) */}
       <div className="relative z-20 h-full flex flex-col justify-center pl-12 md:pl-20 lg:pl-32 pt-[18vh] pb-20">
         {/* Sub-copy */}
-        <div className="flex items-center gap-4 mb-10 text-xs tracking-[0.3em] text-gray-500 uppercase">
-          <div className="w-px h-4 bg-gray-600" />
+        <div className="flex items-center gap-4 mb-10 text-xs tracking-[0.3em] text-muted-foreground uppercase">
+          <div className="w-px h-4 bg-border" />
           <span>
             0{activeMenuIndex + 1} / 0{MENU_ITEMS.length} — GET TO KNOW
           </span>

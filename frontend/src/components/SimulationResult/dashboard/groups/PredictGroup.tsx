@@ -53,7 +53,7 @@ export function PredictGroup({ simResult, openModal }: Props) {
 
   return (
     <div className="space-y-6">
-      <nav className="flex border-b border-stone-800/60 overflow-x-auto scrollbar-hide">
+      <nav className="flex border-b border-border/60 overflow-x-auto scrollbar-hide">
         <TabButton
           id="sales_forecast"
           label="매출 예측"

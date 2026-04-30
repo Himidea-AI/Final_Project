@@ -37,11 +37,11 @@ interface DecisionCardProps {
 }
 
 const HERO_CLS: Record<DecisionCardProps['heroColor'], string> = {
-  emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-  amber: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-  rose: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
-  indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
-  stone: 'bg-stone-700/20 text-stone-400 border-stone-600/40 border-dashed',
+  emerald: 'bg-success/10 text-success border-success/30',
+  amber: 'bg-warning/10 text-warning border-warning/30',
+  rose: 'bg-danger/10 text-danger border-danger/30',
+  indigo: 'bg-primary/10 text-primary border-primary/30',
+  stone: 'bg-muted/20 text-muted-foreground border-border/40 border-dashed',
 };
 
 export function DecisionCard({
@@ -56,11 +56,11 @@ export function DecisionCard({
   const FootnoteEl = onFootnoteClick ? 'button' : 'div';
   const footnoteInteractive = onFootnoteClick != null;
   return (
-    <div className="relative bg-card border border-stone-800/60 rounded-3xl p-8 flex flex-col h-full hover:border-stone-700 hover:shadow-[0_20px_50px_-25px_rgba(34,211,238,0.15)] transition-all group overflow-hidden">
+    <div className="relative bg-card border border-border/60 rounded-3xl p-8 flex flex-col h-full hover:border-border hover:shadow-[0_20px_50px_-25px_rgba(34,211,238,0.15)] transition-all group overflow-hidden">
       {/* 모서리 micro dot — 디자인 "완결감" */}
-      <div className="absolute top-6 right-6 w-1 h-1 rounded-full bg-stone-800" />
+      <div className="absolute top-6 right-6 w-1 h-1 rounded-full bg-card" />
 
-      <h3 className="text-[1.25rem] font-black text-stone-100 mb-6 italic tracking-tighter leading-tight">
+      <h3 className="text-[1.25rem] font-black text-foreground mb-6 italic tracking-tighter leading-tight">
         {title}
       </h3>
 
@@ -70,25 +70,23 @@ export function DecisionCard({
         {heroBadge}
       </div>
 
-      <p className="text-[0.8125rem] text-stone-400 leading-relaxed mb-8 flex-grow font-medium">
+      <p className="text-[0.8125rem] text-muted-foreground leading-relaxed mb-8 flex-grow font-medium">
         {description}
       </p>
 
-      <div className="border-t border-dashed border-stone-800/80 mb-6 w-full" />
+      <div className="border-t border-dashed border-border/80 mb-6 w-full" />
 
       <ul className="space-y-3 mb-8">
         {items.map((item, i) => (
           <li key={i} className="flex items-center gap-3">
             <span
               className={`w-1.5 h-1.5 rotate-45 transition-colors shrink-0 ${
-                item.highlight
-                  ? 'bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]'
-                  : 'bg-stone-700'
+                item.highlight ? 'bg-primary shadow-[0_0_6px_rgba(34,211,238,0.8)]' : 'bg-muted'
               }`}
             />
             <span
               className={`text-[0.8125rem] tracking-tight ${
-                item.highlight ? 'text-stone-100 font-bold' : 'text-stone-500'
+                item.highlight ? 'text-foreground font-bold' : 'text-muted-foreground'
               }`}
             >
               {item.text}
@@ -105,16 +103,18 @@ export function DecisionCard({
               'aria-label': `${title} — 근거 상세 보기`,
             }
           : {})}
-        className={`w-full flex items-center justify-between mt-auto pt-6 border-t border-stone-900 text-left transition-colors ${
+        className={`w-full flex items-center justify-between mt-auto pt-6 border-t border-border text-left transition-colors ${
           footnoteInteractive
-            ? 'cursor-pointer rounded-b-3xl -mx-8 -mb-8 px-8 pb-8 hover:bg-stone-900/40 hover:border-cyan-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40'
-            : 'group-hover:border-stone-800'
+            ? 'cursor-pointer rounded-b-3xl -mx-8 -mb-8 px-8 pb-8 hover:bg-card/40 hover:border-primary/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+            : 'group-hover:border-border'
         }`}
       >
         <div className="flex items-center gap-2">
           <span
             className={`text-[0.5625rem] font-black uppercase tracking-[0.2em] transition-colors ${
-              footnoteInteractive ? 'text-stone-500 group-hover:text-cyan-400' : 'text-stone-600'
+              footnoteInteractive
+                ? 'text-muted-foreground group-hover:text-primary'
+                : 'text-muted-foreground'
             }`}
           >
             근거
@@ -125,7 +125,7 @@ export function DecisionCard({
               return (
                 <div
                   key={agent.id}
-                  className={`w-6 h-6 rounded-full bg-stone-900 border-2 flex items-center justify-center shadow-md ${
+                  className={`w-6 h-6 rounded-full bg-card border-2 flex items-center justify-center shadow-md ${
                     agent.borderCls ?? 'border-card'
                   }`}
                 >
@@ -138,8 +138,8 @@ export function DecisionCard({
         <div
           className={`flex items-center gap-1.5 text-[0.5625rem] font-black uppercase tracking-widest truncate max-w-[180px] transition-colors ${
             footnoteInteractive
-              ? 'text-stone-500 group-hover:text-cyan-400'
-              : 'text-stone-600 group-hover:text-stone-400'
+              ? 'text-muted-foreground group-hover:text-primary'
+              : 'text-muted-foreground group-hover:text-muted-foreground'
           }`}
         >
           {footer.methodology}
@@ -147,8 +147,8 @@ export function DecisionCard({
             size={12}
             className={`shrink-0 transition-all ${
               footnoteInteractive
-                ? 'text-stone-600 group-hover:text-cyan-400 group-hover:translate-x-0.5'
-                : 'text-stone-800 group-hover:text-stone-500'
+                ? 'text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5'
+                : 'text-muted-foreground group-hover:text-muted-foreground'
             }`}
           />
         </div>
