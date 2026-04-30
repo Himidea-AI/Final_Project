@@ -29,7 +29,7 @@ from src.config.settings import settings
 from src.schemas.state import AgentState
 from src.schemas.structured_output import LegalBatchOutput
 from src.services.ftc_franchise import FtcFranchiseClient
-from src.services.law_api import LawApiClient
+# LawApiClient: SP2 후 사용 안 함. 외부 API fallback 필요 시 다시 import.
 
 # 전체 조문 원본 인덱스 — chunks.json에서 (source, article) → 전체 본문 조립
 # RAG는 "어떤 조문이 관련 있는지" 식별용으로만 사용하고, 실제 표시 본문은 여기서 가져옴
@@ -214,6 +214,22 @@ _DEFAULT_CHECKLIST: dict[str, list[dict]] = {
         {"text": "가맹본부 재무 현황 및 분쟁 이력 검토", "isRequired": False},
     ],
 }
+
+
+def _make_fallback_risk(
+    type_name: str,
+    summary: str = "",
+    recommendation: str = "",
+) -> dict:
+    """SP4: 통일된 fallback risk dict 생성 (15+ 군데 verbose 중복 제거)."""
+    return {
+        "type": type_name,
+        "level": "caution",
+        "summary": summary,
+        "articles": [],
+        "recommendation": recommendation,
+        "is_fallback": True,
+    }
 
 
 def _derive_checklist_from_articles(articles: list, risk_type: str) -> list[dict]:
@@ -735,11 +751,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     sewage_q = f"{business_type} 오수 배출 개인하수처리시설 설치 배수설비 공공하수도 하수도법"
     fair_trade_q = f"{brand} 가맹본부 불공정거래 거래강제 필수물품 공급"
 
-    # LawApiClient — 모듈 레벨 싱글톤 (매 요청 인스턴스 생성 방지)
-    if not hasattr(_run_legal_pipeline, "_law_client"):
-        _run_legal_pipeline._law_client = LawApiClient()
-    law_client = _run_legal_pipeline._law_client
-
+    # SP2 후: LawApiClient 6개 호출 제거됨 — DB 검색으로 대체
     # zoning: I/O 없는 규칙 기반 — 즉시 실행 후 Phase 1 병렬 대기
     zoning_result = await check_zoning_regulation(state)
 
@@ -764,12 +776,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
         retriever.search(accessibility_q, top_k=10, source_filter=LegalDocumentRetriever.ACCESSIBILITY_LAW_SOURCES),
         retriever.search(sewage_q, top_k=10, source_filter=LegalDocumentRetriever.SEWAGE_LAW_SOURCES),
         retriever.search(fair_trade_q, top_k=10, source_filter=LegalDocumentRetriever.FAIR_TRADE_SOURCES),
-        law_client.search_precedents("가맹사업 영업지역", display=3),
-        law_client.search_precedents("권리금 회수", display=3),
-        law_client.search_precedents("식품위생 영업허가", display=3),
-        law_client.search_precedents("다중이용업소 소방", display=3),
-        law_client.search_precedents("건축물 용도변경 근린생활시설", display=2),
-        law_client.search_precedents("근로계약 최저임금", display=2),
+        # SP2: 외부 law.go.kr API 호출 → DB 검색 (51 법령 + 86 판례 본문 BGE-m3 임베딩 적재됨)
+        retriever.search("가맹사업 영업지역 침해 판례", top_k=3),
+        retriever.search("권리금 회수 임차인 판례", top_k=3),
+        retriever.search("식품위생 영업허가 판례", top_k=3),
+        retriever.search("다중이용업소 소방 안전 판례", top_k=3),
+        retriever.search("건축물 용도변경 근린생활시설 판례", top_k=2),
+        retriever.search("근로계약 최저임금 판례", top_k=2),
         return_exceptions=True,
     )
     # 결과 합치기 (기존 인덱스 순서 유지)
@@ -1086,168 +1099,70 @@ async def _run_legal_pipeline(state: dict) -> dict:
         for t in _BATCH_TYPES:
             if t not in seen:
                 batch_results.append(
-                    {
-                        "type": t,
-                        "level": "caution",
-                        "summary": "LLM 응답 누락 — 수동 검토 필요",
-                        "articles": [],
-                        "recommendation": "전문가 상담 권장",
-                        "is_fallback": True,
-                    }
+                    _make_fallback_risk(
+                        t,
+                        summary="LLM 응답 누락 - 수동 검토 필요",
+                        recommendation="전문가 상담 권장",
+                    )
                 )
         logger.info(f"[legal_node] 배치 LLM 완료 (Structured Output) - {len(batch_results)}개 항목 처리")
-    except Exception as e:
-        logger.error(f"[legal_node] 배치 LLM 실패: {e} - 전체 caution 처리")
+    except asyncio.TimeoutError as e:
+        # SP4: 일시적 timeout — 재시도 권장 메시지
+        logger.error(f"[legal_node] LLM timeout: {e} - 전체 caution 처리 (재시도 권장)")
         batch_results = [
-            {
-                "type": t,
-                "level": "caution",
-                "summary": f"LLM 분석 실패: {e}",
-                "articles": [],
-                "recommendation": "전문가 상담 권장",
-                "is_fallback": True,
-            }
+            _make_fallback_risk(
+                t,
+                summary=f"LLM 응답 시간 초과: {e}",
+                recommendation="잠시 후 재시도 또는 전문가 상담 권장",
+            )
+            for t in _BATCH_TYPES
+        ]
+    except (json.JSONDecodeError, ValueError) as e:
+        # SP4: 스키마/파싱 오류 — 수동 검토 권장
+        logger.error(f"[legal_node] LLM 스키마 위반: {e} - 전체 caution 처리")
+        batch_results = [
+            _make_fallback_risk(
+                t,
+                summary=f"LLM 응답 형식 오류: {e}",
+                recommendation="전문가 상담 권장 (응답 파싱 실패)",
+            )
+            for t in _BATCH_TYPES
+        ]
+    except Exception as e:
+        # SP4: 미지의 오류 — 일반 fallback
+        logger.error(f"[legal_node] LLM 실패 (예상치 못한 오류): {e} - 전체 caution 처리")
+        batch_results = [
+            _make_fallback_risk(
+                t,
+                summary=f"LLM 분석 실패: {e}",
+                recommendation="전문가 상담 권장",
+            )
             for t in _BATCH_TYPES
         ]
 
     # batch_results를 타입별로 인덱싱
     _batch_map = {r["type"]: r for r in batch_results}
 
+    # SP4: 14 risks 구성 — _batch_map(12 LLM 항목) + zoning_result + ftc_result
+    # 순서는 다운스트림(인덱스 기반) 호환을 위해 유지
+    def _r(type_name: str) -> dict:
+        return _batch_map.get(type_name, _make_fallback_risk(type_name))
+
     risks = [
-        _batch_map.get(
-            "franchise_law",
-            {
-                "type": "franchise_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "commercial_lease_law",
-            {
-                "type": "commercial_lease_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
+        _r("franchise_law"),
+        _r("commercial_lease_law"),
         zoning_result,
-        _batch_map.get(
-            "food_hygiene",
-            {
-                "type": "food_hygiene",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "safety_regulation",
-            {
-                "type": "safety_regulation",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
+        _r("food_hygiene"),
+        _r("safety_regulation"),
         ftc_result,
-        _batch_map.get(
-            "building_law",
-            {
-                "type": "building_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "fire_safety_law",
-            {
-                "type": "fire_safety_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "labor_law",
-            {
-                "type": "labor_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "vat_law",
-            {
-                "type": "vat_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "privacy_law",
-            {
-                "type": "privacy_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "accessibility_law",
-            {
-                "type": "accessibility_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "sewage_law",
-            {
-                "type": "sewage_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
-        _batch_map.get(
-            "fair_trade_law",
-            {
-                "type": "fair_trade_law",
-                "level": "caution",
-                "summary": "",
-                "articles": [],
-                "recommendation": "",
-                "is_fallback": True,
-            },
-        ),
+        _r("building_law"),
+        _r("fire_safety_law"),
+        _r("labor_law"),
+        _r("vat_law"),
+        _r("privacy_law"),
+        _r("accessibility_law"),
+        _r("sewage_law"),
+        _r("fair_trade_law"),
     ]
 
     # §13 드로어 체크리스트 필드 — 각 risk 의 articles 에서 휴리스틱으로 파생
@@ -1259,27 +1174,46 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 _r.get("type", "unknown"),
             )
 
-    # 의무 법률 최소 위험도 보정 — 미이행 시 영업불가인 법률은 safe로 내려가지 않도록 강제
-    _MUST_CAUTION = {"franchise_law", "commercial_lease_law", "vat_law", "privacy_law", "fair_trade_law"}
-    _MUST_DANGER = {"food_hygiene", "building_law", "fire_safety_law", "labor_law", "safety_regulation"}
+    # SP4: 의무 법률 안전망 — safe 진입만 차단 (caution까지). LLM의 caution/danger 판단은 그대로 신뢰.
+    # 이전엔 _MUST_DANGER 5개를 강제 danger로 끌어올려 alert fatigue 발생.
+    _SAFE_FLOOR = {
+        "franchise_law",
+        "commercial_lease_law",
+        "vat_law",
+        "privacy_law",
+        "fair_trade_law",
+        "food_hygiene",
+        "building_law",
+        "fire_safety_law",
+        "labor_law",
+        "safety_regulation",
+    }
     for _r in risks:
         if not isinstance(_r, dict):
             continue
         rtype = _r.get("type", "")
         level = _r.get("level", "")
-        if rtype in _MUST_DANGER and level != "danger":
-            _r["level"] = "danger"
-        elif rtype in _MUST_CAUTION and level == "safe":
+        if rtype in _SAFE_FLOOR and level == "safe":
             _r["level"] = "caution"
 
     # 벌칙 조문 본문을 recommendation에 자동 추가
     _enrich_penalty_info(risks)
 
-    # overall_level: danger 하나라도 있으면 danger, caution 있으면 caution, 전부 safe면 safe
-    levels = [r.get("level", "caution") for r in risks if isinstance(r, dict)]
-    if "danger" in levels:
+    # SP4: overall_level 결정 — 핵심 카테고리 + 임계값 룰
+    # 핵심 = 미이행 시 영업정지/형사처벌이 직접적인 영역 (식품위생/소방/건축)
+    # 핵심 1개라도 danger → overall=danger
+    # 비핵심 danger 2개 이상 → overall=danger (다중 위험)
+    # 그 외 danger 1개 또는 caution 존재 → caution
+    # 전부 safe → safe
+    _CRITICAL_TYPES = {"food_hygiene", "fire_safety_law", "building_law"}
+
+    danger_types = [r.get("type", "") for r in risks if isinstance(r, dict) and r.get("level") == "danger"]
+    has_critical_danger = any(t in _CRITICAL_TYPES for t in danger_types)
+    has_caution = any(r.get("level") == "caution" for r in risks if isinstance(r, dict))
+
+    if has_critical_danger or len(danger_types) >= 2:
         overall_level = "danger"
-    elif "caution" in levels:
+    elif danger_types or has_caution:
         overall_level = "caution"
     else:
         overall_level = "safe"

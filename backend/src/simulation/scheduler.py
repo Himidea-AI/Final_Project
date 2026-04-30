@@ -34,7 +34,7 @@ class Scheduler:
         agents: list[Agent],
         seed: int = 42,
         hours_map: StoreHoursMap | None = None,
-        llm_concurrency: int = 4,
+        llm_concurrency: int = 8,
         conversation: ConversationEngine | None = None,
     ):
         self.world = world

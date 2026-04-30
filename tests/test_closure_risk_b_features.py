@@ -100,12 +100,14 @@ def test_open_close_ratio_handles_zero_close():
     assert np.isfinite(second_row["open_close_ratio_lag1"])
 
 
-def test_LGBM_FEATURES_count_is_23():
-    """B-1 적용 후 LGBM_FEATURES 가 정확히 23개 (기존 15 + 신규 8).
+def test_LGBM_FEATURES_count_after_b1_rollback():
+    """B-1 production rollback 후 LGBM_FEATURES = 15 (D layer baseline).
 
-    Note: spec 문서는 'current 16' 으로 표기했으나 실제 baseline 은 15 (확인됨).
+    B-1 retrain 결과 AUC -0.024 degradation → LGBM_FEATURES 에서 신규 8 제거.
+    derivation 코드는 _engineer_lag_features 에 보존 (미래 sprint 활용).
     """
-    assert len(LGBM_FEATURES) == 23, f"LGBM_FEATURES 길이 mismatch: {len(LGBM_FEATURES)}"
+    assert len(LGBM_FEATURES) == 15, f"LGBM_FEATURES 길이 mismatch: {len(LGBM_FEATURES)}"
+    # 신규 8 feature 는 LGBM_FEATURES 에 없어야 함 (rollback)
     new_cols = {
         "weekday_sales_yoy",
         "weekend_sales_yoy",
@@ -116,4 +118,4 @@ def test_LGBM_FEATURES_count_is_23():
         "holiday_count",
         "cpi_index_yoy",
     }
-    assert new_cols.issubset(set(LGBM_FEATURES))
+    assert new_cols.isdisjoint(set(LGBM_FEATURES))

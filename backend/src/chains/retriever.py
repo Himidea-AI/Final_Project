@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 # HyDE용 일상 용어 → 법률 용어 매핑 (LLM 호출 없이 빠르게 치환)
 _LEGAL_SYNONYM_MAP: dict[str, str] = {
-    "4대보험": "국민연금 건강보험 고용보험 산업재해보상보험",
     "월세": "차임 월 차임",
     "보증금": "임대차보증금 환산보증금",
     "알바": "단시간근로자 기간제근로자",
@@ -24,13 +23,11 @@ _LEGAL_SYNONYM_MAP: dict[str, str] = {
     "퇴직금": "퇴직급여 퇴직연금",
     "CCTV": "영상정보처리기기",
     "고객정보": "개인정보 정보주체",
-    "간이과세": "간이과세자 납부의무 면제",
     "영업허가": "영업허가 영업신고 영업등록",
     "소방점검": "작동기능점검 종합정밀점검 자체점검",
     "비상구": "피난시설 비상구 안전시설",
     "장애인화장실": "장애인등편의시설 편의시설",
     "경사로": "장애인등편의시설 경사로 접근",
-    "그리스트랩": "유류분리기 오수처리시설",
     "가맹비": "가맹금 가입비",
     "로열티": "가맹금 계약이행보증금",
     "본사 갑질": "불공정거래행위 거래강제 부당한 차별취급",
@@ -38,12 +35,10 @@ _LEGAL_SYNONYM_MAP: dict[str, str] = {
     "용도변경": "건축물 용도변경 근린생활시설",
     # 상가임대차 관련
     "권리금": "권리금 회수기회 보호 제10조의4",
-    "계약갱신": "계약갱신요구권 제10조",
     "임대료인상": "차임증감청구 차임증액",
     "환산보증금": "환산보증금 보증금 환산",
     "묵시적갱신": "묵시적갱신 계약갱신",
     # 근로기준법 관련
-    "주휴수당": "주휴일 유급휴일 주휴수당",
     "연장근로": "연장근로 가산임금 통상임금",
     "해고": "해고 경영상 이유 부당해고",
     "근로계약서": "근로조건 서면명시 제17조",
@@ -77,7 +72,6 @@ _LEGAL_SYNONYM_MAP: dict[str, str] = {
     "시설기준": "시설기준 조리시설 영업장 제36조",
     "영업자준수사항": "영업자 준수사항 위생관리 제3조 제44조",
     # 소방시설법 보강
-    "소방안전관리자": "소방안전관리자 선임 제24조 제25조",
     "자체점검": "자체점검 정기점검 작동기능점검 제22조",
     "소방시설설치": "소방시설 설치 의무 기준 제12조 제13조",
     # 근로기준법 보강
@@ -103,7 +97,6 @@ _LEGAL_SYNONYM_MAP: dict[str, str] = {
     "대상시설": "대상시설 편의시설 공공건물 공중이용시설 공동주택 제7조",
     "편의시설설치": "편의시설 설치 대상시설 규모 용도 제8조",
     # 공정거래법 보강
-    "거래강제": "거래강제 불공정거래행위 제45조 제40조",
     "필수물품": "필수물품 공급 부당한 거래 제47조",
     # 가맹사업법 보강 (Issue A — 영업지역)
     "매장 근처": "영업지역 침해 부당한 영업지역 침해금지 제12조의4",
@@ -220,13 +213,19 @@ class LegalDocumentRetriever:
         # 2차: LLM 가상 조문 생성
         import hashlib
 
-        cache_key = f"v3:hyde:{hashlib.sha256(query.encode()).hexdigest()[:32]}"
+        # SP3: 의미 동일 + 표기 차이 (공백/대소문자/구두점) 쿼리는 같은 캐시 히트
+        import re
+
+        normalized = re.sub(r"\s+", " ", query.lower()).strip()
+        normalized = re.sub(r"[?!.,()\[\]{}\"']", "", normalized)
+        cache_key = f"v3:hyde:{hashlib.sha256(normalized.encode()).hexdigest()[:32]}"
 
         # Redis 캐시 조회
         hyde_text = None
         _redis = None
         try:
             import redis.asyncio as aioredis
+
             _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
             cached = await _redis.get(cache_key)
             if cached:
@@ -251,6 +250,7 @@ class LegalDocumentRetriever:
                 # Anthropic SDK (claude-haiku-4.5)
                 if settings.anthropic_api_key:
                     from anthropic import AsyncAnthropic
+
                     client = AsyncAnthropic(api_key=settings.anthropic_api_key)
                     resp = await asyncio.wait_for(
                         client.messages.create(
@@ -258,9 +258,7 @@ class LegalDocumentRetriever:
                             max_tokens=500,
                             system=HYDE_SYSTEM_PROMPT,
                             messages=[
-                                {"role": m["role"], "content": m["content"]}
-                                for m in messages
-                                if m["role"] != "system"
+                                {"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"
                             ],
                         ),
                         timeout=10.0,
@@ -269,6 +267,7 @@ class LegalDocumentRetriever:
                 # OpenAI fallback (gpt-4o-mini)
                 elif settings.openai_api_key:
                     from openai import AsyncOpenAI
+
                     client = AsyncOpenAI(api_key=settings.openai_api_key)
                     resp = await asyncio.wait_for(
                         client.chat.completions.create(
@@ -371,10 +370,24 @@ class LegalDocumentRetriever:
     # 관련성 임계값 — 이 점수 미만인 문서는 LLM 컨텍스트에서 제외
     RELEVANCE_THRESHOLD = 0.3
 
-    # RRF 파라미터
-    _RRF_K = 60  # Reciprocal Rank Fusion 상수
-    _VECTOR_WEIGHT = 0.5
-    _BM25_WEIGHT = 0.5
+    # RRF 파라미터 — settings에서 외부화 (SP3). .env로 RRF_K/RRF_VECTOR_WEIGHT/RRF_BM25_WEIGHT 조정 가능.
+    @property
+    def _RRF_K(self) -> int:
+        from src.config.settings import settings
+
+        return settings.rrf_k
+
+    @property
+    def _VECTOR_WEIGHT(self) -> float:
+        from src.config.settings import settings
+
+        return settings.rrf_vector_weight
+
+    @property
+    def _BM25_WEIGHT(self) -> float:
+        from src.config.settings import settings
+
+        return settings.rrf_bm25_weight
 
     # Reranker (전부 비활성 — 3종 모두 역효과 확인)
     # ms-marco-MiniLM: F1 -0.247
@@ -390,6 +403,43 @@ class LegalDocumentRetriever:
 
     # 오답 방지 필터 (Hard Negative Mining)
     _confusion_map = None  # 지연 로딩: {(law_keyword, wrong_article): {correct_articles}}
+
+    # SP3: Kiwi 형태소 토크나이저 — BM25 한국어 정확도 향상
+    # 의미 토큰만 보존 (조사/어미 제거): 명사/동사/형용사/부사/숫자/한자/외래어
+    _BM25_KEEP_TAGS = (
+        "NNG",  # 일반명사
+        "NNP",  # 고유명사
+        "NNB",  # 의존명사
+        "NR",  # 수사
+        "VV",  # 동사
+        "VA",  # 형용사
+        "MAG",  # 일반부사
+        "MAJ",  # 접속부사
+        "SL",  # 외국어
+        "SN",  # 숫자
+        "SH",  # 한자
+    )
+    _kiwi = None  # 지연 초기화 (모델 로드 ~100ms)
+
+    @classmethod
+    def _get_kiwi(cls):
+        if cls._kiwi is None:
+            from kiwipiepy import Kiwi
+
+            cls._kiwi = Kiwi()
+        return cls._kiwi
+
+    @classmethod
+    def _tokenize_korean(cls, text: str) -> list[str]:
+        """SP3: Kiwi 형태소 분석으로 의미 토큰만 추출. 조사/어미 제거.
+
+        예: "권리금을 회수할 수 있다" → ["권리금", "회수", "수", "있"]
+        (이전: "권리금을", "회수할", "수", "있다" — 조사/어미 포함)
+        """
+        if not text:
+            return []
+        kiwi = cls._get_kiwi()
+        return [tok.form for tok in kiwi.tokenize(text) if tok.tag in cls._BM25_KEEP_TAGS and len(tok.form) > 0]
 
     def _build_bm25_index(self) -> None:
         """chunks.json에서 BM25 인덱스를 메모리에 구축합니다."""
@@ -407,12 +457,14 @@ class LegalDocumentRetriever:
         # 문서: [(text, metadata), ...]
         self._bm25_docs: list[tuple[str, dict]] = []
         inv_index: dict[str, list[tuple[int, int]]] = {}
+        self._bm25_doc_lens: list[int] = []
         for i, c in enumerate(chunks):
             text = c.get("text", "")
             meta = c.get("metadata", {})
             self._bm25_docs.append((text, meta))
-            # 단순 공백 토크나이저 (한국어 법률은 띄어쓰기 기반으로 충분)
-            tokens = text.split()
+            # SP3: Kiwi 형태소 토크나이저 (단순 split 대체)
+            tokens = self._tokenize_korean(text)
+            self._bm25_doc_lens.append(len(tokens))
             tf_map: dict[str, int] = {}
             for t in tokens:
                 tf_map[t] = tf_map.get(t, 0) + 1
@@ -421,9 +473,8 @@ class LegalDocumentRetriever:
 
         self._bm25_index = inv_index
         self._bm25_doc_count = len(self._bm25_docs)
-        # 문서별 토큰 수
-        self._bm25_doc_lens = [len(d[0].split()) for d in self._bm25_docs]
         self._bm25_avg_dl = sum(self._bm25_doc_lens) / max(len(self._bm25_doc_lens), 1)
+        logger.info(f"[BM25] Kiwi 인덱스 구축 완료: 문서 {self._bm25_doc_count}, 평균 토큰 {self._bm25_avg_dl:.1f}")
 
     def _bm25_search(
         self,
@@ -438,25 +489,22 @@ class LegalDocumentRetriever:
 
         k1 = 1.5
         b = 0.75
-        query_tokens = query.split()
+        # SP3: Kiwi 형태소 토크나이저 — 쿼리도 동일 방식
+        query_tokens = self._tokenize_korean(query)
         scores: dict[int, float] = {}
 
         for qt in query_tokens:
-            # 부분 매칭: 쿼리 토큰을 포함하는 모든 인덱스 키를 찾음
-            matching_entries: list[tuple[int, int]] = []
-            for token, entries in self._bm25_index.items():
-                if qt in token or token in qt:
-                    matching_entries.extend(entries)
-
-            if not matching_entries:
+            # SP3: 형태소 단위 정확 매칭 (이전 부분 매칭 `qt in token` 제거 — false positive 야기)
+            entries = self._bm25_index.get(qt)
+            if not entries:
                 continue
 
-            # IDF 계산 — 매칭된 고유 문서 수 기준
-            doc_ids = set(e[0] for e in matching_entries)
+            # IDF 계산 — 매칭 토큰의 고유 문서 수 기준
+            doc_ids = set(e[0] for e in entries)
             df = len(doc_ids)
             idf = math.log((self._bm25_doc_count - df + 0.5) / (df + 0.5) + 1)
 
-            for doc_idx, tf in matching_entries:
+            for doc_idx, tf in entries:
                 dl = self._bm25_doc_lens[doc_idx]
                 tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / self._bm25_avg_dl))
                 scores[doc_idx] = scores.get(doc_idx, 0) + idf * tf_norm
@@ -750,15 +798,12 @@ class LegalDocumentRetriever:
         from sentence_transformers import SentenceTransformer
 
         if not hasattr(self.__class__, "_st_model"):
-            self.__class__._st_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+            self.__class__._st_model = SentenceTransformer("BAAI/bge-m3")
         q_emb = self.__class__._st_model.encode([query])[0]
 
         # source_filter 적용
         if source_filter:
-            valid_mask = np.array([
-                any(sf in m.get("source", "") for sf in source_filter)
-                for m in vq_mapping
-            ])
+            valid_mask = np.array([any(sf in m.get("source", "") for sf in source_filter) for m in vq_mapping])
         else:
             valid_mask = np.ones(len(vq_mapping), dtype=bool)
 
@@ -769,12 +814,10 @@ class LegalDocumentRetriever:
         filtered_embs = vq_embs[valid_mask]
         filtered_indices = np.where(valid_mask)[0]
 
-        scores = np.dot(filtered_embs, q_emb) / (
-            np.linalg.norm(filtered_embs, axis=1) * np.linalg.norm(q_emb) + 1e-8
-        )
+        scores = np.dot(filtered_embs, q_emb) / (np.linalg.norm(filtered_embs, axis=1) * np.linalg.norm(q_emb) + 1e-8)
 
         # top_k 추출
-        top_k_idx = np.argsort(scores)[::-1][:top_k * 2]
+        top_k_idx = np.argsort(scores)[::-1][: top_k * 2]
 
         # 원본 청크 로드
         chunks_path = Path(__file__).resolve().parent.parent / "data" / "legal" / "processed" / "chunks.json"
@@ -795,14 +838,16 @@ class LegalDocumentRetriever:
 
             if chunk_idx < len(self.__class__._chunks_cache):
                 chunk = self.__class__._chunks_cache[chunk_idx]
-                results.append({
-                    "content": chunk.get("text", chunk.get("content", "")),
-                    "metadata": {
-                        **chunk.get("metadata", {}),
-                        "relevance": float(scores[idx_pos]),
-                        "via": "q2q",
-                    },
-                })
+                results.append(
+                    {
+                        "content": chunk.get("text", chunk.get("content", "")),
+                        "metadata": {
+                            **chunk.get("metadata", {}),
+                            "relevance": float(scores[idx_pos]),
+                            "via": "q2q",
+                        },
+                    }
+                )
             if len(results) >= top_k:
                 break
 
@@ -818,6 +863,7 @@ class LegalDocumentRetriever:
         """
         if cls._reranker is None:
             from sentence_transformers import CrossEncoder
+
             cls._reranker = CrossEncoder(cls._RERANK_MODEL, max_length=512)
             logger.info(f"[Reranker] {cls._RERANK_MODEL} 로드 완료")
 

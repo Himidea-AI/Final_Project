@@ -60,13 +60,18 @@ class Settings(BaseSettings):
     # HyDE (Hypothetical Document Embeddings) — LLM 기반 쿼리 확장
     hyde_enabled: bool = os.getenv("HYDE_ENABLED", "false").lower() == "true"
 
+    # RRF (Reciprocal Rank Fusion) — vector + BM25 결합 가중치
+    # SP3: 외부화 (.env로 조정 가능). 기본값은 검증 전 안전 baseline 0.5/0.5 유지.
+    # bench_rag_accuracy.py로 골든셋 측정 후 최적값 확정 예정.
+    rrf_k: int = int(os.getenv("RRF_K", "60"))
+    rrf_vector_weight: float = float(os.getenv("RRF_VECTOR_WEIGHT", "0.5"))
+    rrf_bm25_weight: float = float(os.getenv("RRF_BM25_WEIGHT", "0.5"))
+
     # NTS (국세청)
     nts_api_key: str = os.getenv("NTS_API_KEY", "")
 
     # JWT — dev fallback 제공, 운영에선 반드시 .env의 강력한 secret으로 덮어쓰기
-    jwt_secret_key: str = os.getenv(
-        "JWT_SECRET_KEY", "dev-only-not-secret-replace-in-prod"
-    )
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "dev-only-not-secret-replace-in-prod")
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 
