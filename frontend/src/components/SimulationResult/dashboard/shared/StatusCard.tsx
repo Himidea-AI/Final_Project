@@ -11,7 +11,7 @@ interface StatusCardProps {
 }
 
 const STATUS_DOT: Record<StatusColor, string> = {
-  indigo: 'bg-primary shadow-[0_0_8px_rgba(99,102,241,0.6)]',
+  indigo: 'bg-primary shadow-[0_0_8px_rgba(0,44,209,0.6)]',
   emerald: 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.6)]',
   amber: 'bg-warning shadow-[0_0_8px_rgba(245,158,11,0.6)]',
   rose: 'bg-danger shadow-[0_0_8px_rgba(244,63,94,0.6)]',

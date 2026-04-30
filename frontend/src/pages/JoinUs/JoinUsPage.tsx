@@ -82,7 +82,7 @@ export default function JoinUsPage({ onBack }: Props) {
           <span className="text-border">/</span>
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-white transition-colors duration-300"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
           >
             <ChevronRight size={14} className="rotate-180" />
             BACK
@@ -116,7 +116,7 @@ export default function JoinUsPage({ onBack }: Props) {
               <div className="w-full max-w-3xl mb-8 flex justify-start">
                 <button
                   onClick={handleBackToRoleSelect}
-                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-white transition-colors"
+                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft size={14} />
                   가입 유형 재선택
@@ -166,7 +166,7 @@ export default function JoinUsPage({ onBack }: Props) {
               <div className="flex items-center justify-between mb-8">
                 <button
                   onClick={handleBackToPricing}
-                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-white transition-colors"
+                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft size={14} />
                   요금제 재선택
@@ -210,7 +210,7 @@ export default function JoinUsPage({ onBack }: Props) {
               <div className="flex items-center justify-between mb-8">
                 <button
                   onClick={handleBackToRoleSelect}
-                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-white transition-colors"
+                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft size={14} />
                   가입 유형 재선택

@@ -71,7 +71,7 @@ export function HybridSliderInput({
   const renderMin = minLabel ?? `${min}${unit}`;
 
   return (
-    <div className={`flex flex-col gap-3 mb-6 ${className}`}>
+    <div className={`flex flex-col gap-2 mb-3 ${className}`}>
       {/* 라벨 + 수기 입력 영역 */}
       <div className="flex justify-between items-center">
         <label className="text-xs font-bold text-foreground flex items-center gap-1.5 group cursor-help">
@@ -86,7 +86,7 @@ export function HybridSliderInput({
           )}
         </label>
 
-        <div className="flex items-center bg-muted border border-border rounded-md px-2 py-1.5 focus-within:border-primary focus-within:shadow-[0_0_10px_rgba(0,44,209,0.2)] transition-all">
+        <div className="flex items-baseline gap-1 focus-within:[&>input]:text-primary transition-all">
           <input
             type="text"
             inputMode="numeric"
@@ -96,14 +96,14 @@ export function HybridSliderInput({
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
-            className="w-16 bg-transparent text-right text-xs font-mono tabular-nums font-black text-primary focus:outline-none placeholder-muted-foreground/60"
+            className="w-20 bg-transparent text-right text-2xl font-black tabular-nums text-primary tracking-tight focus:outline-none placeholder-muted-foreground/60"
             placeholder={String(min)}
           />
-          <span className="text-[0.625rem] text-muted-foreground ml-1 font-bold">{unit}</span>
+          <span className="text-xs font-bold text-muted-foreground">{unit}</span>
         </div>
       </div>
 
-      {/* 커스텀 슬라이더 */}
+      {/* 커스텀 슬라이더 — input 자체에 gradient background 로 progress fill (왼쪽 Deep Blue / 오른쪽 gray) */}
       <div className="relative flex items-center h-4 group">
         <input
           type="range"
@@ -112,11 +112,10 @@ export function HybridSliderInput({
           step={step}
           value={sliderValue}
           onChange={handleSliderChange}
-          className="absolute w-full h-1.5 appearance-none bg-border rounded-full outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(0,44,209,0.6)] z-10"
-        />
-        <div
-          className="absolute left-0 h-1.5 bg-gradient-to-r from-primary to-primary rounded-full pointer-events-none z-0"
-          style={{ width: `${progressPercent}%` }}
+          className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(0,44,209,0.6)] [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:cursor-pointer"
+          style={{
+            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${progressPercent}%, var(--border) ${progressPercent}%, var(--border) 100%)`,
+          }}
         />
       </div>
 

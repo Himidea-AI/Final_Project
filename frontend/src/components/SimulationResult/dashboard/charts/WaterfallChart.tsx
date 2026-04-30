@@ -137,7 +137,7 @@ export function WaterfallChart({
           axisLine={{ stroke: 'var(--border)' }}
         />
         <Tooltip
-          cursor={{ fill: 'rgba(129,140,248,0.05)' }}
+          cursor={{ fill: 'rgba(0,44,209,0.05)' }}
           contentStyle={{
             backgroundColor: 'var(--card)',
             border: '1px solid var(--border)',

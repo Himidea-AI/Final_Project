@@ -90,7 +90,7 @@ export function PeakHourCard({ data }: Props) {
                 <div
                   className={`w-full rounded-sm transition-all ${
                     isPeak
-                      ? 'bg-primary shadow-[0_0_8px_rgba(129,140,248,0.4)]'
+                      ? 'bg-primary shadow-[0_0_8px_rgba(0,44,209,0.4)]'
                       : 'bg-muted group-hover:bg-muted'
                   }`}
                   style={{ height: `${height}%` }}

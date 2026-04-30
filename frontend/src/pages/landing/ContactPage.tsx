@@ -29,7 +29,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
           <span className="text-border">/</span>
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-white transition-colors duration-300"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
           >
             <ChevronRight size={14} className="rotate-180" />
             BACK
@@ -214,13 +214,13 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-2 block">
                   Team
                 </span>
-                <p className="text-lg font-bold text-white mb-4">
+                <p className="text-lg font-bold text-foreground mb-4">
                   AI 심화과정 6인 팀 프로젝트 (3조)
                 </p>
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-2 block">
                   Mentor
                 </span>
-                <p className="text-lg font-bold text-white">황태림</p>
+                <p className="text-lg font-bold text-foreground">황태림</p>
               </div>
             </div>
 
@@ -242,7 +242,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                 </span>
                 <div className="flex items-center gap-3">
                   <MapPin className="text-primary w-6 h-6 shrink-0" />
-                  <span className="text-lg font-bold text-white leading-tight">
+                  <span className="text-lg font-bold text-foreground leading-tight">
                     강남 하이미디어
                     <br />
                     아카데미

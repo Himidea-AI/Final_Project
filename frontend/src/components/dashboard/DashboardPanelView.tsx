@@ -44,7 +44,7 @@ export function StatCard({
   return (
     <div
       onClick={onClick}
-      className="bg-card border border-border p-6 rounded-xl flex flex-col justify-between gap-3 group cursor-pointer hover:border-primary hover:shadow-[0_0_20px_rgba(129,140,248,0.2)] transition-all min-h-[130px]"
+      className="bg-card border border-border p-6 rounded-xl flex flex-col justify-between gap-3 group cursor-pointer hover:border-primary hover:shadow-[0_0_20px_rgba(0,44,209,0.2)] transition-all min-h-[130px]"
     >
       <div className="flex justify-between items-start">
         <p className="text-muted-foreground text-xs font-medium">{title}</p>
@@ -208,7 +208,7 @@ export function TableRow({
                       cx="42"
                       cy="35"
                       r="22"
-                      fill="rgba(129,140,248,0.2)"
+                      fill="rgba(0,44,209,0.2)"
                       stroke="var(--primary)"
                       strokeWidth="1.5"
                     />
@@ -519,7 +519,7 @@ function DashboardPanelView({
   // winner 패널 시각 강조 — DistrictRankings의 indigo 톤(메모리 project_persona_pivot 본부 영업팀)
   // 톤 재사용. 외곽선/링/glow로 추천 동임을 즉시 인지하게 한다.
   const winnerWrapCls = isWinner
-    ? 'ring-1 ring-primary/30 shadow-[0_0_20px_rgba(99,102,241,0.15)] rounded-xl'
+    ? 'ring-1 ring-primary/30 shadow-[0_0_20px_rgba(0,44,209,0.15)] rounded-xl'
     : '';
   const winnerBadgeCls = isWinner ? 'bg-primary/20 text-primary border-primary/30' : badgeColor;
   const winnerLabel = isWinner ? '추천 1위' : panelLabels[panelIndex];
@@ -619,7 +619,7 @@ function DashboardPanelView({
             ))}
             <polygon
               points={radarPoints}
-              fill={isVariantB ? 'rgba(16,185,129,0.15)' : 'rgba(129,140,248,0.15)'}
+              fill={isVariantB ? 'rgba(16,185,129,0.15)' : 'rgba(0,44,209,0.15)'}
               stroke={isVariantB ? 'var(--success)' : 'var(--primary)'}
               strokeWidth="2"
             />

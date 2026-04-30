@@ -59,7 +59,7 @@ function CommandPalette({
           >
             <div className="flex items-center gap-3">
               <LayoutDashboard className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-              <span className="text-sm font-medium text-muted-foreground group-hover:text-white">
+              <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground">
                 시뮬레이터 대시보드
               </span>
             </div>
@@ -71,7 +71,7 @@ function CommandPalette({
           >
             <div className="flex items-center gap-3">
               <Building2 className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-              <span className="text-sm font-medium text-muted-foreground group-hover:text-white">
+              <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground">
                 HQ 커맨드 센터
               </span>
             </div>
@@ -83,7 +83,7 @@ function CommandPalette({
           >
             <div className="flex items-center gap-3">
               <FileText className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-              <span className="text-sm font-medium text-muted-foreground group-hover:text-white">
+              <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground">
                 About SPOTTER
               </span>
             </div>
@@ -95,7 +95,7 @@ function CommandPalette({
           >
             <div className="flex items-center gap-3">
               <Mail className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-              <span className="text-sm font-medium text-muted-foreground group-hover:text-white">
+              <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground">
                 Contact
               </span>
             </div>
@@ -111,7 +111,7 @@ function CommandPalette({
           >
             <div className="flex items-center gap-3">
               <Settings className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-              <span className="text-sm font-medium text-muted-foreground group-hover:text-white">
+              <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground">
                 다크/라이트 테마 전환
               </span>
             </div>

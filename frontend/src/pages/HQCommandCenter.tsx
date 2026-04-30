@@ -38,6 +38,7 @@ import {
   BarChart3,
   Zap,
   ChevronDown,
+  ChevronRight,
   Trash2,
   Pencil,
   AlertTriangle,
@@ -122,21 +123,23 @@ function MasterCommandCenter() {
   };
 
   return (
-    <div className="absolute inset-0 z-20 flex bg-card text-foreground font-sans overflow-hidden select-none">
+    <div className="absolute inset-0 z-20 flex bg-card text-foreground font-sans overflow-hidden select-none pt-20">
       {/* ==========================================
-          좌측 사이드바 (LNB)
+          좌측 사이드바 (LNB) — bg-muted (cream zone, 메인 bg-card 와 hue 분리).
+          외곽 pt-20 으로 LNB가 App 헤더(80px) 아래에서 시작 → cream이 헤더 영역으로 안 새어남.
           ========================================== */}
-      <div className="w-64 bg-card border-r border-border flex flex-col z-20 shrink-0">
-        {/* 워크스페이스 로고 영역 — auth.user 기반 동적 */}
-        <div className="h-20 flex items-center px-6 border-b border-border gap-3 cursor-pointer group mt-24">
+      <div className="w-64 bg-muted border-r border-border flex flex-col z-20 shrink-0">
+        {/* 워크스페이스 로고 영역 — auth.user 기반 동적. font-size text-lg.
+            (mt-20 제거됨 — 외곽 pt-20 으로 통합) */}
+        <div className="h-20 flex items-center px-6 border-b border-border gap-3 cursor-pointer group">
           <BrandLogo
             name={user?.company_name || 'SPOTTER'}
             isUser={false}
-            className="w-8 h-8 text-xs rounded-lg shrink-0"
+            className="w-9 h-9 text-sm rounded-lg shrink-0"
           />
           <div className="flex flex-col min-w-0">
             <span
-              className="font-black text-sm text-foreground group-hover:text-primary transition-colors truncate"
+              className="font-black text-lg text-foreground group-hover:text-primary transition-colors truncate leading-tight"
               title={user?.company_name || 'SPOTTER Workspace'}
             >
               {user?.company_name || 'SPOTTER Workspace'}
@@ -196,27 +199,37 @@ function MasterCommandCenter() {
           />
         </div>
 
-        {/* 하단 유저 프로필 — auth.user 기반 동적 (master / manager 분기) */}
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-card cursor-pointer transition-colors">
+        {/* 하단 유저 프로필 — auth.user 기반 동적 (master / manager 분기).
+            T2 white card on LNB cream zone + chevron affordance + 클릭 시 mypage 메뉴로. */}
+        <div className="p-4">
+          <button
+            onClick={() => setActiveMenu('mypage')}
+            className="w-full bg-card rounded-xl shadow-md hover:shadow-lg p-3 flex items-center gap-3 cursor-pointer transition-all duration-200 group text-left"
+          >
             <BrandLogo
               name={user?.contact_name || '사용자'}
               isUser={true}
               tone="accent"
-              className="w-8 h-8 text-xs rounded-full shrink-0"
+              className="w-9 h-9 text-sm rounded-full shrink-0"
             />
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <span className="truncate">{user?.contact_name || '사용자'}</span>
-                <span className="text-[0.5625rem] font-mono text-muted-foreground uppercase shrink-0">
-                  · {user?.role === 'manager' ? '매니저' : '팀장'}
+            <div className="flex flex-col min-w-0 flex-1 gap-0.5">
+              <span className="text-sm font-bold text-foreground truncate">
+                {user?.contact_name || '사용자'}
+              </span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[0.5625rem] font-bold text-primary uppercase tracking-wider shrink-0">
+                  {user?.role === 'manager' ? 'Manager' : 'Master'}
                 </span>
-              </span>
-              <span className="text-[0.625rem] text-primary truncate">
-                {user?.role === 'manager' ? 'Regional Access' : `${user?.plan || 'Pro'} Plan`}
-              </span>
+                <span className="text-[0.5625rem] text-muted-foreground shrink-0">·</span>
+                <span className="text-[0.5625rem] text-muted-foreground truncate">
+                  {user?.role === 'manager'
+                    ? 'Regional Access'
+                    : `${user?.plan || 'Pro'} Plan`}
+                </span>
+              </div>
             </div>
-          </div>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
+          </button>
         </div>
       </div>
 
@@ -224,8 +237,9 @@ function MasterCommandCenter() {
           우측 메인 콘텐츠 영역
           ========================================== */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-card">
-        {/* 상단 툴바 */}
-        <header className="h-20 border-b border-border flex items-center justify-between px-8 bg-card/80 backdrop-blur-md z-10 shrink-0 mt-24">
+        {/* 상단 툴바 — 좌측 LNB 회사명과 같은 높이.
+            (mt-20 제거됨 — 외곽 pt-20 으로 통합) */}
+        <header className="h-20 border-b border-border flex items-center justify-between px-8 bg-card/80 backdrop-blur-md z-10 shrink-0">
           <h2 className="text-lg font-bold flex items-center gap-2">
             {activeMenu === 'team' && '팀 및 권역 관리'}
             {activeMenu === 'pipeline' && '출점 파이프라인 보드'}
@@ -246,7 +260,7 @@ function MasterCommandCenter() {
                   }
                 }}
                 disabled={activeMenu === 'team' && isIssuing}
-                className="h-9 px-4 bg-primary hover:bg-primary text-primary-foreground text-xs font-bold rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                className="h-9 px-4 bg-primary hover:bg-primary text-primary-foreground text-xs font-bold rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(0,44,209,0.3)] hover:shadow-[0_0_20px_rgba(0,44,209,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {activeMenu === 'team' && isIssuing ? (
                   <>
@@ -311,21 +325,24 @@ function MenuButton({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 group ${
+      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all duration-200 group ${
         active
-          ? 'bg-primary/10 text-primary'
-          : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+          ? 'bg-card text-primary font-bold shadow-sm'
+          : 'text-muted-foreground hover:bg-card/70 hover:text-foreground'
       }`}
     >
       <div className="flex items-center gap-3">
         {icon}
-        <span className="text-xs font-medium">{label}</span>
+        <span className="text-xs">{label}</span>
       </div>
-      {badge && (
-        <span className="w-4 h-4 rounded-full bg-danger text-white text-[0.5625rem] font-black flex items-center justify-center animate-pulse">
-          {badge}
-        </span>
-      )}
+      <div className="flex items-center gap-2">
+        {badge && (
+          <span className="w-4 h-4 rounded-full bg-danger text-white text-[0.5625rem] font-black flex items-center justify-center animate-pulse">
+            {badge}
+          </span>
+        )}
+        {active && !badge && <div className="w-1.5 h-1.5 bg-primary rounded-full" />}
+      </div>
     </button>
   );
 }
@@ -610,7 +627,7 @@ function ReassignRegionModal({
           className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
         >
           <div className="px-6 py-5 border-b border-border">
-            <h3 className="text-sm font-black text-white flex items-center gap-2">
+            <h3 className="text-sm font-black text-foreground flex items-center gap-2">
               <Pencil className="w-4 h-4 text-primary" />
               담당 권역 변경
             </h3>
@@ -673,7 +690,7 @@ function ReassignRegionModal({
               type="button"
               onClick={onClose}
               disabled={isBusy}
-              className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-white transition-colors"
+              className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
             >
               취소
             </button>
@@ -681,7 +698,7 @@ function ReassignRegionModal({
               type="button"
               onClick={() => onSave(manager.id, gu || null, dongs.length ? dongs : null)}
               disabled={isBusy}
-              className="px-4 py-2 bg-primary hover:bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-primary hover:bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(0,44,209,0.3)] hover:shadow-[0_0_20px_rgba(0,44,209,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isBusy ? (
                 <>
@@ -730,7 +747,7 @@ function DeleteConfirmModal({
           className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
         >
           <div className="px-6 py-5 border-b border-border">
-            <h3 className="text-sm font-black text-white flex items-center gap-2">
+            <h3 className="text-sm font-black text-foreground flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-danger" />
               매니저 제거 (퇴사 처리)
             </h3>
@@ -738,7 +755,7 @@ function DeleteConfirmModal({
 
           <div className="p-6 space-y-3 text-sm">
             <p className="text-foreground">
-              <span className="font-bold text-white">{manager.contact_name}</span>
+              <span className="font-bold text-foreground">{manager.contact_name}</span>
               <span className="text-muted-foreground text-xs"> ({manager.email})</span>
               <br />
               매니저를 워크스페이스에서 제거하시겠습니까?
@@ -756,7 +773,7 @@ function DeleteConfirmModal({
               type="button"
               onClick={onClose}
               disabled={isBusy}
-              className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-white transition-colors"
+              className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
             >
               취소
             </button>
@@ -806,7 +823,7 @@ function PendingManagerCard({
   };
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5 shadow-lg shadow-rose-500/5">
+    <div className="bg-card rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
           <BrandLogo
@@ -1073,7 +1090,7 @@ function TeamManagementView({
         </h3>
 
         {isLoading && managers.length === 0 ? (
-          <div className="bg-card border border-border rounded-xl p-10 flex items-center justify-center">
+          <div className="bg-card rounded-xl p-10 shadow-md flex items-center justify-center">
             <div className="w-5 h-5 border-2 border-border border-t-primary rounded-full animate-spin" />
           </div>
         ) : pending.length === 0 ? (
@@ -1142,7 +1159,7 @@ function TeamManagementView({
               return (
                 <div
                   key={m.id}
-                  className="bg-card border border-border rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between hover:border-primary/50 hover:bg-card/30 transition-all duration-300 group shadow-sm gap-4 md:gap-0"
+                  className="bg-card rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between transition-all duration-300 group shadow-md hover:shadow-lg gap-4 md:gap-0"
                 >
                   {/* Left: Avatar + Info */}
                   <div className="flex items-center gap-4">
@@ -1154,7 +1171,7 @@ function TeamManagementView({
                     />
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-bold text-white truncate">
+                        <span className="text-base font-bold text-foreground truncate">
                           {m.contact_name}
                         </span>
                         <span className="px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-[0.5625rem] font-bold uppercase tracking-wider shrink-0">
@@ -1399,7 +1416,7 @@ function BrandProfileView() {
   };
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-6 relative overflow-hidden">
+    <div className="box-glass rounded-2xl p-6 relative overflow-hidden">
       <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-primary opacity-5 pointer-events-none" />
 
       <div className="relative z-10">
@@ -1471,7 +1488,7 @@ function BrandProfileView() {
 /* ───── AI 튜닝 (Phase 2 로드맵 프리뷰) ───── */
 function BrandTuningPhase2View() {
   return (
-    <div className="bg-card border border-primary/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(129,140,248,0.05)] relative overflow-hidden">
+    <div className="box-glass rounded-2xl p-6 relative overflow-hidden">
       <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-primary opacity-5 pointer-events-none" />
 
       <div className="relative z-10">
@@ -1668,10 +1685,10 @@ function BillingManagementView() {
                     </span>
                   </div>
                 )}
-                <h4 className="text-lg font-bold text-white mb-1">{plan.id}</h4>
+                <h4 className="text-lg font-bold text-foreground mb-1">{plan.id}</h4>
                 <p className="text-[0.625rem] text-muted-foreground mb-4">{plan.target}</p>
                 <div className="flex items-end gap-1 mb-6 pb-6 border-b border-border">
-                  <span className="text-2xl font-black text-white">{plan.price}</span>
+                  <span className="text-2xl font-black text-foreground">{plan.price}</span>
                   <span className="text-[0.625rem] text-muted-foreground mb-1">/ month</span>
                 </div>
                 <ul className="text-[0.6875rem] text-muted-foreground space-y-3 mb-8">
@@ -1688,7 +1705,7 @@ function BillingManagementView() {
                     onClick={() =>
                       showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')
                     }
-                    className="w-full py-3 bg-card text-muted-foreground border border-border text-xs font-bold rounded-xl group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(129,140,248,0)] group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)]"
+                    className="w-full py-3 bg-card text-muted-foreground border border-border text-xs font-bold rounded-xl group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(0,44,209,0)] group-hover:shadow-[0_0_20px_rgba(0,44,209,0.4)]"
                   >
                     플랜 문의하기
                   </button>
@@ -1833,11 +1850,11 @@ function MyPageView() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
-        className="bg-card border border-border rounded-2xl p-8 shadow-lg"
+        className="box-glass rounded-2xl p-8"
       >
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h3 className="text-lg font-bold text-white mb-2">내 정보 관리</h3>
+            <h3 className="text-lg font-bold text-foreground mb-2">내 정보 관리</h3>
             <p className="text-xs text-muted-foreground">
               {isManager
                 ? '매니저 프로필 정보를 수정할 수 있습니다.'
@@ -1855,7 +1872,7 @@ function MyPageView() {
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
               placeholder="홍길동"
-              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           <div>
@@ -1880,7 +1897,7 @@ function MyPageView() {
               value={position}
               onChange={(e) => setPosition(e.target.value)}
               placeholder="팀장 / 과장 / 매니저"
-              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           <div>
@@ -1890,7 +1907,7 @@ function MyPageView() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="010-0000-0000"
-              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           {!isManager && (
@@ -1902,7 +1919,7 @@ function MyPageView() {
                 value={storeCount}
                 onChange={(e) => setStoreCount(e.target.value)}
                 placeholder="0"
-                className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary transition-colors"
+                className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
               />
             </div>
           )}
@@ -1912,7 +1929,7 @@ function MyPageView() {
           <button
             onClick={() => handleActionRequest('update')}
             disabled={!contactName.trim()}
-            className="px-6 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(0,44,209,0.4)] hover:bg-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             변경사항 저장
           </button>
@@ -1925,7 +1942,7 @@ function MyPageView() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.08, ease: [0.19, 1, 0.22, 1] }}
-          className="bg-card border border-danger/30 rounded-2xl p-8 shadow-lg"
+          className="box-glass rounded-2xl p-8 ring-1 ring-danger/20"
         >
           <div className="flex items-center gap-2 mb-2">
             <Shield className="w-4 h-4 text-danger" />
@@ -1987,7 +2004,7 @@ function MyPageView() {
               <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mb-4 border border-danger/20">
                 <AlertTriangle className="w-6 h-6 text-danger" />
               </div>
-              <h3 className="text-xl font-black text-white mb-2">정말로 탈퇴하시겠습니까?</h3>
+              <h3 className="text-xl font-black text-foreground mb-2">정말로 탈퇴하시겠습니까?</h3>
               <div className="bg-danger/10 border border-danger/20 p-4 rounded-lg mb-6">
                 <p className="text-sm text-danger font-bold leading-relaxed">
                   구독 후 1회 이상 시뮬레이션을 실행한 경우, 중간에 탈퇴하더라도 남은 기간에 대한
@@ -2040,7 +2057,7 @@ function MyPageView() {
               transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
               className="relative bg-card border border-border rounded-2xl p-8 shadow-2xl max-w-sm w-full"
             >
-              <h3 className="text-lg font-bold text-white mb-2">본인 인증</h3>
+              <h3 className="text-lg font-bold text-foreground mb-2">본인 인증</h3>
               <p className="text-xs text-muted-foreground mb-6">
                 {actionType === 'delete' ? '안전한 탈퇴 처리를 위해' : '정보 수정을 위해'} 현재
                 비밀번호를 입력해주세요.
@@ -2057,7 +2074,7 @@ function MyPageView() {
                   if (e.key === 'Enter') handlePasswordConfirm();
                 }}
                 placeholder="비밀번호 입력"
-                className="w-full bg-card border border-border rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-primary mb-2 transition-colors"
+                className="w-full bg-card border border-border rounded-lg px-4 py-3 text-sm text-foreground focus:outline-none focus:border-primary mb-2 transition-colors"
               />
               {passwordError && (
                 <p className="text-[0.6875rem] text-danger mb-4">{passwordError}</p>
@@ -2067,7 +2084,7 @@ function MyPageView() {
                 <button
                   onClick={() => setShowPasswordModal(false)}
                   disabled={isSaving}
-                  className="px-4 py-2 text-muted-foreground hover:text-white text-sm font-bold transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-muted-foreground hover:text-foreground text-sm font-bold transition-colors disabled:opacity-50"
                 >
                   취소
                 </button>

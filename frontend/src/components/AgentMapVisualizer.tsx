@@ -218,7 +218,7 @@ export default function AgentMapVisualizer({
             className="absolute inset-0"
             style={{
               backgroundImage:
-                'linear-gradient(rgba(129, 140, 248, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(129, 140, 248, 0.15) 1px, transparent 1px)',
+                'linear-gradient(rgba(0, 44, 209, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 44, 209, 0.15) 1px, transparent 1px)',
               backgroundSize: '50px 50px',
               transform: 'perspective(500px) rotateX(60deg) scale(2) translateY(-100px)',
               transformOrigin: 'top center',
@@ -276,7 +276,7 @@ export default function AgentMapVisualizer({
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div className="bg-card border text-foreground px-2 py-0.5 rounded text-[0.5625rem] font-bold mb-1 border-primary shadow-[0_0_10px_rgba(129,140,248,0.5)]">
+              <div className="bg-card border text-foreground px-2 py-0.5 rounded text-[0.5625rem] font-bold mb-1 border-primary shadow-[0_0_10px_rgba(0,44,209,0.5)]">
                 {loc.name}
               </div>
               <MapPin className="w-6 h-6" style={{ color: pinColor, fill: `${pinColor}33` }} />

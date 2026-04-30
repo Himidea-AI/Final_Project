@@ -112,7 +112,7 @@ export default function EnterpriseContactForm({ onSuccess }: Props) {
         disabled={!allValid}
         className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
           allValid
-            ? 'bg-gradient-to-r from-primary to-primary text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]'
+            ? 'bg-gradient-to-r from-primary to-primary text-white shadow-[0_0_20px_rgba(0,44,209,0.3)] hover:scale-[1.02] active:scale-[0.98]'
             : 'bg-card text-muted-foreground cursor-not-allowed'
         }`}
       >

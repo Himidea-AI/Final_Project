@@ -319,7 +319,7 @@ function DetailDrawer({
                               style={{ width: `${pct}%` }}
                             />
                           </div>
-                          <span className="text-[0.6875rem] text-white font-mono w-20 text-right">
+                          <span className="text-[0.6875rem] text-foreground font-mono w-20 text-right">
                             {d.daily_total.toLocaleString()}
                           </span>
                           <span className="text-[0.5625rem] text-muted-foreground w-10">

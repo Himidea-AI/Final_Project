@@ -32,13 +32,13 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.15, duration: 0.5 }}
           onClick={onSelectMaster}
-          className="w-full bg-card border border-border hover:border-primary rounded-2xl p-6 flex items-start gap-5 text-left group transition-all duration-300 hover:shadow-[0_0_30px_rgba(129,140,248,0.15)]"
+          className="w-full bg-card border border-border hover:border-primary rounded-2xl p-6 flex items-start gap-5 text-left group transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,44,209,0.15)]"
         >
           <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-primary/20 transition-all">
             <Building2 className="w-6 h-6 text-primary" />
           </div>
           <div className="flex-1">
-            <h3 className="text-base font-bold text-white mb-1.5">
+            <h3 className="text-base font-bold text-foreground mb-1.5">
               새 워크스페이스 개설
               <span className="ml-2 text-[0.625rem] text-primary font-mono uppercase tracking-wider">
                 팀장
@@ -62,7 +62,7 @@ export default function RoleSelectView({ onSelectMaster, onSelectManager }: Prop
             <Key className="w-6 h-6 text-success" />
           </div>
           <div className="flex-1">
-            <h3 className="text-base font-bold text-white mb-1.5">
+            <h3 className="text-base font-bold text-foreground mb-1.5">
               초대 코드로 합류
               <span className="ml-2 text-[0.625rem] text-success font-mono uppercase tracking-wider">
                 팀원

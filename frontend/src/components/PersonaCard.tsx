@@ -42,7 +42,7 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
         {/* Close 버튼 */}
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 rounded p-1 text-muted-foreground hover:bg-muted hover:text-white"
+          className="absolute right-3 top-3 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="닫기"
         >
           <X className="h-4 w-4" />

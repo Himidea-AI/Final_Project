@@ -95,7 +95,7 @@ export const AGENTS_LIST: AgentDef[] = [
     id: 'synthesis',
     name: '종합 전략',
     icon: BrainCircuit,
-    color: 'text-white',
+    color: 'text-foreground',
     borderCls: 'border-border/40 hover:border-border/80',
     iconBgCls: 'bg-muted/5 border-border/40',
     desc: 'synthesis_agent',

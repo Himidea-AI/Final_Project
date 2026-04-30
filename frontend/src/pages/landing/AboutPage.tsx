@@ -83,7 +83,7 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
           <span className="text-border">/</span>
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-white transition-colors duration-300"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
           >
             <ChevronRight size={14} className="rotate-180" />
             BACK

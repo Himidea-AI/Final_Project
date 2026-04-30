@@ -441,7 +441,7 @@ export default function SignupForm({ planName, onSuccess }: Props) {
             ? '가입하기 · 무료로 시작'
             : '구독 및 가입';
         const activeClass = isFree
-          ? 'bg-gradient-to-r from-primary to-primary text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-[1.02] active:scale-[0.98]'
+          ? 'bg-gradient-to-r from-primary to-primary text-white shadow-[0_0_20px_rgba(0,44,209,0.3)] hover:scale-[1.02] active:scale-[0.98]'
           : 'bg-gradient-to-r from-warning to-warning text-warning-foreground shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-[0.98]';
         return (
           <>

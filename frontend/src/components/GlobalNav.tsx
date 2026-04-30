@@ -41,6 +41,37 @@ export function LogoutButton() {
 }
 
 /**
+ * WelcomeWidget — 글로벌 헤더 중앙. 로그인 시 "{브랜드} {담당자} {직급}님 환영합니다" 표시.
+ * 클릭 무반응(정보 표시 only). role 기반 이동은 GlobalLimelightNav 4 아이콘이 처리.
+ * IntroScene 우상단 토글 로직에서 이전 (2026-05-01).
+ */
+export function WelcomeWidget() {
+  const { isLoggedIn, user, brand } = useAuth();
+  if (!isLoggedIn) return null;
+
+  const brandName = brand?.brand_name || user?.company_name || '';
+  const personName = user?.contact_name || '';
+  const roleTitle = user?.position || (user?.role === 'master' ? '팀장' : '매니저');
+
+  if (!brandName && !personName) return null;
+
+  return (
+    <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center pointer-events-none select-none">
+      <span className="text-[0.6875rem] font-medium tracking-wide whitespace-nowrap">
+        {brandName && <span className="text-primary font-semibold">{brandName}</span>}
+        {brandName && personName && <span className="text-muted-foreground"> · </span>}
+        {personName && (
+          <span className="text-foreground">
+            {personName} {roleTitle}
+          </span>
+        )}
+        <span className="text-muted-foreground">님 환영합니다</span>
+      </span>
+    </div>
+  );
+}
+
+/**
  * Notification Mock Items — 도메인 특화 샘플 3종
  * (실제 API 연동 전 demo 용도. 승인 대기는 실 데이터로 별도 렌더)
  */
@@ -175,7 +206,7 @@ function GlobalLimelightNav() {
             {React.cloneElement(item.icon, {
               className: `w-4 h-4 transition-all duration-300 ${
                 targetIndex === index
-                  ? 'text-primary scale-110 drop-shadow-[0_0_5px_rgba(129,140,248,0.5)]'
+                  ? 'text-primary scale-110 drop-shadow-[0_0_5px_rgba(0,44,209,0.5)]'
                   : 'scale-100 group-hover:scale-110'
               }`,
             } as React.HTMLAttributes<HTMLElement>)}
@@ -241,8 +272,8 @@ function GlobalLimelightNav() {
                         <ShieldAlert className="w-4 h-4 text-danger" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-foreground leading-snug group-hover:text-white transition-colors">
-                          <strong className="font-bold text-white mr-1">[권한 승인]</strong>
+                        <p className="text-xs text-foreground leading-snug group-hover:text-foreground transition-colors">
+                          <strong className="font-bold text-foreground mr-1">[권한 승인]</strong>
                           새로운 매니저 워크스페이스 승인 대기 ({m.contact_name} 님)
                         </p>
                         <p className="text-[0.625rem] text-muted-foreground mt-1.5 font-mono">
@@ -292,8 +323,8 @@ function GlobalLimelightNav() {
                           <Icon className={`w-4 h-4 ${iconColor}`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-foreground leading-snug group-hover:text-white transition-colors">
-                            <strong className="font-bold text-white mr-1">{tag}</strong>
+                          <p className="text-xs text-foreground leading-snug group-hover:text-foreground transition-colors">
+                            <strong className="font-bold text-foreground mr-1">{tag}</strong>
                             {body}
                           </p>
                           <p className="text-[0.625rem] text-muted-foreground mt-1.5 font-mono">
@@ -317,7 +348,7 @@ function GlobalLimelightNav() {
                   showToast('info', '전체 알림 센터는 준비 중입니다.');
                   setOpenDropdown(null);
                 }}
-                className="w-full py-2 text-[0.625rem] font-bold text-muted-foreground hover:text-white hover:bg-card rounded-lg transition-colors"
+                className="w-full py-2 text-[0.625rem] font-bold text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-colors"
               >
                 알림 센터 전체 보기
               </button>

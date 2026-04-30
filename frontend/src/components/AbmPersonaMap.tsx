@@ -1707,7 +1707,7 @@ export default function AbmPersonaMap({
                   // v=0 hex — 외곽선만 그려 격자 윤곽 표시 (사용자 피드백: 경계 보이게).
                   if (v <= 0) {
                     ctx.translate(hex.x, hex.y);
-                    ctx.strokeStyle = 'rgba(99, 102, 241, 0.18)'; // indigo dim
+                    ctx.strokeStyle = 'rgba(0, 44, 209, 0.18)'; // brand (Deep Blue)
                     ctx.lineWidth = 0.5;
                     ctx.stroke(hexPath);
                     ctx.translate(-hex.x, -hex.y);
@@ -2342,7 +2342,7 @@ export default function AbmPersonaMap({
       <div className="flex-1 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
         {/* 헤더 — AI 에이전트 맵과 동일 스타일 */}
         <div className="h-14 bg-muted/90 backdrop-blur-md border-b border-border flex justify-between items-center px-6 shrink-0 z-10">
-          <h3 className="text-sm font-black text-white flex items-center gap-3">
+          <h3 className="text-sm font-black text-foreground flex items-center gap-3">
             <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]" />
             ABM 페르소나 행동 시뮬레이션
           </h3>
@@ -2579,7 +2579,7 @@ export default function AbmPersonaMap({
                     </p>
                     <button
                       onClick={() => onClearResult?.()}
-                      className="text-[10px] px-2 py-1 rounded border border-border text-muted-foreground hover:text-white hover:border-success/60 transition-all"
+                      className="text-[10px] px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-success/60 transition-all"
                     >
                       ← 뒤로
                     </button>
@@ -2636,16 +2636,16 @@ export default function AbmPersonaMap({
             )}
           </div>
           {/* 우측 결과 패널 — 좌우 분할 모드 (지도 75% / 결과 25%) */}
-          <div className="relative px-5 py-5 flex flex-col gap-4 shrink-0 w-[28%] min-w-[340px] max-w-[480px] bg-background border-l border-white/10 overflow-y-auto">
+          <div className="relative px-5 py-5 flex flex-col gap-4 shrink-0 w-[28%] min-w-[340px] max-w-[480px] bg-background border-l border-border overflow-y-auto">
             {/* 백그라운드 무드 조명 */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_rgba(79,70,229,0.05)_0%,_transparent_60%)] pointer-events-none" />
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
             {abmResult ? (
               <div className="relative w-full flex flex-col gap-4">
                 {/* 헤더 라벨 — narrow column 에 맞춰 작게 */}
                 <div className="flex items-baseline justify-between">
                   <div className="flex flex-col gap-1">
-                    <h4 className="text-lg font-black text-white italic tracking-tighter leading-none">
+                    <h4 className="text-lg font-black text-foreground italic tracking-tighter leading-none">
                       General Statistics
                     </h4>
                     <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em]">
@@ -2692,7 +2692,7 @@ export default function AbmPersonaMap({
                                 });
                               }
                             }}
-                            className="w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 hover:bg-warning/[0.06] transition-colors"
+                            className="w-full text-left px-3 py-2 border-b border-border/60 last:border-b-0 hover:bg-warning/[0.06] transition-colors"
                           >
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <span className="text-[9px] font-mono text-warning/80 tracking-wider tabular-nums">
@@ -2793,7 +2793,7 @@ export default function AbmPersonaMap({
                       suffix: '명',
                       sub: 'Tier S 50 · LLM thought',
                       color: '#002CD1',
-                      glow: 'rgba(129,140,248,0.18)',
+                      glow: 'rgba(0,44,209,0.18)',
                       icon: (
                         <>
                           <circle cx="9" cy="8" r="3" stroke="#000" strokeWidth="2" />
@@ -2810,15 +2810,15 @@ export default function AbmPersonaMap({
                   ].map((m) => (
                     <div
                       key={m.label}
-                      className="relative bg-card/90 backdrop-blur-xl border border-white/10 rounded-[24px] p-5 shadow-2xl flex flex-col gap-3 overflow-hidden group transition-all hover:border-white/20"
+                      className="relative bg-card/90 backdrop-blur-xl border border-border rounded-[24px] p-5 shadow-2xl flex flex-col gap-3 overflow-hidden group transition-all hover:border-primary/40"
                       style={{ boxShadow: `0 0 32px ${m.glow}` }}
                     >
                       {/* 상단 글로스 highlight */}
-                      <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none" />
+                      <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-foreground/[0.04] to-transparent pointer-events-none" />
                       {/* 헤더 — 색 박스 아이콘 + 라벨 */}
                       <div className="relative z-10 flex items-center gap-2.5">
                         <div
-                          className="w-5 h-5 rounded-md flex items-center justify-center border border-white/10 shrink-0"
+                          className="w-5 h-5 rounded-md flex items-center justify-center border border-border shrink-0"
                           style={{ backgroundColor: m.color }}
                         >
                           <svg
@@ -2831,20 +2831,20 @@ export default function AbmPersonaMap({
                             {m.icon}
                           </svg>
                         </div>
-                        <span className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none">
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">
                           {m.label}
                         </span>
                       </div>
                       {/* 큰 숫자 */}
                       <div className="relative z-10 flex items-baseline gap-1.5">
-                        <span className="text-3xl font-black text-white italic tracking-tighter leading-none tabular-nums">
+                        <span className="text-3xl font-black text-foreground italic tracking-tighter leading-none tabular-nums">
                           {m.value}
                         </span>
-                        <span className="text-xs font-bold text-white/40 italic tracking-tight">
+                        <span className="text-xs font-bold text-muted-foreground italic tracking-tight">
                           {m.suffix}
                         </span>
                       </div>
-                      <div className="relative z-10 w-full h-px bg-white/[0.06]" />
+                      <div className="relative z-10 w-full h-px bg-foreground/[0.06]" />
                       {/* 서브라인 */}
                       <div className="relative z-10 flex items-center gap-1.5 text-[9.5px] font-bold text-muted-foreground uppercase tracking-tighter">
                         <div

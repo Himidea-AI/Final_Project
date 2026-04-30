@@ -67,7 +67,7 @@ export function DetailModal({ modalContent, onClose }: DetailModalProps) {
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-2.5 bg-card text-white font-bold rounded-xl hover:bg-muted transition-colors"
+                className="px-6 py-2.5 bg-card text-foreground font-bold rounded-xl hover:bg-muted transition-colors"
               >
                 닫기
               </button>

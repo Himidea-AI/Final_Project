@@ -56,8 +56,6 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import { ToastProvider, useToast } from './components/Toast';
 import type { SimulationOutput } from './types';
 import { type SimResult, toSimResultViewModel } from './viewmodels/simResult';
-import { QuarterlyProjectionChart } from './components/SimulationResult/QuarterlyProjectionChart';
-import { ShapChart } from './components/SimulationResult/ShapChart';
 // [H4] TabbedDashboard 직접 import 제거 — /dashboard 라우트로 분리 후 미사용.
 // SimulationHistoryDetail 은 여전히 자체 import 로 사용 중 (H7 에서 정리 예정).
 import { DashboardHub } from './components/SimulationResult/dashboard/DashboardHub';
@@ -87,12 +85,7 @@ import {
   type CannRow,
   type NeighborhoodRow,
 } from './components/PDF/HiddenPDFTemplate';
-import DashboardPanelView, {
-  StatCard,
-  SortHeader,
-  TableRow,
-  InsightCard,
-} from './components/dashboard/DashboardPanelView';
+import DashboardPanelView from './components/dashboard/DashboardPanelView';
 
 // Phase C Round 1 — 마케팅 페이지 4종 lazy 분리 (App.tsx에서 추출)
 const IntroScene = lazy(() => import('./pages/landing/IntroScene'));
@@ -101,7 +94,7 @@ const AboutPage = lazy(() => import('./pages/landing/AboutPage'));
 const ContactPage = lazy(() => import('./pages/landing/ContactPage'));
 
 // Phase C Round 3 — 보조 컴포넌트 5종 추출 (GlobalNav 정적 / 나머지 3종 lazy)
-import GlobalLimelightNav, { LogoutButton } from './components/GlobalNav';
+import GlobalLimelightNav, { LogoutButton, WelcomeWidget } from './components/GlobalNav';
 import type { DrawerKey } from './components/DetailDrawer';
 const DetailDrawer = lazy(() => import('./components/DetailDrawer'));
 const SpotterAgentWorkflow = lazy(() => import('./components/simulation/SpotterAgentWorkflow'));
@@ -110,56 +103,33 @@ const CommandPalette = lazy(() => import('./components/CommandPalette'));
 import {
   ChevronRight,
   Sliders,
-  Activity,
   MapPin,
-  Users,
-  TrendingUp,
   Play,
   ChevronDown,
   X,
-  ShieldAlert,
-  CheckCircle2,
   Zap,
   Calendar,
   Download,
   FileText,
   Database,
-  BarChart3,
-  Crosshair,
-  AlertTriangle,
-  Scale,
   Store,
   Columns,
-  Rows3,
-  AlignJustify,
-  List,
   Terminal,
-  Network,
-  BarChartBig,
-  Map as MapIcon,
-  Lightbulb,
-  ClipboardList,
   UserCheck,
   Loader2,
 } from 'lucide-react';
 
-import AgentMapVisualizer from './components/AgentMapVisualizer';
-import AbmPersonaMap from './components/AbmPersonaMap';
 import HybridSliderInput from './components/ui/HybridSliderInput';
 import { SectionLabel } from './components/ui/SectionLabel';
+import { FormField } from './components/ui/FormField';
+import { ScopeHint } from './components/ui/ScopeHint';
+import { ChipGroup } from './components/ui/ChipGroup';
+import { Toggle } from './components/ui/Toggle';
 import { ManagerListProvider } from './hooks/useManagerList';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  Tooltip as RechartsTooltipWrapper,
-  ResponsiveContainer,
-} from 'recharts';
 
 /* ═══════════════════════════════════════════════════════
    DATA
    ═══════════════════════════════════════════════════════ */
-import { motion } from 'framer-motion';
 
 const DONG_DATA: Record<string, string[]> = {
   강남구: [
@@ -758,48 +728,6 @@ function sortRows<T extends Record<string, string>>(
    SimulationOutput.market_report → 7개 항목별 차트 데이터 (backend main.py:308)
 */
 
-/* ═══════════════════════════════════════════════════════
-   Recharts Custom Tooltip — 실데이터 전용 (mock 제거)
-   일일 차트는 백엔드 시간대별 매출 API 대기 중 → empty state.
-   월간 차트는 `simResult.quarterlyProjection` 사용 (실데이터만).
-   ═══════════════════════════════════════════════════════ */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function RechartsDarkTooltip(props: any) {
-  const { active, payload, label } = props;
-  const mode: 'daily' | 'monthly' = props.chartMode ?? 'daily';
-  if (!active || !payload || !payload.length) return null;
-  const date = new Date(label);
-  const title =
-    mode === 'daily'
-      ? `${String(date.getHours() % 24).padStart(2, '0')}:00`
-      : `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
-
-  return (
-    <div className="bg-card border border-border rounded-lg shadow-2xl px-4 py-3 text-xs min-w-[180px]">
-      <div className="text-[0.625rem] text-muted-foreground font-mono mb-2 tracking-widest uppercase">
-        {title}
-      </div>
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      {payload.map((p: any) => {
-        const isRevenue = p.dataKey === 'revenue';
-        return (
-          <div key={p.dataKey} className="flex items-center justify-between gap-3 py-0.5">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ background: p.stroke }} />
-              <span className="text-muted-foreground">{isRevenue ? '예상 매출' : '유동인구'}</span>
-            </div>
-            <span className="text-foreground font-bold font-mono tabular-nums">
-              {isRevenue
-                ? `₩ ${(p.value * 10000).toLocaleString()}`
-                : `${(p.value * 100).toLocaleString()} 명`}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * SimulatorDashboard — 시뮬레이션 분석 결과 대시보드
  * idle → loading(Progress Bar) → result(KPI + 차트 + 테이블)
@@ -815,7 +743,7 @@ function SimulatorDashboard({
   const navigate = useNavigate();
   const [radius, setRadius] = useState(500);
   const [budget, setBudget] = useState(200);
-  const [weighted, setWeighted] = useState(true);
+  const [weighted, setWeighted] = useState(false);
   // loadingText/loadingProgress state는 로딩 UI 제거(2026-04-28)와 함께 dead.
   // SimulationFloatingWidget이 store status를 직접 구독해 진행 표시.
   const { showToast } = useToast();
@@ -823,20 +751,12 @@ function SimulatorDashboard({
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
-  // viewMode: TabbedDashboard (v4.2 리디자인) 전용. legacy JSX 블록은 idle/loading 상태 UI 보존용으로 남아있음.
-  // useState 유지 이유: TS literal narrowing 방지 (legacy 비교 구문이 dead code로 남아있어도 타입 체크 통과).
-  const [viewMode] = useState<'integrated' | 'legacy'>('integrated');
 
   // [R4] saveDialogOpen 은 UI-only 로컬. savedHistoryId 는 [R1] store 에서 파생.
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
   const setSavedHistoryId = useSimulationStore((s) => s.setSavedHistoryId);
   const saveSim = useSaveSimulation();
-  const [chartView, setChartView] = useState<'daily' | 'monthly'>('daily');
-  const [tableView, setTableView] = useState<'cannibalization' | 'neighborhoods'>(
-    'cannibalization',
-  );
-  const [dashboardMode, setDashboardMode] = useState<'data' | 'map' | 'abm'>('data');
   const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   // 마포구 외 다른 자치구 미지원 — useState 트릭 제거하고 const 로 노출.
   // 향후 다른 구 확장 시 useState<GuName>('마포구') + setter 로 복원.
@@ -879,9 +799,6 @@ function SimulatorDashboard({
   const [operatingHours, setOperatingHours] = useState<string[]>(['점심', '저녁']);
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
   const [isSplitMode, setIsSplitMode] = useState(false);
-  const [tableDensity, setTableDensity] = useState<'comfortable' | 'standard' | 'compact'>(
-    'standard',
-  );
   const [initialCapital, setInitialCapital] = useState(5000); // 만원
 
   // [customer_revenue] 타겟 고객 프로필 — A1 찬영 P1-C 연동. 빈 선택 = 전체 고객
@@ -922,24 +839,11 @@ function SimulatorDashboard({
 
   // [A1] 유동인구 실시간 데이터
   const [popData, setPopData] = useState<any>(null);
-  const [popLoading, setPopLoading] = useState(false);
-
-  // [ABM] 행동 시뮬레이션 — 분석 에이전트와 독립, 결과에 영향 없음
-  const [abmResult, setAbmResult] = useState<any>(null);
-  const [abmLoading, setAbmLoading] = useState(false);
-  const [abmError, setAbmError] = useState<string | null>(null);
-  // 대시보드에서 선택해 ABM 탭으로 진입한 공실 스팟 — 지도에 이 스팟만 하이라이트
-  const [abmFocusSpot, setAbmFocusSpot] = useState<{
-    lat: number;
-    lon: number;
-    label?: string;
-  } | null>(null);
 
   useEffect(() => {
     if (reportState !== 'result') return;
     let cancelled = false;
     const fetchPop = async () => {
-      setPopLoading(true);
       try {
         // 마포 16동 전체 fetch — 비교 모드(winnerDistrict + top3 candidates)에서
         // selectedDongs 외 후보 동의 popData도 매칭 가능하도록. 인자 미지정 시
@@ -950,8 +854,6 @@ function SimulatorDashboard({
         if (!cancelled) setPopData(data);
       } catch (e) {
         console.error('유동인구 API 실패:', e);
-      } finally {
-        if (!cancelled) setPopLoading(false);
       }
     };
     fetchPop();
@@ -963,29 +865,11 @@ function SimulatorDashboard({
   // [v8.0/v8.1] Drill-down Drawer + 테이블 행 확장 + 정렬 상태
   const [activeDrawer, setActiveDrawer] = useState<DrawerKey>(null);
   const [selectedLegalType, setSelectedLegalType] = useState<string | null>(null);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-
-  const handleSort = useCallback(
-    (key: string) => {
-      if (sortKey === key) {
-        setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-      } else {
-        setSortKey(key);
-        setSortDir('asc');
-      }
-      setExpandedRow(null); // 정렬 변경 시 펼침 초기화
-    },
-    [sortKey, sortDir],
-  );
-
-  // 테이블 뷰 변경 시 정렬/펼침 초기화 헬퍼
-  const handleTableViewChange = useCallback((view: 'cannibalization' | 'neighborhoods') => {
-    setTableView(view);
-    setSortKey(null);
-    setExpandedRow(null);
-  }, []);
+  // sortKey/sortDir 은 dead 분기 제거(2026-04-30) 후 setter 가 호출되지 않아
+  // 사실상 정적 상수가 되었으나, sortRows() 시그니처 호환을 위해 유지.
+  // PDF/Excel 내보내기는 입력 순서대로 출력됨.
+  const sortKey: string | null = null;
+  const sortDir: 'asc' | 'desc' = 'asc';
 
   // 정렬된 행 데이터 — 가맹점 간섭도는 competitor_intel.samples 실데이터 우선
   // Pancras 2013 거리 감쇠: (1 - 0.281)^(1/1.609) ≈ 0.813 per km
@@ -1048,65 +932,6 @@ function SimulatorDashboard({
       }))
     : [];
   const sortedNeighborhoodRows = sortRows(dynamicNeighborhoodRows, sortKey, sortDir);
-
-  // 분기 매출 예측 차트 데이터 — /predict 응답(DistrictPredictionResult.quarterly_projection)을 Recharts time축 형식으로 변환
-  const monthlyChartData = simResult?.quarterlyProjection?.length
-    ? simResult.quarterlyProjection.map((q) => ({
-        time: q.quarter, // X축: 분기 번호 (1~4)
-        revenue: Math.round(q.revenue / 10000), // 원 → 만원 스케일 통일
-        traffic: Math.round(q.confidence_lower / 10000),
-        confidence_upper: Math.round(q.confidence_upper / 10000),
-      }))
-    : [];
-
-  // 레이더 차트 7축 꼭지점 — market_report 기반. 없으면 null → 렌더 시 empty state.
-  // 순서: 유동인구(12시) → 매출(2시) → 성장성(4시) → 폐업률(6시) → 임대료(8시) → 경쟁강도(10시) → 접근성(11시)
-  // NaN 방지: undefined/null/NaN 은 0 으로 치환 (SVG polygon cx/cy NaN 에러 방지)
-  const _safeNum = (v: unknown, fallback = 0): number => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : fallback;
-  };
-  const hasMarketReport = Boolean(simResult?.marketReport);
-  const radarValues: number[] = hasMarketReport
-    ? [
-        _safeNum(simResult!.marketReport!.floating_population, 0),
-        _safeNum(simResult!.marketReport!.estimated_revenue, 0),
-        _safeNum(simResult!.marketReport!.growth_potential, 0),
-        simResult!.marketReport!.closure_rate != null
-          ? _safeNum(Math.round(simResult!.marketReport!.closure_rate * 100), 0)
-          : _safeNum(100 - _safeNum(simResult!.marketReport!.survival_rate, 0), 0),
-        _safeNum(simResult!.marketReport!.rent_index, 0),
-        _safeNum(simResult!.marketReport!.competition_intensity, 0),
-        _safeNum(simResult!.marketReport!.accessibility, 0),
-      ]
-    : [];
-  const RADAR_LABELS = [
-    '유동인구',
-    '매출',
-    '성장성',
-    '폐업률',
-    '임대료',
-    '경쟁강도',
-    '접근성',
-  ] as const;
-  const radarVertices = radarValues.map((v, k) => {
-    const angle = -Math.PI / 2 + (2 * Math.PI * k) / 7;
-    // NaN 방지 — v 가 Infinity/NaN 이면 0
-    const safeV = Number.isFinite(v) ? v : 0;
-    const r = Math.max(0, Math.min(100, safeV)) * 0.6; // max radius 60px
-    return {
-      x: 100 + Math.cos(angle) * r,
-      y: 100 + Math.sin(angle) * r,
-      value: safeV,
-      label: RADAR_LABELS[k],
-    };
-  });
-  const radarPointsStr = radarVertices
-    .map(
-      (v) =>
-        `${(Number.isFinite(v.x) ? v.x : 100).toFixed(1)},${(Number.isFinite(v.y) ? v.y : 100).toFixed(1)}`,
-    )
-    .join(' ');
 
   // 오늘 날짜 (리포트 생성 시점)
   const today = new Date();
@@ -1493,521 +1318,420 @@ function SimulatorDashboard({
   // SimulationFloatingWidget이 store를 직접 구독해 진행 상태 표시.
 
   // Light theme tokens (semantic, dark-mode hex retired)
-  const textPrimary = 'text-foreground';
   const textSecondary = 'text-muted-foreground';
-  const accent = 'text-primary';
-  const accentBg = 'bg-primary';
-  const panel = 'bg-card border-border shadow-2xl';
 
   return (
     <div
       ref={dashboardRef}
       className="relative z-10 h-full w-full bg-card overflow-y-auto custom-scrollbar"
     >
-      {/* Top bar — 타이틀만. "내 이력" 버튼은 상단 4아이콘 바의 User 아이콘으로 이관 */}
-      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-14 bg-card/80 backdrop-blur-xl">
-        <span className={`text-xs font-medium tracking-wider ${textSecondary}`}>
-          마포구 시뮬레이터
-        </span>
+      {/* Top bar — 페이지 타이틀(좌) + RUN 버튼(우).
+          mt-28 = 초기 위치는 App 헤더(80px)와 32px 갭.
+          sticky top-20 = 스크롤 시 App 헤더 바닥에 flush 로 붙음 → 갭 사이 컨텐츠 비침 차단.
+          (top-28 로 갭 유지하면 갭 사이로 스크롤되는 컨텐츠가 비치는 이슈) */}
+      <div
+        className={`sticky top-20 z-30 flex items-center justify-between px-8 py-4 mt-28 bg-card/90 backdrop-blur-xl ${
+          reportState === 'result' ? 'hidden' : ''
+        }`}
+      >
+        <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">
+          SIMULATION SETUP
+        </h1>
+        <button
+          onClick={runSim}
+          disabled={reportState === 'loading'}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm tracking-wider transition-all duration-200 ${
+            reportState === 'loading'
+              ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground'
+              : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98]'
+          }`}
+        >
+          <Play size={16} fill="currentColor" />
+          RUN SIMULATION
+        </button>
       </div>
 
-      {/* Dashboard body — cockpit grid layout (좌 5 / 우 7) */}
+      {/* Dashboard body — cockpit grid layout (좌 7 / 우 5 row 1, full-width row 2 / row 3).
+          ScopeHint 를 row 사이 full-width 띠로 분리 → 핵심파라미터 키 축소되어 운영조건과 자연 매칭.
+          default items-stretch 로 row 1 의 두 박스 키 같게 유지. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-8 max-w-[1650px] mx-auto">
-        {/* Left panel — Controls (result 상태일 땐 숨김 → 우측 리포트가 full-width로 확장) */}
+        {/* ─────── 핵심 파라미터 카드 — Cell row1·col5 (lg:order-2 로 시각 우측) ─────── */}
         <div
-          className={`lg:col-span-12 rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === 'result' ? 'hidden' : ''}`}
+          className={`lg:col-span-5 lg:order-2 box-glass rounded-2xl p-6 transition-all duration-700 ${reportState === 'result' ? 'hidden' : ''}`}
         >
-          <h3
-            className={`flex items-center gap-2 text-sm font-bold tracking-wider mb-6 ${textPrimary}`}
-          >
-            <Sliders size={16} className={accent} />
-            SIMULATION CONTROLS
-          </h3>
-
-          {/* Plan A+B 재구성: 3개 의미 섹션 — Core / Operating / Target */}
-          <div className="space-y-10">
-            {/* ─────── 섹션 1: Core Parameters (위계 강조) ─────── */}
-            <div>
-              <SectionLabel icon={MapPin} title="핵심 파라미터" sub="Core Parameters · 필수 항목" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 분석 대상 박스 — 강조 */}
-                <div className="space-y-2 text-left p-4 bg-card border border-primary/20 rounded-2xl shadow-xl shadow-primary/5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <MapPin size={13} className={accent} />
-                    <label className={`text-xs font-medium ${textSecondary}`}>분석 대상</label>
-                  </div>
-
-                  {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
-                  <div className="mb-2 px-3 py-2.5 rounded-lg border border-white/5 bg-card/50 flex items-center justify-between">
-                    <span className="text-sm text-foreground">{selectedGu}</span>
-                    <span className="text-[0.625rem] text-muted-foreground uppercase tracking-wider opacity-70">
-                      선택됨
-                    </span>
-                  </div>
-
-                  {/* 행정동 선택 드롭다운 */}
-                  <div className="relative">
-                    <button
-                      onClick={() => {
-                        setDongDropdownOpen(!dongDropdownOpen);
-                        setBusinessTypeOpen(false);
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
-                    >
-                      <span className="truncate">
-                        {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
-                      </span>
-                      <ChevronRight
-                        size={14}
-                        className={`text-muted-foreground transition-transform duration-200 shrink-0 ${
-                          dongDropdownOpen ? 'rotate-90' : ''
-                        }`}
-                      />
-                    </button>
-                    {dongDropdownOpen && (
-                      <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
-                        <button
-                          onClick={toggleAllDongs}
-                          className="w-full text-left px-3 py-2 text-xs font-medium border-b border-border transition-colors text-primary hover:bg-primary/10"
-                        >
-                          {selectedDongs.length >= MAX_DONGS
-                            ? `전체 해제 (1개만 유지)`
-                            : `최대 ${MAX_DONGS}개 채우기`}
-                        </button>
-                        {DONG_DATA[selectedGu].map((dong) => {
-                          const checked = selectedDongs.includes(dong);
-                          return (
-                            <button
-                              key={dong}
-                              onClick={() => toggleDong(dong)}
-                              className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                                checked
-                                  ? 'text-foreground hover:bg-muted'
-                                  : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
-                              }`}
-                            >
-                              <div
-                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                                  checked
-                                    ? 'bg-primary border-primary'
-                                    : 'border-border bg-transparent'
-                                }`}
-                              >
-                                {checked && (
-                                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                                    <path
-                                      d="M1.5 4L3 5.5L6.5 2"
-                                      stroke="white"
-                                      strokeWidth="1.5"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    />
-                                  </svg>
-                                )}
-                              </div>
-                              {dong}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 우측 컬럼 — 업종 박스 + 유동인구 가중치 박스 stack.
-                    좌측 분석 대상(구+동) 박스 높이를 두 박스 합으로 매칭, 공백 회피. */}
-                <div className="flex flex-col gap-4">
-                  {/* 업종 박스 — 강조 동일 */}
-                  <div className="space-y-2 text-left p-4 bg-card border border-primary/20 rounded-2xl shadow-xl shadow-primary/5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Store size={13} className={accent} />
-                      <label className={`text-xs font-medium ${textSecondary}`}>업종</label>
-                    </div>
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setBusinessTypeOpen(!businessTypeOpen);
-                          setDongDropdownOpen(false);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-white/5 bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
-                      >
-                        <span>{businessType}</span>
-                        <ChevronRight
-                          size={14}
-                          className={`text-muted-foreground transition-transform duration-200 ${
-                            businessTypeOpen ? 'rotate-90' : ''
-                          }`}
-                        />
-                      </button>
-                      {businessTypeOpen && (
-                        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
-                          {BUSINESS_TYPES.map((type) => (
-                            <button
-                              key={type}
-                              onClick={() => {
-                                setBusinessType(type);
-                                setBusinessTypeOpen(false);
-                              }}
-                              className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                                type === businessType
-                                  ? 'text-primary bg-primary/10'
-                                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                              }`}
-                            >
-                              {type}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 유동인구 가중치 토글 — 섹션 2에서 옮겨옴. flex-1로 남은 공간 채워
-                      좌측 분석 대상 박스 높이와 자연 매칭. */}
-                  <div className="flex-1 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-white/5 bg-card/40">
-                    <label
-                      className={`text-xs font-medium ${textSecondary} flex items-center gap-1.5 min-w-0 flex-1`}
-                    >
-                      유동인구 가중치
-                      <span
-                        className="text-primary cursor-help shrink-0"
-                        title="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
-                      >
-                        &#9432;
-                      </span>
-                    </label>
-                    <button
-                      onClick={() => setWeighted(!weighted)}
-                      aria-label="유동인구 가중치 토글"
-                      className={`relative w-11 h-6 rounded-full transition-colors duration-300 shrink-0 ${
-                        weighted ? accentBg : 'bg-muted'
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${
-                          weighted ? 'translate-x-[22px]' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ─────── 섹션 2: 운영 조건 (Operating Constraints) ─────── */}
-            <div>
-              <SectionLabel
-                icon={Sliders}
-                title="운영 조건"
-                sub="Operating Constraints · 입지·재무"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 1. 상권 반경 */}
-                <HybridSliderInput
-                  label="상권 반경"
-                  value={radius}
-                  onChange={setRadius}
-                  min={100}
-                  max={1500}
-                  step={50}
-                  unit="m"
-                  infoText="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장"
-                  className="mb-0"
-                />
-
-                {/* 2. 임대료 예산 */}
-                <HybridSliderInput
-                  label="임대료 예산"
-                  value={budget}
-                  onChange={setBudget}
-                  min={50}
-                  max={1000}
-                  step={10}
-                  unit="만원"
-                  infoText="월 임대료 예산. 마포구 평균 1층 기준 200~400만원"
-                  className="mb-0"
-                />
-
-                {/* 3. 매장 면적 */}
-                <HybridSliderInput
-                  label="매장 면적"
-                  value={storeArea}
-                  onChange={setStoreArea}
-                  min={5}
-                  max={100}
-                  step={1}
-                  unit="평"
-                  infoText="공간 기반 수익성(평당 매출) 계산에 사용됩니다."
-                  className="mb-0"
-                />
-
-                {/* 4. 초기 자본금 */}
-                <HybridSliderInput
-                  label="초기 자본금"
-                  value={initialCapital}
-                  onChange={setInitialCapital}
-                  min={1000}
-                  max={50000}
-                  step={100}
-                  unit="만원"
-                  infoText="권리금/보증금 제외, 인테리어 및 초기 운영비 기준입니다."
-                  minLabel="1천만"
-                  className="mb-0"
-                />
-
-                {/* 5. 목표 객단가 — col-span-1 (P3: 박스 wrap) */}
-                <div className="px-4 py-3 rounded-lg border border-white/5 bg-card/40">
-                  <label className={`block text-xs font-medium ${textSecondary}`}>
-                    목표 객단가
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5 mt-2">
-                    {PRICE_RANGES.map((range) => {
-                      const active = targetPrice === range.value;
-                      return (
-                        <button
-                          key={range.value}
-                          onClick={() => setTargetPrice(range.value)}
-                          className={`px-2 py-2 rounded-lg text-[0.6875rem] font-medium border transition-all ${
-                            active
-                              ? 'bg-primary/15 border-primary text-primary'
-                              : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                          }`}
-                        >
-                          {range.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 6. 주 타겟 시간대 — col-span-1 (P3: 박스 wrap) */}
-                <div className="px-4 py-3 rounded-lg border border-white/5 bg-card/40">
-                  <div className="flex items-baseline justify-between">
-                    <label className={`text-xs font-medium ${textSecondary}`}>주 타겟 시간대</label>
-                    <span className="text-[0.625rem] text-muted-foreground opacity-60">
-                      복수 선택
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5 mt-2">
-                    {OPERATING_HOURS_OPTIONS.map((hour) => {
-                      const active = operatingHours.includes(hour);
-                      return (
-                        <button
-                          key={hour}
-                          onClick={() => toggleOperatingHour(hour)}
-                          className={`py-2 rounded-lg text-[0.6875rem] font-medium border transition-all ${
-                            active
-                              ? 'bg-primary/15 border-primary text-primary'
-                              : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                          }`}
-                        >
-                          {hour}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 유동인구 가중치 토글은 섹션 1(핵심 파라미터)의 업종 박스 아래로 이관 —
-                    좌측 분석 대상 박스 높이 매칭 + 공백 회피(2026-04-28). */}
-              </div>
-              <p
-                className={`text-[0.625rem] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-white/5`}
-              >
-                * 권리금/보증금 제외, 인테리어·초기 운영비 기준
-              </p>
-            </div>
-
-            {/* ─────── 섹션 3: Target Audience ─────── */}
-            <div>
-              <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
-              <div>
-                <div className="flex items-baseline justify-end mb-3">
-                  <span className="text-[0.625rem] text-muted-foreground opacity-60">
-                    미선택 시 전체 고객 기준
+          <SectionLabel icon={MapPin} title="핵심 파라미터" sub="Core Parameters · 필수 항목" />
+          {/* 단일 컬럼 flow — 내부 박스 wrapper 3개 제거 (강조용 bg-card+border-primary+shadow-xl 중첩 외피).
+              box-glass 표면 위에 FormField 들 직접 배치. 균등 space-y-5 로 시각 리듬. */}
+          <div className="space-y-5">
+            {/* 분석 대상 — 구(고정) + 행정동(드롭다운) */}
+            <FormField label="분석 대상" icon={MapPin}>
+              <div className="space-y-2">
+                {/* 구 — 고정 (explore에서 선택된 구, 변경 불가) */}
+                <div className="px-3 h-10 rounded-lg border border-border bg-card flex items-center justify-between">
+                  <span className="text-sm text-foreground">{selectedGu}</span>
+                  <span className="text-[0.625rem] text-muted-foreground uppercase tracking-wider opacity-70">
+                    선택됨
                   </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* 연령대 — 복수 선택 */}
-                  <div>
-                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>
-                      연령대
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {[
-                        { v: '10대', l: '10대' },
-                        { v: '20대', l: '20대' },
-                        { v: '30대', l: '30대' },
-                        { v: '40대', l: '40대' },
-                        { v: '50대', l: '50대' },
-                        { v: '60대이상', l: '60대+' },
-                      ].map((opt) => {
-                        const active = targetAgeGroups.includes(opt.v);
-                        return (
-                          <button
-                            key={opt.v}
-                            type="button"
-                            onClick={() => toggleTargetAge(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
-                              active
-                                ? 'bg-primary/15 border-primary text-primary'
-                                : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                            }`}
-                          >
-                            {opt.l}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
 
-                  {/* 성별 — 단일 선택 (null = 전체) */}
-                  <div>
-                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>성별</div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(
-                        [
-                          { v: null, l: '전체' },
-                          { v: 'male', l: '남성' },
-                          { v: 'female', l: '여성' },
-                        ] as const
-                      ).map((opt) => {
-                        const active = targetGender === opt.v;
+                {/* 행정동 선택 드롭다운 */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setDongDropdownOpen(!dongDropdownOpen);
+                      setBusinessTypeOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 h-10 rounded-lg border border-border bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
+                  >
+                    <span className="truncate">
+                      {selectedDongs.length}/{MAX_DONGS}개 동 선택됨
+                    </span>
+                    <ChevronRight
+                      size={14}
+                      className={`text-muted-foreground transition-transform duration-200 shrink-0 ${
+                        dongDropdownOpen ? 'rotate-90' : ''
+                      }`}
+                    />
+                  </button>
+                  {dongDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
+                      <button
+                        onClick={toggleAllDongs}
+                        className="w-full text-left px-3 py-2 text-xs font-medium border-b border-border transition-colors text-primary hover:bg-primary/10"
+                      >
+                        {selectedDongs.length >= MAX_DONGS
+                          ? `전체 해제 (1개만 유지)`
+                          : `최대 ${MAX_DONGS}개 채우기`}
+                      </button>
+                      {DONG_DATA[selectedGu].map((dong) => {
+                        const checked = selectedDongs.includes(dong);
                         return (
                           <button
-                            key={opt.l}
-                            type="button"
-                            onClick={() => setTargetGender(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
-                              active
-                                ? 'bg-primary/15 border-primary text-primary'
-                                : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                            key={dong}
+                            onClick={() => toggleDong(dong)}
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+                              checked
+                                ? 'text-foreground hover:bg-muted'
+                                : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
                             }`}
                           >
-                            {opt.l}
+                            <div
+                              className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                checked
+                                  ? 'bg-primary border-primary'
+                                  : 'border-border bg-transparent'
+                              }`}
+                            >
+                              {checked && (
+                                <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                  <path
+                                    d="M1.5 4L3 5.5L6.5 2"
+                                    stroke="white"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              )}
+                            </div>
+                            {dong}
                           </button>
                         );
                       })}
                     </div>
-                  </div>
-
-                  {/* 방문 시간대 — 복수 선택 */}
-                  <div>
-                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>
-                      방문 시간대
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {[
-                        { v: 'time_00_06', l: '심야' },
-                        { v: 'time_06_11', l: '오전' },
-                        { v: 'time_11_14', l: '점심' },
-                        { v: 'time_14_17', l: '오후' },
-                        { v: 'time_17_21', l: '저녁' },
-                        { v: 'time_21_24', l: '야간' },
-                      ].map((opt) => {
-                        const active = targetTimeSlots.includes(opt.v);
-                        return (
-                          <button
-                            key={opt.v}
-                            type="button"
-                            onClick={() => toggleTargetTime(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
-                              active
-                                ? 'bg-primary/15 border-primary text-primary'
-                                : 'bg-transparent border-white/5 text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                            }`}
-                          >
-                            {opt.l}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* 요일 — 단일 선택 */}
-                  <div>
-                    <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>요일</div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(
-                        [
-                          { v: null, l: '전체' },
-                          { v: 'weekday', l: '평일' },
-                          { v: 'weekend', l: '주말' },
-                        ] as const
-                      ).map((opt) => {
-                        const active = targetDayType === opt.v;
-                        return (
-                          <button
-                            key={opt.l}
-                            type="button"
-                            onClick={() => setTargetDayType(opt.v)}
-                            className={`px-2 py-1.5 rounded-lg text-[0.6875rem] font-medium border transition-all ${
-                              active
-                                ? 'bg-primary/15 border-primary text-primary'
-                                : 'bg-transparent border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                            }`}
-                          >
-                            {opt.l}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  )}
                 </div>
+              </div>
+            </FormField>
 
-                {/* 예상 월매출 — full-width */}
-                <div className="mt-4">
-                  <div className={`text-[0.625rem] mb-1.5 ${textSecondary} opacity-70`}>
-                    예상 월매출 (선택)
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="예: 23150000 (원)"
-                    value={
-                      targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
-                    }
-                    onChange={(e) => handleMonthlySalesChange(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg text-xs font-mono tabular-nums bg-transparent border border-border text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none"
+            {/* 업종 */}
+            <FormField label="업종" icon={Store}>
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setBusinessTypeOpen(!businessTypeOpen);
+                    setDongDropdownOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between px-3 h-10 rounded-lg border border-border bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
+                >
+                  <span>{businessType}</span>
+                  <ChevronRight
+                    size={14}
+                    className={`text-muted-foreground transition-transform duration-200 ${
+                      businessTypeOpen ? 'rotate-90' : ''
+                    }`}
                   />
-                  <p className="mt-1 text-[0.625rem] text-muted-foreground/50">
-                    입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
-                  </p>
-                </div>
-
-                {/* [customer_segment 미리보기] RUN 누르기 전 ~100ms MLP 결과 표시 */}
-                {previewSegment && (
-                  <div className="mt-4 px-4 py-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[0.625rem] font-black text-primary uppercase tracking-widest">
-                        실시간 미리보기 · {(previewSegment.segment_ratio * 100).toFixed(1)}% 기여
-                      </span>
-                      {isPreviewLoading && (
-                        <Loader2 size={12} className="animate-spin text-primary" />
-                      )}
-                    </div>
-                    <p className="text-[0.6875rem] text-foreground leading-relaxed">
-                      {previewSegment.profile_summary}
-                    </p>
-                    {previewSegment.segment_sales != null && (
-                      <p className="text-[0.625rem] text-muted-foreground tabular-nums">
-                        세그먼트 매출 추정: ₩{previewSegment.segment_sales.toLocaleString('ko-KR')}
-                      </p>
-                    )}
-                    <p className="text-[0.5625rem] text-muted-foreground italic">
-                      * 동·업종 단위 MLP 추정 — RUN SIMULATION 후 종합 결과로 검증
-                    </p>
-                  </div>
-                )}
-                {previewError && !isPreviewLoading && (
-                  <div className="mt-4 px-4 py-2 rounded-lg border border-danger/30 bg-danger/10 text-[0.6875rem] text-danger">
-                    미리보기 실패: {previewError}
+                </button>
+                {businessTypeOpen && (
+                  <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
+                    {BUSINESS_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          setBusinessType(type);
+                          setBusinessTypeOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                          type === businessType
+                            ? 'text-primary bg-primary/10'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
+            </FormField>
+
+            {/* 유동인구 가중치 */}
+            <FormField
+              label="유동인구 가중치"
+              info="ON: KT 통신 유동인구 데이터를 매출 예측에 반영. 카페/음식점은 ON 권장"
+            >
+              <div className="flex items-center justify-between bg-card border border-border rounded-lg px-4 h-10">
+                <span className="text-xs text-muted-foreground">
+                  {weighted ? '활성화' : '비활성화'}
+                </span>
+                <Toggle on={weighted} onChange={setWeighted} ariaLabel="유동인구 가중치" />
+              </div>
+            </FormField>
+          </div>
+          {/* (ScopeHint 는 row 2 full-width 띠로 이동됨 — 박스 키 균형 위해 2026-05-01) */}
+        </div>
+
+        {/* RUN 버튼은 상단 sticky 헤더 우측으로 이관됨 (2026-05-01) */}
+
+        {/* ─────── ScopeHint 띠 — Cell row2 col-12 (lg:order-3).
+            핵심파라미터 박스 안에서 분리되어 row 사이 full-width 시각 띠로 동적 피드백 노출. ─────── */}
+        <div
+          className={`lg:col-span-12 lg:order-3 ${reportState === 'result' ? 'hidden' : ''}`}
+        >
+          <ScopeHint selectedDongCount={selectedDongs.length} />
+        </div>
+
+        {/* ─────── 섹션 2: 운영 조건 — Cell row1·col7. p-5 + gap-3 으로 row 1 height 정상화 ─────── */}
+        <div
+          className={`lg:col-span-7 lg:order-1 box-glass rounded-2xl p-5 transition-all duration-700 ${reportState === 'result' ? 'hidden' : ''}`}
+        >
+          <SectionLabel icon={Sliders} title="운영 조건" sub="Operating Constraints · 입지·재무" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+            {/* 1. 상권 반경 */}
+            <HybridSliderInput
+              label="상권 반경"
+              value={radius}
+              onChange={setRadius}
+              min={100}
+              max={1500}
+              step={50}
+              unit="m"
+              infoText="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장"
+              className="mb-0"
+            />
+
+            {/* 2. 임대료 예산 */}
+            <HybridSliderInput
+              label="임대료 예산"
+              value={budget}
+              onChange={setBudget}
+              min={50}
+              max={1000}
+              step={10}
+              unit="만원"
+              infoText="월 임대료 예산. 마포구 평균 1층 기준 200~400만원"
+              className="mb-0"
+            />
+
+            {/* 3. 매장 면적 */}
+            <HybridSliderInput
+              label="매장 면적"
+              value={storeArea}
+              onChange={setStoreArea}
+              min={5}
+              max={100}
+              step={1}
+              unit="평"
+              infoText="공간 기반 수익성(평당 매출) 계산에 사용됩니다."
+              className="mb-0"
+            />
+
+            {/* 4. 초기 자본금 */}
+            <HybridSliderInput
+              label="초기 자본금"
+              value={initialCapital}
+              onChange={setInitialCapital}
+              min={1000}
+              max={50000}
+              step={100}
+              unit="만원"
+              infoText="권리금/보증금 제외, 인테리어 및 초기 운영비 기준입니다."
+              minLabel="1천만"
+              className="mb-0"
+            />
+
+            {/* 5. 목표 객단가 — col-span-1 (P3: 박스 wrap) */}
+            <FormField label="목표 객단가" hint="단일 선택">
+              <ChipGroup
+                options={PRICE_RANGES.map((r) => ({ v: r.value, l: r.label }))}
+                value={targetPrice}
+                onChange={setTargetPrice}
+                cols={2}
+              />
+            </FormField>
+
+            {/* 6. 주 타겟 시간대 — boxed FormField */}
+            <FormField label="주 타겟 시간대" hint="복수 선택">
+              <ChipGroup
+                multi
+                options={OPERATING_HOURS_OPTIONS.map((h) => ({ v: h, l: h }))}
+                value={operatingHours}
+                onChange={toggleOperatingHour}
+                cols={4}
+              />
+            </FormField>
+
+            {/* 유동인구 가중치 토글은 섹션 1(핵심 파라미터)의 업종 박스 아래로 이관 —
+                    좌측 분석 대상 박스 높이 매칭 + 공백 회피(2026-04-28). */}
+          </div>
+          <p
+            className={`text-[0.625rem] mt-3 ${textSecondary} opacity-50 italic pt-2 border-t border-border`}
+          >
+            * 권리금/보증금 제외, 인테리어·초기 운영비 기준
+          </p>
+        </div>
+
+        {/* ─────── 섹션 3: 타겟 페르소나 — Cell row3 full-width (lg:col-span-12 lg:order-4).
+            row 2 우측 col-5 자리(RUN 버튼 이관 후 빈 공간)를 없애고 full-width 로 시원하게. ─────── */}
+        <div
+          className={`lg:col-span-12 lg:order-4 box-glass rounded-2xl p-6 transition-all duration-700 ${reportState === 'result' ? 'hidden' : ''}`}
+        >
+          <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
+          <div>
+            <div className="flex items-baseline justify-end mb-3">
+              <span className="text-[0.625rem] text-muted-foreground opacity-60">
+                미선택 시 전체 고객 기준
+              </span>
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 연령대 — 복수 선택 */}
+              <FormField label="연령대" hint="복수 선택">
+                <ChipGroup
+                  multi
+                  options={[
+                    { v: '10대', l: '10대' },
+                    { v: '20대', l: '20대' },
+                    { v: '30대', l: '30대' },
+                    { v: '40대', l: '40대' },
+                    { v: '50대', l: '50대' },
+                    { v: '60대이상', l: '60대+' },
+                  ]}
+                  value={targetAgeGroups}
+                  onChange={toggleTargetAge}
+                  cols={3}
+                />
+              </FormField>
+
+              {/* 성별 — 단일 선택 (null = 전체) */}
+              <FormField label="성별" hint="단일 선택">
+                <ChipGroup
+                  options={
+                    [
+                      { v: null, l: '전체' },
+                      { v: 'male', l: '남성' },
+                      { v: 'female', l: '여성' },
+                    ] as const
+                  }
+                  value={targetGender}
+                  onChange={setTargetGender}
+                  cols={3}
+                />
+              </FormField>
+
+              {/* 방문 시간대 — 복수 선택 */}
+              <FormField label="방문 시간대" hint="복수 선택">
+                <ChipGroup
+                  multi
+                  options={[
+                    { v: 'time_00_06', l: '심야' },
+                    { v: 'time_06_11', l: '오전' },
+                    { v: 'time_11_14', l: '점심' },
+                    { v: 'time_14_17', l: '오후' },
+                    { v: 'time_17_21', l: '저녁' },
+                    { v: 'time_21_24', l: '야간' },
+                  ]}
+                  value={targetTimeSlots}
+                  onChange={toggleTargetTime}
+                  cols={3}
+                />
+              </FormField>
+
+              {/* 요일 — 단일 선택 */}
+              <FormField label="요일" hint="단일 선택">
+                <ChipGroup
+                  options={
+                    [
+                      { v: null, l: '전체' },
+                      { v: 'weekday', l: '평일' },
+                      { v: 'weekend', l: '주말' },
+                    ] as const
+                  }
+                  value={targetDayType}
+                  onChange={setTargetDayType}
+                  cols={3}
+                />
+              </FormField>
+            </div>
+
+            {/* 예상 월매출 — full-width */}
+            <div className="mt-4">
+              <FormField label="예상 월매출" hint="선택 사항">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="예: 23150000 (원)"
+                  value={
+                    targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
+                  }
+                  onChange={(e) => handleMonthlySalesChange(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg text-xs font-mono tabular-nums bg-card border border-border text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none transition-colors"
+                />
+                <p className="mt-1.5 text-[11px] text-muted-foreground/70">
+                  입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
+                </p>
+              </FormField>
+            </div>
+
+            {/* [customer_segment 미리보기] RUN 누르기 전 ~100ms MLP 결과 표시 */}
+            {previewSegment && (
+              <div className="mt-4 px-4 py-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[0.625rem] font-black text-primary uppercase tracking-widest">
+                    실시간 미리보기 · {(previewSegment.segment_ratio * 100).toFixed(1)}% 기여
+                  </span>
+                  {isPreviewLoading && <Loader2 size={12} className="animate-spin text-primary" />}
+                </div>
+                <p className="text-[0.6875rem] text-foreground leading-relaxed">
+                  {previewSegment.profile_summary}
+                </p>
+                {previewSegment.segment_sales != null && (
+                  <p className="text-[0.625rem] text-muted-foreground tabular-nums">
+                    세그먼트 매출 추정: ₩{previewSegment.segment_sales.toLocaleString('ko-KR')}
+                  </p>
+                )}
+                <p className="text-[0.5625rem] text-muted-foreground italic">
+                  * 동·업종 단위 MLP 추정 — RUN SIMULATION 후 종합 결과로 검증
+                </p>
+              </div>
+            )}
+            {previewError && !isPreviewLoading && (
+              <div className="mt-4 px-4 py-2 rounded-lg border border-danger/30 bg-danger/10 text-[0.6875rem] text-danger">
+                미리보기 실패: {previewError}
+              </div>
+            )}
           </div>
         </div>
+        {/* /타겟 페르소나 카드 끝 */}
 
         {/* Right panel wrapper — col-span-12 풀폭. RUN SIMULATION 박스(아래)가 이 wrapper의
             자식이므로 wrapper 자체에 hidden을 걸면 안 됨. 내부 Visualization 박스만 result 시
@@ -2015,7 +1739,7 @@ function SimulatorDashboard({
         <div className="lg:col-span-12 flex flex-col gap-6">
           {/* Right panel — Visualization (result 시에만 표시. idle/loading 시 hidden) */}
           <div
-            className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 ${panel} ${reportState !== 'result' ? 'hidden' : ''}`}
+            className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 bg-card border-border shadow-sm ${reportState !== 'result' ? 'hidden' : ''}`}
           >
             {/* idle UI(블러 대시보드 실루엣 + 3-step 가이드) 제거 — 좌측 옵션 패널이
                 풀폭으로 노출되어 가이드 역할 자체가 의미 없어짐(2026-04-28). */}
@@ -2059,45 +1783,6 @@ function SimulatorDashboard({
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      {/* v4.2 리디자인 — 통합/상세 뷰 토글 제거, TabbedDashboard 단일 뷰 */}
-                      {!isSplitMode && viewMode === 'legacy' && (
-                        <div className="flex bg-card rounded-lg border border-border p-1 shadow-inner">
-                          <button
-                            onClick={() => setDashboardMode('data')}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
-                              dashboardMode === 'data'
-                                ? 'bg-muted text-primary shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                          >
-                            <BarChartBig className="w-3.5 h-3.5" />
-                            데이터 뷰
-                          </button>
-                          <button
-                            onClick={() => setDashboardMode('map')}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
-                              dashboardMode === 'map'
-                                ? 'bg-muted text-primary shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                          >
-                            <MapIcon className="w-3.5 h-3.5" />
-                            AI 에이전트 맵
-                          </button>
-                          <button
-                            onClick={() => setDashboardMode('abm')}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-bold rounded-md transition-all duration-300 ${
-                              dashboardMode === 'abm'
-                                ? 'bg-muted text-success shadow-sm'
-                                : 'text-muted-foreground hover:text-success'
-                            }`}
-                          >
-                            <Activity className="w-3.5 h-3.5" />
-                            ABM 시뮬 맵
-                            {abmResult && <span className="w-1.5 h-1.5 rounded-full bg-success" />}
-                          </button>
-                        </div>
-                      )}
                       <button
                         onClick={() => setIsSplitMode(!isSplitMode)}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[0.6875rem] font-bold transition-all duration-300 border ${
@@ -2221,1904 +1906,12 @@ function SimulatorDashboard({
                       분석 결과로 이동 중...
                     </div>
                   )}
-
-                  {/* Single Mode: 기존 (legacy) 대시보드 — 사실상 dead code.
-                    · viewMode 는 line 828 에서 'integrated' 로 고정 → 'legacy' 절대 true 아님.
-                    · 2026-04-30 fix: `|| !rawSimResult` 제거. hydration 중 일시 null 일 때
-                      이 블록이 렌더되어 H7 후 삭제됐어야 할 옛 디자인이 새로고침/홈 이동 후
-                      다시 노출되던 회귀 버그(약 1,800줄 옛 JSX) 해소.
-                    · 옛 JSX 블록 자체 (line 2222~) 는 별도 cycle 에서 완전 제거 예정. */}
-                  {!isSplitMode && viewMode === 'legacy' && (
-                    <>
-                      {/* [C1 신규] AI Verdict 신호등 배너 — signal + 한 줄 판단
-                        · map 뷰에서는 숨김 (AI 에이전트 맵 화면 간결성)
-                        · data 뷰에서는 기본 접힘 → 한 줄평만, 클릭 시 전체 설명 펼침 */}
-                      {(() => {
-                        if (dashboardMode !== 'data') return null;
-
-                        // LLM이 출력한 영어 리스크 용어를 한국어로 치환
-                        const localizeRiskTerms = (text: string) =>
-                          text
-                            .replace(/'caution'/g, "'주의'")
-                            .replace(/'safe'/g, "'안전'")
-                            .replace(/'danger'/g, "'위험'")
-                            .replace(/'green'/g, "'진입 권장'")
-                            .replace(/'yellow'/g, "'조건부 진입'")
-                            .replace(/'red'/g, "'진입 비권장'")
-                            .replace(/\bcaution\b/g, '주의 단계')
-                            .replace(/\bdanger\b/g, '위험 단계')
-                            .replace(/\bsparse\b/g, '희박')
-                            .replace(/\bsaturated\b/g, '포화')
-                            .replace(/\bEXCELLENT\b/g, '탁월')
-                            .replace(/\bGOOD\b/g, '우수')
-                            .replace(/\bNORMAL\b/g, '보통')
-                            .replace(/\bRISKY\b/g, '주의');
-
-                        const rawRec = simResult?.recommendation;
-                        const rec = rawRec ? localizeRiskTerms(rawRec) : rawRec;
-                        const legalRisk = simResult?.overallLegalRisk;
-                        const ciSignal = simResult?.competitorIntel?.market_entry_signal;
-                        // signal 없고 recommendation도 없으면 렌더 안 함
-                        if (!rec && !legalRisk && !ciSignal) return null;
-
-                        // signal: competitor_intel 우선, 없으면 overall_legal_risk 매핑.
-                        // 신호가 어느 쪽에서도 없으면 null → 중립 렌더.
-                        let signal: 'green' | 'yellow' | 'red' | null = null;
-                        if (ciSignal === 'green' || ciSignal === 'yellow' || ciSignal === 'red') {
-                          signal = ciSignal;
-                        } else if (legalRisk === 'safe') signal = 'green';
-                        else if (legalRisk === 'danger') signal = 'red';
-                        else if (legalRisk === 'caution') signal = 'yellow';
-
-                        const sigCfg: Record<
-                          'green' | 'yellow' | 'red',
-                          {
-                            icon: JSX.Element;
-                            label: string;
-                            border: string;
-                            badge: string;
-                            iconBg: string;
-                          }
-                        > = {
-                          green: {
-                            icon: <CheckCircle2 className="h-6 w-6 text-success" />,
-                            // [I-7] colorblind 대응 — 영문 GREEN → 한글 '안전'
-                            label: '안전',
-                            border: 'border-success/30',
-                            badge: 'bg-success/20 text-success ring-1 ring-success/40',
-                            iconBg: 'bg-success/10 ring-1 ring-success/30',
-                          },
-                          yellow: {
-                            icon: <AlertTriangle className="h-6 w-6 text-warning" />,
-                            // [I-7] colorblind 대응 — 영문 YELLOW → 한글 '주의'
-                            label: '주의',
-                            border: 'border-warning/30',
-                            badge: 'bg-warning/20 text-warning ring-1 ring-warning/40',
-                            iconBg: 'bg-warning/10 ring-1 ring-warning/30',
-                          },
-                          red: {
-                            icon: <ShieldAlert className="h-6 w-6 text-danger" />,
-                            // [I-7] colorblind 대응 — 영문 RED → 한글 '위험'
-                            label: '위험',
-                            border: 'border-danger/30',
-                            badge: 'bg-danger/20 text-danger ring-1 ring-danger/40',
-                            iconBg: 'bg-danger/10 ring-1 ring-danger/30',
-                          },
-                        };
-                        const cfg = signal ? sigCfg[signal] : null;
-
-                        // headline: rec의 첫 문장 or 첫 60자 + '…'
-                        let oneLiner = '';
-                        if (rec) {
-                          // 한글/영문 문장 끝 문자 매칭 (trailing whitespace 없이도 OK)
-                          const firstSentence = rec.match(/^(.+?[.!?。])(?:\s|$)/);
-                          if (firstSentence && firstSentence[1].length <= 80) {
-                            oneLiner = firstSentence[1].trim();
-                          } else {
-                            oneLiner = rec.length > 60 ? rec.slice(0, 60).trim() + '…' : rec;
-                          }
-                        }
-                        // rec이 oneLiner로 시작하면 꼬리만 표시 (중복 렌더 방지)
-                        const tailOfRec =
-                          rec && oneLiner && rec.startsWith(oneLiner)
-                            ? rec.slice(oneLiner.length).trim()
-                            : rec;
-
-                        const borderCls = cfg ? cfg.border : 'border-border';
-
-                        return (
-                          <div
-                            className={`mb-2 overflow-hidden rounded-xl border ${borderCls} bg-card p-5 shadow-xl`}
-                          >
-                            <div className="flex items-start gap-4">
-                              {cfg && (
-                                <div
-                                  className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${cfg.iconBg}`}
-                                >
-                                  {cfg.icon}
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-                                    AI VERDICT
-                                  </h3>
-                                  {cfg && (
-                                    <span
-                                      className={`rounded-full px-2 py-0.5 text-xs font-bold ${cfg.badge}`}
-                                    >
-                                      {cfg.label}
-                                    </span>
-                                  )}
-                                </div>
-                                {oneLiner && (
-                                  <p className="mt-2 text-base font-semibold leading-snug text-foreground">
-                                    {oneLiner}
-                                  </p>
-                                )}
-                                {tailOfRec && tailOfRec !== oneLiner && (
-                                  <details className="mt-2 group">
-                                    <summary className="cursor-pointer text-xs text-primary hover:text-primary/80 font-mono select-none">
-                                      상세보기
-                                    </summary>
-                                    <p className="mt-2 text-sm leading-relaxed text-foreground">
-                                      {tailOfRec}
-                                    </p>
-                                  </details>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Main Dashboard Body — dashboardMode 토글 (data | map | abm) */}
-                      {dashboardMode === 'data' ? (
-                        <div className="flex flex-col gap-4 h-full animate-in fade-in duration-500">
-                          {/* 4 Stats Cards — data 뷰에서만 표시 */}
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-                            {/* §3.7 — 데이터 없을 때 임의 default 금지. mock trend/등급/인구 모두 '—'. */}
-                            <StatCard
-                              onClick={() => setActiveDrawer('revenue')}
-                              title="예상 월 총매출"
-                              value={
-                                simResult?.revenue != null
-                                  ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-                                  : '—'
-                              }
-                              trend="—"
-                              trendUp={true}
-                              icon={<BarChart3 />}
-                              sparkline="M 0 20 Q 10 5, 20 15 T 40 10 T 60 25 T 80 5 T 100 0"
-                              subtitle={
-                                simResult?.netProfit != null
-                                  ? `순이익 ${simResult.netProfit}만원`
-                                  : undefined
-                              }
-                            />
-                            <StatCard
-                              onClick={() => setActiveDrawer('attractiveness')}
-                              title="상권 종합 매력도"
-                              value={simResult?.score != null ? `${simResult.score} / 100` : '—'}
-                              trend="—"
-                              trendUp={true}
-                              icon={<Crosshair />}
-                              sparkline="M 0 25 Q 15 20, 30 10 T 60 15 T 80 5 T 100 0"
-                            />
-                            <StatCard
-                              onClick={() => setActiveDrawer('traffic')}
-                              title="일일 유동인구"
-                              value={
-                                popData?.daily_average
-                                  ? `${popData.daily_average.toLocaleString()} 명`
-                                  : popLoading
-                                    ? '로딩중...'
-                                    : '—'
-                              }
-                              trend={
-                                popData?.change_pct !== undefined
-                                  ? `${popData.change_pct > 0 ? '+' : ''}${popData.change_pct}%`
-                                  : '—'
-                              }
-                              trendUp={popData?.change_pct ? popData.change_pct > 0 : false}
-                              icon={<Users />}
-                              sparkline="M 0 5 Q 15 10, 30 20 T 60 15 T 80 25 T 100 30"
-                              subtitle={popData?.date ?? ''}
-                            />
-                            <StatCard
-                              onClick={() => setActiveDrawer('cannibalization')}
-                              title="카니발리제이션 위험"
-                              value={simResult?.riskLevel != null ? simResult.riskLevel : '—'}
-                              trend="—"
-                              trendUp={true}
-                              icon={<AlertTriangle className="text-primary" />}
-                              sparkline="M 0 30 Q 20 25, 40 28 T 80 25 T 100 30"
-                            />
-                          </div>
-
-                          {/* Charts / Table / Radar / Insights */}
-                          <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
-                            {/* Left Column */}
-                            <div className="lg:flex-[2] flex flex-col gap-4">
-                              {/* Chart */}
-                              <div className="bg-card border border-border rounded-xl p-5 pb-10 shadow-xl flex flex-col h-[320px]">
-                                <div className="flex justify-between items-end mb-4">
-                                  <div>
-                                    <h2 className="text-sm font-bold text-foreground">
-                                      {chartView === 'daily'
-                                        ? '시간대별 유동인구 및 매출 (24H)'
-                                        : 'LSTM 12개월 매출 추이 예측 (12M)'}
-                                    </h2>
-                                    <p className="text-[0.6875rem] text-muted-foreground">
-                                      {chartView === 'daily'
-                                        ? '경쟁점 데이터 및 배후세대 동선 분석 기준'
-                                        : 'AI 엔진을 통한 향후 1년간의 매출 예측값'}
-                                    </p>
-                                  </div>
-                                  <div className="flex bg-card rounded-md border border-border p-0.5">
-                                    <button
-                                      onClick={() => setChartView('daily')}
-                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'daily' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                                    >
-                                      24H 분석
-                                    </button>
-                                    <button
-                                      onClick={() => setChartView('monthly')}
-                                      className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${chartView === 'monthly' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                                    >
-                                      12M 예측
-                                    </button>
-                                  </div>
-                                </div>
-                                <div
-                                  onClick={() => setActiveDrawer('traffic')}
-                                  className="flex-1 relative w-full cursor-pointer group/chart hover:bg-primary/[0.03] rounded-lg transition-colors min-h-0"
-                                >
-                                  {/* empty state — 24H 시간대 분석은 백엔드 미구현, 12M 예측은 quarterly_projection 없을 때 */}
-                                  {(chartView === 'daily' ||
-                                    (chartView === 'monthly' && monthlyChartData.length === 0)) && (
-                                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-border bg-card/60 backdrop-blur-[2px]">
-                                      <div className="text-center max-w-xs px-4">
-                                        <div className="mx-auto mb-2 h-6 w-6 animate-pulse rounded-full bg-border" />
-                                        <div className="text-xs font-semibold text-foreground">
-                                          구현 예정
-                                        </div>
-                                        <div className="mt-1 text-[0.625rem] text-muted-foreground leading-relaxed">
-                                          {chartView === 'daily'
-                                            ? '시간대별 매출·유동인구 API 연동 대기 중'
-                                            : '분기 매출 예측 — 시뮬레이션 완료 후 표시됩니다'}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                  <motion.div
-                                    key={`chart-reveal-${chartView}`}
-                                    initial={{ clipPath: 'inset(0 100% 0 0)' }}
-                                    animate={{ clipPath: 'inset(0 0 0 0)' }}
-                                    transition={{ duration: 1.4, ease: 'linear' }}
-                                    className="w-full h-full"
-                                  >
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <AreaChart
-                                        data={chartView === 'daily' ? [] : monthlyChartData}
-                                        margin={{ top: 10, right: 15, left: -20, bottom: 0 }}
-                                      >
-                                        <defs>
-                                          <linearGradient
-                                            id="rcRevenueGradient"
-                                            x1="0"
-                                            y1="0"
-                                            x2="0"
-                                            y2="1"
-                                          >
-                                            <stop
-                                              offset="0%"
-                                              stopColor="var(--primary)"
-                                              stopOpacity={0.5}
-                                            />
-                                            <stop
-                                              offset="100%"
-                                              stopColor="var(--primary)"
-                                              stopOpacity={0}
-                                            />
-                                          </linearGradient>
-                                          <linearGradient
-                                            id="rcTrafficGradient"
-                                            x1="0"
-                                            y1="0"
-                                            x2="0"
-                                            y2="1"
-                                          >
-                                            <stop
-                                              offset="0%"
-                                              stopColor="var(--muted-foreground)"
-                                              stopOpacity={0.2}
-                                            />
-                                            <stop
-                                              offset="100%"
-                                              stopColor="var(--muted-foreground)"
-                                              stopOpacity={0}
-                                            />
-                                          </linearGradient>
-                                        </defs>
-                                        <XAxis
-                                          dataKey="time"
-                                          type="number"
-                                          domain={['dataMin', 'dataMax']}
-                                          scale={chartView === 'daily' ? 'time' : 'linear'}
-                                          tickFormatter={(t: number) => {
-                                            if (chartView === 'daily') {
-                                              const d = new Date(t);
-                                              return `${String(d.getHours() % 24).padStart(2, '0')}:00`;
-                                            }
-                                            // 분기 모드: quarterlyProjection 있으면 "1Q..4Q", 없으면 (mock) "1월..12월"
-                                            return simResult?.quarterlyProjection?.length
-                                              ? `${t}Q`
-                                              : `${new Date(t).getMonth() + 1}월`;
-                                          }}
-                                          stroke="var(--muted-foreground)"
-                                          fontSize={10}
-                                          tickLine={false}
-                                          axisLine={false}
-                                          tick={{ fill: 'var(--muted-foreground)' }}
-                                        />
-                                        <RechartsTooltipWrapper
-                                          content={<RechartsDarkTooltip chartMode={chartView} />}
-                                          cursor={{
-                                            stroke: 'var(--primary)',
-                                            strokeWidth: 1,
-                                            strokeDasharray: '4 4',
-                                          }}
-                                        />
-                                        <Area
-                                          type="monotone"
-                                          dataKey="traffic"
-                                          stroke="var(--muted-foreground)"
-                                          strokeWidth={2}
-                                          fill="url(#rcTrafficGradient)"
-                                          isAnimationActive={false}
-                                        />
-                                        <Area
-                                          type="monotone"
-                                          dataKey="revenue"
-                                          stroke="var(--primary)"
-                                          strokeWidth={3}
-                                          fill="url(#rcRevenueGradient)"
-                                          isAnimationActive={false}
-                                        />
-                                        {/* 분기 모드 + 실응답에 confidence_upper 있을 때 신뢰 상한선 점선 */}
-                                        {chartView === 'monthly' &&
-                                          simResult?.quarterlyProjection?.length && (
-                                            <Area
-                                              type="monotone"
-                                              dataKey="confidence_upper"
-                                              stroke="var(--primary)"
-                                              strokeWidth={1}
-                                              strokeDasharray="3 3"
-                                              fill="none"
-                                              isAnimationActive={false}
-                                            />
-                                          )}
-                                      </AreaChart>
-                                    </ResponsiveContainer>
-                                  </motion.div>
-                                </div>
-                              </div>
-
-                              {/* 분기별 매출 예측 차트 (TCN 모델 출력) — quarterly_projection 있을 때만 렌더링 */}
-                              {simResult?.quarterlyProjection &&
-                                simResult.quarterlyProjection.length > 0 && (
-                                  <div className="mt-6">
-                                    <h3 className="text-lg font-semibold mb-3">분기별 예상 매출</h3>
-                                    <QuarterlyProjectionChart
-                                      series={[
-                                        {
-                                          district:
-                                            simResult.winnerDistrict ??
-                                            rawSimResult?.target_district ??
-                                            '단일',
-                                          projection: simResult.quarterlyProjection,
-                                        },
-                                      ]}
-                                      winnerDistrict={simResult.winnerDistrict}
-                                    />
-                                  </div>
-                                )}
-
-                              {/* SHAP 피처 기여도 차트 — shapResult 있을 때만 렌더링 */}
-                              {simResult?.shapResult && (
-                                <div className="mt-6">
-                                  <h3 className="text-lg font-semibold mb-3">
-                                    매출 기여 피처 분석 (SHAP)
-                                  </h3>
-                                  <ShapChart data={simResult.shapResult} />
-                                </div>
-                              )}
-
-                              {/* [C1 신규] 향후 12개월 전망 카드 (trend_forecaster) */}
-                              {(() => {
-                                const tf = simResult?.trendForecast;
-                                if (!tf) return null;
-                                const score = tf.forecast?.score;
-                                const direction = tf.forecast?.direction;
-                                const confidence = tf.forecast?.confidence;
-                                const narrative = tf.forecast?.narrative;
-                                const industryDir = tf.industry_trend?.direction;
-                                const changeIxLabel = tf.change_ix?.change_ix_label;
-                                // 최소 데이터도 없으면 렌더 안 함
-                                if (
-                                  score == null &&
-                                  !direction &&
-                                  !narrative &&
-                                  !industryDir &&
-                                  !changeIxLabel
-                                ) {
-                                  return null;
-                                }
-                                const directionCfg: Record<string, { label: string; cls: string }> =
-                                  {
-                                    strong_growth: {
-                                      label: '↑↑ STRONG GROWTH',
-                                      cls: 'bg-success/30 text-success ring-1 ring-success/60',
-                                    },
-                                    growth: {
-                                      label: '↑ GROWTH',
-                                      cls: 'bg-success/20 text-success ring-1 ring-success/40',
-                                    },
-                                    stable: {
-                                      label: '→ STABLE',
-                                      cls: 'bg-warning/20 text-warning ring-1 ring-warning/40',
-                                    },
-                                    decline: {
-                                      label: '↓ DECLINE',
-                                      cls: 'bg-danger/20 text-danger ring-1 ring-danger/40',
-                                    },
-                                    strong_decline: {
-                                      label: '↓↓ STRONG DECLINE',
-                                      cls: 'bg-danger/30 text-danger ring-1 ring-danger/60',
-                                    },
-                                  };
-                                const dirBadge = direction
-                                  ? (directionCfg[direction] ?? {
-                                      label: direction,
-                                      cls: 'bg-muted text-muted-foreground ring-1 ring-border',
-                                    })
-                                  : null;
-                                const industryDirLabel =
-                                  industryDir === 'up'
-                                    ? '↑ 상승'
-                                    : industryDir === 'down'
-                                      ? '↓ 하락'
-                                      : industryDir === 'flat'
-                                        ? '→ 보합'
-                                        : 'N/A';
-                                return (
-                                  <div className="mt-6 rounded-xl border border-border bg-card p-5 shadow-xl">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <TrendingUp className="h-4 w-4 text-primary" />
-                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-                                          향후 12개월 전망
-                                        </h3>
-                                      </div>
-                                      {confidence && (
-                                        <span className="text-xs text-muted-foreground">
-                                          신뢰도: {confidence}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {(score != null || dirBadge) && (
-                                      <div className="mt-3 flex items-baseline gap-3 flex-wrap">
-                                        {score != null && (
-                                          <>
-                                            <span className="text-4xl font-bold font-mono tabular-nums text-foreground">
-                                              {Math.round(score)}
-                                            </span>
-                                            <span className="text-sm text-muted-foreground">
-                                              /100
-                                            </span>
-                                          </>
-                                        )}
-                                        {dirBadge && (
-                                          <span
-                                            className={`rounded-full px-2 py-0.5 text-xs font-bold ${dirBadge.cls}`}
-                                          >
-                                            {dirBadge.label}
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                                      <div className="rounded-lg bg-card/50 p-3">
-                                        <div className="text-muted-foreground">업종 트렌드</div>
-                                        <div className="mt-1 font-semibold text-foreground">
-                                          {industryDirLabel}
-                                        </div>
-                                      </div>
-                                      <div className="rounded-lg bg-card/50 p-3">
-                                        <div className="text-muted-foreground">상권 분류</div>
-                                        <div className="mt-1 font-semibold text-foreground">
-                                          {changeIxLabel ?? 'N/A'}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {narrative && (
-                                      <p className="mt-4 text-sm leading-relaxed text-foreground">
-                                        {narrative}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-
-                              {/* [C1 신규] 경쟁 + 잠식 분석 풀 카드 (competitor_intel) */}
-                              {(() => {
-                                const ci = simResult?.competitorIntel;
-                                if (!ci) return null;
-                                const comp = ci.competition_500m;
-                                const cann = ci.cannibalization;
-                                const signal = ci.market_entry_signal;
-                                const diff = ci.differentiation_position;
-                                const opps = ci.key_opportunities ?? [];
-                                const risks = ci.key_risks ?? [];
-                                const actions = ci.recommended_actions ?? [];
-                                const narrative = ci.narrative;
-                                // 최소 콘텐츠 없으면 렌더 안 함
-                                if (
-                                  !comp &&
-                                  !cann &&
-                                  !signal &&
-                                  !diff &&
-                                  opps.length === 0 &&
-                                  risks.length === 0 &&
-                                  actions.length === 0 &&
-                                  !narrative
-                                ) {
-                                  return null;
-                                }
-                                const sigBadgeCfg: Record<string, { cls: string; label: string }> =
-                                  {
-                                    green: {
-                                      cls: 'bg-success/20 text-success ring-1 ring-success/50',
-                                      label: '진입 권장',
-                                    },
-                                    yellow: {
-                                      cls: 'bg-warning/20 text-warning ring-1 ring-warning/50',
-                                      label: '조건부',
-                                    },
-                                    red: {
-                                      cls: 'bg-danger/20 text-danger ring-1 ring-danger/50',
-                                      label: '비권장',
-                                    },
-                                  };
-                                const sigBadge = signal ? sigBadgeCfg[signal] : null;
-                                const cannImpactPct =
-                                  typeof cann?.estimated_revenue_impact_pct === 'number'
-                                    ? (cann.estimated_revenue_impact_pct * 100).toFixed(1)
-                                    : null;
-                                const SATURATION_KO: Record<string, string> = {
-                                  sparse: '희박 (0~2개)',
-                                  low: '낮음 (3~5개)',
-                                  medium: '보통 (6~10개)',
-                                  high: '높음 (11~20개)',
-                                  saturated: '포화 (21개+)',
-                                };
-                                const satKo = comp?.saturation_level
-                                  ? (SATURATION_KO[comp.saturation_level] ?? comp.saturation_level)
-                                  : 'N/A';
-                                return (
-                                  <div className="rounded-xl border border-border bg-card p-5 shadow-xl">
-                                    <div className="flex items-center justify-between flex-wrap gap-2">
-                                      <div className="flex items-center gap-2">
-                                        <Crosshair className="h-4 w-4 text-primary" />
-                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-                                          경쟁 + 잠식 분석
-                                        </h3>
-                                      </div>
-                                      {sigBadge && (
-                                        <span
-                                          className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${sigBadge.cls}`}
-                                        >
-                                          {sigBadge.label}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                      <div className="rounded-lg bg-card/50 p-3">
-                                        <div className="text-xs text-muted-foreground">
-                                          500m 경쟁 밀도
-                                        </div>
-                                        <div className="mt-1 text-base font-semibold text-foreground">
-                                          {satKo}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          총 {comp?.total_competitors ?? 0}개 매장
-                                        </div>
-                                      </div>
-                                      <div className="rounded-lg bg-card/50 p-3">
-                                        <div className="text-xs text-muted-foreground">
-                                          자기잠식 영향
-                                        </div>
-                                        <div className="mt-1 text-lg font-semibold text-danger">
-                                          {cannImpactPct != null
-                                            ? `매출 ${cannImpactPct}% 감소`
-                                            : 'N/A'}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          500m 내 동일 브랜드 기준
-                                        </div>
-                                      </div>
-                                      <div className="rounded-lg bg-card/50 p-3">
-                                        <div className="text-xs text-muted-foreground">
-                                          프랜차이즈 / 개인점
-                                        </div>
-                                        <div className="mt-1 text-lg font-semibold text-foreground">
-                                          {comp?.franchise_count ?? 0}개 /{' '}
-                                          {comp?.independent_count ?? 0}개
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          체인 브랜드 / 로컬 매장
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {diff && (
-                                      <div className="mt-4 rounded-lg bg-primary/10 p-3 ring-1 ring-primary/30">
-                                        <div className="text-xs uppercase tracking-wider text-primary">
-                                          차별화 포지션
-                                        </div>
-                                        <p className="mt-1 text-sm text-foreground">{diff}</p>
-                                      </div>
-                                    )}
-
-                                    {(opps.length > 0 || risks.length > 0) && (
-                                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {opps.length > 0 && (
-                                          <div>
-                                            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-success">
-                                              <Lightbulb className="h-4 w-4 text-success" />
-                                              <span>기회</span>
-                                            </div>
-                                            <ul className="mt-2 space-y-1">
-                                              {opps.map((o, i) => (
-                                                <li key={i} className="text-xs text-foreground">
-                                                  • {o}
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                        {risks.length > 0 && (
-                                          <div>
-                                            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-danger">
-                                              <AlertTriangle className="h-4 w-4 text-danger" />
-                                              <span>리스크</span>
-                                            </div>
-                                            <ul className="mt-2 space-y-1">
-                                              {risks.map((r, i) => (
-                                                <li key={i} className="text-xs text-foreground">
-                                                  • {r}
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {actions.length > 0 && (
-                                      <div className="mt-4 rounded-lg bg-warning/10 p-3 ring-1 ring-warning/30">
-                                        <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-warning">
-                                          <ClipboardList className="h-4 w-4 text-warning" />
-                                          <span>추천 액션</span>
-                                        </div>
-                                        <ul className="mt-2 space-y-1">
-                                          {actions.map((a, i) => (
-                                            <li key={i} className="text-xs text-foreground">
-                                              <span className="font-bold text-warning">
-                                                {i + 1}.
-                                              </span>{' '}
-                                              {a}
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-
-                                    {narrative && (
-                                      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-                                        {narrative}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-
-                              {/* Table */}
-                              <div className="bg-card border border-border rounded-xl shadow-xl flex flex-col">
-                                <div className="p-5 border-b border-border flex justify-between items-center">
-                                  <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                                    상세 데이터 테이블
-                                    <span className="hidden md:inline-block px-1.5 py-0.5 bg-border text-muted-foreground text-[0.5625rem] rounded uppercase font-mono">
-                                      {tableDensity} view
-                                    </span>
-                                  </h2>
-                                  <div className="flex items-center gap-3">
-                                    {/* 밀도 조절 */}
-                                    <div className="hidden sm:flex bg-card rounded-md border border-border p-0.5">
-                                      <button
-                                        onClick={() => setTableDensity('comfortable')}
-                                        title="넓게 보기"
-                                        className={`p-1 rounded transition-colors ${tableDensity === 'comfortable' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                                      >
-                                        <Rows3 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => setTableDensity('standard')}
-                                        title="보통"
-                                        className={`p-1 rounded transition-colors ${tableDensity === 'standard' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                                      >
-                                        <AlignJustify className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => setTableDensity('compact')}
-                                        title="좁게 보기"
-                                        className={`p-1 rounded transition-colors ${tableDensity === 'compact' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                                      >
-                                        <List className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                    {/* 테이블 종류 토글 */}
-                                    <div className="flex bg-card rounded-md border border-border p-0.5">
-                                      <button
-                                        onClick={() => handleTableViewChange('cannibalization')}
-                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'cannibalization' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                                      >
-                                        가맹점 간섭도
-                                      </button>
-                                      <button
-                                        onClick={() => handleTableViewChange('neighborhoods')}
-                                        className={`px-3 py-1 text-[0.625rem] font-bold rounded transition-colors ${tableView === 'neighborhoods' ? 'bg-border text-primary' : 'text-muted-foreground hover:text-foreground'}`}
-                                      >
-                                        행정동 비교
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div>
-                                  <table className="w-full text-left border-collapse">
-                                    <thead className="sticky top-0 bg-card/90 backdrop-blur-sm z-10">
-                                      <tr className="text-[0.6875rem] font-mono text-muted-foreground uppercase tracking-wider">
-                                        {tableView === 'cannibalization' ? (
-                                          <>
-                                            <th className="p-3 pl-5 font-medium">
-                                              <SortHeader
-                                                label="가맹점명"
-                                                sortField="name"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                            <th className="p-3 font-medium">
-                                              <SortHeader
-                                                label="거리"
-                                                sortField="distance"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                            <th className="p-3 font-medium">
-                                              <SortHeader
-                                                label="예상 매출 하락"
-                                                sortField="impact"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                            <th className="p-3 font-medium">
-                                              <SortHeader
-                                                label="상태"
-                                                sortField="status"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <th className="p-3 pl-5 font-medium">
-                                              <SortHeader
-                                                label="행정동"
-                                                sortField="name"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                            <th className="p-3 font-medium">
-                                              <SortHeader
-                                                label="AI 점수"
-                                                sortField="score"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                            <th className="p-3 font-medium">
-                                              <SortHeader
-                                                label="폐업률"
-                                                sortField="closureRate"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                            <th className="p-3 font-medium">
-                                              <SortHeader
-                                                label="예상 BEP"
-                                                sortField="bep"
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleSort}
-                                              />
-                                            </th>
-                                          </>
-                                        )}
-                                      </tr>
-                                    </thead>
-                                    <tbody className="text-xs divide-y divide-border">
-                                      {tableView === 'cannibalization' ? (
-                                        sortedCannRows.length === 0 ? (
-                                          <tr>
-                                            <td
-                                              colSpan={4}
-                                              className="py-8 text-center text-xs text-muted-foreground"
-                                            >
-                                              카니발리제이션 데이터 없음 — 500m 반경 내 경쟁 매장이
-                                              없거나 분석 대상 지역 밖입니다.
-                                            </td>
-                                          </tr>
-                                        ) : (
-                                          sortedCannRows.map((row, i) => (
-                                            <TableRow
-                                              key={row.name}
-                                              index={i}
-                                              expanded={expandedRow === i}
-                                              onToggle={() =>
-                                                setExpandedRow(expandedRow === i ? null : i)
-                                              }
-                                              icon={<Store className="w-3.5 h-3.5" />}
-                                              col1={row.name}
-                                              col2={row.distance}
-                                              col3={row.impact}
-                                              status={row.status}
-                                              density={tableDensity}
-                                            />
-                                          ))
-                                        )
-                                      ) : sortedNeighborhoodRows.length === 0 ? (
-                                        <tr>
-                                          <td
-                                            colSpan={4}
-                                            className="py-8 text-center text-xs text-muted-foreground"
-                                          >
-                                            행정동 비교 데이터 없음 — 시뮬레이션을 실행해 주세요.
-                                          </td>
-                                        </tr>
-                                      ) : (
-                                        sortedNeighborhoodRows.map((row, i) => (
-                                          <TableRow
-                                            key={row.name}
-                                            index={i}
-                                            expanded={expandedRow === i}
-                                            onToggle={() =>
-                                              setExpandedRow(expandedRow === i ? null : i)
-                                            }
-                                            icon={<MapPin className="w-3.5 h-3.5" />}
-                                            col1={row.name}
-                                            col2={row.score}
-                                            col3={row.closureRate}
-                                            status={row.bep}
-                                            density={tableDensity}
-                                          />
-                                        ))
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                                {/* Footer — 빈 공간을 채우는 메타 정보 */}
-                                <div className="px-5 py-3 border-t border-border flex justify-between items-center text-[0.625rem] font-mono text-muted-foreground">
-                                  <span>
-                                    총{' '}
-                                    {tableView === 'cannibalization'
-                                      ? sortedCannRows.length
-                                      : sortedNeighborhoodRows.length}
-                                    건 ·{' '}
-                                    {tableView === 'cannibalization'
-                                      ? '가맹점 간섭도 분석'
-                                      : '행정동 비교 분석'}
-                                  </span>
-                                  <span className="opacity-70">UPDATED {reportFullDate}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Right Column */}
-                            <div className="lg:flex-[1] flex flex-col gap-4">
-                              {/* Radar Chart */}
-                              <div className="bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col items-center justify-center">
-                                <div className="w-full text-left mb-2">
-                                  <h2 className="text-sm font-bold text-foreground">
-                                    상권 종합 지표 분석 (7 Core Metrics)
-                                  </h2>
-                                  <p className="text-[0.6875rem] text-primary">
-                                    에이전트 노드 분석 결과 통합 데이터
-                                  </p>
-                                </div>
-                                <div className="relative w-[180px] h-[180px] my-2">
-                                  {!hasMarketReport && (
-                                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed border-border bg-card/60 backdrop-blur-[2px]">
-                                      <div className="text-center px-3">
-                                        <div className="mx-auto mb-1 h-5 w-5 animate-pulse rounded-full bg-border" />
-                                        <div className="text-[0.6875rem] font-semibold text-foreground">
-                                          구현 예정
-                                        </div>
-                                        <div className="mt-0.5 text-[0.5625rem] text-muted-foreground">
-                                          market_report 대기
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                  <svg
-                                    viewBox="0 0 200 200"
-                                    className="w-full h-full overflow-visible"
-                                  >
-                                    <defs>
-                                      <clipPath id="radarReveal">
-                                        <motion.circle
-                                          cx={100}
-                                          cy={100}
-                                          initial={{ r: 0 }}
-                                          animate={{ r: 70 }}
-                                          transition={{ duration: 1.4, ease: 'linear' }}
-                                        />
-                                      </clipPath>
-                                    </defs>
-                                    {/* Grid + axis (항상 표시) */}
-                                    <polygon
-                                      points="100,40 147,63 158,113 126,154 74,154 42,113 53,63"
-                                      fill="var(--card)"
-                                      stroke="var(--border)"
-                                      strokeWidth="1"
-                                    />
-                                    <polygon
-                                      points="100,70 123.5,81.5 129,106.5 113,127 87,127 71,106.5 76.5,81.5"
-                                      fill="none"
-                                      stroke="var(--border)"
-                                      strokeWidth="1"
-                                      strokeDasharray="2 2"
-                                    />
-                                    <line
-                                      x1="100"
-                                      y1="100"
-                                      x2="100"
-                                      y2="40"
-                                      stroke="var(--border)"
-                                    />
-                                    <line
-                                      x1="100"
-                                      y1="100"
-                                      x2="147"
-                                      y2="63"
-                                      stroke="var(--border)"
-                                    />
-                                    <line
-                                      x1="100"
-                                      y1="100"
-                                      x2="158"
-                                      y2="113"
-                                      stroke="var(--border)"
-                                    />
-                                    <line
-                                      x1="100"
-                                      y1="100"
-                                      x2="126"
-                                      y2="154"
-                                      stroke="var(--border)"
-                                    />
-                                    <line
-                                      x1="100"
-                                      y1="100"
-                                      x2="74"
-                                      y2="154"
-                                      stroke="var(--border)"
-                                    />
-                                    <line
-                                      x1="100"
-                                      y1="100"
-                                      x2="42"
-                                      y2="113"
-                                      stroke="var(--border)"
-                                    />
-                                    <line
-                                      x1="100"
-                                      y1="100"
-                                      x2="53"
-                                      y2="63"
-                                      stroke="var(--border)"
-                                    />
-                                    {/* Data polygon + dots — market_report 기반 동적 계산 */}
-                                    <g clipPath="url(#radarReveal)">
-                                      <polygon
-                                        points={radarPointsStr}
-                                        fill="rgba(99,102,241,0.4)"
-                                        stroke="var(--primary)"
-                                        strokeWidth="2"
-                                        className="drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]"
-                                      />
-                                      {radarVertices.map((v, i) => (
-                                        <circle key={i} cx={v.x} cy={v.y} r={3} fill="#fff" />
-                                      ))}
-                                    </g>
-                                    <text
-                                      onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
-                                      x="100"
-                                      y="32"
-                                      fill="var(--muted-foreground)"
-                                      fontSize="10"
-                                      fontWeight="bold"
-                                      textAnchor="middle"
-                                    >
-                                      <title>유동인구: 82/100 (마포구 상위 12%)</title>유동인구
-                                    </text>
-                                    <text
-                                      onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
-                                      x="157"
-                                      y="60"
-                                      fill="var(--muted-foreground)"
-                                      fontSize="10"
-                                      textAnchor="start"
-                                    >
-                                      <title>매출: 74/100 (월 3,240만 추정)</title>매출
-                                    </text>
-                                    <text
-                                      onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
-                                      x="168"
-                                      y="117"
-                                      fill="var(--muted-foreground)"
-                                      fontSize="10"
-                                      textAnchor="start"
-                                    >
-                                      <title>성장성: 56/100 (전년 대비 +3.2%)</title>성장성
-                                    </text>
-                                    <text
-                                      onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
-                                      x="133"
-                                      y="166"
-                                      fill="var(--muted-foreground)"
-                                      fontSize="10"
-                                      textAnchor="middle"
-                                    >
-                                      <title>폐업률</title>폐업률
-                                    </text>
-                                    <text
-                                      onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
-                                      x="67"
-                                      y="166"
-                                      fill="var(--muted-foreground)"
-                                      fontSize="10"
-                                      textAnchor="middle"
-                                    >
-                                      <title>임대료: 45/100 (평당 25만원)</title>임대료
-                                    </text>
-                                    <text
-                                      onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
-                                      x="32"
-                                      y="117"
-                                      fill="var(--muted-foreground)"
-                                      fontSize="10"
-                                      textAnchor="end"
-                                    >
-                                      <title>경쟁강도: 68/100 (반경 500m 내 45개)</title>경쟁강도
-                                    </text>
-                                    <text
-                                      onClick={() => setActiveDrawer('attractiveness')}
-                                      className="cursor-pointer hover:fill-[var(--primary)] transition-colors"
-                                      x="43"
-                                      y="60"
-                                      fill="var(--muted-foreground)"
-                                      fontSize="10"
-                                      textAnchor="end"
-                                    >
-                                      <title>접근성: 78/100 (지하철 도보 5분)</title>접근성
-                                    </text>
-                                  </svg>
-                                </div>
-                              </div>
-
-                              {/* 폐업 위험도 카드 (B2 수지니) */}
-                              {simResult?.closureRisk ? (
-                                (() => {
-                                  const cr = simResult.closureRisk;
-                                  const pct = Math.round((cr.risk_score ?? 0) * 100);
-                                  const levelConfig = {
-                                    safe: {
-                                      badge: 'bg-success/20 text-success border-success/40',
-                                      bar: 'bg-success',
-                                      label: '안전',
-                                    },
-                                    caution: {
-                                      badge: 'bg-warning/20 text-warning border-warning/40',
-                                      bar: 'bg-warning',
-                                      label: '주의',
-                                    },
-                                    danger: {
-                                      badge: 'bg-danger/20 text-danger border-danger/40',
-                                      bar: 'bg-danger',
-                                      label: '위험',
-                                    },
-                                  }[cr.risk_level] ?? {
-                                    badge: 'bg-muted text-muted-foreground border-border',
-                                    bar: 'bg-muted-foreground',
-                                    label: '—',
-                                  };
-                                  // 2026-04-27: closure_risk가 lgbm/tcn 두 모델 결과를 별도 노출
-                                  // top_signals → top_signals_lgbm + top_signals_tcn (TCN 실패 시 빈 배열)
-                                  const topLgbm = (cr.top_signals_lgbm ?? []).slice(0, 3);
-                                  const topTcn = (cr.top_signals_tcn ?? []).slice(0, 3);
-                                  const maxAbs = Math.max(
-                                    ...topLgbm.map((s) => Math.abs(s.contribution)),
-                                    ...topTcn.map((s) => Math.abs(s.contribution)),
-                                    0.0001,
-                                  );
-                                  return (
-                                    <div
-                                      className={`bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col gap-3 ${
-                                        cr.is_mock ? 'opacity-60' : ''
-                                      }`}
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                          <h2 className="text-sm font-bold text-foreground">
-                                            폐업 위험도
-                                          </h2>
-                                          {cr.is_mock && (
-                                            <span className="text-[0.5rem] font-mono px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground uppercase tracking-wider">
-                                              MOCK
-                                            </span>
-                                          )}
-                                        </div>
-                                        <span
-                                          className={`inline-flex items-center gap-1 text-[0.5625rem] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full border ${levelConfig.badge}`}
-                                        >
-                                          <span
-                                            className={`w-1.5 h-1.5 rounded-full ${levelConfig.bar}`}
-                                          />
-                                          {levelConfig.label}
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-baseline justify-between mb-1.5">
-                                          <span className="text-[0.625rem] text-muted-foreground">
-                                            위험 점수
-                                          </span>
-                                          <span className="text-lg font-bold text-foreground font-mono tabular-nums">
-                                            {pct}
-                                            <span className="text-[0.6875rem] text-muted-foreground ml-0.5">
-                                              /100
-                                            </span>
-                                          </span>
-                                        </div>
-                                        <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border">
-                                          <div
-                                            className={`h-full ${levelConfig.bar} transition-all duration-700`}
-                                            style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                                          />
-                                        </div>
-                                      </div>
-                                      {(topLgbm.length > 0 || topTcn.length > 0) && (
-                                        <div className="flex flex-col gap-3 pt-2 border-t border-border">
-                                          {topLgbm.length > 0 && (
-                                            <div className="flex flex-col gap-1.5">
-                                              <div className="text-[0.625rem] text-muted-foreground mb-0.5 flex items-center gap-1.5">
-                                                <span className="w-1 h-1 rounded-full bg-primary" />
-                                                LightGBM · 과거 패턴 기여 Top {topLgbm.length}
-                                              </div>
-                                              {topLgbm.map((s, i) => {
-                                                const w = Math.round(
-                                                  (Math.abs(s.contribution) / maxAbs) * 100,
-                                                );
-                                                const positive = s.contribution >= 0;
-                                                return (
-                                                  <div
-                                                    key={`lgbm-${i}`}
-                                                    className="flex items-center gap-2 text-[0.625rem]"
-                                                  >
-                                                    <span className="w-28 shrink-0 text-foreground truncate">
-                                                      {s.feature}
-                                                    </span>
-                                                    <div className="flex-1 h-1.5 bg-card rounded-full overflow-hidden border border-border">
-                                                      <div
-                                                        className={`h-full ${positive ? 'bg-danger' : 'bg-success'}`}
-                                                        style={{ width: `${w}%` }}
-                                                      />
-                                                    </div>
-                                                    <span
-                                                      className={`w-12 text-right font-mono tabular-nums ${positive ? 'text-danger' : 'text-success'}`}
-                                                    >
-                                                      {positive ? '+' : ''}
-                                                      {s.contribution.toFixed(2)}
-                                                    </span>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
-                                          {topTcn.length > 0 && (
-                                            <div className="flex flex-col gap-1.5 pt-2 border-t border-border/50">
-                                              <div className="text-[0.625rem] text-muted-foreground mb-0.5 flex items-center gap-1.5">
-                                                <span className="w-1 h-1 rounded-full bg-chart-2" />
-                                                TCN · 시계열 흐름 기여 Top {topTcn.length}
-                                              </div>
-                                              {topTcn.map((s, i) => {
-                                                const w = Math.round(
-                                                  (Math.abs(s.contribution) / maxAbs) * 100,
-                                                );
-                                                const positive = s.contribution >= 0;
-                                                return (
-                                                  <div
-                                                    key={`tcn-${i}`}
-                                                    className="flex items-center gap-2 text-[0.625rem]"
-                                                  >
-                                                    <span className="w-28 shrink-0 text-foreground truncate">
-                                                      {s.feature}
-                                                    </span>
-                                                    <div className="flex-1 h-1.5 bg-card rounded-full overflow-hidden border border-border">
-                                                      <div
-                                                        className={`h-full ${positive ? 'bg-chart-2' : 'bg-success'}`}
-                                                        style={{ width: `${w}%` }}
-                                                      />
-                                                    </div>
-                                                    <span
-                                                      className={`w-12 text-right font-mono tabular-nums ${positive ? 'text-chart-2' : 'text-success'}`}
-                                                    >
-                                                      {positive ? '+' : ''}
-                                                      {s.contribution.toFixed(2)}
-                                                    </span>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })()
-                              ) : (
-                                <div className="bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col items-center justify-center min-h-[120px]">
-                                  <span className="text-xs text-muted-foreground">
-                                    폐업 위험도 데이터 없음
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* [C1 신규] 핵심 소비층 분석 카드 (demographic_depth) */}
-                              {(() => {
-                                const d = simResult?.demographicReport;
-                                if (!d) return null;
-                                const genderKo = (g: string) =>
-                                  (
-                                    ({
-                                      male: '남성',
-                                      female: '여성',
-                                      mixed: '혼합',
-                                    }) as Record<string, string>
-                                  )[g] ?? g;
-                                const incomeLevelKo = (l: string) =>
-                                  (
-                                    ({
-                                      high: '상',
-                                      mid: '중',
-                                      low: '하',
-                                      unknown: 'N/A',
-                                    }) as Record<string, string>
-                                  )[l] ?? l;
-                                const core = d.core_demographic;
-                                const top3 = d.top_3_age_groups ?? [];
-                                const peakHours = d.peak_consumption_hours ?? [];
-                                return (
-                                  <div className="rounded-xl border border-border bg-card p-5 shadow-xl">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <Users className="h-4 w-4 text-primary" />
-                                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-                                          핵심 소비층 분석
-                                        </h3>
-                                      </div>
-                                      {d.elderly_ratio != null && (
-                                        <span className="text-xs font-mono tabular-nums text-muted-foreground">
-                                          고령: {d.elderly_ratio.toFixed(1)}%
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {core && (core.age || core.gender) && (
-                                      <div className="mt-3 rounded-lg bg-primary/10 p-3 ring-1 ring-primary/30">
-                                        <div className="text-xs uppercase tracking-wider text-primary">
-                                          주 소비층
-                                        </div>
-                                        <div className="mt-1 flex items-baseline gap-2 flex-wrap">
-                                          <span className="text-2xl font-bold text-foreground">
-                                            {core.age ? `${core.age}대` : ''}{' '}
-                                            {genderKo(core.gender ?? '')}
-                                          </span>
-                                          {typeof core.share === 'number' && (
-                                            <span className="text-sm text-muted-foreground">
-                                              {(core.share * 100).toFixed(1)}% 매출 기여
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {top3.length > 0 && (
-                                      <div className="mt-4 space-y-2">
-                                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                          연령대 TOP 3
-                                        </div>
-                                        {top3.map((a) => (
-                                          <div
-                                            key={a.age_group}
-                                            className="flex items-center gap-2 text-xs"
-                                          >
-                                            <span className="w-12 text-foreground">
-                                              {a.age_group}대
-                                            </span>
-                                            <div className="flex-1 rounded-full bg-card/50">
-                                              <div
-                                                className="h-2 rounded-full bg-primary"
-                                                style={{
-                                                  width: `${Math.min(100, Math.max(0, a.share * 100))}%`,
-                                                }}
-                                              />
-                                            </div>
-                                            <span className="w-12 text-right font-mono tabular-nums text-muted-foreground">
-                                              {(a.share * 100).toFixed(1)}%
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                                      <div className="rounded-lg bg-card/50 p-2">
-                                        <div className="text-muted-foreground">피크</div>
-                                        <div className="mt-1 font-semibold text-foreground">
-                                          {peakHours.slice(0, 2).join(' · ') || 'N/A'}
-                                        </div>
-                                      </div>
-                                      <div className="rounded-lg bg-card/50 p-2">
-                                        <div className="text-muted-foreground">평/주말</div>
-                                        <div className="mt-1 font-semibold font-mono tabular-nums text-foreground">
-                                          {typeof d.weekday_weekend_ratio === 'number'
-                                            ? d.weekday_weekend_ratio.toFixed(2)
-                                            : 'N/A'}
-                                        </div>
-                                      </div>
-                                      <div className="rounded-lg bg-card/50 p-2">
-                                        <div className="text-muted-foreground">소득</div>
-                                        <div className="mt-1 font-semibold text-foreground">
-                                          {incomeLevelKo(d.area_income_level ?? 'unknown')}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {d.resident_visitor_ratio != null && (
-                                      <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                        <MapPin className="h-3 w-3 text-muted-foreground" />
-                                        <span>
-                                          외부 방문객 비율:{' '}
-                                          {(d.resident_visitor_ratio * 100).toFixed(1)}%
-                                        </span>
-                                      </div>
-                                    )}
-
-                                    {d.brand_target_match_score != null && (
-                                      <div className="mt-3 rounded-lg bg-warning/10 p-3 ring-1 ring-warning/30">
-                                        <div className="flex items-baseline gap-2 flex-wrap">
-                                          <span className="text-xs uppercase tracking-wider text-warning">
-                                            브랜드 타겟 매칭
-                                          </span>
-                                          <span className="text-lg font-bold font-mono tabular-nums text-warning">
-                                            {d.brand_target_match_score.toFixed(0)}/100
-                                          </span>
-                                        </div>
-                                        {d.match_rationale && (
-                                          <p className="mt-1 text-xs text-foreground">
-                                            {d.match_rationale}
-                                          </p>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {d.narrative && (
-                                      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-                                        {d.narrative}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-
-                              {/* Insights */}
-                              <div className="bg-card border border-border rounded-xl p-5 shadow-xl flex flex-col flex-1">
-                                {/* Header with dynamic counter */}
-                                <div className="flex items-center justify-between mb-3">
-                                  <h2 className="text-sm font-bold text-foreground">
-                                    SPOTTER AI 인사이트
-                                  </h2>
-                                  <span className="font-mono text-[0.5625rem] uppercase tracking-widest text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded-full">
-                                    3 INSIGHTS
-                                  </span>
-                                </div>
-                                <div className="space-y-3">
-                                  {/* 고정 카드 1: 저녁 시간대 매출 */}
-                                  <InsightCard
-                                    severity="advisory"
-                                    onClick={() => setActiveDrawer('insight_traffic')}
-                                    icon={<TrendingUp className="w-4 h-4 text-primary" />}
-                                    title="저녁 시간대 매출 집중형"
-                                    desc="18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다."
-                                  />
-                                  {/* 법률 리스크 통합 카드: safe 제외하고 위험/주의 항목만 서브 표시 */}
-                                  {(() => {
-                                    const TYPE_LABEL: Record<string, string> = {
-                                      franchise_law: '가맹사업법',
-                                      commercial_lease_law: '상가임대차보호법',
-                                      zoning_regulation: '용도지역 규제',
-                                      food_hygiene: '식품위생법',
-                                      safety_regulation: '안전규정',
-                                      building_law: '건축법',
-                                      fire_safety_law: '소방안전법',
-                                      labor_law: '근로기준법',
-                                      vat_law: '부가가치세법',
-                                      privacy_law: '개인정보보호법',
-                                      accessibility_law: '장애인편의법',
-                                      sewage_law: '하수도법',
-                                      fair_trade_law: '공정거래법',
-                                      ftc_franchise: '공정위 정보공개서',
-                                    };
-                                    const severityOf = (
-                                      level: string,
-                                    ): 'critical' | 'advisory' | 'safe' => {
-                                      const r = (level || '').toLowerCase();
-                                      if (r === 'danger' || r === 'high') return 'critical';
-                                      if (r === 'caution' || r === 'medium') return 'advisory';
-                                      return 'safe';
-                                    };
-
-                                    // safe 항목 제외 — 위험·주의만 표시
-                                    const dangerRisks = (simResult?.legalRisks ?? []).filter(
-                                      (r) => severityOf(r.risk_level) !== 'safe',
-                                    );
-
-                                    if (dangerRisks.length === 0) {
-                                      // 위험 항목 없으면 "안전" 긍정 메시지 (mock 제거됨)
-                                      return (
-                                        <InsightCard
-                                          severity="advisory"
-                                          onClick={() => setActiveDrawer('insight_legal')}
-                                          icon={<Scale className="w-4 h-4 text-success" />}
-                                          title="법률 리스크 — 안전"
-                                          desc={
-                                            simResult?.recommendation ||
-                                            '해당 권역에서 감지된 고위험 법률 이슈가 없습니다. 세부 14개 법령 체크리스트는 drawer에서 확인하세요.'
-                                          }
-                                        />
-                                      );
-                                    }
-
-                                    const topSev = dangerRisks.some(
-                                      (r) => severityOf(r.risk_level) === 'critical',
-                                    )
-                                      ? 'critical'
-                                      : 'advisory';
-
-                                    const openLegalDrawer = (type: string | null) => {
-                                      // 개별 법률이 지정되지 않으면 가장 위험한 첫 번째 항목을 기본 선택
-                                      const fallbackType = dangerRisks[0]?.type ?? null;
-                                      setSelectedLegalType(type ?? fallbackType);
-                                      setActiveDrawer('insight_legal');
-                                    };
-
-                                    return (
-                                      <div
-                                        onClick={() => openLegalDrawer(null)}
-                                        className="flex flex-col gap-2 p-3 rounded-lg bg-card border border-border cursor-pointer hover:border-primary hover:bg-primary/[0.05] transition-all group"
-                                      >
-                                        <div className="flex items-center gap-3">
-                                          <Scale
-                                            className={`w-4 h-4 shrink-0 ${topSev === 'critical' ? 'text-danger' : 'text-warning'}`}
-                                          />
-                                          <div className="flex-1 flex items-center justify-between gap-2">
-                                            <h4 className="text-foreground font-bold text-xs">
-                                              법률 리스크 종합
-                                            </h4>
-                                            <span className="inline-flex items-center gap-1 shrink-0">
-                                              <span
-                                                className={`w-1.5 h-1.5 rounded-full ${topSev === 'critical' ? 'bg-danger' : 'bg-warning'}`}
-                                              />
-                                              <span className="text-[0.5rem] font-mono uppercase tracking-wider text-muted-foreground">
-                                                {topSev === 'critical' ? '필수이행' : '확인필요'}
-                                              </span>
-                                            </span>
-                                          </div>
-                                        </div>
-                                        <div className="flex flex-col gap-2 border-t border-border pt-2">
-                                          {dangerRisks.map((risk, i) => {
-                                            const sev = severityOf(risk.risk_level);
-                                            const isCritical = sev === 'critical';
-                                            return (
-                                              <div
-                                                key={i}
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  openLegalDrawer(risk.type);
-                                                }}
-                                                className={`flex gap-2.5 pl-2.5 border-l-2 cursor-pointer rounded-r hover:bg-primary/[0.08] transition-colors ${isCritical ? 'border-danger' : 'border-primary'}`}
-                                              >
-                                                <div className="flex flex-col gap-0.5 flex-1 min-w-0 py-0.5">
-                                                  <div className="flex items-center gap-1.5">
-                                                    <span className="text-foreground text-[0.6875rem] font-semibold">
-                                                      {TYPE_LABEL[risk.type] || risk.type}
-                                                    </span>
-                                                    <span
-                                                      className={`text-[0.5rem] font-mono px-1 py-0.5 rounded ${isCritical ? 'bg-danger/20 text-danger' : 'bg-warning/20 text-warning'}`}
-                                                    >
-                                                      {isCritical ? '필수이행' : '확인필요'}
-                                                    </span>
-                                                  </div>
-                                                  {risk.detail && (
-                                                    <p className="text-muted-foreground text-[0.625rem] leading-relaxed">
-                                                      {risk.detail}
-                                                    </p>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                  {/* 동적 카드 3: 타겟 고객층 */}
-                                  <InsightCard
-                                    severity="opportunity"
-                                    onClick={() => setActiveDrawer('insight_target')}
-                                    icon={<Users className="w-4 h-4 text-primary" />}
-                                    title={
-                                      simResult?.analysis_metrics?.main_target_age
-                                        ? `${simResult.analysis_metrics.main_target_age} 타겟 권역`
-                                        : '주요 타겟 고객층'
-                                    }
-                                    desc={
-                                      simResult?.analysis_metrics?.peak_time
-                                        ? `피크 타임: ${simResult.analysis_metrics.peak_time} · 타겟층 집중 마케팅 전략 권장`
-                                        : '유동인구 분석 기반 타겟 고객층 전략을 확인하세요.'
-                                    }
-                                  />
-                                </div>
-
-                                {/* --- AI Workflow & Report Buttons --- */}
-                                <div className="flex flex-col gap-2 mt-3 shrink-0">
-                                  <button
-                                    onClick={() => setIsWorkflowOpen(true)}
-                                    className="w-full py-2.5 bg-gradient-to-r from-primary/20 to-transparent hover:from-primary/40 border border-primary/30 rounded-md text-xs font-bold text-foreground transition-all flex items-center justify-between px-4 group shadow-[0_0_15px_rgba(129,140,248,0.1)] hover:shadow-[0_0_20px_rgba(129,140,248,0.25)]"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <Network className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-                                      <span>AI 에이전트 워크플로우 보기</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                                      <span className="text-[0.625rem] font-mono text-primary">
-                                        LIVE
-                                      </span>
-                                    </div>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : dashboardMode === 'map' ? (
-                        /* 🗺️ AI 에이전트 맵 뷰 — KPI 없이 화면 꽉 채움 */
-                        <div className="flex-1 w-full h-full min-h-[700px] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
-                          <div className="flex-1 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
-                            {/* 맵 헤더 */}
-                            <div className="h-14 bg-muted/90 backdrop-blur-md border-b border-border flex justify-between items-center px-6 shrink-0 z-50">
-                              <h3 className="text-sm font-black text-foreground flex items-center gap-3">
-                                <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
-                                Multi-Agent Geospatial Recommendations
-                              </h3>
-                              <p className="text-xs text-muted-foreground font-mono tracking-widest">
-                                AI AGENT TARGETING SYSTEM
-                              </p>
-                            </div>
-                            <div className="flex-1 relative">
-                              <AgentMapVisualizer
-                                height="100%"
-                                locations={
-                                  simResult?.vacancySpots && simResult.vacancySpots.length > 0
-                                    ? simResult.vacancySpots.map((s) => ({
-                                        id: `vacancy_${s.id}`,
-                                        name: s.dong_name,
-                                        lat: s.lat,
-                                        lng: s.lon,
-                                        type: 'vacancy' as const,
-                                        listingCount: s.listing_count,
-                                      }))
-                                    : undefined
-                                }
-                                competitors={(simResult?.allCompetitorLocations?.length
-                                  ? simResult.allCompetitorLocations
-                                  : (simResult?.competitorIntel?.competition_500m?.samples ?? [])
-                                )
-                                  .filter((s: any) => s.lat && (s.lng ?? s.lon))
-                                  .map((s: any) => ({
-                                    id: s.id ?? `comp_${s.place_name}_${s.lat}`,
-                                    name: s.place_name || s.brand_name || '경쟁업체',
-                                    lat: s.lat,
-                                    lng: s.lng ?? s.lon,
-                                    distance_m: s.distance_m,
-                                    is_franchise: s.is_franchise ?? false,
-                                    category: s.category,
-                                  }))}
-                                onSpotClick={async (loc) => {
-                                  // 공실 번호 마커 클릭 → ABM 탭 전환 + 해당 스팟만 5000 에이전트 시뮬
-                                  if (!simResult || abmLoading) return;
-                                  setDashboardMode('abm');
-                                  setAbmFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
-                                  setAbmLoading(true);
-                                  setAbmError(null);
-                                  setAbmResult(null);
-                                  try {
-                                    const res = await fetch('/api/simulate-abm', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        target_district: loc.name,
-                                        business_type: businessType,
-                                        brand_name:
-                                          brand?.brand_name || user?.company_name || '신규 매장',
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        langgraph_result: (simResult as any)._raw ?? simResult,
-                                        n_agents: 5000,
-                                        days: 1,
-                                        spot_lat: loc.lat,
-                                        spot_lon: loc.lng,
-                                        scenario: {
-                                          weather_override: null,
-                                          date_override: null,
-                                          weekend_force: false,
-                                          rent_shock_pct: 0.0,
-                                        },
-                                        // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
-                                        enable_llm_thought: true,
-                                        // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
-                                        enable_llm_decisions: true,
-                                        // 신규 매장 평수 — backend seats(평×2) + capacity 모델링.
-                                        store_area: storeArea,
-                                      }),
-                                    });
-                                    const data = await res.json();
-                                    if (!res.ok) {
-                                      setAbmError(
-                                        data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`,
-                                      );
-                                    } else if (data.status === 'error') {
-                                      setAbmError(
-                                        data?.message ||
-                                          'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
-                                      );
-                                    } else {
-                                      setAbmResult(data);
-                                    }
-                                  } catch (err) {
-                                    setAbmError(
-                                      `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
-                                    );
-                                  } finally {
-                                    setAbmLoading(false);
-                                  }
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        /* 🤖 ABM 페르소나 행동 시뮬 뷰 */
-                        <AbmPersonaMap
-                          abmResult={abmResult}
-                          abmLoading={abmLoading}
-                          abmError={abmError}
-                          targetDistrict={selectedDongs[0] || '서교동'}
-                          vacancySpots={simResult?.vacancySpots}
-                          focusSpot={abmFocusSpot}
-                          competitors={
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            ((simResult as any)?.allCompetitorLocations?.length
-                              ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                (simResult as any).allCompetitorLocations
-                              : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                ((simResult as any)?.competitorIntel?.competition_500m?.samples ??
-                                [])) as any
-                          }
-                          onClearResult={() => {
-                            setAbmResult(null);
-                            setAbmError(null);
-                            setAbmFocusSpot(null);
-                            setDashboardMode('map');
-                          }}
-                          onSpotClick={async (spot) => {
-                            if (!simResult || abmLoading) return;
-                            setAbmFocusSpot({
-                              lat: spot.lat,
-                              lon: spot.lon,
-                              label: spot.dong_name,
-                            });
-                            setAbmLoading(true);
-                            setAbmError(null);
-                            try {
-                              const res = await fetch('/api/simulate-abm', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  // 클릭한 스팟의 동을 target 으로 강제 (선택된 동과 다를 수 있음)
-                                  target_district: spot.dong_name,
-                                  business_type: businessType,
-                                  brand_name:
-                                    brand?.brand_name || user?.company_name || '신규 매장',
-                                  langgraph_result: (simResult as any)._raw ?? simResult,
-                                  n_agents: 5000,
-                                  days: 1,
-                                  spot_lat: spot.lat,
-                                  spot_lon: spot.lon,
-                                  scenario: {
-                                    weather_override: null,
-                                    date_override: null,
-                                    weekend_force: false,
-                                    rent_shock_pct: 0.0,
-                                  },
-                                  // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
-                                  enable_llm_thought: true,
-                                  // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
-                                  enable_llm_decisions: true,
-                                  // 신규 매장 평수 — backend seats + capacity 모델링.
-                                  store_area: storeArea,
-                                }),
-                              });
-                              const data = await res.json();
-                              if (!res.ok) {
-                                setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
-                              } else if (data.status === 'error') {
-                                setAbmError(
-                                  data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
-                                );
-                              } else {
-                                setAbmResult(data);
-                              }
-                            } catch (err) {
-                              setAbmError(
-                                `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
-                              );
-                            } finally {
-                              setAbmLoading(false);
-                            }
-                          }}
-                          onRunSimulation={async (scenario) => {
-                            if (!simResult) return;
-                            setAbmLoading(true);
-                            setAbmError(null);
-                            try {
-                              const res = await fetch('/api/simulate-abm', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  target_district: selectedDongs[0] || '서교동',
-                                  business_type: businessType,
-                                  brand_name:
-                                    brand?.brand_name || user?.company_name || '신규 매장',
-                                  langgraph_result: (simResult as any)._raw ?? simResult,
-                                  n_agents: 5000,
-                                  days: 1,
-                                  scenario: {
-                                    weather_override: scenario.weather_override,
-                                    date_override: scenario.date_override,
-                                    weekend_force: scenario.weekend_force,
-                                    rent_shock_pct: scenario.rent_shock_pct,
-                                  },
-                                  // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 표시.
-                                  enable_llm_thought: true,
-                                  // Tier S/A LLM 의사결정 (A) — Tier 별 행동 차별화.
-                                  enable_llm_decisions: true,
-                                  // 신규 매장 평수 — backend seats + capacity 모델링.
-                                  store_area: storeArea,
-                                }),
-                              });
-                              const data = await res.json();
-                              if (!res.ok) {
-                                setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
-                              } else if (data.status === 'unavailable') {
-                                setAbmError(
-                                  'ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)',
-                                );
-                              } else if (data.status === 'error') {
-                                setAbmError(
-                                  data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
-                                );
-                              } else {
-                                setAbmResult(data);
-                              }
-                            } catch (err) {
-                              setAbmError(
-                                `ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
-                              );
-                            } finally {
-                              setAbmLoading(false);
-                            }
-                          }}
-                        />
-                      )}
-                    </>
-                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* ─────────── RUN SIMULATION 박스 (cockpit 우측 하단) ─────────── */}
-          <div
-            className={`rounded-2xl border p-6 transition-all duration-700 ${panel} ${reportState === 'result' ? 'hidden' : ''}`}
-          >
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <span className={`text-sm font-bold tracking-wider ${textPrimary}`}>
-                  시뮬레이션 실행
-                </span>
-                <span className={`text-[0.6875rem] ${textSecondary} leading-relaxed`}>
-                  좌측 입력값을 바탕으로 AI 분석 엔진을 가동합니다 · 약 20초 소요
-                </span>
-              </div>
-              <button
-                onClick={runSim}
-                disabled={reportState === 'loading'}
-                className={`md:min-w-[220px] py-3.5 px-6 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center gap-2 transition-all duration-300 ${
-                  reportState === 'loading'
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:scale-[1.02] active:scale-[0.98]'
-                } bg-primary text-primary-foreground shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:bg-primary/90`}
-              >
-                <Play size={16} />
-                RUN SIMULATION
-              </button>
-            </div>
-          </div>
+          {/* RUN 버튼은 우5 패널의 핵심 파라미터 카드 밑으로 이동됨 (라인 ~1678 부근) */}
         </div>
       </div>
 
@@ -4437,11 +2230,20 @@ export default function App() {
 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [reportState, setReportState] = useState<'idle' | 'loading' | 'result'>('idle');
-  const [activeMenuIndex, setActiveMenuIndex] = useState(2);
 
   // Simulation background tracking (IM3-205): store가 페이지 이동과 독립적으로
   // 시뮬레이션 상태를 보유. useCompletionToast는 running→done/error 전이 감지.
   useCompletionToast();
+
+  // FloatingWidget 의 dismiss(X) 가 store.status='idle' 로 만들 때 reportState 도 동기화.
+  // 동기화 안 하면 reportState 가 'result' 로 남아 옛 비교모드 dashboard (dead 1,800줄) 가 노출됨.
+  const storeStatus = useSimulationStore((s) => s.status);
+  useEffect(() => {
+    if (storeStatus === 'idle' && reportState !== 'idle') {
+      setReportState('idle');
+    }
+  }, [storeStatus, reportState]);
+
   const [hoveredDistrictIdx, setHoveredDistrictIdx] = useState<number | null>(null);
 
   // 페이지 전환 시 모든 스크롤 컨테이너를 최상단으로 리셋
@@ -4584,8 +2386,6 @@ export default function App() {
                     path="/"
                     element={
                       <IntroScene
-                        activeMenuIndex={activeMenuIndex}
-                        setActiveMenuIndex={setActiveMenuIndex}
                         onAboutClick={() => transitionTo('about')}
                         onLoginClick={() => transitionTo('login')}
                         onSimulatorClick={() => transitionTo('accordion')}
@@ -4608,7 +2408,6 @@ export default function App() {
                         hoveredIdx={hoveredDistrictIdx}
                         setHoveredIdx={setHoveredDistrictIdx}
                         onMapoClick={() => transitionTo('simulator')}
-                        onLogoClick={() => transitionTo('intro')}
                       />
                     }
                   />
@@ -4682,7 +2481,7 @@ export default function App() {
 
               {/* Global header — all scenes except intro */}
               {scene !== 'intro' && scene !== 'login' && !isTransitioning && (
-                <header className="fixed top-0 left-0 w-full h-24 border-b border-border flex items-center px-8 md:px-16 justify-between bg-card/90 backdrop-blur-md z-50 transition-colors duration-500">
+                <header className="fixed top-0 left-0 w-full h-20 border-b border-border flex items-center px-8 md:px-16 justify-between bg-card/90 backdrop-blur-md z-50 transition-colors duration-500">
                   <div className="flex items-center gap-4">
                     <button
                       onClick={() => transitionTo('intro')}
@@ -4721,6 +2520,8 @@ export default function App() {
                       BACK
                     </button>
                   </div>
+                  {/* Center — 환영 메시지 (로그인 시) */}
+                  <WelcomeWidget />
                   <div className="flex items-center gap-4 md:gap-6">
                     <GlobalLimelightNav />
                     <LogoutButton />

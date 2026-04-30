@@ -28,7 +28,7 @@ interface Props {
 }
 
 const AGENT_ICON = {
-  synthesis: { icon: BrainCircuit, color: 'text-white', borderCls: 'border-border/60' },
+  synthesis: { icon: BrainCircuit, color: 'text-foreground', borderCls: 'border-border/60' },
   legal: { icon: AlertTriangle, color: 'text-danger', borderCls: 'border-danger/50' },
   competitor: { icon: ShieldAlert, color: 'text-warning', borderCls: 'border-warning/50' },
 };
