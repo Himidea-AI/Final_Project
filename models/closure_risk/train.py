@@ -25,7 +25,7 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader, TensorDataset
 
 from models.closure_risk.data_prep import _time_based_split, build_closure_risk_dataset
-from models.closure_risk.evaluate import evaluate_model, save_metrics_and_plot  # noqa: F401  (Task 5에서 사용)
+from models.closure_risk.evaluate import evaluate_model, save_metrics_and_plot
 from models.closure_risk.model import WEIGHTS_DIR, TCNClassifier
 from models.lstm_forecast.data_prep import ALL_FEATURES, DB_URL
 from models.tcn_forecast.model import WEIGHTS_DIR as TCN_WEIGHTS_DIR
@@ -360,12 +360,12 @@ def train(config: dict | None = None) -> None:
     X_lgbm_test = test_df[X_lgbm.columns].values
     y_tr_arr = train_df["__y__"].values
     y_val_arr = val_df["__y__"].values
-    y_test_arr = test_df["__y__"].values  # noqa: F841  (Task 5 evaluate 입력)
+    y_test_arr = test_df["__y__"].values
 
     # 2. LightGBM 학습
     lgbm_model = train_lgbm(X_lgbm_tr, y_tr_arr, cfg)
     lgbm_val_proba = lgbm_model.predict_proba(X_lgbm_val)[:, 1]
-    lgbm_test_proba = lgbm_model.predict_proba(X_lgbm_test)[:, 1]  # noqa: F841  (Task 5 evaluate 입력)
+    lgbm_test_proba = lgbm_model.predict_proba(X_lgbm_test)[:, 1]
     lgbm_val_auc = roc_auc_score(y_val_arr, lgbm_val_proba) if len(np.unique(y_val_arr)) > 1 else 0.5
     logger.info("LightGBM val_AUC=%.4f", lgbm_val_auc)
 
@@ -375,7 +375,7 @@ def train(config: dict | None = None) -> None:
     val_quarters = set(val_df["quarter"].unique()) if cfg["split_strategy"] == "time" else None
     test_quarters = set(test_df["quarter"].unique()) if cfg["split_strategy"] == "time" else None
 
-    tcn_model, tcn_val_auc, tcn_val_proba, tcn_test_proba, y_val_tcn, y_test_tcn, tcn_scaler = train_tcn(  # noqa: F841
+    tcn_model, tcn_val_auc, tcn_val_proba, tcn_test_proba, y_val_tcn, y_test_tcn, tcn_scaler = train_tcn(
         df_full,
         y,
         cfg,
@@ -416,6 +416,65 @@ def train(config: dict | None = None) -> None:
         pickle.dump(ensemble_weights, f)
     logger.info("앙상블 가중치 저장: %s", cfg["ensemble_weights_path"])
     logger.info("학습 완료 — 예상 앙상블 AUC: %.4f", max(lgbm_val_auc, tcn_val_auc))
+
+    # 6. Evaluate val + test (5 metric + calibration)
+    # ensemble proba: w_lgbm * lgbm + w_tcn * tcn
+    # LGBM 와 TCN 의 sample 길이가 다를 수 있음 (TCN 시퀀스 손실 분기) — TCN 길이 기준 trim
+    n_val = min(len(lgbm_val_proba), len(tcn_val_proba)) if len(tcn_val_proba) > 0 else len(lgbm_val_proba)
+    if n_val > 0 and len(tcn_val_proba) > 0:
+        ensemble_val_proba = w_lgbm * lgbm_val_proba[:n_val] + w_tcn * tcn_val_proba[:n_val]
+        y_val_common = y_val_arr[:n_val]
+    else:
+        ensemble_val_proba = lgbm_val_proba
+        y_val_common = y_val_arr
+
+    val_metrics = {
+        "lgbm": evaluate_model(y_val_arr, lgbm_val_proba, k_pct=10),
+        "tcn": evaluate_model(y_val_tcn, tcn_val_proba, k_pct=10) if len(tcn_val_proba) > 0 else None,
+        "ensemble": evaluate_model(y_val_common, ensemble_val_proba, k_pct=10),
+    }
+
+    # Test set (final unbiased)
+    if cfg["split_strategy"] == "time" and len(y_test_arr) > 0:
+        n_test = min(len(lgbm_test_proba), len(tcn_test_proba)) if len(tcn_test_proba) > 0 else len(lgbm_test_proba)
+        if n_test > 0 and len(tcn_test_proba) > 0:
+            ensemble_test_proba = w_lgbm * lgbm_test_proba[:n_test] + w_tcn * tcn_test_proba[:n_test]
+            y_test_common = y_test_arr[:n_test]
+        else:
+            ensemble_test_proba = lgbm_test_proba
+            y_test_common = y_test_arr
+
+        test_metrics = {
+            "lgbm": evaluate_model(y_test_arr, lgbm_test_proba, k_pct=10),
+            "tcn": evaluate_model(y_test_tcn, tcn_test_proba, k_pct=10) if len(tcn_test_proba) > 0 else None,
+            "ensemble": evaluate_model(y_test_common, ensemble_test_proba, k_pct=10),
+        }
+    else:
+        test_metrics = None
+
+    metrics_summary = {
+        "split_strategy": cfg["split_strategy"],
+        "train_quarters": sorted(set(train_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
+        "val_quarters": sorted(set(val_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
+        "test_quarters": sorted(set(test_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
+        "ensemble_weights": {"w_lgbm": w_lgbm, "w_tcn": w_tcn},
+        "lgbm": {"val": val_metrics["lgbm"], "test": (test_metrics or {}).get("lgbm")},
+        "tcn": {"val": val_metrics["tcn"], "test": (test_metrics or {}).get("tcn")},
+        "ensemble": {"val": val_metrics["ensemble"], "test": (test_metrics or {}).get("ensemble")},
+    }
+
+    save_metrics_and_plot(
+        metrics_summary,
+        metrics_path=cfg["metrics_path"],
+        plot_path=cfg["calibration_plot_path"],
+    )
+
+    logger.info(
+        "최종 ensemble val_AUC=%.4f / test_AUC=%.4f (split=%s)",
+        val_metrics["ensemble"]["auc"],
+        (test_metrics["ensemble"]["auc"] if test_metrics else 0.0),
+        cfg["split_strategy"],
+    )
 
 
 if __name__ == "__main__":
