@@ -36,7 +36,7 @@ html {
     --secondary-foreground: #0a0a0a;
     --muted: #f5f4ee;
     --muted-foreground: #6b6a63;
-    --border: #eae9e1;
+    --border: #d4d2c4; /* 카드 경계 명확화 (이전 #EAE9E1 → 컨트라스트 1.4:1 → 2.2:1) */
     --input: #ffffff;
     --radius: 1.25rem;
 
