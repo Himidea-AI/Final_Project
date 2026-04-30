@@ -72,9 +72,12 @@ def _load_models() -> tuple:
             ensemble_w = pickle.load(f)  # noqa: S301
 
     # TCN 모델 — input_size는 ensemble_weights에 저장된 값 사용 (기본 34)
+    import torch as _torch
+    _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
     input_size = ensemble_w.get("input_size", 34)
     tcn = TCNClassifier(input_size=input_size)
     tcn.load_weights(tcn_path)
+    tcn.to(_device)
     tcn.eval()
 
     # TCN 스케일러 — 학습 시 저장된 스케일러 로드 (위에서 존재 보장됨)
@@ -218,9 +221,11 @@ def _top_signals_tcn(
 
         wrapped = _TCNWithSigmoid(tcn_model)
         wrapped.eval()
+        _dev = next(tcn_model.parameters()).device
         window_size = x_seq.shape[1]
         input_size = x_seq.shape[2]
-        background = torch.zeros(10, window_size, input_size)
+        background = torch.zeros(10, window_size, input_size).to(_dev)
+        x_seq = x_seq.to(_dev)
 
         shap_values_raw = None
         try:
@@ -374,7 +379,8 @@ def predict(
     seq = tcn_scaler.transform(recent[-window_size:])
 
     tcn_model.eval()
-    x_tcn = torch.from_numpy(seq).unsqueeze(0)  # (1, 4, features)
+    _dev = next(tcn_model.parameters()).device
+    x_tcn = torch.from_numpy(seq).unsqueeze(0).to(_dev)  # (1, 4, features)
     with torch.no_grad():
         p_tcn = float(torch.sigmoid(tcn_model(x_tcn)).cpu().numpy().flatten()[0])
 

@@ -16,6 +16,11 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# 프로세스 단위 모델 캐시 — 같은 가중치 경로는 한 번만 로드
+# ---------------------------------------------------------------------------
+_SHAP_MODEL_CACHE: dict = {}
+
+# ---------------------------------------------------------------------------
 # 한국어 피처명 매핑 (docs/glossary.md 및 data_prep.FEATURE_COLS 기준)
 # ---------------------------------------------------------------------------
 
@@ -306,20 +311,30 @@ def explain_tcn_prediction(
         result["summary"] = []
         return result
 
-    # ---- 2) 스케일러 로드 → input_size 결정 ----
-    try:
-        feat_scaler, tgt_scaler = load_scalers(scalers_path)
-        input_size = len(feat_scaler.scale_)
-        _log("INFO", f"TCN 스케일러 로드 완료: input_size={input_size}")
-    except Exception as exc:
-        _log("WARNING", f"TCN 스케일러 로드 실패 - mock 반환: {exc}")
-        result = _mock_shap_values(list(ALL_FEATURES))
-        result["predicted_value_unit"] = "원"
-        result["predicted_value"] = 15_000_000.0
-        result["summary"] = []
-        return result
+    # ---- 2) 스케일러 로드 (캐시 우선) ----
+    # NOTE: model은 캐시하지 않음 — asyncio.gather로 4개 동이 동시 실행될 때
+    # GradientExplainer가 동일 model 인스턴스에 forward_hook을 동시 등록하면
+    # hook 간섭으로 SHAP 값이 오염됨. 스케일러만 캐시하고 model은 호출마다 신규 생성.
+    # (weights 파일은 OS 페이지 캐시에 올라온 이후 재로드 ~50ms로 무시 가능)
+    _cache_key = (str(weights_path), str(scalers_path))
+    if _cache_key in _SHAP_MODEL_CACHE:
+        feat_scaler, tgt_scaler, input_size = _SHAP_MODEL_CACHE[_cache_key]
+        _log("INFO", f"스케일러 캐시 히트 — input_size={input_size}")
+    else:
+        try:
+            feat_scaler, tgt_scaler = load_scalers(scalers_path)
+            input_size = len(feat_scaler.scale_)
+            _log("INFO", f"TCN 스케일러 로드 완료: input_size={input_size}")
+            _SHAP_MODEL_CACHE[_cache_key] = (feat_scaler, tgt_scaler, input_size)
+        except Exception as exc:
+            _log("WARNING", f"TCN 스케일러 로드 실패 - mock 반환: {exc}")
+            result = _mock_shap_values(list(ALL_FEATURES))
+            result["predicted_value_unit"] = "원"
+            result["predicted_value"] = 15_000_000.0
+            result["summary"] = []
+            return result
 
-    # ---- 3) TCN 모델 로드 ----
+    # ---- 3) TCN 모델 로드 (호출마다 신규 인스턴스 — hook 간섭 방지) ----
     try:
         model = TCNForecaster(
             input_size=input_size,
@@ -329,6 +344,7 @@ def explain_tcn_prediction(
             dropout=0.2,
         )
         model.load_weights(weights_path)
+        model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         model.eval()
         _log("INFO", "TCNForecaster 가중치 로드 완료")
     except Exception as exc:
@@ -363,12 +379,14 @@ def explain_tcn_prediction(
 
         # 피처 스케일링 후 텐서 변환 — shape: (1, window_size, input_size)
         seq = feat_scaler.transform(recent[-window_size:])
-        input_tensor = torch.tensor(seq, dtype=torch.float32).unsqueeze(0)
+        _dev = next(model.parameters()).device
+        input_tensor = torch.tensor(seq, dtype=torch.float32).unsqueeze(0).to(_dev)
         _log("INFO", f"입력 텐서 준비 완료: shape={tuple(input_tensor.shape)}")
     except Exception as exc:
         _log("WARNING", f"입력 데이터 준비 실패 - mock 반환: {exc}")
         # 데이터 없을 때 배경 텐서 기준 shape으로 mock 입력 사용
-        input_tensor = torch.zeros(1, window_size, input_size)
+        _dev = next(model.parameters()).device
+        input_tensor = torch.zeros(1, window_size, input_size).to(_dev)
 
     # ---- 5) 모델 순전파 — 기준 예측값 확보 (매출액 원 단위) ----
     with torch.no_grad():
@@ -386,7 +404,8 @@ def explain_tcn_prediction(
     _log("INFO", f"TCN 예측값: {predicted_value:,.0f}원")
 
     # ---- 6) SHAP — GradientExplainer 우선 (TCN Conv1d에 더 안정적), DeepExplainer 2순위 ----
-    background = torch.zeros(10, window_size, input_size)  # 배경 텐서: 영벡터 10개
+    _dev = next(model.parameters()).device
+    background = torch.zeros(10, window_size, input_size).to(_dev)  # 배경 텐서: 영벡터 10개
 
     shap_values_raw = None
     base_value = 0.0
