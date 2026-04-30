@@ -8,14 +8,24 @@ predict(dong_code, industry_code) → closure_risk dict
 
 from __future__ import annotations
 
+import json
 import logging
 import pickle
+from functools import lru_cache
 
 import numpy as np
 import torch
 
 from models.closure_risk.model import WEIGHTS_DIR, TCNClassifier
-from models.lstm_forecast.data_prep import ALL_FEATURES, DB_URL, EXCLUDE_COMBOS, ExcludedComboError, build_timeseries, load_sales_data, load_store_data
+from models.lstm_forecast.data_prep import (
+    ALL_FEATURES,
+    DB_URL,
+    EXCLUDE_COMBOS,
+    ExcludedComboError,
+    build_timeseries,
+    load_sales_data,
+    load_store_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +40,35 @@ RISK_LEVELS = [
 ]
 
 
+@lru_cache(maxsize=1)
+def _load_risk_levels() -> tuple[tuple[float, str], ...]:
+    """metrics.json 에서 fit 된 quantile threshold load.
+
+    metrics.json 미존재 / 손상 / thresholds 키 없음 → default fallback.
+
+    Returns:
+        ((danger_thr, "danger"), (caution_thr, "caution"), (0.0, "safe"))
+    """
+    metrics_path = WEIGHTS_DIR / "metrics.json"
+    if metrics_path.exists():
+        try:
+            with open(metrics_path, encoding="utf-8") as f:
+                m = json.load(f)
+            t = m.get("thresholds", {})
+            if "danger" in t and "caution" in t:
+                return (
+                    (float(t["danger"]), "danger"),
+                    (float(t["caution"]), "caution"),
+                    (0.0, "safe"),
+                )
+        except (json.JSONDecodeError, OSError, ValueError) as e:
+            logger.warning("metrics.json threshold load 실패 — default fallback: %s", e)
+    return ((0.65, "danger"), (0.40, "caution"), (0.0, "safe"))
+
+
 def _classify(score: float) -> str:
-    for threshold, level in RISK_LEVELS:
+    """위험도 점수 → 레벨. metrics.json fit threshold 우선."""
+    for threshold, level in _load_risk_levels():
         if score >= threshold:
             return level
     return "safe"
@@ -73,6 +110,7 @@ def _load_models() -> tuple:
 
     # TCN 모델 — input_size는 ensemble_weights에 저장된 값 사용 (기본 34)
     import torch as _torch
+
     _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
     input_size = ensemble_w.get("input_size", 34)
     tcn = TCNClassifier(input_size=input_size)
