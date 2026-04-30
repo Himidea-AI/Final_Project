@@ -443,6 +443,32 @@ def train(config: dict | None = None) -> None:
         ensemble_val_proba = lgbm_val_proba
         y_val_common = y_val_arr
 
+    # threshold fit (val proba quantile) — D layer fix
+    DANGER_Q = 0.90
+    CAUTION_Q = 0.70
+    if len(ensemble_val_proba) > 0:
+        thresholds = {
+            "danger_quantile": DANGER_Q,
+            "caution_quantile": CAUTION_Q,
+            "danger": float(np.quantile(ensemble_val_proba, DANGER_Q)),
+            "caution": float(np.quantile(ensemble_val_proba, CAUTION_Q)),
+        }
+        logger.info(
+            "threshold fit — danger>=%.4f (q%d), caution>=%.4f (q%d)",
+            thresholds["danger"],
+            int(DANGER_Q * 100),
+            thresholds["caution"],
+            int(CAUTION_Q * 100),
+        )
+    else:
+        thresholds = {
+            "danger_quantile": DANGER_Q,
+            "caution_quantile": CAUTION_Q,
+            "danger": 0.65,
+            "caution": 0.40,
+        }
+        logger.warning("ensemble_val_proba 비어있음 — default threshold 0.65/0.40 fallback")
+
     val_metrics = {
         "lgbm": evaluate_model(y_val_arr, lgbm_val_proba, k_pct=10),
         "tcn": evaluate_model(y_val_tcn, tcn_val_proba, k_pct=10) if len(tcn_val_proba) > 0 else None,
@@ -473,6 +499,7 @@ def train(config: dict | None = None) -> None:
         "val_quarters": sorted(set(val_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
         "test_quarters": sorted(set(test_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
         "ensemble_weights": {"w_lgbm": w_lgbm, "w_tcn": w_tcn},
+        "thresholds": thresholds,
         "lgbm": {"val": val_metrics["lgbm"], "test": (test_metrics or {}).get("lgbm")},
         "tcn": {"val": val_metrics["tcn"], "test": (test_metrics or {}).get("tcn")},
         "ensemble": {"val": val_metrics["ensemble"], "test": (test_metrics or {}).get("ensemble")},
