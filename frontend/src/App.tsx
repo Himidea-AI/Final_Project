@@ -1357,17 +1357,25 @@ function SimulatorDashboard({
 
   const toggleDong = useCallback(
     (dong: string) => {
+      // setState updater 함수는 순수해야 함. side effect (showToast) 를 안에 두면
+      // React 18 StrictMode/concurrent mode 가 updater 를 여러 번 호출할 때
+      // toast 가 여러 번 떠 "무한 에러 메시지" 처럼 보임.
+      // → flag 로 의도 기록, setSelectedDongs 호출 후 외부에서 showToast 한 번만.
+      let hitLimit = false;
       setSelectedDongs((prev) => {
         if (prev.includes(dong)) {
           if (prev.length <= 1) return prev; // 최소 1개
           return prev.filter((d) => d !== dong);
         }
         if (prev.length >= MAX_DONGS) {
-          showToast('info', `동은 최대 ${MAX_DONGS}개까지 선택할 수 있습니다.`);
+          hitLimit = true;
           return prev;
         }
         return [...prev, dong];
       });
+      if (hitLimit) {
+        showToast('info', `동은 최대 ${MAX_DONGS}개까지 선택할 수 있습니다.`);
+      }
     },
     [showToast],
   );
