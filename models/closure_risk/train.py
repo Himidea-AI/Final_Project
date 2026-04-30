@@ -24,7 +24,8 @@ import torch.nn as nn
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader, TensorDataset
 
-from models.closure_risk.data_prep import build_closure_risk_dataset
+from models.closure_risk.data_prep import _time_based_split, build_closure_risk_dataset
+from models.closure_risk.evaluate import evaluate_model, save_metrics_and_plot  # noqa: F401  (Task 5에서 사용)
 from models.closure_risk.model import WEIGHTS_DIR, TCNClassifier
 from models.lstm_forecast.data_prep import ALL_FEATURES, DB_URL
 from models.tcn_forecast.model import WEIGHTS_DIR as TCN_WEIGHTS_DIR
@@ -36,7 +37,11 @@ DEFAULT_CONFIG: dict = {
     "db_url": DB_URL,
     "dong_prefix": "11440",
     "window_size": 4,
-    "val_ratio": 0.2,
+    # split 전략 — "time" (default, 학술 표준) | "random" (legacy, 분기 부족 시 fallback)
+    "split_strategy": "time",
+    "train_ratio": 0.70,
+    "val_ratio": 0.15,
+    # test_ratio = 1 - train_ratio - val_ratio = 0.15
     "random_state": 42,
     # TCN fine-tune
     "tcn_epochs": 50,
@@ -57,6 +62,8 @@ DEFAULT_CONFIG: dict = {
     "tcn_scaler_path": str(WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"),
     "lgbm_model_path": str(WEIGHTS_DIR / "closure_risk_lgbm.pkl"),
     "ensemble_weights_path": str(WEIGHTS_DIR / "ensemble_weights.pkl"),
+    "metrics_path": str(WEIGHTS_DIR / "metrics.json"),
+    "calibration_plot_path": str(WEIGHTS_DIR / "calibration_curve.png"),
 }
 
 
@@ -232,26 +239,73 @@ def train(config: dict | None = None) -> None:
     df_full, X_lgbm, y = build_closure_risk_dataset(db_url=cfg["db_url"], dong_prefix=cfg["dong_prefix"])
     logger.info("데이터셋: %d 샘플, 고위험 비율=%.1f%%", len(y), y.mean() * 100)
 
-    # train/val split (시간순 유지)
-    n_val = max(1, int(len(y) * cfg["val_ratio"]))
-    X_lgbm_tr = X_lgbm.iloc[:-n_val].values
-    X_lgbm_val = X_lgbm.iloc[-n_val:].values
-    y_tr_arr = y.iloc[:-n_val].values
-    y_val_arr = y.iloc[-n_val:].values
+    # df_full 에 X_lgbm + y 컬럼이 함께 있어야 split 가능 → align
+    df_full_aligned = df_full.loc[X_lgbm.index].copy()
+    # index 기준 align — build_closure_risk_dataset 의 X_lgbm/y/df_full 행 순서 일치 보장 X
+    df_full_aligned["__y__"] = y.loc[df_full_aligned.index]
+    X_lgbm_aligned = X_lgbm.loc[df_full_aligned.index]
+    df_full_aligned[X_lgbm_aligned.columns] = X_lgbm_aligned
+
+    # split
+    if cfg["split_strategy"] == "time":
+        train_df, val_df, test_df = _time_based_split(df_full_aligned, cfg["train_ratio"], cfg["val_ratio"])
+        logger.info(
+            "time-based split: train=%d (<=%s), val=%d (<=%s), test=%d (>%s)",
+            len(train_df),
+            train_df["quarter"].max(),
+            len(val_df),
+            val_df["quarter"].max(),
+            len(test_df),
+            val_df["quarter"].max(),
+        )
+    elif cfg["split_strategy"] == "random":
+        logger.warning("random split — temporal leakage 위험 (deprecated). split_strategy='time' 권장")
+        from sklearn.model_selection import train_test_split
+
+        test_ratio = 1 - cfg["train_ratio"] - cfg["val_ratio"]
+        train_df, temp_df = train_test_split(
+            df_full_aligned,
+            test_size=(cfg["val_ratio"] + test_ratio),
+            random_state=cfg["random_state"],
+        )
+        val_df, test_df = train_test_split(
+            temp_df,
+            test_size=test_ratio / (cfg["val_ratio"] + test_ratio),
+            random_state=cfg["random_state"] + 1,
+        )
+    else:
+        raise ValueError(f"unknown split_strategy: {cfg['split_strategy']}")
+
+    # 빈 split 방어 — train_test_split 의 부동소수점 오차 또는 _time_based_split 의 비율 misconfiguration 시
+    if len(train_df) == 0 or len(val_df) == 0 or len(test_df) == 0:
+        raise ValueError(
+            f"split 결과 비어있는 set 존재 — "
+            f"train={len(train_df)}, val={len(val_df)}, test={len(test_df)}. "
+            f"train_ratio({cfg['train_ratio']}) + val_ratio({cfg['val_ratio']}) 조정 필요."
+        )
+
+    # LightGBM 입력 추출 (인덱스 기준)
+    X_lgbm_tr = train_df[X_lgbm.columns].values
+    X_lgbm_val = val_df[X_lgbm.columns].values
+    X_lgbm_test = test_df[X_lgbm.columns].values
+    y_tr_arr = train_df["__y__"].values
+    y_val_arr = val_df["__y__"].values
+    y_test_arr = test_df["__y__"].values  # noqa: F841  (Task 5 evaluate 입력)
 
     # 2. LightGBM 학습
     lgbm_model = train_lgbm(X_lgbm_tr, y_tr_arr, cfg)
     lgbm_val_proba = lgbm_model.predict_proba(X_lgbm_val)[:, 1]
-    lgbm_auc = roc_auc_score(y_val_arr, lgbm_val_proba) if len(np.unique(y_val_arr)) > 1 else 0.5
-    logger.info("LightGBM val_AUC=%.4f", lgbm_auc)
+    lgbm_test_proba = lgbm_model.predict_proba(X_lgbm_test)[:, 1]  # noqa: F841  (Task 5 evaluate 입력)
+    lgbm_val_auc = roc_auc_score(y_val_arr, lgbm_val_proba) if len(np.unique(y_val_arr)) > 1 else 0.5
+    logger.info("LightGBM val_AUC=%.4f", lgbm_val_auc)
 
     # 3. TCN 학습 (전이학습)
     pretrained_path = TCN_WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"
     tcn_model, tcn_auc, tcn_scaler = train_tcn(df_full, y, cfg, pretrained_path)
 
     # 4. 앙상블 가중치 결정 (AUC 비례)
-    total = lgbm_auc + tcn_auc
-    w_lgbm = lgbm_auc / total if total > 0 else 0.5
+    total = lgbm_val_auc + tcn_auc
+    w_lgbm = lgbm_val_auc / total if total > 0 else 0.5
     w_tcn = tcn_auc / total if total > 0 else 0.5
     logger.info("앙상블 가중치 — LightGBM=%.3f, TCN=%.3f", w_lgbm, w_tcn)
 
@@ -272,14 +326,14 @@ def train(config: dict | None = None) -> None:
     ensemble_weights = {
         "w_lgbm": w_lgbm,
         "w_tcn": w_tcn,
-        "lgbm_auc": lgbm_auc,
+        "lgbm_auc": lgbm_val_auc,
         "tcn_auc": tcn_auc,
         "input_size": actual_input_size,
     }
     with open(cfg["ensemble_weights_path"], "wb") as f:
         pickle.dump(ensemble_weights, f)
     logger.info("앙상블 가중치 저장: %s", cfg["ensemble_weights_path"])
-    logger.info("학습 완료 — 예상 앙상블 AUC: %.4f", max(lgbm_auc, tcn_auc))
+    logger.info("학습 완료 — 예상 앙상블 AUC: %.4f", max(lgbm_val_auc, tcn_auc))
 
 
 if __name__ == "__main__":
