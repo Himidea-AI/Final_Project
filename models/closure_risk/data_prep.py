@@ -118,6 +118,43 @@ def _compute_industry_p75_train(
     return p75, global_p75
 
 
+def add_dong_residual_feature(
+    df: pd.DataFrame,
+    train_quarters: set[int],
+) -> pd.DataFrame:
+    """B-3 (2026-05-01): dong-industry 의 lag1 closure_rate residual.
+
+    `dong_closure_rate_residual_lag1 = closure_rate_lag1 - industry_avg_train_fit(industry_code)`
+
+    A-3 의 Stage 1 industry-level prior 와 보완적 dong-specific deviation 신호.
+    train_quarters 만으로 industry mean fit (leakage 차단).
+
+    Args:
+        df: lag feature 까지 적용된 dataset (closure_rate_lag1 컬럼 존재).
+        train_quarters: train split 분기 set.
+
+    Returns:
+        df with dong_closure_rate_residual_lag1 column.
+
+    학술 근거:
+        Gelman & Hill (2006) hierarchical regression — partial pooling 의 residual 분해.
+    """
+    train_df = df[df["quarter"].isin(train_quarters)]
+    if len(train_df) == 0 or "closure_rate_lag1" not in df.columns:
+        df = df.copy()
+        df["dong_closure_rate_residual_lag1"] = 0.0
+        return df
+
+    industry_mean = train_df.groupby("industry_code")["closure_rate_lag1"].mean()
+    global_mean = float(train_df["closure_rate_lag1"].mean())
+
+    df = df.copy()
+    df["_industry_mean_lag1"] = df["industry_code"].map(industry_mean).fillna(global_mean)
+    df["dong_closure_rate_residual_lag1"] = df["closure_rate_lag1"].fillna(0) - df["_industry_mean_lag1"]
+    df = df.drop(columns=["_industry_mean_lag1"])
+    return df
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
@@ -150,6 +187,8 @@ LGBM_FEATURES = [
     "adstrd_flpop",  # 행정동 전체 유동인구
     # A-2 Stage 1 hierarchical (2026-05-01) — Wolpert 1992 two-stage stacking
     "industry_prior_pred",  # industry-level prior model 예측 (broadcast per (industry, quarter))
+    # B-3 dong residual (2026-05-01) — Gelman & Hill 2006 hierarchical regression
+    "dong_closure_rate_residual_lag1",  # closure_rate_lag1 - industry mean (train fit)
     # B-1 신규 8 derivation (2026-05-01) — production rollback (commit 9b09cd1)
     # AUC -0.024 degradation 으로 LGBM 입력 미사용. derivation 코드는 _engineer_lag_features
     # 에 보존되어 미래 sprint (B-2 spillover, B-3 hierarchical) 와 결합 시 활용 가능.

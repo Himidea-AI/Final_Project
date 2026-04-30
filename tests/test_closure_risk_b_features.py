@@ -101,12 +101,13 @@ def test_open_close_ratio_handles_zero_close():
 
 
 def test_LGBM_FEATURES_count_after_b1_rollback():
-    """B-1 rollback + A-2 Stage 1 추가 후 LGBM_FEATURES = 16.
+    """B-1 rollback + A-2 Stage 1 + B-3 dong residual 추가 후 LGBM_FEATURES = 17.
 
     B-1 rollback: 신규 8 feature 제거 (15 baseline 유지).
-    A-2 Stage 1: industry_prior_pred 1개 추가 → 15 + 1 = 16.
+    A-2 Stage 1: industry_prior_pred 1개 추가 → 16.
+    B-3: dong_closure_rate_residual_lag1 1개 추가 → 17.
     """
-    assert len(LGBM_FEATURES) == 16, f"LGBM_FEATURES 길이 mismatch: {len(LGBM_FEATURES)}"
+    assert len(LGBM_FEATURES) == 17, f"LGBM_FEATURES 길이 mismatch: {len(LGBM_FEATURES)}"
     # B-1 신규 8 feature 는 LGBM_FEATURES 에 없어야 함 (rollback 유지)
     b1_cols = {
         "weekday_sales_yoy",

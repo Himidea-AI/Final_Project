@@ -61,6 +61,9 @@ DEFAULT_CONFIG: dict = {
     # degradation + threshold collapse (danger==caution) 로 rollback. 코드는 보존되어 미래
     # 변형 (Platt scaling, CV calibration 등) 또는 데이터 추가 후 재시도 가능.
     "enable_d3_calibration": False,
+    # B-3 dong residual feature (2026-05-01) — hierarchical-grounded residual 추가
+    # T2 retrain 결과로 keep/rollback 결정 (cfg flag 로 toggle)
+    "enable_b3_dong_residual": True,
     # 저장 경로
     "tcn_weights_path": str(WEIGHTS_DIR / "closure_risk_tcn.pt"),
     "tcn_scaler_path": str(WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"),
@@ -421,6 +424,19 @@ def train(config: dict | None = None) -> None:
     with open(stage1_path, "wb") as f:
         pickle.dump({"model": stage1_model, "agg": stage1_agg}, f)
     logger.info("Stage 1 model 저장: %s", stage1_path)
+
+    # B-3 dong residual feature (2026-05-01) — train-only fit
+    if cfg.get("enable_b3_dong_residual", True):
+        from models.closure_risk.data_prep import add_dong_residual_feature
+
+        df_labeled = add_dong_residual_feature(df_labeled, train_quarters)
+        logger.info(
+            "B-3 dong residual 추가. range=[%.4f, %.4f]",
+            float(df_labeled["dong_closure_rate_residual_lag1"].min()),
+            float(df_labeled["dong_closure_rate_residual_lag1"].max()),
+        )
+    else:
+        logger.info("B-3 dong residual disabled (cfg.enable_b3_dong_residual=False)")
 
     # 4. label 적용 후 split 별 row 재추출
     train_df = df_labeled[df_labeled["quarter"].isin(train_quarters)].copy()
