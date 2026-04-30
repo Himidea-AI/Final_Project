@@ -469,12 +469,64 @@ def train(config: dict | None = None) -> None:
         plot_path=cfg["calibration_plot_path"],
     )
 
+    if test_metrics:
+        logger.info(
+            "최종 ensemble val_AUC=%.4f / test_AUC=%.4f (split=%s)",
+            val_metrics["ensemble"]["auc"],
+            test_metrics["ensemble"]["auc"],
+            cfg["split_strategy"],
+        )
+    else:
+        logger.info(
+            "최종 ensemble val_AUC=%.4f / test_AUC=N/A (split=%s)",
+            val_metrics["ensemble"]["auc"],
+            cfg["split_strategy"],
+        )
+
+    logger.info("=" * 70)
+    logger.info("학습 완료 — closure_risk 모델 (split=%s)", cfg["split_strategy"])
+    logger.info("=" * 70)
+    if cfg["split_strategy"] == "time":
+        logger.info(
+            "Train quarters: %s ~ %s (%d개)",
+            train_df["quarter"].min(),
+            train_df["quarter"].max(),
+            train_df["quarter"].nunique(),
+        )
+        logger.info(
+            "Val quarters:   %s ~ %s (%d개)",
+            val_df["quarter"].min(),
+            val_df["quarter"].max(),
+            val_df["quarter"].nunique(),
+        )
+        if len(test_df) > 0:
+            logger.info(
+                "Test quarters:  %s ~ %s (%d개)",
+                test_df["quarter"].min(),
+                test_df["quarter"].max(),
+                test_df["quarter"].nunique(),
+            )
     logger.info(
-        "최종 ensemble val_AUC=%.4f / test_AUC=%.4f (split=%s)",
+        "Val  metrics — ensemble: AUC=%.4f, PR-AUC=%.4f, P@10=%.3f, R@10=%.3f, Brier=%.4f",
         val_metrics["ensemble"]["auc"],
-        (test_metrics["ensemble"]["auc"] if test_metrics else 0.0),
-        cfg["split_strategy"],
+        val_metrics["ensemble"]["pr_auc"],
+        val_metrics["ensemble"]["p_at_k"],
+        val_metrics["ensemble"]["r_at_k"],
+        val_metrics["ensemble"]["brier"],
     )
+    if test_metrics:
+        logger.info(
+            "Test metrics — ensemble: AUC=%.4f, PR-AUC=%.4f, P@10=%.3f, R@10=%.3f, Brier=%.4f",
+            test_metrics["ensemble"]["auc"],
+            test_metrics["ensemble"]["pr_auc"],
+            test_metrics["ensemble"]["p_at_k"],
+            test_metrics["ensemble"]["r_at_k"],
+            test_metrics["ensemble"]["brier"],
+        )
+    else:
+        logger.info("Test metrics — N/A (split=random)")
+    logger.info("Metrics JSON: %s", cfg["metrics_path"])
+    logger.info("Calibration plot: %s", cfg["calibration_plot_path"])
 
 
 if __name__ == "__main__":
