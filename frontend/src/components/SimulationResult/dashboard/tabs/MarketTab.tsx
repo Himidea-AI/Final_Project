@@ -18,7 +18,6 @@ import { FlowVsRevenueScatter } from '../charts/FlowVsRevenueScatter';
 import { DifferentiationCard } from '../charts/DifferentiationCard';
 import { CannibalizationDistanceChart } from '../charts/CannibalizationDistanceChart';
 import { IndustryClosureTrendCard } from '../charts/IndustryClosureTrendCard';
-import { EmergingSignalCard } from '../charts/EmergingSignalCard';
 
 interface Props {
   simResult: SimulationOutput;
@@ -158,9 +157,6 @@ export function MarketTab({ simResult }: Props) {
           </div>
         );
       })()}
-
-      {/* ═══ [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder) ═══ */}
-      <EmergingSignalCard signal={simResult.emerging_signal ?? null} />
 
       {/* ═══ Scatter: 유동인구 × 매출 상관 (가이드 #8) ═══ */}
       <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
