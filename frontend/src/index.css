@@ -3,8 +3,14 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   SPOTTER Design System — Indigo & Stone Theme (Tailwind v3)
-   v4.2 (2026-04-23) — #0C0B0A high-end dark 전역 전환
+   SPOTTER Design System — Light Mode (Tailwind v3)
+   v5.0 (2026-04-30) — Cream + 12-color palette 전역 전환
+   ───────────────────────────────────────────────────────
+   두 시스템 분리:
+   • System A — 배경/구조 6색 (warm-white / cream / black 라이트 인프라)
+       어떤 의미도 없는 중립. 라이트모드 정체성을 만드는 뼈대.
+   • System B — 12색 컬러 팔레트 (모든 유의미한 색 — 데이터/상태/액센트/장식)
+       외부에서 한 색도 안 가져옴. 새 컴포넌트는 무조건 12색 안에서만 매핑.
    ═══════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════
@@ -19,26 +25,70 @@ html {
 
 @layer base {
   :root {
-    --background: #0c0b0a;
-    --foreground: #e2e8f0;
-    --card: #1a1a1a;
-    --card-foreground: #e2e8f0;
-    --popover: #1a1a1a;
-    --popover-foreground: #e2e8f0;
-    --primary: #818cf8;
-    --primary-foreground: #0c0b0a;
-    --secondary: #292524;
-    --secondary-foreground: #d6d3d1;
-    --muted: #1a1a1a;
-    --muted-foreground: #a8a29e;
-    --accent: #44403c;
-    --accent-foreground: #d6d3d1;
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-    --border: #292524;
-    --input: #292524;
-    --ring: #818cf8;
+    /* ─── System A: 배경/구조 (의미 없는 중립 인프라) ─── */
+    --background: #faf9f5; /* warm-white page */
+    --foreground: #0a0a0a; /* near-black body text */
+    --card: #ffffff; /* 데이터 표면 */
+    --card-foreground: #0a0a0a;
+    --popover: #ffffff;
+    --popover-foreground: #0a0a0a;
+    --secondary: #f5f4ee; /* sidebar / nav rail */
+    --secondary-foreground: #0a0a0a;
+    --muted: #f5f4ee;
+    --muted-foreground: #6b6a63;
+    --border: #eae9e1;
+    --input: #ffffff;
     --radius: 1.25rem;
+
+    /* ─── System B: 12색 팔레트 ─── */
+    /* Base */
+    --color-cream: #f8f7e8; /* Background Cream — 큰 면적 장식 자리 */
+    --color-text-black: #000000; /* Text Black */
+    /* Point */
+    --color-starburst-pink: #ff78b9; /* Starburst Pink */
+    --color-deep-blue: #002cd1; /* Deep Blue (brand primary) */
+    /* Geometric */
+    --color-vivid-red: #ff3800;
+    --color-bright-cyan: #00e0d1;
+    --color-sunshine-yellow: #ffde00;
+    --color-teal-green: #00ba7a;
+    --color-hot-pink: #ff0070;
+    /* Shapes */
+    --color-soft-orange: #ff7940;
+    --color-light-pink: #ffb6d0;
+    --color-vibrant-purple: #b35cff;
+
+    /* ─── Brand & semantic — 12색 alias ─── */
+    --primary: var(--color-deep-blue);
+    --primary-foreground: #ffffff;
+    --accent: var(--color-cream); /* large-area accent slot */
+    --accent-foreground: #0a0a0a;
+    --destructive: var(--color-vivid-red);
+    --destructive-foreground: #ffffff;
+    --ring: var(--color-deep-blue);
+
+    /* Status */
+    --success: var(--color-teal-green);
+    --success-foreground: #ffffff;
+    --warning: var(--color-soft-orange);
+    --warning-foreground: #ffffff;
+    --danger: var(--color-vivid-red);
+    --danger-foreground: #ffffff;
+
+    /* Chart 4색 (4동 비교 — chart-1 = 본인 동, primary와 동일) */
+    --chart-1: var(--color-deep-blue);
+    --chart-2: var(--color-vivid-red);
+    --chart-3: var(--color-teal-green);
+    --chart-4: var(--color-vibrant-purple);
+
+    /* Decoration (큰 면적 장식 only — 작은 마커/얇은 선/텍스트 사용 금지)
+       이 4색은 라이트 배경에서 컨트라스트 1.2~1.5:1 → 데이터 자리 부적격 */
+    --decor-cyan: var(--color-bright-cyan);
+    --decor-yellow: var(--color-sunshine-yellow);
+    --decor-light-pink: var(--color-light-pink);
+    --decor-hot-pink: var(--color-hot-pink);
+    --decor-starburst-pink: var(--color-starburst-pink);
+    --decor-cream: var(--color-cream);
   }
 }
 
