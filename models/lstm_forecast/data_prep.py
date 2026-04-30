@@ -251,6 +251,43 @@ def load_store_data(
     return df
 
 
+def load_timeseries(
+    db_url: str = DB_URL,
+    dong_prefix: str | None = None,
+) -> pd.DataFrame:
+    """load_sales_data + load_store_data + build_timeseries 를 합쳐서 캐싱한다.
+
+    build_timeseries 내부에서 seoul_golmok_rent / holiday_calendar /
+    load_adstrd_flpop 등 추가 DB 쿼리가 발생하므로, 결과 전체를 TTL 캐시로
+    보관해 반복 호출 오버헤드를 제거한다.
+
+    Parameters
+    ----------
+    db_url : str
+        PostgreSQL 접속 URL.
+    dong_prefix : str, optional
+        행정동 코드 접두사 필터 (예: '11440' = 마포구).
+
+    Returns
+    -------
+    pd.DataFrame
+        build_timeseries 결과 (dong_code, industry_code, quarter, features).
+    """
+    _ts_key = ("ts", db_url, str(dong_prefix))
+    if _ts_key in _DATA_CACHE:
+        _cached_ts, _cached_time = _DATA_CACHE[_ts_key]
+        if time.monotonic() - _cached_time < _CACHE_TTL:
+            logger.debug("캐시 히트 — timeseries (%s)", dong_prefix)
+            return _cached_ts.copy()
+
+    sales_df = load_sales_data(db_url=db_url, dong_prefix=dong_prefix)
+    store_df = load_store_data(db_url=db_url, dong_prefix=dong_prefix)
+    ts = build_timeseries(sales_df, store_df)
+    _DATA_CACHE[_ts_key] = (ts, time.monotonic())
+    logger.info("timeseries 빌드 완료 → 캐시 저장 (%s, %d rows)", dong_prefix, len(ts))
+    return ts.copy()
+
+
 def load_adstrd_flpop(
     db_url: str = DB_URL,
     dong_prefix: str | None = None,
