@@ -232,11 +232,12 @@ _TCN_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
 }
 
 
-def _generate_tcn_summary(feature_importance: list[dict], top_n: int = 3, threshold: float = 0.005) -> list[str]:
+def _generate_tcn_summary(feature_importance: list[dict], top_n: int = 3, threshold: float = 10_000.0) -> list[str]:
     """TCN SHAP 결과를 자연어 문장으로 요약한다.
 
     feature_importance는 abs_shap 내림차순으로 정렬된 상태여야 한다.
-    abs_shap >= threshold인 상위 top_n개 피처에 대해서만 문장을 생성한다.
+    abs_shap >= threshold(원 단위)인 상위 top_n개 피처에 대해서만 문장을 생성한다.
+    threshold 기본값 10,000원 — 1만원 미만 기여도는 요약 제외.
     """
     sentences = []
     for item in feature_importance[:top_n]:
@@ -474,6 +475,27 @@ def explain_tcn_prediction(
     shap_array = shap_array[:n_feats]
     feature_cols = feature_cols[:n_feats]
 
+    # ---- 7.5) SHAP 값을 원(₩) 단위로 변환 ----
+    # 모델 출력은 StandardScaler(log1p(revenue)) 공간이므로 shap_value가 수십만~수억 원이 아닌
+    # ±0.001~±1.0 수준의 스케일링된 값으로 반환됨.
+    # UI formatKrw()는 원 단위를 기대하므로, predicted_value - base_value_won 비율로 선형 스케일링.
+    # sum(shap_won) = predicted_value - base_value_won 가산성 보존.
+    try:
+        base_log = tgt_scaler.inverse_transform([[base_value]])[0][0]
+        base_value_won = float(np.expm1(base_log))
+        base_value_won = max(0.0, base_value_won)
+        delta_won = predicted_value - base_value_won
+        shap_sum = float(np.sum(shap_array))
+        if abs(shap_sum) > 1e-10:
+            shap_array = shap_array * (delta_won / shap_sum)
+        else:
+            shap_array = np.zeros_like(shap_array)
+        base_value = base_value_won
+        _log("INFO", f"SHAP 원 단위 변환: base={base_value_won:,.0f}원, delta={delta_won:,.0f}원")
+    except Exception as _e:
+        _log("WARNING", f"SHAP 원 단위 변환 실패 - raw 값 유지: {_e}")
+        base_value = 0.0
+
     # ---- 8) 피처별 기여도 정렬 (절댓값 내림차순) ----
     sorted_indices = np.argsort(-np.abs(shap_array))
     feature_importance = [
@@ -481,8 +503,8 @@ def explain_tcn_prediction(
             "rank": rank + 1,
             "feature": feature_cols[i],
             "feature_ko": _TCN_FEATURE_KO.get(feature_cols[i], feature_cols[i]),
-            "shap_value": round(float(shap_array[i]), 6),
-            "abs_shap": round(float(abs(shap_array[i])), 6),
+            "shap_value": round(float(shap_array[i]), 2),
+            "abs_shap": round(float(abs(shap_array[i])), 2),
             # 기여 방향: 매출을 높이면 positive, 낮추면 negative
             "direction": "positive" if shap_array[i] > 0 else ("negative" if shap_array[i] < 0 else "neutral"),
         }
@@ -493,7 +515,7 @@ def explain_tcn_prediction(
 
     return {
         "feature_importance": feature_importance,
-        "base_value": round(base_value, 6),
+        "base_value": round(base_value, 2),
         "predicted_value": round(predicted_value, 2),
         "predicted_value_unit": "원",  # 매출 단위 명시 (생존률과 구별)
         "summary": _generate_tcn_summary(feature_importance),
