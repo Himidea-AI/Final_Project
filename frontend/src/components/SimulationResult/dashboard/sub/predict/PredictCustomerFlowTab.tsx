@@ -43,7 +43,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
 
     return (
       <div className="space-y-6">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest">
+        <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest">
           동별 유동인구 피크 / 고객 세그먼트
         </h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -53,18 +53,22 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
             return (
               <div
                 key={p.district}
-                className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-4 space-y-3"
+                className="bg-card border border-border rounded-3xl p-4 space-y-3"
               >
-                <div className="text-xs font-bold text-stone-300">{p.district}</div>
+                <div className="text-xs font-bold text-foreground">{p.district}</div>
                 {livingPop ? (
                   <PeakHourCard data={livingPop} />
                 ) : (
-                  <div className="text-[0.625rem] text-stone-500">유동인구 데이터 미수신</div>
+                  <div className="text-[0.625rem] text-muted-foreground">
+                    유동인구 데이터 미수신
+                  </div>
                 )}
                 {segment ? (
                   <CustomerSegmentCard segment={segment} />
                 ) : (
-                  <div className="text-[0.625rem] text-stone-500">고객 세그먼트 데이터 미수신</div>
+                  <div className="text-[0.625rem] text-muted-foreground">
+                    고객 세그먼트 데이터 미수신
+                  </div>
                 )}
               </div>
             );
@@ -81,10 +85,10 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
   if (!hasLivingPop) {
     return (
       <div className="space-y-6">
-        <div className="rounded-3xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center">
-          <Activity className="mx-auto text-stone-600 mb-2" size={22} />
-          <p className="text-xs text-stone-500">유동인구 피크 시간 예측 데이터 없음</p>
-          <p className="mt-1 text-[0.625rem] text-stone-600">
+        <div className="rounded-3xl border border-dashed border-border bg-card p-6 text-center">
+          <Activity className="mx-auto text-muted-foreground mb-2" size={22} />
+          <p className="text-xs text-muted-foreground">유동인구 피크 시간 예측 데이터 없음</p>
+          <p className="mt-1 text-[0.625rem] text-muted-foreground">
             living_pop_forecast (TCN) 모델 호출 실패 시 표시됩니다
           </p>
         </div>

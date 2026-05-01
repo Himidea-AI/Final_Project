@@ -46,7 +46,7 @@ export function HistoryDashboardView({
     <button
       type="button"
       onClick={() => setView('hub')}
-      className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-xs font-bold uppercase tracking-widest text-stone-500 transition-colors hover:text-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
+      className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-xs font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
     >
       <ArrowLeft className="h-3.5 w-3.5" />
       Hub

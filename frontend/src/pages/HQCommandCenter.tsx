@@ -38,6 +38,7 @@ import {
   BarChart3,
   Zap,
   ChevronDown,
+  ChevronRight,
   Trash2,
   Pencil,
   AlertTriangle,
@@ -122,26 +123,28 @@ function MasterCommandCenter() {
   };
 
   return (
-    <div className="absolute inset-0 z-20 flex bg-[#1e1b18] text-[#e2e8f0] font-sans overflow-hidden select-none">
+    <div className="absolute inset-0 z-20 flex bg-card text-foreground font-sans overflow-hidden select-none pt-20">
       {/* ==========================================
-          좌측 사이드바 (LNB)
+          좌측 사이드바 (LNB) — bg-muted (cream zone, 메인 bg-card 와 hue 분리).
+          외곽 pt-20 으로 LNB가 App 헤더(80px) 아래에서 시작 → cream이 헤더 영역으로 안 새어남.
           ========================================== */}
-      <div className="w-64 bg-[#2c2825] border-r border-[#3a3633] flex flex-col z-20 shrink-0">
-        {/* 워크스페이스 로고 영역 — auth.user 기반 동적 */}
-        <div className="h-20 flex items-center px-6 border-b border-[#3a3633] gap-3 cursor-pointer group mt-24">
+      <div className="w-64 bg-muted border-r border-border flex flex-col z-20 shrink-0">
+        {/* 워크스페이스 로고 영역 — auth.user 기반 동적. font-size text-lg.
+            (mt-20 제거됨 — 외곽 pt-20 으로 통합) */}
+        <div className="h-20 flex items-center px-6 border-b border-border gap-3 cursor-pointer group">
           <BrandLogo
             name={user?.company_name || 'SPOTTER'}
             isUser={false}
-            className="w-8 h-8 text-xs rounded-lg shrink-0"
+            className="w-9 h-9 text-sm rounded-lg shrink-0"
           />
           <div className="flex flex-col min-w-0">
             <span
-              className="font-black text-sm text-[#e2e8f0] group-hover:text-[#818cf8] transition-colors truncate"
+              className="font-black text-lg text-foreground group-hover:text-primary transition-colors truncate leading-tight"
               title={user?.company_name || 'SPOTTER Workspace'}
             >
               {user?.company_name || 'SPOTTER Workspace'}
             </span>
-            <span className="text-[0.5625rem] text-[#9ca3af] font-mono tracking-widest uppercase">
+            <span className="text-[0.5625rem] text-muted-foreground font-mono tracking-widest uppercase">
               SPOTTER-HQ
             </span>
           </div>
@@ -149,7 +152,7 @@ function MasterCommandCenter() {
 
         {/* 메뉴 리스트 */}
         <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-2">
-          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-muted-foreground mb-2 tracking-widest">
             COMMAND CENTER
           </p>
 
@@ -179,7 +182,7 @@ function MasterCommandCenter() {
             label="내 시뮬 이력"
           />
 
-          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-muted-foreground mt-6 mb-2 tracking-widest">
             SETTINGS
           </p>
           <MenuButton
@@ -196,36 +199,47 @@ function MasterCommandCenter() {
           />
         </div>
 
-        {/* 하단 유저 프로필 — auth.user 기반 동적 (master / manager 분기) */}
-        <div className="p-4 border-t border-[#3a3633]">
-          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#1e1b18] cursor-pointer transition-colors">
+        {/* 하단 유저 프로필 — auth.user 기반 동적 (master / manager 분기).
+            T2 white card on LNB cream zone + chevron affordance + 클릭 시 mypage 메뉴로. */}
+        <div className="p-4">
+          <button
+            onClick={() => setActiveMenu('mypage')}
+            className="w-full bg-card rounded-xl shadow-md hover:shadow-lg p-3 flex items-center gap-3 cursor-pointer transition-all duration-200 group text-left"
+          >
             <BrandLogo
               name={user?.contact_name || '사용자'}
               isUser={true}
               tone="accent"
-              className="w-8 h-8 text-xs rounded-full shrink-0"
+              className="w-9 h-9 text-sm rounded-full shrink-0"
             />
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-xs font-bold text-[#e2e8f0] flex items-center gap-1.5">
-                <span className="truncate">{user?.contact_name || '사용자'}</span>
-                <span className="text-[0.5625rem] font-mono text-[#9ca3af] uppercase shrink-0">
-                  · {user?.role === 'manager' ? '매니저' : '팀장'}
+            <div className="flex flex-col min-w-0 flex-1 gap-0.5">
+              <span className="text-sm font-bold text-foreground truncate">
+                {user?.contact_name || '사용자'}
+              </span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[0.5625rem] font-bold text-primary uppercase tracking-wider shrink-0">
+                  {user?.role === 'manager' ? 'Manager' : 'Master'}
                 </span>
-              </span>
-              <span className="text-[0.625rem] text-[#818cf8] truncate">
-                {user?.role === 'manager' ? 'Regional Access' : `${user?.plan || 'Pro'} Plan`}
-              </span>
+                <span className="text-[0.5625rem] text-muted-foreground shrink-0">·</span>
+                <span className="text-[0.5625rem] text-muted-foreground truncate">
+                  {user?.role === 'manager'
+                    ? 'Regional Access'
+                    : `${user?.plan || 'Pro'} Plan`}
+                </span>
+              </div>
             </div>
-          </div>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
+          </button>
         </div>
       </div>
 
       {/* ==========================================
           우측 메인 콘텐츠 영역
           ========================================== */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#1e1b18]">
-        {/* 상단 툴바 */}
-        <header className="h-20 border-b border-[#3a3633] flex items-center justify-between px-8 bg-[#1e1b18]/80 backdrop-blur-md z-10 shrink-0 mt-24">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-card">
+        {/* 상단 툴바 — 좌측 LNB 회사명과 같은 높이.
+            (mt-20 제거됨 — 외곽 pt-20 으로 통합) */}
+        <header className="h-20 border-b border-border flex items-center justify-between px-8 bg-card/80 backdrop-blur-md z-10 shrink-0">
           <h2 className="text-lg font-bold flex items-center gap-2">
             {activeMenu === 'team' && '팀 및 권역 관리'}
             {activeMenu === 'pipeline' && '출점 파이프라인 보드'}
@@ -246,11 +260,11 @@ function MasterCommandCenter() {
                   }
                 }}
                 disabled={activeMenu === 'team' && isIssuing}
-                className="h-9 px-4 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                className="h-9 px-4 bg-primary hover:bg-primary text-primary-foreground text-xs font-bold rounded-full flex items-center gap-2 shadow-[0_0_15px_rgba(0,44,209,0.3)] hover:shadow-[0_0_20px_rgba(0,44,209,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {activeMenu === 'team' && isIssuing ? (
                   <>
-                    <div className="w-3.5 h-3.5 border-2 border-[#1e1b18]/40 border-t-[#1e1b18] rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
                     발급 중...
                   </>
                 ) : (
@@ -311,21 +325,24 @@ function MenuButton({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 group ${
+      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all duration-200 group ${
         active
-          ? 'bg-[#818cf8]/10 text-[#818cf8]'
-          : 'text-[#9ca3af] hover:bg-[#3a3633]/30 hover:text-[#e2e8f0]'
+          ? 'bg-card text-primary font-bold shadow-sm'
+          : 'text-muted-foreground hover:bg-card/70 hover:text-foreground'
       }`}
     >
       <div className="flex items-center gap-3">
         {icon}
-        <span className="text-xs font-medium">{label}</span>
+        <span className="text-xs">{label}</span>
       </div>
-      {badge && (
-        <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[0.5625rem] font-black flex items-center justify-center animate-pulse">
-          {badge}
-        </span>
-      )}
+      <div className="flex items-center gap-2">
+        {badge && (
+          <span className="w-4 h-4 rounded-full bg-danger text-white text-[0.5625rem] font-black flex items-center justify-center animate-pulse">
+            {badge}
+          </span>
+        )}
+        {active && !badge && <div className="w-1.5 h-1.5 bg-primary rounded-full" />}
+      </div>
     </button>
   );
 }
@@ -373,18 +390,18 @@ function RegionSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between bg-[#2c2825] border rounded-lg px-3.5 py-2.5 text-xs transition-colors ${
+        className={`w-full flex items-center justify-between bg-card border rounded-lg px-3.5 py-2.5 text-xs transition-colors ${
           open
-            ? 'border-[#818cf8] text-[#e2e8f0]'
+            ? 'border-primary text-foreground'
             : value
-              ? 'border-[#3a3633] text-[#e2e8f0] hover:border-[#818cf8]/50'
-              : 'border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50'
+              ? 'border-border text-foreground hover:border-primary/50'
+              : 'border-border text-muted-foreground hover:border-primary/50'
         }`}
       >
         <span className="font-medium">{value || placeholder}</span>
         <ChevronDown
           className={`w-3.5 h-3.5 transition-transform duration-200 ${
-            open ? 'rotate-180 text-[#818cf8]' : 'text-[#9ca3af]'
+            open ? 'rotate-180 text-primary' : 'text-muted-foreground'
           }`}
         />
       </button>
@@ -396,7 +413,7 @@ function RegionSelect({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15, ease: [0.19, 1, 0.22, 1] }}
-            className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 origin-top bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl overflow-hidden"
+            className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 origin-top bg-card border border-border rounded-lg shadow-2xl overflow-hidden"
           >
             <ul className="max-h-60 overflow-y-auto custom-scrollbar py-1">
               {options.map((opt) => {
@@ -411,8 +428,8 @@ function RegionSelect({
                       }}
                       className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
                         selected
-                          ? 'bg-[#818cf8]/10 text-[#818cf8] font-bold'
-                          : 'text-[#e2e8f0] hover:bg-[#2c2825]'
+                          ? 'bg-primary/10 text-primary font-bold'
+                          : 'text-foreground hover:bg-card'
                       }`}
                     >
                       <span>{opt}</span>
@@ -500,7 +517,7 @@ function ManagerActionsMenu({
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-[#9ca3af] hover:text-[#818cf8] transition-colors p-1 rounded hover:bg-[#1e1b18]"
+        className="text-muted-foreground hover:text-primary transition-colors p-1 rounded hover:bg-card"
       >
         <MoreVertical className="w-5 h-5 ml-auto" />
       </button>
@@ -521,7 +538,7 @@ function ManagerActionsMenu({
                 left: position.left,
                 width: MENU_WIDTH,
               }}
-              className="z-[1000] origin-top-right bg-[#1e1b18] border border-[#3a3633] rounded-lg shadow-2xl overflow-hidden"
+              className="z-[1000] origin-top-right bg-card border border-border rounded-lg shadow-2xl overflow-hidden"
             >
               <ul className="py-1">
                 <li>
@@ -531,20 +548,20 @@ function ManagerActionsMenu({
                       onReassign();
                       setOpen(false);
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs text-[#e2e8f0] hover:bg-[#2c2825] flex items-center gap-2.5 transition-colors"
+                    className="w-full text-left px-3.5 py-2 text-xs text-foreground hover:bg-card flex items-center gap-2.5 transition-colors"
                   >
-                    <Pencil className="w-3.5 h-3.5 text-[#818cf8]" />
+                    <Pencil className="w-3.5 h-3.5 text-primary" />
                     담당 권역 변경
                   </button>
                 </li>
-                <li className="border-t border-[#3a3633]">
+                <li className="border-t border-border">
                   <button
                     type="button"
                     onClick={() => {
                       onDelete();
                       setOpen(false);
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2.5 transition-colors"
+                    className="w-full text-left px-3.5 py-2 text-xs text-danger hover:bg-danger/10 flex items-center gap-2.5 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     매니저 제거 (퇴사)
@@ -607,21 +624,21 @@ function ReassignRegionModal({
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md bg-[#2c2825] border border-[#3a3633] rounded-2xl shadow-2xl overflow-hidden"
+          className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
         >
-          <div className="px-6 py-5 border-b border-[#3a3633]">
-            <h3 className="text-sm font-black text-white flex items-center gap-2">
-              <Pencil className="w-4 h-4 text-[#818cf8]" />
+          <div className="px-6 py-5 border-b border-border">
+            <h3 className="text-sm font-black text-foreground flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-primary" />
               담당 권역 변경
             </h3>
-            <p className="text-[0.6875rem] text-[#9ca3af] mt-1">
+            <p className="text-[0.6875rem] text-muted-foreground mt-1">
               {manager.contact_name} 매니저의 담당 구/행정동을 변경합니다.
             </p>
           </div>
 
           <div className="p-6 space-y-4">
             <div>
-              <label className="text-[0.625rem] text-[#9ca3af] uppercase tracking-wider font-bold block mb-2">
+              <label className="text-[0.625rem] text-muted-foreground uppercase tracking-wider font-bold block mb-2">
                 담당 구
               </label>
               <RegionSelect
@@ -637,7 +654,9 @@ function ReassignRegionModal({
 
             {gu && (
               <div>
-                <p className="text-[0.625rem] text-[#9ca3af] mb-2">{gu} 행정동 선택 (복수 가능)</p>
+                <p className="text-[0.625rem] text-muted-foreground mb-2">
+                  {gu} 행정동 선택 (복수 가능)
+                </p>
                 <div className="flex flex-wrap gap-1.5">
                   {REGION_DATA[gu]?.map((dong) => {
                     const selected = dongs.includes(dong);
@@ -648,8 +667,8 @@ function ReassignRegionModal({
                         onClick={() => toggleDong(dong)}
                         className={`px-2.5 py-1 rounded-full text-[0.625rem] font-medium border transition-all ${
                           selected
-                            ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                            : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                            ? 'bg-primary/15 border-primary text-primary'
+                            : 'bg-transparent border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
                         }`}
                       >
                         {dong}
@@ -658,7 +677,7 @@ function ReassignRegionModal({
                   })}
                 </div>
                 {dongs.length > 0 && (
-                  <p className="text-[0.625rem] text-[#818cf8] mt-2 font-mono">
+                  <p className="text-[0.625rem] text-primary mt-2 font-mono">
                     {dongs.length}개 동 선택됨
                   </p>
                 )}
@@ -666,12 +685,12 @@ function ReassignRegionModal({
             )}
           </div>
 
-          <div className="px-6 py-4 border-t border-[#3a3633] bg-[#1e1b18]/50 flex justify-end gap-2">
+          <div className="px-6 py-4 border-t border-border bg-card/50 flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
               disabled={isBusy}
-              className="px-4 py-2 text-xs font-bold text-[#9ca3af] hover:text-white transition-colors"
+              className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
             >
               취소
             </button>
@@ -679,11 +698,11 @@ function ReassignRegionModal({
               type="button"
               onClick={() => onSave(manager.id, gu || null, dongs.length ? dongs : null)}
               disabled={isBusy}
-              className="px-4 py-2 bg-[#818cf8] hover:bg-[#6366f1] text-[#1e1b18] text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(129,140,248,0.3)] hover:shadow-[0_0_20px_rgba(129,140,248,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-primary hover:bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(0,44,209,0.3)] hover:shadow-[0_0_20px_rgba(0,44,209,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isBusy ? (
                 <>
-                  <div className="w-3 h-3 border-2 border-[#1e1b18]/40 border-t-[#1e1b18] rounded-full animate-spin" />
+                  <div className="w-3 h-3 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
                   저장 중...
                 </>
               ) : (
@@ -725,36 +744,36 @@ function DeleteConfirmModal({
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-sm bg-[#2c2825] border border-[#3a3633] rounded-2xl shadow-2xl overflow-hidden"
+          className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
         >
-          <div className="px-6 py-5 border-b border-[#3a3633]">
-            <h3 className="text-sm font-black text-white flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-500" />
+          <div className="px-6 py-5 border-b border-border">
+            <h3 className="text-sm font-black text-foreground flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-danger" />
               매니저 제거 (퇴사 처리)
             </h3>
           </div>
 
           <div className="p-6 space-y-3 text-sm">
-            <p className="text-[#e2e8f0]">
-              <span className="font-bold text-white">{manager.contact_name}</span>
-              <span className="text-[#9ca3af] text-xs"> ({manager.email})</span>
+            <p className="text-foreground">
+              <span className="font-bold text-foreground">{manager.contact_name}</span>
+              <span className="text-muted-foreground text-xs"> ({manager.email})</span>
               <br />
               매니저를 워크스페이스에서 제거하시겠습니까?
             </p>
-            <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-lg">
-              <p className="text-[0.6875rem] text-rose-400 leading-relaxed">
+            <div className="p-3 bg-danger/5 border border-danger/20 rounded-lg">
+              <p className="text-[0.6875rem] text-danger leading-relaxed">
                 해당 매니저는 즉시 비활성화되며 더 이상 로그인할 수 없습니다. 담당 권역 할당 정보는
                 보존되지만 복구하려면 재승인이 필요합니다.
               </p>
             </div>
           </div>
 
-          <div className="px-6 py-4 border-t border-[#3a3633] bg-[#1e1b18]/50 flex justify-end gap-2">
+          <div className="px-6 py-4 border-t border-border bg-card/50 flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
               disabled={isBusy}
-              className="px-4 py-2 text-xs font-bold text-[#9ca3af] hover:text-white transition-colors"
+              className="px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
             >
               취소
             </button>
@@ -762,7 +781,7 @@ function DeleteConfirmModal({
               type="button"
               onClick={() => onConfirm(manager.id)}
               disabled={isBusy}
-              className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-danger hover:bg-danger/90 text-white text-xs font-bold rounded-lg shadow-[0_0_15px_rgba(244,63,94,0.3)] hover:shadow-[0_0_20px_rgba(244,63,94,0.5)] transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isBusy ? (
                 <>
@@ -804,7 +823,7 @@ function PendingManagerCard({
   };
 
   return (
-    <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-5 shadow-lg shadow-rose-500/5">
+    <div className="bg-card rounded-xl p-5 shadow-md hover:shadow-lg transition-shadow">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
           <BrandLogo
@@ -815,17 +834,17 @@ function PendingManagerCard({
           />
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-base font-bold text-[#e2e8f0]">{manager.contact_name}</span>
-              <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded text-[0.5625rem] font-bold uppercase tracking-wider border border-rose-500/20">
+              <span className="text-base font-bold text-foreground">{manager.contact_name}</span>
+              <span className="px-1.5 py-0.5 bg-danger/10 text-danger rounded text-[0.5625rem] font-bold uppercase tracking-wider border border-danger/20">
                 Pending
               </span>
               {manager.position && (
-                <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[0.5625rem] font-bold uppercase tracking-wider">
+                <span className="px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-[0.5625rem] font-bold uppercase tracking-wider">
                   {manager.position}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 text-xs text-[#6b7280]">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="font-mono">{manager.email}</span>
               <span className="hidden sm:inline">·</span>
               <span className="hidden sm:inline">
@@ -844,7 +863,7 @@ function PendingManagerCard({
               )
             }
             disabled={isBusy}
-            className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50 disabled:cursor-wait"
+            className="p-2 bg-success/10 text-success hover:bg-success hover:text-white rounded-lg transition-colors border border-success/20 disabled:opacity-50 disabled:cursor-wait"
             title="승인"
           >
             <CheckCircle2 className="w-5 h-5" />
@@ -852,7 +871,7 @@ function PendingManagerCard({
           <button
             onClick={() => onReject(manager.id)}
             disabled={isBusy}
-            className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50 disabled:cursor-wait"
+            className="p-2 bg-danger/10 text-danger hover:bg-danger hover:text-white rounded-lg transition-colors border border-danger/20 disabled:opacity-50 disabled:cursor-wait"
             title="거절"
           >
             <XCircle className="w-5 h-5" />
@@ -861,8 +880,8 @@ function PendingManagerCard({
       </div>
 
       {/* 구 → 동 선택 */}
-      <div className="bg-[#1e1b18] border border-[#3a3633] rounded-lg p-4">
-        <p className="text-[0.625rem] text-[#9ca3af] uppercase tracking-wider font-bold mb-3">
+      <div className="bg-card border border-border rounded-lg p-4">
+        <p className="text-[0.625rem] text-muted-foreground uppercase tracking-wider font-bold mb-3">
           담당 권역 할당
         </p>
         <div className="mb-3">
@@ -879,7 +898,7 @@ function PendingManagerCard({
 
         {pendingGu && (
           <div>
-            <p className="text-[0.625rem] text-[#9ca3af] mb-2">
+            <p className="text-[0.625rem] text-muted-foreground mb-2">
               {pendingGu} 행정동 선택 (복수 가능)
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -891,8 +910,8 @@ function PendingManagerCard({
                     onClick={() => toggleDong(dong)}
                     className={`px-2.5 py-1 rounded-full text-[0.625rem] font-medium border transition-all ${
                       selected
-                        ? 'bg-[#818cf8]/15 border-[#818cf8] text-[#818cf8]'
-                        : 'bg-transparent border-[#3a3633] text-[#9ca3af] hover:border-[#818cf8]/50 hover:text-[#e2e8f0]'
+                        ? 'bg-primary/15 border-primary text-primary'
+                        : 'bg-transparent border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
                     }`}
                   >
                     {dong}
@@ -901,7 +920,7 @@ function PendingManagerCard({
               })}
             </div>
             {pendingDongs.length > 0 && (
-              <p className="text-[0.625rem] text-[#818cf8] mt-2 font-mono">
+              <p className="text-[0.625rem] text-primary mt-2 font-mono">
                 {pendingDongs.length}개 동 선택됨: {pendingDongs.join(', ')}
               </p>
             )}
@@ -1064,25 +1083,27 @@ function TeamManagementView({
         <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${
-              pending.length > 0 ? 'bg-rose-500 animate-pulse' : 'bg-[#404040]'
+              pending.length > 0 ? 'bg-danger animate-pulse' : 'bg-muted'
             }`}
           />
           승인 대기 중인 매니저 ({pending.length})
         </h3>
 
         {isLoading && managers.length === 0 ? (
-          <div className="bg-[#2c2825] border border-[#3a3633] rounded-xl p-10 flex items-center justify-center">
-            <div className="w-5 h-5 border-2 border-[#3a3633] border-t-[#818cf8] rounded-full animate-spin" />
+          <div className="bg-card rounded-xl p-10 shadow-md flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-border border-t-primary rounded-full animate-spin" />
           </div>
         ) : pending.length === 0 ? (
-          <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-8 flex flex-col items-center justify-center text-center">
-            <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
-              <ShieldAlert className="w-5 h-5 text-[#6b7280]" />
+          <div className="bg-card border border-dashed border-border rounded-xl p-8 flex flex-col items-center justify-center text-center">
+            <div className="w-10 h-10 rounded-full bg-card flex items-center justify-center mb-3">
+              <ShieldAlert className="w-5 h-5 text-muted-foreground" />
             </div>
-            <p className="text-sm font-bold text-[#a3a3a3] mb-1">대기 중인 요청이 없습니다.</p>
-            <p className="text-xs text-[#6b7280]">
-              우측 상단의 <span className="text-[#818cf8] font-bold">초대코드 발급</span> 버튼을
-              눌러 팀원을 초대하세요.
+            <p className="text-sm font-bold text-muted-foreground mb-1">
+              대기 중인 요청이 없습니다.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              우측 상단의 <span className="text-primary font-bold">초대코드 발급</span> 버튼을 눌러
+              팀원을 초대하세요.
             </p>
           </div>
         ) : (
@@ -1103,7 +1124,7 @@ function TeamManagementView({
       {/* 2. 활성 멤버 리스트 (Card List — v12.3 + 정렬 필터) */}
       <section>
         <div className="flex items-center justify-between mb-4 gap-3">
-          <h3 className="text-sm font-bold text-[#e2e8f0]">
+          <h3 className="text-sm font-bold text-foreground">
             활성 워크스페이스 멤버 ({active.length})
           </h3>
           {active.length > 1 && (
@@ -1119,10 +1140,10 @@ function TeamManagementView({
         </div>
 
         {active.length === 0 ? (
-          <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-10 flex flex-col items-center justify-center text-center">
-            <Users className="w-8 h-8 text-[#404040] mb-3" />
-            <p className="text-sm font-bold text-[#a3a3a3] mb-1">활성 멤버가 없습니다.</p>
-            <p className="text-xs text-[#6b7280]">
+          <div className="bg-card border border-dashed border-border rounded-xl p-10 flex flex-col items-center justify-center text-center">
+            <Users className="w-8 h-8 text-muted-foreground/60 mb-3" />
+            <p className="text-sm font-bold text-muted-foreground mb-1">활성 멤버가 없습니다.</p>
+            <p className="text-xs text-muted-foreground">
               위에서 승인 대기 중인 매니저를 승인하여 팀을 구성하세요.
             </p>
           </div>
@@ -1138,7 +1159,7 @@ function TeamManagementView({
               return (
                 <div
                   key={m.id}
-                  className="bg-[#1e1b18] border border-[#3a3633] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between hover:border-[#818cf8]/50 hover:bg-[#2c2825]/30 transition-all duration-300 group shadow-sm gap-4 md:gap-0"
+                  className="bg-card rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between transition-all duration-300 group shadow-md hover:shadow-lg gap-4 md:gap-0"
                 >
                   {/* Left: Avatar + Info */}
                   <div className="flex items-center gap-4">
@@ -1150,14 +1171,14 @@ function TeamManagementView({
                     />
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-bold text-white truncate">
+                        <span className="text-base font-bold text-foreground truncate">
                           {m.contact_name}
                         </span>
-                        <span className="px-1.5 py-0.5 bg-[#3a3633] text-[#a3a3a3] rounded text-[0.5625rem] font-bold uppercase tracking-wider shrink-0">
+                        <span className="px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-[0.5625rem] font-bold uppercase tracking-wider shrink-0">
                           {m.position || 'Regional Mgr'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-[#6b7280]">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="font-mono truncate">{m.email}</span>
                       </div>
                     </div>
@@ -1168,22 +1189,22 @@ function TeamManagementView({
                     {/* Assigned Region */}
                     <div className="flex flex-col items-start md:items-end gap-1.5">
                       {m.assigned_gu ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20 rounded-md text-[0.625rem] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary border border-primary/20 rounded-md text-[0.625rem] font-bold">
                           <MapPin className="w-3 h-3" />
                           {m.assigned_gu}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#3a3633]/50 text-[#a3a3a3] border border-[#3a3633] rounded-md text-[0.625rem] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-muted/50 text-muted-foreground border border-border rounded-md text-[0.625rem] font-bold">
                           <MapPin className="w-3 h-3" /> 미배정
                         </span>
                       )}
-                      <span className="text-[0.625rem] text-[#6b7280]">{dongSummary}</span>
+                      <span className="text-[0.625rem] text-muted-foreground">{dongSummary}</span>
                     </div>
 
                     {/* Activity Status (고정 Active) */}
                     <div className="w-20 flex justify-end shrink-0">
-                      <span className="flex items-center gap-1.5 text-xs text-emerald-500 font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="flex items-center gap-1.5 text-xs text-success font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                         Active
                       </span>
                     </div>
@@ -1229,22 +1250,22 @@ function PipelineKanbanView() {
   // 실데이터 원칙: 파이프라인 스테이지 테이블이 백엔드에 아직 없음
   // → mock 가맹점주/매출 숫자 전부 제거, 백엔드 스펙 명시한 empty state로 교체
   const stages = [
-    { title: '상권 분석 중', borderColor: 'border-[#3a3633]', titleColor: 'text-[#9ca3af]' },
-    { title: '임원 보고 대기', borderColor: 'border-amber-500/50', titleColor: 'text-amber-500' },
-    { title: '가맹점주 제안', borderColor: 'border-[#818cf8]/50', titleColor: 'text-[#818cf8]' },
-    { title: '출점 확정', borderColor: 'border-emerald-500/50', titleColor: 'text-emerald-500' },
+    { title: '상권 분석 중', borderColor: 'border-border', titleColor: 'text-muted-foreground' },
+    { title: '임원 보고 대기', borderColor: 'border-warning/50', titleColor: 'text-warning' },
+    { title: '가맹점주 제안', borderColor: 'border-primary/50', titleColor: 'text-primary' },
+    { title: '출점 확정', borderColor: 'border-success/50', titleColor: 'text-success' },
   ];
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      <div className="rounded-2xl border border-dashed border-amber-500/30 bg-amber-500/5 p-5">
+      <div className="rounded-2xl border border-dashed border-warning/30 bg-warning/5 p-5">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
+          <AlertTriangle className="h-5 w-5 text-warning mt-0.5 shrink-0" />
           <div className="flex-1">
-            <h4 className="text-sm font-bold text-amber-300 mb-1">
+            <h4 className="text-sm font-bold text-warning mb-1">
               출점 파이프라인 — 백엔드 연동 대기
             </h4>
-            <p className="text-xs text-amber-200/80 leading-relaxed">
+            <p className="text-xs text-warning/80 leading-relaxed">
               파이프라인 스테이지 테이블이 백엔드에 아직 구축되지 않아 칸반 표시 보류 중입니다.
               스펙이 정해지면 매니저가 저장한 시뮬레이션을 단계별로 드래그해 관리할 수 있습니다.
             </p>
@@ -1256,18 +1277,18 @@ function PipelineKanbanView() {
         {stages.map((col, idx) => (
           <div
             key={idx}
-            className={`flex-1 min-w-[240px] bg-[#2c2825]/40 border border-[#3a3633] rounded-2xl flex flex-col overflow-hidden border-t-2 ${col.borderColor}`}
+            className={`flex-1 min-w-[240px] bg-card/40 border border-border rounded-2xl flex flex-col overflow-hidden border-t-2 ${col.borderColor}`}
           >
-            <div className="p-4 border-b border-[#3a3633]/50 flex justify-between items-center bg-[#1e1b18]/30">
+            <div className="p-4 border-b border-border/50 flex justify-between items-center bg-card/30">
               <h4 className={`text-xs font-bold uppercase tracking-wider ${col.titleColor}`}>
                 {col.title}
               </h4>
-              <span className="w-5 h-5 rounded-full bg-[#1e1b18] flex items-center justify-center text-[0.625rem] font-bold text-stone-600 border border-[#3a3633]">
+              <span className="w-5 h-5 rounded-full bg-card flex items-center justify-center text-[0.625rem] font-bold text-muted-foreground border border-border">
                 —
               </span>
             </div>
             <div className="flex-1 p-3 min-h-[140px] flex items-center justify-center">
-              <span className="text-[0.625rem] font-mono text-stone-600 tracking-widest uppercase">
+              <span className="text-[0.625rem] font-mono text-muted-foreground tracking-widest uppercase">
                 Awaiting backend
               </span>
             </div>
@@ -1289,7 +1310,7 @@ function BrandSettingsView() {
 
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
-      <div className="flex items-center gap-1 p-1 bg-[#1e1b18] border border-[#3a3633] rounded-xl self-start">
+      <div className="flex items-center gap-1 p-1 bg-card border border-border rounded-xl self-start">
         <BrandSubTabButton
           active={tab === 'profile'}
           onClick={() => setTab('profile')}
@@ -1324,14 +1345,16 @@ function BrandSubTabButton({
       type="button"
       onClick={onClick}
       className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${
-        active ? 'bg-[#818cf8] text-[#1e1b18]' : 'text-[#9ca3af] hover:text-[#e2e8f0]'
+        active
+          ? 'bg-primary text-primary-foreground'
+          : 'text-muted-foreground hover:text-foreground'
       }`}
     >
       {label}
       {badge && (
         <span
           className={`text-[0.5625rem] font-mono px-1.5 py-0.5 rounded ${
-            active ? 'bg-[#1e1b18]/20 text-[#1e1b18]' : 'bg-[#818cf8]/10 text-[#818cf8]'
+            active ? 'bg-card/20 text-primary-foreground' : 'bg-primary/10 text-primary'
           }`}
         >
           {badge}
@@ -1393,22 +1416,22 @@ function BrandProfileView() {
   };
 
   return (
-    <div className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-6 relative overflow-hidden">
-      <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-[#818cf8] opacity-5 pointer-events-none" />
+    <div className="box-glass rounded-2xl p-6 relative overflow-hidden">
+      <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-primary opacity-5 pointer-events-none" />
 
       <div className="relative z-10">
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h3 className="text-lg font-bold text-[#e2e8f0] flex items-center gap-2 mb-1">
-              <Building2 className="w-5 h-5 text-[#818cf8]" /> 자사 브랜드 프로필
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-2 mb-1">
+              <Building2 className="w-5 h-5 text-primary" /> 자사 브랜드 프로필
             </h3>
-            <p className="text-xs text-[#9ca3af]">
+            <p className="text-xs text-muted-foreground">
               로그인 시 회사 마스터 데이터에서 불러온 기본 정보입니다. 수정은 본사 담당자 승인이
               필요해요.
             </p>
           </div>
           {user?.role === 'master' && (
-            <span className="text-[0.5625rem] font-mono text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/30 px-2 py-1 rounded-md uppercase tracking-widest">
+            <span className="text-[0.5625rem] font-mono text-primary bg-primary/10 border border-primary/30 px-2 py-1 rounded-md uppercase tracking-widest">
               Master
             </span>
           )}
@@ -1418,21 +1441,21 @@ function BrandProfileView() {
           {fields.map((f) => (
             <div
               key={f.label}
-              className="p-4 bg-[#1e1b18] border border-[#3a3633] rounded-xl flex flex-col gap-1"
+              className="p-4 bg-card border border-border rounded-xl flex flex-col gap-1"
             >
-              <span className="text-[0.625rem] font-bold text-[#9ca3af] uppercase tracking-widest">
+              <span className="text-[0.625rem] font-bold text-muted-foreground uppercase tracking-widest">
                 {f.label}
               </span>
-              <span className="text-lg font-black text-[#e2e8f0] tabular-nums">{f.value}</span>
-              {f.hint && <span className="text-[0.625rem] text-[#57534e]">{f.hint}</span>}
+              <span className="text-lg font-black text-foreground tabular-nums">{f.value}</span>
+              {f.hint && <span className="text-[0.625rem] text-muted-foreground/60">{f.hint}</span>}
             </div>
           ))}
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-[#e2e8f0] flex items-center justify-between">
+          <label className="text-xs font-bold text-foreground flex items-center justify-between">
             <span>브랜드 메모</span>
-            <span className="text-[0.625rem] font-normal text-[#57534e]">
+            <span className="text-[0.625rem] font-normal text-muted-foreground/60">
               이 브라우저에만 저장 · 팀 공유 X
             </span>
           </label>
@@ -1444,14 +1467,14 @@ function BrandProfileView() {
             }}
             rows={4}
             placeholder="예: 2026 Q3 신규 상권 서교/합정 우선 검토. 배달 채널 비중 높은 입지 선호."
-            className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg p-3 text-sm text-[#e2e8f0] placeholder-[#57534e] focus:border-[#818cf8] outline-none resize-none"
+            className="w-full bg-card border border-border rounded-lg p-3 text-sm text-foreground placeholder-muted-foreground/60 focus:border-primary outline-none resize-none"
           />
           <div className="flex justify-end">
             <button
               type="button"
               onClick={saveMemo}
               disabled={!memoDirty}
-              className="px-4 py-2 bg-[#818cf8] text-[#1e1b18] text-xs font-bold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#6366f1]"
+              className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary"
             >
               메모 저장
             </button>
@@ -1465,26 +1488,26 @@ function BrandProfileView() {
 /* ───── AI 튜닝 (Phase 2 로드맵 프리뷰) ───── */
 function BrandTuningPhase2View() {
   return (
-    <div className="bg-[#2c2825] border border-[#818cf8]/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(129,140,248,0.05)] relative overflow-hidden">
-      <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-[#818cf8] opacity-5 pointer-events-none" />
+    <div className="box-glass rounded-2xl p-6 relative overflow-hidden">
+      <Building2 className="absolute -right-10 -top-10 w-48 h-48 text-primary opacity-5 pointer-events-none" />
 
       <div className="relative z-10">
         <div className="flex items-start justify-between gap-4 mb-2">
-          <h3 className="text-lg font-bold text-[#818cf8] flex items-center gap-2">
+          <h3 className="text-lg font-bold text-primary flex items-center gap-2">
             <Zap className="w-5 h-5" /> Brand AI Weights
           </h3>
-          <span className="text-[0.625rem] font-mono text-[#f59e0b] bg-[#f59e0b]/10 border border-[#f59e0b]/30 px-2 py-1 rounded-md uppercase tracking-widest whitespace-nowrap">
+          <span className="text-[0.625rem] font-mono text-warning bg-warning/10 border border-warning/30 px-2 py-1 rounded-md uppercase tracking-widest whitespace-nowrap">
             Phase 2 · 2026 Q3
           </span>
         </div>
-        <p className="text-sm text-[#9ca3af] mb-4">
+        <p className="text-sm text-muted-foreground mb-4">
           우리 프랜차이즈의 특성을 입력하면 AI 예측 모델이 가중치로 반영해 맞춤형 매출/리스크를
           산출하는 기능입니다.
         </p>
 
-        <div className="flex items-start gap-2 mb-8 p-3 bg-[#f59e0b]/10 border border-[#f59e0b]/30 rounded-xl">
-          <AlertTriangle className="w-4 h-4 text-[#f59e0b] mt-0.5 shrink-0" />
-          <p className="text-[0.6875rem] text-[#f59e0b] leading-relaxed">
+        <div className="flex items-start gap-2 mb-8 p-3 bg-warning/10 border border-warning/30 rounded-xl">
+          <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+          <p className="text-[0.6875rem] text-warning leading-relaxed">
             <strong>로드맵 프리뷰입니다.</strong> 현재 입력값은 AI 모델에 반영되지 않습니다. 2026 Q3
             백엔드 가중치 API 구축 완료 후 정식 활성화됩니다.
           </p>
@@ -1493,55 +1516,55 @@ function BrandTuningPhase2View() {
         <fieldset disabled className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-60">
           {/* 객단가 (AOV) */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-[#e2e8f0]">예상 평균 객단가 (AOV)</label>
+            <label className="text-xs font-bold text-foreground">예상 평균 객단가 (AOV)</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af] font-bold">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
                 ₩
               </span>
               <input
                 type="text"
                 defaultValue="25,000"
-                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg pl-8 pr-4 py-2.5 text-sm font-mono text-[#e2e8f0] outline-none cursor-not-allowed"
+                className="w-full bg-card border border-border rounded-lg pl-8 pr-4 py-2.5 text-sm font-mono text-foreground outline-none cursor-not-allowed"
               />
             </div>
-            <p className="text-[0.625rem] text-[#9ca3af]">
+            <p className="text-[0.625rem] text-muted-foreground">
               유동인구 소비력 스코어 계산에 가중치로 작용합니다.
             </p>
           </div>
 
           {/* 타겟 연령층 */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-[#e2e8f0]">
+            <label className="text-xs font-bold text-foreground">
               핵심 타겟 고객층 (Primary Target)
             </label>
-            <select className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm font-medium text-[#e2e8f0] outline-none appearance-none cursor-not-allowed">
+            <select className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm font-medium text-foreground outline-none appearance-none cursor-not-allowed">
               <option value="2030f">2030 여성 (트렌드/디저트)</option>
               <option value="2030m">2030 남성/여성 (가성비/식사)</option>
               <option value="3040">3040 직장인 (회식/저녁)</option>
               <option value="family">주거 배후세대 (가족/배달)</option>
             </select>
-            <p className="text-[0.625rem] text-[#9ca3af]">
+            <p className="text-[0.625rem] text-muted-foreground">
               선택한 타겟층의 해당 상권 거주/유동 비율을 우선 분석합니다.
             </p>
           </div>
 
           {/* 배달 vs 홀 비중 슬라이더 */}
-          <div className="flex flex-col gap-4 md:col-span-2 mt-4 p-5 bg-[#1e1b18] border border-[#3a3633] rounded-xl">
+          <div className="flex flex-col gap-4 md:col-span-2 mt-4 p-5 bg-card border border-border rounded-xl">
             <div className="flex justify-between items-center">
-              <label className="text-xs font-bold text-[#e2e8f0]">매출 비중 (홀 vs 배달)</label>
-              <span className="text-xs font-mono font-bold text-[#818cf8]">홀 30% : 배달 70%</span>
+              <label className="text-xs font-bold text-foreground">매출 비중 (홀 vs 배달)</label>
+              <span className="text-xs font-mono font-bold text-primary">홀 30% : 배달 70%</span>
             </div>
 
-            <div className="relative w-full h-3 bg-[#3a3633] rounded-full overflow-hidden flex cursor-not-allowed">
-              <div className="h-full bg-[#3a3633]" style={{ width: '30%' }} />
-              <div className="h-full bg-[#818cf8]" style={{ width: '70%' }} />
+            <div className="relative w-full h-3 bg-muted rounded-full overflow-hidden flex cursor-not-allowed">
+              <div className="h-full bg-muted" style={{ width: '30%' }} />
+              <div className="h-full bg-primary" style={{ width: '70%' }} />
               <div
-                className="absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-[#818cf8]"
+                className="absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-primary"
                 style={{ left: 'calc(30% - 10px)' }}
               />
             </div>
 
-            <div className="flex justify-between text-[0.625rem] font-bold text-[#9ca3af]">
+            <div className="flex justify-between text-[0.625rem] font-bold text-muted-foreground">
               <span>Dine-in (입지/접근성 가중치 상승)</span>
               <span>Delivery (배후세대 가중치 상승)</span>
             </div>
@@ -1552,7 +1575,7 @@ function BrandTuningPhase2View() {
           <button
             type="button"
             disabled
-            className="px-6 py-2.5 bg-[#818cf8]/30 text-[#1e1b18]/60 text-sm font-bold rounded-lg cursor-not-allowed"
+            className="px-6 py-2.5 bg-primary/30 text-primary-foreground/60 text-sm font-bold rounded-lg cursor-not-allowed"
           >
             AI 모델 업데이트 적용 (Phase 2)
           </button>
@@ -1574,36 +1597,36 @@ function BillingManagementView() {
     <div className="flex flex-col gap-8 max-w-6xl">
       {/* 1. 현재 구독 & API 토큰 — 백엔드 연동 대기 */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-[#2c2825] border border-dashed border-amber-500/30 bg-amber-500/5 rounded-2xl p-6 flex flex-col justify-center gap-2">
+        <div className="bg-card border border-dashed border-warning/30 bg-warning/5 rounded-2xl p-6 flex flex-col justify-center gap-2">
           <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest">
+            <CreditCard className="w-4 h-4 text-warning" />
+            <h3 className="text-xs font-black text-warning uppercase tracking-widest">
               Current Plan
             </h3>
           </div>
-          <div className="text-2xl font-black text-stone-500">—</div>
-          <p className="text-[0.6875rem] text-amber-200/70 leading-relaxed">
+          <div className="text-2xl font-black text-muted-foreground">—</div>
+          <p className="text-[0.6875rem] text-warning/70 leading-relaxed">
             결제/구독 API 미구축. 스펙 확정 후 현재 요금제·결제 주기·수단이 표시됩니다.
           </p>
           <button
             type="button"
             onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
-            className="mt-2 w-full py-2 bg-[#1e1b18] text-stone-500 border border-stone-800 text-[0.6875rem] font-bold rounded-lg cursor-not-allowed"
+            className="mt-2 w-full py-2 bg-card text-muted-foreground border border-border text-[0.6875rem] font-bold rounded-lg cursor-not-allowed"
             disabled
           >
             결제 수단 관리 (대기)
           </button>
         </div>
 
-        <div className="lg:col-span-2 bg-[#2c2825] border border-dashed border-amber-500/30 bg-amber-500/5 rounded-2xl p-6 flex flex-col justify-center gap-2">
+        <div className="lg:col-span-2 bg-card border border-dashed border-warning/30 bg-warning/5 rounded-2xl p-6 flex flex-col justify-center gap-2">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-black text-amber-300 uppercase tracking-widest">
+            <Zap className="w-4 h-4 text-warning" />
+            <h3 className="text-xs font-black text-warning uppercase tracking-widest">
               API Tokens Usage (가상 집계)
             </h3>
           </div>
-          <div className="text-2xl font-black text-stone-500">—</div>
-          <p className="text-[0.6875rem] text-amber-200/70 leading-relaxed">
+          <div className="text-2xl font-black text-muted-foreground">—</div>
+          <p className="text-[0.6875rem] text-warning/70 leading-relaxed">
             팀별 토큰 한도·사용량 API 미구축. 실측 LLM 비용은 하단 LangSmith 번레이트 참고.
           </p>
         </div>
@@ -1612,15 +1635,15 @@ function BillingManagementView() {
       {/* 1.5 LLM 토큰 번레이트 (LangSmith 실데이터) — 리서치 #7 */}
       <section className="mt-4">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-[#e2e8f0]">LLM 토큰 번레이트 (최근 30일)</h3>
-          <span className="text-[0.625rem] text-[#9ca3af]">LangSmith 실데이터 기반</span>
+          <h3 className="text-sm font-bold text-foreground">LLM 토큰 번레이트 (최근 30일)</h3>
+          <span className="text-[0.625rem] text-muted-foreground">LangSmith 실데이터 기반</span>
         </div>
         <TokenBurnrateSection />
       </section>
 
       {/* 2. Plan Upgrade (Pricing Cards) */}
       <section className="mt-4">
-        <h3 className="text-sm font-bold text-[#e2e8f0] mb-4">플랜 업그레이드</h3>
+        <h3 className="text-sm font-bold text-foreground mb-4">플랜 업그레이드</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             {
@@ -1651,29 +1674,29 @@ function BillingManagementView() {
                 className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                 style={{
                   background:
-                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
+                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
                 }}
               />
-              <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] flex flex-col p-6 transition-colors duration-500 border border-[#3a3633] group-hover:border-transparent">
+              <div className="relative z-10 h-full w-full bg-card rounded-[14px] flex flex-col p-6 transition-colors duration-500 border border-border group-hover:border-transparent">
                 {plan.isPopular && (
-                  <div className="absolute top-4 right-4 inline-flex items-center justify-center h-5 px-2.5 bg-[#3a3633] border border-[#818cf8]/30 rounded-full">
-                    <span className="text-[0.5625rem] font-bold text-[#818cf8] tracking-wider leading-none">
+                  <div className="absolute top-4 right-4 inline-flex items-center justify-center h-5 px-2.5 bg-muted border border-primary/30 rounded-full">
+                    <span className="text-[0.5625rem] font-bold text-primary tracking-wider leading-none">
                       MOST POPULAR
                     </span>
                   </div>
                 )}
-                <h4 className="text-lg font-bold text-white mb-1">{plan.id}</h4>
-                <p className="text-[0.625rem] text-[#9ca3af] mb-4">{plan.target}</p>
-                <div className="flex items-end gap-1 mb-6 pb-6 border-b border-[#3a3633]">
-                  <span className="text-2xl font-black text-white">{plan.price}</span>
-                  <span className="text-[0.625rem] text-[#9ca3af] mb-1">/ month</span>
+                <h4 className="text-lg font-bold text-foreground mb-1">{plan.id}</h4>
+                <p className="text-[0.625rem] text-muted-foreground mb-4">{plan.target}</p>
+                <div className="flex items-end gap-1 mb-6 pb-6 border-b border-border">
+                  <span className="text-2xl font-black text-foreground">{plan.price}</span>
+                  <span className="text-[0.625rem] text-muted-foreground mb-1">/ month</span>
                 </div>
-                <ul className="text-[0.6875rem] text-[#9ca3af] space-y-3 mb-8">
+                <ul className="text-[0.6875rem] text-muted-foreground space-y-3 mb-8">
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#818cf8]" /> {plan.tokens}
+                    <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> {plan.tokens}
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#818cf8]" /> 모든 상권 분석 지표 제공
+                    <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> 모든 상권 분석 지표 제공
                   </li>
                 </ul>
                 <div className="mt-auto">
@@ -1682,7 +1705,7 @@ function BillingManagementView() {
                     onClick={() =>
                       showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')
                     }
-                    className="w-full py-3 bg-[#1e1b18] text-[#9ca3af] border border-[#3a3633] text-xs font-bold rounded-xl group-hover:bg-[#818cf8] group-hover:text-[#1e1b18] group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(129,140,248,0)] group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)]"
+                    className="w-full py-3 bg-card text-muted-foreground border border-border text-xs font-bold rounded-xl group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(0,44,209,0)] group-hover:shadow-[0_0_20px_rgba(0,44,209,0.4)]"
                   >
                     플랜 문의하기
                   </button>
@@ -1827,35 +1850,35 @@ function MyPageView() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
-        className="bg-[#2c2825] border border-[#3a3633] rounded-2xl p-8 shadow-lg"
+        className="box-glass rounded-2xl p-8"
       >
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h3 className="text-lg font-bold text-white mb-2">내 정보 관리</h3>
-            <p className="text-xs text-[#9ca3af]">
+            <h3 className="text-lg font-bold text-foreground mb-2">내 정보 관리</h3>
+            <p className="text-xs text-muted-foreground">
               {isManager
                 ? '매니저 프로필 정보를 수정할 수 있습니다.'
                 : '팀장(마스터) 권한 이양 및 담당자 변경을 위해 가입 정보를 수정할 수 있습니다.'}
             </p>
           </div>
-          {isLoadingProfile && <Loader2 className="w-4 h-4 text-[#818cf8] animate-spin shrink-0" />}
+          {isLoadingProfile && <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">이름</label>
+            <label className="text-xs font-bold text-foreground block mb-1.5">이름</label>
             <input
               type="text"
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
               placeholder="홍길동"
-              className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">
+            <label className="text-xs font-bold text-foreground block mb-1.5">
               이메일 (ID)
-              <span className="ml-2 text-[0.5625rem] font-mono text-[#6b7280] uppercase">
+              <span className="ml-2 text-[0.5625rem] font-mono text-muted-foreground uppercase">
                 Read-only
               </span>
             </label>
@@ -1864,39 +1887,39 @@ function MyPageView() {
               value={user?.email || ''}
               readOnly
               disabled
-              className="w-full bg-[#1e1b18]/50 border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-[#9ca3af] font-mono cursor-not-allowed"
+              className="w-full bg-card/50 border border-border rounded-lg px-4 py-2.5 text-sm text-muted-foreground font-mono cursor-not-allowed"
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">직책</label>
+            <label className="text-xs font-bold text-foreground block mb-1.5">직책</label>
             <input
               type="text"
               value={position}
               onChange={(e) => setPosition(e.target.value)}
               placeholder="팀장 / 과장 / 매니저"
-              className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">연락처</label>
+            <label className="text-xs font-bold text-foreground block mb-1.5">연락처</label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="010-0000-0000"
-              className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+              className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
             />
           </div>
           {!isManager && (
             <div className="md:col-span-2">
-              <label className="text-xs font-bold text-[#e2e8f0] block mb-1.5">가맹점 수</label>
+              <label className="text-xs font-bold text-foreground block mb-1.5">가맹점 수</label>
               <input
                 type="number"
                 min={0}
                 value={storeCount}
                 onChange={(e) => setStoreCount(e.target.value)}
                 placeholder="0"
-                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#818cf8] transition-colors"
+                className="w-full bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
               />
             </div>
           )}
@@ -1906,7 +1929,7 @@ function MyPageView() {
           <button
             onClick={() => handleActionRequest('update')}
             disabled={!contactName.trim()}
-            className="px-6 py-2.5 bg-[#818cf8] text-[#1e1b18] text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(129,140,248,0.4)] hover:bg-[#6366f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg shadow-[0_0_20px_rgba(0,44,209,0.4)] hover:bg-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             변경사항 저장
           </button>
@@ -1919,19 +1942,19 @@ function MyPageView() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.08, ease: [0.19, 1, 0.22, 1] }}
-          className="bg-[#1e1b18] border border-rose-500/30 rounded-2xl p-8 shadow-lg"
+          className="box-glass rounded-2xl p-8 ring-1 ring-danger/20"
         >
           <div className="flex items-center gap-2 mb-2">
-            <Shield className="w-4 h-4 text-rose-500" />
-            <h3 className="text-lg font-bold text-rose-500">Danger Zone</h3>
+            <Shield className="w-4 h-4 text-danger" />
+            <h3 className="text-lg font-bold text-danger">Danger Zone</h3>
           </div>
-          <p className="text-xs text-[#9ca3af] mb-6">
+          <p className="text-xs text-muted-foreground mb-6">
             워크스페이스를 탈퇴하고 모든 데이터를 DB에서 영구적으로 파기합니다. 이 작업은 되돌릴 수
             없습니다.
           </p>
           <button
             onClick={() => handleActionRequest('delete')}
-            className="px-6 py-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/30 hover:bg-rose-500 hover:text-white text-sm font-bold rounded-lg transition-colors"
+            className="px-6 py-2.5 bg-danger/10 text-danger border border-danger/30 hover:bg-danger hover:text-white text-sm font-bold rounded-lg transition-colors"
           >
             회원 탈퇴 및 워크스페이스 삭제
           </button>
@@ -1941,16 +1964,16 @@ function MyPageView() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.08, ease: [0.19, 1, 0.22, 1] }}
-          className="bg-[#1e1b18] border border-[#3a3633] rounded-2xl p-6 flex items-start gap-4"
+          className="bg-card border border-border rounded-2xl p-6 flex items-start gap-4"
         >
-          <div className="w-9 h-9 rounded-full bg-[#2c2825] flex items-center justify-center shrink-0 mt-0.5">
-            <Shield className="w-4 h-4 text-[#818cf8]" />
+          <div className="w-9 h-9 rounded-full bg-card flex items-center justify-center shrink-0 mt-0.5">
+            <Shield className="w-4 h-4 text-primary" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-bold text-[#e2e8f0] mb-1">
+            <p className="text-sm font-bold text-foreground mb-1">
               계정 해지는 팀장을 통해 진행됩니다
             </p>
-            <p className="text-xs text-[#9ca3af] leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               매니저 계정은 개별 탈퇴가 불가합니다. 퇴사 등으로 계정 해지가 필요하면 소속 팀장에게
               '팀 및 권역 관리 → 매니저 제거'를 요청해주세요.
             </p>
@@ -1968,7 +1991,7 @@ function MyPageView() {
             className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           >
             <div
-              className="absolute inset-0 bg-[#050505]/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
               onClick={() => setShowDeleteAlert(false)}
             />
             <motion.div
@@ -1976,26 +1999,26 @@ function MyPageView() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
-              className="relative bg-[#1e1b18] border border-rose-500/50 rounded-2xl p-8 shadow-[0_0_50px_rgba(244,63,94,0.15)] max-w-md w-full"
+              className="relative bg-card border border-danger/50 rounded-2xl p-8 shadow-[0_0_50px_rgba(244,63,94,0.15)] max-w-md w-full"
             >
-              <div className="w-12 h-12 rounded-full bg-rose-500/10 flex items-center justify-center mb-4 border border-rose-500/20">
-                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mb-4 border border-danger/20">
+                <AlertTriangle className="w-6 h-6 text-danger" />
               </div>
-              <h3 className="text-xl font-black text-white mb-2">정말로 탈퇴하시겠습니까?</h3>
-              <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-lg mb-6">
-                <p className="text-sm text-rose-400 font-bold leading-relaxed">
+              <h3 className="text-xl font-black text-foreground mb-2">정말로 탈퇴하시겠습니까?</h3>
+              <div className="bg-danger/10 border border-danger/20 p-4 rounded-lg mb-6">
+                <p className="text-sm text-danger font-bold leading-relaxed">
                   구독 후 1회 이상 시뮬레이션을 실행한 경우, 중간에 탈퇴하더라도 남은 기간에 대한
                   환불이 불가합니다.
                 </p>
               </div>
-              <p className="text-xs text-[#9ca3af] mb-8">
+              <p className="text-xs text-muted-foreground mb-8">
                 탈퇴 시 귀하의 계정과 시뮬레이션 히스토리 등 모든 데이터가 영구적으로 삭제됩니다.
               </p>
 
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => setShowDeleteAlert(false)}
-                  className="px-4 py-2 bg-[#2c2825] hover:bg-[#3a3633] text-[#e2e8f0] text-sm font-bold rounded-lg transition-colors border border-[#3a3633]"
+                  className="px-4 py-2 bg-card hover:bg-muted text-foreground text-sm font-bold rounded-lg transition-colors border border-border"
                 >
                   취소
                 </button>
@@ -2004,7 +2027,7 @@ function MyPageView() {
                     setShowDeleteAlert(false);
                     setShowPasswordModal(true);
                   }}
-                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-lg transition-colors shadow-[0_0_15px_rgba(244,63,94,0.4)]"
+                  className="px-4 py-2 bg-danger hover:bg-danger/90 text-white text-sm font-bold rounded-lg transition-colors shadow-[0_0_15px_rgba(244,63,94,0.4)]"
                 >
                   탈퇴합니다
                 </button>
@@ -2024,7 +2047,7 @@ function MyPageView() {
             className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           >
             <div
-              className="absolute inset-0 bg-[#050505]/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
               onClick={() => !isSaving && setShowPasswordModal(false)}
             />
             <motion.div
@@ -2032,10 +2055,10 @@ function MyPageView() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2, ease: [0.19, 1, 0.22, 1] }}
-              className="relative bg-[#2c2825] border border-[#3a3633] rounded-2xl p-8 shadow-2xl max-w-sm w-full"
+              className="relative bg-card border border-border rounded-2xl p-8 shadow-2xl max-w-sm w-full"
             >
-              <h3 className="text-lg font-bold text-white mb-2">본인 인증</h3>
-              <p className="text-xs text-[#9ca3af] mb-6">
+              <h3 className="text-lg font-bold text-foreground mb-2">본인 인증</h3>
+              <p className="text-xs text-muted-foreground mb-6">
                 {actionType === 'delete' ? '안전한 탈퇴 처리를 위해' : '정보 수정을 위해'} 현재
                 비밀번호를 입력해주세요.
               </p>
@@ -2051,17 +2074,17 @@ function MyPageView() {
                   if (e.key === 'Enter') handlePasswordConfirm();
                 }}
                 placeholder="비밀번호 입력"
-                className="w-full bg-[#1e1b18] border border-[#3a3633] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[#818cf8] mb-2 transition-colors"
+                className="w-full bg-card border border-border rounded-lg px-4 py-3 text-sm text-foreground focus:outline-none focus:border-primary mb-2 transition-colors"
               />
               {passwordError && (
-                <p className="text-[0.6875rem] text-rose-400 mb-4">{passwordError}</p>
+                <p className="text-[0.6875rem] text-danger mb-4">{passwordError}</p>
               )}
               {!passwordError && <div className="mb-4" />}
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => setShowPasswordModal(false)}
                   disabled={isSaving}
-                  className="px-4 py-2 text-[#9ca3af] hover:text-white text-sm font-bold transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-muted-foreground hover:text-foreground text-sm font-bold transition-colors disabled:opacity-50"
                 >
                   취소
                 </button>
@@ -2070,8 +2093,8 @@ function MyPageView() {
                   disabled={isSaving || passwordInput.length < 8}
                   className={`px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                     actionType === 'delete'
-                      ? 'bg-rose-500 hover:bg-rose-600'
-                      : 'bg-[#818cf8] hover:bg-[#6366f1]'
+                      ? 'bg-danger hover:bg-danger/90'
+                      : 'bg-primary hover:bg-primary'
                   }`}
                 >
                   {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -2113,10 +2136,10 @@ function ManagerWorkspace() {
   }, [tabFromUrl]);
 
   return (
-    <div className="absolute inset-0 z-20 flex bg-[#1e1b18] text-[#e2e8f0] font-sans overflow-hidden select-none">
+    <div className="absolute inset-0 z-20 flex bg-card text-foreground font-sans overflow-hidden select-none">
       {/* 좌측 사이드바 */}
-      <div className="w-64 bg-[#2c2825] border-r border-[#3a3633] flex flex-col z-20 shrink-0">
-        <div className="h-20 flex items-center px-6 border-b border-[#3a3633] gap-3 mt-24">
+      <div className="w-64 bg-card border-r border-border flex flex-col z-20 shrink-0">
+        <div className="h-20 flex items-center px-6 border-b border-border gap-3 mt-24">
           <BrandLogo
             name={user?.contact_name || 'Manager'}
             isUser={true}
@@ -2124,17 +2147,17 @@ function ManagerWorkspace() {
             className="w-8 h-8 text-xs rounded-full shrink-0"
           />
           <div className="flex flex-col min-w-0">
-            <span className="font-black text-sm text-[#e2e8f0] truncate">
+            <span className="font-black text-sm text-foreground truncate">
               {user?.contact_name || 'Manager'}
             </span>
-            <span className="text-[0.5625rem] text-[#818cf8] font-mono tracking-widest uppercase">
+            <span className="text-[0.5625rem] text-primary font-mono tracking-widest uppercase">
               Regional Manager
             </span>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto py-6 px-4 flex flex-col gap-2">
-          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-muted-foreground mb-2 tracking-widest">
             WORKSPACE
           </p>
           <MenuButton
@@ -2150,7 +2173,7 @@ function ManagerWorkspace() {
             label="내 시뮬 이력"
           />
 
-          <p className="px-2 text-[0.625rem] font-bold text-[#9ca3af] mt-6 mb-2 tracking-widest">
+          <p className="px-2 text-[0.625rem] font-bold text-muted-foreground mt-6 mb-2 tracking-widest">
             SETTINGS
           </p>
           <MenuButton
@@ -2161,7 +2184,7 @@ function ManagerWorkspace() {
           />
         </div>
 
-        <div className="p-4 border-t border-[#3a3633]">
+        <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3 p-2 rounded-lg">
             <BrandLogo
               name={user?.contact_name || '매니저'}
@@ -2170,18 +2193,18 @@ function ManagerWorkspace() {
               className="w-8 h-8 text-xs rounded-full shrink-0"
             />
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-xs font-bold text-[#e2e8f0] truncate">
+              <span className="text-xs font-bold text-foreground truncate">
                 {user?.contact_name || '매니저'}
               </span>
-              <span className="text-[0.625rem] text-[#818cf8] truncate">Regional Access</span>
+              <span className="text-[0.625rem] text-primary truncate">Regional Access</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 우측 메인 영역 */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#1e1b18]">
-        <header className="h-20 border-b border-[#3a3633] flex items-center justify-between px-8 bg-[#1e1b18]/80 backdrop-blur-md z-10 shrink-0 mt-24">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-card">
+        <header className="h-20 border-b border-border flex items-center justify-between px-8 bg-card/80 backdrop-blur-md z-10 shrink-0 mt-24">
           <h2 className="text-lg font-bold flex items-center gap-2">
             {activeMenu === 'workspace' && '내 워크스페이스'}
             {activeMenu === 'history' && '내 시뮬 이력'}
@@ -2209,10 +2232,10 @@ function ManagerWorkspaceView() {
       {/* 내 시뮬레이션 기록 — simulation_history 실데이터 연동 */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-[#818cf8]" />내 시뮬레이션 기록
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary" />내 시뮬레이션 기록
           </h3>
-          <span className="text-[0.625rem] font-mono text-[#6b7280] uppercase tracking-widest">
+          <span className="text-[0.625rem] font-mono text-muted-foreground uppercase tracking-widest">
             Recent Runs
           </span>
         </div>
@@ -2222,23 +2245,23 @@ function ManagerWorkspaceView() {
       {/* 시뮬레이션 의뢰 목록 */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-[#e2e8f0] flex items-center gap-2">
-            <Users className="w-4 h-4 text-[#818cf8]" />
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary" />
             시뮬레이션 의뢰 목록
           </h3>
-          <span className="text-[0.625rem] font-mono text-[#6b7280] uppercase tracking-widest">
+          <span className="text-[0.625rem] font-mono text-muted-foreground uppercase tracking-widest">
             Client Requests
           </span>
         </div>
-        <div className="bg-[#1e1b18] border border-dashed border-[#3a3633] rounded-xl p-10 flex flex-col items-center justify-center text-center">
-          <div className="w-10 h-10 rounded-full bg-[#2c2825] flex items-center justify-center mb-3">
-            <Users className="w-5 h-5 text-[#6b7280]" />
+        <div className="bg-card border border-dashed border-border rounded-xl p-10 flex flex-col items-center justify-center text-center">
+          <div className="w-10 h-10 rounded-full bg-card flex items-center justify-center mb-3">
+            <Users className="w-5 h-5 text-muted-foreground" />
           </div>
-          <p className="text-sm font-bold text-[#a3a3a3] mb-1">들어온 의뢰가 없습니다.</p>
-          <p className="text-xs text-[#6b7280] mb-4">
+          <p className="text-sm font-bold text-muted-foreground mb-1">들어온 의뢰가 없습니다.</p>
+          <p className="text-xs text-muted-foreground mb-4">
             팀장이 의뢰 요청을 배정하면 이 목록에 표시됩니다.
           </p>
-          <p className="text-[0.625rem] font-mono text-[#818cf8]/60 uppercase tracking-wider">
+          <p className="text-[0.625rem] font-mono text-primary/60 uppercase tracking-wider">
             [Backend 연동 대기 중 — IM3 Jira]
           </p>
         </div>

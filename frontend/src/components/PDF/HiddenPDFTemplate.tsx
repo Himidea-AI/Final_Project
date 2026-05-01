@@ -39,16 +39,16 @@ interface HiddenPDFTemplateProps {
   customerSegment?: CustomerSegment | null;
 }
 
-// 인디고 SPOTTER 로고 SVG 경로 (Light 테마 버전 — #6366f1)
+// SPOTTER 로고 SVG 경로 (Light 테마 — Deep Blue #002cd1)
 const SPOTTER_LOGO_PATHS = (
   <>
     <path
       d="M18.5147 0C15.4686 0 12.5473 1.21005 10.3934 3.36396L3.36396 10.3934C1.21005 12.5473 0 15.4686 0 18.5147C0 24.8579 5.14214 30 11.4853 30C14.5314 30 17.4527 28.7899 19.6066 26.636L24.4689 21.7737C24.469 21.7738 24.4689 21.7736 24.4689 21.7737L38.636 7.6066C39.6647 6.57791 41.0599 6 42.5147 6C44.9503 6 47.0152 7.58741 47.7311 9.78407L52.2022 5.31296C50.1625 2.11834 46.586 0 42.5147 0C39.4686 0 36.5473 1.21005 34.3934 3.36396L15.364 22.3934C14.3353 23.4221 12.9401 24 11.4853 24C8.45584 24 6 21.5442 6 18.5147C6 17.0599 6.57791 15.6647 7.6066 14.636L14.636 7.6066C15.6647 6.57791 17.0599 6 18.5147 6C20.9504 6 23.0152 7.58748 23.7311 9.78421L28.2023 5.31307C26.1626 2.1184 22.5861 0 18.5147 0Z"
-      fill="#6366f1"
+      fill="#002cd1"
     />
     <path
       d="M39.364 22.3934C38.3353 23.4221 36.9401 24 35.4853 24C33.05 24 30.9853 22.413 30.2692 20.2167L25.7982 24.6877C27.838 27.8819 31.4143 30 35.4853 30C38.5314 30 41.4527 28.7899 43.6066 26.636L62.636 7.6066C63.6647 6.57791 65.0599 6 66.5147 6C69.5442 6 72 8.45584 72 11.4853C72 12.9401 71.4221 14.3353 70.3934 15.364L63.364 22.3934C62.3353 23.4221 60.9401 24 59.4853 24C57.0498 24 54.985 22.4127 54.269 20.2162L49.798 24.6873C51.8377 27.8818 55.4141 30 59.4853 30C62.5314 30 65.4527 28.7899 67.6066 26.636L74.636 19.6066C76.7899 17.4527 78 14.5314 78 11.4853C78 5.14214 72.8579 0 66.5147 0C63.4686 0 60.5473 1.21005 58.3934 3.36396L39.364 22.3934Z"
-      fill="#6366f1"
+      fill="#002cd1"
     />
   </>
 );
@@ -112,7 +112,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
 
     const severityStyle = {
       critical: { dot: 'bg-rose-500', bg: 'bg-rose-50 border-rose-200' },
-      advisory: { dot: 'bg-[#6366f1]', bg: 'bg-indigo-50 border-indigo-200' },
+      advisory: { dot: 'bg-[#002cd1]', bg: 'bg-[rgba(0,44,209,0.06)] border-[rgba(0,44,209,0.2)]' },
       opportunity: { dot: 'bg-emerald-500', bg: 'bg-emerald-50 border-emerald-200' },
     };
 
@@ -128,7 +128,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
             <svg width="200" height="78" viewBox="0 0 78 30" fill="none" className="mb-10">
               {SPOTTER_LOGO_PATHS}
             </svg>
-            <p className="text-[#6366f1] font-mono text-[0.6875rem] tracking-[0.3em] border border-[#6366f1] px-5 py-1.5 rounded-full bg-indigo-50 mb-16">
+            <p className="text-[#002cd1] font-mono text-[0.6875rem] tracking-[0.3em] border border-[#002cd1] px-5 py-1.5 rounded-full bg-[rgba(0,44,209,0.06)] mb-16">
               AI FRANCHISE INTELLIGENCE REPORT
             </p>
             <h1 className="text-[2.75rem] font-black text-slate-900 text-center leading-[1.2] tracking-tight">
@@ -201,19 +201,19 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                 />
                 <path
                   d="M 0 290 C 150 290, 200 150, 300 120 C 400 90, 450 200, 550 180 C 650 160, 750 40, 850 50 C 950 60, 980 150, 1000 160 L 1000 300 L 0 300 Z"
-                  fill="url(#pdfIndigoGrad)"
+                  fill="url(#pdfBrandGrad)"
                   opacity="0.35"
                 />
                 <path
                   d="M 0 290 C 150 290, 200 150, 300 120 C 400 90, 450 200, 550 180 C 650 160, 750 40, 850 50 C 950 60, 980 150, 1000 160"
                   fill="none"
-                  stroke="#6366f1"
+                  stroke="#002cd1"
                   strokeWidth="4"
                 />
                 <defs>
-                  <linearGradient id="pdfIndigoGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.5" />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+                  <linearGradient id="pdfBrandGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#002cd1" stopOpacity="0.5" />
+                    <stop offset="100%" stopColor="#002cd1" stopOpacity="0" />
                   </linearGradient>
                   <linearGradient id="pdfGrayGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#94a3b8" stopOpacity="0.4" />
@@ -251,17 +251,17 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                 <line x1="100" y1="100" x2="53" y2="63" stroke="#cbd5e1" />
                 <polygon
                   points="100,50 140,70 145,110 115,140 85,130 60,105 70,75"
-                  fill="rgba(99,102,241,0.25)"
-                  stroke="#6366f1"
+                  fill="rgba(0,44,209,0.25)"
+                  stroke="#002cd1"
                   strokeWidth="2"
                 />
-                <circle cx="100" cy="50" r="3" fill="#6366f1" />
-                <circle cx="140" cy="70" r="3" fill="#6366f1" />
-                <circle cx="145" cy="110" r="3" fill="#6366f1" />
-                <circle cx="115" cy="140" r="3" fill="#6366f1" />
-                <circle cx="85" cy="130" r="3" fill="#6366f1" />
-                <circle cx="60" cy="105" r="3" fill="#6366f1" />
-                <circle cx="70" cy="75" r="3" fill="#6366f1" />
+                <circle cx="100" cy="50" r="3" fill="#002cd1" />
+                <circle cx="140" cy="70" r="3" fill="#002cd1" />
+                <circle cx="145" cy="110" r="3" fill="#002cd1" />
+                <circle cx="115" cy="140" r="3" fill="#002cd1" />
+                <circle cx="85" cy="130" r="3" fill="#002cd1" />
+                <circle cx="60" cy="105" r="3" fill="#002cd1" />
+                <circle cx="70" cy="75" r="3" fill="#002cd1" />
                 <text
                   x="100"
                   y="32"
@@ -363,7 +363,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                       <td className="py-3 font-medium text-slate-900">{r.name}</td>
                       <td className="py-3 font-mono text-slate-900">{r.score}</td>
                       <td className="py-3 font-mono text-slate-900">{r.closureRate}</td>
-                      <td className="py-3 font-mono text-[#6366f1] font-bold">{r.bep}</td>
+                      <td className="py-3 font-mono text-[#002cd1] font-bold">{r.bep}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -469,7 +469,7 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                   <div className="text-[0.5625rem] text-slate-500 uppercase tracking-wider">
                     세그먼트 비율
                   </div>
-                  <div className="mt-1 text-[1.125rem] font-black text-[#6366f1]">
+                  <div className="mt-1 text-[1.125rem] font-black text-[#002cd1]">
                     {typeof customerSegment.segment_ratio === 'number'
                       ? `${(customerSegment.segment_ratio * 100).toFixed(2)}%`
                       : '—'}
@@ -595,7 +595,7 @@ function PDFRatioChart({
             <div key={it.key} className="flex items-center gap-2">
               <div className="w-14 shrink-0 text-[0.625rem] text-slate-700">{it.label}</div>
               <div className="relative flex-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-[#6366f1]" style={{ width: `${width}%` }} />
+                <div className="h-full rounded-full bg-[#002cd1]" style={{ width: `${width}%` }} />
               </div>
               <div className="w-12 shrink-0 text-right text-[0.625rem] font-mono text-slate-700">
                 {(v * 100).toFixed(1)}%

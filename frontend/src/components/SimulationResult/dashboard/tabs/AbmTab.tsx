@@ -182,26 +182,26 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       {/* 모드 토글 헤더 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-black text-stone-100 flex items-center gap-2 italic tracking-tight">
+          <h3 className="text-sm font-black text-foreground flex items-center gap-2 italic tracking-tight">
             {mode === 'map' ? (
               <>
-                <MapPin size={16} className="text-indigo-400" /> 공실 스팟 지도 & Multi-Agent
+                <MapPin size={16} className="text-primary" /> 공실 스팟 지도 & Multi-Agent
                 Geospatial
               </>
             ) : (
               <>
-                <Radar size={16} className="text-cyan-400" /> ABM 페르소나 행동 시뮬 (
+                <Radar size={16} className="text-primary" /> ABM 페르소나 행동 시뮬 (
                 {focusSpot?.label ?? '—'})
               </>
             )}
           </h3>
-          {abmLoading && <Loader2 size={14} className="animate-spin text-stone-500" />}
+          {abmLoading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
         </div>
         {mode === 'abm' && (
           <button
             type="button"
             onClick={handleClearResult}
-            className="text-[0.6875rem] font-bold text-stone-400 hover:text-stone-100 uppercase tracking-widest"
+            className="text-[0.6875rem] font-bold text-muted-foreground hover:text-foreground uppercase tracking-widest"
           >
             ← 지도로 돌아가기
           </button>
@@ -210,7 +210,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
 
       {/* 에러 배너 */}
       {abmError && (
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-300 flex items-start gap-2">
+        <div className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger flex items-start gap-2">
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
           <span>{abmError}</span>
         </div>
@@ -218,17 +218,17 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
 
       {/* 지도 / ABM 뷰 */}
       {mode === 'map' ? (
-        <div className="bg-stone-900/30 border border-stone-800 rounded-3xl p-4">
-          <div className="h-14 bg-[#171717]/90 backdrop-blur-md border border-[#3a3633] rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">
-            <h4 className="text-xs font-black text-stone-100 flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-[#818cf8] animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]" />
+        <div className="bg-card/30 border border-border rounded-3xl p-4">
+          <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">
+            <h4 className="text-xs font-black text-foreground flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,44,209,0.8)]" />
               Multi-Agent Geospatial Recommendations
             </h4>
-            <p className="text-[0.625rem] text-stone-500 font-mono tracking-widest">
+            <p className="text-[0.625rem] text-muted-foreground font-mono tracking-widest">
               AI AGENT TARGETING · {locations.length} VACANCY · {competitors.length} COMP
             </p>
           </div>
-          <div className="relative bg-stone-950 rounded-b-2xl overflow-hidden">
+          <div className="relative bg-card rounded-b-2xl overflow-hidden">
             <AgentMapVisualizer
               height="600px"
               locations={locations.length > 0 ? locations : undefined}

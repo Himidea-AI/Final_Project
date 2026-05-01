@@ -40,23 +40,23 @@ interface Props {
  */
 const MARKDOWN_COMPONENTS: Components = {
   h1: ({ node: _n, ...props }) => (
-    <h1 className="mb-3 mt-4 text-xl font-black text-stone-100" {...props} />
+    <h1 className="mb-3 mt-4 text-xl font-black text-foreground" {...props} />
   ),
   h2: ({ node: _n, ...props }) => (
-    <h2 className="mb-2 mt-3 text-lg font-bold text-stone-100" {...props} />
+    <h2 className="mb-2 mt-3 text-lg font-bold text-foreground" {...props} />
   ),
   h3: ({ node: _n, ...props }) => (
-    <h3 className="mb-2 mt-2 text-base font-semibold text-stone-200" {...props} />
+    <h3 className="mb-2 mt-2 text-base font-semibold text-foreground" {...props} />
   ),
   p: ({ node: _n, ...props }) => (
-    <p className="mb-2 text-sm leading-relaxed text-stone-300" {...props} />
+    <p className="mb-2 text-sm leading-relaxed text-foreground" {...props} />
   ),
-  strong: ({ node: _n, ...props }) => <strong className="font-bold text-stone-100" {...props} />,
+  strong: ({ node: _n, ...props }) => <strong className="font-bold text-foreground" {...props} />,
   ul: ({ node: _n, ...props }) => (
-    <ul className="mb-2 list-disc space-y-1 pl-5 text-sm text-stone-300" {...props} />
+    <ul className="mb-2 list-disc space-y-1 pl-5 text-sm text-foreground" {...props} />
   ),
   ol: ({ node: _n, ...props }) => (
-    <ol className="mb-2 list-decimal space-y-1 pl-5 text-sm text-stone-300" {...props} />
+    <ol className="mb-2 list-decimal space-y-1 pl-5 text-sm text-foreground" {...props} />
   ),
   li: ({ node: _n, ...props }) => <li className="leading-relaxed" {...props} />,
 };
@@ -93,31 +93,33 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
     <div className="space-y-6">
       {/* ═══ H6: 1등 추천 동 카드 (winner_district 있을 때만) ═══ */}
       {winnerDistrict && (
-        <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-stone-900/40 to-stone-900/40 p-8">
+        <div className="rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card/40 to-card/40 p-8">
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1">
-              <div className="mb-3 flex items-center gap-2 text-[0.625rem] font-black uppercase tracking-widest text-indigo-300">
+              <div className="mb-3 flex items-center gap-2 text-[0.625rem] font-black uppercase tracking-widest text-primary">
                 <Trophy className="h-3.5 w-3.5" />
                 추천 1순위
               </div>
               <div className="flex items-baseline gap-3">
-                <span className="text-5xl font-black tracking-tight text-indigo-300">
+                <span className="text-5xl font-black tracking-tight text-primary">
                   {winnerDistrict}
                 </span>
                 {simResult.target_district && simResult.target_district !== winnerDistrict && (
-                  <span className="text-xs text-stone-500">
+                  <span className="text-xs text-muted-foreground">
                     (요청 동: {simResult.target_district})
                   </span>
                 )}
               </div>
-              {winnerSubText && <div className="mt-2 text-sm text-stone-400">{winnerSubText}</div>}
+              {winnerSubText && (
+                <div className="mt-2 text-sm text-muted-foreground">{winnerSubText}</div>
+              )}
             </div>
-            <MapPin className="h-10 w-10 shrink-0 text-indigo-400/60" />
+            <MapPin className="h-10 w-10 shrink-0 text-primary/60" />
           </div>
 
           {showTopChips && (
             <div className="mt-6 flex flex-wrap items-center gap-2">
-              <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
+              <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
                 Top {topCandidates!.length}
               </span>
               {topCandidates!.map((d, i) => {
@@ -127,8 +129,8 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
                     key={`${d}-${i}`}
                     className={
                       isWinner
-                        ? 'rounded-full border border-indigo-400/60 bg-indigo-500/20 px-3 py-1 text-xs font-bold text-indigo-200'
-                        : 'rounded-full border border-stone-700 bg-stone-800/60 px-3 py-1 text-xs text-stone-300'
+                        ? 'rounded-full border border-primary/60 bg-primary/20 px-3 py-1 text-xs font-bold text-primary'
+                        : 'rounded-full border border-border bg-card/60 px-3 py-1 text-xs text-foreground'
                     }
                   >
                     {i + 1}. {d}
@@ -142,8 +144,8 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
 
       {/* ═══ synthesis 종합 분석 (최상단, 섹션별 블록 구조) ═══ */}
       {summary && (
-        <div className="rounded-3xl border border-stone-700/60 bg-stone-900/60 p-8">
-          <h3 className="mb-6 text-base font-black uppercase tracking-widest text-stone-300">
+        <div className="rounded-3xl border border-border/60 bg-card/60 p-8">
+          <h3 className="mb-6 text-base font-black uppercase tracking-widest text-foreground">
             synthesis 종합 분석
           </h3>
           <SynthesisSections text={summary} />
@@ -152,8 +154,8 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
 
       {/* ═══ 최종 권고 ═══ */}
       {recommendation && (
-        <div className="rounded-3xl border border-indigo-500/20 bg-indigo-500/5 p-8">
-          <h4 className="mb-4 text-xs font-black uppercase tracking-widest text-indigo-400">
+        <div className="rounded-3xl border border-primary/20 bg-primary/5 p-8">
+          <h4 className="mb-4 text-xs font-black uppercase tracking-widest text-primary">
             최종 권고
           </h4>
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>

@@ -542,7 +542,9 @@ def predict(
     risk_score = round(risk_score, 4)
 
     # --- SHAP (LightGBM + TCN 분리) ---
-    lgbm_signals = _top_signals(lgbm_model, x_lgbm, LGBM_FEATURES)
+    # LightGBM: 전체 피처(15개) SHAP 모두 반환 — frontend heatmap 에서 작은 contribution 도
+    # alpha 약하게 시각화하여 "이 피처는 위험에 영향 없음" 도 정직히 표현.
+    lgbm_signals = _top_signals(lgbm_model, x_lgbm, LGBM_FEATURES, top_n=len(LGBM_FEATURES))
     tcn_signals = _top_signals_tcn(tcn_model, x_tcn, tcn_features)
 
     return {

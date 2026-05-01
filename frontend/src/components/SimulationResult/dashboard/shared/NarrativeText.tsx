@@ -30,8 +30,8 @@ interface Props {
 
 export function NarrativeText({
   text,
-  className = 'text-sm text-stone-500 leading-relaxed',
-  highlightClass = 'text-cyan-400 font-bold',
+  className = 'text-sm text-muted-foreground leading-relaxed',
+  highlightClass = 'text-primary font-bold',
 }: Props) {
   const parts = useMemo(() => {
     if (!text) return [] as { text: string; highlight: boolean }[];

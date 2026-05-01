@@ -51,10 +51,10 @@ export function DemographicTab({ simResult }: Props) {
 
   if (!hasAnyComposition && !hasReport && !hasCustomerSegment) {
     return (
-      <div className="bg-stone-900/30 border border-dashed border-stone-800 rounded-3xl p-10 text-center">
-        <Users className="mx-auto mb-3 text-stone-600" size={22} />
-        <div className="text-sm font-bold text-stone-400">인구 심층 분석 데이터 없음</div>
-        <div className="mt-1 text-xs text-stone-500">
+      <div className="bg-card/30 border border-dashed border-border rounded-3xl p-10 text-center">
+        <Users className="mx-auto mb-3 text-muted-foreground" size={22} />
+        <div className="text-sm font-bold text-muted-foreground">인구 심층 분석 데이터 없음</div>
+        <div className="mt-1 text-xs text-muted-foreground">
           demographic_depth 에이전트 분석이 완료되면 이 탭이 채워집니다.
         </div>
       </div>
@@ -65,12 +65,12 @@ export function DemographicTab({ simResult }: Props) {
     <div className="space-y-6">
       {/* 인구 구성 — Donut + StackedAge + WeekdayWeekend (+ optional Heatmap) */}
       {hasAnyComposition && (
-        <div className="bg-stone-900/30 border border-stone-800/40 rounded-3xl p-6">
+        <div className="bg-card/30 border border-border/40 rounded-3xl p-6">
           <div className="mb-4 flex items-center gap-3">
-            <h3 className="text-sm font-black text-stone-100 uppercase tracking-tight">
+            <h3 className="text-sm font-black text-foreground uppercase tracking-tight">
               인구 구성 상세
             </h3>
-            <span className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
+            <span className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
               demographic_depth
             </span>
           </div>
@@ -79,7 +79,7 @@ export function DemographicTab({ simResult }: Props) {
             <StackedAgeBar groups={demo?.top_3_age_groups ?? []} />
             <WeekdayWeekendBar ratio={demo?.weekday_weekend_ratio} />
             {hasPeakMatrix && (
-              <div className="flex h-[140px] items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+              <div className="flex h-[140px] items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
                 Calendar Heatmap — Track B #106 구현 대기
               </div>
             )}
@@ -89,16 +89,16 @@ export function DemographicTab({ simResult }: Props) {
 
       {/* 인구 심층 분석 리포트 */}
       {hasReport && (
-        <div className="bg-stone-900/30 border border-stone-800/40 rounded-3xl p-8">
+        <div className="bg-card/30 border border-border/40 rounded-3xl p-8">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic text-left tracking-tight">
-              <Users size={22} className="text-indigo-400" /> 인구 심층 분석 리포트
-              <span className="text-[0.6875rem] font-black text-stone-500 uppercase tracking-widest not-italic">
+            <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic text-left tracking-tight">
+              <Users size={22} className="text-primary" /> 인구 심층 분석 리포트
+              <span className="text-[0.6875rem] font-black text-muted-foreground uppercase tracking-widest not-italic">
                 demographic_report
               </span>
             </h3>
             {match != null && (
-              <div className="px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[0.6875rem] font-black text-indigo-400 tracking-widest tabular-nums">
+              <div className="px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full text-[0.6875rem] font-black text-primary tracking-widest tabular-nums">
                 브랜드 적합도 {Math.round(match)}
               </div>
             )}
@@ -120,12 +120,12 @@ export function DemographicTab({ simResult }: Props) {
           </div>
 
           {(narrative || rationale) && (
-            <div className="p-6 bg-stone-950/40 border border-stone-800 rounded-2xl text-left space-y-2">
+            <div className="p-6 bg-card/40 border border-border rounded-2xl text-left space-y-2">
               {narrative && (
-                <p className="text-sm text-stone-300 leading-relaxed font-medium">{narrative}</p>
+                <p className="text-sm text-foreground leading-relaxed font-medium">{narrative}</p>
               )}
               {rationale && (
-                <p className="text-xs text-stone-500 leading-relaxed italic">
+                <p className="text-xs text-muted-foreground leading-relaxed italic">
                   매칭 근거: {rationale}
                 </p>
               )}

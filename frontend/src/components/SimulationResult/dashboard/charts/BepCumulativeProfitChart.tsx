@@ -22,6 +22,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { QuarterlyProjection } from '../../../../types';
+import { SERIES_COLORS } from '../../QuarterlyProjectionChart';
 
 /** 동별 분기 누적이익 시리즈 1건 */
 type ChartSeries = { district: string; projection: QuarterlyProjection[] };
@@ -31,8 +32,8 @@ interface Props {
   height?: number;
 }
 
-// indigo / cyan / amber / rose — QuarterlyProjectionChart 와 동일
-const COLORS = ['#818cf8', '#22d3ee', '#fbbf24', '#fb7185'] as const;
+// 4동 차트 팔레트 — QuarterlyProjectionChart 와 form 통일 (deep blue / vivid red / teal / sunshine-yellow).
+const COLORS = SERIES_COLORS;
 
 const formatKRW = (value: number): string => {
   const abs = Math.abs(value);
@@ -47,7 +48,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const validSeries = (series ?? []).filter((s) => s.projection && s.projection.length > 0);
   if (validSeries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+      <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
         투자 회수 데이터 없음
       </div>
     );
@@ -77,48 +78,43 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
 
   return (
-    <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500 flex items-center gap-2">
-          <span>분기별 투자 회수 곡선</span>
-          <span className="text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
-            cumulative_profit · BEP 도달 시점 강조 (기준: {trimmedSeries[0]?.district ?? '—'})
+    <div className="rounded-2xl border border-border bg-secondary p-6">
+      <div className="mb-3 flex items-center justify-between">
+        {hasMockQuarters && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning">
+            <span className="h-1 w-1 rounded-full bg-warning" />
+            일부 분기 mock
           </span>
-          {hasMockQuarters && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[0.5625rem] font-bold normal-case tracking-normal text-amber-300">
-              <span className="h-1 w-1 rounded-full bg-amber-400" />
-              일부 분기 mock
-            </span>
-          )}
-        </div>
+        )}
         {bepQuarter !== null && (
-          <span className="text-[0.625rem] font-black tabular-nums text-emerald-400">
-            BEP Q{bepQuarter}
+          <span className="ml-auto text-[0.625rem] font-black tabular-nums text-success">
+            BEP {bepQuarter}분기
           </span>
         )}
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#292524" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="quarter"
-            tickFormatter={(q: number) => `Q${q}`}
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tickFormatter={(q: number) => `${q}분기`}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
           />
           <YAxis
             tickFormatter={formatKRW}
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
             width={60}
           />
           <Tooltip
-            cursor={{ stroke: '#44403c' }}
+            cursor={{ stroke: 'var(--border)' }}
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #44403c',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
               fontSize: 12,
+              color: 'var(--card-foreground)',
             }}
             formatter={(value: number, name: string) => {
               // {동}_cumulative → "{동} 누적이익"
@@ -131,13 +127,13 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
             labelFormatter={(q: number) => `${q}분기`}
           />
           <Legend
-            verticalAlign="top"
-            height={24}
-            wrapperStyle={{ paddingBottom: 4, fontSize: 11 }}
+            verticalAlign="bottom"
+            height={28}
+            wrapperStyle={{ paddingTop: 8, fontSize: 11 }}
             iconType="circle"
           />
           {/* y=0 기준선 — BEP 도달 시각화 */}
-          <ReferenceLine y={0} stroke="#a8a29e" strokeDasharray="2 2" />
+          <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="2 2" />
 
           {/* 동별 누적이익 라인 — 4 색상 순환 */}
           {trimmedSeries.map((s, idx) => (
@@ -149,7 +145,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
               stroke={COLORS[idx % COLORS.length]}
               strokeWidth={2}
               dot={{ r: 3 }}
-              activeDot={{ r: 5, stroke: '#fff', strokeWidth: 1 }}
+              activeDot={{ r: 5, stroke: 'var(--card)', strokeWidth: 1 }}
               isAnimationActive={false}
               connectNulls
             />
@@ -159,9 +155,9 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
           {bepQuarter !== null && (
             <ReferenceLine
               x={bepQuarter}
-              stroke="#10b981"
+              stroke="var(--success)"
               strokeDasharray="3 3"
-              label={{ value: 'BEP', fill: '#10b981', fontSize: 11 }}
+              label={{ value: 'BEP', fill: 'var(--success)', fontSize: 11 }}
             />
           )}
         </LineChart>

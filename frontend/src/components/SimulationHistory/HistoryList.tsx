@@ -46,14 +46,14 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
 
       <HistoryFilter value={filter} onChange={setFilter} />
 
-      <div className="flex items-center justify-between text-xs text-stone-400">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
-          총 <span className="font-mono text-stone-100">{total}</span>건
+          총 <span className="font-mono text-foreground">{total}</span>건
         </span>
         <button
           type="button"
           onClick={() => void refetch()}
-          className="text-stone-400 hover:text-stone-100"
+          className="text-muted-foreground hover:text-foreground"
           aria-label="새로고침"
         >
           새로고침
@@ -61,17 +61,17 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
       </div>
 
       {error && (
-        <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+        <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
         </div>
       )}
 
       {isLoading ? (
-        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-500">
+        <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
           불러오는 중…
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-400">
+        <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
           조건에 맞는 시뮬 이력이 없습니다
         </div>
       ) : (

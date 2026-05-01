@@ -26,7 +26,7 @@ interface Props {
 export function LegalDistributionBar({ risks }: Props) {
   if (!risks || risks.length === 0) {
     return (
-      <div className="flex h-[80px] items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+      <div className="flex h-[80px] items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
         legal 분석 대기
       </div>
     );
@@ -37,23 +37,23 @@ export function LegalDistributionBar({ risks }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex h-6 w-full overflow-hidden rounded-lg border border-stone-800">
+      <div className="flex h-6 w-full overflow-hidden rounded-lg border border-border">
         <div
-          className="flex items-center justify-center bg-rose-500/80 text-[0.5625rem] font-black text-white"
+          className="flex items-center justify-center bg-danger/80 text-[0.5625rem] font-black text-white"
           style={{ width: `${pct(counts.high)}%` }}
           title={`필수이행 ${counts.high}`}
         >
           {counts.high >= 1 && pct(counts.high) > 10 ? counts.high : ''}
         </div>
         <div
-          className="flex items-center justify-center bg-amber-500/80 text-[0.5625rem] font-black text-stone-950"
+          className="flex items-center justify-center bg-warning/80 text-[0.5625rem] font-black text-muted-foreground"
           style={{ width: `${pct(counts.medium)}%` }}
           title={`확인필요 ${counts.medium}`}
         >
           {counts.medium >= 1 && pct(counts.medium) > 10 ? counts.medium : ''}
         </div>
         <div
-          className="flex items-center justify-center bg-emerald-500/80 text-[0.5625rem] font-black text-stone-950"
+          className="flex items-center justify-center bg-success/80 text-[0.5625rem] font-black text-muted-foreground"
           style={{ width: `${pct(counts.low)}%` }}
           title={`참고사항 ${counts.low}`}
         >
@@ -61,11 +61,11 @@ export function LegalDistributionBar({ risks }: Props) {
         </div>
       </div>
       <div className="flex flex-wrap gap-4 text-[0.625rem]">
-        <LegendItem color="bg-rose-500" label={`필수이행 ${counts.high}`} />
-        <LegendItem color="bg-amber-500" label={`확인필요 ${counts.medium}`} />
-        <LegendItem color="bg-emerald-500" label={`참고사항 ${counts.low}`} />
+        <LegendItem color="bg-danger" label={`필수이행 ${counts.high}`} />
+        <LegendItem color="bg-warning" label={`확인필요 ${counts.medium}`} />
+        <LegendItem color="bg-success" label={`참고사항 ${counts.low}`} />
         {counts.fallback > 0 && (
-          <span className="text-stone-500 italic">(fallback {counts.fallback})</span>
+          <span className="text-muted-foreground italic">(fallback {counts.fallback})</span>
         )}
       </div>
     </div>
@@ -76,7 +76,7 @@ function LegendItem({ color, label }: { color: string; label: string }) {
   return (
     <div className="flex items-center gap-1.5">
       <div className={`h-2 w-2 rounded-sm ${color}`} />
-      <span className="font-bold text-stone-400 tabular-nums">{label}</span>
+      <span className="font-bold text-muted-foreground tabular-nums">{label}</span>
     </div>
   );
 }

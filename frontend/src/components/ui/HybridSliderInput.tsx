@@ -71,22 +71,22 @@ export function HybridSliderInput({
   const renderMin = minLabel ?? `${min}${unit}`;
 
   return (
-    <div className={`flex flex-col gap-3 mb-6 ${className}`}>
+    <div className={`flex flex-col gap-2 mb-3 ${className}`}>
       {/* 라벨 + 수기 입력 영역 */}
       <div className="flex justify-between items-center">
-        <label className="text-xs font-bold text-[#e2e8f0] flex items-center gap-1.5 group cursor-help">
+        <label className="text-xs font-bold text-foreground flex items-center gap-1.5 group cursor-help">
           {label}
           {infoText && (
             <div className="relative flex items-center">
-              <Info className="w-3.5 h-3.5 text-[#6b7280] group-hover:text-[#818cf8] transition-colors" />
-              <div className="absolute left-6 top-4 w-48 p-2 bg-[#1e1b18] border border-[#3a3633] rounded-md shadow-xl text-[0.625rem] text-[#a3a3a3] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              <Info className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+              <div className="absolute left-6 top-4 w-48 p-2 bg-card border border-border rounded-md shadow-xl text-[0.625rem] text-muted-foreground opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                 {infoText}
               </div>
             </div>
           )}
         </label>
 
-        <div className="flex items-center bg-[#171717] border border-[#404040] rounded-md px-2 py-1.5 focus-within:border-[#818cf8] focus-within:shadow-[0_0_10px_rgba(129,140,248,0.2)] transition-all">
+        <div className="flex items-baseline gap-1 focus-within:[&>input]:text-primary transition-all">
           <input
             type="text"
             inputMode="numeric"
@@ -96,14 +96,14 @@ export function HybridSliderInput({
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
-            className="w-16 bg-transparent text-right text-xs font-mono tabular-nums font-black text-[#818cf8] focus:outline-none placeholder-[#404040]"
+            className="w-20 bg-transparent text-right text-2xl font-black tabular-nums text-primary tracking-tight focus:outline-none placeholder-muted-foreground/60"
             placeholder={String(min)}
           />
-          <span className="text-[0.625rem] text-[#9ca3af] ml-1 font-bold">{unit}</span>
+          <span className="text-xs font-bold text-muted-foreground">{unit}</span>
         </div>
       </div>
 
-      {/* 커스텀 슬라이더 */}
+      {/* 커스텀 슬라이더 — input 자체에 gradient background 로 progress fill (왼쪽 Deep Blue / 오른쪽 gray) */}
       <div className="relative flex items-center h-4 group">
         <input
           type="range"
@@ -112,15 +112,14 @@ export function HybridSliderInput({
           step={step}
           value={sliderValue}
           onChange={handleSliderChange}
-          className="absolute w-full h-1.5 appearance-none bg-[#3a3633] rounded-full outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#818cf8] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(129,140,248,0.6)] z-10"
-        />
-        <div
-          className="absolute left-0 h-1.5 bg-gradient-to-r from-[#6366f1] to-[#818cf8] rounded-full pointer-events-none z-0"
-          style={{ width: `${progressPercent}%` }}
+          className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(0,44,209,0.6)] [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:cursor-pointer"
+          style={{
+            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${progressPercent}%, var(--border) ${progressPercent}%, var(--border) 100%)`,
+          }}
         />
       </div>
 
-      <div className="flex justify-between text-[0.625rem] text-[#6b7280] font-mono tabular-nums">
+      <div className="flex justify-between text-[0.625rem] text-muted-foreground font-mono tabular-nums">
         <span>{renderMin}</span>
         <span>{renderMax}</span>
       </div>

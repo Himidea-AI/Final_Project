@@ -94,10 +94,11 @@ export function buildRows(steps: WaterfallStep[]): {
   return { rows, runningTotals };
 }
 
-const COLOR_BASE = '#a8a29e'; // Stone 400
-const COLOR_FINAL = '#818cf8'; // Indigo 400 (메인)
-const COLOR_POS = '#22c55e'; // Emerald 500 (양 기여)
-const COLOR_NEG = '#ef4444'; // Rose 500 (음 기여)
+// 룰 §10 SHAP Waterfall — 시맨틱 토큰
+const COLOR_BASE = 'var(--muted-foreground)';
+const COLOR_FINAL = 'var(--primary)';
+const COLOR_POS = 'var(--success)';
+const COLOR_NEG = 'var(--danger)';
 
 function colorFor(kind: BarRow['kind'], signed: number): string {
   if (kind === 'base') return COLOR_BASE;
@@ -112,7 +113,7 @@ export function WaterfallChart({
 }: Props) {
   if (!steps || steps.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-stone-500 text-xs">
+      <div className="flex items-center justify-center h-48 text-muted-foreground text-xs">
         Waterfall 데이터 없음
       </div>
     );
@@ -123,25 +124,26 @@ export function WaterfallChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={rows} margin={{ top: 16, right: 16, left: 16, bottom: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#292524" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 10, fill: '#a8a29e' }}
+          tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
           interval={0}
-          axisLine={{ stroke: '#44403c' }}
+          axisLine={{ stroke: 'var(--border)' }}
         />
         <YAxis
           tickFormatter={formatY}
-          tick={{ fontSize: 10, fill: '#a8a29e' }}
-          axisLine={{ stroke: '#44403c' }}
+          tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+          axisLine={{ stroke: 'var(--border)' }}
         />
         <Tooltip
-          cursor={{ fill: 'rgba(129,140,248,0.05)' }}
+          cursor={{ fill: 'rgba(0,44,209,0.05)' }}
           contentStyle={{
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #44403c',
+            backgroundColor: 'var(--card)',
+            border: '1px solid var(--border)',
             borderRadius: 8,
             fontSize: 12,
+            color: 'var(--card-foreground)',
           }}
           formatter={(_v, _n, item) => {
             const r = item?.payload as BarRow;
@@ -150,7 +152,7 @@ export function WaterfallChart({
           }}
           labelFormatter={() => ''}
         />
-        <ReferenceLine y={0} stroke="#44403c" />
+        <ReferenceLine y={0} stroke="var(--border)" />
         {/* spacer는 invisible, bar만 시각화 */}
         <Bar dataKey="spacer" stackId="a" fill="transparent" isAnimationActive={false} />
         <Bar dataKey="bar" stackId="a" radius={[3, 3, 0, 0]} isAnimationActive={false}>
