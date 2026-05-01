@@ -220,3 +220,61 @@ def test_dms_predict_applies_expm1():
         tgt_scaler=mock_tgt_scaler, device=torch.device("cpu"),
     )
     assert all(v == pytest.approx(0.0) for v in result)
+
+
+# ---------------------------------------------------------------------------
+# _generate_report 테스트
+# ---------------------------------------------------------------------------
+
+
+def _dummy_metrics():
+    return dict(mape=15.0, mae=1_000_000.0, rmse=1_200_000.0,
+                da=70.0, bias=50_000.0, pq_mape=[10.0, 12.0, 15.0, 18.0])
+
+
+def test_generate_report_creates_file(tmp_path):
+    from scripts.evaluate_model import _generate_report
+    path = _generate_report(
+        metrics_v1=_dummy_metrics(), metrics_v2=_dummy_metrics(),
+        v1_weights_name="v1.pt", v2_weights_name="v2.pt",
+        n_combos=10, reports_dir=tmp_path,
+        residual_std=None, warn_combos=[],
+    )
+    assert path.exists()
+
+
+def test_generate_report_contains_required_sections(tmp_path):
+    from scripts.evaluate_model import _generate_report
+    path = _generate_report(
+        metrics_v1=_dummy_metrics(), metrics_v2=_dummy_metrics(),
+        v1_weights_name="v1.pt", v2_weights_name="v2.pt",
+        n_combos=10, reports_dir=tmp_path,
+        residual_std=None, warn_combos=[],
+    )
+    content = path.read_text(encoding="utf-8")
+    for section in ["전체 지표 비교", "분기별 MAPE", "결론"]:
+        assert section in content
+
+
+def test_generate_report_auto_creates_dir(tmp_path):
+    from scripts.evaluate_model import _generate_report
+    new_dir = tmp_path / "reports"
+    _generate_report(
+        metrics_v1=_dummy_metrics(), metrics_v2=_dummy_metrics(),
+        v1_weights_name="v1.pt", v2_weights_name="v2.pt",
+        n_combos=10, reports_dir=new_dir,
+        residual_std=None, warn_combos=[],
+    )
+    assert new_dir.exists()
+
+
+def test_generate_report_includes_residual_std(tmp_path):
+    from scripts.evaluate_model import _generate_report
+    path = _generate_report(
+        metrics_v1=_dummy_metrics(), metrics_v2=_dummy_metrics(),
+        v1_weights_name="v1.pt", v2_weights_name="v2.pt",
+        n_combos=10, reports_dir=tmp_path,
+        residual_std=[1_200_000.0, 1_450_000.0, 1_680_000.0, 1_920_000.0],
+        warn_combos=[],
+    )
+    assert "신뢰구간" in path.read_text(encoding="utf-8")
