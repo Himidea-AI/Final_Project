@@ -9,7 +9,7 @@ interface Props {
 export function CustomerSegmentCard({ segment }: Props) {
   if (!segment) {
     return (
-      <div className="rounded-2xl border border-dashed border-border bg-card/40 p-6 text-center">
+      <div className="rounded-2xl border border-dashed border-border bg-secondary p-6 text-center">
         <Users className="mx-auto text-muted-foreground mb-2" size={24} />
         <p className="text-xs text-muted-foreground">
           타겟 고객 프로필을 입력하면 분석 결과가 표시됩니다

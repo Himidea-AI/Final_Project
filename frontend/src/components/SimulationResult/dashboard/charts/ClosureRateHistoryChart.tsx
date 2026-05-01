@@ -34,7 +34,7 @@ interface Row {
 export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
   if (!rates || rates.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
         과거 12개월 폐업률 데이터 없음
       </div>
     );
@@ -46,7 +46,7 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
   }));
 
   return (
-    <div className="mt-3 rounded-lg border border-border/60 bg-card/40 p-4">
+    <div className="mt-3 rounded-lg border border-border bg-secondary p-4">
       <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground mb-3">
         과거 12개월 폐업률 추이
         <span className="ml-2 text-[0.5625rem] font-bold text-muted-foreground normal-case tracking-normal">

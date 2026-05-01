@@ -21,7 +21,7 @@ export function ClosureRatePanel({ rate, district }: Props) {
   }
   const avgPct = rate.closure_rate != null ? (rate.closure_rate * 100).toFixed(1) : '—';
   return (
-    <div className="bg-card/40 border border-border/60 rounded-3xl p-6">
+    <div className="bg-card border border-border rounded-3xl p-6">
       {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
       <div className="flex items-center justify-between mb-4">
         <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">

@@ -22,6 +22,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { QuarterlyProjection } from '../../../../types';
+import { SERIES_COLORS } from '../../QuarterlyProjectionChart';
 
 /** 동별 분기 누적이익 시리즈 1건 */
 type ChartSeries = { district: string; projection: QuarterlyProjection[] };
@@ -31,8 +32,8 @@ interface Props {
   height?: number;
 }
 
-// 4동 비교 — 룰 §6: chart-1 ~ chart-4 토큰
-const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'] as const;
+// 4동 차트 팔레트 — QuarterlyProjectionChart 와 form 통일 (deep blue / vivid red / teal / sunshine-yellow).
+const COLORS = SERIES_COLORS;
 
 const formatKRW = (value: number): string => {
   const abs = Math.abs(value);
@@ -47,7 +48,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const validSeries = (series ?? []).filter((s) => s.projection && s.projection.length > 0);
   if (validSeries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
         투자 회수 데이터 없음
       </div>
     );
@@ -77,23 +78,17 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
 
   return (
-    <div className="mt-3 rounded-lg border border-border/60 bg-card/40 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-          <span>분기별 투자 회수 곡선</span>
-          <span className="text-[0.5625rem] font-bold text-muted-foreground normal-case tracking-normal">
-            cumulative_profit · BEP 도달 시점 강조 (기준: {trimmedSeries[0]?.district ?? '—'})
+    <div className="rounded-2xl border border-border bg-secondary p-6">
+      <div className="mb-3 flex items-center justify-between">
+        {hasMockQuarters && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning">
+            <span className="h-1 w-1 rounded-full bg-warning" />
+            일부 분기 mock
           </span>
-          {hasMockQuarters && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold normal-case tracking-normal text-warning">
-              <span className="h-1 w-1 rounded-full bg-warning" />
-              일부 분기 mock
-            </span>
-          )}
-        </div>
+        )}
         {bepQuarter !== null && (
-          <span className="text-[0.625rem] font-black tabular-nums text-success">
-            BEP Q{bepQuarter}
+          <span className="ml-auto text-[0.625rem] font-black tabular-nums text-success">
+            BEP {bepQuarter}분기
           </span>
         )}
       </div>
@@ -102,7 +97,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="quarter"
-            tickFormatter={(q: number) => `Q${q}`}
+            tickFormatter={(q: number) => `${q}분기`}
             tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
             axisLine={{ stroke: 'var(--border)' }}
           />
@@ -132,9 +127,9 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
             labelFormatter={(q: number) => `${q}분기`}
           />
           <Legend
-            verticalAlign="top"
-            height={24}
-            wrapperStyle={{ paddingBottom: 4, fontSize: 11 }}
+            verticalAlign="bottom"
+            height={28}
+            wrapperStyle={{ paddingTop: 8, fontSize: 11 }}
             iconType="circle"
           />
           {/* y=0 기준선 — BEP 도달 시각화 */}

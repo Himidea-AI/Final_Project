@@ -1,15 +1,20 @@
 /**
  * SurvivalRateKpi — 생존률 보조 KPI 카드
  *
- * 데이터: market_report.survival_rate (0~100 정규화 또는 0~1)
- * 디자인: 폐업률(rose) ↔ 생존률(emerald) 시각적 균형
+ * 2026-05-01 정합 fix: backend 의 survival_rate 가 임의 변환식 (score × 0.9 floor 30) 이라
+ *   misleading. 생존률을 폐업률의 보완값 (100 - closure_rate × 100) 으로 직접 산출 →
+ *   두 값이 동일 모델 출처에서 정합. survivalRate prop 더 이상 사용하지 않음 (deprecated).
+ *
+ * 데이터: market_report.closure_rate (DB 실측, 0~1 비율 또는 0~100)
+ * 디자인: 폐업률(danger) ↔ 생존률(success) — 합 100% 보장
  */
 
 import { ShieldCheck } from 'lucide-react';
 
 interface Props {
-  survivalRate: number | null | undefined;
-  closureRate?: number | null | undefined;
+  /** @deprecated backend 임의 변환식 — closure 의 보완값으로 자동 산출. 무시됨. */
+  survivalRate?: number | null | undefined;
+  closureRate: number | null | undefined;
 }
 
 function normalizePct(value: number | null | undefined): number | null {
@@ -18,16 +23,17 @@ function normalizePct(value: number | null | undefined): number | null {
   return value <= 1 ? Math.round(value * 100) : Math.round(value);
 }
 
-export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
-  const sPct = normalizePct(survivalRate);
+export function SurvivalRateKpi({ closureRate }: Props) {
   const cPct = normalizePct(closureRate);
+  // 생존률 = 100 - 폐업률 (실측 보완). closure_rate 가 null 이면 둘 다 null.
+  const sPct = cPct != null ? 100 - cPct : null;
 
-  if (sPct == null && cPct == null) {
+  if (cPct == null) {
     return null;
   }
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/40 p-5">
+    <div className="rounded-2xl border border-border bg-secondary p-5">
       <div className="flex items-center gap-2 mb-3">
         <ShieldCheck size={14} className="text-success" />
         <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
@@ -54,24 +60,15 @@ export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
           </div>
         </div>
       </div>
-      {sPct != null &&
-        cPct != null &&
-        (() => {
-          // High #3 — 합 100% 보장 안 됨 (단순 누적은 105% 되어 시각 깨짐).
-          // total>0이면 share로 정규화 후 width로만 사용. 표시 텍스트는 원본 그대로.
-          const total = sPct + cPct;
-          if (total <= 0) return null;
-          const sShare = (sPct / total) * 100;
-          const cShare = (cPct / total) * 100;
-          return (
-            <div className="mt-3 h-1.5 w-full rounded-full bg-card overflow-hidden flex">
-              <div className="h-full bg-success/70" style={{ width: `${sShare}%` }} />
-              <div className="h-full bg-danger/70" style={{ width: `${cShare}%` }} />
-            </div>
-          );
-        })()}
-      <p className="mt-3 text-[0.625rem] text-muted-foreground leading-relaxed">
-        market_report 정규화 지표. 100을 합한 비율 시각화.
+      {/* 생존률 + 폐업률 = 100 보장 (cPct + sPct = 100). 단순 width 비율로 시각화. */}
+      {sPct != null && (
+        <div className="mt-3 flex h-1.5 w-full overflow-hidden rounded-full bg-card">
+          <div className="h-full bg-success" style={{ width: `${sPct}%` }} />
+          <div className="h-full bg-danger" style={{ width: `${cPct}%` }} />
+        </div>
+      )}
+      <p className="mt-3 text-[0.625rem] leading-relaxed text-muted-foreground">
+        DB 실측 폐업률 기반 — 생존률 = 100 − 폐업률.
       </p>
     </div>
   );

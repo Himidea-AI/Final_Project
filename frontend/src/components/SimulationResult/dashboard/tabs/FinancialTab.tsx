@@ -44,10 +44,7 @@ export function FinancialTab({ simResult }: Props) {
         bepMonths={bepMonths}
       />
 
-      <SurvivalRateKpi
-        survivalRate={simResult.market_report?.survival_rate}
-        closureRate={simResult.market_report?.closure_rate}
-      />
+      <SurvivalRateKpi closureRate={simResult.market_report?.closure_rate} />
 
       <ClosureRatePanel rate={simResult.closure_rate} />
 

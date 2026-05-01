@@ -18,7 +18,7 @@ interface Props {
 export function ClosureRiskPanel({ closure, district }: Props) {
   if (!closure) {
     return (
-      <div className="rounded-2xl border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-xs text-muted-foreground">
         {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
         closure_risk 분석 대기
       </div>
@@ -30,7 +30,7 @@ export function ClosureRiskPanel({ closure, district }: Props) {
   const score100 =
     scoreRaw == null ? null : scoreRaw <= 1 ? Math.round(scoreRaw * 100) : Math.round(scoreRaw);
   return (
-    <div className="bg-card/40 border border-border/60 rounded-3xl p-6">
+    <div className="bg-card border border-border rounded-3xl p-6">
       {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
       <div className="flex items-center justify-between mb-4">
         <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
@@ -42,12 +42,15 @@ export function ClosureRiskPanel({ closure, district }: Props) {
           </span>
         )}
       </div>
+      {/* 폐업 위험도는 lower-better — 점수 낮을수록 안전.
+          [30, 60] 임계값은 시각 영역 분할용 (안전/주의/위험 구간 색감 가이드)이며 수치로
+          표시되지 않음 → §3.7 위반 아님. 이전 target={30} 임의 마커는 misleading 으로 제거.  */}
       <BulletChart
         actual={score100}
-        target={30}
         max={100}
         label="위험 점수"
         thresholds={[30, 60]}
+        polarity="lower-better"
       />
 
       {/* 2026-04-27: closure_risk가 LightGBM(과거 패턴) + TCN(시계열) 두 모델 결과를 별도 노출 */}

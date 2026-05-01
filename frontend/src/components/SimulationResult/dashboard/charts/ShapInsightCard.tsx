@@ -24,7 +24,7 @@ function formatKrw(value: number): string {
 export function ShapInsightCard({ shap, district }: Props) {
   if (!shap) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-card/40 p-8 text-center text-xs text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border bg-secondary p-8 text-center text-xs text-muted-foreground">
         {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
         SHAP 해석 데이터 없음 — 모델 예측 신뢰도가 확정되면 표시됩니다
       </div>
@@ -36,7 +36,7 @@ export function ShapInsightCard({ shap, district }: Props) {
 
   if (top.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
         {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
         피처 기여도 산출 결과 없음
       </div>
@@ -45,8 +45,8 @@ export function ShapInsightCard({ shap, district }: Props) {
 
   return (
     <div
-      className={`rounded-2xl border p-5 ${
-        isMock ? 'border-border bg-card/30 opacity-60' : 'border-border/60 bg-card/50'
+      className={`rounded-2xl border border-border p-5 ${
+        isMock ? 'bg-secondary/60 opacity-60' : 'bg-secondary'
       }`}
     >
       {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}

@@ -25,24 +25,26 @@ html {
 
 @layer base {
   :root {
-    /* ─── System A: 배경/구조 (의미 없는 중립 인프라) ─── */
-    --background: #f8f7e8; /* Background Cream (System B 팔레트 #1) — 전체 페이지 바닥. 카드(white)와 hue 분리로 surface elevation 형성 */
+    /* ─── System A: 배경/구조 ─── */
+    --background: #ffffff; /* White — 전체 페이지 바닥 (그대로 유지) */
     --foreground: #0a0a0a; /* near-black body text */
     --card: #ffffff; /* 데이터 표면 */
     --card-foreground: #0a0a0a;
     --popover: #ffffff;
     --popover-foreground: #0a0a0a;
-    --secondary: #f5f4ee; /* sidebar / nav rail */
+    /* 2026-05-01: 이전 cream(#f5f4ee) 자리들을 cool gray slate-100 으로 교체.
+       날카로운 IT dashboard 톤. page(white) 위에 panel/chip/sidebar 가 cool gray 로 떠있는 surface 분리. */
+    --secondary: #f1f5f9; /* slate-100, cool gray — chip / sidebar / nav rail */
     --secondary-foreground: #0a0a0a;
-    --muted: #f5f4ee;
-    --muted-foreground: #6b6a63;
-    --border: #d4d2c4; /* 카드 경계 명확화 (이전 #EAE9E1 → 컨트라스트 1.4:1 → 2.2:1) */
+    --muted: #f1f5f9; /* slate-100 */
+    --muted-foreground: #64748b; /* slate-500 cool gray text */
+    --border: #cbd5e1; /* slate-300, cool gray border (이전 cream-tint #d4d2c4) */
     --input: #ffffff;
     --radius: 1.25rem;
 
     /* ─── System B: 12색 팔레트 ─── */
     /* Base */
-    --color-cream: #f8f7e8; /* Background Cream — 페이지 바닥 (--background), --accent/--decor-cream 별칭 */
+    --color-cream: #f1f5f9; /* Cool Gray slate-100 (2026-05-01: cream #f8f7e8 → 차가운 톤 전환). 토큰 이름은 historical 유지 — 사용처 자동 적용. */
     --color-text-black: #000000; /* Text Black */
     /* Point */
     --color-starburst-pink: #ff78b9; /* Starburst Pink */
@@ -61,7 +63,7 @@ html {
     /* ─── Brand & semantic — 12색 alias ─── */
     --primary: var(--color-deep-blue);
     --primary-foreground: #ffffff;
-    --accent: var(--color-cream); /* large-area accent slot */
+    --accent: #f1f5f9; /* slate-100 large-area accent (cream → cool gray) */
     --accent-foreground: #0a0a0a;
     --destructive: var(--color-vivid-red);
     --destructive-foreground: #ffffff;

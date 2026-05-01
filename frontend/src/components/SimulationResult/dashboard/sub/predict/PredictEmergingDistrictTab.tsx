@@ -49,17 +49,14 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
       </h4>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {dpredicts.map((p) => (
-          <div
-            key={p.district}
-            className="bg-card/40 border border-border/60 rounded-3xl p-4 space-y-3"
-          >
+          <div key={p.district} className="bg-card border border-border rounded-3xl p-4 space-y-3">
             <div className="text-xs font-black text-foreground uppercase tracking-widest">
               {p.district}
             </div>
             {p.emerging_signal ? (
               <EmergingSignalCard signal={p.emerging_signal as unknown as EmergingSignal} />
             ) : (
-              <div className="rounded-2xl border border-dashed border-border bg-card/40 p-4 text-[0.625rem] text-muted-foreground">
+              <div className="rounded-2xl border border-dashed border-border bg-secondary p-4 text-[0.625rem] text-muted-foreground">
                 신흥상권 신호 미수신
               </div>
             )}
