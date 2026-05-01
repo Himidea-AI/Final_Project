@@ -9,13 +9,17 @@
  *   3) "뒤로" → AgentMapVisualizer 복귀
  *
  * 이 탭은 TabbedDashboard v4.2 마이그레이션 시 누락되어 복원.
+ *
+ * 상태 관리: useState 로컬 → useAbmStore (zustand+persist+AbortController)로 이관.
+ * 새로고침/탭 이동/dashboardMode 토글에도 in-flight 시뮬 결과를 잃지 않는다.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapPin, Radar, Loader2, AlertCircle } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import AgentMapVisualizer from '../../../AgentMapVisualizer';
 import AbmPersonaMap from '../../../AbmPersonaMap';
+import { useAbmStore } from '../../../../stores/abmStore';
 
 interface Props {
   simResult: SimulationOutput;
@@ -24,12 +28,6 @@ interface Props {
   businessType?: string | null;
   /** 신규 매장 평수 — backend seats=storeArea*2 + 잠식 계산에 사용. 미지정 시 simResult 에서 추출 또는 15. */
   storeArea?: number;
-}
-
-interface FocusSpot {
-  lat: number;
-  lon: number;
-  label?: string;
 }
 
 interface AbmScenario {
@@ -43,12 +41,31 @@ type DashboardMode = 'map' | 'abm';
 
 export function AbmTab({ simResult, brandName, businessType, storeArea }: Props) {
   const [mode, setMode] = useState<DashboardMode>('map');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [abmResult, setAbmResult] = useState<any>(null);
-  const [abmLoading, setAbmLoading] = useState(false);
-  const [abmError, setAbmError] = useState<string | null>(null);
-  const [focusSpot, setFocusSpot] = useState<FocusSpot | null>(null);
 
+  // store selector — store 가 single source of truth. focusSpot 도 store 에 둠
+  // (새로고침 시 어떤 spot 를 시뮬하던 중인지 같이 살리기 위해).
+  const abmResult = useAbmStore((s) => s.result);
+  const abmStatus = useAbmStore((s) => s.status);
+  const abmError = useAbmStore((s) => s.error);
+  const focusSpot = useAbmStore((s) => s.focusSpot);
+  const startAbm = useAbmStore((s) => s.startAbm);
+  const dismissResult = useAbmStore((s) => s.dismissResult);
+  const setFocusSpot = useAbmStore((s) => s.setFocusSpot);
+  const resumePollingIfNeeded = useAbmStore((s) => s.resumePollingIfNeeded);
+
+  const abmLoading = abmStatus === 'running';
+
+  // mount 시 persist 복원된 running jobId 가 있으면 polling 재개.
+  // 또한 done 상태로 복원된 결과가 있으면 ABM 모드로 자동 진입.
+  useEffect(() => {
+    resumePollingIfNeeded();
+    if ((abmStatus === 'running' || abmStatus === 'done') && focusSpot) {
+      setMode('abm');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = simResult as any;
   const targetDistrict =
     r?.winner_district || r?.target_district || r?.target_districts?.[0] || '서교동';
@@ -60,6 +77,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
     : [];
 
   const locations = vacancySpots
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((s: any) => ({
       id: `vacancy_${s.id}`,
       name: s.dong_name ?? '공실',
@@ -68,10 +86,13 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       type: 'vacancy' as const,
       listingCount: s.listing_count,
     }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((l: any) => typeof l.lat === 'number' && typeof l.lng === 'number');
 
   const competitors = competitorSamples
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((s: any) => s.lat && (s.lng ?? s.lon))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((s: any) => ({
       id: s.id ?? `comp_${s.place_name}_${s.lat}`,
       name: s.place_name || s.brand_name || '경쟁업체',
@@ -82,63 +103,40 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       category: s.category,
     }));
 
-  async function callAbmApi(params: {
+  /** store action wrapper — payload 빌드 + startAbm 호출. */
+  function runAbm(params: {
     districtOverride?: string;
     spotLat?: number;
     spotLon?: number;
     scenario: AbmScenario;
+    nextFocusSpot?: { lat: number; lon: number; label?: string } | null;
   }) {
-    setAbmLoading(true);
-    setAbmError(null);
-    try {
-      const res = await fetch('/api/simulate-abm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_district: params.districtOverride ?? targetDistrict,
-          business_type: businessType ?? 'cafe',
-          brand_name: brandName || '신규 매장',
-          langgraph_result: r?._raw ?? r,
-          n_agents: 5000,
-          days: 1,
-          spot_lat: params.spotLat,
-          spot_lon: params.spotLon,
-          scenario: params.scenario,
-          // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 시각화에 필요.
-          // backend default False 라 명시적으로 true 전달.
-          enable_llm_thought: true,
-          // Tier S/A LLM 의사결정 (A 옵션) — Tier 별 행동 차별화 활성.
-          // Tier S → Haiku smart_decide, Tier A → Gemini Flash fast_decide, Tier B → rule.
-          // 비용 ~$0.7/sim, 시간 +60~180s. False 면 전 Tier policy_decide ($0).
-          enable_llm_decisions: true,
-          // 신규 매장 평수 — props 우선, 없으면 simResult.storeArea, 둘다 없으면 15.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          store_area: storeArea ?? (r as any)?.storeArea ?? (r as any)?.store_area ?? 15,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAbmError(data?.message || `ABM 시뮬 실패 (HTTP ${res.status})`);
-      } else if (data.status === 'unavailable') {
-        setAbmError('ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)');
-      } else if (data.status === 'error') {
-        setAbmError(data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.');
-      } else {
-        setAbmResult(data);
-      }
-    } catch (err) {
-      setAbmError(`ABM 시뮬레이션 요청 실패: ${(err as Error).message || '네트워크 오류'}`);
-    } finally {
-      setAbmLoading(false);
-    }
+    const payload = {
+      target_district: params.districtOverride ?? targetDistrict,
+      business_type: businessType ?? 'cafe',
+      brand_name: brandName || '신규 매장',
+      langgraph_result: r?._raw ?? r,
+      n_agents: 5000,
+      days: 1,
+      spot_lat: params.spotLat,
+      spot_lon: params.spotLon,
+      scenario: params.scenario,
+      // Tier S 50명 LLM thought 활성 — 풍선/PersonaCard 시각화에 필요.
+      enable_llm_thought: true,
+      // Tier S/A LLM 의사결정 (A 옵션) — Tier 별 행동 차별화.
+      enable_llm_decisions: true,
+      // 신규 매장 평수.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      store_area: storeArea ?? (r as any)?.storeArea ?? (r as any)?.store_area ?? 15,
+    };
+    return startAbm(payload, params.nextFocusSpot ?? null);
   }
 
   const handleAgentMapSpotClick = async (loc: { lat: number; lng: number; name: string }) => {
     if (abmLoading) return;
     setMode('abm');
-    setFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
-    setAbmResult(null);
-    await callAbmApi({
+    const next = { lat: loc.lat, lon: loc.lng, label: loc.name };
+    await runAbm({
       districtOverride: loc.name,
       spotLat: loc.lat,
       spotLon: loc.lng,
@@ -148,14 +146,14 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
         weekend_force: false,
         rent_shock_pct: 0.0,
       },
+      nextFocusSpot: next,
     });
   };
 
   const handleAbmSpotClick = async (spot: { lat: number; lon: number; dong_name: string }) => {
     if (abmLoading) return;
-    setFocusSpot({ lat: spot.lat, lon: spot.lon, label: spot.dong_name });
-    setAbmResult(null);
-    await callAbmApi({
+    const next = { lat: spot.lat, lon: spot.lon, label: spot.dong_name };
+    await runAbm({
       districtOverride: spot.dong_name,
       spotLat: spot.lat,
       spotLon: spot.lon,
@@ -165,16 +163,16 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
         weekend_force: false,
         rent_shock_pct: 0.0,
       },
+      nextFocusSpot: next,
     });
   };
 
   const handleRunSimulation = async (scenario: AbmScenario) => {
-    await callAbmApi({ scenario });
+    await runAbm({ scenario, nextFocusSpot: focusSpot });
   };
 
   const handleClearResult = () => {
-    setAbmResult(null);
-    setAbmError(null);
+    dismissResult();
     setFocusSpot(null);
     setMode('map');
   };

@@ -8,6 +8,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import numpy as np
+
 from .agents import Agent, Role, Tier, spawn_agents
 from .brain import LLMBrain
 from .config import (
@@ -298,10 +300,13 @@ async def _batch_generate_thoughts(
 ) -> list[str]:
     """N agents 동시 호출 — Semaphore 로 OpenAI org RPM(500) 보호.
 
-    smart_decide(ThreadPool) + thought(asyncio) 가 같은 org 풀 공유.
-    각각 4 동시성 cap → 합산 8 concurrent → 안전 마진. 직렬 0.86s × 50 / 4 ≈ 11s.
+    동시성 운영 모델:
+      - enable_llm_decisions=True 모드: smart_decide(ThreadPool=8) 만 활성, thought 재활용
+      - enable_llm_decisions=False + enable_llm_thought=True: 본 Semaphore(8) 만 활성
+      두 모드 모두 단일 메커니즘 8 concurrent → 1.5s/call 시 ~320 RPM (OpenAI Tier 1 500 RPM 안).
+      이전 4 → 8 상향으로 시뮬당 LLM 대기 60-90s 절감 (5000 agents 기준).
     """
-    sem = asyncio.Semaphore(4)
+    sem = asyncio.Semaphore(8)
 
     async def _bounded(a):
         async with sem:
@@ -440,7 +445,7 @@ def run_simulation(
     pgvector_clear: bool = False,
     scenario: Scenario | None = None,
     save_path: str | Path | None = None,
-    llm_concurrency: int = 4,
+    llm_concurrency: int = 8,
     use_profiles: bool = False,
     enable_chat: bool = False,
     chat_per_step: int = 2,
@@ -753,7 +758,8 @@ def run_simulation(
     DENSITY_ROWS = 96
     _density_d_lat = (DENSITY_MAX_LAT - DENSITY_MIN_LAT) / DENSITY_ROWS
     _density_d_lon = (DENSITY_MAX_LON - DENSITY_MIN_LON) / DENSITY_COLS
-    density_hours: dict[str, list[int]] = {}
+    # numpy int32 array per hour — bincount 누적용. 출력 시 .tolist() 로 직렬화.
+    density_hours: dict[str, np.ndarray] = {}
     density_max: int = 0
 
     # 에이전트 홈 좌표 (동 center)
@@ -785,6 +791,22 @@ def run_simulation(
     # agent_id → Agent lookup — agents 리스트는 시뮬 중 변경 X 라 1회만 빌드.
     # (이전엔 매 hour 재빌드 → 5000 entry × 20 hours 불필요 반복).
     _agent_by_id = {a.agent_id: a for a in agents}
+
+    # ───── numpy 벡터화 사전 계산 — density grid binning 핫 패스 (기존 Python 루프
+    # 5000명×24h 가우시안+integer division 누적 ~3-5s → numpy 한 번 호출 ~0.5s) ────
+    # 1) agent_id → array index 매핑 (visited_now 적용 시 사용).
+    _agent_idx = {a.agent_id: i for i, a in enumerate(agents)}
+    # 2) per-agent 안정 가우시안 unit (이전 코드 = Random(agent_id*golden).gauss(0,1) 두 번).
+    #    정확히 같은 시퀀스 보존 — 결과 재현성 유지.
+    import random as _np_seed_rng
+
+    _gauss_units = np.empty((len(agents), 2), dtype=np.float64)
+    for _i, _a in enumerate(agents):
+        _r = _np_seed_rng.Random(_a.agent_id * 0x9E3779B1)
+        _gauss_units[_i, 0] = _r.gauss(0.0, 1.0)
+        _gauss_units[_i, 1] = _r.gauss(0.0, 1.0)
+    # 3) dong → sigma_deg pre-cache (기존 _dong_sigma_deg 가 매 hour 5000번 호출되던 hash lookup).
+    _sigma_by_dong = {d: _dong_sigma_deg(d) for d in MAPO_DONGS}
 
     # [v12] Warmup: 측정 전 N 일 시뮬 후 집계 초기화 — Layer 2/5 습관 형성
     total_loops = warmup_days + days
@@ -824,6 +846,34 @@ def run_simulation(
             total_decisions = 0
             visits_log.clear()
             trajectory.clear()
+
+        # Hierarchical Planning (Stanford UIST'23) — 측정일 시작 시 Tier S 하루 일정 batch 생성.
+        # 매 hour 슬롯 조회로 LLM 호출 회피 + 일관성 보장 (점심 한 번만 등).
+        # 외부 (ext_commuter/visitor) 는 외부 시간엔 결정 X 라 plan 무의미 → 마포 거주/통근만.
+        if not is_warmup and use_llm_decisions and hasattr(brain, "generate_daily_plans_batch"):
+            _tier_s_for_plan = [
+                a for a in agents if a.tier == Tier.S and a.role not in (Role.EXT_COMMUTER, Role.EXT_VISITOR)
+            ]
+            if _tier_s_for_plan:
+                if verbose:
+                    print(
+                        f"  [plan] hierarchical plan 생성 — Tier S {len(_tier_s_for_plan)}명...",
+                        flush=True,
+                    )
+                try:
+                    _plans = brain.generate_daily_plans_batch(_tier_s_for_plan, world)
+                    for _a in _tier_s_for_plan:
+                        _a.daily_plan = _plans.get(_a.agent_id, [])
+                    if verbose:
+                        _n_planned = sum(1 for _a in _tier_s_for_plan if _a.daily_plan)
+                        print(
+                            f"  [plan] {_n_planned}/{len(_tier_s_for_plan)} agent plan 생성 완료",
+                            flush=True,
+                        )
+                except Exception as e:
+                    print(f"  [plan] 실패 — batch_smart_decide fallback 사용: {e}", flush=True)
+                    for _a in _tier_s_for_plan:
+                        _a.daily_plan = []
 
         for _ in range(time_cfg.total_steps):
             res = scheduler.step(brain)
@@ -957,36 +1007,50 @@ def run_simulation(
                 abs_hour_key = str(day * 24 + res.hour)
                 density_cells = density_hours.get(abs_hour_key)
                 if density_cells is None:
-                    density_cells = [0] * (DENSITY_COLS * DENSITY_ROWS)
+                    # numpy int32 array — bincount 결과 누적 + 직렬화 시 .tolist() 변환.
+                    density_cells = np.zeros(DENSITY_COLS * DENSITY_ROWS, dtype=np.int32)
                     density_hours[abs_hour_key] = density_cells
-                import random as _agent_rng_lib
 
-                for a in agents:
-                    if a.current_dong == "외부":
+                # ─── numpy 벡터화 — agent loc → cell idx → bincount ──────────────
+                # 출처: 마포구청 「마포구 통계연보 2023」 p.46-47 면적 기반 σ.
+                # 동별 σ 범위: 염리동(0.43km²) σ≈185m / 평균(1.0km²) σ≈282m /
+                # 합정동(1.69km²) σ≈366m / 상암동(가중) σ≈547m.
+                _n = len(agents)
+                _lats = np.full(_n, np.nan, dtype=np.float64)
+                _lons = np.full(_n, np.nan, dtype=np.float64)
+                _sigmas = np.zeros(_n, dtype=np.float64)
+                for _i, _a in enumerate(agents):
+                    if _a.current_dong == "외부":
                         continue
-                    if a.agent_id in visited_now:
-                        d_lat, d_lon = visited_now[a.agent_id]
-                    else:
-                        d_coord = dong_coords.get(a.current_dong)
-                        if not d_coord:
-                            continue
-                        # per-agent stable Gaussian — 동별 면적 기반 가변 σ.
-                        # 출처: 마포구청 「마포구 통계연보 2023」 p.46-47 — 16개 행정동
-                        # 면적 (km²). σ = R/2 where R=√(area/π), uniform circular 가정.
-                        # 상암동(8.40 km²) 은 한강·DMC·공원 등 비주거 영역 多 → weight 0.45.
-                        # 동별 σ 범위: 염리동(0.43km²) σ≈185m / 평균(1.0km²) σ≈282m /
-                        # 합정동(1.69km²) σ≈366m / 상암동(가중) σ≈547m.
-                        sigma_deg = _dong_sigma_deg(a.current_dong)
-                        ag_rng = _agent_rng_lib.Random(a.agent_id * 0x9E3779B1)
-                        d_lat = d_coord[0] + ag_rng.gauss(0, sigma_deg)
-                        d_lon = d_coord[1] + ag_rng.gauss(0, sigma_deg)
-                    d_r = int((DENSITY_MAX_LAT - d_lat) / _density_d_lat)
-                    d_c = int((d_lon - DENSITY_MIN_LON) / _density_d_lon)
-                    if 0 <= d_r < DENSITY_ROWS and 0 <= d_c < DENSITY_COLS:
-                        d_idx = d_r * DENSITY_COLS + d_c
-                        density_cells[d_idx] += 1
-                        if density_cells[d_idx] > density_max:
-                            density_max = density_cells[d_idx]
+                    _coord = dong_coords.get(_a.current_dong)
+                    if not _coord:
+                        continue
+                    _lats[_i] = _coord[0]
+                    _lons[_i] = _coord[1]
+                    _sigmas[_i] = _sigma_by_dong.get(_a.current_dong, 0.003)
+                # visit overrides — 매장 좌표로 덮어쓰고 noise 0 (정확 위치).
+                for _aid, _vlatlon in visited_now.items():
+                    _idx = _agent_idx.get(_aid)
+                    if _idx is not None:
+                        _lats[_idx] = _vlatlon[0]
+                        _lons[_idx] = _vlatlon[1]
+                        _sigmas[_idx] = 0.0
+                # noise 적용 + cell index 산출.
+                # NaN(외부/coord 없는 agent) 는 cell 캐스트 전에 0 치환 — np.float→int32 시
+                # NaN→int 정의 안 됨 (RuntimeWarning). 유효성은 _finite mask 로 별도 검사.
+                _finite = np.isfinite(_lats)
+                _final_lats = np.where(_finite, _lats + _sigmas * _gauss_units[:, 0], 0.0)
+                _final_lons = np.where(_finite, _lons + _sigmas * _gauss_units[:, 1], 0.0)
+                _d_r = ((DENSITY_MAX_LAT - _final_lats) / _density_d_lat).astype(np.int32)
+                _d_c = ((_final_lons - DENSITY_MIN_LON) / _density_d_lon).astype(np.int32)
+                _valid = _finite & (_d_r >= 0) & (_d_r < DENSITY_ROWS) & (_d_c >= 0) & (_d_c < DENSITY_COLS)
+                if _valid.any():
+                    _flat = _d_r[_valid] * DENSITY_COLS + _d_c[_valid]
+                    _counts = np.bincount(_flat, minlength=DENSITY_COLS * DENSITY_ROWS).astype(np.int32)
+                    density_cells += _counts
+                    _hour_max = int(density_cells.max())
+                    if _hour_max > density_max:
+                        density_max = _hour_max
 
                 _iter_agents = (
                     [a for a in agents if a.agent_id in _trajectory_sample_ids]
@@ -1387,7 +1451,8 @@ def run_simulation(
                 "bbox": [DENSITY_MIN_LAT, DENSITY_MIN_LON, DENSITY_MAX_LAT, DENSITY_MAX_LON],
                 "cols": DENSITY_COLS,
                 "rows": DENSITY_ROWS,
-                "hours": density_hours,
+                # numpy int32 array → list[int] (JSON 직렬화 호환).
+                "hours": {k: v.tolist() for k, v in density_hours.items()},
                 "max_count": density_max,
             }
             if density_hours

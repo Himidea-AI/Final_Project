@@ -142,6 +142,23 @@ def evaluate_model(
     }
 
 
+def _to_native(obj):
+    """numpy 타입 → native python recursive (JSON serializable 보장)."""
+    if isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_native(v) for v in obj]
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    return obj
+
+
 def save_metrics_and_plot(
     metrics: dict,
     metrics_path: str | Path,
@@ -158,8 +175,10 @@ def save_metrics_and_plot(
     """
     metrics_path = Path(metrics_path)
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
+    # numpy 타입 → native python 재귀 변환 (TypeError: int64 is not JSON serializable 회피)
+    metrics_native = _to_native(metrics)
     with open(metrics_path, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, ensure_ascii=False, indent=2)
+        json.dump(metrics_native, f, ensure_ascii=False, indent=2)
     logger.info("metrics 저장: %s", metrics_path)
 
     if plot_path is None:

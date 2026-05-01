@@ -23,6 +23,24 @@ from .config import MAPO_DONGS
 load_dotenv()
 
 
+# LangSmith 추적 — LANGCHAIN_TRACING_V2=true 일 때만 동작.
+# langsmith 미설치 / 환경변수 OFF 면 no-op 데코레이터로 graceful degrade.
+try:
+    from langsmith import traceable as _ls_traceable
+
+    def traceable(*dargs, **dkwargs):
+        return _ls_traceable(*dargs, **dkwargs)
+except Exception:
+
+    def traceable(*dargs, **dkwargs):
+        def _decorator(fn):
+            return fn
+
+        if dargs and callable(dargs[0]):
+            return dargs[0]
+        return _decorator
+
+
 # ---------------------------------------------------------------
 # Policy 스키마
 # ---------------------------------------------------------------
@@ -243,19 +261,26 @@ OPENAI_MODEL = os.getenv("OPENAI_POLICY_MODEL", "gpt-4o-mini")
 
 
 def _get_openai_client():
-    """OpenAI 클라이언트. 키 없으면 None."""
+    """OpenAI 클라이언트. 키 없으면 None. LangSmith wrap_openai 자동 적용."""
     key = os.getenv("OPENAI_API_KEY")
     if not key:
         return None
     try:
         from openai import OpenAI
 
-        return OpenAI(api_key=key)
+        client = OpenAI(api_key=key)
+        try:
+            from langsmith.wrappers import wrap_openai
+
+            return wrap_openai(client)
+        except Exception:
+            return client
     except Exception as e:
         print(f"[policy_gen] OpenAI 클라이언트 초기화 실패: {e}")
         return None
 
 
+@traceable(run_type="llm", name="policy_gen.openai")
 def _call_openai(client, prompt: str) -> dict | None:
     """OpenAI 호출 + JSON 파싱. gpt-4o-mini는 response_format json_object 지원."""
     system_msg = (
@@ -296,18 +321,25 @@ def _ollama_alive() -> bool:
 
 
 def _get_ollama_client():
-    """Ollama OpenAI 호환 클라이언트. 서버 다운이면 None."""
+    """Ollama OpenAI 호환 클라이언트. 서버 다운이면 None. LangSmith wrap_openai 자동 적용."""
     if not _ollama_alive():
         return None
     try:
         from openai import OpenAI
 
-        return OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+        client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+        try:
+            from langsmith.wrappers import wrap_openai
+
+            return wrap_openai(client)
+        except Exception:
+            return client
     except Exception as e:
         print(f"[policy_gen] Ollama 클라이언트 초기화 실패: {e}")
         return None
 
 
+@traceable(run_type="llm", name="policy_gen.ollama")
 def _call_ollama(client, prompt: str) -> dict | None:
     """Ollama 호출 + JSON 파싱. Qwen2.5:3b는 response_format json_object 지원.
 

@@ -19,6 +19,7 @@ import logging
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -82,6 +83,78 @@ def _time_based_split(
     return train, val, test
 
 
+def _compute_industry_p75_train(
+    df: pd.DataFrame,
+    train_quarters: set[int],
+    min_samples: int = 4,
+) -> tuple[pd.Series, float]:
+    """Train rows 의 industry 별 closure_rate 75 percentile 계산.
+
+    Args:
+        df: 전체 dataset (lag feature 까지 적용된 상태).
+        train_quarters: train split 분기 set (e.g. {20191, ...}).
+        min_samples: industry 별 최소 sample 수. 미만 시 NaN (fallback 대상).
+
+    Returns:
+        (industry_p75 Series indexed by industry_code, global_p75 float).
+        Sample 부족한 industry 는 industry_p75 에 NaN, 호출자가 fallback 처리.
+
+    Raises:
+        ValueError: train_quarters 에 해당 row 0건.
+
+    학술 근거:
+        Bergmeir & Benítez (2012) 시계열 leakage 차단 — train-only quantile fit.
+    """
+    train_df = df[df["quarter"].isin(train_quarters)]
+    if len(train_df) == 0:
+        raise ValueError(f"train_quarters={train_quarters} 에 해당 row 0건")
+
+    global_p75 = float(train_df["closure_rate"].quantile(0.75))
+
+    counts = train_df.groupby("industry_code")["closure_rate"].size()
+    p75 = train_df.groupby("industry_code")["closure_rate"].quantile(0.75)
+    p75 = p75.where(counts >= min_samples, np.nan)
+
+    return p75, global_p75
+
+
+def add_dong_residual_feature(
+    df: pd.DataFrame,
+    train_quarters: set[int],
+) -> pd.DataFrame:
+    """B-3 (2026-05-01): dong-industry 의 lag1 closure_rate residual.
+
+    `dong_closure_rate_residual_lag1 = closure_rate_lag1 - industry_avg_train_fit(industry_code)`
+
+    A-3 의 Stage 1 industry-level prior 와 보완적 dong-specific deviation 신호.
+    train_quarters 만으로 industry mean fit (leakage 차단).
+
+    Args:
+        df: lag feature 까지 적용된 dataset (closure_rate_lag1 컬럼 존재).
+        train_quarters: train split 분기 set.
+
+    Returns:
+        df with dong_closure_rate_residual_lag1 column.
+
+    학술 근거:
+        Gelman & Hill (2006) hierarchical regression — partial pooling 의 residual 분해.
+    """
+    train_df = df[df["quarter"].isin(train_quarters)]
+    if len(train_df) == 0 or "closure_rate_lag1" not in df.columns:
+        df = df.copy()
+        df["dong_closure_rate_residual_lag1"] = 0.0
+        return df
+
+    industry_mean = train_df.groupby("industry_code")["closure_rate_lag1"].mean()
+    global_mean = float(train_df["closure_rate_lag1"].mean())
+
+    df = df.copy()
+    df["_industry_mean_lag1"] = df["industry_code"].map(industry_mean).fillna(global_mean)
+    df["dong_closure_rate_residual_lag1"] = df["closure_rate_lag1"].fillna(0) - df["_industry_mean_lag1"]
+    df = df.drop(columns=["_industry_mean_lag1"])
+    return df
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
@@ -112,6 +185,21 @@ LGBM_FEATURES = [
     "trend_score",  # 네이버 검색 트렌드 (업종 관심도 감소 → 수요 감소 신호)
     # 유동인구 — adstrd_flpop(null 0%, zero 0%)이 bus_flpop(zero 49%)보다 완전
     "adstrd_flpop",  # 행정동 전체 유동인구
+    # A-2 Stage 1 hierarchical (2026-05-01) — Wolpert 1992 two-stage stacking
+    "industry_prior_pred",  # industry-level prior model 예측 (broadcast per (industry, quarter))
+    # B-3 dong residual (2026-05-01) — Gelman & Hill 2006 hierarchical regression
+    "dong_closure_rate_residual_lag1",  # closure_rate_lag1 - industry mean (train fit)
+    # B-1 신규 8 derivation (2026-05-01) — production rollback (commit 9b09cd1)
+    # AUC -0.024 degradation 으로 LGBM 입력 미사용. derivation 코드는 _engineer_lag_features
+    # 에 보존되어 미래 sprint (B-2 spillover, B-3 hierarchical) 와 결합 시 활용 가능.
+    # "weekday_sales_yoy",
+    # "weekend_sales_yoy",
+    # "age_20_sales_ratio",
+    # "age_60_sales_ratio",
+    # "open_close_ratio_lag1",
+    # "total_pop_yoy",
+    # "holiday_count",
+    # "cpi_index_yoy",
 ]
 
 # TCN 브랜치는 data_prep.ALL_FEATURES 34개 시계열 그대로 사용
@@ -152,48 +240,51 @@ def load_base_data(db_url: str = DB_URL, dong_prefix: str = "11440") -> pd.DataF
 # ---------------------------------------------------------------------------
 
 
-def _make_labels(df: pd.DataFrame) -> pd.DataFrame:
-    """다음 분기 기준 3중 조건 고위험 레이블 생성.
+def _make_labels(
+    df: pd.DataFrame,
+    train_quarters: set[int] | None,
+    *,
+    drop_unseen_industry: bool = True,
+) -> pd.DataFrame:
+    """단일 quantile 기반 label 생성 (C-B1).
 
-    조건 (하나라도 해당 → 1):
-        ① 다음 분기 closure_rate > 업종 전체 평균 × 1.5
-        ② 다음 2분기 연속 store_count 감소
-        ③ 다음 분기 monthly_sales 전년동기 대비 -25% 이상
+    label = 1 ⟺ next_closure_rate > industry_p75_train.
+    train_quarters 의 closure_rate 만으로 p75 fit (leakage 차단).
+
+    Args:
+        df: lag feature 까지 적용된 dataset.
+        train_quarters: train split 분기 set. None / 빈 set → ValueError.
+        drop_unseen_industry: True (default) 이면 train 에 없거나 sample 부족
+            (min_samples<4) 인 industry row drop. False 이면 global_p75 fallback.
+
+    Returns:
+        df + ["label", "industry_p75"] 컬럼. 마지막 분기 (next 없음) row drop.
+
+    Raises:
+        ValueError: train_quarters 가 None 또는 빈 set.
     """
+    if not train_quarters:
+        raise ValueError("train_quarters 필수 — leakage 차단 위해 None / 빈 set 금지")
+
     df = df.copy().sort_values(["dong_code", "industry_code", "quarter"])
     gk = ["dong_code", "industry_code"]
 
-    # 다음 분기 값 shift
     df["next_closure_rate"] = df.groupby(gk)["closure_rate"].shift(-1)
-    df["next_store_count"] = df.groupby(gk)["store_count"].shift(-1)
-    df["next2_store_count"] = df.groupby(gk)["store_count"].shift(-2)
-    df["next_monthly_sales"] = df.groupby(gk)["monthly_sales"].shift(-1)
 
-    # 전년동기 매출 (4분기 전)
-    df["sales_4q_ago"] = df.groupby(gk)["monthly_sales"].shift(4)
+    p75_series, global_p75 = _compute_industry_p75_train(df, train_quarters)
+    df["industry_p75"] = df["industry_code"].map(p75_series)
 
-    # 업종별 평균 closure_rate (분기 전체 기준)
-    # 업종별 전 분기 통합 평균 (시계열 leakage 아님 — 임계값 기준선으로만 사용)
-    industry_avg = df.groupby("industry_code")["closure_rate"].transform("mean")
+    if drop_unseen_industry:
+        unseen_count = int(df["industry_p75"].isna().sum())
+        if unseen_count > 0:
+            logger.warning("train 에 없거나 sample 부족 industry → %d row drop", unseen_count)
+        df = df[df["industry_p75"].notna()].copy()
+    else:
+        df["industry_p75"] = df["industry_p75"].fillna(global_p75)
 
-    # 조건 ①: 다음 분기 폐업률 > 업종 평균 × 1.5
-    cond1 = df["next_closure_rate"] > industry_avg * 1.5
-
-    # 조건 ②: 다음 2분기 연속 store_count 감소
-    cond2 = (df["next_store_count"] < df["store_count"]) & (df["next2_store_count"] < df["next_store_count"])
-
-    # 조건 ③: 다음 분기 매출 전년동기 -25% 이상 하락
-    yoy_change = (df["next_monthly_sales"] - df["sales_4q_ago"]) / (df["sales_4q_ago"].abs() + 1e-6)
-    cond3 = yoy_change < -0.25
-
-    df["label"] = (cond1 | cond2 | cond3).astype(int)
-
-    # 다음 분기 데이터 없는 마지막 행 제거
+    df["label"] = (df["next_closure_rate"] > df["industry_p75"]).astype(int)
     df = df[df["next_closure_rate"].notna()].copy()
-
-    # 임시 컬럼 제거
-    drop_cols = ["next_closure_rate", "next_store_count", "next2_store_count", "next_monthly_sales", "sales_4q_ago"]
-    df = df.drop(columns=[c for c in drop_cols if c in df.columns])
+    df = df.drop(columns=["next_closure_rate"])
 
     return df
 
@@ -234,6 +325,45 @@ def _engineer_lag_features(df: pd.DataFrame) -> pd.DataFrame:
         df["rent_1f_lag1"] = 0.0
         df["rent_change"] = 0.0
 
+    # B-1 신규 feature 8종 (2026-05-01) — 기존 build_timeseries 가 load 하지만 LGBM 미사용 신호 활용
+    if "weekday_sales" in df.columns:
+        wd_lag4 = df.groupby(gk)["weekday_sales"].shift(4)
+        df["weekday_sales_yoy"] = (df["weekday_sales"] - wd_lag4) / (wd_lag4.abs() + 1)
+    else:
+        df["weekday_sales_yoy"] = 0.0
+
+    if "weekend_sales" in df.columns:
+        we_lag4 = df.groupby(gk)["weekend_sales"].shift(4)
+        df["weekend_sales_yoy"] = (df["weekend_sales"] - we_lag4) / (we_lag4.abs() + 1)
+    else:
+        df["weekend_sales_yoy"] = 0.0
+
+    monthly = df["monthly_sales"].clip(lower=1)
+    df["age_20_sales_ratio"] = df.get("age_20_sales", pd.Series(0.0, index=df.index)) / monthly
+    df["age_60_sales_ratio"] = df.get("age_60_above_sales", pd.Series(0.0, index=df.index)) / monthly
+
+    if "open_count" in df.columns and "close_count" in df.columns:
+        open_lag1 = df.groupby(gk)["open_count"].shift(1)
+        close_lag1 = df.groupby(gk)["close_count"].shift(1)
+        df["open_close_ratio_lag1"] = open_lag1 / close_lag1.clip(lower=1)
+    else:
+        df["open_close_ratio_lag1"] = 1.0
+
+    if "total_pop" in df.columns:
+        pop_lag4 = df.groupby(gk)["total_pop"].shift(4)
+        df["total_pop_yoy"] = (df["total_pop"] - pop_lag4) / (pop_lag4.abs() + 1)
+    else:
+        df["total_pop_yoy"] = 0.0
+
+    if "holiday_count" not in df.columns:
+        df["holiday_count"] = 0
+
+    if "cpi_index" in df.columns:
+        cpi_lag4 = df.groupby(gk)["cpi_index"].shift(4)
+        df["cpi_index_yoy"] = (df["cpi_index"] - cpi_lag4) / (cpi_lag4.abs() + 1)
+    else:
+        df["cpi_index_yoy"] = 0.0
+
     return df
 
 
@@ -245,42 +375,28 @@ def _engineer_lag_features(df: pd.DataFrame) -> pd.DataFrame:
 def build_closure_risk_dataset(
     db_url: str = DB_URL,
     dong_prefix: str = "11440",
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
-    """폐업위험도 학습용 데이터셋 빌드.
+) -> pd.DataFrame:
+    """폐업위험도 학습용 데이터셋 빌드 — load + lag feature 까지만.
+
+    label 은 split 이후 별도로 `_make_labels(train_quarters=...)` 호출.
 
     Returns
     -------
-    df_full : pd.DataFrame
-        전체 데이터 (시계열 포함 — TCN 브랜치 시퀀스 생성용)
-    X_lgbm : pd.DataFrame
-        LightGBM 브랜치 입력 피처
-    y : pd.Series
-        레이블 (0/1)
-    """
-    logger.info("폐업위험도 데이터셋 빌드 중...")
-    df = load_base_data(db_url=db_url, dong_prefix=dong_prefix)
+    df : pd.DataFrame
+        lag feature 적용 + LGBM_FEATURES 누락 컬럼 0 채움. label/industry_p75 미포함.
 
-    # lag 피처 계산
+    Note:
+        시그니처 변경 (3-tuple → single df). 호출자 (`train.py`) 에서
+        split → `_make_labels(train_quarters=...)` → X/y 추출 순으로 처리.
+    """
+    logger.info("폐업위험도 데이터셋 빌드 중 (label 미생성, split 이후 별도)...")
+    df = load_base_data(db_url=db_url, dong_prefix=dong_prefix)
     df = _engineer_lag_features(df)
 
-    # 레이블 생성
-    df = _make_labels(df)
-
-    logger.info(
-        "레이블 분포 — 고위험(1): %d / 저위험(0): %d (총 %d)",
-        df["label"].sum(),
-        (df["label"] == 0).sum(),
-        len(df),
-    )
-
-    # LightGBM 입력 피처 추출
     missing = [f for f in LGBM_FEATURES if f not in df.columns]
     if missing:
         logger.warning("누락 피처 (0으로 채움): %s", missing)
         for f in missing:
             df[f] = 0.0
 
-    X_lgbm = df[LGBM_FEATURES].fillna(0).astype(float)
-    y = df["label"].astype(int)
-
-    return df, X_lgbm, y
+    return df

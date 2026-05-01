@@ -4,34 +4,24 @@
  * MarketTab에서 법률 섹션 이관. 가맹사업법·임대차보호법 등 규제 리스크를
  * 전용 공간에서 드릴다운할 수 있도록 분리. 본부 영업팀 법무 확인용.
  *
- * 2026-04-29 IM3-263 — AnalyzeAiSummaryTab의 LLM 출처 통합 판단 카드(legal × entry 2D)를
- *   법률 탭 최상단으로 이관. 법률 리스크 등급과 진입 신호를 같은 화면에서 종합 판정.
+ * 2026-04-30 — LLM 출처 통합 판단(GO/HOLD/STOP) 카드 제거.
  *
  * 구성:
- * 1) 최상단: LLM 출처 통합 판단 (legal × entry → GO/HOLD/STOP)
- * 2) 헤더: 위험/안전 카운트 + 전체 리포트 보기
- * 3) 등급 분포 막대 (HIGH/MEDIUM/LOW 한눈에)
- * 4) 하단: InsightsGrid legalOnly — 표 + LegalDrawer 상세
+ * 1) 헤더: 위험/안전 카운트 + 전체 리포트 보기
+ * 2) 등급 분포 막대 (HIGH/MEDIUM/LOW 한눈에)
+ * 3) 하단: InsightsGrid legalOnly — 표 + LegalDrawer 상세
  */
 
-import { AlertTriangle, BrainCircuit, Maximize2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Maximize2 } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { InsightsGrid } from '../../sections/InsightsGrid';
 import { LegalDistributionBar } from '../charts/LegalDistributionBar';
-import { DecisionCard } from '../shared/DecisionCard';
-import { computeDecision, DECISION_COPY } from '../../../../constants/decisionThresholds';
 
 interface Props {
   simResult: SimulationOutput;
   openModal: (content: DetailModalContent) => void;
 }
-
-const AGENT_ICON = {
-  synthesis: { icon: BrainCircuit, color: 'text-foreground', borderCls: 'border-border/60' },
-  legal: { icon: AlertTriangle, color: 'text-danger', borderCls: 'border-danger/50' },
-  competitor: { icon: ShieldAlert, color: 'text-warning', borderCls: 'border-warning/50' },
-};
 
 // risk_level 두 패턴 정규화 — InsightsGrid.normalizeLevel 와 동일 매핑
 function isHazard(level: string): boolean {
@@ -45,49 +35,8 @@ export function LegalTab({ simResult, openModal }: Props) {
   const hazardCount = risks.filter((r) => isHazard(r.risk_level)).length;
   const safeCount = totalCount - hazardCount;
 
-  // ═══ LLM 출처 통합 판단 (legal × entry 2D 매트릭스) ═══
-  const ci = simResult.competitor_intel as Record<string, unknown> | null | undefined;
-  const legalRaw = simResult.overall_legal_risk ?? null;
-  const entryRaw = (ci?.market_entry_signal as string | undefined) ?? null;
-  const verdict = computeDecision(legalRaw, entryRaw);
-  const verdictCopy = DECISION_COPY[verdict];
-  const isVerdictUnknown = verdict === 'UNKNOWN';
-
   return (
     <div className="space-y-6">
-      {/* ═══ LLM 출처 통합 판단 (AnalyzeAiSummaryTab → 이관) ═══ */}
-      <DecisionCard
-        title="LLM 출처 통합 판단"
-        heroBadge={isVerdictUnknown ? verdictCopy.label : `${verdict} · ${verdictCopy.label}`}
-        heroColor={verdictCopy.color}
-        description={
-          isVerdictUnknown
-            ? '법률 분석 또는 경쟁 진입 신호 중 일부가 아직 수신되지 않았습니다. 해당 에이전트 실행이 완료되면 판정이 산출됩니다.'
-            : '법률 리스크(safe/caution/danger) × 경쟁 진입 신호(green/yellow/red)의 2D 매트릭스로 GO / HOLD / STOP 3단계 판정을 도출합니다.'
-        }
-        items={[
-          {
-            text: `법률 리스크 ${legalRaw ?? '미수신'}`,
-            highlight: legalRaw === 'safe',
-          },
-          {
-            text: `진입 신호 ${entryRaw ?? '미수신'}`,
-            highlight: entryRaw === 'green',
-          },
-          {
-            text: `종합 판정 ${verdict}`,
-            highlight: verdict === 'GO',
-          },
-        ]}
-        footer={{
-          agents: [AGENT_ICON.synthesis, AGENT_ICON.legal, AGENT_ICON.competitor].map((a, i) => ({
-            id: `legal-decision-${i}`,
-            ...a,
-          })),
-          methodology: 'synthesis + legal + competitor',
-        }}
-      />
-
       {/* ═══ 법률·규제 검토 본문 ═══ */}
       <div className="bg-card/40 border border-border/60 p-8 rounded-3xl">
         <div className="flex justify-between items-center mb-6">

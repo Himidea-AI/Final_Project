@@ -8,14 +8,25 @@ predict(dong_code, industry_code) → closure_risk dict
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 import pickle
+from functools import lru_cache
 
 import numpy as np
 import torch
 
 from models.closure_risk.model import WEIGHTS_DIR, TCNClassifier
-from models.lstm_forecast.data_prep import ALL_FEATURES, DB_URL, EXCLUDE_COMBOS, ExcludedComboError, build_timeseries, load_sales_data, load_store_data
+from models.lstm_forecast.data_prep import (
+    ALL_FEATURES,
+    DB_URL,
+    EXCLUDE_COMBOS,
+    ExcludedComboError,
+    build_timeseries,
+    load_sales_data,
+    load_store_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +41,35 @@ RISK_LEVELS = [
 ]
 
 
+@lru_cache(maxsize=1)
+def _load_risk_levels() -> tuple[tuple[float, str], ...]:
+    """metrics.json 에서 fit 된 quantile threshold load.
+
+    metrics.json 미존재 / 손상 / thresholds 키 없음 → default fallback.
+
+    Returns:
+        ((danger_thr, "danger"), (caution_thr, "caution"), (0.0, "safe"))
+    """
+    metrics_path = WEIGHTS_DIR / "metrics.json"
+    if metrics_path.exists():
+        try:
+            with open(metrics_path, encoding="utf-8") as f:
+                m = json.load(f)
+            t = m.get("thresholds", {})
+            if "danger" in t and "caution" in t:
+                return (
+                    (float(t["danger"]), "danger"),
+                    (float(t["caution"]), "caution"),
+                    (0.0, "safe"),
+                )
+        except (json.JSONDecodeError, OSError, ValueError) as e:
+            logger.warning("metrics.json threshold load 실패 — default fallback: %s", e)
+    return ((0.65, "danger"), (0.40, "caution"), (0.0, "safe"))
+
+
 def _classify(score: float) -> str:
-    for threshold, level in RISK_LEVELS:
+    """위험도 점수 → 레벨. metrics.json fit threshold 우선."""
+    for threshold, level in _load_risk_levels():
         if score >= threshold:
             return level
     return "safe"
@@ -45,11 +83,23 @@ _cache: dict = {}
 
 
 def _load_models() -> tuple:
-    """LightGBM, TCNClassifier, 앙상블 가중치 로드 (캐시)."""
+    """LightGBM, TCNClassifier, 앙상블 가중치, scaler, Stage 1 prior, calibrator 로드 (캐시).
+
+    Returns 6-tuple: (lgbm, tcn, ensemble_w, scaler, stage1_data, calibrator)
+    stage1_data is dict {"model": LGBMRegressor, "agg": pd.DataFrame} or None if pkl missing.
+    calibrator is sklearn.isotonic.IsotonicRegression or None (D-3, 2026-05-01).
+    """
     global _cache  # noqa: PLW0603
 
     if _cache:
-        return _cache["lgbm"], _cache["tcn"], _cache["weights"], _cache["scaler"]
+        return (
+            _cache["lgbm"],
+            _cache["tcn"],
+            _cache["weights"],
+            _cache["scaler"],
+            _cache.get("stage1"),
+            _cache.get("calibrator"),
+        )
 
     lgbm_path = WEIGHTS_DIR / "closure_risk_lgbm.pkl"
     tcn_path = WEIGHTS_DIR / "closure_risk_tcn.pt"
@@ -71,8 +121,8 @@ def _load_models() -> tuple:
         with open(ew_path, "rb") as f:
             ensemble_w = pickle.load(f)  # noqa: S301
 
-    # TCN 모델 — input_size는 ensemble_weights에 저장된 값 사용 (기본 34)
     import torch as _torch
+
     _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
     input_size = ensemble_w.get("input_size", 34)
     tcn = TCNClassifier(input_size=input_size)
@@ -80,12 +130,45 @@ def _load_models() -> tuple:
     tcn.to(_device)
     tcn.eval()
 
-    # TCN 스케일러 — 학습 시 저장된 스케일러 로드 (위에서 존재 보장됨)
     with open(scaler_path, "rb") as f:
         tcn_scaler = pickle.load(f)  # noqa: S301
 
-    _cache.update({"lgbm": lgbm, "tcn": tcn, "weights": ensemble_w, "scaler": tcn_scaler})
-    return lgbm, tcn, ensemble_w, tcn_scaler
+    # A-2 Stage 1 prior — graceful fallback if missing
+    stage1_path = WEIGHTS_DIR / "stage1_industry_prior.pkl"
+    stage1_data = None
+    if stage1_path.exists():
+        try:
+            with open(stage1_path, "rb") as f:
+                stage1_data = pickle.load(f)  # noqa: S301
+            logger.info("Stage 1 industry prior 로드: %s", stage1_path)
+        except Exception as e:
+            logger.warning("Stage 1 pkl load 실패 — fallback 0.0: %s", e)
+            stage1_data = None
+
+    # D-3 isotonic calibrator — graceful fallback (2026-05-01)
+    cal_path = WEIGHTS_DIR / "ensemble_calibrator.pkl"
+    calibrator = None
+    if cal_path.exists():
+        try:
+            with open(cal_path, "rb") as f:
+                calibrator = pickle.load(f)  # noqa: S301
+            if calibrator is not None:
+                logger.info("ensemble calibrator 로드: %s", cal_path)
+        except Exception as e:
+            logger.warning("calibrator pkl load 실패 — raw proba 사용: %s", e)
+            calibrator = None
+
+    _cache.update(
+        {
+            "lgbm": lgbm,
+            "tcn": tcn,
+            "weights": ensemble_w,
+            "scaler": tcn_scaler,
+            "stage1": stage1_data,
+            "calibrator": calibrator,
+        }
+    )
+    return lgbm, tcn, ensemble_w, tcn_scaler, stage1_data, calibrator
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +191,15 @@ _FEATURE_KO = {
     "vacancy_rate": "공실률",
     "trend_score": "네이버 검색 트렌드",
     "adstrd_flpop": "행정동 유동인구",
+    # B-1 신규 (2026-05-01)
+    "weekday_sales_yoy": "평일 매출 전년동기 변화율",
+    "weekend_sales_yoy": "주말 매출 전년동기 변화율",
+    "age_20_sales_ratio": "20대 매출 비중",
+    "age_60_sales_ratio": "60대+ 매출 비중",
+    "open_close_ratio_lag1": "직전 분기 창업/폐업 비율",
+    "total_pop_yoy": "거주인구 전년동기 변화율",
+    "holiday_count": "분기 공휴일 수",
+    "cpi_index_yoy": "물가 전년동기 변화율",
 }
 
 _RISK_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
@@ -170,6 +262,39 @@ _RISK_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
     "adstrd_flpop": {
         "positive": "유동인구가 많아 경쟁 환경이 치열합니다.",
         "negative": "유동인구 감소로 고객 유입이 줄고 있습니다.",
+    },
+    # B-1 신규
+    "weekday_sales_yoy": {
+        "positive": "평일 매출이 전년 대비 감소해 직장 상권 위험 신호가 나타납니다.",
+        "negative": "평일 매출이 전년 대비 증가해 직장 상권이 활성화되고 있습니다.",
+    },
+    "weekend_sales_yoy": {
+        "positive": "주말 매출이 전년 대비 감소해 주거 상권 위험 신호가 나타납니다.",
+        "negative": "주말 매출이 전년 대비 증가해 주거 상권이 활성화되고 있습니다.",
+    },
+    "age_20_sales_ratio": {
+        "positive": "20대 매출 비중이 높아 트렌드 의존도가 큽니다.",
+        "negative": "20대 매출 비중이 낮아 변동성이 적습니다.",
+    },
+    "age_60_sales_ratio": {
+        "positive": "60대+ 매출 비중이 높아 안정적이나 성장 한계가 있습니다.",
+        "negative": "60대+ 매출 비중이 낮아 젊은 고객 유입이 활발합니다.",
+    },
+    "open_close_ratio_lag1": {
+        "positive": "창업이 폐업보다 많아 상권 활성화 흐름입니다.",
+        "negative": "폐업이 창업보다 많아 상권 위축 신호입니다.",
+    },
+    "total_pop_yoy": {
+        "positive": "거주인구가 증가해 잠재 수요가 늘고 있습니다.",
+        "negative": "거주인구가 감소해 수요 기반이 약해지고 있습니다.",
+    },
+    "holiday_count": {
+        "positive": "공휴일 수가 많아 외식/소비 기회가 증가합니다.",
+        "negative": "공휴일 수가 적어 평상 영업일 의존도가 큽니다.",
+    },
+    "cpi_index_yoy": {
+        "positive": "물가 상승으로 비용 압박이 커지고 있습니다.",
+        "negative": "물가 안정으로 비용 부담이 적습니다.",
     },
 }
 
@@ -331,7 +456,7 @@ def predict(
     window_size = 4
 
     try:
-        lgbm_model, tcn_model, ensemble_w, tcn_scaler = _load_models()
+        lgbm_model, tcn_model, ensemble_w, tcn_scaler, stage1_data, calibrator = _load_models()
     except FileNotFoundError as e:
         logger.warning("모델 없음 — mock 반환: %s", e)
         return _mock_result()
@@ -364,7 +489,27 @@ def predict(
         return _mock_result()
 
     latest = grp_eng.iloc[-1]
-    x_lgbm = np.array([latest.get(f, 0.0) for f in LGBM_FEATURES], dtype=np.float32)
+
+    # A-2 Stage 1 prior lookup
+    industry_prior_pred = 0.0
+    if stage1_data is not None:
+        agg = stage1_data["agg"]
+        latest_quarter = int(latest["quarter"])
+        matching = agg[(agg["industry_code"] == industry_code) & (agg["quarter"] == latest_quarter)]
+        if len(matching) > 0:
+            if "industry_prior_pred" in matching.columns:
+                industry_prior_pred = float(matching["industry_prior_pred"].iloc[0])
+            else:
+                # agg 에 prediction 미저장 → on-the-fly
+                from models.closure_risk.stage1_industry_prior import STAGE1_FEATURES
+
+                X_stage1 = matching[STAGE1_FEATURES].fillna(0).values
+                industry_prior_pred = float(stage1_data["model"].predict(X_stage1)[0])
+
+    x_lgbm = np.array(
+        [latest.get(f, 0.0) if f != "industry_prior_pred" else industry_prior_pred for f in LGBM_FEATURES],
+        dtype=np.float32,
+    )
     p_lgbm = float(lgbm_model.predict_proba(x_lgbm.reshape(1, -1))[0, 1])
 
     # --- TCN 브랜치 ---
@@ -387,7 +532,14 @@ def predict(
     # --- 앙상블 ---
     w_lgbm = ensemble_w.get("w_lgbm", 0.5)
     w_tcn = ensemble_w.get("w_tcn", 0.5)
-    risk_score = round((w_lgbm * p_lgbm + w_tcn * p_tcn) / (w_lgbm + w_tcn), 4)
+    raw_score = (w_lgbm * p_lgbm + w_tcn * p_tcn) / (w_lgbm + w_tcn)
+
+    # D-3 isotonic calibration (2026-05-01) — graceful fallback if calibrator None
+    if calibrator is not None:
+        risk_score = float(calibrator.transform([raw_score])[0])
+    else:
+        risk_score = raw_score
+    risk_score = round(risk_score, 4)
 
     # --- SHAP (LightGBM + TCN 분리) ---
     # LightGBM: 전체 피처(15개) SHAP 모두 반환 — frontend heatmap 에서 작은 contribution 도
@@ -418,3 +570,74 @@ def _mock_result() -> dict:
         "model": "lgbm_tcn_ensemble",
         "is_mock": True,
     }
+
+
+def predict_topk(
+    targets: list[tuple[str, str]],
+    k_pct: int = 10,
+    config: dict | None = None,
+) -> list[dict]:
+    """다수 (dong, industry) 조합에서 위험도 top K% 추천.
+
+    Args:
+        targets: (dong_code, industry_code) tuple list. EXCLUDE_COMBOS 자동 제외.
+            빈 list 입력 → [] 반환.
+        k_pct: 상위 K% (1~100). 1 미만 → 1, 100 초과 → 100 으로 clamp.
+        config: db_url 등 override (predict() 의 config 와 동일).
+
+    Returns:
+        list[dict] — 각 dict 키:
+            "dong_code": str,
+            "industry_code": str,
+            "risk_score": float | None,
+            "risk_level": str,
+            "rank": int (1부터, top=1),
+            "top_signals_lgbm": list[dict],
+            "top_signals_tcn": list[dict],
+            "summary_lgbm": list[str],
+            "summary_tcn": list[str],
+            "is_mock": bool,
+            "model": str,
+
+        길이 = max(1, ceil(n_valid * k_pct / 100)).
+        risk_score=None (is_mock=True) 결과는 sort 시 마지막.
+
+    Note:
+        - EXCLUDE_COMBOS 의 target 은 자동 제외 + log info
+        - cache (`_load_models`) 재사용 — N=160 (마포 16동 × 10업종) 도 1회 model load
+    """
+    if not targets:
+        return []
+
+    k_pct = max(1, min(100, k_pct))
+
+    valid = [(d, i) for (d, i) in targets if (d, i) not in EXCLUDE_COMBOS]
+    excluded_n = len(targets) - len(valid)
+    if excluded_n > 0:
+        logger.info("predict_topk: EXCLUDE_COMBOS %d targets 제외", excluded_n)
+
+    if not valid:
+        return []
+
+    results = []
+    for dong, industry in valid:
+        try:
+            res = predict(dong, industry, config=config)
+        except ExcludedComboError:
+            continue
+        results.append({"dong_code": dong, "industry_code": industry, **res})
+
+    def _sort_key(r):
+        score = r.get("risk_score")
+        return (1 if score is None else 0, -(score if score is not None else 0))
+
+    results.sort(key=_sort_key)
+
+    n = len(results)
+    k = max(1, math.ceil(n * k_pct / 100))
+    top = results[:k]
+
+    for i, r in enumerate(top, start=1):
+        r["rank"] = i
+
+    return top

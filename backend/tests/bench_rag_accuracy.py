@@ -1,10 +1,11 @@
 """
-RAG 검색 정확도 벤치마크 — F1-score + Exact-match + LLM-judge
+RAG 검색 정확도 벤치마크 — 표준 RAG 지표 (Recall@K / MRR / NDCG@K / Hit@K) + F1 + LLM-judge
 
 실행: cd backend && python -m tests.bench_rag_accuracy
 """
 
 import asyncio
+import math
 import re
 import selectors
 import sys
@@ -12,6 +13,57 @@ import time
 from pathlib import Path
 
 from src.chains.retriever import LegalDocumentRetriever
+
+
+def compute_rag_metrics(expected: list[str], retrieved_ranked: list[str], k: int = 10) -> dict:
+    """RAG 표준 지표 — rank-aware.
+
+    expected: 정답 article 리스트 (순서 무관, set으로 처리)
+    retrieved_ranked: top-K article 리스트 (순서 = retrieval rank)
+    k: top-K cutoff
+
+    반환:
+        recall@k, precision@k, hit@k, mrr, ndcg@k, f1@k
+    """
+    expected_set = set(expected)
+    retrieved_topk = retrieved_ranked[:k]
+    retrieved_set = set(retrieved_topk)
+
+    if not expected_set:
+        return {"recall@k": 0.0, "precision@k": 0.0, "hit@k": 0, "mrr": 0.0, "ndcg@k": 0.0, "f1@k": 0.0}
+
+    # Recall@K, Precision@K
+    tp = expected_set & retrieved_set
+    recall_k = len(tp) / len(expected_set)
+    precision_k = (len(tp) / len(retrieved_topk)) if retrieved_topk else 0.0
+
+    # Hit@K — 1 if any relevant in top-K
+    hit_k = 1 if tp else 0
+
+    # MRR — reciprocal rank of first relevant
+    mrr = 0.0
+    for rank, art in enumerate(retrieved_topk, 1):
+        if art in expected_set:
+            mrr = 1.0 / rank
+            break
+
+    # NDCG@K — binary relevance + log2 discount
+    dcg = sum(1.0 / math.log2(rank + 1) for rank, art in enumerate(retrieved_topk, 1) if art in expected_set)
+    ideal_dcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, min(len(expected_set), k) + 1))
+    ndcg_k = (dcg / ideal_dcg) if ideal_dcg > 0 else 0.0
+
+    # F1@K (set-based, for 비교 용)
+    f1_k = (2 * precision_k * recall_k / (precision_k + recall_k)) if (precision_k + recall_k) > 0 else 0.0
+
+    return {
+        "recall@k": round(recall_k, 4),
+        "precision@k": round(precision_k, 4),
+        "hit@k": hit_k,
+        "mrr": round(mrr, 4),
+        "ndcg@k": round(ndcg_k, 4),
+        "f1@k": round(f1_k, 4),
+    }
+
 
 # Golden dataset v3 — 법률 원문 기반 독립 선별, 쿼리별 정답 분리
 # 각 법률을 여러 주제(쿼리)로 나누고, 쿼리가 묻는 범위에 해당하는 조문만 정답으로 지정
@@ -212,43 +264,57 @@ async def run_benchmark():
     total_hit = 0
     results_table = []
 
+    K = 10  # top-K cutoff (RAG 표준)
+
     for law_name, query, filter_attr, expected_articles in BENCHMARK_CASES:
         source_filter = getattr(retriever, filter_attr, None)
 
         start = time.perf_counter()
-        docs = await retriever.search(query, top_k=5, source_filter=source_filter)
+        docs = await retriever.search(query, top_k=K, source_filter=source_filter)
         elapsed_ms = (time.perf_counter() - start) * 1000
 
-        # 반환된 조문 추출 — 항 분할 접미사(_0, _1 등) 제거하여 조 단위로 정규화
-        returned_articles = []
+        # 반환된 조문 추출 — rank 보존 (NDCG/MRR용)
+        returned_ranked = []
         for d in docs:
             art = d.get("metadata", {}).get("article", "")
             if art and art not in ("전문", "미분류", "N/A"):
-                # "제2조_0" → "제2조", "제45조_3" → "제45조" (항 분할 접미사 제거)
                 normalized = re.sub(r"_\d+$", "", art)
-                if normalized not in returned_articles:
-                    returned_articles.append(normalized)
+                if normalized not in returned_ranked:
+                    returned_ranked.append(normalized)
 
-        # Exact-match 적중 계산
-        hits = sum(1 for ea in expected_articles if ea in returned_articles)
+        # Exact-match 적중 (set-based, rank 무시)
+        hits = sum(1 for ea in expected_articles if ea in returned_ranked)
         total_expected += len(expected_articles)
         total_hit += hits
 
-        results_table.append({
-            "law": law_name,
-            "query": query,
-            "expected": expected_articles,
-            "returned": returned_articles[:5],
-            "hits": hits,
-            "total": len(expected_articles),
-            "time_ms": round(elapsed_ms),
-        })
+        # 표준 RAG 지표 — rank-aware
+        metrics = compute_rag_metrics(expected_articles, returned_ranked, k=K)
+
+        results_table.append(
+            {
+                "law": law_name,
+                "query": query,
+                "expected": expected_articles,
+                "returned": returned_ranked[:K],
+                "hits": hits,
+                "total": len(expected_articles),
+                "time_ms": round(elapsed_ms),
+                "metrics": metrics,
+            }
+        )
 
     # --- LLM-as-judge 평가 ---
     # 반환됐지만 exact-match에 포함되지 않은 조문이 쿼리에 "관련성 있는지" LLM이 판정
+    # 사용자 명시 요청으로 OpenAI 사용 (JUDGE_MODEL env로 변경 가능)
+    import os
+
     from langchain_openai import ChatOpenAI
 
-    judge_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+    judge_llm = ChatOpenAI(
+        model=os.getenv("JUDGE_MODEL", "gpt-4.1-mini"),
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        temperature=0,
+    )
 
     judge_total = 0
     judge_relevant = 0
@@ -284,18 +350,30 @@ async def run_benchmark():
                 resp = await judge_llm.ainvoke(prompt)
                 is_relevant = "YES" in resp.content.upper()
             except Exception as e:
-                print(f"  LLM judge error: {e}")
-                is_relevant = False
+                # 호출 실패는 카운트 제외 — 이전엔 NO로 잘못 카운트되어 통계 왜곡
+                print(f"  LLM judge error (skip): {str(e)[:80]}")
+                judge_details.append(
+                    {
+                        "law": r["law"],
+                        "query": r["query"],
+                        "article": art,
+                        "relevant": None,
+                        "error": str(e)[:120],
+                    }
+                )
+                continue
 
             judge_total += 1
             if is_relevant:
                 judge_relevant += 1
-            judge_details.append({
-                "law": r["law"],
-                "query": r["query"],
-                "article": art,
-                "relevant": is_relevant,
-            })
+            judge_details.append(
+                {
+                    "law": r["law"],
+                    "query": r["query"],
+                    "article": art,
+                    "relevant": is_relevant,
+                }
+            )
 
     # 실질 정확도 = (exact-match 적중 + LLM 관련 판정) / 전체 반환 조문
     total_returned = sum(len(r["returned"]) for r in results_table)
@@ -320,14 +398,18 @@ async def run_benchmark():
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
-        f1_per_query.append({
-            "law": r["law"],
-            "query": r["query"],
-            "precision": round(precision, 3),
-            "recall": round(recall, 3),
-            "f1": round(f1, 3),
-            "tp": tp, "fp": fp, "fn": fn,
-        })
+        f1_per_query.append(
+            {
+                "law": r["law"],
+                "query": r["query"],
+                "precision": round(precision, 3),
+                "recall": round(recall, 3),
+                "f1": round(f1, 3),
+                "tp": tp,
+                "fp": fp,
+                "fn": fn,
+            }
+        )
         micro_tp += tp
         micro_fp += fp
         micro_fn += fn
@@ -335,17 +417,45 @@ async def run_benchmark():
     # 마이크로 F1 (전체 합산)
     micro_precision = micro_tp / (micro_tp + micro_fp) if (micro_tp + micro_fp) > 0 else 0.0
     micro_recall = micro_tp / (micro_tp + micro_fn) if (micro_tp + micro_fn) > 0 else 0.0
-    micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0.0
+    micro_f1 = (
+        2 * micro_precision * micro_recall / (micro_precision + micro_recall)
+        if (micro_precision + micro_recall) > 0
+        else 0.0
+    )
 
     # 매크로 F1 (쿼리별 평균)
     macro_f1 = sum(r["f1"] for r in f1_per_query) / len(f1_per_query) if f1_per_query else 0.0
 
+    # --- 표준 RAG 지표 집계 (Recall@K / MRR / NDCG@K / Hit@K) ---
+    n = len(results_table)
+    avg_recall = sum(r["metrics"]["recall@k"] for r in results_table) / n if n else 0.0
+    avg_precision = sum(r["metrics"]["precision@k"] for r in results_table) / n if n else 0.0
+    avg_mrr = sum(r["metrics"]["mrr"] for r in results_table) / n if n else 0.0
+    avg_ndcg = sum(r["metrics"]["ndcg@k"] for r in results_table) / n if n else 0.0
+    hit_count = sum(r["metrics"]["hit@k"] for r in results_table)
+    hit_rate = hit_count / n if n else 0.0
+
     # --- 콘솔 출력 ---
-    print("\n=== F1-Score 결과 ===")
+    print("\n=== 표준 RAG 지표 (top-10) ===")
+    print(f"{'법률':<16} {'쿼리':<30} {'R@10':>5} {'MRR':>5} {'NDCG':>5} {'Hit':>4}")
+    print("-" * 70)
+    for r in results_table:
+        m = r["metrics"]
+        q_short = r["query"][:28]
+        print(
+            f"{r['law']:<16} {q_short:<30} {m['recall@k']:>5.3f} {m['mrr']:>5.3f} {m['ndcg@k']:>5.3f} {m['hit@k']:>4}"
+        )
+    print("-" * 70)
+    print(f"{'Mean':<48} {avg_recall:>5.3f} {avg_mrr:>5.3f} {avg_ndcg:>5.3f} {hit_rate:>4.2f}")
+    print(f"  Hit@10 (≥1 정답 retrieved): {hit_count}/{n} ({hit_rate * 100:.1f}%)")
+    print(f"  Avg Precision@10: {avg_precision:.3f}")
+
+    # --- F1-Score (참고용, set-based) ---
+    print("\n=== F1-Score (참고, set-based — rank 무시) ===")
     print(f"{'법률':<16} {'쿼리':<30} {'Prec':>5} {'Rec':>5} {'F1':>5}")
     print("-" * 65)
     for r in f1_per_query:
-        q_short = r['query'][:28]
+        q_short = r["query"][:28]
         print(f"{r['law']:<16} {q_short:<30} {r['precision']:>5.3f} {r['recall']:>5.3f} {r['f1']:>5.3f}")
     print("-" * 65)
     print(f"{'Micro':<48} {micro_precision:>5.3f} {micro_recall:>5.3f} {micro_f1:>5.3f}")
@@ -358,6 +468,16 @@ async def run_benchmark():
     with open(output_path, "w", encoding="utf-8") as f:
         _json.dump(
             {
+                "rag_metrics": {
+                    "k": K,
+                    "mean_recall@k": round(avg_recall, 4),
+                    "mean_precision@k": round(avg_precision, 4),
+                    "mean_mrr": round(avg_mrr, 4),
+                    "mean_ndcg@k": round(avg_ndcg, 4),
+                    "hit@k_count": hit_count,
+                    "hit@k_total": n,
+                    "hit@k_rate": round(hit_rate, 4),
+                },
                 "f1_score": {
                     "micro_precision": round(micro_precision, 4),
                     "micro_recall": round(micro_recall, 4),
@@ -385,6 +505,10 @@ async def run_benchmark():
             indent=2,
         )
     print(f"\nResults saved to {output_path}")
+    print(
+        f"RAG metrics summary: Recall@{K}={avg_recall:.3f}, MRR={avg_mrr:.3f}, "
+        f"NDCG@{K}={avg_ndcg:.3f}, Hit@{K}={hit_rate * 100:.1f}%"
+    )
     print(f"Exact-match: {total_hit}/{total_expected} ({total_hit / total_expected * 100:.1f}%)")
     print(f"LLM-judge relevance: {llm_relevant_total}/{total_returned} ({llm_pct:.1f}%)")
 

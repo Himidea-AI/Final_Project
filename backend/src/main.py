@@ -15,6 +15,21 @@ if sys.platform == "win32":
     except AttributeError:
         pass
 
+# Python root logger 구성 — backend 코드의 logger.info() / logger.warning() 화면 출력 활성화.
+# LOG_LEVEL env (DEBUG/INFO/WARNING/ERROR) 로 조정. 미설정 시 INFO.
+# force=True: uvicorn이 먼저 root logger에 핸들러 등록한 경우 덮어씀.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    datefmt="%H:%M:%S",
+    force=True,
+)
+# 외부 라이브러리 noise 줄임
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("watchfiles").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
@@ -26,8 +41,6 @@ if str(current_dir) not in sys.path:
 _project_root = str(Path(__file__).parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
-
-logger = logging.getLogger(__name__)
 
 import redis.asyncio as aioredis
 
@@ -991,9 +1004,11 @@ async def biz_lookup(req: BizLookupRequest):
             engine = get_sync_engine(os.environ.get("POSTGRES_URL", ""))
             with engine.connect() as conn:
                 row = conn.execute(
-                    sa_text("SELECT company_name, brand_name, industry_large, industry_medium, "
-                            "franchise_count, avg_sales, mapo_store_count "
-                            "FROM biz_brand_mapping WHERE biz_number = :biz"),
+                    sa_text(
+                        "SELECT company_name, brand_name, industry_large, industry_medium, "
+                        "franchise_count, avg_sales, mapo_store_count "
+                        "FROM biz_brand_mapping WHERE biz_number = :biz"
+                    ),
                     {"biz": biz_clean},
                 ).fetchone()
             engine.dispose()
@@ -1003,15 +1018,17 @@ async def biz_lookup(req: BizLookupRequest):
                     "status": "success",
                     "data": {
                         "verification": {"biz_number": biz_clean, "status": "", "tax_type": "", "valid": True},
-                        "brands": [{
-                            "brand_name": d["brand_name"],
-                            "corp_name": d["company_name"],
-                            "industry_large": d.get("industry_large", ""),
-                            "industry_medium": d.get("industry_medium", ""),
-                            "franchise_count": d["franchise_count"],
-                            "avrgSlsAmt": d["avg_sales"],
-                            "mapo_store_count": d["mapo_store_count"],
-                        }],
+                        "brands": [
+                            {
+                                "brand_name": d["brand_name"],
+                                "corp_name": d["company_name"],
+                                "industry_large": d.get("industry_large", ""),
+                                "industry_medium": d.get("industry_medium", ""),
+                                "franchise_count": d["franchise_count"],
+                                "avrgSlsAmt": d["avg_sales"],
+                                "mapo_store_count": d["mapo_store_count"],
+                            }
+                        ],
                         "matched_count": 1,
                     },
                 }
@@ -1575,6 +1592,10 @@ class AbmSimulationRequest(BaseModel):
     # True 시 use_policy=False → Tier S→Haiku, Tier A→Gemini Flash, Tier B→rule
     # False 시 전 Tier policy_decide (deterministic, $0)
     enable_llm_decisions: bool = False
+    # 비동기 모드 — True 시 즉시 job_id 반환, 시뮬은 background thread.
+    # 클라이언트 disconnect 해도 시뮬 끝까지 진행, 결과는 in-memory cache 보존.
+    # GET /simulate-abm/{job_id}/status, /result 로 polling 조회.
+    async_mode: bool = False
 
 
 @app.post("/simulate-abm")
@@ -1750,6 +1771,38 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         cached_result["cached"] = True
         return cached_result
 
+    # ----------------------------------------------------------------------
+    # async_mode=True — job_id 즉시 반환, 시뮬은 background thread.
+    # 클라이언트 disconnect 해도 시뮬 끝까지 진행, 결과는 abm_jobs_cache 에 보존.
+    # 동기 모드는 backward compat 위해 아래 기존 코드 그대로 유지.
+    # ----------------------------------------------------------------------
+    if req.async_mode:
+        from src.services.abm_simulation_service import run_abm_async
+
+        job_id = run_abm_async(
+            pop=pop,
+            tier=tier,
+            cfg=cfg,
+            scenario=scenario,
+            days=req.days,
+            enable_llm_thought=req.enable_llm_thought,
+            collect_trajectory=True,
+            seed_memory=False,
+            use_llm_decisions=req.enable_llm_decisions,
+            llm_concurrency=8,
+            target_district=req.target_district,
+            n_agents=req.n_agents,
+            weather_override=req.scenario.weather_override,
+            weekend_force=req.scenario.weekend_force,
+            rent_shock_pct=req.scenario.rent_shock_pct,
+            date_override=req.scenario.date_override,
+            langgraph_result=lr,
+            cache_key=cache_key,
+            redis_url=settings.redis_url,
+        )
+        logger.info(f"[ABM] async job started: job_id={job_id}")
+        return {"job_id": job_id, "status": "running", "cached": False}
+
     try:
         result = await run_in_threadpool(
             abm_run,
@@ -1767,13 +1820,15 @@ async def run_abm_simulation(req: AbmSimulationRequest):
             # 매 호출마다 5000 agent × 14일 가상 visit history 생성하던 cold-start
             # mitigation — /simulate-abm 시연용엔 불필요 (응답 2~5s 절감).
             seed_memory=False,
-            # Tier S/A LLM 의사결정 옵션 (A 모드) — True 면 use_policy=False 로 강제 전환,
-            # Tier S→Haiku smart_decide, Tier A→Gemini Flash fast_decide, Tier B→rule.
+            # Tier S 전용 LLM 의사결정 옵션 — Tier A/B는 policy_decide 유지.
             use_llm_decisions=req.enable_llm_decisions,
-            # LLM 의사결정 시 동시 호출 수 — OpenAI org RPM(500) 분배:
-            # smart_decide ThreadPool 4 + thought asyncio.Semaphore 4 = 합산 8 concurrent.
-            # 평균 1.5s/call → 320 RPM peak (500 한도 안). 429 시 _smart_decide_openai 재시도.
-            llm_concurrency=4,
+            # LLM 동시 호출 수 — 모드별 단일 메커니즘 활성:
+            #   - enable_llm_decisions=True: smart_decide ThreadPool(8) 만 사용
+            #   - enable_llm_decisions=False + enable_llm_thought=True: thought Semaphore(8) 만 사용
+            # 8 concurrent × 1.5s/call ≈ 320 RPM (OpenAI Tier 1 500 RPM 안).
+            # 4→8 상향으로 Tier S LLM 대기 60-90s 절감 (5000 agents 기준).
+            # 429 발생 시 brain.py:_smart_decide_openai 가 0.5/1/2s backoff 로 재시도.
+            llm_concurrency=8,
         )
     except Exception as e:
         logger.error(f"[ABM] 시뮬레이션 실패: {e}")
@@ -1862,3 +1917,63 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         logger.warning(f"[ABM] Redis 캐시 저장 실패(무시): {e}")
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# /simulate-abm 비동기 polling 엔드포인트 (job_id 패턴)
+# 시뮬은 background thread 에서 진행, 결과는 abm_jobs_cache 보존.
+# vacancy_evaluation.py 의 _require_done_job 패턴 차용.
+# ---------------------------------------------------------------------------
+@app.get("/simulate-abm/{job_id}/status")
+def get_abm_job_status(job_id: str) -> dict[str, Any]:
+    """ABM async job 상태 조회 — running / done / failed.
+
+    응답:
+        {
+            "job_id": str,
+            "status": "running" | "done" | "failed",
+            "elapsed_seconds": int,
+            "progress": str | None,    # "queued"|"running_simulation"|"building_response"|"done"|"failed"
+            "error": str | None,       # failed 시만
+        }
+    """
+    import time as _time
+
+    from src.services.abm_simulation_service import cleanup_old_jobs, get_job
+
+    # status endpoint 진입 시 가벼운 cleanup (만료 1h 초과 job 제거)
+    cleanup_old_jobs(ttl_seconds=3600)
+
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"job {job_id} not found")
+    return {
+        "job_id": job_id,
+        "status": job["status"],
+        "elapsed_seconds": int(_time.time() - job["started_at"]),
+        "progress": job.get("progress"),
+        "error": job.get("error"),
+    }
+
+
+@app.get("/simulate-abm/{job_id}/result")
+def get_abm_job_result(job_id: str) -> dict[str, Any]:
+    """ABM async job 결과 조회.
+
+    상태별 응답:
+        - done: cache[job_id]["result"] (동기 /simulate-abm 응답과 동일 schema)
+        - running: 409 Conflict
+        - failed: 500 Internal Server Error
+        - not found: 404
+    """
+    from src.services.abm_simulation_service import get_job
+
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"job {job_id} not found")
+    if job["status"] == "running":
+        raise HTTPException(status_code=409, detail="job still running")
+    if job["status"] == "failed":
+        raise HTTPException(status_code=500, detail=job.get("error", "unknown error"))
+    # done — Redis 저장은 run_abm_async 내부에서 이미 처리됨
+    return job["result"]

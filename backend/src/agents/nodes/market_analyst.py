@@ -46,7 +46,7 @@ async def market_analyst_node(state: AgentState) -> dict:
                 kind="LLM",
                 sources=["district_sales", "kakao_store", "golmok_rent"],
                 verdict=f"상권 등급 {_cached_metrics.get('district_grade', 'NORMAL')} / 성장률 {_cached_metrics.get('growth_rate', 0)}%",
-                reasoning=str(cached_data.get("market_report", ""))[:300] or "시장 분석 데이터 기반 (캐시)",
+                reasoning=str(cached_data.get("market_report", "")) or "시장 분석 데이터 기반 (캐시)",
                 confidence=0.8,
             )
             analysis["market_analyst_result"] = {"agent_attribution": cached_attribution}
@@ -204,7 +204,7 @@ async def market_analyst_node(state: AgentState) -> dict:
         kind="LLM",
         sources=["district_sales", "kakao_store", "golmok_rent"],
         verdict=f"상권 등급 {final_metrics.get('district_grade', 'NORMAL')} / 성장률 {final_metrics.get('growth_rate', 0)}%",
-        reasoning=str(market_summary)[:300] if market_summary else "시장 분석 데이터 기반",
+        reasoning=str(market_summary) if market_summary else "시장 분석 데이터 기반",
         confidence=0.8,
     )
     analysis_results["market_analyst_result"] = {"agent_attribution": attribution}

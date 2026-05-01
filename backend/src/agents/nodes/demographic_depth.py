@@ -218,7 +218,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
                     "elderly_ratio_region",
                 ],
                 verdict=f"주 소비층 {_age} {_gender} ({_share_pct}%)",
-                reasoning=(_cached_report.get("narrative", "") if isinstance(_cached_report, dict) else "")[:300]
+                reasoning=(_cached_report.get("narrative", "") if isinstance(_cached_report, dict) else "")
                 or "소비자 심층 분석 (캐시)",
                 confidence=0.8,
             )
@@ -420,7 +420,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
             "elderly_ratio_region",
         ],
         verdict=f"주 소비층 {core.age} {core.gender} ({_share_pct_main}%)",
-        reasoning=str(analysis_out.narrative)[:300]
+        reasoning=str(analysis_out.narrative)
         if analysis_out and analysis_out.narrative
         else "소비자 심층 분석 데이터 기반",
         confidence=0.8,
