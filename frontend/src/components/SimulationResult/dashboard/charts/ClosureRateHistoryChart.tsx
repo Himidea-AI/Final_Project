@@ -41,16 +41,16 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
   }
 
   const data: Row[] = rates.map((r, i) => ({
-    month: `M${i + 1}`,
+    month: `${i + 1}분기`,
     rate: Number((r * 100).toFixed(2)),
   }));
 
   return (
     <div className="mt-3 rounded-lg border border-border bg-secondary p-4">
       <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground mb-3">
-        과거 12개월 폐업률 추이
+        최근 4분기 폐업률 추이
         <span className="ml-2 text-[0.5625rem] font-bold text-muted-foreground normal-case tracking-normal">
-          monthly_closure_rates · 실측 (예측 아님)
+          분기별 실측값 (예측 아님)
         </span>
       </div>
       <ResponsiveContainer width="100%" height={height}>

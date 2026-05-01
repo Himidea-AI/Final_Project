@@ -128,6 +128,7 @@ async def market_analyst_node(state: AgentState) -> dict:
     await asyncio.sleep(2)
 
     system_content = (
+        "[AGENT: market_analyst] 상권 분석 에이전트 — LangSmith 식별용 라벨.\n\n"
         "당신은 상권 분석 전문가이자 프랜차이즈 전략 컨설턴트입니다. "
         "공급된 실데이터를 분석하여 전문가 리포트와 정량 지표를 출력하세요.\n\n"
         f"### {target_district} 실데이터 분석 요약:\n"

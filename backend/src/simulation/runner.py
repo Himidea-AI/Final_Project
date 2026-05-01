@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -12,6 +13,29 @@ import numpy as np
 
 from .agents import Agent, Role, Tier, spawn_agents
 from .brain import LLMBrain
+
+# LangSmith 메타-trace: ABM 시뮬 1회를 root run 1개로 그룹화.
+# brain.* / policy_gen.* 호출이 이 부모 run 의 child 로 nested 되어,
+# LangSmith UI 메인 화면에 ABM 은 "abm.simulation_run" 1줄로만 표시.
+# Expand 시 200+ LLM 호출이 펼쳐지고, LangGraph 에이전트(synthesis 등) trace 는
+# 별도 root 로 그대로 남아 보기 편함.
+try:
+    from langsmith import traceable as _ls_traceable
+
+    def _abm_meta_traceable(*dargs, **dkwargs):
+        proj = os.getenv("ABM_LANGCHAIN_PROJECT") or None
+        if proj and "project_name" not in dkwargs:
+            dkwargs["project_name"] = proj
+        return _ls_traceable(*dargs, **dkwargs)
+except Exception:
+
+    def _abm_meta_traceable(*dargs, **dkwargs):
+        def _decorator(fn):
+            return fn
+
+        if dargs and callable(dargs[0]):
+            return dargs[0]
+        return _decorator
 from .config import (
     MAPO_DONGS,
     ModelConfig,
@@ -430,6 +454,7 @@ class SimulationResult:
         return getattr(self, key)
 
 
+@_abm_meta_traceable(run_type="chain", name="abm.simulation_run")
 def run_simulation(
     days: int = 1,
     pop: PopulationMix | None = None,
