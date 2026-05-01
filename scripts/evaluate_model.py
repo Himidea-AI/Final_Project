@@ -400,3 +400,31 @@ def run_evaluation(
     )
     logger.info("평가 리포트 저장: %s", report_path)
     return report_path
+
+
+# ---------------------------------------------------------------------------
+# CLI 진입점
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    import argparse
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    parser = argparse.ArgumentParser(description="TCN v1 vs v2 비교 평가")
+    parser.add_argument("--v2-weights", required=True)
+    parser.add_argument("--v2-scalers", required=True)
+    parser.add_argument("--v1-weights", default=str(V1_WEIGHTS_PATH))
+    parser.add_argument("--v1-scalers", default=str(V1_SCALERS_PATH))
+    args = parser.parse_args()
+    report = run_evaluation(
+        v2_weights=args.v2_weights,
+        v2_scalers=args.v2_scalers,
+        v1_weights=args.v1_weights,
+        v1_scalers=args.v1_scalers,
+    )
+    print(f"리포트 저장 완료: {report}")
+
+
+if __name__ == "__main__":
+    main()
