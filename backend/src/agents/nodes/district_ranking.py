@@ -4,9 +4,12 @@
 LLM 없이 Python 연산만으로 16개 행정동을 정량 점수화하여 순위를 산출합니다.
 market / population / legal 에이전트와 asyncio.gather로 병렬 실행됩니다.
 
-점수 산식 (100점 만점, 동적 가중치):
-  population_weight=True  (기본): 매출 35% + 인구 45% + 임대료 20%
-  population_weight=False       : 매출 50% + 인구 10% + 임대료 40%
+점수 산식 (100점 만점, A안 가중치 + 정규화 강제):
+  population_weight=True  (기본): 매출 35% + 인구 20% + 임대료 15% + 접근성 10% + 경쟁밀도 10% + 트렌드 10%
+  population_weight=False       : 매출 50% + 인구 10% + 임대료 20% + 접근성  5% + 경쟁밀도  5% + 트렌드 10%
+
+  * 데이터 결측 시: 결측 지표 가중치를 활성 지표에 비례 분배해 합 항상 1.0 유지.
+  * 매출 floor 제거 — 정규화로 음수/0 발생 불가.
 
 추가 패널티:
   - 임대료 예산 초과: 1.5배 초과 시 -50%, 1~1.5배 초과 시 비례 감점
@@ -292,8 +295,9 @@ def _normalize_and_rank(
     """
     16개 동의 원시 지표를 0~100으로 정규화 후 가중 합산 → 내림차순 정렬
 
-    population_weight=True  : 매출35% + 인구45% + 임대료20%
-    population_weight=False : 매출50% + 인구10% + 임대료40%
+    population_weight=True  : 매출35% + 인구20% + 임대료15% + 접근성10% + 경쟁밀도10% + 트렌드10%
+    population_weight=False : 매출50% + 인구10% + 임대료20% + 접근성 5% + 경쟁밀도 5% + 트렌드10%
+    데이터 결측 시 활성 지표에만 합 1.0 강제 정규화 (결측 가중치를 활성에 비례 분배).
     monthly_rent_budget > 0 : 예산 초과 동에 페널티 적용
     vacancy_rate_map        : 공실률 높은 동 추가 패널티 (5~10%: -15%, 10%+: -30%)
     business_type           : 용도지역 규제 패널티 판정용 업종 코드
@@ -306,11 +310,26 @@ def _normalize_and_rank(
     vacancy_rate_map = vacancy_rate_map or {}
     operfit_map = operfit_map or {}
 
-    # 동적 가중치
+    # A안 가중치 (합 1.00) — 6개 지표 독립 정의. 매출에서만 차감하던 기존 비대칭 제거.
+    # 데이터 결측 시 활성 지표만 모아 합 1.0 강제 정규화 (결측 가중치를 활성에 비례 분배).
     if population_weight:
-        w_sales, w_pop, w_rent = 0.35, 0.45, 0.20
+        weights = {
+            "sales": 0.35,    # 결과 변수 — 가장 강한 신호
+            "pop": 0.20,      # 매출 선행 지표 (유동인구 성장률)
+            "rent": 0.15,     # 비용 부담 (낮을수록 점수 ↑)
+            "access": 0.10,   # 인구 유입 메커니즘 (Hansen + E2SFCA)
+            "density": 0.10,  # 경쟁 포화도 (낮을수록 점수 ↑)
+            "trend": 0.10,    # 미래 시장 성장 (NAVER 트렌드)
+        }
     else:
-        w_sales, w_pop, w_rent = 0.50, 0.10, 0.40
+        weights = {
+            "sales": 0.50,
+            "pop": 0.10,
+            "rent": 0.20,
+            "access": 0.05,
+            "density": 0.05,
+            "trend": 0.10,
+        }
 
     # 예산 기반 평당 허용 임대료 계산 (0이면 필터 비활성화)
     budget_per_3_3m2 = (monthly_rent_budget / max(store_area, 1)) if monthly_rent_budget > 0 else 0
@@ -377,22 +396,27 @@ def _normalize_and_rank(
         f"접근성:{operfit_hit}/16"
     )
 
-    # 가중치 재분배: 경쟁밀도 15%, 트렌드 5%, inflow 15%
-    # 전부 매출에서 차감 — 인구/임대료 가중치는 유지. 매출 최소 5% 보장.
-    w_density = 0.15 if has_density else 0.0
-    w_trend = 0.05 if has_trend else 0.0
-    w_operfit = 0.15 if has_operfit else 0.0
-    w_sales_adj = max(w_sales - w_density - w_trend - w_operfit, 0.05)
+    # 활성 지표만 추려서 합 1.0으로 강제 정규화 (결측 지표 가중치 → 활성에 비례 분배).
+    # sales/pop/rent 는 항상 활성 (raw 입력에서 None 이어도 _minmax 가 50 으로 채움).
+    active = {"sales": weights["sales"], "pop": weights["pop"], "rent": weights["rent"]}
+    if has_density:
+        active["density"] = weights["density"]
+    if has_trend:
+        active["trend"] = weights["trend"]
+    if has_operfit:
+        active["access"] = weights["access"]
+    _total = sum(active.values())
+    norm = {k: v / _total for k, v in active.items()}  # 합 == 1.0 보장
 
     ranked = []
     for i, r in enumerate(raw):
-        score = sales_norm[i] * w_sales_adj + pop_norm[i] * w_pop + rent_norm[i] * w_rent
-        if density_norm is not None:
-            score += density_norm[i] * w_density
-        if trend_norm is not None:
-            score += trend_norm[i] * w_trend
-        if operfit_norm is not None:
-            score += operfit_norm[i] * w_operfit
+        score = sales_norm[i] * norm["sales"] + pop_norm[i] * norm["pop"] + rent_norm[i] * norm["rent"]
+        if density_norm is not None and "density" in norm:
+            score += density_norm[i] * norm["density"]
+        if trend_norm is not None and "trend" in norm:
+            score += trend_norm[i] * norm["trend"]
+        if operfit_norm is not None and "access" in norm:
+            score += operfit_norm[i] * norm["access"]
 
         # 예산 초과 페널티
         if budget_per_3_3m2 > 0 and r["avg_rent"] is not None and r["avg_rent"] > 0:
@@ -483,8 +507,9 @@ async def district_ranking_node(state: AgentState) -> dict:
     # v5: target_districts를 캐시 키에 포함 — 선택 동이 다르면 별도 캐시 (v4 무효화)
     # v6: top_3도 선택 동 내로 제한 (v5 잘못된 top_3 캐시 무효화)
     # v7: inflow(교통·집객 접근성) 점수 추가 — Hansen/E2SFCA (v6 무효화)
+    # v8: A안 가중치 + 정규화 강제 (매출 5%→35%, 인구 45%→20%, 합 1.0 보장 — v7 무효화)
     cache_key = (
-        f"v7:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+        f"v8:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
     )
     _redis = None
     try:
