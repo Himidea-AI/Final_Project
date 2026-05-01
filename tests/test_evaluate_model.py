@@ -30,6 +30,30 @@ def test_compute_mape_all_near_zero_returns_nan():
     assert np.isnan(compute_mape(np.array([500.0]), np.array([999.0])))
 
 
+def test_compute_wa_mape_basic():
+    from scripts.evaluate_model import compute_wa_mape
+
+    # Σ|pred-true| / Σtrue = (100+100) / (1000+2000) * 100 = 6.667%
+    pred = np.array([1100.0, 2100.0])
+    true = np.array([1000.0, 2000.0])
+    assert compute_wa_mape(pred, true) == pytest.approx(200.0 / 3000.0 * 100)
+
+
+def test_compute_wa_mape_excludes_near_zero():
+    from scripts.evaluate_model import compute_wa_mape
+
+    # true=999 제외, true=1000만 포함 → |100|/1000 * 100 = 10%
+    pred = np.array([500.0, 1100.0])
+    true = np.array([999.0, 1000.0])
+    assert compute_wa_mape(pred, true) == pytest.approx(10.0)
+
+
+def test_compute_wa_mape_all_near_zero_returns_nan():
+    from scripts.evaluate_model import compute_wa_mape
+
+    assert np.isnan(compute_wa_mape(np.array([500.0]), np.array([999.0])))
+
+
 def test_compute_mae():
     from scripts.evaluate_model import compute_mae
 
@@ -230,7 +254,7 @@ def test_dms_predict_applies_expm1():
 
 
 def _dummy_metrics():
-    return dict(mape=15.0, mae=1_000_000.0, rmse=1_200_000.0,
+    return dict(mape=15.0, wa_mape=12.0, mae=1_000_000.0, rmse=1_200_000.0,
                 da=70.0, bias=50_000.0, pq_mape=[10.0, 12.0, 15.0, 18.0])
 
 

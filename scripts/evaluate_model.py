@@ -13,8 +13,14 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# 프로젝트 루트를 sys.path에 추가 (python scripts/evaluate_model.py 직접 실행 지원)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import numpy as np
 import pandas as pd
@@ -81,6 +87,18 @@ def compute_mape(pred: np.ndarray, true: np.ndarray) -> float:
     if mask.sum() == 0:
         return float("nan")
     return float(np.mean(np.abs(pred[mask] - true[mask]) / true[mask]) * 100)
+
+
+def compute_wa_mape(pred: np.ndarray, true: np.ndarray) -> float:
+    """WA-MAPE(Weighted Average MAPE) 계산. true < 1000원 제외.
+
+    WA-MAPE = Σ|pred - true| / Σtrue × 100
+    소규모 매출 조합의 APE 이상값이 전체를 왜곡하는 문제를 보완.
+    """
+    mask = true >= 1000
+    if mask.sum() == 0:
+        return float("nan")
+    return float(np.sum(np.abs(pred[mask] - true[mask])) / np.sum(true[mask]) * 100)
 
 
 def compute_mae(pred: np.ndarray, true: np.ndarray) -> float:
@@ -206,6 +224,7 @@ def _generate_report(
     reports_dir: Path,
     residual_std: list[float] | None,
     warn_combos: list[tuple[str, str, float]],
+    training_config: dict | None = None,
 ) -> Path:
     """마크다운 리포트 생성 후 파일 경로 반환."""
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -214,11 +233,17 @@ def _generate_report(
     def _krw(v: float) -> str:
         return f"{v:,.0f}원"
 
-    def _improvement(v1: float, v2: float, higher_is_better: bool = False) -> str:
+    def _improvement(v1: float, v2: float, higher_is_better: bool = False, pct: bool = True) -> str:
+        """개선 방향 표기. pct=True: %p 단위(지표), pct=False: v1 대비 % 개선율(금액)."""
         diff = v2 - v1
-        if higher_is_better:
-            return f"▲ {diff:+.1f}%p" if diff > 0 else f"▼ {diff:.1f}%p"
-        return f"▼ {v1 - v2:.1f}%p" if diff < 0 else f"▲ {diff:+.1f}%p"
+        if pct:
+            if higher_is_better:
+                return f"▲ {diff:+.1f}%p" if diff > 0 else f"▼ {diff:.1f}%p"
+            return f"▼ {v1 - v2:.1f}%p" if diff < 0 else f"▲ {diff:+.1f}%p"
+        if v1 == 0:
+            return "-"
+        rate = (v1 - v2) / abs(v1) * 100
+        return f"▼ {rate:.1f}%" if rate > 0 else f"▲ {abs(rate):.1f}% 악화"
 
     pq1, pq2 = metrics_v1["pq_mape"], metrics_v2["pq_mape"]
     pq_labels = ["Q1 (+1분기)", "Q2 (+2분기)", "Q3 (+3분기)", "Q4 (+4분기)"]
@@ -231,15 +256,42 @@ def _generate_report(
         "val 기간: 2024Q1~2024Q4 (quarter >= 20241)  ",
         f"평가 조합 수: {n_combos}개\n",
         "---\n",
+    ]
+
+    if training_config:
+        c1 = training_config.get("v1", {})
+        c2 = training_config.get("v2", {})
+        lines += [
+            "## 0. 학습 조건\n",
+            "| 항목 | v1 (자기회귀) | v2 (DMS) |",
+            "|------|-------------|---------|",
+            f"| window_size | {c1.get('window_size', '-')} | {c2.get('window_size', '-')} |",
+            f"| dilations | {c1.get('dilations', '-')} | {c2.get('dilations', '-')} |",
+            f"| kernel_size | {c1.get('kernel_size', '-')} | {c2.get('kernel_size', '-')} |",
+            f"| output_size | {c1.get('output_size', '-')} | {c2.get('output_size', '-')} |",
+            f"| n_channels | {c1.get('n_channels', '-')} | {c2.get('n_channels', '-')} |",
+            f"| 피처 수 | {c1.get('n_features', '-')} | {c2.get('n_features', '-')} |",
+            f"| 신규 피처 | - | {c2.get('extra_features', '-')} |",
+            f"| val_quarter | {c1.get('val_quarter', '-')} | {c2.get('val_quarter', '-')} |",
+            f"| pretrain epoch | {c1.get('pretrain_epoch', '-')} | {c2.get('pretrain_epoch', '-')} |",
+            f"| finetune epoch | {c1.get('finetune_epoch', '-')} | {c2.get('finetune_epoch', '-')} |",
+            f"| random seed | {c1.get('seed', '-')} | {c2.get('seed', '-')} |",
+            f"| 탈락 조합 처리 | {c1.get('short_combo_policy', '-')} | {c2.get('short_combo_policy', '-')} |",
+            f"| 비고 | {c1.get('note', '-')} | {c2.get('note', '-')} |\n",
+            "---\n",
+        ]
+
+    lines += [
         "## 1. 전체 지표 비교\n",
         "| 지표 | v1 (자기회귀) | v2 (DMS) | 개선 |",
         "|------|--------------|----------|------|",
         f"| MAPE | {metrics_v1['mape']:.1f}% | {metrics_v2['mape']:.1f}% | {_improvement(metrics_v1['mape'], metrics_v2['mape'])} |",
-        f"| MAE | {_krw(metrics_v1['mae'])} | {_krw(metrics_v2['mae'])} | {_improvement(metrics_v1['mae'], metrics_v2['mae'])} |",
-        f"| RMSE | {_krw(metrics_v1['rmse'])} | {_krw(metrics_v2['rmse'])} | {_improvement(metrics_v1['rmse'], metrics_v2['rmse'])} |",
+        f"| MAE | {_krw(metrics_v1['mae'])} | {_krw(metrics_v2['mae'])} | {_improvement(metrics_v1['mae'], metrics_v2['mae'], pct=False)} |",
+        f"| WA-MAPE | {metrics_v1['wa_mape']:.1f}% | {metrics_v2['wa_mape']:.1f}% | {_improvement(metrics_v1['wa_mape'], metrics_v2['wa_mape'])} |",
+        f"| RMSE | {_krw(metrics_v1['rmse'])} | {_krw(metrics_v2['rmse'])} | {_improvement(metrics_v1['rmse'], metrics_v2['rmse'], pct=False)} |",
         f"| Directional Accuracy | {metrics_v1['da']:.1f}% | {metrics_v2['da']:.1f}% | {_improvement(metrics_v1['da'], metrics_v2['da'], higher_is_better=True)} |",
         f"| Bias | {_krw(metrics_v1['bias'])} | {_krw(metrics_v2['bias'])} | - |",
-        "\n> Bias: 양수=과대예측, 음수=과소예측.\n",
+        "\n> MAPE: 단순평균(소규모 조합에 민감). WA-MAPE: 매출 규모 가중평균(왜곡 보완). Bias: 양수=과대예측, 음수=과소예측.\n",
         "---\n",
         "## 2. 분기별 MAPE (Per-Quarter MAPE)\n",
         "| 분기 | v1 | v2 | 해석 |",
@@ -335,7 +387,13 @@ def run_evaluation(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
 
-        feature_cols = [c for c in ALL_FEATURES if c in ts.columns]
+        # 스케일러 피처 수에 맞게 feature_cols 구성
+        # v2 전용 신규 피처: v1 스케일러는 이 3개를 모름
+        _V2_ONLY = {"opr_sale_mt_avg", "cls_sale_mt_avg", "industry_trend"}
+        feature_cols = [
+            c for c in ALL_FEATURES
+            if c in ts.columns and (input_size >= 37 or c not in _V2_ONLY)
+        ]
         target_col = "monthly_sales"
         target_idx = feature_cols.index(target_col) if target_col in feature_cols else 0
         window_size = config["window_size"]
@@ -367,6 +425,7 @@ def run_evaluation(
         flat_p, flat_t = preds.flatten(), trues.flatten()
         return dict(
             mape=compute_mape(flat_p, flat_t),
+            wa_mape=compute_wa_mape(flat_p, flat_t),
             mae=compute_mae(flat_p, flat_t),
             rmse=compute_rmse(flat_p, flat_t),
             da=compute_directional_accuracy(q0s, preds, trues),
@@ -388,6 +447,40 @@ def run_evaluation(
         with open(residual_std_path, "rb") as f:
             residual_std = pickle.load(f)  # noqa: S301
 
+    feat_scaler_v1, _ = load_scalers(v1_scalers)
+    feat_scaler_v2, _ = load_scalers(v2_scalers)
+    training_config = {
+        "v1": {
+            "window_size": V1_CONFIG["window_size"],
+            "dilations": V1_CONFIG["dilations"],
+            "kernel_size": V1_CONFIG.get("kernel_size", 2),
+            "output_size": V1_CONFIG["output_size"],
+            "n_channels": V1_CONFIG["n_channels"],
+            "n_features": len(feat_scaler_v1.scale_),
+            "val_quarter": VAL_QUARTER,
+            "pretrain_epoch": "-",
+            "finetune_epoch": "-",
+            "seed": "-",
+            "short_combo_policy": "평가 제외(B)",
+            "note": "자기회귀 단일스텝",
+        },
+        "v2": {
+            "window_size": V2_CONFIG["window_size"],
+            "dilations": V2_CONFIG["dilations"],
+            "kernel_size": V2_CONFIG.get("kernel_size", 2),
+            "output_size": V2_CONFIG["output_size"],
+            "n_channels": V2_CONFIG["n_channels"],
+            "n_features": len(feat_scaler_v2.scale_),
+            "extra_features": "opr_sale_mt_avg, cls_sale_mt_avg, industry_trend",
+            "val_quarter": VAL_QUARTER,
+            "pretrain_epoch": "-",
+            "finetune_epoch": "-",
+            "seed": "-",
+            "short_combo_policy": "평가 제외(B)",
+            "note": "DMS 4분기 동시 출력",
+        },
+    }
+
     report_path = _generate_report(
         metrics_v1=_metrics(preds_v1, trues_v1, q0s_v1),
         metrics_v2=_metrics(preds_v2, trues_v2, q0s_v2),
@@ -397,6 +490,7 @@ def run_evaluation(
         reports_dir=REPORTS_DIR,
         residual_std=residual_std,
         warn_combos=warn_combos,
+        training_config=training_config,
     )
     logger.info("평가 리포트 저장: %s", report_path)
     return report_path
