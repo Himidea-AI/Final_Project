@@ -52,10 +52,10 @@ DEFAULT_CONFIG: dict = {
     "n_channels": 128,
     "kernel_size": 2,
     "dilations": [1, 2],
-    "dropout": 0.2,
+    "dropout": 0.2,  # sprint 10 시도 0.3 → rollback (test AUC -0.0001 noise)
     # LightGBM
-    "lgbm_num_leaves": 31,
-    "lgbm_n_estimators": 200,
+    "lgbm_num_leaves": 31,  # sprint 11 시도 15 → rollback (test AUC -0.017)
+    "lgbm_n_estimators": 200,  # sprint 12 시도 100 → rollback (test AUC -0.0006 noise)
     "lgbm_learning_rate": 0.05,
     # LGBM regularization (2026-05-01 sprint 8) — overfit 차단 시도
     "lgbm_reg_alpha": 0.1,  # L1 (sparse)
