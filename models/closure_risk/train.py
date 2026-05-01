@@ -57,6 +57,9 @@ DEFAULT_CONFIG: dict = {
     "lgbm_num_leaves": 31,
     "lgbm_n_estimators": 200,
     "lgbm_learning_rate": 0.05,
+    # LGBM regularization (2026-05-01 sprint 8) — overfit 차단 시도
+    "lgbm_reg_alpha": 0.1,  # L1 (sparse)
+    "lgbm_reg_lambda": 0.1,  # L2 (smooth)
     # D-3 isotonic calibration (default False) — 2026-05-01 retrain 시 test AUC -0.038
     # degradation + threshold collapse (danger==caution) 로 rollback. 코드는 보존되어 미래
     # 변형 (Platt scaling, CV calibration 등) 또는 데이터 추가 후 재시도 가능.
@@ -133,6 +136,8 @@ def train_lgbm(X_train: np.ndarray, y_train: np.ndarray, config: dict) -> object
         num_leaves=config["lgbm_num_leaves"],
         n_estimators=config["lgbm_n_estimators"],
         learning_rate=config["lgbm_learning_rate"],
+        reg_alpha=config.get("lgbm_reg_alpha", 0.0),  # L1 정규화 (sprint 8)
+        reg_lambda=config.get("lgbm_reg_lambda", 0.0),  # L2 정규화 (sprint 8)
         scale_pos_weight=scale_pos_weight,  # 클래스 불균형 처리
         random_state=config["random_state"],
         verbose=-1,
