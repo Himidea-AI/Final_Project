@@ -13,14 +13,14 @@ interface Props {
 export function SectionLabel({ icon: Icon, title, sub }: Props) {
   return (
     <div className="flex items-center gap-3 mb-5">
-      <div className="p-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
-        <Icon size={14} className="text-indigo-400" />
+      <div className="p-1.5 bg-primary/10 rounded-lg border border-primary/20">
+        <Icon size={14} className="text-primary" />
       </div>
       <div className="flex flex-col text-left">
-        <span className="text-[0.625rem] font-black text-indigo-400 uppercase tracking-[0.2em] leading-none">
+        <span className="text-[0.625rem] font-black text-primary uppercase tracking-[0.2em] leading-none">
           {title}
         </span>
-        <span className="text-[0.5625rem] font-bold text-stone-600 uppercase mt-1 leading-none">
+        <span className="text-[0.5625rem] font-bold text-muted-foreground uppercase mt-1 leading-none">
           {sub}
         </span>
       </div>

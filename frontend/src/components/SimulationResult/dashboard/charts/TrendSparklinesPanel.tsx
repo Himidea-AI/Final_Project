@@ -46,31 +46,33 @@ function TrendCell({ icon, label, subLabel, value, unit, delta, deltaUnit, sampl
   const deltaPositive = delta != null && delta > 0;
   const deltaColor =
     delta == null
-      ? 'text-stone-500'
+      ? 'text-muted-foreground'
       : delta > 0
-        ? 'text-emerald-400'
+        ? 'text-success'
         : delta < 0
-          ? 'text-rose-400'
-          : 'text-stone-400';
+          ? 'text-danger'
+          : 'text-muted-foreground';
 
   return (
-    <div className="rounded-2xl border border-stone-800/60 bg-stone-950/40 p-4 flex flex-col gap-2">
+    <div className="rounded-2xl border border-border/60 bg-card/40 p-4 flex flex-col gap-2">
       <div className="flex items-center gap-2">
         {icon}
         <div className="flex-1 min-w-0">
-          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-stone-500 truncate">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-muted-foreground truncate">
             {label}
           </div>
           {subLabel && (
-            <div className="text-[0.625rem] font-bold text-stone-400 truncate">{subLabel}</div>
+            <div className="text-[0.625rem] font-bold text-muted-foreground truncate">
+              {subLabel}
+            </div>
           )}
         </div>
       </div>
       <div className="flex items-baseline justify-between">
-        <span className="text-2xl font-black tabular-nums text-stone-100 tracking-tighter">
+        <span className="text-2xl font-black tabular-nums text-foreground tracking-tighter">
           {value ?? '—'}
           {value && unit && (
-            <span className="text-[0.6875rem] font-bold text-stone-500 ml-1">{unit}</span>
+            <span className="text-[0.6875rem] font-bold text-muted-foreground ml-1">{unit}</span>
           )}
         </span>
         {delta != null && (
@@ -85,7 +87,7 @@ function TrendCell({ icon, label, subLabel, value, unit, delta, deltaUnit, sampl
         {samples && samples.length > 1 ? (
           <Sparkline data={samples} height={28} />
         ) : (
-          <span className="text-[0.5625rem] text-stone-600">시계열 데이터 부족</span>
+          <span className="text-[0.5625rem] text-muted-foreground">시계열 데이터 부족</span>
         )}
       </div>
     </div>
@@ -108,7 +110,7 @@ export function TrendSparklinesPanel({ industryTrend, dongTrend, macro }: Props)
   return (
     <div className="grid grid-cols-3 gap-3">
       <TrendCell
-        icon={<TrendingUp size={14} className="text-indigo-400" />}
+        icon={<TrendingUp size={14} className="text-primary" />}
         label="업종 트렌드"
         subLabel={industryTrend?.industry ?? '—'}
         value={
@@ -122,7 +124,7 @@ export function TrendSparklinesPanel({ industryTrend, dongTrend, macro }: Props)
         samples={industryTrend?.samples}
       />
       <TrendCell
-        icon={<MapPin size={14} className="text-cyan-400" />}
+        icon={<MapPin size={14} className="text-primary" />}
         label="동 트렌드"
         subLabel={dongTrend?.dong_name ?? '—'}
         value={formatScore(dongTrend?.recent_score)}
@@ -132,7 +134,7 @@ export function TrendSparklinesPanel({ industryTrend, dongTrend, macro }: Props)
         samples={dongTrend?.samples}
       />
       <TrendCell
-        icon={<Landmark size={14} className="text-amber-400" />}
+        icon={<Landmark size={14} className="text-warning" />}
         label="한국은행 기준금리"
         subLabel={macro?.base_rate_trend ?? '—'}
         value={macro?.current_base_rate != null ? macro.current_base_rate.toFixed(2) : null}

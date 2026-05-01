@@ -39,13 +39,13 @@ export function AnalyzeMarketTab({ simResult, openModal }: Props) {
       <MarketTab simResult={simResult} openModal={openModal} />
 
       {hasTrendBlock && (
-        <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8 space-y-5">
+        <div className="bg-card/40 border border-border/60 rounded-3xl p-8 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
-                <Globe2 className="text-cyan-400" size={20} /> 거시·트렌드 환경
+              <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left leading-none">
+                <Globe2 className="text-primary" size={20} /> 거시·트렌드 환경
               </h3>
-              <p className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+              <p className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-[0.2em] mt-3">
                 업종 · 지역 · 거시 12개월 시계열 + LLM 요약
               </p>
             </div>
@@ -58,7 +58,7 @@ export function AnalyzeMarketTab({ simResult, openModal }: Props) {
                     content: trendNarrative,
                   })
                 }
-                className="text-[0.625rem] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1 transition-colors shrink-0"
+                className="text-[0.625rem] font-bold text-muted-foreground hover:text-primary uppercase tracking-widest flex items-center gap-1 transition-colors shrink-0"
               >
                 <Maximize2 size={12} /> 전체 해석
               </button>

@@ -13,14 +13,14 @@ export function WeekdayWeekendBar({ ratio }: Props) {
   const n = normalizeRatio(ratio);
   if (n == null) {
     return (
-      <div className="flex h-[120px] items-center justify-center rounded-2xl border border-dashed border-stone-800 text-stone-500 text-xs">
+      <div className="flex h-[120px] items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground text-xs">
         demographic_depth 분석 대기
       </div>
     );
   }
   const data = [
-    { label: '주중', value: Math.round(n * 100), color: '#818cf8' },
-    { label: '주말', value: Math.round((1 - n) * 100), color: '#a8a29e' },
+    { label: '주중', value: Math.round(n * 100), color: 'var(--primary)' },
+    { label: '주말', value: Math.round((1 - n) * 100), color: 'var(--muted-foreground)' },
   ];
   return (
     <div className="h-[120px]">
@@ -30,7 +30,7 @@ export function WeekdayWeekendBar({ ratio }: Props) {
           <YAxis
             type="category"
             dataKey="label"
-            tick={{ fontSize: 11, fill: '#a8a29e' }}
+            tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
             axisLine={false}
             tickLine={false}
           />

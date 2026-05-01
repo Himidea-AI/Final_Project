@@ -4,11 +4,11 @@
  * trend_forecast 는 LLM 출처라 AnalyzeMarketTab 으로 이동.
  */
 
-import { TrendingUp, Zap, Maximize2, GitCompareArrows } from 'lucide-react';
+import { TrendingUp, Zap, Maximize2 } from 'lucide-react';
 import type { QuarterlyProjection, SimulationOutput } from '../../../../../types';
 import type { DetailModalContent } from '../../shared/DetailModal';
 import { QuarterlyProjectionChart, type ChartSeries } from '../../../QuarterlyProjectionChart';
-import { ScenariosComparisonChart } from '../../charts/ScenariosComparisonChart';
+import { QuarterlyStatStrip } from '../../../QuarterlyStatStrip';
 import { ShapInsightCard } from '../../charts/ShapInsightCard';
 
 interface Props {
@@ -54,98 +54,77 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
         : [];
 
   const shap = simResult.shap_result;
-  const scenarios = simResult.scenarios;
-
-  // 멀티 동 scenarios — district_predictions 우선, 비어있으면 simResult.scenarios 단일 동 fallback
-  const allScenarios =
-    districtPreds.length > 0
-      ? districtPreds.map((p) => ({ district: p.district, scenarios: p.scenarios }))
-      : scenarios && scenarios.base && scenarios.base.length > 0
-        ? [
-            {
-              district: simResult.winner_district ?? simResult.target_district ?? '단일',
-              scenarios,
-            },
-          ]
-        : [];
-  const hasScenarios = allScenarios.some(
-    (s) => s.scenarios !== null && (s.scenarios?.base?.length ?? 0) > 0,
-  );
+  // 시나리오 비교 차트 제거 (2026-05-01) — 분기별 예상 매출의 CI band 와 동일 데이터(95% 신뢰구간)라 중복.
+  // 자연어 가치는 QuarterlyStatStrip 의 시나리오 범위 한줄평으로 흡수, 차트 범례는 "낙관/비관 범위" 라벨로.
 
   return (
     <div className="space-y-6">
-      <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+      <div className="rounded-3xl border border-border bg-card p-8">
         <div className="flex items-start justify-between mb-8 gap-6">
           <div>
-            <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
-              <TrendingUp className="text-indigo-400" /> 분기별 예상 매출
+            <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left leading-none">
+              <TrendingUp className="text-primary" /> 분기별 예상 매출
             </h3>
-            <p className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
-              Temporal Convolutional Network · P10~P90 신뢰 구간
-            </p>
           </div>
         </div>
 
-        <div className="relative bg-stone-950/50 border border-stone-800 rounded-2xl p-6 mb-8">
-          {series.length > 0 ? (
-            <QuarterlyProjectionChart series={series} winnerDistrict={simResult.winner_district} />
-          ) : (
-            <div className="aspect-[21/9] flex flex-col items-center justify-center">
-              <TrendingUp size={48} className="text-stone-700 mb-3" />
-              <p className="text-stone-500 font-black uppercase tracking-widest text-xs">
-                분기 매출 데이터 없음
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-stone-800 pb-3">
-            <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2 italic">
-              <Zap className="text-amber-400" size={14} /> 매출 기여 요인 분석
-            </h4>
-            {districtPreds.length === 0 && shap && (
-              <button
-                type="button"
-                onClick={() =>
-                  openModal({
-                    title: 'SHAP 해석 상세',
-                    content: `SHAP (SHapley Additive exPlanations)은 각 피처가 예측값에 얼마나 기여했는지 정량화합니다.\n\nbase_value: ${(shap.base_value ?? 0).toLocaleString('ko-KR')}원\npredicted_value: ${(shap.predicted_value ?? 0).toLocaleString('ko-KR')}원${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다.' : ''}`,
-                  })
-                }
-                className="text-[0.625rem] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1"
-              >
-                <Maximize2 size={12} /> 해석 상세
-              </button>
+        {/* Chart + Stat Strip 좌우 분할 — 평탄 시계열에서 차트는 trend 시각, strip 은 분기별 정량 진실.
+            mobile/tablet 에서는 위아래 stack, lg 이상에서 좌:우 = 1fr : 280px. */}
+        <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
+          <div className="relative flex flex-col justify-center rounded-2xl border border-border bg-secondary p-6">
+            {series.length > 0 ? (
+              <QuarterlyProjectionChart
+                series={series}
+                winnerDistrict={simResult.winner_district}
+              />
+            ) : (
+              <div className="flex aspect-[21/9] flex-col items-center justify-center">
+                <TrendingUp size={48} className="mb-3 text-muted-foreground" />
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  분기 매출 데이터 없음
+                </p>
+              </div>
             )}
           </div>
-          {districtPreds.length > 0 && districtPreds.some((p) => p.shap_result !== null) ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {districtPreds.map((p) => (
-                <ShapInsightCard key={p.district} district={p.district} shap={p.shap_result} />
-              ))}
+          {series.length > 0 && (
+            <div className="rounded-2xl border border-border bg-secondary p-4">
+              <QuarterlyStatStrip series={series} winnerDistrict={simResult.winner_district} />
             </div>
-          ) : (
-            <ShapInsightCard shap={shap} />
           )}
         </div>
       </div>
 
-      {hasScenarios && (
-        <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
-          <div className="flex items-start justify-between mb-6 gap-6">
-            <div>
-              <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
-                <GitCompareArrows className="text-indigo-400" size={20} /> 시나리오 비교
-              </h3>
-              <p className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
-                낙관 · 기본 · 비관 · 4분기 매출 envelope
-              </p>
-            </div>
-          </div>
-          <ScenariosComparisonChart allScenarios={allScenarios} />
+      {/* 매출 기여 요인 분석 — 별도 Layer 2 outer card. 헤더 위계는 분기별 예상 매출과 동일 (h3 text-xl font-black). */}
+      <div className="rounded-3xl border border-border bg-card p-8">
+        <div className="mb-8 flex items-start justify-between gap-6">
+          <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
+            <Zap className="text-primary" /> 매출 기여 요인 분석
+          </h3>
+          {districtPreds.length === 0 && shap && (
+            <button
+              type="button"
+              onClick={() =>
+                openModal({
+                  title: 'SHAP 해석 상세',
+                  content: `SHAP (SHapley Additive exPlanations)은 각 피처가 예측값에 얼마나 기여했는지 정량화합니다.\n\nbase_value: ${(shap.base_value ?? 0).toLocaleString('ko-KR')}원\npredicted_value: ${(shap.predicted_value ?? 0).toLocaleString('ko-KR')}원${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다.' : ''}`,
+                })
+              }
+              className="flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary"
+            >
+              <Maximize2 size={12} /> 해석 상세
+            </button>
+          )}
         </div>
-      )}
+        {districtPreds.length > 0 && districtPreds.some((p) => p.shap_result !== null) ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {districtPreds.map((p) => (
+              <ShapInsightCard key={p.district} district={p.district} shap={p.shap_result} />
+            ))}
+          </div>
+        ) : (
+          <ShapInsightCard shap={shap} />
+        )}
+      </div>
     </div>
   );
 }

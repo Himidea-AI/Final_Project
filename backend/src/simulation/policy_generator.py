@@ -25,10 +25,17 @@ load_dotenv()
 
 # LangSmith 추적 — LANGCHAIN_TRACING_V2=true 일 때만 동작.
 # langsmith 미설치 / 환경변수 OFF 면 no-op 데코레이터로 graceful degrade.
+#
+# 부모 trace 그룹화: runner.run_simulation 의 부모 run 에 자동 nested.
+# 옵션: ABM_LANGCHAIN_PROJECT 환경변수 지정 시 별도 프로젝트 라우팅 (기본 None=같은 프로젝트).
+ABM_LS_PROJECT = os.getenv("ABM_LANGCHAIN_PROJECT") or None
+
 try:
     from langsmith import traceable as _ls_traceable
 
     def traceable(*dargs, **dkwargs):
+        if ABM_LS_PROJECT and "project_name" not in dkwargs:
+            dkwargs["project_name"] = ABM_LS_PROJECT
         return _ls_traceable(*dargs, **dkwargs)
 except Exception:
 

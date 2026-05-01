@@ -69,21 +69,21 @@ const ROADMAP = [
 
 export default function AboutPage({ onBack }: { onBack: () => void }) {
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-[#1e1b18]/95 backdrop-blur-sm text-[#e2e8f0] pb-32 custom-scrollbar">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-card/95 backdrop-blur-sm text-foreground pb-32 custom-scrollbar">
       {/* Header */}
-      <div className="fixed top-0 left-0 w-full h-24 border-b border-[#3a3633]/50 flex items-center px-8 md:px-16 bg-[#1e1b18]/80 backdrop-blur-md z-50">
+      <div className="fixed top-0 left-0 w-full h-24 border-b border-border/50 flex items-center px-8 md:px-16 bg-card/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
           >
             <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">SPOTTER</span>
+            <span className="text-sm font-bold tracking-wider text-foreground">SPOTTER</span>
           </button>
-          <span className="text-[#3a3633]">/</span>
+          <span className="text-border">/</span>
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-white transition-colors duration-300"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
           >
             <ChevronRight size={14} className="rotate-180" />
             BACK
@@ -94,9 +94,9 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
       <div className="max-w-5xl mx-auto px-8 md:px-16 pt-24">
         {/* ── Section 1: Hero ── */}
         <section className="min-h-[80vh] flex flex-col justify-center animate-[fadeSlideIn_1s_ease-out]">
-          <p className="text-lg md:text-xl text-[#9ca3af] mb-6 tracking-wide">
+          <p className="text-lg md:text-xl text-muted-foreground mb-6 tracking-wide">
             기존 상권분석 도구는{' '}
-            <span className="text-[#818cf8] font-bold text-2xl md:text-3xl">'지금'</span>만
+            <span className="text-primary font-bold text-2xl md:text-3xl">'지금'</span>만
             보여줍니다.
           </p>
 
@@ -108,16 +108,16 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
             ].map((q, i) => (
               <div
                 key={i}
-                className="border-l-2 border-indigo-500 pl-6 py-2"
+                className="border-l-2 border-primary pl-6 py-2"
                 style={{ animationDelay: `${i * 150 + 300}ms` }}
               >
-                <p className="text-xl md:text-2xl font-medium text-[#e2e8f0]/80 italic">"{q}"</p>
+                <p className="text-xl md:text-2xl font-medium text-foreground/80 italic">"{q}"</p>
               </div>
             ))}
           </div>
 
           <h2 className="text-3xl md:text-5xl font-black mt-10 tracking-tight leading-tight">
-            <span className="text-[#818cf8]">SPOTTER</span>는
+            <span className="text-primary">SPOTTER</span>는
             <br />
             여기서 시작합니다.
           </h2>
@@ -126,8 +126,8 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
         {/* ── Section 2: What We Do Differently ── */}
         <section className="py-24">
           <div className="flex items-center gap-4 mb-16">
-            <div className="w-12 h-px bg-[#818cf8]" />
-            <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
+            <div className="w-12 h-px bg-primary" />
+            <h3 className="text-xs font-mono tracking-[0.3em] text-muted-foreground uppercase">
               What We Do Differently
             </h3>
           </div>
@@ -135,11 +135,11 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             {FEATURES.map((f) => (
               <div key={f.num} className="relative pl-2 pt-6">
-                <span className="font-mono text-5xl md:text-7xl font-black text-[#3a3633] absolute -top-6 -left-4 opacity-50 z-0 select-none">
+                <span className="font-mono text-5xl md:text-7xl font-black text-border absolute -top-6 -left-4 opacity-50 z-0 select-none">
                   {f.num}
                 </span>
-                <h4 className="text-xl font-bold text-[#e2e8f0] mb-3 relative z-10">{f.title}</h4>
-                <p className="text-[#9ca3af] leading-relaxed relative z-10">{f.desc}</p>
+                <h4 className="text-xl font-bold text-foreground mb-3 relative z-10">{f.title}</h4>
+                <p className="text-muted-foreground leading-relaxed relative z-10">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -148,8 +148,8 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
         {/* ── Section 3: Comparison ── */}
         <section className="py-24">
           <div className="flex items-center gap-4 mb-16">
-            <div className="w-12 h-px bg-[#818cf8]" />
-            <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
+            <div className="w-12 h-px bg-primary" />
+            <h3 className="text-xs font-mono tracking-[0.3em] text-muted-foreground uppercase">
               Compared to Existing Solutions
             </h3>
           </div>
@@ -158,13 +158,13 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
             {COMPARISONS.map((c, i) => (
               <div
                 key={i}
-                className="flex justify-between items-center py-4 border-b border-[#3a3633]/50"
+                className="flex justify-between items-center py-4 border-b border-border/50"
               >
-                <span className="text-[#d1d5db] line-through decoration-[#3a3633] flex-1 text-sm">
+                <span className="text-muted-foreground line-through decoration-border flex-1 text-sm">
                   {c.old}
                 </span>
-                <span className="text-[#3a3633] font-mono mx-6 shrink-0">{c.arrow}</span>
-                <span className="text-indigo-400 font-bold text-lg flex-1 text-right">{c.now}</span>
+                <span className="text-border font-mono mx-6 shrink-0">{c.arrow}</span>
+                <span className="text-primary font-bold text-lg flex-1 text-right">{c.now}</span>
               </div>
             ))}
           </div>
@@ -175,19 +175,19 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
           {/* Data sources */}
           <div className="mb-20">
             <div className="flex items-center gap-4 mb-10">
-              <div className="w-12 h-px bg-[#818cf8]" />
-              <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
+              <div className="w-12 h-px bg-primary" />
+              <h3 className="text-xs font-mono tracking-[0.3em] text-muted-foreground uppercase">
                 Data &amp; Trust
               </h3>
             </div>
-            <p className="text-[#9ca3af] mb-6 text-sm">
+            <p className="text-muted-foreground mb-6 text-sm">
               7개 공공데이터 API 기반 — 신뢰할 수 있는 데이터만 사용합니다.
             </p>
             <div className="flex flex-wrap gap-3">
               {DATA_SOURCES.map((src) => (
                 <span
                   key={src}
-                  className="px-4 py-2 rounded-full border border-[#3a3633] bg-[#2c2825] text-sm text-[#9ca3af] hover:border-indigo-500/50 hover:text-[#e2e8f0] transition-colors cursor-default"
+                  className="px-4 py-2 rounded-full border border-border bg-card text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors cursor-default"
                 >
                   {src}
                 </span>
@@ -198,20 +198,20 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
           {/* Roadmap */}
           <div>
             <div className="flex items-center gap-4 mb-10">
-              <div className="w-12 h-px bg-[#818cf8]" />
-              <h3 className="text-xs font-mono tracking-[0.3em] text-[#9ca3af] uppercase">
+              <div className="w-12 h-px bg-primary" />
+              <h3 className="text-xs font-mono tracking-[0.3em] text-muted-foreground uppercase">
                 Roadmap
               </h3>
             </div>
             <div className="flex flex-col gap-8">
               {ROADMAP.map((r, i) => (
                 <div key={i} className="flex items-start gap-6">
-                  <span className="font-mono text-indigo-400 w-24 shrink-0 text-sm font-bold pt-0.5">
+                  <span className="font-mono text-primary w-24 shrink-0 text-sm font-bold pt-0.5">
                     {r.phase}
                   </span>
                   <div className="flex items-start gap-4">
-                    <div className="mt-2 w-2 h-2 rounded-full bg-[#818cf8] shrink-0" />
-                    <p className="text-[#e2e8f0] leading-relaxed">{r.label}</p>
+                    <div className="mt-2 w-2 h-2 rounded-full bg-primary shrink-0" />
+                    <p className="text-foreground leading-relaxed">{r.label}</p>
                   </div>
                 </div>
               ))}

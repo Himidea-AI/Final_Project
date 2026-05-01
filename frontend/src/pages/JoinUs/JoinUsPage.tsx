@@ -67,22 +67,22 @@ export default function JoinUsPage({ onBack }: Props) {
   return (
     <div
       ref={scrollRef}
-      className="absolute inset-0 z-20 flex flex-col bg-[#1e1b18] text-[#e2e8f0] overflow-y-auto custom-scrollbar"
+      className="absolute inset-0 z-20 flex flex-col bg-card text-foreground overflow-y-auto custom-scrollbar"
     >
       {/* Header */}
-      <div className="fixed top-0 left-0 w-full h-24 border-b border-[#2c2825] flex items-center px-8 md:px-16 bg-[#1e1b18]/80 backdrop-blur-md z-50">
+      <div className="fixed top-0 left-0 w-full h-24 border-b border-border flex items-center px-8 md:px-16 bg-card/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
           >
             <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">SPOTTER</span>
+            <span className="text-sm font-bold tracking-wider text-foreground">SPOTTER</span>
           </button>
-          <span className="text-[#2c2825]">/</span>
+          <span className="text-border">/</span>
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-white transition-colors duration-300"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
           >
             <ChevronRight size={14} className="rotate-180" />
             BACK
@@ -116,7 +116,7 @@ export default function JoinUsPage({ onBack }: Props) {
               <div className="w-full max-w-3xl mb-8 flex justify-start">
                 <button
                   onClick={handleBackToRoleSelect}
-                  className="flex items-center gap-2 text-xs text-[#9ca3af] hover:text-white transition-colors"
+                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft size={14} />
                   가입 유형 재선택
@@ -130,13 +130,13 @@ export default function JoinUsPage({ onBack }: Props) {
                 transition={{ duration: 0.6 }}
                 className="text-center mb-16"
               >
-                <span className="font-mono text-[#818cf8] tracking-widest text-xs uppercase">
+                <span className="font-mono text-primary tracking-widest text-xs uppercase">
                   Pricing
                 </span>
                 <h1 className="text-4xl md:text-6xl font-black mt-4 tracking-tight">
                   요금제를 선택하세요
                 </h1>
-                <p className="text-[#9ca3af] mt-4 text-sm max-w-md mx-auto">
+                <p className="text-muted-foreground mt-4 text-sm max-w-md mx-auto">
                   비즈니스 규모에 맞는 플랜으로 시작하세요.
                   <br />
                   언제든 업그레이드할 수 있습니다.
@@ -166,7 +166,7 @@ export default function JoinUsPage({ onBack }: Props) {
               <div className="flex items-center justify-between mb-8">
                 <button
                   onClick={handleBackToPricing}
-                  className="flex items-center gap-2 text-xs text-[#9ca3af] hover:text-white transition-colors"
+                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft size={14} />
                   요금제 재선택
@@ -178,7 +178,7 @@ export default function JoinUsPage({ onBack }: Props) {
               <h2 className="text-2xl font-black mb-2">
                 {selectedPlan === 'enterprise' ? 'Enterprise 도입 문의' : '회원가입'}
               </h2>
-              <p className="text-[#9ca3af] text-sm mb-8">
+              <p className="text-muted-foreground text-sm mb-8">
                 {selectedPlan === 'enterprise'
                   ? '담당 영업팀이 맞춤 견적을 안내해드립니다.'
                   : '사업자 정보를 입력하여 계정을 생성하세요.'}
@@ -210,18 +210,18 @@ export default function JoinUsPage({ onBack }: Props) {
               <div className="flex items-center justify-between mb-8">
                 <button
                   onClick={handleBackToRoleSelect}
-                  className="flex items-center gap-2 text-xs text-[#9ca3af] hover:text-white transition-colors"
+                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft size={14} />
                   가입 유형 재선택
                 </button>
-                <span className="text-[0.625rem] font-mono text-emerald-400 tracking-wider uppercase px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
+                <span className="text-[0.625rem] font-mono text-success tracking-wider uppercase px-2 py-1 rounded bg-success/10 border border-success/30">
                   팀원 가입
                 </span>
               </div>
 
               <h2 className="text-2xl font-black mb-2">조직 합류하기</h2>
-              <p className="text-[#9ca3af] text-sm mb-8">
+              <p className="text-muted-foreground text-sm mb-8">
                 팀장에게 받은 초대 코드를 먼저 검증한 후, 매니저 정보를 입력해주세요.
               </p>
 
@@ -240,12 +240,12 @@ export default function JoinUsPage({ onBack }: Props) {
             >
               <div
                 className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
-                  selectedRole === 'manager' ? 'bg-emerald-500/10' : 'bg-[#818cf8]/10'
+                  selectedRole === 'manager' ? 'bg-success/10' : 'bg-primary/10'
                 }`}
               >
                 <CheckCircle2
                   size={40}
-                  className={selectedRole === 'manager' ? 'text-emerald-400' : 'text-[#818cf8]'}
+                  className={selectedRole === 'manager' ? 'text-success' : 'text-primary'}
                 />
               </div>
               <h2 className="text-3xl font-black mb-3">
@@ -255,7 +255,7 @@ export default function JoinUsPage({ onBack }: Props) {
                     ? '문의가 접수되었습니다'
                     : '가입이 완료되었습니다'}
               </h2>
-              <p className="text-[#9ca3af] text-sm mb-8 max-w-sm">
+              <p className="text-muted-foreground text-sm mb-8 max-w-sm">
                 {selectedRole === 'manager'
                   ? '매니저 가입이 접수되었습니다. 팀장이 HQ에서 승인하면 즉시 로그인할 수 있습니다.'
                   : selectedPlan === 'enterprise'
@@ -266,8 +266,8 @@ export default function JoinUsPage({ onBack }: Props) {
                 onClick={onBack}
                 className={`px-8 py-3 rounded-xl text-white font-bold text-sm tracking-wider hover:scale-[1.02] active:scale-[0.98] transition-all ${
                   selectedRole === 'manager'
-                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-[#1e1b18]'
-                    : 'bg-gradient-to-r from-[#6366f1] to-[#818cf8]'
+                    ? 'bg-gradient-to-r from-success to-success text-success-foreground'
+                    : 'bg-gradient-to-r from-primary to-primary'
                 }`}
               >
                 {selectedRole === 'manager' ? '로그인 화면으로' : 'SPOTTER 시작하기'}

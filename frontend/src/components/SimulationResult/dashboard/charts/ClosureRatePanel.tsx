@@ -21,23 +21,23 @@ export function ClosureRatePanel({ rate, district }: Props) {
   }
   const avgPct = rate.closure_rate != null ? (rate.closure_rate * 100).toFixed(1) : '—';
   return (
-    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
-      {district && <div className="text-xs font-bold text-stone-400 mb-2">{district}</div>}
+    <div className="bg-card border border-border rounded-3xl p-6">
+      {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
       <div className="flex items-center justify-between mb-4">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2">
-          <History size={14} className="text-stone-400" /> 과거 폐업률 추이
-          <span className="text-[0.625rem] font-black text-stone-600 normal-case tracking-normal">
+        <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+          <History size={14} className="text-muted-foreground" /> 과거 폐업률 추이
+          <span className="text-[0.625rem] font-black text-muted-foreground normal-case tracking-normal">
             closure_rate · 실측
           </span>
         </h4>
         <div className="flex items-center gap-2">
-          <span className="text-[0.6875rem] font-black text-stone-500 tabular-nums">
+          <span className="text-[0.6875rem] font-black text-muted-foreground tabular-nums">
             최근 4분기 평균 {avgPct}%
           </span>
         </div>
       </div>
       <ClosureRateHistoryChart rates={rate.monthly_closure_rates} />
-      <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
+      <p className="mt-3 text-[0.625rem] text-muted-foreground leading-relaxed">
         ※ 이 차트는 과거 데이터 기반 실측 폐업률입니다. 예측은 아래 LightGBM + TCN 폐업위험도 패널을
         참고하세요.
       </p>

@@ -35,23 +35,23 @@ interface Props {
 const TREND_LABEL: Record<string, { label: string; color: string; bg: string }> = {
   improving: {
     label: '개선 중',
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/10 border-emerald-500/30',
+    color: 'text-success',
+    bg: 'bg-success/10 border-success/30',
   },
   worsening: {
     label: '악화 중',
-    color: 'text-rose-400',
-    bg: 'bg-rose-500/10 border-rose-500/30',
+    color: 'text-danger',
+    bg: 'bg-danger/10 border-danger/30',
   },
   stable: {
     label: '안정',
-    color: 'text-stone-300',
-    bg: 'bg-stone-700/30 border-stone-600/40',
+    color: 'text-foreground',
+    bg: 'bg-muted/30 border-border/40',
   },
   unknown: {
     label: '데이터 부족',
-    color: 'text-stone-500',
-    bg: 'bg-stone-800/30 border-stone-700/40',
+    color: 'text-muted-foreground',
+    bg: 'bg-card/30 border-border/40',
   },
 };
 
@@ -72,14 +72,14 @@ export function IndustryClosureTrendCard({ trend }: Props) {
   const fmtPct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(2)}%`);
 
   return (
-    <div className="rounded-2xl border border-stone-800/60 bg-stone-950/40 p-4">
+    <div className="rounded-2xl border border-border/60 bg-card/40 p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Activity size={14} className="text-stone-400" />
-          <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
+          <Activity size={14} className="text-muted-foreground" />
+          <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
             동 업종 폐업률 추세
           </span>
-          <span className="text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
+          <span className="text-[0.5625rem] font-bold text-muted-foreground normal-case tracking-normal">
             8 분기
           </span>
         </div>
@@ -91,19 +91,19 @@ export function IndustryClosureTrendCard({ trend }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-3">
-        <div className="rounded-lg border border-stone-800/60 bg-stone-900/40 p-3">
-          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-stone-500 mb-1">
+        <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-muted-foreground mb-1">
             현재 분기
           </div>
-          <div className="text-xl font-black tabular-nums text-stone-100 tracking-tighter">
+          <div className="text-xl font-black tabular-nums text-foreground tracking-tighter">
             {fmtPct(cur)}
           </div>
         </div>
-        <div className="rounded-lg border border-stone-800/60 bg-stone-900/40 p-3">
-          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-stone-500 mb-1">
+        <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-muted-foreground mb-1">
             과거 평균
           </div>
-          <div className="text-xl font-black tabular-nums text-stone-300 tracking-tighter">
+          <div className="text-xl font-black tabular-nums text-foreground tracking-tighter">
             {fmtPct(avg)}
           </div>
         </div>
@@ -113,7 +113,7 @@ export function IndustryClosureTrendCard({ trend }: Props) {
         {numericSamples.length > 1 ? (
           <Sparkline data={numericSamples} height={48} />
         ) : (
-          <span className="text-[0.5625rem] text-stone-600">시계열 데이터 부족</span>
+          <span className="text-[0.5625rem] text-muted-foreground">시계열 데이터 부족</span>
         )}
       </div>
     </div>

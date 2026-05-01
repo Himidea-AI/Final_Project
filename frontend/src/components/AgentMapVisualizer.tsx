@@ -197,7 +197,7 @@ export default function AgentMapVisualizer({
 
   return (
     <div
-      className="w-full bg-[#1e1b18] rounded-2xl border border-[#3a3633] overflow-hidden relative shadow-2xl flex flex-col"
+      className="w-full bg-card rounded-2xl border border-border overflow-hidden relative shadow-2xl flex flex-col"
       style={{ height }}
     >
       <div ref={mapContainerRef} className="absolute inset-0 z-0">
@@ -213,20 +213,20 @@ export default function AgentMapVisualizer({
       </div>
 
       {IS_MOCK_MODE && (
-        <div className="absolute inset-0 z-0 bg-[#050505] overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 z-0 bg-background overflow-hidden pointer-events-none">
           <div
             className="absolute inset-0"
             style={{
               backgroundImage:
-                'linear-gradient(rgba(129, 140, 248, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(129, 140, 248, 0.15) 1px, transparent 1px)',
+                'linear-gradient(rgba(0, 44, 209, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 44, 209, 0.15) 1px, transparent 1px)',
               backgroundSize: '50px 50px',
               transform: 'perspective(500px) rotateX(60deg) scale(2) translateY(-100px)',
               transformOrigin: 'top center',
             }}
           />
-          <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-[#818cf8]/20 rounded-full animate-[spin_10s_linear_infinite]" />
-          <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] border border-[#818cf8]/10 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
-          <div className="absolute top-4 left-4 font-mono text-[0.625rem] text-[#818cf8] opacity-50 tracking-widest">
+          <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] border border-primary/20 rounded-full animate-[spin_10s_linear_infinite]" />
+          <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] border border-primary/10 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
+          <div className="absolute top-4 left-4 font-mono text-[0.625rem] text-primary opacity-50 tracking-widest">
             MOCK RADAR MODE ACTIVE // NO API KEY DETECTED
           </div>
         </div>
@@ -251,7 +251,7 @@ export default function AgentMapVisualizer({
                 onClick={() => onSpotClick?.(loc)}
                 disabled={!onSpotClick}
                 title={`${loc.name}${loc.listingCount ? ` — 공실 ×${loc.listingCount}` : ''} 클릭해서 ABM 시뮬`}
-                className="absolute z-30 flex items-center justify-center w-8 h-8 rounded-full bg-[#06b6d4] border-2 border-[#22d3ee] text-[#0f172a] text-xs font-black shadow-[0_0_14px_rgba(6,182,212,0.8)] transition-all duration-200 pointer-events-auto cursor-pointer hover:scale-125 hover:bg-[#22d3ee] disabled:cursor-default disabled:opacity-60"
+                className="absolute z-30 flex items-center justify-center w-8 h-8 rounded-full bg-decor-cyan border-2 border-decor-cyan text-foreground text-xs font-black shadow-[0_0_14px_rgba(0,224,209,0.8)] transition-all duration-200 pointer-events-auto cursor-pointer hover:scale-125 hover:bg-decor-cyan disabled:cursor-default disabled:opacity-60"
                 style={{
                   left: pixel.x,
                   top: pixel.y,
@@ -259,13 +259,13 @@ export default function AgentMapVisualizer({
                 }}
               >
                 {vacancyNumber}
-                <span className="absolute inline-flex h-full w-full rounded-full bg-[#22d3ee] opacity-40 animate-ping" />
+                <span className="absolute inline-flex h-full w-full rounded-full bg-decor-cyan opacity-40 animate-ping" />
               </button>
             );
           }
 
           // candidate 기존 핀
-          const pinColor = '#818cf8';
+          const pinColor = 'var(--primary)';
           return (
             <div
               key={`pin-${loc.id}`}
@@ -276,11 +276,11 @@ export default function AgentMapVisualizer({
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div className="bg-[#1e1b18] border text-[#e2e8f0] px-2 py-0.5 rounded text-[0.5625rem] font-bold mb-1 border-[#818cf8] shadow-[0_0_10px_rgba(129,140,248,0.5)]">
+              <div className="bg-card border text-foreground px-2 py-0.5 rounded text-[0.5625rem] font-bold mb-1 border-primary shadow-[0_0_10px_rgba(0,44,209,0.5)]">
                 {loc.name}
               </div>
               <MapPin className="w-6 h-6" style={{ color: pinColor, fill: `${pinColor}33` }} />
-              <div className="w-2 h-2 rounded-full animate-ping absolute bottom-1 bg-[#818cf8]" />
+              <div className="w-2 h-2 rounded-full animate-ping absolute bottom-1 bg-primary" />
             </div>
           );
         })}
@@ -291,10 +291,12 @@ export default function AgentMapVisualizer({
           const pixel = competitorPixels[comp.id];
           if (!pixel) return null;
           const isFranchise = comp.is_franchise;
-          const pinColor = isFranchise ? '#f43f5e' : '#f97316';
+          // 라이트 모드 시맨틱 토큰 — 동일 색을 SVG fill·stroke·background 에 모두 사용하기 위해 hex 리터럴 보존.
+          // var(--danger) #FF3800, var(--warning) #FF7940. 33/22 suffix 는 alpha (CSS hex8).
+          const pinColor = isFranchise ? '#FF3800' : '#FF7940';
           const borderClass = isFranchise
-            ? 'border-[#f43f5e] shadow-[0_0_8px_rgba(244,63,94,0.5)]'
-            : 'border-[#f97316] shadow-[0_0_8px_rgba(249,115,22,0.4)]';
+            ? 'border-danger shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+            : 'border-warning shadow-[0_0_8px_rgba(249,115,22,0.4)]';
           const distLabel = comp.distance_m != null ? ` ${Math.round(comp.distance_m)}m` : '';
           return (
             <div
@@ -307,13 +309,15 @@ export default function AgentMapVisualizer({
               }}
             >
               <div
-                className={`bg-[#1e1b18] border text-[0.625rem] font-bold mb-0.5 px-2 py-0.5 rounded max-w-[120px] truncate ${borderClass}`}
+                className={`bg-card border text-[0.625rem] font-bold mb-0.5 px-2 py-0.5 rounded max-w-[120px] truncate ${borderClass}`}
                 style={{ color: pinColor }}
                 title={comp.name}
               >
                 {comp.name}
                 {distLabel && (
-                  <span className="ml-1 text-[0.5rem] text-[#9ca3af] font-normal">{distLabel}</span>
+                  <span className="ml-1 text-[0.5rem] text-muted-foreground font-normal">
+                    {distLabel}
+                  </span>
                 )}
               </div>
               <svg width="18" height="18" viewBox="0 0 18 18">
@@ -344,17 +348,17 @@ export default function AgentMapVisualizer({
       </svg>
 
       {/* 범례 */}
-      <div className="absolute top-3 left-3 z-40 bg-[#0d1117]/80 backdrop-blur-sm border border-[#3a3633] rounded-lg p-2.5 flex flex-col gap-1.5">
-        <p className="text-[0.5rem] font-mono text-[#6b7280] uppercase tracking-wider mb-0.5">
+      <div className="absolute top-3 left-3 z-40 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-2.5 flex flex-col gap-1.5">
+        <p className="text-[0.5rem] font-mono text-muted-foreground uppercase tracking-wider mb-0.5">
           Legend
         </p>
         <div className="flex items-center gap-1.5">
-          <MapPin className="w-3 h-3" style={{ color: '#818cf8' }} />
-          <span className="text-[0.5625rem] text-[#9ca3af]">출점 후보지</span>
+          <MapPin className="w-3 h-3" style={{ color: 'var(--primary)' }} />
+          <span className="text-[0.5625rem] text-muted-foreground">출점 후보지</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <MapPin className="w-3 h-3" style={{ color: '#10b981' }} />
-          <span className="text-[0.5625rem] text-[#9ca3af]">공실 매물</span>
+          <MapPin className="w-3 h-3" style={{ color: 'var(--success)' }} />
+          <span className="text-[0.5625rem] text-muted-foreground">공실 매물</span>
         </div>
         {competitors.length > 0 && (
           <>
@@ -362,26 +366,26 @@ export default function AgentMapVisualizer({
               <svg width="10" height="10" viewBox="0 0 18 18">
                 <polygon
                   points="9,2 16,16 2,16"
-                  fill="#f43f5e33"
-                  stroke="#f43f5e"
+                  fill="#FF380033"
+                  stroke="#FF3800"
                   strokeWidth="2"
                 />
               </svg>
-              <span className="text-[0.5625rem] text-[#9ca3af]">경쟁 프랜차이즈</span>
+              <span className="text-[0.5625rem] text-muted-foreground">경쟁 프랜차이즈</span>
             </div>
             <div className="flex items-center gap-1.5">
               <svg width="10" height="10" viewBox="0 0 18 18">
                 <polygon
                   points="9,2 16,16 2,16"
-                  fill="#f9731633"
-                  stroke="#f97316"
+                  fill="#FF794033"
+                  stroke="#FF7940"
                   strokeWidth="2"
                 />
               </svg>
-              <span className="text-[0.5625rem] text-[#9ca3af]">경쟁 개인점</span>
+              <span className="text-[0.5625rem] text-muted-foreground">경쟁 개인점</span>
             </div>
-            <div className="mt-0.5 pt-1 border-t border-[#3a3633]">
-              <span className="text-[0.5rem] font-mono text-[#6b7280]">
+            <div className="mt-0.5 pt-1 border-t border-border">
+              <span className="text-[0.5rem] font-mono text-muted-foreground">
                 경쟁 {competitors.length}개 · 500m 반경
               </span>
             </div>
