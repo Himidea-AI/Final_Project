@@ -18,8 +18,6 @@ import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-logger = logging.getLogger(__name__)
-
 from src.agents.llms import get_fast_llm
 from src.agents.nodes._attribution_helpers import build_attribution
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
@@ -29,7 +27,10 @@ from src.config.settings import settings
 from src.schemas.state import AgentState
 from src.schemas.structured_output import LegalBatchOutput
 from src.services.ftc_franchise import FtcFranchiseClient
+
 # LawApiClient: SP2 후 사용 안 함. 외부 API fallback 필요 시 다시 import.
+
+logger = logging.getLogger(__name__)
 
 # 전체 조문 원본 인덱스 — chunks.json에서 (source, article) → 전체 본문 조립
 # RAG는 "어떤 조문이 관련 있는지" 식별용으로만 사용하고, 실제 표시 본문은 여기서 가져옴
@@ -702,13 +703,65 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 overall_cached = cached_data.get("overall_legal_risk", "caution")
                 analysis["overall_legal_risk"] = overall_cached
                 _cached_high = sum(1 for r in (legal_risks or []) if isinstance(r, dict) and r.get("level") == "danger")
+                _cached_caution = sum(
+                    1 for r in (legal_risks or []) if isinstance(r, dict) and r.get("level") == "caution"
+                )
+                _cached_safe = sum(1 for r in (legal_risks or []) if isinstance(r, dict) and r.get("level") == "safe")
+                _cached_danger_types = [
+                    r.get("type", "?")
+                    for r in (legal_risks or [])
+                    if isinstance(r, dict) and r.get("level") == "danger"
+                ]
+                _cached_total_arts = sum(
+                    len(r.get("articles") or []) for r in (legal_risks or []) if isinstance(r, dict)
+                )
+                # 사용자 친화 라벨
+                _CACHE_LABEL_KO = {
+                    "franchise_law": "가맹사업법",
+                    "commercial_lease_law": "상가임대차보호법",
+                    "food_hygiene": "식품위생법",
+                    "safety_regulation": "다중이용업소 안전법",
+                    "building_law": "건축법",
+                    "fire_safety_law": "소방시설법",
+                    "labor_law": "근로기준법",
+                    "vat_law": "부가가치세법",
+                    "privacy_law": "개인정보보호법",
+                    "accessibility_law": "장애인편의법",
+                    "sewage_law": "하수도법",
+                    "fair_trade_law": "공정거래법",
+                    "zoning_regulation": "용도지역",
+                    "ftc_franchise": "공정위 정보공개서",
+                }
+                _cached_danger_labels = [_CACHE_LABEL_KO.get(t, t) for t in _cached_danger_types]
+                _cached_overall_label = {"danger": "위험", "caution": "주의", "safe": "안전"}.get(
+                    overall_cached, overall_cached
+                )
+                if _cached_high == 0:
+                    _cached_summary = (
+                        f"별도 위험 사항은 발견되지 않았으나, 주의 항목 {_cached_caution}건의 사전 확인을 권장합니다."
+                    )
+                else:
+                    _cached_summary = (
+                        f"특히 {', '.join(_cached_danger_labels[:3])}"
+                        f"{' 등' if len(_cached_danger_labels) > 3 else ''} "
+                        f"미이행 시 영업정지·과태료·형사처벌 위험이 있습니다."
+                    )
+                _cached_reasoning = (
+                    f"창업 관련 14개 법률을 검토한 결과 종합 위험도는 '{_cached_overall_label}'로 판정되었습니다. "
+                    f"전체 14개 항목 중 위험 {_cached_high}개, 주의 {_cached_caution}개, 안전 {_cached_safe}개로 "
+                    f"분류되었으며, 각 법률의 핵심 조문 총 {_cached_total_arts}개를 근거로 검토했습니다. "
+                    f"{_cached_summary}"
+                )
                 cached_legal_attr = build_attribution(
                     agent_id="legal",
                     display_name="법률 리스크",
                     kind="RAG",
                     sources=[f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})"],
-                    verdict=f"14 법률 위험도 · overall {overall_cached}",
-                    reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_cached_high}건 HIGH 위험.",
+                    verdict=(
+                        f"종합 위험도: {_cached_overall_label} "
+                        f"(위험 {_cached_high}건 / 주의 {_cached_caution}건 / 안전 {_cached_safe}건)"
+                    ),
+                    reasoning=_cached_reasoning,
                     confidence=0.85,
                 )
                 analysis["legal_result"] = {"agent_attribution": cached_legal_attr}
@@ -737,19 +790,30 @@ async def _run_legal_pipeline(state: dict) -> dict:
         _run_legal_pipeline._retriever = LegalDocumentRetriever()
     retriever = _run_legal_pipeline._retriever
 
-    franchise_q = f"{brand} 영업지역 보장 동일 브랜드 출점 제한 가맹사업법"
-    lease_q = "권리금 회수 기회 보호 계약갱신요구권 환산보증금 상가임대차보호법"
-    food_q = f"{business_type} 영업신고 허가 위생교육 시설기준 식품위생법"
-    safety_q = f"{business_type} 다중이용업소 소방시설 안전시설 완비증명 의무"
-    summary_q = f"{business_type} {district} 프랜차이즈 법률 검토"
-    building_q = f"{business_type} 건축물 용도 근린생활시설 용도변경 건축법"
-    fire_q = f"{business_type} 소방시설 스프링클러 소화기 소방안전관리자 설치의무"
-    labor_q = "근로계약서 최저임금 주휴수당 가산임금 4대보험 근로기준법"
-    vat_q = "사업자등록 일반과세자 간이과세자 세금계산서 부가가치세"
-    privacy_q = "개인정보 수집 동의 처리방침 CCTV 고객정보"
-    accessibility_q = f"{business_type} 대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의증진법"
-    sewage_q = f"{business_type} 오수 배출 개인하수처리시설 설치 배수설비 공공하수도 하수도법"
-    fair_trade_q = f"{brand} 가맹본부 불공정거래 거래강제 필수물품 공급"
+    # SP5: 모든 쿼리에 brand/district/business_type 컨텍스트 주입.
+    # 같은 법률 영역도 업종/지역에 따라 적용되는 조항이 다름 (예: 외식업 vs 카페 위생기준,
+    # 행정동 용도지역별 영업가능 여부). HyDE + BM25 + vector 모두 컨텍스트 풍부할수록 매칭 정밀도 향상.
+    ctx = f"{business_type} {district}".strip()  # 공통 컨텍스트
+    brand_ctx = f"{brand} {ctx}".strip()  # 브랜드 포함
+
+    # SP5 강화: 카니발리제이션 / 영업양도 / 지역상권 보호 키워드를 관련 쿼리에 통합
+    franchise_q = f"{brand_ctx} 영업지역 보장 동일 브랜드 출점 제한 인접 출점 카니발리제이션 가맹사업법 부정경쟁방지법"
+    lease_q = (
+        f"{ctx} 권리금 회수 기회 보호 계약갱신요구권 환산보증금 영업양도 영업승계 임차권 양도 전대차 상가임대차보호법"
+    )
+    food_q = f"{ctx} 영업신고 허가 위생교육 시설기준 식품위생법"
+    safety_q = f"{ctx} 다중이용업소 소방시설 안전시설 완비증명 의무"
+    summary_q = f"{ctx} 프랜차이즈 법률 검토"
+    building_q = f"{ctx} 건축물 용도 근린생활시설 용도변경 건축법"
+    fire_q = f"{ctx} 소방시설 스프링클러 소화기 소방안전관리자 설치의무"
+    labor_q = f"{ctx} 근로계약서 최저임금 주휴수당 가산임금 4대보험 근로기준법"
+    vat_q = f"{business_type} 사업자등록 일반과세자 간이과세자 세금계산서 부가가치세"
+    privacy_q = f"{ctx} 개인정보 수집 동의 처리방침 CCTV 고객정보"
+    accessibility_q = f"{ctx} 대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의증진법"
+    sewage_q = f"{ctx} 오수 배출 개인하수처리시설 설치 배수설비 공공하수도 하수도법"
+    fair_trade_q = (
+        f"{brand_ctx} 가맹본부 불공정거래 거래강제 필수물품 공급 마포구 지역상권 상생협력 조례 골목상권 부정경쟁방지법"
+    )
 
     # SP2 후: LawApiClient 6개 호출 제거됨 — DB 검색으로 대체
     # zoning: I/O 없는 규칙 기반 — 즉시 실행 후 Phase 1 병렬 대기
@@ -776,13 +840,14 @@ async def _run_legal_pipeline(state: dict) -> dict:
         retriever.search(accessibility_q, top_k=10, source_filter=LegalDocumentRetriever.ACCESSIBILITY_LAW_SOURCES),
         retriever.search(sewage_q, top_k=10, source_filter=LegalDocumentRetriever.SEWAGE_LAW_SOURCES),
         retriever.search(fair_trade_q, top_k=10, source_filter=LegalDocumentRetriever.FAIR_TRADE_SOURCES),
-        # SP2: 외부 law.go.kr API 호출 → DB 검색 (51 법령 + 86 판례 본문 BGE-m3 임베딩 적재됨)
-        retriever.search("가맹사업 영업지역 침해 판례", top_k=3),
-        retriever.search("권리금 회수 임차인 판례", top_k=3),
-        retriever.search("식품위생 영업허가 판례", top_k=3),
-        retriever.search("다중이용업소 소방 안전 판례", top_k=3),
-        retriever.search("건축물 용도변경 근린생활시설 판례", top_k=2),
-        retriever.search("근로계약 최저임금 판례", top_k=2),
+        # SP2+SP5: 외부 law.go.kr API → DB 검색 + brand/district/business_type 컨텍스트 주입
+        # 판례도 카니발리제이션/영업양도/지역상권 키워드 추가
+        retriever.search(f"{brand_ctx} 가맹사업 영업지역 침해 인접 출점 카니발리제이션 판례", top_k=3),
+        retriever.search(f"{ctx} 권리금 회수 임차인 영업양도 영업승계 판례", top_k=3),
+        retriever.search(f"{ctx} 식품위생 영업허가 판례", top_k=3),
+        retriever.search(f"{ctx} 다중이용업소 소방 안전 판례", top_k=3),
+        retriever.search(f"{ctx} 건축물 용도변경 근린생활시설 판례", top_k=2),
+        retriever.search(f"{ctx} 근로계약 최저임금 판례", top_k=2),
         return_exceptions=True,
     )
     # 결과 합치기 (기존 인덱스 순서 유지)
@@ -847,9 +912,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
         label = _rag_labels[idx] if 0 <= idx < len(_rag_labels) else f"idx{idx}"
         if isinstance(r, Exception):
             _rag_debug.append(f"{label}: EXCEPTION {type(r).__name__}: {r}")
+            print(f"[legal RAG DEBUG] {label}: EXCEPTION {type(r).__name__}: {r}", flush=True)
             return []
         result = r if isinstance(r, list) else []
         _rag_debug.append(f"{label}: {len(result)} docs")
+        print(f"[legal RAG DEBUG] {label}: {len(result)} docs", flush=True)
         return result
 
     def _safe_ftc(r: object) -> dict:
@@ -1038,14 +1105,29 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "sewage_law": sewage_docs,
         "fair_trade_law": fair_trade_docs,
     }
-    # 법률별 균등 분배 — 12개 법률에 각 최대 1000자씩 (뒤쪽 법률 잘림 방지)
-    _MAX_PER_LAW = 1000
-    for law_type, docs in docs_map.items():
-        if docs:
-            snippets = " | ".join(d["content"][:400] for d in docs[:3])
-            if len(snippets) > _MAX_PER_LAW:
-                snippets = snippets[:_MAX_PER_LAW] + "…"
-            docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
+    # SP6 Chunk Compression — 활성 시 12 cheap LLM 압축 → 메인 LLM 컨텍스트 -73%
+    from src.chains.chunk_compressor import compress_docs_map
+
+    compressed = await compress_docs_map(docs_map, _BATCH_LABELS, brand, business_type, district)
+
+    if compressed:
+        # 압축 모드 — 카테고리별 1~2문장
+        for law_type in docs_map:
+            summary = compressed.get(law_type, "")
+            if summary and summary != "해당 자료 없음":
+                docs_context += f"[{_BATCH_LABELS[law_type]}] {summary}\n"
+        logger.info(f"[legal_node] chunk compression 활성: 컨텍스트 {len(docs_context)} chars")
+    else:
+        # 기본 모드 — top-5 청크, 각 법률 최대 1500자
+        _MAX_PER_LAW = 1500
+        for law_type, docs in docs_map.items():
+            if docs:
+                snippets = " | ".join(d["content"][:400] for d in docs[:5])
+                if len(snippets) > _MAX_PER_LAW:
+                    snippets = snippets[:_MAX_PER_LAW] + "…"
+                docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
+    print(f"[legal RAG DEBUG] docs_context 길이: {len(docs_context)} chars", flush=True)
+    print(f"[legal RAG DEBUG] docs_map 카운트: {[(k, len(v)) for k, v in docs_map.items()]}", flush=True)
 
     items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
 
@@ -1057,19 +1139,68 @@ async def _run_legal_pipeline(state: dict) -> dict:
         f"- danger: 미이행 시 영업신고 불가·영업정지·허가취소·형사처벌. 반드시 창업 전 완료 필수\n"
         f"  (예: 식품위생법 영업신고, 건축법 용도변경, 소방 안전시설완비증명, 가맹사업법 정보공개서 등)\n\n"
         f"[평가 항목]\n{items_desc}\n\n"
+        "## 평가 정밀도 룰 (SP6)\n"
+        "1. summary 작성: '가맹사업법은 ...' 같은 일반론 금지. 반드시 '{입력 브랜드}의 {입력 업종} {입력 지역} 창업 시...' 같이 구체화.\n"
+        "2. 브랜드 정보공개서가 user prompt에 있으면 가맹점 수/폐점률 위험을 franchise_law / fair_trade_law summary에 반영.\n"
+        "   - 폐점률 10%↑: caution 이상\n"
+        "   - 폐점률 20%↑: danger 후보\n"
+        "3. 지역이 마포구(공덕/서교/망원/연남/합정 등)면 fair_trade_law summary에 마포구 지역상권 상생협력 조례 명시.\n"
+        "4. 업종별 critical 조문 매칭:\n"
+        "   - 카페/커피: 식품위생법 제37조(영업신고)·제41조(위생교육), 다중이용업소법(면적 100㎡↑ 시).\n"
+        "   - 음식점: 위 + 식품위생법 제36조(시설기준), 소방시설법.\n"
+        "   - 의류/소매: food_hygiene·다중이용업소법 = safe (소규모).\n"
+        "   - 미용/서비스: 식품 무관. 다중이용업소 면적 따라.\n"
+        "5. 영업지역(franchise_law 제12조의4)·필수품목(제12조 제1항 제2호)·허위과장(제9조) 3대 이슈는 카니발리제이션/구입강제/매출보장 키워드 보이면 우선 인용.\n\n"
         "12개 항목을 빠짐없이 items 리스트에 포함하세요.\n"
-        "summary: 이 법률의 목적과 핵심 의무를 1~2문장으로 설명하세요.\n"
-        "recommendation: 아래 형식의 체크리스트로 작성하세요:\n"
+        "summary: 입력 브랜드/업종/지역에 맞춘 구체적 1~2문장.\n"
+        "recommendation: 다음 형식 체크리스트:\n"
         "• [구체적 행동 항목] (관할 기관, 필요 서류 포함)\n"
         "• ❌ 위반 시: [과태료/벌금/영업정지 등 구체적 제재]\n"
-        "반드시 해당 업종과 지역에 맞춰 구체적으로 작성하세요."
+        "근거 조문이 컨텍스트에 있을 경우 첫 줄에 '[근거: 제N조]' 명시."
     )
 
+    # SP6: FTC 정보공개서 데이터 — 가맹점 수, 폐점률, 평균 매출 (브랜드 특수성 반영)
+    _ftc_hint = ""
+    if isinstance(ftc_result, dict) and not ftc_result.get("is_fallback"):
+        _ftc_summary = ftc_result.get("summary", "")
+        if _ftc_summary:
+            _ftc_hint = f"\n[브랜드 정보공개서] {_ftc_summary[:300]}\n"
+
+    # SP6: 마포구 행정동 hint — 지역 조례 적용 trigger
+    _MAPO_DONGS = {
+        "공덕동",
+        "아현동",
+        "도화동",
+        "용강동",
+        "대흥동",
+        "염리동",
+        "신수동",
+        "서강동",
+        "서교동",
+        "합정동",
+        "망원동",
+        "연남동",
+        "성산동",
+        "상암동",
+        "중동",
+        "상수동",
+    }
+    _district_hint = ""
+    if district in _MAPO_DONGS:
+        _district_hint = (
+            f"\n[지역 조례 hint] {district}은(는) 서울특별시 마포구 소속. "
+            f"마포구 지역상권 상생협력 조례 적용 가능 — 골목상권 보호, 상생협력상가위원회 등. "
+            f"fair_trade_law 평가 시 마포구 조례 명시 검토."
+        )
+
     user_content = (
-        f"브랜드: {brand} / 업종: {business_type} / 지역: {district}\n\n"
+        f"브랜드: {brand} / 업종: {business_type} / 지역: {district}"
+        f"{_ftc_hint}{_district_hint}\n\n"
         f"[참고 법률 문서 발췌]\n{docs_context}\n\n"
         f"위 자료를 바탕으로 12개 법률 항목의 '{business_type}' 업종 '{district}' 지역 창업 리스크를 평가하세요. "
-        "각 항목의 '—' 뒤에 적힌 검토 포인트를 반드시 확인하세요."
+        "각 항목의 '—' 뒤에 적힌 검토 포인트를 반드시 확인하세요. "
+        "summary는 해당 업종/지역에 맞춰 구체적으로 작성하고, 일반론은 피하세요. "
+        "근거 조문을 본문에서 직접 인용한 경우 'recommendation' 시작 부분에 '[근거: 제N조] 형식으로 명시하세요."
     )
 
     batch_results: list[dict] = []
@@ -1253,13 +1384,55 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 pass
 
     _high_count = sum(1 for r in risks if isinstance(r, dict) and r.get("level") == "danger")
+    _caution_count = sum(1 for r in risks if isinstance(r, dict) and r.get("level") == "caution")
+    _safe_count = sum(1 for r in risks if isinstance(r, dict) and r.get("level") == "safe")
+    _danger_types = [r.get("type", "?") for r in risks if isinstance(r, dict) and r.get("level") == "danger"]
+    _total_articles = sum(len(r.get("articles") or []) for r in risks if isinstance(r, dict))
+
+    # 사용자 친화 라벨 (법 모르는 사람용)
+    _LAW_LABEL_KO = {
+        "franchise_law": "가맹사업법",
+        "commercial_lease_law": "상가임대차보호법",
+        "food_hygiene": "식품위생법",
+        "safety_regulation": "다중이용업소 안전법",
+        "building_law": "건축법",
+        "fire_safety_law": "소방시설법",
+        "labor_law": "근로기준법",
+        "vat_law": "부가가치세법",
+        "privacy_law": "개인정보보호법",
+        "accessibility_law": "장애인편의법",
+        "sewage_law": "하수도법",
+        "fair_trade_law": "공정거래법",
+        "zoning_regulation": "용도지역",
+        "ftc_franchise": "공정위 정보공개서",
+    }
+    _danger_labels = [_LAW_LABEL_KO.get(t, t) for t in _danger_types]
+    _overall_label = {"danger": "위험", "caution": "주의", "safe": "안전"}.get(overall_level, overall_level)
+
+    if _high_count == 0:
+        _summary_line = f"별도 위험 사항은 발견되지 않았으나, 주의 항목 {_caution_count}건의 사전 확인을 권장합니다."
+    else:
+        _summary_line = (
+            f"특히 {', '.join(_danger_labels[:3])}"
+            f"{' 등' if len(_danger_labels) > 3 else ''} "
+            f"미이행 시 영업정지·과태료·형사처벌 위험이 있습니다."
+        )
+
+    _reasoning = (
+        f"창업 관련 14개 법률을 검토한 결과 종합 위험도는 '{_overall_label}'로 판정되었습니다. "
+        f"전체 14개 항목 중 위험 {_high_count}개, 주의 {_caution_count}개, 안전 {_safe_count}개로 분류되었으며, "
+        f"각 법률의 핵심 조문 총 {_total_articles}개를 근거로 검토했습니다. "
+        f"{_summary_line}"
+    )
     legal_attr = build_attribution(
         agent_id="legal",
         display_name="법률 리스크",
         kind="RAG",
         sources=[f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})"],
-        verdict=f"14 법률 위험도 · overall {overall_level}",
-        reasoning=f"14개 법률 조항 RAG 검색 (chunks 3775). {_high_count}건 HIGH 위험.",
+        verdict=(
+            f"종합 위험도: {_overall_label} (위험 {_high_count}건 / 주의 {_caution_count}건 / 안전 {_safe_count}건)"
+        ),
+        reasoning=_reasoning,
         confidence=0.85,
     )
     analysis["legal_result"] = {"agent_attribution": legal_attr}
