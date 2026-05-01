@@ -143,6 +143,7 @@ async def population_analyst_node(state: AgentState) -> dict:
 
     # 3. LLM 분석 (Structured Output)
     system_content = (
+        "[AGENT: population] 유동인구 분석 에이전트 — LangSmith 식별용 라벨.\n\n"
         "당신은 인구통계학 및 상권 유동인구 분석 전문가입니다. "
         "제보된 실데이터를 바탕으로 해당 지역의 유동인구 특성분석 리포트를 작성하세요.\n\n"
         f"### {target_district} 유동인구 실데이터:\n"
