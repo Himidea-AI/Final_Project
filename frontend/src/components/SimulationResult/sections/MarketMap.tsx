@@ -348,12 +348,12 @@ export function MarketMap({
   if (error) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border border-stone-700 bg-stone-900 p-8 text-center"
+        className="flex items-center justify-center rounded-lg border border-border bg-card p-8 text-center"
         style={{ height }}
       >
         <div>
-          <div className="mb-2 text-sm font-semibold text-rose-400">지도를 불러올 수 없습니다</div>
-          <div className="text-xs text-stone-500">{error.message}</div>
+          <div className="mb-2 text-sm font-semibold text-danger">지도를 불러올 수 없습니다</div>
+          <div className="text-xs text-muted-foreground">{error.message}</div>
         </div>
       </div>
     );
@@ -361,14 +361,14 @@ export function MarketMap({
 
   return (
     <div className="relative" style={{ height }}>
-      <div ref={containerRef} className="h-full w-full rounded-lg bg-stone-900" />
+      <div ref={containerRef} className="h-full w-full rounded-lg bg-card" />
       {!ready && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-stone-500">
+        <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
           지도를 불러오는 중…
         </div>
       )}
       {geoError && (
-        <div className="absolute right-4 top-4 rounded bg-stone-900/80 px-2 py-1 text-[0.625rem] text-rose-400">
+        <div className="absolute right-4 top-4 rounded bg-card/80 px-2 py-1 text-[0.625rem] text-danger">
           GeoJSON: {geoError}
         </div>
       )}

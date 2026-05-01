@@ -58,7 +58,7 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
 
   if (validScenarios.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
         시나리오 비교 데이터 없음
       </div>
     );
@@ -86,14 +86,14 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest">
+        <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest">
           낙관/기본/비관 시나리오
         </h4>
         {validScenarios.length > 1 ? (
           <select
             value={selectedDistrict}
             onChange={(e) => setSelectedDistrict(e.target.value)}
-            className="bg-stone-900 border border-stone-700 rounded-lg text-xs text-stone-200 px-3 py-1.5 focus:outline-none focus:border-indigo-500"
+            className="bg-card border border-border rounded-lg text-xs text-foreground px-3 py-1.5 focus:outline-none focus:border-primary"
           >
             {validScenarios.map((s) => (
               <option key={s.district} value={s.district}>
@@ -102,32 +102,35 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
             ))}
           </select>
         ) : (
-          <span className="text-[0.625rem] text-stone-500">{validScenarios[0]!.district}</span>
+          <span className="text-[0.625rem] text-muted-foreground">
+            {validScenarios[0]!.district}
+          </span>
         )}
       </div>
 
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} margin={{ top: 12, right: 20, left: 10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#292524" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="quarter"
             tickFormatter={(q) => `Q${q}`}
-            tick={{ fontSize: 11, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
           />
           <YAxis
             tickFormatter={formatKRW}
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
             width={70}
           />
           <Tooltip
-            cursor={{ stroke: '#44403c', strokeDasharray: '3 3' }}
+            cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }}
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #44403c',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
               fontSize: 12,
+              color: 'var(--card-foreground)',
             }}
             labelFormatter={(q: number) => `Q${q}`}
             formatter={(v: number, name: string) => {
@@ -140,7 +143,7 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
             }}
           />
           <Legend
-            wrapperStyle={{ fontSize: 10, color: '#a8a29e' }}
+            wrapperStyle={{ fontSize: 10, color: 'var(--muted-foreground)' }}
             iconType="circle"
             formatter={(v) =>
               v === 'optimistic' ? '낙관' : v === 'base' ? '기본' : v === 'pessimistic' ? '비관' : v
@@ -149,32 +152,32 @@ export function ScenariosComparisonChart({ allScenarios, height = 240 }: Props) 
           <Line
             type="monotone"
             dataKey="optimistic"
-            stroke="#10b981"
+            stroke="var(--success)"
             strokeWidth={2}
             name="optimistic"
             connectNulls
-            dot={{ r: 2.5, fill: '#10b981' }}
+            dot={{ r: 2.5, fill: 'var(--success)' }}
             isAnimationActive={false}
           />
           <Line
             type="monotone"
             dataKey="base"
-            stroke="#818cf8"
+            stroke="var(--primary)"
             strokeWidth={2}
             name="base"
             connectNulls
-            dot={{ r: 3, fill: '#818cf8' }}
-            activeDot={{ r: 5, fill: '#818cf8', stroke: '#fff', strokeWidth: 2 }}
+            dot={{ r: 3, fill: 'var(--primary)' }}
+            activeDot={{ r: 5, fill: 'var(--primary)', stroke: 'var(--card)', strokeWidth: 2 }}
             isAnimationActive={false}
           />
           <Line
             type="monotone"
             dataKey="pessimistic"
-            stroke="#fb7185"
+            stroke="var(--danger)"
             strokeWidth={2}
             name="pessimistic"
             connectNulls
-            dot={{ r: 2.5, fill: '#fb7185' }}
+            dot={{ r: 2.5, fill: 'var(--danger)' }}
             isAnimationActive={false}
           />
         </LineChart>

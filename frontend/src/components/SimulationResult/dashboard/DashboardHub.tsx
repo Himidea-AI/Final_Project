@@ -65,21 +65,21 @@ export function DashboardHub({
 
   return (
     <div className="mx-auto max-w-[1728px] px-8 pt-28 pb-12">
-      <header className="mb-12 flex items-end justify-between border-b border-stone-800/60 pb-6">
-        <h1 className="text-2xl font-black text-stone-100 tracking-tight">{brandName || '—'}</h1>
+      <header className="mb-12 flex items-end justify-between border-b border-border/60 pb-6">
+        <h1 className="text-2xl font-black text-foreground tracking-tight">{brandName || '—'}</h1>
         <div className="flex items-end gap-6">
           <button
             type="button"
             onClick={handleNewSimulation}
-            className="inline-flex items-center rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-indigo-300 transition-all hover:border-indigo-500/60 hover:bg-indigo-500/20 hover:text-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            className="inline-flex items-center rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-primary transition-all hover:border-primary/60 hover:bg-primary/20 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             새로운 시뮬레이션
           </button>
           <div className="text-right">
-            <div className="text-[0.625rem] font-mono uppercase tracking-widest text-stone-500">
+            <div className="text-[0.625rem] font-mono uppercase tracking-widest text-muted-foreground">
               {docId}
             </div>
-            <div className="mt-1 text-[0.625rem] font-mono text-stone-600">{createdAt}</div>
+            <div className="mt-1 text-[0.625rem] font-mono text-muted-foreground">{createdAt}</div>
           </div>
         </div>
       </header>

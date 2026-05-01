@@ -37,17 +37,17 @@ export function InsightTab({ simResult, openModal }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left">
-          <BrainCircuit className="text-indigo-400" /> 8대 멀티 에이전트 상세 리포트
+        <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left">
+          <BrainCircuit className="text-primary" /> 8대 멀티 에이전트 상세 리포트
         </h3>
-        <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
+        <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
           {attributions.length}/8 에이전트 분석 완료
         </div>
       </div>
 
       {/* ═══ Radar Overview (가이드 #7) ═══ */}
-      <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-4">
+      <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
+        <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-4">
           8 에이전트 신뢰도 Overview
         </h4>
         <AgentConfidenceRadar attributions={attributions} />
@@ -67,23 +67,23 @@ export function InsightTab({ simResult, openModal }: Props) {
               key={agent.id}
               className={`border p-6 rounded-3xl h-full flex flex-col transition-all text-left group ${
                 hasData
-                  ? `bg-stone-900/40 ${agent.borderCls}`
-                  : 'bg-stone-900/20 border-dashed border-stone-800 opacity-60'
+                  ? `bg-card/40 ${agent.borderCls}`
+                  : 'bg-card/20 border-dashed border-border opacity-60'
               }`}
             >
               <div className="flex items-center gap-3 mb-4">
                 <div
                   className={`p-2 rounded-xl border shadow-inner group-hover:scale-110 transition-transform ${
-                    hasData ? agent.iconBgCls : 'bg-stone-800 border-stone-700/50'
+                    hasData ? agent.iconBgCls : 'bg-card border-border/50'
                   }`}
                 >
                   <AgentIcon size={18} className={agent.color} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-bold text-stone-200 leading-tight truncate">
+                  <h4 className="text-sm font-bold text-foreground leading-tight truncate">
                     {agent.name}
                   </h4>
-                  <span className="text-[0.5625rem] font-black text-stone-600 uppercase tracking-widest leading-none">
+                  <span className="text-[0.5625rem] font-black text-muted-foreground uppercase tracking-widest leading-none">
                     {agent.desc}
                   </span>
                 </div>
@@ -91,15 +91,15 @@ export function InsightTab({ simResult, openModal }: Props) {
 
               {/* verdict (한 줄 판정) */}
               {verdict && (
-                <div className="mb-3 px-2.5 py-1.5 rounded-md bg-stone-950/40 border border-stone-800/40">
-                  <span className="text-[0.6875rem] font-bold text-stone-300 leading-tight">
+                <div className="mb-3 px-2.5 py-1.5 rounded-md bg-card/40 border border-border/40">
+                  <span className="text-[0.6875rem] font-bold text-foreground leading-tight">
                     {verdict}
                   </span>
                 </div>
               )}
 
               {/* reasoning (요약 3줄) */}
-              <p className="text-[0.6875rem] text-stone-500 leading-relaxed mb-4 flex-grow line-clamp-3">
+              <p className="text-[0.6875rem] text-muted-foreground leading-relaxed mb-4 flex-grow line-clamp-3">
                 {reasoning ?? '해당 에이전트 분석 결과가 아직 수집되지 않았습니다.'}
               </p>
 
@@ -109,7 +109,7 @@ export function InsightTab({ simResult, openModal }: Props) {
                   {sources.slice(0, 3).map((src, i) => (
                     <span
                       key={`${src}-${i}`}
-                      className="text-[0.5rem] font-black text-stone-500 bg-stone-900/50 px-1.5 py-0.5 rounded border border-stone-800 uppercase tracking-tighter"
+                      className="text-[0.5rem] font-black text-muted-foreground bg-card/50 px-1.5 py-0.5 rounded border border-border uppercase tracking-tighter"
                     >
                       {src}
                     </span>
@@ -132,7 +132,7 @@ export function InsightTab({ simResult, openModal }: Props) {
                         .join('\n\n'),
                     })
                   }
-                  className="w-full py-2.5 bg-stone-800 hover:bg-stone-700 text-[0.625rem] font-black text-stone-400 rounded-xl flex items-center justify-center gap-2 tracking-widest uppercase transition-colors"
+                  className="w-full py-2.5 bg-card hover:bg-muted text-[0.625rem] font-black text-muted-foreground rounded-xl flex items-center justify-center gap-2 tracking-widest uppercase transition-colors"
                 >
                   <Maximize2 size={12} /> 상세 분석 결과
                 </button>

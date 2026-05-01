@@ -19,17 +19,19 @@ export function AgentMethodology({ agents, method }: AgentMethodologyProps) {
         {agents.map((_, i) => (
           <div
             key={i}
-            className="w-5 h-5 rounded-full bg-stone-800 border border-stone-700 flex items-center justify-center group-hover:border-indigo-500/50 transition-colors"
+            className="w-5 h-5 rounded-full bg-card border border-border flex items-center justify-center group-hover:border-primary/50 transition-colors"
           >
-            <Fingerprint size={10} className="text-indigo-400" />
+            <Fingerprint size={10} className="text-primary" />
           </div>
         ))}
       </div>
       <div className="flex flex-col text-left">
-        <span className="text-[0.5625rem] font-black text-stone-500 uppercase tracking-tighter leading-none">
+        <span className="text-[0.5625rem] font-black text-muted-foreground uppercase tracking-tighter leading-none">
           분석 엔진
         </span>
-        <span className="text-[0.625rem] font-bold text-stone-400 tracking-tight">{method}</span>
+        <span className="text-[0.625rem] font-bold text-muted-foreground tracking-tight">
+          {method}
+        </span>
       </div>
     </div>
   );

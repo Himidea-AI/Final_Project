@@ -36,13 +36,13 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
       onClick={onClose}
     >
       <div
-        className="relative w-[460px] max-w-[92vw] max-h-[88vh] overflow-y-auto rounded-xl border border-amber-500/30 bg-slate-900 p-5 text-slate-100 shadow-2xl"
+        className="relative w-[460px] max-w-[92vw] max-h-[88vh] overflow-y-auto rounded-xl border border-warning/30 bg-card p-5 text-foreground shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close 버튼 */}
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+          className="absolute right-3 top-3 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="닫기"
         >
           <X className="h-4 w-4" />
@@ -50,19 +50,19 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
 
         {/* 헤더 — Tier S 마커 + agent_id + archetype */}
         <div className="mb-4 flex items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-500/20 text-amber-300">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-warning bg-warning/20 text-warning">
             <span className="text-lg font-bold">⭐</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-amber-400">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-warning">
               <span>Tier S</span>
-              <span className="text-slate-500">·</span>
-              <span className="text-slate-400">Agent #{data.agentId}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground">Agent #{data.agentId}</span>
             </div>
-            <div className="mt-0.5 text-base font-semibold text-slate-100">
+            <div className="mt-0.5 text-base font-semibold text-foreground">
               {data.archetype || '—'}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
               {data.role && <span>{data.role}</span>}
               {data.dongName && (
                 <>
@@ -76,7 +76,7 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
 
         {/* 시간별 thought 타임라인 — 0~23h 그리드 */}
         <div className="mt-3">
-          <div className="mb-2 text-xs font-semibold text-slate-300">
+          <div className="mb-2 text-xs font-semibold text-foreground">
             시간대별 생각 ({data.thoughts.length}건)
           </div>
           <div className="grid grid-cols-12 gap-1 text-[0.625rem]">
@@ -89,25 +89,25 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
                   className={[
                     'flex flex-col items-center rounded border px-1 py-1.5',
                     isNow
-                      ? 'border-amber-400 bg-amber-500/15'
+                      ? 'border-warning bg-warning/15'
                       : t
-                        ? 'border-slate-700 bg-slate-800/60'
-                        : 'border-slate-800/50 bg-slate-900/40 opacity-50',
+                        ? 'border-border bg-muted/60'
+                        : 'border-border/50 bg-card/40 opacity-50',
                   ].join(' ')}
                   title={t?.thought || ''}
                 >
                   <div
                     className={[
                       'text-[0.5625rem] font-mono',
-                      isNow ? 'text-amber-300' : 'text-slate-500',
+                      isNow ? 'text-warning' : 'text-muted-foreground',
                     ].join(' ')}
                   >
                     {String(h).padStart(2, '0')}
                   </div>
                   {t ? (
-                    <div className="mt-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                    <div className="mt-0.5 h-2 w-2 rounded-full bg-warning" />
                   ) : (
-                    <div className="mt-0.5 h-2 w-2 rounded-full bg-slate-700" />
+                    <div className="mt-0.5 h-2 w-2 rounded-full bg-border" />
                   )}
                 </div>
               );
@@ -127,31 +127,29 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
                   key={`${t.day}-${t.hour}-${i}`}
                   className={[
                     'flex items-start gap-2 rounded border px-2.5 py-1.5 text-xs',
-                    isNow
-                      ? 'border-amber-400/60 bg-amber-500/10'
-                      : 'border-slate-800 bg-slate-800/40',
+                    isNow ? 'border-warning/60 bg-warning/10' : 'border-border bg-muted/40',
                   ].join(' ')}
                 >
                   <span
                     className={[
                       'shrink-0 font-mono',
-                      isNow ? 'text-amber-300' : 'text-slate-500',
+                      isNow ? 'text-warning' : 'text-muted-foreground',
                     ].join(' ')}
                   >
                     {String(t.hour).padStart(2, '0')}:00
                   </span>
-                  <span className="flex-1 text-slate-200">{t.thought || '—'}</span>
+                  <span className="flex-1 text-foreground">{t.thought || '—'}</span>
                 </div>
               );
             })}
           {data.thoughts.length === 0 && (
-            <div className="rounded border border-dashed border-slate-700 px-3 py-4 text-center text-xs text-slate-500">
+            <div className="rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
               이 에이전트에 대한 thought 데이터가 없습니다.
             </div>
           )}
         </div>
 
-        <div className="mt-4 border-t border-slate-800 pt-3 text-[0.625rem] leading-relaxed text-slate-500">
+        <div className="mt-4 border-t border-border pt-3 text-[0.625rem] leading-relaxed text-muted-foreground">
           Tier S 50명만 LLM thought 생성됩니다 (gpt-4.1-mini, 한국어 ≤ 12자). Decision logic 은
           policy 기반이라 Pearson r=0.95 학술 검증은 보존됩니다.
         </div>

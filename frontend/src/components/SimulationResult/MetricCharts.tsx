@@ -21,10 +21,10 @@ interface MetricChartsProps {
 }
 
 const GRADE_COLORS = {
-  EXCELLENT: '#10B981', // Emerald-500
-  GOOD: '#3B82F6', // Blue-500
-  NORMAL: '#EAB308', // Yellow-500
-  RISKY: '#EF4444', // Red-500
+  EXCELLENT: 'var(--success)', // Emerald
+  GOOD: '#3B82F6', // Blue-500 — UNMAPPED, see phase-2-2-report
+  NORMAL: 'var(--warning)', // Yellow
+  RISKY: 'var(--danger)', // Red
 };
 
 const GRADE_LABELS = {
@@ -50,16 +50,16 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
   const growthData = [{ name: '전년 대비 성장률', value: metrics.growth_rate || 0 }];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white/50 backdrop-blur-md rounded-2xl border border-gray-100 shadow-xl">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-card/50 backdrop-blur-md rounded-2xl border border-border shadow-xl">
       {/* 1. 등급 요약 카드 */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col items-center justify-center p-6 rounded-2xl bg-white shadow-lg border-t-8 h-full"
+        className="flex flex-col items-center justify-center p-6 rounded-2xl bg-card shadow-lg border-t-8 h-full"
         style={{ borderTopColor: themeColor }}
       >
-        <span className="text-xs font-black text-gray-300 uppercase tracking-widest mb-2">
+        <span className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-2">
           Total Grade
         </span>
         <motion.div
@@ -71,11 +71,11 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
         >
           {metrics.district_grade}
         </motion.div>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-bold border border-gray-100 shadow-sm">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-muted text-foreground font-bold border border-border shadow-sm">
           {metrics.district_grade === 'EXCELLENT' || metrics.district_grade === 'GOOD' ? (
-            <CheckCircle size={18} className="text-emerald-500" />
+            <CheckCircle size={18} className="text-success" />
           ) : (
-            <AlertTriangle size={18} className="text-amber-500" />
+            <AlertTriangle size={18} className="text-warning" />
           )}
           {GRADE_LABELS[metrics.district_grade]}
         </div>
@@ -86,13 +86,13 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.2, duration: 0.6 }}
-        className="p-6 rounded-2xl bg-white shadow-lg border border-gray-50 h-full"
+        className="p-6 rounded-2xl bg-card shadow-lg border border-border h-full"
       >
         <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 bg-blue-50 rounded-lg">
-            <TrendingUp size={18} className="text-blue-500" />
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <TrendingUp size={18} className="text-primary" />
           </div>
-          <h3 className="font-black text-gray-800 tracking-tight">성장 추이 분석</h3>
+          <h3 className="font-black text-foreground tracking-tight">성장 추이 분석</h3>
         </div>
         <div className="h-[120px] w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -104,11 +104,11 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     return (
-                      <div className="bg-white/90 backdrop-blur-md p-3 shadow-2xl rounded-xl border border-blue-50">
-                        <p className="text-[0.625rem] font-bold text-gray-400 uppercase mb-1">
+                      <div className="bg-card/90 backdrop-blur-md p-3 shadow-2xl rounded-xl border border-border">
+                        <p className="text-[0.625rem] font-bold text-muted-foreground uppercase mb-1">
                           매출 성장률
                         </p>
-                        <span className="text-xl font-black text-blue-600">
+                        <span className="text-xl font-black text-primary">
                           +{payload[0].value}%
                         </span>
                       </div>
@@ -129,7 +129,7 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-[0.6875rem] text-center text-gray-400 font-medium mt-2 leading-relaxed">
+        <p className="text-[0.6875rem] text-center text-muted-foreground font-medium mt-2 leading-relaxed">
           과거 12개월 대비 평균 매출이{' '}
           <span className="font-bold underline" style={{ color: themeColor }}>
             {metrics.growth_rate}% 쾌속 성장
@@ -143,16 +143,16 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4, duration: 0.6 }}
-        className="p-6 rounded-2xl bg-white shadow-lg border border-gray-50 md:col-span-2"
+        className="p-6 rounded-2xl bg-card shadow-lg border border-border md:col-span-2"
       >
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-red-50 rounded-lg">
-              <Target size={18} className="text-red-500" />
+            <div className="p-2 bg-danger/10 rounded-lg">
+              <Target size={18} className="text-danger" />
             </div>
-            <h3 className="font-black text-gray-800 tracking-tight">5차원 입지 정밀 진단</h3>
+            <h3 className="font-black text-foreground tracking-tight">5차원 입지 정밀 진단</h3>
           </div>
-          <span className="text-[0.625rem] font-black bg-gray-100 px-2 py-1 rounded text-gray-500">
+          <span className="text-[0.625rem] font-black bg-muted px-2 py-1 rounded text-muted-foreground">
             AI AGENT ENGINE v1.2
           </span>
         </div>
@@ -177,19 +177,19 @@ const MetricCharts: React.FC<MetricChartsProps> = ({ metrics }) => {
           </ResponsiveContainer>
         </div>
         <div className="grid grid-cols-3 gap-2 mt-4">
-          <div className="p-3 bg-gray-50 rounded-xl text-center">
-            <p className="text-[0.5625rem] font-bold text-gray-400 uppercase">경쟁 지수</p>
-            <p className="text-sm font-black text-gray-700">
+          <div className="p-3 bg-muted rounded-xl text-center">
+            <p className="text-[0.5625rem] font-bold text-muted-foreground uppercase">경쟁 지수</p>
+            <p className="text-sm font-black text-foreground">
               {(metrics.competition_score * 10).toFixed(1)}/10
             </p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-xl text-center">
-            <p className="text-[0.5625rem] font-bold text-gray-400 uppercase">임대료</p>
-            <p className="text-sm font-black text-gray-700">{metrics.rent_affordability}</p>
+          <div className="p-3 bg-muted rounded-xl text-center">
+            <p className="text-[0.5625rem] font-bold text-muted-foreground uppercase">임대료</p>
+            <p className="text-sm font-black text-foreground">{metrics.rent_affordability}</p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-xl text-center">
-            <p className="text-[0.5625rem] font-bold text-gray-400 uppercase">종합 점수</p>
-            <p className="text-sm font-black text-blue-600">84.2</p>
+          <div className="p-3 bg-muted rounded-xl text-center">
+            <p className="text-[0.5625rem] font-bold text-muted-foreground uppercase">종합 점수</p>
+            <p className="text-sm font-black text-primary">84.2</p>
           </div>
         </div>
       </motion.div>

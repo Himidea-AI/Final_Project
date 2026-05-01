@@ -3,16 +3,16 @@ import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 const VARIANT_STYLES: Record<string, { ring: string; icon: JSX.Element }> = {
   success: {
-    ring: 'ring-cyan-400/60',
-    icon: <CheckCircle2 className="h-5 w-5 text-cyan-400" />,
+    ring: 'ring-success/60',
+    icon: <CheckCircle2 className="h-5 w-5 text-success" />,
   },
   error: {
-    ring: 'ring-red-500/60',
-    icon: <AlertCircle className="h-5 w-5 text-red-400" />,
+    ring: 'ring-danger/60',
+    icon: <AlertCircle className="h-5 w-5 text-danger" />,
   },
   info: {
-    ring: 'ring-slate-400/60',
-    icon: <Info className="h-5 w-5 text-slate-200" />,
+    ring: 'ring-border',
+    icon: <Info className="h-5 w-5 text-foreground" />,
   },
 };
 
@@ -34,13 +34,13 @@ export function ToastHost() {
         return (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-start gap-3 rounded-lg bg-slate-900/95 px-4 py-3 shadow-lg ring-1 ${style.ring} min-w-[280px] max-w-sm text-slate-100`}
+            className={`pointer-events-auto flex items-start gap-3 rounded-lg bg-card px-4 py-3 shadow-lg ring-1 ${style.ring} min-w-[280px] max-w-sm text-foreground`}
           >
             {style.icon}
             <div className="flex-1">
               <div className="text-sm font-semibold">{t.title}</div>
               {t.description && (
-                <div className="mt-0.5 text-xs text-slate-300">{t.description}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{t.description}</div>
               )}
               {t.action
                 ? ((action) => (
@@ -49,7 +49,7 @@ export function ToastHost() {
                         action.onClick();
                         dismiss(t.id);
                       }}
-                      className="mt-2 text-xs font-medium text-cyan-300 hover:text-cyan-200"
+                      className="mt-2 text-xs font-medium text-primary hover:text-primary/80"
                     >
                       {action.label} →
                     </button>
@@ -58,7 +58,7 @@ export function ToastHost() {
             </div>
             <button
               onClick={() => dismiss(t.id)}
-              className="text-slate-400 hover:text-slate-200"
+              className="text-muted-foreground hover:text-foreground"
               aria-label="닫기"
             >
               <X className="h-4 w-4" />

@@ -27,30 +27,30 @@ export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border border-stone-800/60 bg-stone-950/40 p-5">
+    <div className="rounded-2xl border border-border/60 bg-card/40 p-5">
       <div className="flex items-center gap-2 mb-3">
-        <ShieldCheck size={14} className="text-emerald-400" />
-        <span className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500">
+        <ShieldCheck size={14} className="text-success" />
+        <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
           3년 생존 vs 폐업
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-emerald-400 mb-1">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-success mb-1">
             생존률
           </div>
-          <div className="text-3xl font-black tabular-nums text-emerald-400 tracking-tighter">
+          <div className="text-3xl font-black tabular-nums text-success tracking-tighter">
             {sPct != null ? `${sPct}` : '—'}
-            <span className="text-sm font-bold text-stone-500 ml-0.5">%</span>
+            <span className="text-sm font-bold text-muted-foreground ml-0.5">%</span>
           </div>
         </div>
         <div>
-          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-rose-400 mb-1">
+          <div className="text-[0.5625rem] font-black uppercase tracking-widest text-danger mb-1">
             폐업률
           </div>
-          <div className="text-3xl font-black tabular-nums text-rose-400 tracking-tighter">
+          <div className="text-3xl font-black tabular-nums text-danger tracking-tighter">
             {cPct != null ? `${cPct}` : '—'}
-            <span className="text-sm font-bold text-stone-500 ml-0.5">%</span>
+            <span className="text-sm font-bold text-muted-foreground ml-0.5">%</span>
           </div>
         </div>
       </div>
@@ -64,13 +64,13 @@ export function SurvivalRateKpi({ survivalRate, closureRate }: Props) {
           const sShare = (sPct / total) * 100;
           const cShare = (cPct / total) * 100;
           return (
-            <div className="mt-3 h-1.5 w-full rounded-full bg-stone-800 overflow-hidden flex">
-              <div className="h-full bg-emerald-500/70" style={{ width: `${sShare}%` }} />
-              <div className="h-full bg-rose-500/70" style={{ width: `${cShare}%` }} />
+            <div className="mt-3 h-1.5 w-full rounded-full bg-card overflow-hidden flex">
+              <div className="h-full bg-success/70" style={{ width: `${sShare}%` }} />
+              <div className="h-full bg-danger/70" style={{ width: `${cShare}%` }} />
             </div>
           );
         })()}
-      <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
+      <p className="mt-3 text-[0.625rem] text-muted-foreground leading-relaxed">
         market_report 정규화 지표. 100을 합한 비율 시각화.
       </p>
     </div>

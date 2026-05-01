@@ -21,10 +21,10 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
 
   const top = signals.slice(0, 5);
   const maxAbs = Math.max(...top.map((s) => Math.abs(s.contribution)), 0.0001);
-  const accentClass = accent === 'cyan' ? 'text-cyan-400' : 'text-indigo-400';
+  const accentClass = accent === 'cyan' ? 'text-primary' : 'text-primary';
 
   return (
-    <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
+    <div className="mt-3 rounded-lg border border-border/60 bg-card/40 p-4">
       <div className={`text-[0.625rem] font-black uppercase tracking-widest mb-3 ${accentClass}`}>
         {title}
       </div>
@@ -32,15 +32,15 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
         {top.map((s, i) => {
           const positive = s.contribution >= 0;
           const widthPct = (Math.abs(s.contribution) / maxAbs) * 100;
-          const barColor = positive ? 'bg-rose-500/70' : 'bg-emerald-500/70';
-          const labelColor = positive ? 'text-rose-400' : 'text-emerald-400';
+          const barColor = positive ? 'bg-danger/70' : 'bg-success/70';
+          const labelColor = positive ? 'text-danger' : 'text-success';
           return (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-[0.6875rem] text-stone-400 font-bold w-24 truncate">
+              <span className="text-[0.6875rem] text-muted-foreground font-bold w-24 truncate">
                 {s.feature}
               </span>
               <div className="flex-1 relative h-3 rounded-sm overflow-hidden">
-                <div className="absolute inset-y-0 left-1/2 w-px bg-stone-700" />
+                <div className="absolute inset-y-0 left-1/2 w-px bg-muted" />
                 {positive ? (
                   <div
                     className={`absolute inset-y-0 left-1/2 ${barColor} rounded-r-sm`}
@@ -63,7 +63,7 @@ export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) 
           );
         })}
       </div>
-      <p className="mt-3 text-[0.625rem] text-stone-500 leading-relaxed">
+      <p className="mt-3 text-[0.625rem] text-muted-foreground leading-relaxed">
         양수(빨강) = 폐업 위험을 높이는 요인, 음수(초록) = 낮추는 요인
       </p>
     </div>

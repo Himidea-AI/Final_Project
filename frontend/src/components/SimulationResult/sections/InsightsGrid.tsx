@@ -29,9 +29,9 @@ const LEGAL_TYPE_LABEL: Record<string, string> = {
 };
 
 const LEVEL_CLS: Record<string, { strip: string; text: string; label: string }> = {
-  HIGH: { strip: 'bg-rose-500', text: 'text-rose-400', label: '필수이행' },
-  MEDIUM: { strip: 'bg-yellow-500', text: 'text-yellow-400', label: '확인필요' },
-  LOW: { strip: 'bg-emerald-500', text: 'text-emerald-400', label: '참고사항' },
+  HIGH: { strip: 'bg-danger', text: 'text-danger', label: '필수이행' },
+  MEDIUM: { strip: 'bg-primary', text: 'text-warning', label: '확인필요' },
+  LOW: { strip: 'bg-success', text: 'text-success', label: '참고사항' },
 };
 
 // risk_level 두 패턴 정규화: HIGH/MEDIUM/LOW + danger/caution/safe.
@@ -70,7 +70,7 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
       />
 
       {!legalOnly && (
-        <div className="mb-4 flex gap-1 border-b border-stone-700">
+        <div className="mb-4 flex gap-1 border-b border-border">
           {(
             [
               { key: 'legal', label: `법률 ${risks.length}` },
@@ -84,8 +84,8 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
               onClick={() => setTab(t.key)}
               className={`border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
                 tab === t.key
-                  ? 'border-indigo-500 text-indigo-500'
-                  : 'border-transparent text-stone-400 hover:text-stone-100'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               {t.label}
@@ -95,26 +95,28 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
       )}
 
       {activeTab === 'legal' && (
-        <div className="overflow-x-auto rounded-lg border border-stone-700 bg-zinc-800">
+        <div className="overflow-x-auto rounded-lg border border-border bg-card">
           {risks.length === 0 ? (
-            <div className="p-6 text-center text-sm text-stone-400">법률 리스크 데이터 없음</div>
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              법률 리스크 데이터 없음
+            </div>
           ) : (
             <table className="w-full min-w-[560px]">
-              <thead className="border-b border-stone-700 bg-stone-900/60">
+              <thead className="border-b border-border bg-muted">
                 <tr>
-                  <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
+                  <th className="p-3 text-left text-xs font-semibold uppercase text-muted-foreground">
                     #
                   </th>
-                  <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
+                  <th className="p-3 text-left text-xs font-semibold uppercase text-muted-foreground">
                     법률
                   </th>
-                  <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
+                  <th className="p-3 text-left text-xs font-semibold uppercase text-muted-foreground">
                     위험도
                   </th>
-                  <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+                  <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
                     조문
                   </th>
-                  <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+                  <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
                     체크리스트
                   </th>
                   <th />
@@ -129,26 +131,26 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
                     <tr
                       key={`hazard-${r.type}-${i}`}
                       onClick={() => setSelected(r)}
-                      className="cursor-pointer border-b border-stone-700/50 hover:bg-stone-700/40"
+                      className="cursor-pointer border-b border-border hover:bg-muted"
                     >
-                      <td className="relative p-3 pl-4 font-mono text-xs text-stone-400">
+                      <td className="relative p-3 pl-4 font-mono text-xs text-muted-foreground">
                         <span
                           className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-r ${cls.strip}`}
                           aria-hidden="true"
                         />
                         {i + 1}
                       </td>
-                      <td className="p-3 text-sm font-semibold text-stone-100">
+                      <td className="p-3 text-sm font-semibold text-foreground">
                         {LEGAL_TYPE_LABEL[r.type] || r.type}
                       </td>
                       <td className={`p-3 text-xs font-bold ${cls.text}`}>● {cls.label}</td>
-                      <td className="p-3 text-right text-sm text-stone-300">
+                      <td className="p-3 text-right text-sm text-foreground">
                         {r.articles?.length ?? 0}
                       </td>
-                      <td className="p-3 text-right text-sm text-stone-300">
+                      <td className="p-3 text-right text-sm text-foreground">
                         {r.checklist?.length ?? 0}
                       </td>
-                      <td className="p-3 text-right text-stone-400">›</td>
+                      <td className="p-3 text-right text-muted-foreground">›</td>
                     </tr>
                   );
                 })}
@@ -157,22 +159,24 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
                 {safeRisks.length > 0 && (
                   <tr
                     onClick={() => setExpandedSafe((v) => !v)}
-                    className="cursor-pointer border-b border-stone-700/50 bg-stone-900/40 hover:bg-stone-800/60"
+                    className="cursor-pointer border-b border-border bg-muted hover:bg-muted"
                   >
-                    <td className="relative p-3 pl-4 font-mono text-xs text-stone-500">
+                    <td className="relative p-3 pl-4 font-mono text-xs text-muted-foreground">
                       <span
-                        className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r bg-emerald-500/60"
+                        className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r bg-success/60"
                         aria-hidden="true"
                       />
                       —
                     </td>
-                    <td colSpan={4} className="p-3 text-xs font-bold text-emerald-400/80">
+                    <td colSpan={4} className="p-3 text-xs font-bold text-success/80">
                       안전 항목 {safeRisks.length}건 검토됨
-                      <span className="ml-2 text-stone-500 font-normal">
+                      <span className="ml-2 text-muted-foreground font-normal">
                         (참고사항 — 위험군 아님)
                       </span>
                     </td>
-                    <td className="p-3 text-right text-stone-400">{expandedSafe ? '▾' : '▸'}</td>
+                    <td className="p-3 text-right text-muted-foreground">
+                      {expandedSafe ? '▾' : '▸'}
+                    </td>
                   </tr>
                 )}
 
@@ -185,26 +189,26 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
                       <tr
                         key={`safe-${r.type}-${i}`}
                         onClick={() => setSelected(r)}
-                        className="cursor-pointer border-b border-stone-700/50 bg-stone-900/20 last:border-b-0 hover:bg-stone-700/40"
+                        className="cursor-pointer border-b border-border bg-muted last:border-b-0 hover:bg-muted"
                       >
-                        <td className="relative p-3 pl-4 font-mono text-xs text-stone-500">
+                        <td className="relative p-3 pl-4 font-mono text-xs text-muted-foreground">
                           <span
                             className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-r ${cls.strip}`}
                             aria-hidden="true"
                           />
                           {hazardRisks.length + i + 1}
                         </td>
-                        <td className="p-3 text-sm text-stone-300">
+                        <td className="p-3 text-sm text-foreground">
                           {LEGAL_TYPE_LABEL[r.type] || r.type}
                         </td>
                         <td className={`p-3 text-xs font-bold ${cls.text}`}>● {cls.label}</td>
-                        <td className="p-3 text-right text-sm text-stone-400">
+                        <td className="p-3 text-right text-sm text-muted-foreground">
                           {r.articles?.length ?? 0}
                         </td>
-                        <td className="p-3 text-right text-sm text-stone-400">
+                        <td className="p-3 text-right text-sm text-muted-foreground">
                           {r.checklist?.length ?? 0}
                         </td>
-                        <td className="p-3 text-right text-stone-500">›</td>
+                        <td className="p-3 text-right text-muted-foreground">›</td>
                       </tr>
                     );
                   })}
@@ -215,41 +219,41 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
       )}
 
       {tab === 'ai_insights' && (
-        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6">
+        <div className="rounded-lg border border-border bg-card p-6">
           {aiRecommendation ? (
-            <p className="whitespace-pre-line text-sm leading-relaxed text-stone-200">
+            <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
               {aiRecommendation}
             </p>
           ) : (
-            <div className="text-center text-sm text-stone-400">AI 인사이트 데이터 없음</div>
+            <div className="text-center text-sm text-muted-foreground">AI 인사이트 데이터 없음</div>
           )}
         </div>
       )}
 
       {activeTab === 'competitor_risks' && (
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-stone-700 bg-stone-800 p-4">
-            <h4 className="mb-3 text-sm font-semibold text-emerald-400">기회</h4>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h4 className="mb-3 text-sm font-semibold text-success">기회</h4>
             {opportunities.length > 0 ? (
-              <ul className="space-y-1 text-sm text-stone-300">
+              <ul className="space-y-1 text-sm text-foreground">
                 {opportunities.map((o, i) => (
                   <li key={i}>• {o}</li>
                 ))}
               </ul>
             ) : (
-              <div className="text-sm text-stone-500">데이터 없음</div>
+              <div className="text-sm text-muted-foreground">데이터 없음</div>
             )}
           </div>
-          <div className="rounded-lg border border-stone-700 bg-stone-800 p-4">
-            <h4 className="mb-3 text-sm font-semibold text-rose-400">리스크</h4>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h4 className="mb-3 text-sm font-semibold text-danger">리스크</h4>
             {riskTexts.length > 0 ? (
-              <ul className="space-y-1 text-sm text-stone-300">
+              <ul className="space-y-1 text-sm text-foreground">
                 {riskTexts.map((r, i) => (
                   <li key={i}>• {r}</li>
                 ))}
               </ul>
             ) : (
-              <div className="text-sm text-stone-500">데이터 없음</div>
+              <div className="text-sm text-muted-foreground">데이터 없음</div>
             )}
           </div>
         </div>
