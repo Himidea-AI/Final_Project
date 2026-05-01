@@ -102,7 +102,7 @@ def main():
     feat_cols_s = [c for c in feat_no_trend if c in ts_s.columns]
     print(f"사전학습 피처: {len(feat_cols_s)}개, 데이터: {ts_s.shape}", flush=True)
 
-    X_s, y_s, fs_s, ts_s_scaler, w_s = prepare_sequences(ts_s, window_size=6, feature_cols=feat_cols_s)
+    X_s, y_s, fs_s, ts_s_scaler, w_s, _ = prepare_sequences(ts_s, window_size=6, feature_cols=feat_cols_s)
     n_val = max(1, int(len(X_s) * 0.2))
     train_s = DataLoader(
         TensorDataset(torch.from_numpy(X_s[:-n_val]), torch.from_numpy(y_s[:-n_val]), torch.from_numpy(w_s[:-n_val])),
@@ -127,7 +127,7 @@ def main():
     feat_cols_m = [c for c in ALL_FEATURES if c in ts_m.columns]
     print(f"파인튜닝 피처: {len(feat_cols_m)}개, 데이터: {ts_m.shape}", flush=True)
 
-    X_m, y_m, fs_m, ts_m_scaler, w_m = prepare_sequences(ts_m, window_size=6, feature_cols=feat_cols_m)
+    X_m, y_m, fs_m, ts_m_scaler, w_m, _ = prepare_sequences(ts_m, window_size=6, feature_cols=feat_cols_m)
     n_val_m = max(1, int(len(X_m) * 0.2))
     train_m = DataLoader(
         TensorDataset(
