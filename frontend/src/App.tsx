@@ -1092,7 +1092,10 @@ function SimulatorDashboard({
                     />
                   </button>
                   {dongDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
+                    <div
+                      className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar"
+                      style={{ overscrollBehavior: 'contain' }}
+                    >
                       <button
                         onClick={toggleAllDongs}
                         className="w-full text-left px-3 py-2 text-xs font-medium border-b border-border transition-colors text-primary hover:bg-primary/10"

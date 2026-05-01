@@ -20,7 +20,7 @@
  * 실데이터 원칙: winner_district 가 없으면 추천 동 카드 자체를 hide.
  */
 
-import { MapPin, Trophy } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -93,28 +93,28 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
     <div className="space-y-6">
       {/* ═══ H6: 1등 추천 동 카드 (winner_district 있을 때만) ═══ */}
       {winnerDistrict && (
-        <div className="rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card/40 to-card/40 p-8">
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex-1">
-              <div className="mb-3 flex items-center gap-2 text-[0.625rem] font-black uppercase tracking-widest text-primary">
-                <Trophy className="h-3.5 w-3.5" />
-                추천 1순위
-              </div>
-              <div className="flex items-baseline gap-3">
-                <span className="text-5xl font-black tracking-tight text-primary">
-                  {winnerDistrict}
+        <div className="rounded-3xl border border-border bg-card p-8">
+          <div className="flex-1">
+            <div
+              className="mb-3 flex items-center gap-2 text-[0.625rem] font-black uppercase tracking-widest"
+              style={{ color: 'var(--color-sunshine-yellow)' }}
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              추천 1순위
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="text-5xl font-black tracking-tight text-primary">
+                {winnerDistrict}
+              </span>
+              {simResult.target_district && simResult.target_district !== winnerDistrict && (
+                <span className="text-xs text-muted-foreground">
+                  (요청 동: {simResult.target_district})
                 </span>
-                {simResult.target_district && simResult.target_district !== winnerDistrict && (
-                  <span className="text-xs text-muted-foreground">
-                    (요청 동: {simResult.target_district})
-                  </span>
-                )}
-              </div>
-              {winnerSubText && (
-                <div className="mt-2 text-sm text-muted-foreground">{winnerSubText}</div>
               )}
             </div>
-            <MapPin className="h-10 w-10 shrink-0 text-primary/60" />
+            {winnerSubText && (
+              <div className="mt-2 text-sm text-muted-foreground">{winnerSubText}</div>
+            )}
           </div>
 
           {showTopChips && (
@@ -130,7 +130,7 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
                     className={
                       isWinner
                         ? 'rounded-full border border-primary/60 bg-primary/20 px-3 py-1 text-xs font-bold text-primary'
-                        : 'rounded-full border border-border bg-card/60 px-3 py-1 text-xs text-foreground'
+                        : 'rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground'
                     }
                   >
                     {i + 1}. {d}
@@ -154,7 +154,7 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
 
       {/* ═══ 최종 권고 ═══ */}
       {recommendation && (
-        <div className="rounded-3xl border border-primary/20 bg-primary/5 p-8">
+        <div className="rounded-3xl border-2 border-primary/40 bg-card p-8">
           <h4 className="mb-4 text-xs font-black uppercase tracking-widest text-primary">
             최종 권고
           </h4>

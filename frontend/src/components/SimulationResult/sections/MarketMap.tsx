@@ -115,7 +115,7 @@ const PULSE_CSS = `
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  background: rgba(245, 158, 11, 0.55);
+  background: rgba(255, 0, 112, 0.55); /* hot-pink — spot pin pulse (12색 팔레트) */
   animation: mm-pulse 2s ease-out infinite;
 }
 .mm-pulse-ring-delay { animation-delay: 1s; }
@@ -135,7 +135,7 @@ function buildTargetOverlayContent(): HTMLElement {
     <div style="position:relative;width:28px;height:28px;pointer-events:none;">
       <div class="mm-pulse-ring"></div>
       <div class="mm-pulse-ring mm-pulse-ring-delay"></div>
-      <div style="position:absolute;inset:9px;border-radius:9999px;background:#f59e0b;border:2px solid #ffffff;box-shadow:0 0 10px rgba(245,158,11,0.8);"></div>
+      <div style="position:absolute;inset:9px;border-radius:9999px;background:#ff0070;border:2px solid #ffffff;box-shadow:0 0 10px rgba(255,0,112,0.8);"></div>
     </div>
   `;
   return wrap;
@@ -215,11 +215,11 @@ export function MarketMap({
         center: latLng,
         radius,
         strokeWeight: 2,
-        strokeColor: '#f59e0b',
+        strokeColor: '#ffb6d0', // light-pink — 반경 영역 경계 (12색 팔레트 §Shapes)
         strokeOpacity: 0.8,
         strokeStyle: 'dash',
-        fillColor: '#f59e0b',
-        fillOpacity: 0.05,
+        fillColor: '#ffb6d0',
+        fillOpacity: 0.08,
       });
       circle.setMap(mapInstance);
       overlayLayersRef.current.push(circle);
@@ -255,7 +255,8 @@ export function MarketMap({
           const hasScore = typeof score === 'number';
           const isWinner = dong === winnerDistrict;
           // 실데이터 원칙: 랭킹 점수 없으면 빗금/투명 중립색 (기존 50 기본값 제거 — 점수 50 동과 구분)
-          const fillColor = isWinner ? '#f59e0b' : hasScore ? rankingColor(score) : '#27272a';
+          // winner = sunshine-yellow (추천 강조, Trophy 와 통일). 12색 팔레트.
+          const fillColor = isWinner ? '#ffde00' : hasScore ? rankingColor(score) : '#27272a';
           const fillOpacity = isWinner ? 0.35 : hasScore ? rankingOpacity(score) : 0.08;
           const polygons: number[][][] =
             f.geometry.type === 'MultiPolygon'
@@ -281,7 +282,7 @@ export function MarketMap({
             const poly = new maps.Polygon({
               path,
               strokeWeight: isWinner ? 2 : 1,
-              strokeColor: isWinner ? '#f59e0b' : '#52525b',
+              strokeColor: isWinner ? '#ffde00' : '#52525b',
               strokeOpacity: isWinner ? 0.9 : 0.55,
               fillColor,
               fillOpacity,
