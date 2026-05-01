@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import logging
 
-import numpy as np
-
 from models.revenue_predictor.data_prep import engineer_features, load_store_data
 
 logger = logging.getLogger(__name__)
@@ -48,24 +46,6 @@ def _classify_risk(closure_rate: float) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _interpolate_monthly(quarterly_closure: float, months: int = 12) -> list[float]:
-    """
-    분기 폐업률을 12개월 월별 누적 폐업률로 보간한다.
-
-    분기 폐업률을 월별 증가율로 변환하여 누적 적용.
-    """
-    quarterly_retain = 1.0 - quarterly_closure
-    monthly_decay = quarterly_retain ** (1 / 3)
-
-    monthly_rates = []
-    cumulative = 1.0
-    for _ in range(months):
-        cumulative *= monthly_decay
-        closure = round(max(0.0, min(1.0, 1.0 - cumulative)), 4)
-        monthly_rates.append(closure)
-
-    return monthly_rates
-
 
 # ---------------------------------------------------------------------------
 # 메인 예측 함수
@@ -74,7 +54,7 @@ def _interpolate_monthly(quarterly_closure: float, months: int = 12) -> list[flo
 
 def predict(dong_code: str | int, industry_code: str) -> dict:
     """
-    특정 동x업종의 폐업률을 최근 4분기 실측값 평균으로 반환한다.
+    특정 동x업종의 폐업률을 가장 최근 분기 실측값으로 반환한다.
 
     Args:
         dong_code:     행정동 코드 (예: "11440530")
@@ -82,9 +62,9 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
 
     Returns:
         dict:
-            closure_rate:          최근 4분기 평균 폐업률 (0~1). 계산 실패 시 None.
+            closure_rate:          가장 최근 분기 폐업률 (0~1). 계산 실패 시 None.
             closure_rate_level:    위험도 ("safe" / "caution" / "danger" / "unknown")
-            monthly_closure_rates: 12개월 월별 누적 폐업률 리스트. 실패 시 빈 리스트.
+            monthly_closure_rates: 최근 4분기 실측값 리스트. 실패 시 빈 리스트.
             quarterly_predictions: 최근 4분기 실측값 리스트 (추세 참고용). 실패 시 빈 리스트.
     """
     dong_code = str(dong_code)
@@ -104,20 +84,19 @@ def predict(dong_code: str | int, industry_code: str) -> dict:
         recent = subset["closure_rate_pred"].tail(_LOOKBACK_QUARTERS).values
         quarterly_predictions = [round(float(v), 4) for v in recent]
 
-        # 단순 평균 (최근 4분기 = 1년 → 계절성 자동 해소)
-        closure_rate = round(float(np.mean(recent)), 4)
+        # 가장 최근 분기 실측값
+        closure_rate = round(float(recent[-1]), 4)
 
     except Exception as exc:
         logger.warning("폐업률 계산 실패 — None 반환: %s", exc)
         return _mock_result()
 
     risk_level = _classify_risk(closure_rate)
-    monthly_rates = _interpolate_monthly(closure_rate)
 
     return {
         "closure_rate": closure_rate,
         "closure_rate_level": risk_level,
-        "monthly_closure_rates": monthly_rates,
+        "monthly_closure_rates": quarterly_predictions,  # 분기별 실측값 그대로 사용
         "quarterly_predictions": quarterly_predictions,
         "is_mock": False,
     }
@@ -138,7 +117,7 @@ def _fallback_by_industry(df, industry_code: str) -> dict:
         return {
             "closure_rate": avg,
             "closure_rate_level": risk_level,
-            "monthly_closure_rates": _interpolate_monthly(avg),
+            "monthly_closure_rates": [avg] * 4,  # 업종 평균 4분기 반복
             "quarterly_predictions": [avg] * 4,
             "is_mock": False,
         }

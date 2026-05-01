@@ -13,15 +13,16 @@ from src.config.settings import settings
 from dotenv import load_dotenv
 
 # 커넥션 풀 설정 — RDS max_connections=81 제약 고려
-# db_client(market/ranking)가 별도 풀을 사용하므로 RAG용은 최소화
-_POOL_SIZE = 3  # 기본 커넥션 수 (10→3 축소)
-_MAX_OVERFLOW = 5  # 초과 허용 커넥션 수 (20→5 축소, 최대 8개)
+# legal_node Phase 1 = RAG×13 + 판례×6 = 19 동시 검색 → 풀이 작으면 timeout 후 빈 결과 반환
+# 다른 노드들(market/population 등)이 별도 풀을 사용해도 RAG는 19 동시 보장 필요
+_POOL_SIZE = 10  # 기본 커넥션 수 — Phase 1 동시성 + 마진
+_MAX_OVERFLOW = 15  # 초과 허용 — 최대 25개 (RDS max_connections=81 내)
 _POOL_TIMEOUT = 30  # 커넥션 대기 타임아웃(초)
 _POOL_PRE_PING = True  # 끊긴 커넥션 자동 재연결
 
 load_dotenv()
 
-_LOCAL_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+_LOCAL_EMBEDDING_MODEL = "BAAI/bge-m3"
 
 
 # 모듈 레벨 싱글톤 — 매 요청마다 엔진/임베딩 재생성 방지

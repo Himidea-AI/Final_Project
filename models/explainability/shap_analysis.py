@@ -60,13 +60,24 @@ def _log(level: str, message: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _mock_shap_values(feature_cols: list[str]) -> dict:
-    """가중치 파일이 없는 환경에서 반환하는 mock SHAP 결과."""
+def _mock_shap_values(feature_cols: list[str], predicted_value: float = 15_000_000.0) -> dict:
+    """가중치 파일이 없는 환경에서 반환하는 mock SHAP 결과.
+
+    predicted_value(원 단위)를 기준으로 shap_value를 비율 스케일링하여
+    UI formatKrw()가 "0원"이 아닌 의미 있는 값을 표시할 수 있도록 한다.
+    """
     _log("WARNING", "모델 가중치 없음 - mock SHAP 값을 반환합니다")
 
-    # 재현 가능한 균등 랜덤값 (0.0 ~ 0.1 범위)
+    # 재현 가능한 균등 랜덤값 (0.1 ~ 1.0 범위) — 0 방지
     rng = np.random.default_rng(seed=42)
-    shap_vals = rng.uniform(0.0, 0.1, size=len(feature_cols))
+    raw_vals = rng.uniform(0.1, 1.0, size=len(feature_cols))
+
+    # predicted_value 합계로 비율 스케일링 — sum(shap_vals) = predicted_value
+    raw_sum = float(np.sum(raw_vals))
+    if abs(raw_sum) > 1e-10:
+        shap_vals = raw_vals * (predicted_value / raw_sum)
+    else:
+        shap_vals = np.zeros(len(feature_cols), dtype=np.float32)
 
     # 절댓값 기준 내림차순 정렬
     sorted_indices = np.argsort(-np.abs(shap_vals))
@@ -75,8 +86,8 @@ def _mock_shap_values(feature_cols: list[str]) -> dict:
             "rank": rank + 1,
             "feature": feature_cols[i],
             "feature_ko": _TCN_FEATURE_KO.get(feature_cols[i], feature_cols[i]),
-            "shap_value": round(float(shap_vals[i]), 6),
-            "abs_shap": round(float(abs(shap_vals[i])), 6),
+            "shap_value": round(float(shap_vals[i]), 2),
+            "abs_shap": round(float(abs(shap_vals[i])), 2),
             # 기여 방향: 실제 경로와 동일한 필드 구조 유지
             "direction": "positive" if shap_vals[i] > 0 else ("negative" if shap_vals[i] < 0 else "neutral"),
         }
@@ -85,8 +96,8 @@ def _mock_shap_values(feature_cols: list[str]) -> dict:
 
     return {
         "feature_importance": feature_importance,
-        "base_value": 0.5,
-        "predicted_value": 0.0,
+        "base_value": 0.0,
+        "predicted_value": round(predicted_value, 2),
         "summary": [],
         "is_mock": True,
     }
@@ -125,12 +136,13 @@ _TCN_FEATURE_KO: dict[str, str] = {
     # RENT_FEATURES (2개) — 임대료 피처
     "rent_1f": "1층 임대료",
     "vacancy_rate": "공실률",
-    # EXTRA_FEATURES (5개) — 외부 지표 피처
+    # EXTRA_FEATURES (6개) — 외부 지표 피처
     "cpi_index": "소비자물가지수",
     "quarter_num": "분기 계절성",
     "trend_score": "네이버 검색 트렌드",
     "holiday_count": "분기 공휴일 수",
     "bus_flpop": "버스 정류장 유동인구",
+    "adstrd_flpop": "행정동 유동인구",
     # GOLMOK_FEATURES (5개) — 골목상권 피처
     "store_franchise": "골목상권 프랜차이즈 점포 수",
     "store_normal": "골목상권 일반 점포 수",
@@ -232,11 +244,12 @@ _TCN_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
 }
 
 
-def _generate_tcn_summary(feature_importance: list[dict], top_n: int = 3, threshold: float = 0.005) -> list[str]:
+def _generate_tcn_summary(feature_importance: list[dict], top_n: int = 3, threshold: float = 10_000.0) -> list[str]:
     """TCN SHAP 결과를 자연어 문장으로 요약한다.
 
     feature_importance는 abs_shap 내림차순으로 정렬된 상태여야 한다.
-    abs_shap >= threshold인 상위 top_n개 피처에 대해서만 문장을 생성한다.
+    abs_shap >= threshold(원 단위)인 상위 top_n개 피처에 대해서만 문장을 생성한다.
+    threshold 기본값 10,000원 — 1만원 미만 기여도는 요약 제외.
     """
     sentences = []
     for item in feature_importance[:top_n]:
@@ -303,9 +316,8 @@ def explain_tcn_prediction(
     # ---- 1) 가중치·스케일러 파일 존재 확인 → 없으면 mock ----
     if not weights_path.exists() or not scalers_path.exists():
         _log("WARNING", f"TCN 가중치 또는 스케일러 파일 없음: {weights_path}")
-        result = _mock_shap_values(list(ALL_FEATURES))
+        result = _mock_shap_values(list(ALL_FEATURES), predicted_value=15_000_000.0)
         result["predicted_value_unit"] = "원"
-        result["predicted_value"] = 15_000_000.0  # mock 매출 기본값 (원)
         result["summary"] = []
         return result
 
@@ -326,9 +338,8 @@ def explain_tcn_prediction(
             _SHAP_MODEL_CACHE[_cache_key] = (feat_scaler, tgt_scaler, input_size)
         except Exception as exc:
             _log("WARNING", f"TCN 스케일러 로드 실패 - mock 반환: {exc}")
-            result = _mock_shap_values(list(ALL_FEATURES))
+            result = _mock_shap_values(list(ALL_FEATURES), predicted_value=15_000_000.0)
             result["predicted_value_unit"] = "원"
-            result["predicted_value"] = 15_000_000.0
             result["summary"] = []
             return result
 
@@ -347,9 +358,8 @@ def explain_tcn_prediction(
         _log("INFO", "TCNForecaster 가중치 로드 완료")
     except Exception as exc:
         _log("WARNING", f"TCN 모델 로드 실패 - mock 반환: {exc}")
-        result = _mock_shap_values(list(ALL_FEATURES))
+        result = _mock_shap_values(list(ALL_FEATURES), predicted_value=15_000_000.0)
         result["predicted_value_unit"] = "원"
-        result["predicted_value"] = 15_000_000.0
         result["summary"] = []
         return result
 
@@ -367,6 +377,19 @@ def explain_tcn_prediction(
 
         # 실제 사용 가능한 피처 컬럼만 필터링
         actual_features = [c for c in feature_cols if c in group.columns]
+
+        # 피처 수 불일치: feat_scaler.transform() shape mismatch 방지 → early mock return
+        if len(actual_features) != input_size:
+            _log(
+                "WARNING",
+                f"피처 수 불일치 — actual={len(actual_features)}, expected={input_size}. "
+                "DB 피처 컬럼 누락 가능성. mock 반환.",
+            )
+            result = _mock_shap_values(list(feature_cols), predicted_value=15_000_000.0)
+            result["predicted_value_unit"] = "원"
+            result["summary"] = []
+            return result
+
         group = group.sort_values("quarter")
         recent = group[actual_features].values.astype(np.float32)
 
@@ -380,9 +403,10 @@ def explain_tcn_prediction(
         _log("INFO", f"입력 텐서 준비 완료: shape={tuple(input_tensor.shape)}")
     except Exception as exc:
         _log("WARNING", f"입력 데이터 준비 실패 - mock 반환: {exc}")
-        # 데이터 없을 때 배경 텐서 기준 shape으로 mock 입력 사용
-        _dev = next(model.parameters()).device
-        input_tensor = torch.zeros(1, window_size, input_size).to(_dev)
+        result = _mock_shap_values(list(feature_cols), predicted_value=15_000_000.0)
+        result["predicted_value_unit"] = "원"
+        result["summary"] = []
+        return result
 
     # ---- 5) 모델 순전파 — 기준 예측값 확보 (매출액 원 단위) ----
     with torch.no_grad():
@@ -414,7 +438,12 @@ def explain_tcn_prediction(
         shap_values_raw = explainer.shap_values(input_tensor)
         if hasattr(explainer, "expected_value"):
             _ev = explainer.expected_value
-            base_value = float(_ev.item() if isinstance(_ev, np.ndarray) else _ev)
+            if isinstance(_ev, np.ndarray):
+                base_value = float(_ev.flat[0])
+            elif hasattr(_ev, "detach"):  # torch.Tensor
+                base_value = float(_ev.detach().cpu().numpy().flat[0])
+            else:
+                base_value = float(_ev)
         _log("INFO", "GradientExplainer 완료")
 
     except Exception as grad_exc:
@@ -426,15 +455,19 @@ def explain_tcn_prediction(
             explainer = shap.DeepExplainer(model, background)
             shap_values_raw = explainer.shap_values(input_tensor)
             _ev = explainer.expected_value
-            base_value = float(_ev.item() if isinstance(_ev, np.ndarray) else _ev)
+            if isinstance(_ev, np.ndarray):
+                base_value = float(_ev.flat[0])
+            elif hasattr(_ev, "detach"):  # torch.Tensor
+                base_value = float(_ev.detach().cpu().numpy().flat[0])
+            else:
+                base_value = float(_ev)
             _log("INFO", "DeepExplainer 완료")
 
         except Exception as deep_exc:
             # 두 explainer 모두 실패 → mock 반환
             _log("WARNING", f"DeepExplainer 도 실패 - mock 반환: {deep_exc}")
-            result = _mock_shap_values(feature_cols)
+            result = _mock_shap_values(feature_cols, predicted_value=predicted_value)
             result["predicted_value_unit"] = "원"
-            result["predicted_value"] = predicted_value
             result["summary"] = []
             return result
 
@@ -463,9 +496,8 @@ def explain_tcn_prediction(
     # 처리 후에도 1차원이 아니면 복구 불가 → mock 반환
     if shap_array.ndim != 1:
         _log("WARNING", f"SHAP 값 차원 처리 실패 (ndim={shap_array.ndim}) - mock 반환")
-        result = _mock_shap_values(feature_cols)
+        result = _mock_shap_values(feature_cols, predicted_value=predicted_value)
         result["predicted_value_unit"] = "원"
-        result["predicted_value"] = predicted_value
         result["summary"] = []
         return result
 
@@ -474,6 +506,32 @@ def explain_tcn_prediction(
     shap_array = shap_array[:n_feats]
     feature_cols = feature_cols[:n_feats]
 
+    # ---- 7.5) SHAP 값을 원(₩) 단위로 변환 ----
+    # 모델 출력은 StandardScaler(log1p(revenue)) 공간이므로 shap_value가 수십만~수억 원이 아닌
+    # ±0.001~±1.0 수준의 스케일링된 값으로 반환됨.
+    # UI formatKrw()는 원 단위를 기대하므로, predicted_value - base_value_won 비율로 선형 스케일링.
+    # sum(shap_won) = predicted_value - base_value_won 가산성 보존.
+    try:
+        base_log = tgt_scaler.inverse_transform([[base_value]])[0][0]
+        base_value_won = float(np.expm1(base_log))
+        base_value_won = max(0.0, base_value_won)
+        delta_won = predicted_value - base_value_won
+        shap_sum = float(np.sum(shap_array))
+        if abs(shap_sum) > 1e-10:
+            shap_array = shap_array * (delta_won / shap_sum)
+        else:
+            shap_array = np.zeros_like(shap_array)
+        base_value = base_value_won
+        _log("INFO", f"SHAP 원 단위 변환: base={base_value_won:,.0f}원, delta={delta_won:,.0f}원")
+    except Exception as _e:
+        _log("WARNING", f"SHAP 원 단위 변환 실패 - predicted_value 비율 적용: {_e}")
+        shap_sum = float(np.sum(shap_array))
+        if abs(shap_sum) > 1e-10:
+            shap_array = shap_array * (predicted_value / shap_sum)
+        else:
+            shap_array = np.zeros_like(shap_array)
+        base_value = 0.0
+
     # ---- 8) 피처별 기여도 정렬 (절댓값 내림차순) ----
     sorted_indices = np.argsort(-np.abs(shap_array))
     feature_importance = [
@@ -481,19 +539,26 @@ def explain_tcn_prediction(
             "rank": rank + 1,
             "feature": feature_cols[i],
             "feature_ko": _TCN_FEATURE_KO.get(feature_cols[i], feature_cols[i]),
-            "shap_value": round(float(shap_array[i]), 6),
-            "abs_shap": round(float(abs(shap_array[i])), 6),
+            "shap_value": round(float(shap_array[i]), 2),
+            "abs_shap": round(float(abs(shap_array[i])), 2),
             # 기여 방향: 매출을 높이면 positive, 낮추면 negative
             "direction": "positive" if shap_array[i] > 0 else ("negative" if shap_array[i] < 0 else "neutral"),
         }
         for rank, i in enumerate(sorted_indices)
     ]
 
+    if not feature_importance:
+        _log("WARNING", "feature_importance 리스트 비어있음 - mock 반환")
+        result = _mock_shap_values(feature_cols, predicted_value=predicted_value)
+        result["predicted_value_unit"] = "원"
+        result["summary"] = []
+        return result
+
     _log("INFO", f"TCN SHAP 분석 완료 - 최고 기여 피처: {feature_importance[0]['feature_ko']}")
 
     return {
         "feature_importance": feature_importance,
-        "base_value": round(base_value, 6),
+        "base_value": round(base_value, 2),
         "predicted_value": round(predicted_value, 2),
         "predicted_value_unit": "원",  # 매출 단위 명시 (생존률과 구별)
         "summary": _generate_tcn_summary(feature_importance),

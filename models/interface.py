@@ -159,7 +159,12 @@ def _run_gru_forecast(dong_code: str, industry_code: str) -> dict:
 
 
 def _get_latest_store_count(dong_code: str, industry_code: str) -> int:
-    """해당 동×업종의 최신 분기 store_count 반환. 조회 실패 시 1."""
+    """해당 동×업종의 최신 분기 점포 수 반환. 조회 실패 시 1.
+
+    store_count와 franchise_count 중 큰 값을 사용한다.
+    공식 통계에서 franchise_count > store_count 인 데이터 오류(주로 치킨·호프 업종)가
+    존재하므로, MAX로 하한선을 보정한다.
+    """
     try:
         from models.lstm_forecast.data_prep import load_store_data
 
@@ -172,7 +177,9 @@ def _get_latest_store_count(dong_code: str, industry_code: str) -> int:
         if subset.empty:
             return 1
         latest = subset.sort_values("quarter").iloc[-1]
-        return max(int(latest.get("store_count", 1)), 1)
+        store_cnt = int(latest.get("store_count", 1) or 1)
+        franchise_cnt = int(latest.get("franchise_count", 0) or 0)
+        return max(store_cnt, franchise_cnt, 1)
     except Exception as exc:
         logger.warning("store_count 조회 실패 (1로 대체): %s", exc)
         return 1
@@ -536,13 +543,13 @@ class ModelOutput:
         # ---- dong_name 조회 ----
         dong_name = _resolve_dong_name(dong_code) if not use_mock else dong_code
 
-        # ---- 6) [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN) ----
-        # predict_peak(dong_name, n_quarters) 사용 — 24시간대 × 분기별 피크 시간 산출.
-        # 가중치/스케일러 부재 또는 데이터 부족 시 graceful degradation (None).
+        # ---- 6) [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (naive lag-1) ----
+        # predict_peak_naive(dong_name, n_quarters) 사용 — 24시간대 × 분기별 피크 시간 산출.
+        # predict_naive 사용 (DB lag-1, 가중치 불필요). TCN v2 가중치 미존재로 predict 대신 사용.
         living_pop_result: dict | None = None
         try:
-            from models.living_pop_forecast.predict import (
-                predict_peak as _predict_peak,
+            from models.living_pop_forecast.predict_naive import (
+                predict_peak_naive as _predict_peak,
             )
 
             quarters_pred = _predict_peak(dong_name, n_quarters=4)
@@ -561,16 +568,41 @@ class ModelOutput:
             logger.warning("유동인구 피크 예측 실패 (건너뜀): %s", exc)
             living_pop_result = None
 
-        # ---- 7) [E — emerging_district P1-E] 신흥 상권 조기 감지 (LSTM Autoencoder) ----
+        # ---- 7) [E — emerging_district P1-E] 신흥 상권 조기 감지 ----
+        # Production: 4-tier fallback (change_ix → classifier → B1 trend → slope)
+        # 가 signal 판정의 1차 소스 (change_ix=서울시 공식 ground truth, classifier F1=0.87).
+        # autoencoder는 anomaly_score / consecutive_anomaly_quarters 보강용 (프론트 호환).
         emerging_result: dict | None = None
         try:
-            from models.emerging_district.predict import predict as _predict_emerging
+            from models.emerging_district.predict import predict as _predict_ae
+            from models.emerging_district.predict_fallback import predict_emerging_4tier
 
-            emerging_result = dict(_predict_emerging(dong_code, industry_code))
+            fallback = predict_emerging_4tier(dong_code, industry_code)
+
+            try:
+                ae_raw = _predict_ae(dong_code, industry_code)
+            except Exception as ae_exc:
+                logger.warning("autoencoder anomaly_score 보강 실패 (mock 사용): %s", ae_exc)
+                from models.emerging_district.predict import _mock_result as _ae_mock
+
+                ae_raw = _ae_mock(dong_code, industry_code)
+
+            emerging_result = {
+                "dong_code": dong_code,
+                "industry_code": industry_code,
+                "signal": fallback["signal"],
+                "anomaly_score": float(ae_raw.get("anomaly_score", 0.5)),
+                "consecutive_anomaly_quarters": int(ae_raw.get("consecutive_anomaly_quarters", 0)),
+                "summary": fallback["summary"],
+                "tier": fallback["tier"],
+                "raw": fallback["raw"],
+                "is_mock": fallback["tier"] == "none",
+            }
             logger.info(
-                "신흥 상권 감지 완료 — signal=%s anomaly=%.3f",
-                emerging_result.get("signal"),
-                emerging_result.get("anomaly_score", 0.0),
+                "신흥 상권 감지 완료 — tier=%s signal=%s anomaly=%.3f",
+                fallback["tier"],
+                fallback["signal"],
+                emerging_result["anomaly_score"],
             )
         except Exception as exc:
             logger.warning("신흥 상권 감지 실패 (건너뜀): %s", exc)

@@ -75,6 +75,7 @@ def _ls_attach_usage(input_tokens: int = 0, output_tokens: int = 0, model: str |
     except Exception:
         pass
 
+
 if TYPE_CHECKING:
     from .agents import Agent
     from .memory_index import PgVectorMemory
@@ -203,11 +204,14 @@ class LLMBrain:
         try:
             from langsmith.wrappers import wrap_openai as _wrap_openai
         except Exception:
+
             def _wrap_openai(c):
                 return c
+
         try:
             from langsmith.wrappers import wrap_anthropic as _wrap_anthropic
         except Exception:
+
             def _wrap_anthropic(c):
                 return c
 
@@ -403,6 +407,326 @@ class LLMBrain:
                 return self._mock_decide(agent, world, tier="S")
         # 도달 불가 — for loop 의 모든 path 가 return. 정적 분석기 fallback 용.
         return self._mock_decide(agent, world, tier="S")
+
+    # -----------------------------------------------------------
+    # Tier S 배치 의사결정 — N agents 한 prompt 에 묶어 1 호출.
+    # 호출 수 ~10x 감소 + LangSmith trace 정리.
+    # OpenAI provider 만 우선 지원, 그 외에는 single-call 자동 fallback.
+    # -----------------------------------------------------------
+    BATCH_SIZE_TIER_S = 10
+
+    def batch_smart_decide(self, agents: list["Agent"], world: "World") -> list[tuple[int, "Decision"]]:
+        """Tier S 다수 agent 를 BATCH_SIZE 청크로 묶어 LLM 호출.
+
+        반환: [(agent_id, Decision), ...] — 입력 순서 보존 보장 X
+        실패 시: 각 agent single-call fallback.
+        """
+        if not agents:
+            return []
+
+        # mock 또는 OpenAI 외 provider → 기존 single-call 경로 사용
+        if self.cfg.mock_mode or self._openai is None or self.cfg.tier_s_provider != "openai":
+            return [(a.agent_id, self.smart_decide(a, world)) for a in agents]
+
+        results: list[tuple[int, "Decision"]] = []
+        for i in range(0, len(agents), self.BATCH_SIZE_TIER_S):
+            chunk = agents[i : i + self.BATCH_SIZE_TIER_S]
+            results.extend(self._batch_smart_decide_openai(chunk, world))
+        return results
+
+    @traceable(run_type="llm", name="brain.tier_s.batch.openai")
+    def _batch_smart_decide_openai(self, agents: list["Agent"], world: "World") -> list[tuple[int, "Decision"]]:
+        # agent별 user block — 페르소나 첫 줄 (lifestyle) + dynamic ctx
+        user_blocks: list[str] = []
+        for a in agents:
+            persona = self.personas.get(a.agent_id)
+            ctx = self._dynamic_context(a, world)
+            # full_profile 첫 1~2 줄만 (batch 토큰 폭발 방지). 약 ~120 자 cap
+            persona_brief = ""
+            if persona is not None:
+                first = persona.full_profile.split("\n", 1)[0]
+                persona_brief = first[:200]
+            user_blocks.append(f"#{a.agent_id} | {persona_brief}\n{ctx}")
+
+        user_prompt = (
+            "\n\n".join(user_blocks) + "\n\n각 agent 결정을 JSON 객체 {decisions:[...]} 로 반환. "
+            'item: {"agent_id":int,"action":"visit|move|rest","category":"카페|음식점|편의점|주점|null",'
+            '"target_dong":str,"spend":int,"reason":"30자 fragment"}. '
+            "agent 마다 다른 카테고리/이유 — 다양성 우선, 같은 패턴 반복 금지."
+        )
+        system_prompt = (
+            "마포구 ABM 시뮬레이터. 다음 N명의 페르소나·컨텍스트를 보고 "
+            "각 agent 의 한 시점 결정을 한 번에 JSON 으로 반환하라."
+        )
+
+        # stat 누적은 호출당 N 만큼
+        self.stats.tier_s_calls += len(agents)
+
+        # max_tokens — agent 1명당 ~80 tok 응답 가정 (cfg.tier_s_max_tokens 그대로 사용)
+        per_agent = max(80, self.cfg.tier_s_max_tokens)
+        max_out = min(8192, per_agent * len(agents) + 200)
+
+        delay = 0.5
+        for attempt in range(3):
+            try:
+                resp = self._openai.chat.completions.create(
+                    model=self.cfg.tier_s_model,
+                    max_tokens=max_out,
+                    temperature=0.5,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                usage = resp.usage
+                self.stats.tier_s_input_tokens += getattr(usage, "prompt_tokens", 0) or 0
+                self.stats.tier_s_output_tokens += getattr(usage, "completion_tokens", 0) or 0
+                cached = 0
+                try:
+                    cached = usage.prompt_tokens_details.cached_tokens or 0
+                except Exception:
+                    pass
+                self.stats.tier_s_cache_read += cached
+                text = resp.choices[0].message.content or ""
+                return self._parse_batch_decisions(text, agents, world)
+            except Exception as e:
+                msg = str(e)
+                is_rate_limit = "429" in msg or "rate_limit" in msg or "RateLimit" in type(e).__name__
+                if is_rate_limit and attempt < 2:
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                self.stats.failures += 1
+                print(f"[brain.S/batch] 실패: {e} — single-call fallback")
+                return [(a.agent_id, self._mock_decide(a, world, tier="S")) for a in agents]
+        return [(a.agent_id, self._mock_decide(a, world, tier="S")) for a in agents]
+
+    def _parse_batch_decisions(self, text: str, agents: list["Agent"], world: "World") -> list[tuple[int, "Decision"]]:
+        """JSON 응답 → (agent_id, Decision) 목록.
+
+        파싱 실패한 agent 는 _mock_decide 로 fallback (single-call 재호출 X — 무한 루프 회피).
+        """
+        items: list = []
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                # 기대 key 우선순위: decisions / agents / 첫 list 값
+                for k in ("decisions", "agents", "results"):
+                    v = data.get(k)
+                    if isinstance(v, list):
+                        items = v
+                        break
+                else:
+                    for v in data.values():
+                        if isinstance(v, list):
+                            items = v
+                            break
+        except Exception as e:
+            print(f"[brain.S/batch] JSON parse 실패: {e}")
+
+        by_id: dict[int, dict] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            aid = item.get("agent_id")
+            try:
+                by_id[int(aid)] = item
+            except (TypeError, ValueError):
+                continue
+
+        results: list[tuple[int, "Decision"]] = []
+        for a in agents:
+            item = by_id.get(a.agent_id)
+            if item is None:
+                results.append((a.agent_id, self._mock_decide(a, world, tier="S")))
+                continue
+            try:
+                text_one = json.dumps(item, ensure_ascii=False)
+                dec = self._parse_decision(text_one, a, world)
+            except Exception:
+                dec = self._mock_decide(a, world, tier="S")
+            results.append((a.agent_id, dec))
+        return results
+
+    # -----------------------------------------------------------
+    # Hierarchical Planning (Stanford Generative Agents UIST'23 적용)
+    # 시뮬 시작 시 Tier S agent 의 하루 일정을 batch 로 1회 생성.
+    # plan 이 있는 hour 는 LLM 호출 없이 슬롯 → Decision 변환.
+    # 효과: LLM 호출 추가 절감 + 일관성 ↑ (점심 한 번만 등 paper 핵심)
+    # -----------------------------------------------------------
+    BATCH_SIZE_PLAN = 10
+
+    def generate_daily_plans_batch(self, agents: list["Agent"], world: "World") -> dict[int, list[dict]]:
+        """Tier S agents 에게 하루 일정 생성 (batch). 반환: agent_id → schedule."""
+        if not agents:
+            return {}
+        if self.cfg.mock_mode or self._openai is None or self.cfg.tier_s_provider != "openai":
+            return {}
+
+        plans: dict[int, list[dict]] = {}
+        for i in range(0, len(agents), self.BATCH_SIZE_PLAN):
+            chunk = agents[i : i + self.BATCH_SIZE_PLAN]
+            plans.update(self._generate_daily_plans_openai(chunk, world))
+        return plans
+
+    @traceable(run_type="llm", name="brain.tier_s.plan.openai")
+    def _generate_daily_plans_openai(self, agents: list["Agent"], world: "World") -> dict[int, list[dict]]:
+        user_blocks: list[str] = []
+        for a in agents:
+            persona = self.personas.get(a.agent_id)
+            persona_brief = ""
+            if persona is not None:
+                first = persona.full_profile.split("\n", 1)[0]
+                persona_brief = first[:200]
+            user_blocks.append(
+                f"#{a.agent_id} | home={a.home_dong}, age={a.age}, role={a.role.value} | {persona_brief}"
+            )
+
+        wkd_label = "주말" if getattr(world, "is_weekend", False) else "평일"
+        weather = getattr(world, "weather", "맑음")
+        user_prompt = (
+            "\n".join(user_blocks)
+            + f"\n\n오늘={wkd_label}, 날씨={weather}. "
+            + "각 agent 의 하루 일정을 6시~26시 (=익일 02시) 시간 슬롯으로 생성. "
+            + 'JSON {"plans":[{"agent_id":int,"schedule":[{"start":int,"end":int,"action":str,'
+            + '"dong":str,"category":str|null,"reason":"30자 fragment"}]}]}.\n'
+            + "action: work|visit|rest|move 중 하나.\n"
+            + "category (visit 슬롯만): 카페|음식점|편의점|주점.\n"
+            + "agent 페르소나·home_dong 반영. 점심·저녁·휴식 자연스럽게 분배. "
+            + "슬롯 6~10개. 시간 겹치지 않게 연속 배치. 같은 카테고리 3회 이상 반복 금지."
+        )
+        system_prompt = (
+            "마포구 ABM 시뮬레이터. N명 페르소나의 하루 일정을 시간 슬롯으로 한 번에 생성. "
+            "Stanford Generative Agents 의 hierarchical planning 패턴: 일관된 활동 흐름을 보장해 "
+            "에이전트가 점심을 두 번 먹는 등의 비현실적 행동을 차단."
+        )
+
+        # plan 호출도 stat 카운트 — 토큰 추적용
+        self.stats.tier_s_calls += len(agents)
+        # plan 1개 당 ~400 tok 응답 가정. 헤드 200 tok 여유.
+        max_out = min(8192, 400 * len(agents) + 200)
+
+        try:
+            resp = self._openai.chat.completions.create(
+                model=self.cfg.tier_s_model,
+                max_tokens=max_out,
+                temperature=0.7,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            usage = resp.usage
+            self.stats.tier_s_input_tokens += getattr(usage, "prompt_tokens", 0) or 0
+            self.stats.tier_s_output_tokens += getattr(usage, "completion_tokens", 0) or 0
+            text = resp.choices[0].message.content or ""
+            return self._parse_daily_plans(text, agents)
+        except Exception as e:
+            print(f"[brain.S/plan] 실패: {e}")
+            self.stats.failures += 1
+            return {}
+
+    def _parse_daily_plans(self, text: str, agents: list["Agent"]) -> dict[int, list[dict]]:
+        """plan JSON → agent_id → 슬롯 list. 잘못된 슬롯은 skip."""
+        items: list = []
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                for k in ("plans", "agents", "schedules"):
+                    v = data.get(k)
+                    if isinstance(v, list):
+                        items = v
+                        break
+                else:
+                    for v in data.values():
+                        if isinstance(v, list):
+                            items = v
+                            break
+            elif isinstance(data, list):
+                items = data
+        except Exception as e:
+            print(f"[brain.S/plan] JSON parse 실패: {e}")
+            return {}
+
+        valid_actions = {"visit", "move", "rest", "work"}
+        valid_cats = {"카페", "음식점", "편의점", "주점", None}
+        out: dict[int, list[dict]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                aid = int(item.get("agent_id"))
+            except (TypeError, ValueError):
+                continue
+            schedule = item.get("schedule") or item.get("slots") or []
+            if not isinstance(schedule, list):
+                continue
+            valid_slots: list[dict] = []
+            for slot in schedule:
+                if not isinstance(slot, dict):
+                    continue
+                try:
+                    start = int(slot.get("start", -1))
+                    end = int(slot.get("end", -1))
+                except (TypeError, ValueError):
+                    continue
+                if start < 0 or end <= start or end > 30:
+                    continue
+                action = slot.get("action", "rest")
+                if action not in valid_actions:
+                    action = "rest"
+                cat = slot.get("category")
+                if cat == "":
+                    cat = None
+                if cat not in valid_cats:
+                    cat = None
+                valid_slots.append(
+                    {
+                        "start": start,
+                        "end": end,
+                        "action": action,
+                        "dong": (slot.get("dong") or "").strip(),
+                        "category": cat,
+                        "reason": (slot.get("reason") or "")[:60],
+                    }
+                )
+            if valid_slots:
+                # 시간 정렬
+                valid_slots.sort(key=lambda s: s["start"])
+                out[aid] = valid_slots
+        return out
+
+    def decision_from_plan_slot(self, agent: "Agent", world: "World", slot: dict) -> "Decision":
+        """plan 슬롯 → Decision 변환 (LLM 호출 X)."""
+        action = slot.get("action", "rest")
+        target_dong = slot.get("dong") or agent.current_dong
+        cat = slot.get("category")
+        reason = slot.get("reason") or ""
+
+        store_id = None
+        spend = 0.0
+        if action == "visit" and cat:
+            stores = world.stores_in_dong(target_dong, cat)
+            if stores:
+                store = max(stores, key=lambda s: s.rating)
+                store_id = store.store_id
+                # 카테고리별 기본 지출 추정
+                spend = float(getattr(store, "avg_price", 0) or 8000)
+            else:
+                # 매장 없음 → action=rest fallback
+                action = "rest"
+
+        return Decision(
+            action=action,
+            target_dong=target_dong,
+            target_store_id=store_id,
+            spend=spend,
+            reason=reason,
+        )
 
     # -----------------------------------------------------------
     # Tier A: Gemini Flash 또는 OpenAI nano

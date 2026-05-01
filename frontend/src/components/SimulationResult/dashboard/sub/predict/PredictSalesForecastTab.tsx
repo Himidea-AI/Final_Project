@@ -110,7 +110,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
                 onClick={() =>
                   openModal({
                     title: 'SHAP 해석 상세',
-                    content: `SHAP (SHapley Additive exPlanations)은 각 피처가 예측값에 얼마나 기여했는지 정량화합니다.\n\nbase_value: ${shap.base_value.toLocaleString('ko-KR')}원\npredicted_value: ${shap.predicted_value.toLocaleString('ko-KR')}원${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다.' : ''}`,
+                    content: `SHAP (SHapley Additive exPlanations)은 각 피처가 예측값에 얼마나 기여했는지 정량화합니다.\n\nbase_value: ${(shap.base_value ?? 0).toLocaleString('ko-KR')}원\npredicted_value: ${(shap.predicted_value ?? 0).toLocaleString('ko-KR')}원${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다.' : ''}`,
                   })
                 }
                 className="text-[0.625rem] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1"
@@ -119,7 +119,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
               </button>
             )}
           </div>
-          {districtPreds.length > 0 ? (
+          {districtPreds.length > 0 && districtPreds.some((p) => p.shap_result !== null) ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {districtPreds.map((p) => (
                 <ShapInsightCard key={p.district} district={p.district} shap={p.shap_result} />

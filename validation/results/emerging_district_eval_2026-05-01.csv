@@ -1,0 +1,13 @@
+scope,signal_source,metric,value,n_total,n_emerging,n_declining,note
+mapo,LSTM_AE,AUC_any,0.5314,272,0,1,거의 random; 마포는 emerging transition 0건
+mapo,LSTM_AE,AUC_declining,0.5314,272,0,1,transition sample 1건 → 통계적 무의미
+mapo,B1_subway,AUC,N/A,91,0,0,merged sample 부족 (마포 emerging/declining transition 0/0)
+mapo,B1_migration_2030,AUC,0.5539,448,0,3,거의 random
+seoul,B1_subway,AUC_any,0.3660,2154,1,6,역방향 (sign이 뒤집힘 = 무의미)
+seoul,B1_subway,AUC_emerging,0.3177,2154,1,6,emerging transition 1건 only
+seoul,B1_subway,AUC_declining,0.6258,2154,1,6,약한 신호
+seoul,B1_migration_2030,AUC,0.5539,448,0,3,거의 random
+mapo_classifier,4class_change_ix,test_accuracy,0.8903,N/A,N/A,N/A,stage 분류 (HH/HL/LH/LL) — transition 검출이 아님
+mapo_classifier,4class_change_ix,macro_F1,0.8675,N/A,N/A,N/A,baseline F1 0.1912의 4.5배
+seoul,change_ix,emerging_transition_count,50,11900,6,44,서울 전체에서 50건 (0.42%) — 매우 희소 사건
+mapo,change_ix,emerging_transition_count,1,272,0,1,마포에는 emerging transition 0건
