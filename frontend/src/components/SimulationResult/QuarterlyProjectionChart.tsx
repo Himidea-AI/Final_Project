@@ -148,7 +148,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   const yPad = range * 0.18;
   const yDomain: [number, number] = zoomY
     ? [Math.max(0, dataMin - yPad), dataMax + yPad]
-    : [0, dataMax + yPad];
+    : [0, dataMax * 1.1];
 
   // ─── winner 동 4분기 평균 (reference line 용) ───
   const winnerSeries = trimmedSeries.find((s) => s.district === effectiveWinner) ?? ciSourceSeries;
@@ -232,18 +232,19 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
         <button
           type="button"
           onClick={() => setZoomY(!zoomY)}
-          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest transition-colors ${
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
             zoomY
               ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
               : 'border-border bg-card text-muted-foreground hover:bg-muted/40'
           }`}
           aria-pressed={zoomY}
+          aria-label={zoomY ? 'Y축 자동 줌 ON — 클릭하여 OFF' : 'Y축 자동 줌 OFF — 클릭하여 ON'}
           title={zoomY ? '0 기준선으로 보기' : '데이터 영역으로 확대 보기'}
         >
           <span
             className={`h-1 w-1 rounded-full ${zoomY ? 'bg-primary' : 'bg-muted-foreground'}`}
           />
-          {zoomY ? 'Y축 확대 · 0 미표시' : '0 기준'}
+          {zoomY ? 'Y축 자동 줌: ON' : 'Y축 자동 줌: OFF'}
         </button>
         {hasMockQuarters && (
           <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning">

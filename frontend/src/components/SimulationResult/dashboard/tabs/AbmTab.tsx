@@ -218,7 +218,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
 
       {/* 지도 / ABM 뷰 */}
       {mode === 'map' ? (
-        <div className="bg-card/30 border border-border rounded-3xl p-4">
+        <div className="bg-card border border-border rounded-3xl p-4">
           <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">
             <h4 className="text-xs font-black text-foreground flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,44,209,0.8)]" />

@@ -10,21 +10,22 @@ import type { ClosureRiskSignal } from '../../../../types';
 interface Props {
   signals: ClosureRiskSignal[] | undefined;
   title: string;
-  /** 라벨 색상 토큰 (LightGBM=indigo, TCN=cyan 등) */
-  accent?: 'indigo' | 'cyan';
+  /** 라벨 색상 — LightGBM(과거 패턴, chart-1 deep blue) / TCN(시계열 흐름, chart-3 teal). 12색 토큰 SoT. */
+  accent?: 'lgbm' | 'tcn';
 }
 
-export function ClosureSignalsBar({ signals, title, accent = 'indigo' }: Props) {
+export function ClosureSignalsBar({ signals, title, accent = 'lgbm' }: Props) {
   if (!signals || signals.length === 0) {
     return null;
   }
 
   const top = signals.slice(0, 5);
   const maxAbs = Math.max(...top.map((s) => Math.abs(s.contribution)), 0.0001);
-  const accentClass = accent === 'cyan' ? 'text-primary' : 'text-primary';
+  // 두 모델 시각 분리 — LightGBM = primary(deep blue, brand), TCN = chart-3(teal green)
+  const accentClass = accent === 'tcn' ? 'text-chart-3' : 'text-primary';
 
   return (
-    <div className="mt-3 rounded-lg border border-border/60 bg-card/40 p-4">
+    <div className="mt-3 rounded-lg border border-border bg-secondary p-4">
       <div className={`text-[0.625rem] font-black uppercase tracking-widest mb-3 ${accentClass}`}>
         {title}
       </div>

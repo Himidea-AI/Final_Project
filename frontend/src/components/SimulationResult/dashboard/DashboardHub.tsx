@@ -8,17 +8,11 @@
  *   - 함수: in-page state 전환 모드 (button onClick). HistoryDashboardView 에서 사용.
  */
 
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import type { SimulationOutput } from '../../../types';
 import { formatDocumentId } from '../../../types/simulationHistory';
 import { useSimulationStore } from '../../../stores/simulationStore';
-import { useAuth } from '../../../auth/AuthContext';
-import { useSaveSimulation } from '../../../hooks/useSaveSimulation';
-import { useToast } from '../../Toast';
-import { SaveButton } from '../../SimulationHistory/SaveButton';
-import { SaveDialog } from '../../SimulationHistory/SaveDialog';
 import { HubCard } from './HubCard';
 
 export type HubView = 'predict' | 'analyze' | 'abm';
@@ -97,44 +91,9 @@ export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }:
     navigate('/simulator');
   };
 
-  // 시뮬 이력 저장 — App.tsx 의 옛 SaveDialog/saveSim 패턴 (1979~2027) 을 Hub 헤더로 이식.
-  // 권한 정책은 백엔드 simulation_history 가 user_type(master/manager) 기준으로 분기:
-  // 팀장 저장 → 팀장만 조회, 매니저 저장 → 본인 + 같은 소속 팀장 조회.
-  const { user, brand } = useAuth();
-  const { showToast } = useToast();
-  const saveSim = useSaveSimulation();
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const isSaved = savedHistoryId != null;
-
-  const handleConfirmSave = async (clientName: string) => {
-    const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
-    const signalRaw = compIntel?.['market_entry_signal'];
-    const signal =
-      signalRaw === 'green' || signalRaw === 'yellow' || signalRaw === 'red' ? signalRaw : null;
-    const verdictSummary =
-      simResult.ai_recommendation?.split(/[.!?。]/)[0]?.slice(0, 200) ??
-      simResult.analysis_report?.slice(0, 200) ??
-      null;
-    const districtForSave = targetDongs[0] || params?.target_district || '';
-    const res = await saveSim.save({
-      client_name: clientName,
-      district: districtForSave,
-      brand_name: brand?.brand_name || user?.company_name || brandName || '브랜드 미지정',
-      business_type: bizKey || null,
-      scenario: params ? (params as unknown as Record<string, unknown>) : null,
-      simulation_result: simResult,
-      ai_verdict_summary: verdictSummary,
-      market_entry_signal: signal,
-    });
-    if (res) {
-      useSimulationStore.getState().setSavedHistoryId(res.id);
-      setSaveDialogOpen(false);
-      showToast(
-        'success',
-        `${clientName} 고객님 시뮬 이력이 저장되었습니다. (${formatDocumentId(res.id)})`,
-      );
-    }
-  };
+  // 시뮬 이력 저장 버튼은 hub 가 아닌 각 결과 페이지(예측/분석) 헤더로 분산.
+  // IM3-259 분리 호출이라 두 슬라이스가 다른 시점 도착 — "내가 보던 결과 화면" 에 저장 버튼이
+  // 있어야 UX 자연. 공통 컴포넌트: SaveSimulationActions (components/SimulationHistory/).
 
   return (
     <div className="mx-auto max-w-[1728px] px-8 pt-32 pb-12">
@@ -180,13 +139,6 @@ export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }:
             </div>
             <div className="mt-1 text-[0.6875rem] font-mono text-muted-foreground">{createdAt}</div>
           </div>
-          {/* [시뮬 이력 저장] — 저장 성공 시 Document ID 가 DRAFT → 정식 번호로 격상.
-              권한: 팀장 저장→팀장만 조회 / 매니저 저장→본인+같은 소속 팀장 조회 (백엔드 분기). */}
-          <SaveButton
-            onClick={() => setSaveDialogOpen(true)}
-            saved={isSaved}
-            label={isSaved ? `저장됨 · ${formatDocumentId(savedHistoryId ?? null)}` : undefined}
-          />
           <button
             type="button"
             onClick={handleNewSimulation}
@@ -196,22 +148,6 @@ export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }:
           </button>
         </div>
       </header>
-
-      <SaveDialog
-        open={saveDialogOpen}
-        onClose={() => {
-          setSaveDialogOpen(false);
-          saveSim.reset();
-        }}
-        meta={{
-          brandName: brand?.brand_name || user?.company_name || brandName || '브랜드',
-          district: targetDongs[0] || params?.target_district || '',
-          managerName: user?.contact_name || user?.email || '매니저',
-        }}
-        isSaving={saveSim.isSaving}
-        errorMessage={saveSim.error}
-        onConfirm={handleConfirmSave}
-      />
 
       {/* Result Modules introducer — 헤더와 3카드 그룹 사이 시각적 단절 + 다음 섹션 라벨링. */}
       <div className="mb-8 mt-10 flex items-center gap-4">
