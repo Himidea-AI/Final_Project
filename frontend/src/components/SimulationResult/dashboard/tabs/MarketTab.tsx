@@ -70,7 +70,7 @@ export function MarketTab({ simResult }: Props) {
       {/* ═══ 상단 2:1 분할: Kakao 지도 (좌) + 분석 사이드바 (우) ═══ */}
       <div className="grid grid-cols-3 gap-6">
         {/* ── 좌측: 지도 영역 (col-span-2 ≈ 67%) ── */}
-        <div className="col-span-2 bg-card border border-border/60 rounded-[40px] p-6 relative">
+        <div className="col-span-2 bg-card border border-border rounded-[40px] p-6 relative">
           <div className="flex justify-between items-start mb-4">
             <div className="min-w-0">
               <h3 className="text-lg font-black text-foreground flex items-center gap-3 italic text-left">
@@ -112,7 +112,7 @@ export function MarketTab({ simResult }: Props) {
 
       {/* ═══ 중단 Bento 2 col: Indicator + Ranking ═══ */}
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-card/40 border border-border/60 p-8 rounded-3xl flex flex-col">
+        <div className="bg-card border border-border p-8 rounded-3xl flex flex-col">
           <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
             <BarChart3 size={16} className="text-primary" /> 8대 핵심 상권 지표
           </h4>
@@ -120,7 +120,7 @@ export function MarketTab({ simResult }: Props) {
             <IndicatorGrid simResult={simResult} />
           </div>
         </div>
-        <div className="bg-card/40 border border-border/60 p-8 rounded-3xl flex flex-col">
+        <div className="bg-card border border-border p-8 rounded-3xl flex flex-col">
           <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
             <Layers size={16} className="text-primary" /> 마포구 동별 랭킹
             {winnerDistrict && (
@@ -144,7 +144,7 @@ export function MarketTab({ simResult }: Props) {
         const ranking = attrs.find((a) => a.id === 'district_ranking');
         if (!market && !population && !ranking) return null;
         return (
-          <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
+          <div className="bg-card border border-border rounded-3xl p-8">
             <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
               <Brain size={16} className="text-primary" /> 에이전트 분석 요약
             </h4>
@@ -159,7 +159,7 @@ export function MarketTab({ simResult }: Props) {
       })()}
 
       {/* ═══ Scatter: 유동인구 × 매출 상관 (가이드 #8) ═══ */}
-      <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
+      <div className="bg-card border border-border rounded-3xl p-8">
         <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
           유동인구 × 매출 상관 (16 동)
         </h4>
@@ -193,7 +193,7 @@ export function MarketTab({ simResult }: Props) {
 
       {/* ═══ HHI 경쟁 집중도 카드 (실데이터 기반) ═══ */}
       {samples.length > 0 && (
-        <div className="bg-card/40 border border-border/60 rounded-3xl p-6 grid grid-cols-3 gap-6">
+        <div className="bg-card border border-border rounded-3xl p-6 grid grid-cols-3 gap-6">
           <div className="text-left">
             <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
               HHI 집중도 지수
@@ -281,7 +281,7 @@ function MarketAnalysisSidebar({
   ];
 
   return (
-    <aside className="col-span-1 bg-card/60 border border-border/40 rounded-[32px] p-6 flex flex-col gap-5 min-w-0">
+    <aside className="col-span-1 bg-card border border-border rounded-[32px] p-6 flex flex-col gap-5 min-w-0">
       {/* ─ 섹션 1: 분석 결과 ─ */}
       <section>
         <h4 className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-[0.2em] mb-4">
@@ -301,7 +301,7 @@ function MarketAnalysisSidebar({
         </ul>
       </section>
 
-      <div className="border-t border-border/40" />
+      <div className="border-t border-border" />
 
       {/* ─ 섹션 2: 분석 근거 ─ */}
       <section>
@@ -323,7 +323,7 @@ function MarketAnalysisSidebar({
         </div>
       </section>
 
-      <div className="border-t border-border/40" />
+      <div className="border-t border-border" />
 
       {/* ─ 섹션 3: 주요 경쟁점 ─ */}
       <section className="flex-1 min-h-0">

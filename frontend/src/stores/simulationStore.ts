@@ -108,9 +108,11 @@ function stageFor(progress: number): string {
   return current;
 }
 
-// sessionStorage persist — F5 새로고침 시 result 복원, 탭 닫으면 자연 휘발(DRAFT 의도 유지).
-// status='running'/'error' 상태는 idle로 강제 복원 — 진행 중이던 timer/abortController는
-// in-memory 전용이라 복원 시 가짜 진행률에 멈춤. result만 살아있는 'done' 케이스만 복원 의미가 있다.
+// localStorage persist — F5/탭 닫기/직접 URL 진입(/dashboard/predict 북마크 등) 시도 result 복원.
+//   2026-05-02: sessionStorage → localStorage 전환. /dashboard 직접 URL 진입 시 simulator 로
+//   redirect 되던 UX 문제 해결 (DashboardOutlet null guard + sessionStorage 휘발 조합).
+//   status='done' 일 때만 partialize 라 outdated 위험 낮음 — dismiss/새 시뮬로 자연 cleanup.
+//   running/error 상태는 idle로 강제 복원 (in-memory timer/abortController 라 진행률 가짜 stuck 방지).
 export const useSimulationStore = create<SimulationState>()(
   persist(
     (set, get) => ({
@@ -273,7 +275,7 @@ export const useSimulationStore = create<SimulationState>()(
     }),
     {
       name: 'mapo-simulation-store',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       // 'done' 상태에서 result/params/savedHistoryId만 직렬화. running/error는 idle로 강제.
       // _abortController, _progressTimer는 비-직렬화 (반환에서 자동 제외).
       partialize: (state) => ({

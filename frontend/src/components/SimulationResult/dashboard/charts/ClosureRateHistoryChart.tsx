@@ -45,6 +45,18 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
     rate: Number((r * 100).toFixed(2)),
   }));
 
+  // Y축 auto-zoom — 실제 값 범위 기준 [min - pad, max + pad]. min === max 이면 [0, max * 1.5].
+  const rateValues = data.map((d) => d.rate);
+  const dataMin = Math.min(...rateValues);
+  const dataMax = Math.max(...rateValues);
+  const yDomain: [number, number] =
+    dataMin === dataMax
+      ? [0, dataMax * 1.5 || 1]
+      : [
+          Math.max(0, dataMin - Math.max((dataMax - dataMin) * 0.15, 1)),
+          dataMax + Math.max((dataMax - dataMin) * 0.15, 1),
+        ];
+
   return (
     <div className="mt-3 rounded-lg border border-border bg-secondary p-4">
       <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground mb-3">
@@ -65,8 +77,8 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
           <YAxis
             tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
             axisLine={{ stroke: 'var(--border)' }}
-            tickFormatter={(v) => `${v}%`}
-            domain={[0, (max: number) => Math.max(60, Math.ceil(max / 10) * 10)]}
+            tickFormatter={(v: number) => `${v.toFixed(1)}%`}
+            domain={yDomain}
           />
           <Tooltip
             cursor={{ stroke: 'var(--border)' }}
@@ -102,6 +114,9 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
           />
         </LineChart>
       </ResponsiveContainer>
+      <p className="mt-2 text-[0.625rem] text-muted-foreground">
+        Y축 자동 줌 — 실제 값 범위에 맞춤
+      </p>
     </div>
   );
 }

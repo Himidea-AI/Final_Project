@@ -83,7 +83,7 @@ export function PredictFinancialSimTab({ simResult }: Props) {
           <div className="rounded-3xl border border-border bg-card p-8">
             <div className="mb-8 flex items-start justify-between gap-6">
               <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
-                <History className="text-primary" /> 동별 12개월 폐업률 추이
+                <History className="text-primary" /> 동별 최근 4분기 폐업률 추이
               </h3>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

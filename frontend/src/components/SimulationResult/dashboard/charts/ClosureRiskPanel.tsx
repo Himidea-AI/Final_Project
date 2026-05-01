@@ -51,6 +51,7 @@ export function ClosureRiskPanel({ closure, district }: Props) {
         label="위험 점수"
         thresholds={[30, 60]}
         polarity="lower-better"
+        unit="점"
       />
 
       {/* 2026-04-27: closure_risk가 LightGBM(과거 패턴) + TCN(시계열) 두 모델 결과를 별도 노출 */}
@@ -68,7 +69,7 @@ export function ClosureRiskPanel({ closure, district }: Props) {
       <ClosureSignalsBar
         signals={closure.top_signals_lgbm}
         title="LightGBM 기여 피처 (과거 패턴)"
-        accent="indigo"
+        accent="lgbm"
       />
       {closure.summary_tcn && closure.summary_tcn.length > 0 && (
         <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
@@ -84,7 +85,7 @@ export function ClosureRiskPanel({ closure, district }: Props) {
       <ClosureSignalsBar
         signals={closure.top_signals_tcn}
         title="TCN 기여 피처 (시계열 흐름)"
-        accent="cyan"
+        accent="tcn"
       />
       {(!closure.summary_lgbm || closure.summary_lgbm.length === 0) &&
         (!closure.summary_tcn || closure.summary_tcn.length === 0) &&

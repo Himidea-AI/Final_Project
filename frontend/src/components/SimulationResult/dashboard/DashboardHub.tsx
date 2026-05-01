@@ -91,6 +91,10 @@ export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }:
     navigate('/simulator');
   };
 
+  // 시뮬 이력 저장 버튼은 hub 가 아닌 각 결과 페이지(예측/분석) 헤더로 분산.
+  // IM3-259 분리 호출이라 두 슬라이스가 다른 시점 도착 — "내가 보던 결과 화면" 에 저장 버튼이
+  // 있어야 UX 자연. 공통 컴포넌트: SaveSimulationActions (components/SimulationHistory/).
+
   return (
     <div className="mx-auto max-w-[1728px] px-8 pt-32 pb-12">
       {/* header height 는 우측 박스 (DOC ID + 새 시뮬 버튼) 자연 높이(~44px)에 의해 결정.
@@ -128,7 +132,7 @@ export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }:
             </div>
           )}
         </div>
-        <div className="flex items-end gap-8">
+        <div className="flex items-end gap-6">
           <div className="text-right">
             <div className="text-[0.6875rem] font-mono uppercase tracking-widest text-muted-foreground">
               {docId}

@@ -85,6 +85,9 @@ EXTRA_FEATURES = [
     "holiday_count",  # 분기 내 공휴일 수 (holiday_calendar)
     "bus_flpop",  # 동별 분기 버스 승하차 집계 (bus_boarding_daily)
     "adstrd_flpop",  # 행정동 분기 유동인구 (seoul_adstrd_flpop.total_flpop — 서울 전체 동 커버)
+    "opr_sale_mt_avg",  # 동 단위 월평균 개업 수 (seoul_adstrd_change_ix)
+    "cls_sale_mt_avg",  # 동 단위 월평균 폐업 수 (seoul_adstrd_change_ix)
+    "industry_trend",  # 업종별 네이버 검색 트렌드 (naver_trend_industry)
 ]
 
 GOLMOK_FEATURES = [
@@ -467,6 +470,21 @@ def _impute_missing(
         )
         df["adstrd_flpop"] = df["adstrd_flpop"].fillna(0)
 
+    # opr_sale_mt_avg / cls_sale_mt_avg: 동별 선형 보간 후 0 대체
+    for _new_feat in ("opr_sale_mt_avg", "cls_sale_mt_avg"):
+        if _new_feat in df.columns:
+            df[_new_feat] = df.groupby("dong_code")[_new_feat].transform(
+                lambda x: x.interpolate(method="linear", limit_direction="both")
+            )
+            df[_new_feat] = df[_new_feat].fillna(0)
+
+    # industry_trend: 업종별 선형 보간 후 0 대체
+    if "industry_trend" in df.columns:
+        df["industry_trend"] = df.groupby("industry_code")["industry_trend"].transform(
+            lambda x: x.interpolate(method="linear", limit_direction="both")
+        )
+        df["industry_trend"] = df["industry_trend"].fillna(0)
+
     # 나머지 피처: fillna(0)
     if feature_cols is None:
         feature_cols = ALL_FEATURES
@@ -690,6 +708,71 @@ def build_timeseries(
     else:
         df["adstrd_flpop"] = 0.0
 
+    # ── 신규 피처: opr_sale_mt_avg, cls_sale_mt_avg (seoul_adstrd_change_ix) ──
+    try:
+        from sqlalchemy import create_engine
+
+        engine = create_engine(DB_URL + "?connect_timeout=3", echo=False)
+        change_df = pd.read_sql(
+            """
+            SELECT
+                quarter,
+                dong_code,
+                AVG(opr_sale_mt_avg) AS opr_sale_mt_avg,
+                AVG(cls_sale_mt_avg) AS cls_sale_mt_avg
+            FROM seoul_adstrd_change_ix
+            GROUP BY quarter, dong_code
+            """,
+            engine,
+        )
+        engine.dispose()
+        change_df["dong_code"] = change_df["dong_code"].astype(str)
+        change_df["quarter"] = change_df["quarter"].astype(int)
+        if "quarter" in df.columns and "dong_code" in df.columns:
+            df = df.merge(change_df, on=["quarter", "dong_code"], how="left")
+    except Exception:
+        df["opr_sale_mt_avg"] = 0.0
+        df["cls_sale_mt_avg"] = 0.0
+
+    # ── 신규 피처: industry_trend (naver_trend_industry) ──
+    try:
+        from sqlalchemy import create_engine
+
+        engine = create_engine(DB_URL + "?connect_timeout=3", echo=False)
+        naver_df = pd.read_sql(
+            """
+            SELECT
+                industry,
+                (EXTRACT(YEAR FROM period)::int * 10
+                 + EXTRACT(QUARTER FROM period)::int) AS quarter,
+                AVG(ratio) AS industry_trend
+            FROM naver_trend_industry
+            GROUP BY industry, quarter
+            """,
+            engine,
+        )
+        engine.dispose()
+        naver_df["quarter"] = naver_df["quarter"].astype(int)
+        _CS_TO_NAVER_LOCAL: dict[str, str] = {
+            "CS100001": "한식",
+            "CS100002": "중식",
+            "CS100003": "일식",
+            "CS100004": "양식",
+            "CS100005": "제과",
+            "CS100006": "패스트푸드",
+            "CS100007": "치킨",
+            "CS100008": "분식",
+            "CS100009": "호프",
+            "CS100010": "커피",
+        }
+        if "industry_code" in df.columns:
+            df["_naver_industry"] = df["industry_code"].map(_CS_TO_NAVER_LOCAL)
+            naver_df = naver_df.rename(columns={"industry": "_naver_industry"})
+            df = df.merge(naver_df, on=["quarter", "_naver_industry"], how="left")
+            df = df.drop(columns=["_naver_industry"], errors="ignore")
+    except Exception:
+        df["industry_trend"] = 0.0
+
     # 코로나 시기 가중치 (2020~2021 → 0.5, 나머지 → 1.0)
     if "quarter" in df.columns:
         year = df["quarter"] // 10
@@ -712,9 +795,10 @@ def build_timeseries(
 def prepare_sequences(
     data: pd.DataFrame,
     window_size: int = 4,
+    output_size: int = 1,
     target_col: str = "monthly_sales",
     feature_cols: list[str] | None = None,
-) -> tuple[np.ndarray, np.ndarray, MinMaxScaler, MinMaxScaler]:
+) -> tuple:
     """시계열 데이터를 LSTM 입력 시퀀스로 변환한다.
 
     (dong_code, industry_code) 그룹별로 sliding window를 적용하여
@@ -726,6 +810,8 @@ def prepare_sequences(
         ``build_timeseries()`` 의 출력.
     window_size : int
         입력 시퀀스 길이 (분기 수).
+    output_size : int
+        예측 스텝 수. DMS=4, 기존 단일스텝=1 (기본값 1 → 하위 호환).
     target_col : str
         예측 대상 컬럼.
     feature_cols : list[str], optional
@@ -734,9 +820,11 @@ def prepare_sequences(
     Returns
     -------
     X : np.ndarray, shape ``(N, window_size, n_features)``
-    y : np.ndarray, shape ``(N, 1)``
+    y : np.ndarray, shape ``(N, output_size)``
     feature_scaler : MinMaxScaler
     target_scaler : MinMaxScaler
+    w : np.ndarray, shape ``(N,)``
+    first_pred_quarters : np.ndarray, shape ``(N,)``
     """
     if feature_cols is None:
         feature_cols = [c for c in ALL_FEATURES if c in data.columns]
@@ -763,6 +851,7 @@ def prepare_sequences(
     X_list: list[np.ndarray] = []
     y_list: list[np.ndarray] = []
     w_list: list[float] = []
+    first_pred_quarters_list: list[int] = []
     has_weight = "sample_weight" in data.columns
 
     groups = data.groupby(["dong_code", "industry_code"])
@@ -770,17 +859,19 @@ def prepare_sequences(
         # 극단적 이상치 조합 제외
         if (str(dong_code), str(industry_code)) in EXCLUDE_COMBOS:
             continue
-        if len(group) <= window_size:
+        if len(group) < window_size + output_size:
             continue
 
         feat_vals = feature_scaler.transform(group[feature_cols].values.astype(np.float32))
         tgt_vals = target_scaler.transform(group[[target_col]].values.astype(np.float32))
         weights = group["sample_weight"].values if has_weight else np.ones(len(group))
+        quarter_vals = group["quarter"].values
 
-        for i in range(len(group) - window_size):
+        for i in range(len(group) - window_size - output_size + 1):
             X_list.append(feat_vals[i : i + window_size])
-            y_list.append(tgt_vals[i + window_size])
+            y_list.append(tgt_vals[i + window_size : i + window_size + output_size].flatten())
             w_list.append(float(weights[i + window_size]))
+            first_pred_quarters_list.append(int(quarter_vals[i + window_size]))
 
     if not X_list:
         raise ValueError(f"시퀀스를 생성할 수 없습니다. window_size={window_size}보다 긴 시계열 그룹이 없습니다.")
@@ -788,8 +879,9 @@ def prepare_sequences(
     X = np.array(X_list, dtype=np.float32)
     y = np.array(y_list, dtype=np.float32)
     w = np.array(w_list, dtype=np.float32)
+    first_pred_quarters = np.array(first_pred_quarters_list, dtype=np.int32)
 
-    return X, y, feature_scaler, target_scaler, w
+    return X, y, feature_scaler, target_scaler, w, first_pred_quarters
 
 
 # ---------------------------------------------------------------------------
@@ -875,9 +967,11 @@ def prepare_dataloaders(
     logger.info("시계열 DataFrame 크기: %s", ts.shape)
 
     # 시퀀스 생성
-    X, y, feat_scaler, tgt_scaler, w = prepare_sequences(
+    output_size = config.get("output_size", 1)
+    X, y, feat_scaler, tgt_scaler, w, first_pred_quarters = prepare_sequences(
         ts,
         window_size=window_size,
+        output_size=output_size,
         target_col=target_col,
         feature_cols=feature_cols,
     )
@@ -885,13 +979,29 @@ def prepare_dataloaders(
 
     input_size = X.shape[2]
 
-    # Train / Val split (시간순 유지를 위해 뒤쪽을 val로 사용)
-    n_val = max(1, int(len(X) * val_ratio))
-    n_train = len(X) - n_val
-
-    X_train, X_val = X[:n_train], X[n_train:]
-    y_train, y_val = y[:n_train], y[n_train:]
-    w_train = w[:n_train]
+    # Train / Val split
+    val_quarter = config.get("val_quarter", None)
+    if val_quarter is not None:
+        val_mask = first_pred_quarters >= int(val_quarter)
+        if not np.any(~val_mask):
+            raise ValueError(f"val_quarter={val_quarter} 적용 후 학습 데이터가 없습니다.")
+        if not np.any(val_mask):
+            raise ValueError(f"val_quarter={val_quarter} 적용 후 검증 데이터가 없습니다.")
+        X_train, X_val = X[~val_mask], X[val_mask]
+        y_train, y_val = y[~val_mask], y[val_mask]
+        w_train = w[~val_mask]
+        logger.info(
+            "시간 기반 val 분할: val_quarter=%s → train=%d, val=%d",
+            val_quarter,
+            len(X_train),
+            len(X_val),
+        )
+    else:
+        n_val = max(1, int(len(X) * val_ratio))
+        n_train = len(X) - n_val
+        X_train, X_val = X[:n_train], X[n_train:]
+        y_train, y_val = y[:n_train], y[n_train:]
+        w_train = w[:n_train]
 
     train_ds = TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train), torch.from_numpy(w_train))
     val_ds = TensorDataset(torch.from_numpy(X_val), torch.from_numpy(y_val))
