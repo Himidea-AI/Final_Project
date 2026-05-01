@@ -66,9 +66,6 @@ import {
 import DashboardPredictPage from './pages/dashboard/DashboardPredictPage';
 import DashboardAnalyzePage from './pages/dashboard/DashboardAnalyzePage';
 import DashboardAbmPage from './pages/dashboard/DashboardAbmPage';
-import { SaveDialog } from './components/SimulationHistory/SaveDialog';
-import { useSaveSimulation } from './hooks/useSaveSimulation';
-import { formatDocumentId } from './types/simulationHistory';
 import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
 import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
@@ -702,10 +699,6 @@ function SimulatorDashboard({
   // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
 
-  // [R4] saveDialogOpen 은 UI-only 로컬. SaveDialog → setSavedHistoryId 로 store 갱신.
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const setSavedHistoryId = useSimulationStore((s) => s.setSavedHistoryId);
-  const saveSim = useSaveSimulation();
   // 마포구 외 다른 자치구 미지원 — useState 트릭 제거하고 const 로 노출.
   // 향후 다른 구 확장 시 useState<GuName>('마포구') + setter 로 복원.
   const selectedGu = '마포구' as const;
@@ -984,7 +977,6 @@ function SimulatorDashboard({
       // 아래 setRawSimResult/setSimResult 는 마운트 복원 로직과 동일 함수 사용.
       setRawSimResult(simRes);
       setSimResult(toSimResultViewModel(simRes));
-      saveSim.reset(); // SaveDialog 에러 메시지 초기화 (store.savedHistoryId 는 startSimulation 에서 이미 null 리셋됨)
       setReportState('result');
     } catch (err) {
       console.error('Simulation failed:', err);
@@ -1018,7 +1010,6 @@ function SimulatorDashboard({
     targetTimeSlots,
     targetDayType,
     targetMonthlySales,
-    saveSim, // line 1359 saveSim.reset() 호출 — useSaveSimulation 인스턴스 변경 추적
   ]);
 
   // 로딩 UI 제거(2026-04-28)와 함께 store progress/stage 미러 useEffect도 dead → 제거.
@@ -1517,57 +1508,6 @@ function SimulatorDashboard({
           selectedLegalType={selectedLegalType}
         />
       </Suspense>
-
-      {/* 시뮬 이력 저장 다이얼로그 */}
-      <SaveDialog
-        open={saveDialogOpen}
-        onClose={() => {
-          setSaveDialogOpen(false);
-          saveSim.reset();
-        }}
-        meta={{
-          brandName: user?.company_name || simResult?.recommendation?.slice(0, 20) || '브랜드',
-          district: selectedDongs[0] || '연남동',
-          managerName: user?.contact_name || user?.email || '매니저',
-        }}
-        isSaving={saveSim.isSaving}
-        errorMessage={saveSim.error}
-        onConfirm={async (clientName) => {
-          if (!rawSimResult) return;
-          const compIntel = rawSimResult.competitor_intel as
-            | Record<string, unknown>
-            | null
-            | undefined;
-          const signalRaw = compIntel?.['market_entry_signal'];
-          const signal =
-            signalRaw === 'green' || signalRaw === 'yellow' || signalRaw === 'red'
-              ? signalRaw
-              : null;
-          const verdictSummary =
-            rawSimResult.ai_recommendation?.split(/[.!?。]/)[0]?.slice(0, 200) ??
-            rawSimResult.analysis_report?.slice(0, 200) ??
-            null;
-
-          const res = await saveSim.save({
-            client_name: clientName,
-            district: selectedDongs[0] || '연남동',
-            brand_name: brand?.brand_name || user?.company_name || '브랜드 미지정',
-            business_type: businessType,
-            scenario: null, // Phase 1: scenario 입력 UI 아직 없음
-            simulation_result: rawSimResult,
-            ai_verdict_summary: verdictSummary,
-            market_entry_signal: signal,
-          });
-          if (res) {
-            setSavedHistoryId(res.id);
-            setSaveDialogOpen(false);
-            showToast(
-              'success',
-              `${clientName} 고객님 시뮬 이력이 저장되었습니다. (${formatDocumentId(res.id)})`,
-            );
-          }
-        }}
-      />
     </div>
   );
 }
