@@ -543,13 +543,13 @@ class ModelOutput:
         # ---- dong_name 조회 ----
         dong_name = _resolve_dong_name(dong_code) if not use_mock else dong_code
 
-        # ---- 6) [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN) ----
-        # predict_peak(dong_name, n_quarters) 사용 — 24시간대 × 분기별 피크 시간 산출.
-        # 가중치/스케일러 부재 또는 데이터 부족 시 graceful degradation (None).
+        # ---- 6) [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (naive lag-1) ----
+        # predict_peak_naive(dong_name, n_quarters) 사용 — 24시간대 × 분기별 피크 시간 산출.
+        # predict_naive 사용 (DB lag-1, 가중치 불필요). TCN v2 가중치 미존재로 predict 대신 사용.
         living_pop_result: dict | None = None
         try:
-            from models.living_pop_forecast.predict import (
-                predict_peak as _predict_peak,
+            from models.living_pop_forecast.predict_naive import (
+                predict_peak_naive as _predict_peak,
             )
 
             quarters_pred = _predict_peak(dong_name, n_quarters=4)
