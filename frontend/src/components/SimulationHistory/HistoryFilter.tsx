@@ -83,22 +83,22 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
   const currentSortLabel = SORT_OPTIONS.find((o) => o.value === currentSort)?.label ?? '최신순';
 
   return (
-    <div className="rounded-xl border border-[#3a3633] bg-[#2c2825] p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-3">
         {/* 검색 */}
         <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9ca3af]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
             placeholder="고객명 검색 (부분 일치)"
-            className="w-full rounded-lg border border-[#3a3633] bg-[#1e1b18] pl-9 pr-3 py-2.5 text-sm text-[#e2e8f0] placeholder:text-[#9ca3af]/60 focus:border-[#818cf8]/60 focus:outline-none focus:ring-1 focus:ring-[#818cf8]/40 transition-colors"
+            className="w-full rounded-lg border border-border bg-card pl-9 pr-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors"
           />
         </div>
 
         {/* 기간 프리셋 — 세그먼트 스타일 */}
-        <div className="flex items-center gap-0.5 rounded-lg border border-[#3a3633] bg-[#1e1b18] p-1">
+        <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-1">
           {(
             [
               ['today', '오늘'],
@@ -117,8 +117,8 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
                 onClick={() => applyPreset(k)}
                 className={`rounded-md px-2.5 py-1.5 text-[0.6875rem] font-semibold transition-all ${
                   active
-                    ? 'bg-[#818cf8]/15 text-[#818cf8] border border-[#818cf8]/40'
-                    : 'border border-transparent text-[#9ca3af] hover:text-[#e2e8f0] hover:bg-[#3a3633]/40'
+                    ? 'bg-primary/15 text-primary border border-primary/40'
+                    : 'border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40'
                 }`}
               >
                 {label}
@@ -129,7 +129,7 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
 
         {/* 커스텀 날짜 — native date picker (접근성 + 브라우저 달력 유지) */}
         {preset === 'custom' && (
-          <div className="flex items-center gap-2 text-xs text-[#9ca3af]">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Calendar className="h-4 w-4" />
             <input
               type="date"
@@ -137,16 +137,16 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
               onChange={(e) =>
                 onChange({ ...value, from_date: e.target.value || undefined, page: 1 })
               }
-              className="rounded-lg border border-[#3a3633] bg-[#1e1b18] px-2 py-1.5 text-[#e2e8f0] focus:border-[#818cf8]/60 focus:outline-none"
+              className="rounded-lg border border-border bg-card px-2 py-1.5 text-foreground focus:border-primary/60 focus:outline-none"
             />
-            <span className="text-[#9ca3af]/70">~</span>
+            <span className="text-muted-foreground/70">~</span>
             <input
               type="date"
               value={value.to_date ?? ''}
               onChange={(e) =>
                 onChange({ ...value, to_date: e.target.value || undefined, page: 1 })
               }
-              className="rounded-lg border border-[#3a3633] bg-[#1e1b18] px-2 py-1.5 text-[#e2e8f0] focus:border-[#818cf8]/60 focus:outline-none"
+              className="rounded-lg border border-border bg-card px-2 py-1.5 text-foreground focus:border-primary/60 focus:outline-none"
             />
           </div>
         )}
@@ -156,17 +156,19 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
           <button
             type="button"
             onClick={() => setSortOpen((o) => !o)}
-            className="flex items-center gap-2 rounded-lg border border-[#3a3633] bg-[#1e1b18] px-3 py-2 text-xs text-[#e2e8f0] hover:border-[#818cf8]/50 transition-colors min-w-[170px] justify-between"
+            className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground hover:border-primary/50 transition-colors min-w-[170px] justify-between"
           >
-            <span className="text-[#9ca3af] tracking-wider uppercase text-[0.625rem]">정렬</span>
+            <span className="text-muted-foreground tracking-wider uppercase text-[0.625rem]">
+              정렬
+            </span>
             <span className="flex-1 text-left ml-2">{currentSortLabel}</span>
             <ChevronDown
               size={14}
-              className={`text-[#9ca3af] transition-transform duration-200 ${sortOpen ? 'rotate-180' : ''}`}
+              className={`text-muted-foreground transition-transform duration-200 ${sortOpen ? 'rotate-180' : ''}`}
             />
           </button>
           {sortOpen && (
-            <div className="absolute right-0 z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-[#3a3633] bg-[#2c2825] shadow-2xl">
+            <div className="absolute right-0 z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
               {SORT_OPTIONS.map((opt) => {
                 const active = currentSort === opt.value;
                 return (
@@ -178,9 +180,7 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
                       setSortOpen(false);
                     }}
                     className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                      active
-                        ? 'bg-[#818cf8]/10 text-[#818cf8]'
-                        : 'text-[#e2e8f0] hover:bg-[#3a3633]/60'
+                      active ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted/60'
                     }`}
                   >
                     {opt.label}

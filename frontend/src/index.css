@@ -3,8 +3,14 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   SPOTTER Design System — Indigo & Stone Theme (Tailwind v3)
-   v4.2 (2026-04-23) — #0C0B0A high-end dark 전역 전환
+   SPOTTER Design System — Light Mode (Tailwind v3)
+   v5.0 (2026-04-30) — Cream + 12-color palette 전역 전환
+   ───────────────────────────────────────────────────────
+   두 시스템 분리:
+   • System A — 배경/구조 6색 (warm-white / cream / black 라이트 인프라)
+       어떤 의미도 없는 중립. 라이트모드 정체성을 만드는 뼈대.
+   • System B — 12색 컬러 팔레트 (모든 유의미한 색 — 데이터/상태/액센트/장식)
+       외부에서 한 색도 안 가져옴. 새 컴포넌트는 무조건 12색 안에서만 매핑.
    ═══════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════
@@ -19,27 +25,448 @@ html {
 
 @layer base {
   :root {
-    --background: #0c0b0a;
-    --foreground: #e2e8f0;
-    --card: #1a1a1a;
-    --card-foreground: #e2e8f0;
-    --popover: #1a1a1a;
-    --popover-foreground: #e2e8f0;
-    --primary: #818cf8;
-    --primary-foreground: #0c0b0a;
-    --secondary: #292524;
-    --secondary-foreground: #d6d3d1;
-    --muted: #1a1a1a;
-    --muted-foreground: #a8a29e;
-    --accent: #44403c;
-    --accent-foreground: #d6d3d1;
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-    --border: #292524;
-    --input: #292524;
-    --ring: #818cf8;
+    /* ─── System A: 배경/구조 (의미 없는 중립 인프라) ─── */
+    --background: #f8f7e8; /* Background Cream (System B 팔레트 #1) — 전체 페이지 바닥. 카드(white)와 hue 분리로 surface elevation 형성 */
+    --foreground: #0a0a0a; /* near-black body text */
+    --card: #ffffff; /* 데이터 표면 */
+    --card-foreground: #0a0a0a;
+    --popover: #ffffff;
+    --popover-foreground: #0a0a0a;
+    --secondary: #f5f4ee; /* sidebar / nav rail */
+    --secondary-foreground: #0a0a0a;
+    --muted: #f5f4ee;
+    --muted-foreground: #6b6a63;
+    --border: #d4d2c4; /* 카드 경계 명확화 (이전 #EAE9E1 → 컨트라스트 1.4:1 → 2.2:1) */
+    --input: #ffffff;
     --radius: 1.25rem;
+
+    /* ─── System B: 12색 팔레트 ─── */
+    /* Base */
+    --color-cream: #f8f7e8; /* Background Cream — 페이지 바닥 (--background), --accent/--decor-cream 별칭 */
+    --color-text-black: #000000; /* Text Black */
+    /* Point */
+    --color-starburst-pink: #ff78b9; /* Starburst Pink */
+    --color-deep-blue: #002cd1; /* Deep Blue (brand primary) */
+    /* Geometric */
+    --color-vivid-red: #ff3800;
+    --color-bright-cyan: #00e0d1;
+    --color-sunshine-yellow: #ffde00;
+    --color-teal-green: #00ba7a;
+    --color-hot-pink: #ff0070;
+    /* Shapes */
+    --color-soft-orange: #ff7940;
+    --color-light-pink: #ffb6d0;
+    --color-vibrant-purple: #b35cff;
+
+    /* ─── Brand & semantic — 12색 alias ─── */
+    --primary: var(--color-deep-blue);
+    --primary-foreground: #ffffff;
+    --accent: var(--color-cream); /* large-area accent slot */
+    --accent-foreground: #0a0a0a;
+    --destructive: var(--color-vivid-red);
+    --destructive-foreground: #ffffff;
+    --ring: var(--color-deep-blue);
+
+    /* Status */
+    --success: var(--color-teal-green);
+    --success-foreground: #ffffff;
+    --warning: var(--color-soft-orange);
+    --warning-foreground: #ffffff;
+    --danger: var(--color-vivid-red);
+    --danger-foreground: #ffffff;
+
+    /* Chart 4색 (4동 비교 — chart-1 = 본인 동, primary와 동일) */
+    --chart-1: var(--color-deep-blue);
+    --chart-2: var(--color-vivid-red);
+    --chart-3: var(--color-teal-green);
+    --chart-4: var(--color-vibrant-purple);
+
+    /* Decoration (큰 면적 장식 only — 작은 마커/얇은 선/텍스트 사용 금지)
+       이 4색은 라이트 배경에서 컨트라스트 1.2~1.5:1 → 데이터 자리 부적격 */
+    --decor-cyan: var(--color-bright-cyan);
+    --decor-yellow: var(--color-sunshine-yellow);
+    --decor-light-pink: var(--color-light-pink);
+    --decor-hot-pink: var(--color-hot-pink);
+    --decor-starburst-pink: var(--color-starburst-pink);
+    --decor-cream: var(--color-cream);
   }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Glassmorphism — Panel Glass (frosted)
+   ───────────────────────────────────────────────────────
+   참고: 외부 dashboard glass 레퍼런스. 우리 cream 단색 배경 위에서는
+   레퍼런스의 alpha 0.30~0.45 로는 박스 윤곽이 묻혀 (대비 ~1.0:1).
+   alpha 를 0.35~0.70 으로 올려서 cream 위 카드 분리감 확보.
+   blur 14px = SVG 자식 요소 가독성 유지하면서 frosted 질감 표현.
+   ═══════════════════════════════════════════════════════ */
+.panel-glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.35) 100%);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 8px 32px rgba(20, 30, 60, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.75);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Box Glass — full painted glass for rectangular panels
+   ───────────────────────────────────────────────────────
+   v3.1 (2026-05-01) — .glass-btn 레시피 채택. shine sweep + brand drop +
+   hover 동작 모두 유지. **deep blue inner tint 한 줄만 제거** (사용자 요청).
+
+   1) multi-layer bg = 반투명 베이스 + 사선 shine sweep
+   2) box-shadow = 아래 highlight + 흰 ring + brand drop + floor cushion
+   3) 호버 시 — shine 위치 이동 + shadow 강화
+   외곽선(테두리 레이저)은 AccordionGallery wrapper 의 conic 이 담당.
+   ═══════════════════════════════════════════════════════ */
+.box-glass {
+  position: relative;
+  background:
+    /* shine sweep — 사선 흰 띠 (top layer) */
+    linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0) 30%,
+      rgba(255, 255, 255, 0.5) 50%,
+      rgba(255, 255, 255, 0) 70%
+    ),
+    /* base — alpha 0.75→0.95, 0.35→0.85 으로 상향 (옵션 B):
+       회전 conic 의 deep blue bleed-through 80~90% 차단. backdrop-filter 도
+       제거 (뒤 conic 을 blur 해서 보여주는 본질적 매개라 함께 빠짐). */
+    linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+  background-size:
+    200% 200%,
+    100% 100%;
+  background-position:
+    0% 50%,
+    0% 0%;
+  box-shadow:
+    /* (제거됨 2026-05-01) 위쪽 deep blue inner tint
+       inset 0 0.125em 0.125em rgba(0, 44, 209, 0.03) */
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.65),
+    0 0 0.1em 0.25em inset rgba(255, 255, 255, 0.4),
+    0 0.25em 0.5em -0.125em rgba(0, 44, 209, 0.05),
+    0 0.75em 2em rgba(20, 30, 60, 0.1);
+  transition:
+    background-position 600ms cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 400ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.box-glass:hover {
+  background-position:
+    50% 50%,
+    0% 0%;
+  box-shadow:
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.7),
+    0 0 0.1em 0.25em inset rgba(255, 255, 255, 0.5),
+    0 0.25em 0.5em -0.125em rgba(0, 44, 209, 0.08),
+    0 1em 3em rgba(20, 30, 60, 0.15);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Glass Button — IntroScene SIMULATOR CTA
+   ───────────────────────────────────────────────────────
+   외부 dashboard glassmorphism 레퍼런스 채용. brand color
+   `#0033cc` → `#002CD1` (우리 Deep Blue) 로 치환.
+   conic-gradient 외곽 + 내부 inset highlight + shine sweep.
+   :has() 셀렉터 사용 — 모던 브라우저 (Chrome/Edge/Safari) 지원.
+   ═══════════════════════════════════════════════════════ */
+@property --angle-1 {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: -75deg;
+}
+@property --angle-2 {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: -45deg;
+}
+
+:root {
+  --glass-btn-size: clamp(1rem, 1.5vw, 1.5rem);
+  --glass-btn-anim-time: 400ms;
+  --glass-btn-anim-ease: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.button-wrap {
+  font-size: var(--glass-btn-size);
+  position: relative;
+  z-index: 2;
+  border-radius: 999vw;
+  background: transparent;
+  pointer-events: none;
+  transition: all var(--glass-btn-anim-time) var(--glass-btn-anim-ease);
+}
+
+.button-shadow {
+  --shadow-cuttoff-fix: 2em;
+  position: absolute;
+  width: calc(100% + var(--shadow-cuttoff-fix));
+  height: calc(100% + var(--shadow-cuttoff-fix));
+  top: calc(0% - var(--shadow-cuttoff-fix) / 2);
+  left: calc(0% - var(--shadow-cuttoff-fix) / 2);
+  filter: blur(clamp(2px, 0.125em, 12px));
+  -webkit-filter: blur(clamp(2px, 0.125em, 12px));
+  overflow: visible;
+  pointer-events: none;
+}
+
+.button-shadow::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: 999vw;
+  background: linear-gradient(180deg, rgba(0, 44, 209, 0.2), rgba(0, 44, 209, 0.05));
+  width: calc(100% - var(--shadow-cuttoff-fix) - 0.25em);
+  height: calc(100% - var(--shadow-cuttoff-fix) - 0.25em);
+  top: calc(var(--shadow-cuttoff-fix) - 0.5em);
+  left: calc(var(--shadow-cuttoff-fix) - 0.875em);
+  padding: 0.125em;
+  box-sizing: border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: all var(--glass-btn-anim-time) var(--glass-btn-anim-ease);
+  overflow: visible;
+  opacity: 1;
+}
+
+.glass-btn {
+  --border-width: clamp(1px, 0.0625em, 4px);
+  all: unset;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  pointer-events: auto;
+  z-index: 3;
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.3),
+    rgba(255, 255, 255, 0.1)
+  );
+  border-radius: 999vw;
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 44, 209, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.6),
+    0 0.25em 0.125em -0.125em rgba(0, 44, 209, 0.1),
+    0 0 0.1em 0.25em inset rgba(255, 255, 255, 0.3),
+    0 0 0 0 rgba(255, 255, 255, 1);
+  backdrop-filter: blur(clamp(1px, 0.125em, 4px));
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 4px));
+  transition: all var(--glass-btn-anim-time) var(--glass-btn-anim-ease);
+}
+
+.glass-btn:hover {
+  transform: scale(0.975);
+  backdrop-filter: blur(0.01em);
+  -webkit-backdrop-filter: blur(0.01em);
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 44, 209, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.6),
+    0 0.15em 0.05em -0.1em rgba(0, 44, 209, 0.15),
+    0 0 0.05em 0.1em inset rgba(255, 255, 255, 0.6),
+    0 0 0 0 rgba(255, 255, 255, 1);
+}
+
+.glass-btn span {
+  position: relative;
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  font-size: 1em;
+  color: #002cd1;
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0em 0.1em 0.05em rgba(255, 255, 255, 0.8);
+  transition: all var(--glass-btn-anim-time) var(--glass-btn-anim-ease);
+  padding-inline: 1.75em;
+  padding-block: 0.875em;
+}
+
+.glass-btn:hover span {
+  text-shadow: 0.025em 0.025em 0.025em rgba(255, 255, 255, 0.9);
+}
+
+.glass-btn span::after {
+  content: '';
+  display: block;
+  position: absolute;
+  z-index: 3;
+  width: calc(100% - var(--border-width));
+  height: calc(100% - var(--border-width));
+  top: calc(0% + var(--border-width) / 2);
+  left: calc(0% + var(--border-width) / 2);
+  box-sizing: border-box;
+  border-radius: 999vw;
+  overflow: clip;
+  background: linear-gradient(
+    var(--angle-2),
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.6) 40% 50%,
+    rgba(255, 255, 255, 0) 55%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  background-repeat: no-repeat;
+  transition:
+    background-position calc(var(--glass-btn-anim-time) * 1.25) var(--glass-btn-anim-ease),
+    --angle-2 calc(var(--glass-btn-anim-time) * 1.25) var(--glass-btn-anim-ease);
+}
+
+.glass-btn:hover span::after {
+  background-position: 25% 50%;
+}
+.glass-btn:active span::after {
+  background-position: 50% 15%;
+  --angle-2: -15deg;
+}
+
+.glass-btn::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: 999vw;
+  width: calc(100% + var(--border-width));
+  height: calc(100% + var(--border-width));
+  top: calc(0% - var(--border-width) / 2);
+  left: calc(0% - var(--border-width) / 2);
+  padding: var(--border-width);
+  box-sizing: border-box;
+  background:
+    conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(0, 44, 209, 0.3),
+      rgba(0, 44, 209, 0) 5% 40%,
+      rgba(0, 44, 209, 0.3) 50%,
+      rgba(0, 44, 209, 0) 60% 95%,
+      rgba(0, 44, 209, 0.3)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition:
+    all var(--glass-btn-anim-time) var(--glass-btn-anim-ease),
+    --angle-1 500ms ease;
+  box-shadow: inset 0 0 0 calc(var(--border-width) / 2) rgba(255, 255, 255, 0.8);
+}
+
+.glass-btn:hover::after {
+  --angle-1: -125deg;
+}
+.glass-btn:active::after {
+  --angle-1: -75deg;
+}
+
+.button-wrap:has(.glass-btn:hover) .button-shadow {
+  filter: blur(clamp(2px, 0.0625em, 6px));
+  -webkit-filter: blur(clamp(2px, 0.0625em, 6px));
+  transition: filter var(--glass-btn-anim-time) var(--glass-btn-anim-ease);
+}
+
+.button-wrap:has(.glass-btn:hover) .button-shadow::after {
+  top: calc(var(--shadow-cuttoff-fix) - 0.875em);
+  opacity: 1;
+}
+
+.button-wrap:has(.glass-btn:active) {
+  transform: rotate3d(1, 0, 0, 25deg);
+}
+
+.button-wrap:has(.glass-btn:active) .glass-btn {
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 44, 209, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.5),
+    0 0.125em 0.125em -0.125em rgba(0, 44, 209, 0.2),
+    0 0 0.1em 0.25em inset rgba(255, 255, 255, 0.2),
+    0 0.225em 0.05em 0 rgba(0, 44, 209, 0.05),
+    0 0.25em 0 0 rgba(255, 255, 255, 0.75),
+    inset 0 0.25em 0.05em 0 rgba(0, 44, 209, 0.15);
+}
+
+.button-wrap:has(.glass-btn:active) .button-shadow {
+  filter: blur(clamp(2px, 0.125em, 12px));
+  -webkit-filter: blur(clamp(2px, 0.125em, 12px));
+}
+
+.button-wrap:has(.glass-btn:active) .button-shadow::after {
+  top: calc(var(--shadow-cuttoff-fix) - 0.5em);
+  opacity: 0.75;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Glass Button — Primary variant (Deep Blue tinted glass)
+   ───────────────────────────────────────────────────────
+   B안: 솔리드 X, translucent Deep Blue 틴트로 brand 강조 + glass 단서 보존.
+   - bg: rgba(0,44,209) 0.4→0.7→0.4 그라디언트 (translucent → 뒤가 살짝 비침)
+   - text: 흰색 + 어두운 brand text-shadow (깊이감)
+   - top inset highlight: 흰색 (위에서 빛 내려옴)
+   - bottom inset shadow: 어두운 grid (밑은 그림자)
+   - 외곽 conic ring: 흰 alpha (deep blue 위에서 white 굴절감)
+   사용: <button className="glass-btn glass-btn-primary">
+   ═══════════════════════════════════════════════════════ */
+.glass-btn.glass-btn-primary {
+  background: linear-gradient(
+    -75deg,
+    rgba(0, 44, 209, 0.4),
+    rgba(0, 44, 209, 0.7),
+    rgba(0, 44, 209, 0.4)
+  );
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(255, 255, 255, 0.3),
+    inset 0 -0.125em 0.125em rgba(0, 0, 0, 0.15),
+    0 0.25em 0.125em -0.125em rgba(0, 30, 140, 0.4),
+    0 0 0.1em 0.25em inset rgba(255, 255, 255, 0.35),
+    0 0 0 0 rgba(255, 255, 255, 1);
+}
+
+.glass-btn.glass-btn-primary:hover {
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(255, 255, 255, 0.3),
+    inset 0 -0.125em 0.125em rgba(0, 0, 0, 0.15),
+    0 0.15em 0.05em -0.1em rgba(0, 30, 140, 0.5),
+    0 0 0.05em 0.1em inset rgba(255, 255, 255, 0.55),
+    0 0 0 0 rgba(255, 255, 255, 1);
+}
+
+.glass-btn.glass-btn-primary span {
+  color: #ffffff;
+  text-shadow: 0em 0.1em 0.1em rgba(0, 20, 100, 0.4);
+}
+
+.glass-btn.glass-btn-primary:hover span {
+  text-shadow: 0.025em 0.05em 0.05em rgba(0, 20, 100, 0.5);
+}
+
+/* 외곽 conic ring — deep blue bg 위에선 흰 굴절감으로 전환 */
+.glass-btn.glass-btn-primary::after {
+  background:
+    conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0) 5% 40%,
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0) 60% 95%,
+      rgba(255, 255, 255, 0.55)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5));
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -153,11 +580,11 @@ html {
 @keyframes energy-pulse {
   0%,
   100% {
-    text-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    text-shadow: 0 0 20px rgba(0, 44, 209, 0.4);
     transform: translateZ(0px) scale(1);
   }
   50% {
-    text-shadow: 0 0 40px rgba(99, 102, 241, 0.8);
+    text-shadow: 0 0 40px rgba(0, 44, 209, 0.8);
     transform: translateZ(20px) scale(1.02);
   }
 }

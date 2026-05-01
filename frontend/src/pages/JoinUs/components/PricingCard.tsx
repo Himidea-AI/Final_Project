@@ -28,29 +28,31 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
         style={{
           background:
-            'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
+            'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
         }}
       />
 
       {/* 2. 내부 카드 컨텐츠 */}
-      <div className="relative z-10 h-full w-full bg-[#2c2825] rounded-[14px] flex flex-col p-8 transition-colors duration-500">
+      <div className="relative z-10 h-full w-full bg-card rounded-[14px] flex flex-col p-8 transition-colors duration-500">
         {/* Badge — 이름 + MOST POPULAR (Growth만) */}
         <div className="flex items-center gap-2 mb-4">
           <span className="text-lg">{plan.badge}</span>
-          <span className="text-[#e2e8f0] font-bold text-lg">{plan.name}</span>
+          <span className="text-foreground font-bold text-lg">{plan.name}</span>
           {plan.badgeLabel && (
-            <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-[#a5b4fc] text-[0.625rem] font-bold tracking-wider uppercase">
+            <span className="ml-auto px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-[0.625rem] font-bold tracking-wider uppercase">
               {plan.badgeLabel}
             </span>
           )}
         </div>
 
-        <p className="text-[#9ca3af] text-xs mb-6">{plan.target}</p>
+        <p className="text-muted-foreground text-xs mb-6">{plan.target}</p>
 
         {/* Price */}
         <div className="flex items-baseline gap-1 mb-8">
-          <span className="text-4xl font-bold text-[#e2e8f0] tabular-nums">{plan.price}</span>
-          {plan.priceNote && <span className="text-[#9ca3af] text-sm">{plan.priceNote}</span>}
+          <span className="text-4xl font-bold text-foreground tabular-nums">{plan.price}</span>
+          {plan.priceNote && (
+            <span className="text-muted-foreground text-sm">{plan.priceNote}</span>
+          )}
         </div>
 
         {/* Features */}
@@ -58,11 +60,11 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
           {plan.features.map((f, i) => (
             <div key={i} className="flex items-center gap-3 text-sm leading-relaxed">
               {f.included ? (
-                <Check size={14} className="text-[#a5b4fc] shrink-0" />
+                <Check size={14} className="text-primary shrink-0" />
               ) : (
-                <Minus size={14} className="text-[#3a3633] shrink-0" />
+                <Minus size={14} className="text-border shrink-0" />
               )}
-              <span className={f.included ? 'text-[#9ca3af]' : 'text-[#3a3633]'}>{f.text}</span>
+              <span className={f.included ? 'text-muted-foreground' : 'text-border'}>{f.text}</span>
             </div>
           ))}
         </div>
@@ -70,7 +72,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         {/* CTA — 기본 스톤톤, 호버 시 인디고 점등 */}
         <button
           onClick={() => onSelect(plan.id)}
-          className="w-full py-4 rounded-xl font-bold text-sm tracking-wider transition-all duration-300 bg-[#1e1b18] text-[#9ca3af] border border-[#3a3633] group-hover:bg-[#818cf8] group-hover:text-[#1e1b18] group-hover:border-transparent group-hover:shadow-[0_0_20px_rgba(129,140,248,0.4)] active:scale-[0.98]"
+          className="w-full py-4 rounded-xl font-bold text-sm tracking-wider transition-all duration-300 bg-card text-muted-foreground border border-border group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-transparent group-hover:shadow-[0_0_20px_rgba(0,44,209,0.4)] active:scale-[0.98]"
         >
           {plan.cta}
         </button>

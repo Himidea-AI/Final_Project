@@ -40,11 +40,11 @@ export default function VacancySpotMarker({
       <div style="
         width: 24px;
         height: 24px;
-        background: #E45756;
+        background: var(--danger);
         border: 3px solid white;
         border-radius: 50%;
         animation: vacancy-spot-pulse 1.5s infinite;
-        box-shadow: 0 0 8px rgba(228, 87, 86, 0.8);
+        box-shadow: 0 0 8px rgba(255, 56, 0, 0.8);
         pointer-events: none;
       "></div>
       <style>
@@ -69,10 +69,10 @@ export default function VacancySpotMarker({
       center: position,
       radius: radiusM,
       strokeWeight: 2,
-      strokeColor: '#E45756',
+      strokeColor: '#FF3800',
       strokeOpacity: 0.6,
       strokeStyle: 'dashed',
-      fillColor: '#E45756',
+      fillColor: '#FF3800',
       fillOpacity: 0.05,
     });
     circleRef.current.setMap(map);

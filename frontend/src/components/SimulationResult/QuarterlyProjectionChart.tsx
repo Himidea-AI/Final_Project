@@ -39,8 +39,8 @@ interface Props {
   winnerDistrict?: string;
 }
 
-// indigo / cyan / amber / rose
-const COLORS = ['#818cf8', '#22d3ee', '#fbbf24', '#fb7185'] as const;
+// 4동 차트 팔레트 (chart-1~4)
+const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'] as const;
 
 // 값 크기에 따라 억원/만원 단위 자동 스위칭 — 0.1억원 같은 라벨 중복·정보 손실 방지
 const formatKRW = (value: number): string => {
@@ -59,7 +59,9 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   const validSeries = (series ?? []).filter((s) => s.projection && s.projection.length > 0);
   if (validSeries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-400 text-sm">데이터 없음</div>
+      <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
+        데이터 없음
+      </div>
     );
   }
 
@@ -106,25 +108,29 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   return (
     <div className="relative">
       {hasMockQuarters && (
-        <div className="absolute right-2 top-0 z-10 flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-amber-300">
-          <span className="h-1 w-1 rounded-full bg-amber-400" />
+        <div className="absolute right-2 top-0 z-10 flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning">
+          <span className="h-1 w-1 rounded-full bg-warning" />
           일부 분기 mock
         </div>
       )}
       <ResponsiveContainer width="100%" height={280}>
         <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
           {/* 격자선 — 수평만 (세로 노이즈 제거로 선 그래프 가독성↑) */}
-          <CartesianGrid strokeDasharray="3 3" stroke="#3a3633" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
 
           {/* X축 — 분기 번호를 Q1, Q2 형식으로 표시 */}
           <XAxis
             dataKey="quarter"
             tickFormatter={(q: number) => `Q${q}`}
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }}
           />
 
           {/* Y축 — 억원 단위 */}
-          <YAxis tickFormatter={formatKRW} tick={{ fill: '#9ca3af', fontSize: 11 }} width={70} />
+          <YAxis
+            tickFormatter={formatKRW}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+            width={70}
+          />
 
           {/* Tooltip */}
           <Tooltip
@@ -150,12 +156,12 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
             }}
             labelFormatter={(q: number) => `${q}분기`}
             contentStyle={{
-              backgroundColor: '#1e1b18',
-              border: '1px solid #3a3633',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
             }}
-            labelStyle={{ color: '#fff' }}
-            itemStyle={{ color: '#9ca3af' }}
+            labelStyle={{ color: 'var(--card-foreground)' }}
+            itemStyle={{ color: 'var(--muted-foreground)' }}
           />
 
           {/* 범례 — 동 이름. CI Area 는 legendType="none" 으로 숨김 */}
@@ -167,14 +173,14 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
           />
 
           {/* 신뢰구간 — 첫 번째 동(series[0]) 만 음영. 95/80 이중 또는 단일 confidence.
-              fill 색상은 COLORS[0] (indigo #818cf8) 로 series[0] 라인 색과 일치 */}
+              fill 색상은 COLORS[0] (chart-1) 로 series[0] 라인 색과 일치 */}
           {has95Ci ? (
             <>
               <Area
                 type="monotone"
                 dataKey="ci_95_lower"
                 stroke="none"
-                fill="#818cf8"
+                fill="var(--chart-1)"
                 fillOpacity={0}
                 legendType="none"
                 isAnimationActive={false}
@@ -186,7 +192,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
                 type="monotone"
                 dataKey="ci_95_upper"
                 stroke="none"
-                fill="#818cf8"
+                fill="var(--chart-1)"
                 fillOpacity={0.08}
                 legendType="none"
                 isAnimationActive={false}
@@ -200,7 +206,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
                     type="monotone"
                     dataKey="ci_80_lower"
                     stroke="none"
-                    fill="#818cf8"
+                    fill="var(--chart-1)"
                     fillOpacity={0}
                     legendType="none"
                     isAnimationActive={false}
@@ -212,7 +218,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
                     type="monotone"
                     dataKey="ci_80_upper"
                     stroke="none"
-                    fill="#818cf8"
+                    fill="var(--chart-1)"
                     fillOpacity={0.22}
                     legendType="none"
                     isAnimationActive={false}
@@ -229,7 +235,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
                 type="monotone"
                 dataKey="confidence_lower"
                 stroke="none"
-                fill="#818cf8"
+                fill="var(--chart-1)"
                 fillOpacity={0}
                 legendType="none"
                 isAnimationActive={false}
@@ -241,7 +247,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
                 type="monotone"
                 dataKey="confidence_upper"
                 stroke="none"
-                fill="#818cf8"
+                fill="var(--chart-1)"
                 fillOpacity={0.1}
                 legendType="none"
                 isAnimationActive={false}
@@ -265,7 +271,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
                 stroke={color}
                 strokeWidth={isWinner ? 3 : 2}
                 dot={{ r: isWinner ? 5 : 3, fill: color }}
-                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                activeDot={{ r: 6, stroke: 'var(--card)', strokeWidth: 2 }}
                 isAnimationActive={false}
                 connectNulls
               />
@@ -276,9 +282,9 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
           {bepQuarter !== null && (
             <ReferenceLine
               x={bepQuarter}
-              stroke="#10B981"
+              stroke="var(--success)"
               strokeDasharray="4 3"
-              label={{ value: 'BEP', fill: '#10B981', fontSize: 12 }}
+              label={{ value: 'BEP', fill: 'var(--success)', fontSize: 12 }}
             />
           )}
         </ComposedChart>

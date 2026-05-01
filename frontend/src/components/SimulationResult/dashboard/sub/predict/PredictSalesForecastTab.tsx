@@ -74,25 +74,25 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+      <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
         <div className="flex items-start justify-between mb-8 gap-6">
           <div>
-            <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
-              <TrendingUp className="text-indigo-400" /> 분기별 예상 매출
+            <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left leading-none">
+              <TrendingUp className="text-primary" /> 분기별 예상 매출
             </h3>
-            <p className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+            <p className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-[0.2em] mt-3">
               Temporal Convolutional Network · P10~P90 신뢰 구간
             </p>
           </div>
         </div>
 
-        <div className="relative bg-stone-950/50 border border-stone-800 rounded-2xl p-6 mb-8">
+        <div className="relative bg-card/50 border border-border rounded-2xl p-6 mb-8">
           {series.length > 0 ? (
             <QuarterlyProjectionChart series={series} winnerDistrict={simResult.winner_district} />
           ) : (
             <div className="aspect-[21/9] flex flex-col items-center justify-center">
-              <TrendingUp size={48} className="text-stone-700 mb-3" />
-              <p className="text-stone-500 font-black uppercase tracking-widest text-xs">
+              <TrendingUp size={48} className="text-muted-foreground mb-3" />
+              <p className="text-muted-foreground font-black uppercase tracking-widest text-xs">
                 분기 매출 데이터 없음
               </p>
             </div>
@@ -100,9 +100,9 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-stone-800 pb-3">
-            <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest flex items-center gap-2 italic">
-              <Zap className="text-amber-400" size={14} /> 매출 기여 요인 분석
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2 italic">
+              <Zap className="text-warning" size={14} /> 매출 기여 요인 분석
             </h4>
             {districtPreds.length === 0 && shap && (
               <button
@@ -113,7 +113,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
                     content: `SHAP (SHapley Additive exPlanations)은 각 피처가 예측값에 얼마나 기여했는지 정량화합니다.\n\nbase_value: ${(shap.base_value ?? 0).toLocaleString('ko-KR')}원\npredicted_value: ${(shap.predicted_value ?? 0).toLocaleString('ko-KR')}원${shap.is_mock ? '\n\n⚠️ 현재 SHAP 데이터는 mock 상태입니다.' : ''}`,
                   })
                 }
-                className="text-[0.625rem] font-bold text-stone-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1"
+                className="text-[0.625rem] font-bold text-muted-foreground hover:text-primary uppercase tracking-widest flex items-center gap-1"
               >
                 <Maximize2 size={12} /> 해석 상세
               </button>
@@ -132,13 +132,13 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
       </div>
 
       {hasScenarios && (
-        <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8">
+        <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
           <div className="flex items-start justify-between mb-6 gap-6">
             <div>
-              <h3 className="text-xl font-black text-stone-100 flex items-center gap-3 italic tracking-tight text-left leading-none">
-                <GitCompareArrows className="text-indigo-400" size={20} /> 시나리오 비교
+              <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left leading-none">
+                <GitCompareArrows className="text-primary" size={20} /> 시나리오 비교
               </h3>
-              <p className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mt-3">
+              <p className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-[0.2em] mt-3">
                 낙관 · 기본 · 비관 · 4분기 매출 envelope
               </p>
             </div>

@@ -25,19 +25,19 @@ const FALLBACK_CENTER: StoreNode = {
 
 // 에이전트 Action 색 (채움) — gold(결제)·cyan(external halo)·white(테두리)는 별도
 const ACTION_COLOR: Record<string, string> = {
-  visit: '#E45756', // Red — 매장 방문(결제)
-  move: '#4C78A8', // Blue — 이동 중
-  work: '#54A24B', // Green — 근무 (테두리만)
-  rest: '#6b7280', // Gray — 휴식 (희미)
+  visit: '#FF3800', // Red — 매장 방문(결제)
+  move: '#002CD1', // Blue — 이동 중
+  work: '#00BA7A', // Green — 근무 (테두리만)
+  rest: '#6B6A63', // Gray — 휴식 (희미)
 };
 
 // Phase 2: 4 거점 floating glassmorphism 카드 — 마포 대표 dong centroid.
 // Orion 레퍼런스의 주요 도시 카드(Chicago/Berlin/Sangam-DMC 등) 패턴 재현.
 const KEY_DONGS: Array<{ name: string; lat: number; lon: number; color: string }> = [
-  { name: 'Hongdae-Ip-Gu', lat: 37.553, lon: 126.918, color: '#f43f5e' }, // 서교동·홍대입구
-  { name: 'Sangam-DMC', lat: 37.567, lon: 126.916, color: '#818cf8' }, // 성산동
-  { name: 'Gongdeok-Stn', lat: 37.544, lon: 126.953, color: '#f43f5e' }, // 공덕동
-  { name: 'Mangwon-Mkt', lat: 37.557, lon: 126.905, color: '#fbbf24' }, // 망원동
+  { name: 'Hongdae-Ip-Gu', lat: 37.553, lon: 126.918, color: '#FF3800' }, // 서교동·홍대입구
+  { name: 'Sangam-DMC', lat: 37.567, lon: 126.916, color: '#002CD1' }, // 성산동
+  { name: 'Gongdeok-Stn', lat: 37.544, lon: 126.953, color: '#FF3800' }, // 공덕동
+  { name: 'Mangwon-Mkt', lat: 37.557, lon: 126.905, color: '#FF7940' }, // 망원동
 ];
 
 interface PixelCoord {
@@ -287,14 +287,14 @@ function drawStoreHouse(
   let fill: string;
   let accent: string;
   if (tier === 'A') {
-    fill = '#4F46E5';
-    accent = '#818CF8';
+    fill = '#002CD1';
+    accent = '#002CD1';
   } else if (tier === 'B') {
-    fill = '#4B5563';
-    accent = '#9CA3AF';
+    fill = '#6B6A63';
+    accent = '#6B6A63';
   } else {
-    fill = '#4F46E5';
-    accent = '#818CF8';
+    fill = '#002CD1';
+    accent = '#002CD1';
   }
   // 지붕 (삼각형)
   ctx.fillStyle = accent;
@@ -312,7 +312,7 @@ function drawStoreHouse(
   ctx.fillRect(left + 5, top + roofH + 3, 4, 4);
   ctx.fillRect(left + w - 9, top + roofH + 3, 4, 4);
   // 문 (중앙)
-  ctx.fillStyle = '#1F2937';
+  ctx.fillStyle = '#0a0a0a';
   ctx.fillRect(cx - 2, top + h - 6, 4, 6);
   // 테두리 (흰색 반투명 또는 gold 강조)
   ctx.strokeStyle = ringColor;
@@ -348,15 +348,15 @@ function drawPaymentBounce(ctx: CanvasRenderingContext2D, cx: number, baseY: num
   ctx.arc(cx, baseY + 2, 4 * (1 - Math.abs(offsetY) / bounceH) + 2, 0, Math.PI * 2);
   ctx.fill();
   // gold 원
-  ctx.fillStyle = '#FBBF24';
-  ctx.strokeStyle = '#B45309';
+  ctx.fillStyle = '#FF7940';
+  ctx.strokeStyle = '#9A4500';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.arc(cx, cy, 6, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   // ₩ 글자
-  ctx.fillStyle = '#111827';
+  ctx.fillStyle = '#0a0a0a';
   ctx.font = 'bold 8px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -1619,7 +1619,7 @@ export default function AbmPersonaMap({
         if (!isCompetitor) return; // 일반 store/공실 후보 의 집모양 제거 — 사용자 피드백.
 
         // 작은 4px dot — 보라 (vacancy 빨강과 구분)
-        const dotColor = recentPay ? '#FBBF24' : '#A78BFA';
+        const dotColor = recentPay ? '#FF7940' : '#B35CFF';
         ctx.save();
         ctx.shadowColor = 'rgba(167, 139, 250, 0.85)';
         ctx.shadowBlur = 6;
@@ -1653,12 +1653,12 @@ export default function AbmPersonaMap({
           const displayHour = Math.floor(virtualHour);
 
           const roleColor: Record<string, string> = {
-            resident: '#34D399',
-            commuter: '#60A5FA',
-            visitor: '#F472B6',
-            owner: '#FBBF24',
-            ext_commuter: '#22D3EE',
-            ext_visitor: '#A78BFA',
+            resident: '#00BA7A',
+            commuter: '#002CD1',
+            visitor: '#FF0070',
+            owner: '#FF7940',
+            ext_commuter: '#00E0D1',
+            ext_visitor: '#B35CFF',
           };
 
           // ─── 히트맵 layer — 헥사 격자 + 네온 글로우 (Orion 스타일 ref) ─────
@@ -1711,7 +1711,7 @@ export default function AbmPersonaMap({
                   // v=0 hex — 외곽선만 그려 격자 윤곽 표시 (사용자 피드백: 경계 보이게).
                   if (v <= 0) {
                     ctx.translate(hex.x, hex.y);
-                    ctx.strokeStyle = 'rgba(99, 102, 241, 0.18)'; // indigo dim
+                    ctx.strokeStyle = 'rgba(0, 44, 209, 0.18)'; // brand (Deep Blue)
                     ctx.lineWidth = 0.5;
                     ctx.stroke(hexPath);
                     ctx.translate(-hex.x, -hex.y);
@@ -1766,7 +1766,7 @@ export default function AbmPersonaMap({
                   ctx.font = 'bold 10px monospace';
                   ctx.textAlign = 'center';
                   ctx.textBaseline = 'middle';
-                  ctx.fillStyle = '#FEF3C7';
+                  ctx.fillStyle = '#FFF8DC';
                   ctx.strokeStyle = 'rgba(0,0,0,0.85)';
                   ctx.lineWidth = 2.5;
                   for (const h of topHot) {
@@ -1869,16 +1869,16 @@ export default function AbmPersonaMap({
             if (pix.x < -10 || pix.y < -10 || pix.x > W + 10 || pix.y > H + 10) return;
 
             // action 별 색·alpha — role 색이 base, action 으로 modulate.
-            let fill = roleColor[prev.role] || '#E5E7EB';
+            let fill = roleColor[prev.role] || '#EAE9E1';
             let alpha = 1;
             if (action === 'rest') {
-              fill = '#9CA3AF'; // gray — 휴식
+              fill = '#6B6A63'; // gray — 휴식
               alpha = 0.45;
             } else if (action === 'visit') {
-              fill = '#E45756'; // red — 매장 방문/결제
+              fill = '#FF3800'; // red — 매장 방문/결제
               alpha = 1;
             } else if (action === 'work') {
-              fill = '#54A24B'; // green — 근무 (정적)
+              fill = '#00BA7A'; // green — 근무 (정적)
               alpha = 0.85;
             }
 
@@ -1892,7 +1892,7 @@ export default function AbmPersonaMap({
               ctx.beginPath();
               ctx.arc(pix.x, pix.y, 3.2, 0, Math.PI * 2);
               ctx.fill();
-              ctx.strokeStyle = '#FCD34D';
+              ctx.strokeStyle = '#FF7940';
               ctx.lineWidth = 1.6;
               ctx.beginPath();
               ctx.arc(pix.x, pix.y, 4.2, 0, Math.PI * 2);
@@ -1938,7 +1938,7 @@ export default function AbmPersonaMap({
               ctx.beginPath();
               roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
               ctx.fill();
-              ctx.strokeStyle = '#FCD34D';
+              ctx.strokeStyle = '#FF7940';
               ctx.lineWidth = 1.5;
               ctx.beginPath();
               roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
@@ -1952,7 +1952,7 @@ export default function AbmPersonaMap({
               ctx.closePath();
               ctx.fill();
               // 텍스트
-              ctx.fillStyle = '#FEF3C7';
+              ctx.fillStyle = '#FFF8DC';
               ctx.fillText(text, bx, by);
               ctx.textBaseline = 'alphabetic';
             }
@@ -1970,7 +1970,7 @@ export default function AbmPersonaMap({
           const tw2 = ctx.measureText(hourLabel).width;
           roundedRect(ctx, 8, 8, tw2 + 14, 20, 4);
           ctx.fill();
-          ctx.fillStyle = '#86EFAC';
+          ctx.fillStyle = '#00BA7A';
           ctx.fillText(hourLabel, 15, 22);
         }
       }
@@ -1992,7 +1992,7 @@ export default function AbmPersonaMap({
           ctx.arc(fx, fy, 18 * pulse, 0, Math.PI * 2);
           ctx.stroke();
           // 신규 매장 = green house
-          drawStoreHouse(ctx, fx, fy, 'S', '#10B981', 2.5);
+          drawStoreHouse(ctx, fx, fy, 'S', '#00BA7A', 2.5);
           // 라벨
           const label = `NEW · ${focusSpot.label ?? '선택 스팟'}`;
           ctx.font = 'bold 11px monospace';
@@ -2001,7 +2001,7 @@ export default function AbmPersonaMap({
           ctx.fillStyle = 'rgba(16,185,129,0.92)';
           roundedRect(ctx, fx - tw / 2 - 4, fy + 18, tw + 8, 15, 4);
           ctx.fill();
-          ctx.fillStyle = '#0f172a';
+          ctx.fillStyle = '#0a0a0a';
           ctx.fillText(label, fx, fy + 29);
         }
       }
@@ -2284,10 +2284,10 @@ export default function AbmPersonaMap({
           ctx.fillStyle = ACTION_COLOR.visit; // 빨강 — focusSpot 근처 dot 강조
         } else if (p.action === 'rest') {
           ctx.globalAlpha = 0.4;
-          ctx.fillStyle = '#6b7280';
+          ctx.fillStyle = '#6B6A63';
         } else if (p.action === 'work') {
           ctx.globalAlpha = 0.85;
-          ctx.fillStyle = '#54A24B';
+          ctx.fillStyle = '#00BA7A';
         } else if (p.action === 'visit') {
           // focusSpot 모드 시 다른 매장 visit 은 단조 색 (빨강 산만 회피)
           ctx.globalAlpha = focusSpot ? 0.7 : 1;
@@ -2343,20 +2343,20 @@ export default function AbmPersonaMap({
 
   return (
     <div className="flex-1 w-full h-full min-h-[88vh] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
-      <div className="flex-1 bg-[#1e1b18] border border-[#3a3633] rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
+      <div className="flex-1 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
         {/* 헤더 — AI 에이전트 맵과 동일 스타일 */}
-        <div className="h-14 bg-[#171717]/90 backdrop-blur-md border-b border-[#3a3633] flex justify-between items-center px-6 shrink-0 z-10">
-          <h3 className="text-sm font-black text-white flex items-center gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]" />
+        <div className="h-14 bg-muted/90 backdrop-blur-md border-b border-border flex justify-between items-center px-6 shrink-0 z-10">
+          <h3 className="text-sm font-black text-foreground flex items-center gap-3">
+            <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]" />
             ABM 페르소나 행동 시뮬레이션
           </h3>
           <div className="flex items-center gap-4">
-            <span className="text-[11px] font-mono text-emerald-400">
+            <span className="text-[11px] font-mono text-success">
               {N_PERSONAS} PERSONAS · {timeLabel}
             </span>
             {spotsLoading && (
               <span
-                className="text-[10px] font-mono px-2 py-0.5 rounded border text-amber-400 border-amber-500/40 animate-pulse"
+                className="text-[10px] font-mono px-2 py-0.5 rounded border text-warning border-warning/40 animate-pulse"
                 title="행정동 스팟 좌표 로딩 중"
               >
                 스팟 로딩...
@@ -2366,10 +2366,10 @@ export default function AbmPersonaMap({
               <span
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                   vacancyFetchError
-                    ? 'text-rose-400 border-rose-500/40'
+                    ? 'text-danger border-danger/40'
                     : vacancyFetching
-                      ? 'text-amber-400 border-amber-500/40 animate-pulse'
-                      : 'text-violet-300 border-violet-500/40'
+                      ? 'text-warning border-warning/40 animate-pulse'
+                      : 'text-primary border-primary/40'
                 }`}
                 title={
                   vacancyFetchError
@@ -2384,7 +2384,7 @@ export default function AbmPersonaMap({
                     : 'VACANCY MODE'}
               </span>
             )}
-            <span className="text-[10px] text-[#6b7280] font-mono tracking-widest uppercase">
+            <span className="text-[10px] text-muted-foreground font-mono tracking-widest uppercase">
               {mode === 'vacancy' && vacancySpot
                 ? `VACANCY PSE · ${vacancySpot.dong}${vacancySpot.category ? ' · ' + vacancySpot.category : ''}`
                 : `MAPO BEHAVIORAL SIM · ${targetDistrict}`}
@@ -2400,21 +2400,21 @@ export default function AbmPersonaMap({
             <div ref={mapContainerRef} className="absolute inset-0" />
             {/* S-2: API 키 없으면 mock 대신 안내 UI로 명시 */}
             {KAKAO_KEY_MISSING && (
-              <div className="absolute inset-0 bg-[#1a2535]/95 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center">
-                <p className="text-sm font-bold text-amber-300">카카오맵 API 키가 필요합니다</p>
-                <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
+              <div className="absolute inset-0 bg-background/95 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center">
+                <p className="text-sm font-bold text-warning">카카오맵 API 키가 필요합니다</p>
+                <p className="text-xs text-muted-foreground font-mono leading-relaxed max-w-md">
                   .env 에{' '}
-                  <code className="text-emerald-300">VITE_KAKAO_MAP_API_KEY=&lt;your_key&gt;</code>{' '}
-                  설정 후 개발 서버를 재시작하세요. 키 없이 mock 모드로는 도보/교통/결제 시각화가
+                  <code className="text-success">VITE_KAKAO_MAP_API_KEY=&lt;your_key&gt;</code> 설정
+                  후 개발 서버를 재시작하세요. 키 없이 mock 모드로는 도보/교통/결제 시각화가
                   동작하지 않습니다.
                 </p>
               </div>
             )}
             {/* C-3: 스팟 로딩 실패 (1개 이하) — 에이전트 시뮬 비활성 안내 */}
             {!KAKAO_KEY_MISSING && !spotsLoading && storeNodes.length < 2 && (
-              <div className="absolute inset-0 bg-[#1a2535]/60 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center pointer-events-none">
-                <p className="text-sm font-bold text-amber-300">지도 스팟 로딩 실패</p>
-                <p className="text-xs text-[#9ca3af] font-mono leading-relaxed max-w-md">
+              <div className="absolute inset-0 bg-background/60 z-30 flex flex-col items-center justify-center gap-3 p-6 text-center pointer-events-none">
+                <p className="text-sm font-bold text-warning">지도 스팟 로딩 실패</p>
+                <p className="text-xs text-muted-foreground font-mono leading-relaxed max-w-md">
                   {targetDistrict}의 스팟 정보를 불러오지 못했습니다. 에이전트 시뮬레이션이
                   비활성화됩니다.
                 </p>
@@ -2436,7 +2436,7 @@ export default function AbmPersonaMap({
                         setSpotsLoading(false);
                       });
                   }}
-                  className="pointer-events-auto px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 rounded text-xs font-bold"
+                  className="pointer-events-auto px-3 py-1.5 bg-success/20 hover:bg-success/30 border border-success/50 text-success rounded text-xs font-bold"
                 >
                   다시 시도
                 </button>
@@ -2460,7 +2460,7 @@ export default function AbmPersonaMap({
                   zIndex: 35,
                 }}
               >
-                <span className="inline-block rounded-md bg-black/85 backdrop-blur-md border border-emerald-400/60 px-2 py-1 text-xs font-black tracking-tight text-emerald-200 leading-none whitespace-nowrap shadow-lg shadow-emerald-500/20">
+                <span className="inline-block rounded-md bg-black/85 backdrop-blur-md border border-success/60 px-2 py-1 text-xs font-black tracking-tight text-success leading-none whitespace-nowrap shadow-lg shadow-emerald-500/20">
                   {hoveredDong.name}
                 </span>
               </div>
@@ -2473,28 +2473,28 @@ export default function AbmPersonaMap({
               <div className="absolute bottom-4 right-4 z-30 pointer-events-none">
                 <div className="w-56 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_30px_60px_rgba(0,0,0,0.8)]">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                    <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest">
+                    <div className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse" />
+                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
                       Active Node Analysis
                     </span>
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-end">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase">
                         Density
                       </span>
                       <span className="text-xl font-black text-white italic tabular-nums">
                         {(hoveredHex.intensity * 100).toFixed(1)}%
                       </span>
                     </div>
-                    <div className="w-full h-1 bg-stone-900 rounded-full overflow-hidden">
+                    <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-indigo-500 to-rose-500 shadow-[0_0_10px_#f43f5e]"
+                        className="h-full bg-gradient-to-r from-primary to-danger shadow-[0_0_10px_#FF3800]"
                         style={{ width: `${(hoveredHex.intensity * 100).toFixed(0)}%` }}
                       />
                     </div>
                     <div className="flex justify-between text-[10px] font-bold uppercase">
-                      <span className="text-stone-600">Agents</span>
+                      <span className="text-muted-foreground">Agents</span>
                       <span className="text-white font-black tabular-nums">
                         {hoveredHex.count.toLocaleString()}
                       </span>
@@ -2528,11 +2528,11 @@ export default function AbmPersonaMap({
             {Array.isArray(vacancySpots) &&
               vacancySpots.length > 0 &&
               !abmResult?.new_store_visit_share_pct && (
-                <div className="absolute top-3 right-3 max-w-[260px] bg-[#0d1117]/95 backdrop-blur-sm border border-emerald-500/40 rounded-lg p-3 z-20 shadow-[0_0_20px_rgba(52,211,153,0.15)]">
-                  <p className="text-[10px] font-mono text-emerald-400 mb-2 uppercase tracking-wider">
+                <div className="absolute top-3 right-3 max-w-[260px] bg-background/95 backdrop-blur-sm border border-success/40 rounded-lg p-3 z-20 shadow-[0_0_20px_rgba(52,211,153,0.15)]">
+                  <p className="text-[10px] font-mono text-success mb-2 uppercase tracking-wider">
                     공실 스팟 ({vacancySpots.length})
                   </p>
-                  <p className="text-[10px] text-[#6b7280] mb-2 leading-relaxed">
+                  <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
                     스팟 클릭 → 그 위치에서 ABM 시뮬 실행
                   </p>
                   <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto">
@@ -2548,19 +2548,19 @@ export default function AbmPersonaMap({
                             disabled={abmLoading || !onSpotClick}
                             className={`text-left px-2 py-1.5 rounded text-[11px] border transition-all ${
                               isTarget
-                                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/20'
-                                : 'bg-[#1a1815]/60 border-[#3a3633] text-[#9ca3af] hover:border-[#4a4643]'
+                                ? 'bg-success/10 border-success/40 text-success hover:bg-success/20'
+                                : 'bg-card/60 border-border text-muted-foreground hover:border-border'
                             } ${abmLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-bold">
                                 {idx + 1}. {spot.dong_name}
                               </span>
-                              <span className="text-[9px] font-mono text-[#6b7280]">
+                              <span className="text-[9px] font-mono text-muted-foreground">
                                 {spot.listing_count ?? 0}건
                               </span>
                             </div>
-                            <div className="text-[9px] text-[#6b7280] mt-0.5 font-mono">
+                            <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
                               {spot.lat.toFixed(4)}, {spot.lon.toFixed(4)}
                             </div>
                           </button>
@@ -2573,55 +2573,53 @@ export default function AbmPersonaMap({
             {/* 시뮬 결과 오버레이 — new_store_visit_share_pct 가 있을 때 (스팟 클릭 시뮬 후) */}
             {abmResult &&
               (abmResult.new_store_visit_share_pct > 0 || abmResult.new_store_visits > 0) && (
-                <div className="absolute top-3 right-3 w-[300px] bg-[#0d1117]/95 backdrop-blur-md border border-emerald-500/60 rounded-lg p-4 z-30 shadow-[0_0_30px_rgba(52,211,153,0.25)]">
+                <div className="absolute top-3 right-3 w-[300px] bg-background/95 backdrop-blur-md border border-success/60 rounded-lg p-4 z-30 shadow-[0_0_30px_rgba(52,211,153,0.25)]">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                    <p className="text-[10px] font-mono text-success uppercase tracking-wider">
                       스팟 시뮬 결과
                       {abmResult.cached && (
-                        <span className="ml-1.5 text-[8px] text-cyan-400 normal-case">
-                          (cached)
-                        </span>
+                        <span className="ml-1.5 text-[8px] text-primary normal-case">(cached)</span>
                       )}
                     </p>
                     <button
                       onClick={() => onClearResult?.()}
-                      className="text-[10px] px-2 py-1 rounded border border-[#3a3633] text-[#9ca3af] hover:text-white hover:border-emerald-500/60 transition-all"
+                      className="text-[10px] px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:border-success/60 transition-all"
                     >
                       ← 뒤로
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mb-3">
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2">
-                      <p className="text-[9px] text-emerald-300 mb-1">방문 점유율</p>
-                      <p className="text-lg font-bold text-emerald-200">
+                    <div className="bg-success/10 border border-success/30 rounded p-2">
+                      <p className="text-[9px] text-success mb-1">방문 점유율</p>
+                      <p className="text-lg font-bold text-success">
                         {abmResult.new_store_visit_share_pct?.toFixed(2) ?? '0.00'}%
                       </p>
-                      <p className="text-[8px] text-[#6b7280] mt-0.5">마포 전체 방문 중</p>
+                      <p className="text-[8px] text-muted-foreground mt-0.5">마포 전체 방문 중</p>
                     </div>
-                    <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2">
-                      <p className="text-[9px] text-amber-300 mb-1">일 매출</p>
-                      <p className="text-lg font-bold text-amber-200">
+                    <div className="bg-warning/10 border border-warning/30 rounded p-2">
+                      <p className="text-[9px] text-warning mb-1">일 매출</p>
+                      <p className="text-lg font-bold text-warning">
                         {Math.round(abmResult.new_store_revenue ?? 0).toLocaleString()}원
                       </p>
-                      <p className="text-[8px] text-[#6b7280] mt-0.5">
+                      <p className="text-[8px] text-muted-foreground mt-0.5">
                         방문 {abmResult.new_store_visits ?? 0}회
                       </p>
                     </div>
                   </div>
-                  <div className="text-[10px] text-[#9ca3af] border-t border-[#3a3633] pt-2 leading-relaxed">
+                  <div className="text-[10px] text-muted-foreground border-t border-border pt-2 leading-relaxed">
                     <p className="mb-1">
-                      <span className="text-[#6b7280]">대상 동:</span>{' '}
-                      <span className="text-[#e5e7eb] font-bold">{targetDistrict}</span>
+                      <span className="text-muted-foreground">대상 동:</span>{' '}
+                      <span className="text-muted-foreground font-bold">{targetDistrict}</span>
                     </p>
                     <p className="mb-1">
-                      <span className="text-[#6b7280]">전체 일 매출:</span>{' '}
-                      <span className="text-[#e5e7eb]">
+                      <span className="text-muted-foreground">전체 일 매출:</span>{' '}
+                      <span className="text-muted-foreground">
                         {Math.round(abmResult.total_daily_revenue ?? 0).toLocaleString()}원
                       </span>
                     </p>
                     <p>
-                      <span className="text-[#6b7280]">월 추정:</span>{' '}
-                      <span className="text-[#e5e7eb]">
+                      <span className="text-muted-foreground">월 추정:</span>{' '}
+                      <span className="text-muted-foreground">
                         {Math.round(abmResult.monthly_revenue_estimate ?? 0).toLocaleString()}원
                       </span>
                     </p>
@@ -2631,38 +2629,36 @@ export default function AbmPersonaMap({
 
             {/* Narrator 요약 — 결과 오버레이 활성 시에는 숨김 */}
             {abmResult?.narrator_summary && !abmResult?.new_store_visit_share_pct && (
-              <div className="absolute top-3 right-3 max-w-xs bg-[#0d1117]/90 backdrop-blur-sm border border-[#3a3633] rounded-lg p-3 z-20">
-                <p className="text-[10px] font-mono text-emerald-400 mb-1 uppercase tracking-wider">
+              <div className="absolute top-3 right-3 max-w-xs bg-background/90 backdrop-blur-sm border border-border rounded-lg p-3 z-20">
+                <p className="text-[10px] font-mono text-success mb-1 uppercase tracking-wider">
                   Narrator
                 </p>
-                <p className="text-[11px] text-[#9ca3af] leading-relaxed">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   {abmResult.narrator_summary}
                 </p>
               </div>
             )}
           </div>
           {/* 우측 결과 패널 — 좌우 분할 모드 (지도 75% / 결과 25%) */}
-          <div className="relative px-5 py-5 flex flex-col gap-4 shrink-0 w-[28%] min-w-[340px] max-w-[480px] bg-[#070708] border-l border-white/10 overflow-y-auto">
+          <div className="relative px-5 py-5 flex flex-col gap-4 shrink-0 w-[28%] min-w-[340px] max-w-[480px] bg-background border-l border-border overflow-y-auto">
             {/* 백그라운드 무드 조명 */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_rgba(79,70,229,0.05)_0%,_transparent_60%)] pointer-events-none" />
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
             {abmResult ? (
               <div className="relative w-full flex flex-col gap-4">
                 {/* 헤더 라벨 — narrow column 에 맞춰 작게 */}
                 <div className="flex items-baseline justify-between">
                   <div className="flex flex-col gap-1">
-                    <h4 className="text-lg font-black text-white italic tracking-tighter leading-none">
+                    <h4 className="text-lg font-black text-foreground italic tracking-tighter leading-none">
                       General Statistics
                     </h4>
-                    <p className="text-[9px] font-black text-stone-600 uppercase tracking-[0.3em]">
+                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em]">
                       {abmResult.n_personas?.toLocaleString() ?? '-'} agents · live
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[9px] font-mono text-emerald-400 tracking-widest">
-                      LIVE
-                    </span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                    <span className="text-[9px] font-mono text-success tracking-widest">LIVE</span>
                   </div>
                 </div>
                 {/* Tier S Thought Feed — 50명 LLM reason 시간순 스크롤 피드.
@@ -2670,14 +2666,14 @@ export default function AbmPersonaMap({
                 {sortedThoughts.length > 0 && (
                   <div className="flex flex-col gap-2">
                     <div className="flex items-baseline justify-between">
-                      <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest">
+                      <span className="text-[10px] font-black text-warning uppercase tracking-widest">
                         Tier S · LLM Thoughts
                       </span>
-                      <span className="text-[9px] font-mono text-stone-600">
+                      <span className="text-[9px] font-mono text-muted-foreground">
                         {sortedThoughts.length}
                       </span>
                     </div>
-                    <div className="relative max-h-[280px] overflow-y-auto rounded-xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.04] to-transparent">
+                    <div className="relative max-h-[280px] overflow-y-auto rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent">
                       {sortedThoughts.map((th, idx) => {
                         const aid = th.agent_id;
                         const archetype = th.archetype || '';
@@ -2700,21 +2696,21 @@ export default function AbmPersonaMap({
                                 });
                               }
                             }}
-                            className="w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 hover:bg-amber-500/[0.06] transition-colors"
+                            className="w-full text-left px-3 py-2 border-b border-border/60 last:border-b-0 hover:bg-warning/[0.06] transition-colors"
                           >
                             <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="text-[9px] font-mono text-amber-400/80 tracking-wider tabular-nums">
+                              <span className="text-[9px] font-mono text-warning/80 tracking-wider tabular-nums">
                                 {String(th.hour % 24).padStart(2, '0')}:00
                               </span>
-                              <span className="text-[9px] font-mono text-stone-500 tabular-nums">
+                              <span className="text-[9px] font-mono text-muted-foreground tabular-nums">
                                 #{aid}
                               </span>
                             </div>
-                            <p className="text-[11px] leading-snug text-stone-300 font-medium break-keep">
+                            <p className="text-[11px] leading-snug text-foreground font-medium break-keep">
                               {th.thought}
                             </p>
                             {archetype && (
-                              <p className="mt-0.5 text-[8.5px] font-mono text-stone-600 tracking-wide uppercase">
+                              <p className="mt-0.5 text-[8.5px] font-mono text-muted-foreground tracking-wide uppercase">
                                 {archetype}
                               </p>
                             )}
@@ -2735,7 +2731,7 @@ export default function AbmPersonaMap({
                         abmResult.daily_visits_std > 0
                           ? `σ ${abmResult.daily_visits_std}`
                           : '시뮬 평균',
-                      color: '#34D399',
+                      color: '#00BA7A',
                       glow: 'rgba(52,211,153,0.18)',
                       icon: (
                         <path
@@ -2754,7 +2750,7 @@ export default function AbmPersonaMap({
                         : '-',
                       suffix: '만 ₩',
                       sub: '월 매출 (일×25)',
-                      color: '#FBBF24',
+                      color: '#FF7940',
                       glow: 'rgba(251,191,36,0.18)',
                       icon: (
                         <text
@@ -2780,7 +2776,7 @@ export default function AbmPersonaMap({
                           : '-',
                       suffix: '시',
                       sub: '상위 3 시간대',
-                      color: '#22D3EE',
+                      color: '#00E0D1',
                       glow: 'rgba(34,211,238,0.18)',
                       icon: (
                         <>
@@ -2800,8 +2796,8 @@ export default function AbmPersonaMap({
                       value: abmResult.n_personas ? abmResult.n_personas.toLocaleString() : '-',
                       suffix: '명',
                       sub: 'Tier S 50 · LLM thought',
-                      color: '#818CF8',
-                      glow: 'rgba(129,140,248,0.18)',
+                      color: '#002CD1',
+                      glow: 'rgba(0,44,209,0.18)',
                       icon: (
                         <>
                           <circle cx="9" cy="8" r="3" stroke="#000" strokeWidth="2" />
@@ -2818,15 +2814,15 @@ export default function AbmPersonaMap({
                   ].map((m) => (
                     <div
                       key={m.label}
-                      className="relative bg-[#111113]/90 backdrop-blur-xl border border-white/10 rounded-[24px] p-5 shadow-2xl flex flex-col gap-3 overflow-hidden group transition-all hover:border-white/20"
+                      className="relative bg-card/90 backdrop-blur-xl border border-border rounded-[24px] p-5 shadow-2xl flex flex-col gap-3 overflow-hidden group transition-all hover:border-primary/40"
                       style={{ boxShadow: `0 0 32px ${m.glow}` }}
                     >
                       {/* 상단 글로스 highlight */}
-                      <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none" />
+                      <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-foreground/[0.04] to-transparent pointer-events-none" />
                       {/* 헤더 — 색 박스 아이콘 + 라벨 */}
                       <div className="relative z-10 flex items-center gap-2.5">
                         <div
-                          className="w-5 h-5 rounded-md flex items-center justify-center border border-white/10 shrink-0"
+                          className="w-5 h-5 rounded-md flex items-center justify-center border border-border shrink-0"
                           style={{ backgroundColor: m.color }}
                         >
                           <svg
@@ -2839,22 +2835,22 @@ export default function AbmPersonaMap({
                             {m.icon}
                           </svg>
                         </div>
-                        <span className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none">
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">
                           {m.label}
                         </span>
                       </div>
                       {/* 큰 숫자 */}
                       <div className="relative z-10 flex items-baseline gap-1.5">
-                        <span className="text-3xl font-black text-white italic tracking-tighter leading-none tabular-nums">
+                        <span className="text-3xl font-black text-foreground italic tracking-tighter leading-none tabular-nums">
                           {m.value}
                         </span>
-                        <span className="text-xs font-bold text-white/40 italic tracking-tight">
+                        <span className="text-xs font-bold text-muted-foreground italic tracking-tight">
                           {m.suffix}
                         </span>
                       </div>
-                      <div className="relative z-10 w-full h-px bg-white/[0.06]" />
+                      <div className="relative z-10 w-full h-px bg-foreground/[0.06]" />
                       {/* 서브라인 */}
-                      <div className="relative z-10 flex items-center gap-1.5 text-[9.5px] font-bold text-stone-500 uppercase tracking-tighter">
+                      <div className="relative z-10 flex items-center gap-1.5 text-[9.5px] font-bold text-muted-foreground uppercase tracking-tighter">
                         <div
                           className="w-1 h-1 rounded-full"
                           style={{ backgroundColor: m.color }}
@@ -2868,8 +2864,8 @@ export default function AbmPersonaMap({
                 {/* 페르소나 분포 (customer_profile_dist) — 큰 막대 + 색 차별화 */}
                 {abmResult.customer_profile_dist &&
                   Object.keys(abmResult.customer_profile_dist).length > 0 && (
-                    <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-[#3a3633] rounded-2xl p-4">
-                      <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">
+                    <div className="bg-background/90 backdrop-blur-sm border border-border rounded-2xl p-4">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">
                         페르소나 방문 분포
                       </p>
                       <div className="flex gap-2 items-end h-20">
@@ -2893,18 +2889,18 @@ export default function AbmPersonaMap({
                                           : role;
                             const color =
                               role === 'resident'
-                                ? '#34D399'
+                                ? '#00BA7A'
                                 : role === 'commuter'
-                                  ? '#60A5FA'
+                                  ? '#002CD1'
                                   : role === 'visitor'
-                                    ? '#F472B6'
+                                    ? '#FF0070'
                                     : role === 'owner'
-                                      ? '#FBBF24'
+                                      ? '#FF7940'
                                       : role === 'ext_commuter'
-                                        ? '#22D3EE'
+                                        ? '#00E0D1'
                                         : role === 'ext_visitor'
-                                          ? '#A78BFA'
-                                          : '#9CA3AF';
+                                          ? '#B35CFF'
+                                          : '#6B6A63';
                             return (
                               <div
                                 key={role}
@@ -2922,7 +2918,7 @@ export default function AbmPersonaMap({
                                     boxShadow: `0 0 12px ${color}40`,
                                   }}
                                 />
-                                <span className="text-[10px] font-bold text-stone-400 truncate w-full text-center">
+                                <span className="text-[10px] font-bold text-muted-foreground truncate w-full text-center">
                                   {label}
                                 </span>
                               </div>
@@ -2934,8 +2930,8 @@ export default function AbmPersonaMap({
 
                 {/* 신규 매장 진입 시 잠식 효과 — 큼직하게 + 위험 시각화 */}
                 {abmResult.cannibalization && abmResult.cannibalization.target_dong && (
-                  <div className="bg-rose-500/10 backdrop-blur-sm border border-rose-500/40 rounded-2xl p-4 flex items-center gap-4 shadow-lg shadow-rose-500/10">
-                    <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
+                  <div className="bg-danger/10 backdrop-blur-sm border border-danger/40 rounded-2xl p-4 flex items-center gap-4 shadow-lg shadow-danger/10">
+                    <div className="w-10 h-10 rounded-xl bg-danger/20 flex items-center justify-center shrink-0">
                       <svg
                         width="22"
                         height="22"
@@ -2945,26 +2941,26 @@ export default function AbmPersonaMap({
                       >
                         <path
                           d="M12 9v4M12 17h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"
-                          stroke="#FB7185"
+                          stroke="#FF3800"
                           strokeWidth="2.2"
                           strokeLinecap="round"
                         />
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold text-rose-300 uppercase tracking-wider mb-1">
+                      <p className="text-[10px] font-bold text-danger uppercase tracking-wider mb-1">
                         기존 매장 잠식 (반경 {abmResult.cannibalization.cannibalize_radius_m}m)
                       </p>
-                      <p className="text-sm text-stone-200 leading-relaxed">
-                        <span className="text-rose-200 font-black">
+                      <p className="text-sm text-foreground leading-relaxed">
+                        <span className="text-danger font-black">
                           {abmResult.cannibalization.target_dong}
                         </span>{' '}
                         내 영향권 매장{' '}
-                        <span className="text-rose-200 font-black text-base">
+                        <span className="text-danger font-black text-base">
                           {abmResult.cannibalization.affected_stores}
                         </span>
                         개 · 예상 매출 감소{' '}
-                        <span className="text-rose-200 font-black text-base">
+                        <span className="text-danger font-black text-base">
                           {abmResult.cannibalization.estimated_impact_pct}%
                         </span>
                       </p>
@@ -2975,15 +2971,17 @@ export default function AbmPersonaMap({
             ) : abmLoading ? (
               <AbmProgressPanel />
             ) : abmError ? (
-              <div className="bg-[#0d1117]/90 backdrop-blur-sm border border-amber-500/30 rounded-xl px-6 py-3">
-                <p className="text-sm text-amber-400">{abmError}</p>
+              <div className="bg-background/90 backdrop-blur-sm border border-warning/30 rounded-xl px-6 py-3">
+                <p className="text-sm text-warning">{abmError}</p>
               </div>
             ) : (
               /* 시나리오 선택 UI + 실행 버튼 */
-              <div className="w-full max-w-2xl bg-[#0d1117]/90 backdrop-blur-sm border border-[#3a3633] rounded-xl p-4 flex flex-col gap-3">
+              <div className="w-full max-w-2xl bg-background/90 backdrop-blur-sm border border-border rounded-xl p-4 flex flex-col gap-3">
                 {/* 날씨 */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-[#6b7280] w-16 shrink-0">날씨</span>
+                  <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0">
+                    날씨
+                  </span>
                   <div className="flex gap-1.5">
                     {([null, '맑음', '비', '눈'] as const).map((w) => (
                       <button
@@ -2991,8 +2989,8 @@ export default function AbmPersonaMap({
                         onClick={() => setScenario((s) => ({ ...s, weather_override: w }))}
                         className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border flex items-center gap-1.5 ${
                           scenario.weather_override === w
-                            ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300'
-                            : 'border-[#3a3633] text-[#6b7280] hover:text-[#9ca3af] hover:border-[#4a4643]'
+                            ? 'bg-success/20 border-success/60 text-success'
+                            : 'border-border text-muted-foreground hover:text-muted-foreground hover:border-border'
                         }`}
                       >
                         {w === null ? (
@@ -3006,8 +3004,8 @@ export default function AbmPersonaMap({
                               aria-hidden="true"
                               className="shrink-0"
                             >
-                              <circle cx="9" cy="7" r="3.2" fill="#FBBF24" />
-                              <g stroke="#FBBF24" strokeWidth="1.3" strokeLinecap="round">
+                              <circle cx="9" cy="7" r="3.2" fill="#FF7940" />
+                              <g stroke="#FF7940" strokeWidth="1.3" strokeLinecap="round">
                                 <line x1="9" y1="1" x2="9" y2="2.6" />
                                 <line x1="9" y1="11.4" x2="9" y2="13" />
                                 <line x1="1" y1="7" x2="2.6" y2="7" />
@@ -3031,11 +3029,11 @@ export default function AbmPersonaMap({
                             >
                               <path
                                 d="M4.5 7.5 a3 3 0 0 1 0.3 -5.9 a4 4 0 0 1 7.6 0.4 a2.8 2.8 0 0 1 3.6 4.5 a2.5 2.5 0 0 1 -1.8 0.7 Z"
-                                fill="#9CA3AF"
-                                stroke="#D1D5DB"
+                                fill="#6B6A63"
+                                stroke="#EAE9E1"
                                 strokeWidth="0.7"
                               />
-                              <g stroke="#60A5FA" strokeWidth="1.3" strokeLinecap="round">
+                              <g stroke="#002CD1" strokeWidth="1.3" strokeLinecap="round">
                                 <line x1="6" y1="9.5" x2="5" y2="12.5" />
                                 <line x1="10" y1="9.5" x2="9" y2="12.5" />
                                 <line x1="14" y1="9.5" x2="13" y2="12.5" />
@@ -3053,7 +3051,7 @@ export default function AbmPersonaMap({
                               className="shrink-0"
                             >
                               <g
-                                stroke="#BFDBFE"
+                                stroke="#9DB8FF"
                                 strokeWidth="1.2"
                                 strokeLinecap="round"
                                 fill="none"
@@ -3066,7 +3064,7 @@ export default function AbmPersonaMap({
                                 <line x1="6" y1="11.5" x2="8" y2="10.5" />
                                 <line x1="10" y1="11.5" x2="8" y2="10.5" />
                               </g>
-                              <circle cx="8" cy="7" r="1.2" fill="#E0F2FE" />
+                              <circle cx="8" cy="7" r="1.2" fill="#E6EEFF" />
                             </svg>
                             눈
                           </>
@@ -3077,7 +3075,9 @@ export default function AbmPersonaMap({
                 </div>
                 {/* 요일 */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-[#6b7280] w-16 shrink-0">요일</span>
+                  <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0">
+                    요일
+                  </span>
                   <div className="flex gap-1.5">
                     {[
                       { label: '오늘', weekend_force: false, date: null },
@@ -3096,8 +3096,8 @@ export default function AbmPersonaMap({
                         className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
                           scenario.weekend_force === opt.weekend_force &&
                           scenario.date_override === opt.date
-                            ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300'
-                            : 'border-[#3a3633] text-[#6b7280] hover:text-[#9ca3af] hover:border-[#4a4643]'
+                            ? 'bg-success/20 border-success/60 text-success'
+                            : 'border-border text-muted-foreground hover:text-muted-foreground hover:border-border'
                         }`}
                       >
                         {opt.label}
@@ -3107,7 +3107,9 @@ export default function AbmPersonaMap({
                 </div>
                 {/* 임대료 충격 */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-[#6b7280] w-16 shrink-0">임대료</span>
+                  <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0">
+                    임대료
+                  </span>
                   <div className="flex gap-1.5">
                     {[0, 0.15, 0.3, 0.5].map((pct) => (
                       <button
@@ -3116,9 +3118,9 @@ export default function AbmPersonaMap({
                         className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
                           scenario.rent_shock_pct === pct
                             ? pct === 0
-                              ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300'
-                              : 'bg-rose-500/20 border-rose-500/60 text-rose-300'
-                            : 'border-[#3a3633] text-[#6b7280] hover:text-[#9ca3af] hover:border-[#4a4643]'
+                              ? 'bg-success/20 border-success/60 text-success'
+                              : 'bg-danger/20 border-danger/60 text-danger'
+                            : 'border-border text-muted-foreground hover:text-muted-foreground hover:border-border'
                         }`}
                       >
                         {pct === 0 ? '현재' : `+${Math.round(pct * 100)}%`}
@@ -3129,7 +3131,7 @@ export default function AbmPersonaMap({
                 {/* 실행 버튼 */}
                 <button
                   onClick={() => onRunSimulation(scenario)}
-                  className="mt-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 rounded-lg text-sm font-bold transition-all duration-300 shadow-[0_0_20px_rgba(52,211,153,0.15)]"
+                  className="mt-1 flex items-center justify-center gap-2 py-2.5 bg-success/20 hover:bg-success/30 border border-success/50 hover:border-success text-success rounded-lg text-sm font-bold transition-all duration-300 shadow-[0_0_20px_rgba(52,211,153,0.15)]"
                 >
                   <Play className="w-4 h-4" />
                   {targetDistrict} · {scenario.weather_override ?? '현재날씨'} ·{' '}

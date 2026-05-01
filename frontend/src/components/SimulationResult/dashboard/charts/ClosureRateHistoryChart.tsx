@@ -34,7 +34,7 @@ interface Row {
 export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
   if (!rates || rates.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
         과거 12개월 폐업률 데이터 없음
       </div>
     );
@@ -46,56 +46,57 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
   }));
 
   return (
-    <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
-      <div className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500 mb-3">
+    <div className="mt-3 rounded-lg border border-border/60 bg-card/40 p-4">
+      <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground mb-3">
         과거 12개월 폐업률 추이
-        <span className="ml-2 text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
+        <span className="ml-2 text-[0.5625rem] font-bold text-muted-foreground normal-case tracking-normal">
           monthly_closure_rates · 실측 (예측 아님)
         </span>
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#292524" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="month"
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
             interval={0}
           />
           <YAxis
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
             tickFormatter={(v) => `${v}%`}
             domain={[0, (max: number) => Math.max(60, Math.ceil(max / 10) * 10)]}
           />
           <Tooltip
-            cursor={{ stroke: '#44403c' }}
+            cursor={{ stroke: 'var(--border)' }}
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #44403c',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
               fontSize: 12,
+              color: 'var(--card-foreground)',
             }}
             formatter={(v: number) => [`${v.toFixed(2)}%`, '폐업률']}
           />
           <ReferenceLine
             y={30}
-            stroke="#22c55e"
+            stroke="var(--success)"
             strokeDasharray="3 3"
-            label={{ value: 'safe 30%', position: 'right', fill: '#22c55e', fontSize: 9 }}
+            label={{ value: 'safe 30%', position: 'right', fill: 'var(--success)', fontSize: 9 }}
           />
           <ReferenceLine
             y={60}
-            stroke="#ef4444"
+            stroke="var(--danger)"
             strokeDasharray="3 3"
-            label={{ value: 'danger 60%', position: 'right', fill: '#ef4444', fontSize: 9 }}
+            label={{ value: 'danger 60%', position: 'right', fill: 'var(--danger)', fontSize: 9 }}
           />
           <Line
             type="monotone"
             dataKey="rate"
-            stroke="#a8a29e"
+            stroke="var(--muted-foreground)"
             strokeWidth={2}
-            dot={{ r: 2, fill: '#a8a29e' }}
+            dot={{ r: 2, fill: 'var(--muted-foreground)' }}
             activeDot={{ r: 4 }}
             isAnimationActive={false}
           />

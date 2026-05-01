@@ -23,6 +23,12 @@ interface Props {
   openModal: (content: DetailModalContent) => void;
 }
 
+const AGENT_ICON = {
+  synthesis: { icon: BrainCircuit, color: 'text-foreground', borderCls: 'border-border/60' },
+  legal: { icon: AlertTriangle, color: 'text-danger', borderCls: 'border-danger/50' },
+  competitor: { icon: ShieldAlert, color: 'text-warning', borderCls: 'border-warning/50' },
+};
+
 // risk_level 두 패턴 정규화 — InsightsGrid.normalizeLevel 와 동일 매핑
 function isHazard(level: string): boolean {
   const up = level.toUpperCase();
@@ -38,15 +44,15 @@ export function LegalTab({ simResult, openModal }: Props) {
   return (
     <div className="space-y-6">
       {/* ═══ 법률·규제 검토 본문 ═══ */}
-      <div className="bg-stone-900/40 border border-stone-800/60 p-8 rounded-3xl">
+      <div className="bg-card/40 border border-border/60 p-8 rounded-3xl">
         <div className="flex justify-between items-center mb-6">
-          <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
-            <AlertTriangle size={16} className="text-rose-400" /> 법률·규제 검토
+          <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
+            <AlertTriangle size={16} className="text-danger" /> 법률·규제 검토
             {totalCount > 0 && (
               <span className="text-[0.625rem] font-black normal-case tracking-normal">
-                <span className="text-rose-400">위험 {hazardCount}건</span>
-                <span className="text-stone-600 mx-1">·</span>
-                <span className="text-emerald-400/80">안전 {safeCount}건</span>
+                <span className="text-danger">위험 {hazardCount}건</span>
+                <span className="text-muted-foreground mx-1">·</span>
+                <span className="text-success/80">안전 {safeCount}건</span>
               </span>
             )}
           </h4>
@@ -64,7 +70,7 @@ export function LegalTab({ simResult, openModal }: Props) {
                     .join('\n\n'),
                 })
               }
-              className="text-[0.625rem] font-black text-stone-500 hover:text-indigo-400 flex items-center gap-1 uppercase transition-colors"
+              className="text-[0.625rem] font-black text-muted-foreground hover:text-primary flex items-center gap-1 uppercase transition-colors"
             >
               <Maximize2 size={12} /> 전체 리포트 보기
             </button>
@@ -72,8 +78,8 @@ export function LegalTab({ simResult, openModal }: Props) {
         </div>
 
         {/* 등급 분포 막대 */}
-        <div className="bg-stone-950/40 border border-stone-800/60 rounded-2xl p-6 mb-4">
-          <h5 className="text-xs font-black text-stone-500 uppercase tracking-widest mb-3">
+        <div className="bg-card/40 border border-border/60 rounded-2xl p-6 mb-4">
+          <h5 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-3">
             법률 리스크 등급 분포
           </h5>
           <LegalDistributionBar risks={risks} />

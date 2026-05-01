@@ -6,9 +6,9 @@ interface Props {
 }
 
 const ZONING_CLS: Record<string, string> = {
-  safe: 'text-emerald-400',
-  caution: 'text-yellow-400',
-  danger: 'text-rose-400',
+  safe: 'text-success',
+  caution: 'text-warning',
+  danger: 'text-danger',
 };
 const ZONING_KO: Record<string, string> = {
   safe: '안전',
@@ -36,7 +36,7 @@ export function DistrictRankings({ simResult }: Props) {
     return (
       <section>
         <SectionLabel label="DISTRICT RANKINGS" subtitle="선택 동 입지 순위" />
-        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 text-center text-sm text-stone-400">
+        <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
           입지 랭킹 데이터가 없습니다
         </div>
       </section>
@@ -51,26 +51,32 @@ export function DistrictRankings({ simResult }: Props) {
   return (
     <section>
       <SectionLabel label="DISTRICT RANKINGS" subtitle={subtitle} />
-      <div className="overflow-x-auto rounded-lg border border-stone-700 bg-stone-800">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full min-w-[640px]">
-          <thead className="border-b border-stone-700 bg-stone-900/60">
+          <thead className="border-b border-border bg-muted">
             <tr>
-              <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">순위</th>
-              <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
+              <th className="p-3 text-left text-xs font-semibold uppercase text-muted-foreground">
+                순위
+              </th>
+              <th className="p-3 text-left text-xs font-semibold uppercase text-muted-foreground">
                 행정동
               </th>
-              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+              <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
                 점수
               </th>
-              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+              <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
                 매출성장
               </th>
-              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+              <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
                 폐업위험
-                <span className="ml-1 text-[0.5625rem] font-normal text-stone-600">(ML예측)</span>
+                <span className="ml-1 text-[0.5625rem] font-normal text-muted-foreground">
+                  (ML예측)
+                </span>
               </th>
-              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">BEP</th>
-              <th className="p-3 text-center text-xs font-semibold uppercase text-stone-400">
+              <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
+                BEP
+              </th>
+              <th className="p-3 text-center text-xs font-semibold uppercase text-muted-foreground">
                 용도지역
               </th>
             </tr>
@@ -82,59 +88,56 @@ export function DistrictRankings({ simResult }: Props) {
               const pred = districtPredictions.find((p) => p.district === r.district);
               const isExcluded = pred?.is_excluded_combo === true;
               const rowCls = isExcluded
-                ? 'opacity-50 bg-stone-900/40'
+                ? 'opacity-50 bg-muted'
                 : isWinner
-                  ? 'bg-indigo-500/10'
+                  ? 'bg-primary/10'
                   : i < 3
-                    ? 'bg-indigo-500/5'
+                    ? 'bg-primary/5'
                     : '';
               return (
-                <tr
-                  key={r.district}
-                  className={`border-b border-stone-700/50 last:border-b-0 ${rowCls}`}
-                >
-                  <td className="p-3 font-mono text-sm text-stone-100">
+                <tr key={r.district} className={`border-b border-border last:border-b-0 ${rowCls}`}>
+                  <td className="p-3 font-mono text-sm text-foreground">
                     {/* 자체 1~N위 (정렬 후 인덱스). 전체 마포 16동 중 순위는 작게 보조 표시. */}
                     {i + 1}
                     {selectedDongs.length > 0 && r.rank != null && r.rank !== i + 1 && (
-                      <span className="ml-1 text-[0.5625rem] font-normal text-stone-500">
+                      <span className="ml-1 text-[0.5625rem] font-normal text-muted-foreground">
                         (전체 {r.rank}위)
                       </span>
                     )}
                   </td>
-                  <td className="p-3 text-sm font-semibold text-stone-100">
+                  <td className="p-3 text-sm font-semibold text-foreground">
                     {r.district}
                     {isExcluded && (
-                      <span className="ml-2 rounded bg-stone-700 px-1.5 py-0.5 font-mono text-[10px] text-stone-400">
+                      <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                         예측 불가
                       </span>
                     )}
                     {isWinner && !isExcluded && (
-                      <span className="ml-2 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[0.625rem] font-bold text-indigo-400">
+                      <span className="ml-2 rounded bg-primary/20 px-1.5 py-0.5 text-[0.625rem] font-bold text-primary">
                         추천
                       </span>
                     )}
                   </td>
-                  <td className="p-3 text-right font-mono text-sm text-stone-100">
+                  <td className="p-3 text-right font-mono text-sm text-foreground">
                     {isExcluded ? '—' : r.score.toFixed(1)}
                   </td>
-                  <td className="p-3 text-right font-mono text-sm text-stone-300">
+                  <td className="p-3 text-right font-mono text-sm text-foreground">
                     {/* backend qoq_growth는 이미 percent 단위 (tools.py:300 *100 적용). 추가 ×100 금지 */}
                     {isExcluded ? '—' : `${r.sales_growth.toFixed(1)}%`}
                   </td>
-                  <td className="p-3 text-right font-mono text-sm text-rose-400">
+                  <td className="p-3 text-right font-mono text-sm text-danger">
                     {isExcluded
                       ? '—'
                       : r.closure_rate != null
                         ? `${(r.closure_rate * 100).toFixed(1)}%`
                         : '—'}
                   </td>
-                  <td className="p-3 text-right font-mono text-sm text-stone-300">
+                  <td className="p-3 text-right font-mono text-sm text-foreground">
                     {isExcluded ? '—' : r.bep_quarters != null ? `${r.bep_quarters}분기` : '—'}
                   </td>
                   <td
                     className={`p-3 text-center text-xs font-semibold ${
-                      ZONING_CLS[r.zoning_risk] ?? 'text-stone-400'
+                      ZONING_CLS[r.zoning_risk] ?? 'text-muted-foreground'
                     }`}
                   >
                     ● {ZONING_KO[r.zoning_risk] ?? r.zoning_risk}

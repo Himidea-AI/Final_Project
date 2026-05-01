@@ -32,29 +32,29 @@ interface SignalStyle {
 const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
   emerging: {
     label: '신흥 상권',
-    ring: 'ring-emerald-500/40',
-    text: 'text-emerald-400',
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/30',
-    bar: 'bg-emerald-500',
+    ring: 'ring-success/40',
+    text: 'text-success',
+    bg: 'bg-success/10',
+    border: 'border-success/30',
+    bar: 'bg-success',
     Icon: Sparkles,
   },
   declining: {
     label: '쇠퇴 상권',
-    ring: 'ring-rose-500/40',
-    text: 'text-rose-400',
-    bg: 'bg-rose-500/10',
-    border: 'border-rose-500/30',
-    bar: 'bg-rose-500',
+    ring: 'ring-danger/40',
+    text: 'text-danger',
+    bg: 'bg-danger/10',
+    border: 'border-danger/30',
+    bar: 'bg-danger',
     Icon: TrendingDown,
   },
   normal: {
     label: '정상',
-    ring: 'ring-stone-500/40',
-    text: 'text-stone-300',
-    bg: 'bg-stone-500/10',
-    border: 'border-stone-500/30',
-    bar: 'bg-stone-500',
+    ring: 'ring-border/40',
+    text: 'text-foreground',
+    bg: 'bg-muted/10',
+    border: 'border-border/30',
+    bar: 'bg-muted',
     Icon: Minus,
   },
 };
@@ -62,10 +62,10 @@ const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
 export function EmergingSignalCard({ signal }: Props) {
   if (!signal) {
     return (
-      <div className="rounded-3xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center">
-        <Sparkles className="mx-auto text-stone-600 mb-2" size={22} />
-        <p className="text-xs text-stone-500">신흥 상권 조기 감지 데이터 없음</p>
-        <p className="mt-1 text-[0.625rem] text-stone-600">
+      <div className="rounded-3xl border border-dashed border-border bg-card/40 p-6 text-center">
+        <Sparkles className="mx-auto text-muted-foreground mb-2" size={22} />
+        <p className="text-xs text-muted-foreground">신흥 상권 조기 감지 데이터 없음</p>
+        <p className="mt-1 text-[0.625rem] text-muted-foreground">
           emerging_district (LSTM Autoencoder) 모델 호출 실패 시 표시됩니다
         </p>
       </div>
@@ -78,17 +78,17 @@ export function EmergingSignalCard({ signal }: Props) {
   const consecutive = signal.consecutive_anomaly_quarters;
 
   return (
-    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-8 space-y-6">
+    <div className="bg-card/40 border border-border/60 rounded-3xl p-8 space-y-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h4 className="text-sm font-black text-stone-100 flex items-center gap-2 uppercase tracking-tight">
-          <Sparkles size={16} className="text-indigo-400" /> 신흥 상권 조기 감지
-          <span className="text-[0.625rem] font-black text-stone-500 normal-case tracking-normal">
+        <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
+          <Sparkles size={16} className="text-primary" /> 신흥 상권 조기 감지
+          <span className="text-[0.625rem] font-black text-muted-foreground normal-case tracking-normal">
             emerging_district · LSTM AE
           </span>
         </h4>
         {signal.is_mock && (
-          <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[0.625rem] font-black text-amber-400 flex items-center gap-1.5 uppercase tracking-widest">
+          <div className="px-3 py-1 bg-warning/10 border border-warning/20 rounded-full text-[0.625rem] font-black text-warning flex items-center gap-1.5 uppercase tracking-widest">
             <AlertCircle size={10} /> Mock
           </div>
         )}
@@ -101,27 +101,29 @@ export function EmergingSignalCard({ signal }: Props) {
         >
           <Icon className={style.text} size={28} />
           <div className={`text-base font-black ${style.text} tracking-tight`}>{style.label}</div>
-          <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
+          <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
             signal
           </div>
         </div>
 
-        <div className="col-span-1 bg-stone-950/40 border border-stone-800 rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
-          <div className="text-3xl font-black text-stone-100 tabular-nums tracking-tighter">
+        <div className="col-span-1 bg-card/40 border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
+          <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
             {scorePct}
           </div>
-          <div className="text-[0.6875rem] font-bold text-stone-400 tracking-wide">/ 100</div>
-          <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest mt-1">
+          <div className="text-[0.6875rem] font-bold text-muted-foreground tracking-wide">
+            / 100
+          </div>
+          <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mt-1">
             이상도 점수
           </div>
         </div>
 
-        <div className="col-span-1 bg-stone-950/40 border border-stone-800 rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
-          <div className="text-3xl font-black text-stone-100 tabular-nums tracking-tighter">
+        <div className="col-span-1 bg-card/40 border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
+          <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
             {consecutive}
           </div>
-          <div className="text-[0.6875rem] font-bold text-stone-400 tracking-wide">분기</div>
-          <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest mt-1">
+          <div className="text-[0.6875rem] font-bold text-muted-foreground tracking-wide">분기</div>
+          <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mt-1">
             연속 이상 감지
           </div>
         </div>
@@ -130,17 +132,17 @@ export function EmergingSignalCard({ signal }: Props) {
       {/* anomaly_score 게이지 */}
       <div>
         <div className="flex justify-between items-center mb-2">
-          <span className="text-[0.625rem] font-black text-stone-500 uppercase tracking-widest">
+          <span className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
             Anomaly Score (threshold p95 = 0.0414 기준 정규화)
           </span>
-          <span className="text-[0.6875rem] font-black text-stone-400 tabular-nums">
+          <span className="text-[0.6875rem] font-black text-muted-foreground tabular-nums">
             {signal.anomaly_score.toFixed(4)}
           </span>
         </div>
-        <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
+        <div className="w-full bg-card h-2 rounded-full overflow-hidden">
           <div className={`h-full ${style.bar} transition-all`} style={{ width: `${scorePct}%` }} />
         </div>
-        <div className="flex justify-between text-[0.5625rem] font-bold text-stone-600 tabular-nums mt-1">
+        <div className="flex justify-between text-[0.5625rem] font-bold text-muted-foreground tabular-nums mt-1">
           <span>0.00</span>
           <span>0.50</span>
           <span>1.00</span>
@@ -148,17 +150,17 @@ export function EmergingSignalCard({ signal }: Props) {
       </div>
 
       {/* 자연어 요약 */}
-      <div className="p-4 bg-stone-950/40 border border-stone-800 rounded-2xl">
-        <p className="text-[0.8125rem] text-stone-300 leading-relaxed">{signal.summary}</p>
+      <div className="p-4 bg-card/40 border border-border rounded-2xl">
+        <p className="text-[0.8125rem] text-foreground leading-relaxed">{signal.summary}</p>
       </div>
 
       {/* Disclaimer */}
-      <div className="pt-4 border-t border-stone-800/50 space-y-1">
-        <p className="text-[0.625rem] text-stone-600 leading-relaxed">
+      <div className="pt-4 border-t border-border/50 space-y-1">
+        <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
           ※ LSTM Autoencoder 비지도 학습 — threshold p95 = 0.041380 기준 anomaly_score 정규화 (1.0에
           클리핑).
         </p>
-        <p className="text-[0.625rem] text-stone-600 leading-relaxed">
+        <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
           ※ 마포 157개 조합 중 7개 이상 감지(약 4.5%) — 코로나 영향으로 쇠퇴 감지가 다수, 신흥
           신호는 상대적으로 희소합니다.
         </p>
