@@ -847,6 +847,34 @@ def run_simulation(
             visits_log.clear()
             trajectory.clear()
 
+        # Hierarchical Planning (Stanford UIST'23) — 측정일 시작 시 Tier S 하루 일정 batch 생성.
+        # 매 hour 슬롯 조회로 LLM 호출 회피 + 일관성 보장 (점심 한 번만 등).
+        # 외부 (ext_commuter/visitor) 는 외부 시간엔 결정 X 라 plan 무의미 → 마포 거주/통근만.
+        if not is_warmup and use_llm_decisions and hasattr(brain, "generate_daily_plans_batch"):
+            _tier_s_for_plan = [
+                a for a in agents if a.tier == Tier.S and a.role not in (Role.EXT_COMMUTER, Role.EXT_VISITOR)
+            ]
+            if _tier_s_for_plan:
+                if verbose:
+                    print(
+                        f"  [plan] hierarchical plan 생성 — Tier S {len(_tier_s_for_plan)}명...",
+                        flush=True,
+                    )
+                try:
+                    _plans = brain.generate_daily_plans_batch(_tier_s_for_plan, world)
+                    for _a in _tier_s_for_plan:
+                        _a.daily_plan = _plans.get(_a.agent_id, [])
+                    if verbose:
+                        _n_planned = sum(1 for _a in _tier_s_for_plan if _a.daily_plan)
+                        print(
+                            f"  [plan] {_n_planned}/{len(_tier_s_for_plan)} agent plan 생성 완료",
+                            flush=True,
+                        )
+                except Exception as e:
+                    print(f"  [plan] 실패 — batch_smart_decide fallback 사용: {e}", flush=True)
+                    for _a in _tier_s_for_plan:
+                        _a.daily_plan = []
+
         for _ in range(time_cfg.total_steps):
             res = scheduler.step(brain)
             total_decisions += res.activated

@@ -57,6 +57,16 @@ DEFAULT_CONFIG: dict = {
     "lgbm_num_leaves": 31,
     "lgbm_n_estimators": 200,
     "lgbm_learning_rate": 0.05,
+    # D-3 isotonic calibration (default False) — 2026-05-01 retrain 시 test AUC -0.038
+    # degradation + threshold collapse (danger==caution) 로 rollback. 코드는 보존되어 미래
+    # 변형 (Platt scaling, CV calibration 등) 또는 데이터 추가 후 재시도 가능.
+    "enable_d3_calibration": False,
+    # B-3 dong residual feature (2026-05-01) — hierarchical-grounded residual 추가
+    # T2 retrain 결과로 keep/rollback 결정 (cfg flag 로 toggle)
+    "enable_b3_dong_residual": True,
+    # A-2 additive ensemble (2026-05-01) — Stage 1 industry_prior_pred 를 feature 외 additive 로
+    # final = (1-w) * dong_ensemble + w * scaled_industry_prior, w grid search [0, 0.5] fit
+    "enable_a2_additive": True,
     # 저장 경로
     "tcn_weights_path": str(WEIGHTS_DIR / "closure_risk_tcn.pt"),
     "tcn_scaler_path": str(WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"),
@@ -65,6 +75,45 @@ DEFAULT_CONFIG: dict = {
     "metrics_path": str(WEIGHTS_DIR / "metrics.json"),
     "calibration_plot_path": str(WEIGHTS_DIR / "calibration_curve.png"),
 }
+
+
+# ---------------------------------------------------------------------------
+# A-1: LGBM/TCN inner-join alignment helper (2026-05-01)
+# ---------------------------------------------------------------------------
+
+
+def _align_predictions(
+    lgbm_proba: np.ndarray,
+    lgbm_keys: list[tuple],
+    tcn_proba: np.ndarray,
+    tcn_keys: list[tuple],
+    label_dict: dict[tuple, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[tuple]]:
+    """LGBM/TCN proba 를 (dong, industry, quarter) inner-join.
+
+    A-1 (2026-05-01): 기존 [:n] trim 의 순서 보장 X 문제 해결.
+
+    Args:
+        lgbm_proba: LGBM 예측 확률 array.
+        lgbm_keys: LGBM 의 (dong_code, industry_code, quarter) tuple list.
+        tcn_proba: TCN 예측 확률 array.
+        tcn_keys: TCN 의 키 tuple list.
+        label_dict: {(dong, industry, quarter): label} dict.
+
+    Returns:
+        (aligned_lgbm, aligned_tcn, aligned_y, common_keys)
+        common_keys 는 sorted intersection. 모두 빈 경우 빈 array 반환.
+    """
+    lgbm_dict = dict(zip(lgbm_keys, lgbm_proba))
+    tcn_dict = dict(zip(tcn_keys, tcn_proba))
+    common = sorted(set(lgbm_dict) & set(tcn_dict))
+    if not common:
+        empty = np.array([], dtype=float)
+        return empty, empty, np.array([], dtype=int), []
+    aligned_lgbm = np.array([lgbm_dict[k] for k in common], dtype=float)
+    aligned_tcn = np.array([tcn_dict[k] for k in common], dtype=float)
+    aligned_y = np.array([label_dict[k] for k in common], dtype=int)
+    return aligned_lgbm, aligned_tcn, aligned_y, common
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +159,8 @@ def _build_tcn_sequences(
 ) -> tuple:
     """(dong_code, industry_code) 그룹별 sliding window 시퀀스 + 시간 분할.
 
-    Returns: (X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler).
+    Returns: (X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler, val_keys, test_keys).
+    val_keys/test_keys 는 (dong, industry, quarter) tuple list (A-1 inner-join 용).
     train_quarters/val_quarters/test_quarters 가 주어지면 label 분기 기준 분할.
     Lookback (window) 의 분기는 어떤 split 에 있어도 OK — label 분기만 분리하면 leakage X.
     """
@@ -128,6 +178,8 @@ def _build_tcn_sequences(
     X_tr_list, y_tr_list = [], []
     X_val_list, y_val_list = [], []
     X_test_list, y_test_list = [], []
+    val_keys: list[tuple] = []
+    test_keys: list[tuple] = []
     gk = ["dong_code", "industry_code"]
 
     use_split = train_quarters is not None and val_quarters is not None and test_quarters is not None
@@ -146,15 +198,22 @@ def _build_tcn_sequences(
             label_quarter = quarters_arr[i + window_size]
 
             if use_split:
+                label_key = (
+                    str(group_sorted["dong_code"].iloc[i + window_size]),
+                    str(group_sorted["industry_code"].iloc[i + window_size]),
+                    int(label_quarter),
+                )
                 if label_quarter in train_quarters:
                     X_tr_list.append(x_seq)
                     y_tr_list.append(y_label)
                 elif label_quarter in val_quarters:
                     X_val_list.append(x_seq)
                     y_val_list.append(y_label)
+                    val_keys.append(label_key)
                 elif label_quarter in test_quarters:
                     X_test_list.append(x_seq)
                     y_test_list.append(y_label)
+                    test_keys.append(label_key)
             else:
                 X_tr_list.append(x_seq)
                 y_tr_list.append(y_label)
@@ -185,7 +244,7 @@ def _build_tcn_sequences(
         y_test = np.zeros(0, dtype=np.float32)
         X_tr, y_tr = X_tr[:-n_val], y_tr[:-n_val]
 
-    return X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler
+    return X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler, val_keys, test_keys
 
 
 # ---------------------------------------------------------------------------
@@ -202,12 +261,16 @@ def train_tcn(
     val_quarters: set[str] | None = None,
     test_quarters: set[str] | None = None,
 ) -> tuple:
-    """TCNClassifier fine-tune. (model, val_AUC, val/test proba, y_val/y_test, feat_scaler) 반환."""
+    """TCNClassifier fine-tune.
+
+    Returns: (model, val_AUC, val_proba, test_proba, y_val, y_test, feat_scaler, val_keys, test_keys).
+    val_keys/test_keys 는 A-1 inner-join 용 (dong, industry, quarter) tuple list.
+    """
 
     feature_cols = list(ALL_FEATURES)
     input_size = len(feature_cols)
 
-    X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler = _build_tcn_sequences(
+    X_tr, X_val, X_test, y_tr, y_val, y_test, feat_scaler, val_keys, test_keys = _build_tcn_sequences(
         df_full,
         y,
         config["window_size"],
@@ -292,7 +355,7 @@ def train_tcn(
         )
 
     logger.info("TCNClassifier 학습 완료 (best_val_AUC=%.4f)", best_auc)
-    return model, best_auc, val_proba, test_proba, y_val, y_test, feat_scaler
+    return model, best_auc, val_proba, test_proba, y_val, y_test, feat_scaler, val_keys, test_keys
 
 
 # ---------------------------------------------------------------------------
@@ -345,6 +408,39 @@ def train(config: dict | None = None) -> None:
         float(df_labeled["label"].mean()),
     )
 
+    # A-2 Stage 1: industry prior model 학습 + df_labeled 에 industry_prior_pred 컬럼 추가
+    from models.closure_risk.stage1_industry_prior import (
+        predict_industry_prior,
+        train_industry_prior_stage1,
+    )
+
+    stage1_model, stage1_agg = train_industry_prior_stage1(df_labeled, train_quarters)
+    df_labeled = predict_industry_prior(df_labeled, stage1_model, stage1_agg)
+    logger.info(
+        "A-2 Stage 1 prior 추가 완료. industry_prior_pred range: [%.4f, %.4f]",
+        float(df_labeled["industry_prior_pred"].min()),
+        float(df_labeled["industry_prior_pred"].max()),
+    )
+
+    # Stage 1 model + agg 저장 (predict.py 가 load)
+    stage1_path = WEIGHTS_DIR / "stage1_industry_prior.pkl"
+    with open(stage1_path, "wb") as f:
+        pickle.dump({"model": stage1_model, "agg": stage1_agg}, f)
+    logger.info("Stage 1 model 저장: %s", stage1_path)
+
+    # B-3 dong residual feature (2026-05-01) — train-only fit
+    if cfg.get("enable_b3_dong_residual", True):
+        from models.closure_risk.data_prep import add_dong_residual_feature
+
+        df_labeled = add_dong_residual_feature(df_labeled, train_quarters)
+        logger.info(
+            "B-3 dong residual 추가. range=[%.4f, %.4f]",
+            float(df_labeled["dong_closure_rate_residual_lag1"].min()),
+            float(df_labeled["dong_closure_rate_residual_lag1"].max()),
+        )
+    else:
+        logger.info("B-3 dong residual disabled (cfg.enable_b3_dong_residual=False)")
+
     # 4. label 적용 후 split 별 row 재추출
     train_df = df_labeled[df_labeled["quarter"].isin(train_quarters)].copy()
     val_df = df_labeled[df_labeled["quarter"].isin(val_quarters)].copy()
@@ -390,7 +486,17 @@ def train(config: dict | None = None) -> None:
     tcn_val_quarters = val_quarters if cfg["split_strategy"] == "time" else None
     tcn_test_quarters = test_quarters if cfg["split_strategy"] == "time" else None
 
-    tcn_model, tcn_val_auc, tcn_val_proba, tcn_test_proba, y_val_tcn, y_test_tcn, tcn_scaler = train_tcn(
+    (
+        tcn_model,
+        tcn_val_auc,
+        tcn_val_proba,
+        tcn_test_proba,
+        y_val_tcn,
+        y_test_tcn,
+        tcn_scaler,
+        tcn_val_keys,
+        tcn_test_keys,
+    ) = train_tcn(
         df_labeled,
         df_labeled["label"],
         cfg,
@@ -433,17 +539,79 @@ def train(config: dict | None = None) -> None:
     logger.info("학습 완료 — 예상 앙상블 AUC: %.4f", max(lgbm_val_auc, tcn_val_auc))
 
     # 6. Evaluate val + test (5 metric + calibration)
-    # ensemble proba: w_lgbm * lgbm + w_tcn * tcn
-    # LGBM 와 TCN 의 sample 길이가 다를 수 있음 (TCN 시퀀스 손실 분기) — TCN 길이 기준 trim
-    n_val = min(len(lgbm_val_proba), len(tcn_val_proba)) if len(tcn_val_proba) > 0 else len(lgbm_val_proba)
-    if n_val > 0 and len(tcn_val_proba) > 0:
-        ensemble_val_proba = w_lgbm * lgbm_val_proba[:n_val] + w_tcn * tcn_val_proba[:n_val]
-        y_val_common = y_val_arr[:n_val]
-    else:
-        ensemble_val_proba = lgbm_val_proba
-        y_val_common = y_val_arr
+    # A-1 (2026-05-01): inner-join alignment 으로 [:n] trim 대체.
+    # ensemble proba: w_lgbm * lgbm + w_tcn * tcn — common (dong, industry, quarter) 만.
+    lgbm_val_keys = [
+        (str(d), str(i), int(q)) for d, i, q in zip(val_df["dong_code"], val_df["industry_code"], val_df["quarter"])
+    ]
+    lgbm_test_keys = [
+        (str(d), str(i), int(q)) for d, i, q in zip(test_df["dong_code"], test_df["industry_code"], test_df["quarter"])
+    ]
+    label_dict = {
+        (str(row["dong_code"]), str(row["industry_code"]), int(row["quarter"])): int(row["label"])
+        for _, row in df_labeled.iterrows()
+    }
 
-    # threshold fit (val proba quantile) — D layer fix
+    aligned_lgbm_val, aligned_tcn_val, aligned_y_val, val_common = _align_predictions(
+        lgbm_val_proba, lgbm_val_keys, tcn_val_proba, tcn_val_keys, label_dict
+    )
+    aligned_lgbm_test, aligned_tcn_test, aligned_y_test, test_common = _align_predictions(
+        lgbm_test_proba, lgbm_test_keys, tcn_test_proba, tcn_test_keys, label_dict
+    )
+
+    logger.info("A-1 inner-join: val common=%d, test common=%d", len(val_common), len(test_common))
+
+    if len(val_common) > 0:
+        ensemble_val_proba = w_lgbm * aligned_lgbm_val + w_tcn * aligned_tcn_val
+        y_val_common = aligned_y_val
+    else:
+        logger.warning("inner-join val common=0, fallback to trim")
+        n_val = min(len(lgbm_val_proba), len(tcn_val_proba)) if len(tcn_val_proba) > 0 else len(lgbm_val_proba)
+        if n_val > 0 and len(tcn_val_proba) > 0:
+            ensemble_val_proba = w_lgbm * lgbm_val_proba[:n_val] + w_tcn * tcn_val_proba[:n_val]
+            y_val_common = y_val_arr[:n_val]
+        else:
+            ensemble_val_proba = lgbm_val_proba
+            y_val_common = y_val_arr
+
+    # D-3: isotonic calibration fit on val ensemble proba (2026-05-01)
+    # Niculescu-Mizil & Caruana (2005) — proba calibration 으로 confidence 회복.
+    # 기본 disabled (cfg["enable_d3_calibration"]=False) — 2026-05-01 retrain 시 test AUC
+    # -0.038 degradation + threshold collapse (danger==caution) 로 rollback. 코드는 보존.
+    calibrator = None
+    calibration_info = None
+    _d3_on = cfg.get("enable_d3_calibration", False)
+    if _d3_on and len(ensemble_val_proba) >= 10 and len(np.unique(y_val_common)) >= 2:
+        from sklearn.isotonic import IsotonicRegression
+
+        calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+        raw_val = ensemble_val_proba.copy()
+        calibrator.fit(raw_val, y_val_common)
+        ensemble_val_proba = calibrator.transform(ensemble_val_proba)
+        calibration_info = {
+            "method": "isotonic",
+            "val_raw_range": [float(raw_val.min()), float(raw_val.max())],
+            "val_calibrated_range": [float(ensemble_val_proba.min()), float(ensemble_val_proba.max())],
+        }
+        logger.info(
+            "D-3 isotonic calibration — val raw [%.3f, %.3f] → calibrated [%.3f, %.3f]",
+            calibration_info["val_raw_range"][0],
+            calibration_info["val_raw_range"][1],
+            calibration_info["val_calibrated_range"][0],
+            calibration_info["val_calibrated_range"][1],
+        )
+    elif _d3_on:
+        logger.warning("D-3 calibration skip — val sample %d (<10) 또는 단일 class", len(ensemble_val_proba))
+    else:
+        logger.info("D-3 calibration disabled (cfg.enable_d3_calibration=False)")
+
+    # calibrator 저장 (None 도 저장 — predict.py 가 graceful fallback)
+    cal_path = WEIGHTS_DIR / "ensemble_calibrator.pkl"
+    with open(cal_path, "wb") as f:
+        pickle.dump(calibrator, f)
+    logger.info("calibrator 저장: %s (calibrator=%s)", cal_path, type(calibrator).__name__ if calibrator else "None")
+
+    # threshold fit (val proba quantile) — D layer fix. D-3 후 calibrated proba 기준.
     DANGER_Q = 0.90
     CAUTION_Q = 0.70
     if len(ensemble_val_proba) > 0:
@@ -475,15 +643,24 @@ def train(config: dict | None = None) -> None:
         "ensemble": evaluate_model(y_val_common, ensemble_val_proba, k_pct=10),
     }
 
-    # Test set (final unbiased)
+    # Test set (final unbiased) — A-1 inner-join
     if cfg["split_strategy"] == "time" and len(y_test_arr) > 0:
-        n_test = min(len(lgbm_test_proba), len(tcn_test_proba)) if len(tcn_test_proba) > 0 else len(lgbm_test_proba)
-        if n_test > 0 and len(tcn_test_proba) > 0:
-            ensemble_test_proba = w_lgbm * lgbm_test_proba[:n_test] + w_tcn * tcn_test_proba[:n_test]
-            y_test_common = y_test_arr[:n_test]
+        if len(test_common) > 0:
+            ensemble_test_proba = w_lgbm * aligned_lgbm_test + w_tcn * aligned_tcn_test
+            y_test_common = aligned_y_test
         else:
-            ensemble_test_proba = lgbm_test_proba
-            y_test_common = y_test_arr
+            logger.warning("inner-join test common=0, fallback to trim")
+            n_test = min(len(lgbm_test_proba), len(tcn_test_proba)) if len(tcn_test_proba) > 0 else len(lgbm_test_proba)
+            if n_test > 0 and len(tcn_test_proba) > 0:
+                ensemble_test_proba = w_lgbm * lgbm_test_proba[:n_test] + w_tcn * tcn_test_proba[:n_test]
+                y_test_common = y_test_arr[:n_test]
+            else:
+                ensemble_test_proba = lgbm_test_proba
+                y_test_common = y_test_arr
+
+        # D-3: calibrator transform test (val 에서 fit 된 calibrator 적용)
+        if calibrator is not None and len(ensemble_test_proba) > 0:
+            ensemble_test_proba = calibrator.transform(ensemble_test_proba)
 
         test_metrics = {
             "lgbm": evaluate_model(y_test_arr, lgbm_test_proba, k_pct=10),
@@ -493,6 +670,73 @@ def train(config: dict | None = None) -> None:
     else:
         test_metrics = None
 
+    # A-2 additive ensemble (2026-05-01) — Stage 1 industry_prior_pred 의 explicit additive
+    additive_w_industry = 0.0
+    additive_metrics = None
+    if cfg.get("enable_a2_additive", True) and len(val_common) > 10:
+        # val_common keys 의 industry_prior_pred lookup
+        prior_lookup = {
+            (str(row["dong_code"]), str(row["industry_code"]), int(row["quarter"])): float(row["industry_prior_pred"])
+            for _, row in df_labeled.iterrows()
+        }
+        industry_prior_val = np.array([prior_lookup.get(k, 0.0) for k in val_common])
+        # scale 보정: industry_prior_pred 가 0~0.5 mean → 0~1 (X 2)
+        industry_prior_val_scaled = np.clip(industry_prior_val * 2.0, 0.0, 1.0)
+
+        # grid search w_industry [0, 0.5] step 0.05
+        best_auc = float(roc_auc_score(y_val_common, ensemble_val_proba))
+        baseline_auc = best_auc
+        for w_ind in np.arange(0.05, 0.55, 0.05):
+            w_dong = 1.0 - w_ind
+            candidate = w_dong * ensemble_val_proba + w_ind * industry_prior_val_scaled
+            try:
+                auc = float(roc_auc_score(y_val_common, candidate))
+            except ValueError:
+                continue
+            if auc > best_auc:
+                best_auc = auc
+                additive_w_industry = float(w_ind)
+
+        if additive_w_industry > 0 and len(test_common) > 0:
+            industry_prior_test = np.array([prior_lookup.get(k, 0.0) for k in test_common])
+            industry_prior_test_scaled = np.clip(industry_prior_test * 2.0, 0.0, 1.0)
+
+            additive_val_proba = (
+                1 - additive_w_industry
+            ) * ensemble_val_proba + additive_w_industry * industry_prior_val_scaled
+            additive_test_proba = (
+                1 - additive_w_industry
+            ) * ensemble_test_proba + additive_w_industry * industry_prior_test_scaled
+
+            additive_metrics = {
+                "w_industry": additive_w_industry,
+                "val_auc_baseline": baseline_auc,
+                "val_auc_additive": best_auc,
+                "val_metrics": evaluate_model(y_val_common, additive_val_proba, k_pct=10),
+                "test_metrics": evaluate_model(y_test_common, additive_test_proba, k_pct=10),
+            }
+            logger.info(
+                "A-2 additive — w_industry=%.2f, val AUC %.4f → %.4f (+%.4f), test AUC %.4f",
+                additive_w_industry,
+                baseline_auc,
+                best_auc,
+                best_auc - baseline_auc,
+                additive_metrics["test_metrics"]["auc"],
+            )
+        else:
+            logger.info("A-2 additive — grid search 결과 baseline 동일 (w_industry=0). skip.")
+
+        # ensemble_weights.pkl 에 additive_w_industry 추가 저장 (predict.py 가 load)
+        if additive_w_industry > 0:
+            with open(cfg["ensemble_weights_path"], "rb") as f:
+                _ew = pickle.load(f)
+            _ew["additive_w_industry"] = additive_w_industry
+            with open(cfg["ensemble_weights_path"], "wb") as f:
+                pickle.dump(_ew, f)
+            logger.info("ensemble_weights.pkl 갱신 — additive_w_industry=%.2f", additive_w_industry)
+    else:
+        logger.info("A-2 additive disabled or val 부족")
+
     metrics_summary = {
         "split_strategy": cfg["split_strategy"],
         "train_quarters": sorted(set(train_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
@@ -500,6 +744,8 @@ def train(config: dict | None = None) -> None:
         "test_quarters": sorted(set(test_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
         "ensemble_weights": {"w_lgbm": w_lgbm, "w_tcn": w_tcn},
         "thresholds": thresholds,
+        "calibration_info": calibration_info,
+        "additive_metrics": additive_metrics,  # A-2 additive (2026-05-01)
         "lgbm": {"val": val_metrics["lgbm"], "test": (test_metrics or {}).get("lgbm")},
         "tcn": {"val": val_metrics["tcn"], "test": (test_metrics or {}).get("tcn")},
         "ensemble": {"val": val_metrics["ensemble"], "test": (test_metrics or {}).get("ensemble")},

@@ -25,6 +25,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # pgvector HNSW 인덱스는 fixed-dim vector 컬럼 필수.
+    # LangChain PGVector는 무차원 `vector` 컬럼으로 생성 → ALTER로 1024 명시.
+    # 기존 데이터는 이미 1024-dim BGE-m3 임베딩이라 변환 손실 없음.
+    op.execute(
+        "ALTER TABLE langchain_pg_embedding ALTER COLUMN embedding TYPE vector(1024)"
+    )
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_legal_embedding_hnsw
@@ -37,3 +43,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS idx_legal_embedding_hnsw")
+    # 차원 제약은 downgrade 시에도 유지 (다른 차원 데이터 INSERT 시 실패 방지).
+    # 명시적 제거 필요하면: ALTER COLUMN ... TYPE vector;

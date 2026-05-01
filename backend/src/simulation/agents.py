@@ -148,6 +148,25 @@ class Agent:
     pending_recommendations: list[dict] = field(default_factory=list)
     # [{"store_id": int, "from_agent": int, "category": str, "strength": float}]
 
+    # v13 (2026-05) — Hierarchical Planning (Stanford Generative Agents UIST'23 적용)
+    # Tier S 만 사용. 시뮬 시작 시 1회 LLM 으로 하루 일정 생성, 매 hour 슬롯 조회로 LLM 회피.
+    # 슬롯 부재 (예: warmup 끝나고 plan 만료) 시 batch_smart_decide 로 fallback.
+    daily_plan: list[dict] = field(default_factory=list)
+    # [{"start": int, "end": int, "action": "visit|move|rest|work",
+    #   "dong": str, "category": str | None, "reason": str}]
+
+    def get_plan_slot(self, hour: int) -> dict | None:
+        """현재 hour 에 해당하는 plan slot 반환 (없으면 None)."""
+        for item in self.daily_plan:
+            try:
+                start = int(item.get("start", 0))
+                end = int(item.get("end", 0))
+            except (TypeError, ValueError):
+                continue
+            if start <= hour < end:
+                return item
+        return None
+
     def __post_init__(self):
         if not self.current_dong:
             self.current_dong = self.home_dong

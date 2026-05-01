@@ -5,6 +5,7 @@ RAG 문서 검색 — 하이브리드 (벡터 유사도 + BM25 키워드) + RRF 
 import json
 import logging
 import math
+import os
 from pathlib import Path
 
 from ..database.vector_db import LegalVectorDB
@@ -247,11 +248,18 @@ class LegalDocumentRetriever:
                     messages.append({"role": "assistant", "content": ex["output"]})
                 messages.append({"role": "user", "content": query})
 
+                # SP3: 유효 키만 사용 (placeholder 거부) — env로 prefer 가능
+                _ant_key = settings.anthropic_api_key or ""
+                _oai_key = settings.openai_api_key or ""
+                _ant_valid = _ant_key.startswith("sk-ant-")
+                _oai_valid = _oai_key.startswith("sk-")
+                _prefer = os.getenv("HYDE_PROVIDER", "auto").lower()  # "openai" | "anthropic" | "auto"
+
                 # Anthropic SDK (claude-haiku-4.5)
-                if settings.anthropic_api_key:
+                if _ant_valid and (_prefer == "anthropic" or (_prefer == "auto" and not _oai_valid)):
                     from anthropic import AsyncAnthropic
 
-                    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+                    client = AsyncAnthropic(api_key=_ant_key)
                     resp = await asyncio.wait_for(
                         client.messages.create(
                             model="claude-haiku-4-5-20251001",
@@ -264,8 +272,8 @@ class LegalDocumentRetriever:
                         timeout=10.0,
                     )
                     hyde_text = resp.content[0].text.strip()
-                # OpenAI fallback (gpt-4o-mini)
-                elif settings.openai_api_key:
+                # OpenAI (gpt-4o-mini)
+                elif _oai_valid:
                     from openai import AsyncOpenAI
 
                     client = AsyncOpenAI(api_key=settings.openai_api_key)
@@ -310,20 +318,33 @@ class LegalDocumentRetriever:
             return f"{dict_expanded} {hyde_text}"
         return dict_expanded
 
-    # 청크가 인덱싱된 source 메타데이터 값 (parse_pdfs.py의 파일명 stem과 일치)
+    # 청크가 인덱싱된 source 메타데이터 값.
+    # SP2 후 두 종류의 source 형식이 공존:
+    #   1) PDF chunks: parse_pdfs.py의 파일명 stem (전체 명칭)
+    #   2) 법령_본문 chunks: build_law_chunks.py의 law_short_name (단축명, e.g. "가맹사업법")
+    # Vector $in 매칭은 정확 일치만 → 두 형식 모두 명시 등록.
     FRANCHISE_LAW_SOURCES = [
         "가맹사업거래의 공정화에 관한 법률(법률)(제20712호)(20250121)",
         "가맹사업거래의 공정화에 관한 법률 시행령(대통령령)(제36220호)(20260324)",
+        "가맹사업법",
+        "가맹사업법 시행령",
+        "가맹사업진흥법",
+        "가맹사업진흥법 시행령",
     ]
     LEASE_LAW_SOURCES = [
         "상가건물 임대차보호법(법률)(제21065호)(20260102)",
         "상가건물 임대차보호법 시행령(대통령령)(제35947호)(20260102)",
         "서울시_2023_상가임대차_상담사례집_내지_전자책",
+        "상가임대차법",
+        "상가임대차법 시행령",
+        "상가건물 임대차계약서상의 확정일자 부여 및 임대차 정보제공에 관한 규칙",
     ]
     # 조문 검색 전용 — 상담사례집 제외 (비조문 문서가 조문 검색 정확도를 낮춤)
     LEASE_LAW_STRICT_SOURCES = [
         "상가건물 임대차보호법(법률)(제21065호)(20260102)",
         "상가건물 임대차보호법 시행령(대통령령)(제35947호)(20260102)",
+        "상가임대차법",
+        "상가임대차법 시행령",
     ]
     MAPO_SOURCES = [
         "서울특별시 마포구 지역상권 상생협력에 관한 조례",
@@ -332,36 +353,82 @@ class LegalDocumentRetriever:
         "식품위생법(법률)(제21065호)(20251001)",
         "식품위생법 시행규칙(총리령)(제02077호)(20260301)",
         "[한국외식업중앙회] 2026 위생교육교재 (표지 포함)",
+        "식품위생법",
+        "식품위생법 시행령",
+        "식품위생법 시행규칙",
+        "식품위생 분야 종사자의 건강진단 규칙",
     ]
     SAFETY_SOURCES = [
         "210226_ 「다중이용업소의 안전관리에 관한 특별법」업무처리 지침",
         "제4차(2024~2028) 다중이용업소 안전관리 기본계획(전문)",
+        "다중이용업소법",
+        "다중이용업소법 시행령",
+        "다중이용업소법 시행규칙",
     ]
     BUILDING_LAW_SOURCES = [
         "건축법(법률)(20250101)",
+        "건축법",
+        "건축법 시행령",
+        "건축법 시행규칙",
+        "녹색건축법",
+        "녹색건축법 시행령",
+        "녹색건축법 시행규칙",
     ]
     FIRE_SAFETY_SOURCES = [
         "소방시설 설치 및 관리에 관한 법률(법률)(20250101)",
+        "소방시설법",
+        "소방시설법 시행령",
+        "소방시설법 시행규칙",
+        "소방시설공사업법",
+        "소방시설공사업법 시행령",
+        "소방시설공사업법 시행규칙",
     ]
     LABOR_LAW_SOURCES = [
         "근로기준법(법률)(20250101)",
         "최저임금법(법률)(제17326호)(20200526)",
+        "근로기준법",
+        "근로기준법 시행령",
+        "근로기준법 시행규칙",
+        "최저임금법",
+        "최저임금법 시행령",
+        "최저임금법 시행규칙",
     ]
     VAT_LAW_SOURCES = [
         "부가가치세법(법률)(제21065호)(20260102)",
+        "부가가치세법",
+        "부가가치세법 시행령",
+        "부가가치세법 시행규칙",
+        "외국인관광객면세규정",
+        "영농기자재등면세규정",
     ]
     PRIVACY_LAW_SOURCES = [
         "개인정보 보호법(법률)(제20897호)(20251002)",
+        "개인정보 보호법",
+        "개인정보 보호법 시행령",
+        "개인정보 보호위원회 직제",
+        "개인정보 보호위원회 직제 시행규칙",
     ]
     ACCESSIBILITY_LAW_SOURCES = [
         "장애인ㆍ노인ㆍ임산부 등의 편의증진 보장에 관한 법률(법률)(제20594호)(20251221)",
+        "장애인편의법",
+        "장애인편의법 시행령",
+        "장애인편의법 시행규칙",
     ]
     FAIR_TRADE_SOURCES = [
         "독점규제 및 공정거래에 관한 법률(법률)(제21066호)(20251001)",
+        "공정거래법",
+        "공정거래법 시행령",
+        "공정거래법 시행규칙",
     ]
     SEWAGE_LAW_SOURCES = [
         "하수도법(법률)(제21065호)(20251001)",
         "물환경보전법(법률)(제21368호)(20260219)",
+        "하수도법",
+        "하수도법 시행령",
+        "하수도법 시행규칙",
+        "물환경보전법",
+        "물환경보전법 시행령",
+        "물환경보전법 시행규칙",
     ]
     LIQUOR_LAW_SOURCES = [
         "주세법(법률)(제20618호)(20250101)",
@@ -389,14 +456,21 @@ class LegalDocumentRetriever:
 
         return settings.rrf_bm25_weight
 
-    # Reranker (전부 비활성 — 3종 모두 역효과 확인)
-    # ms-marco-MiniLM: F1 -0.247
-    # mmarco-mMiniLMv2: F1 -0.128
-    # BGE-Reranker-v2-m3: F1 -0.030, F1>=0.7: 43→20 폭락
-    # 결론: 현재 RRF(벡터+BM25) 순서가 리랭커보다 우수
+    # Reranker — Cross-encoder. settings.rerank_enabled로 toggle.
+    # 이전 baseline (MiniLM + 4배 중복) 측정 시 마이너스 → 비활성. SP3 후 재측정 권장.
     _reranker = None
-    _RERANK_ENABLED = False
-    _RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
+
+    @property
+    def _RERANK_ENABLED(self) -> bool:
+        from src.config.settings import settings
+
+        return settings.rerank_enabled
+
+    @property
+    def _RERANK_MODEL(self) -> str:
+        from src.config.settings import settings
+
+        return settings.rerank_model
 
     # Multi-Vector Q2Q (예상 질문 벡터 검색)
     _vq_index = None  # 지연 로딩
@@ -861,11 +935,14 @@ class LegalDocumentRetriever:
         이번 전략: 재정렬 + 노이즈 필터링 (score < 0.01 제거)
         폴백: 필터 후 결과가 top_k 미만이면 원본 RRF 결과로 보충
         """
+        from src.config.settings import settings
+
         if cls._reranker is None:
             from sentence_transformers import CrossEncoder
 
-            cls._reranker = CrossEncoder(cls._RERANK_MODEL, max_length=512)
-            logger.info(f"[Reranker] {cls._RERANK_MODEL} 로드 완료")
+            model_name = settings.rerank_model  # property 회피 — settings에서 직접
+            cls._reranker = CrossEncoder(model_name, max_length=512)
+            logger.info(f"[Reranker] {model_name} 로드 완료")
 
         pairs = [(query, d["content"][:300]) for d in docs]  # 300자 제한 (속도)
         scores = cls._reranker.predict(pairs, batch_size=32)
