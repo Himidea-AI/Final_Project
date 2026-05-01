@@ -25,6 +25,8 @@ interface Props {
   label?: string;
   thresholds?: [number, number];
   polarity?: Polarity;
+  /** 단위 표기 (예: "점", "%", "₩"). 값 옆에 작은 muted suffix 로 렌더. */
+  unit?: string;
 }
 
 function bandFor(value: number, thresholds: [number, number], polarity: Polarity): BulletBand {
@@ -58,6 +60,7 @@ export function BulletChart({
   label,
   thresholds = [40, 70],
   polarity = 'higher-better',
+  unit = '',
 }: Props) {
   const hasValue = actual != null;
   const pct = hasValue ? Math.min(100, Math.max(0, (actual / max) * 100)) : 0;
@@ -84,6 +87,9 @@ export function BulletChart({
         )}
         <span className="text-xs font-black text-foreground tabular-nums">
           {hasValue ? actual : '—'}
+          {hasValue && unit && (
+            <span className="ml-0.5 text-[0.625rem] font-bold text-muted-foreground">{unit}</span>
+          )}
         </span>
       </div>
       <div className="relative h-2 w-full overflow-hidden rounded-full bg-card">

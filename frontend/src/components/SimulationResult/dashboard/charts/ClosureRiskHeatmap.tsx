@@ -185,6 +185,10 @@ export function ClosureRiskHeatmap({ rows }: Props) {
         rows={rows}
       />
       <HeatmapTable title="TCN · 시계열 흐름 기반 기여 피처" features={tcnFeatures} rows={rows} />
+      <p className="text-[0.625rem] text-muted-foreground leading-relaxed mt-3">
+        셀 색강도 = 해당 피처가 폐업 위험에 기여한 정도 (양수 빨강 = 위험↑, 음수 초록 = 위험↓).
+        |값|/최대|값| × 60% 알파.
+      </p>
     </div>
   );
 }
