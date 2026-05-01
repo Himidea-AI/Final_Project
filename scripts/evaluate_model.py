@@ -50,9 +50,9 @@ V1_CONFIG = {
 
 # v2: DMS 4분기 동시출력 (window_size=8, output_size=4)
 V2_CONFIG = {
-    "window_size": 8,  # TCN v2 최소 학습 윈도우
+    "window_size": 12,  # TCN v2 — 3년치 입력, 계절 사이클 3회
     "n_channels": 128,
-    "dilations": [1, 2, 4],
+    "dilations": [1, 2, 4, 8],
     "output_size": 4,
 }
 

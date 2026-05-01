@@ -42,7 +42,7 @@ DEFAULT_PRETRAIN_CONFIG: dict = {
     "db_url": DB_URL,
     "dong_prefix": None,  # 서울 전체 데이터로 사전학습
     "csv_path": None,
-    "window_size": 8,  # 8분기(2년) 입력 — receptive field=8와 일치
+    "window_size": 12,  # 12분기(3년) 입력 — 계절 사이클 3회 커버
     "output_size": 4,  # 4분기 멀티스텝 예측 (DMS)
     "batch_size": 64,
     "val_ratio": 0.2,
@@ -51,7 +51,7 @@ DEFAULT_PRETRAIN_CONFIG: dict = {
     # 모델 하이퍼파라미터
     "n_channels": 128,  # GRU의 hidden_size=128과 동일 조건
     "kernel_size": 2,  # receptive field 최적 커널 크기
-    "dilations": [1, 2, 4],  # receptive field = 1 + 1×(1+2+4) = 8 (window_size=8 커버)
+    "dilations": [1, 2, 4, 8],  # receptive field = 1 + 1×(1+2+4+8) = 16 (window_size=12 초과 커버)
     "dropout": 0.2,
     # 학습 하이퍼파라미터
     "epochs": 100,
@@ -66,7 +66,7 @@ DEFAULT_FINETUNE_CONFIG: dict = {
     "db_url": DB_URL,
     "dong_prefix": "11440",  # 마포구만 파인튜닝
     "csv_path": None,
-    "window_size": 8,  # 8분기(2년) 입력 — pretrain과 동일 조건
+    "window_size": 12,  # 12분기(3년) 입력 — pretrain과 동일 조건
     "output_size": 4,  # 4분기 멀티스텝 예측 (DMS)
     "val_quarter": 20241,  # 이 분기 이후를 val로 분리
     "batch_size": 32,  # 파인튜닝은 배치 작게 (데이터 적음)
@@ -76,7 +76,7 @@ DEFAULT_FINETUNE_CONFIG: dict = {
     # 모델 하이퍼파라미터
     "n_channels": 128,
     "kernel_size": 2,
-    "dilations": [1, 2, 4],  # receptive field = 8 (pretrain과 동일)
+    "dilations": [1, 2, 4, 8],  # receptive field = 16 (pretrain과 동일)
     "dropout": 0.2,
     # 파인튜닝 하이퍼파라미터
     "pretrained_path": str(WEIGHTS_DIR / "pretrained_tcn_v2.pt"),
