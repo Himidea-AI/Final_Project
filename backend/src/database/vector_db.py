@@ -12,13 +12,16 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from src.config.settings import settings
 from dotenv import load_dotenv
 
-# 커넥션 풀 설정 — RDS max_connections=81 제약 고려
+# 커넥션 풀 설정 — RDS max_connections=191 제약 고려
 # legal_node Phase 1 = RAG×13 + 판례×6 = 19 동시 검색 → 풀이 작으면 timeout 후 빈 결과 반환
 # 다른 노드들(market/population 등)이 별도 풀을 사용해도 RAG는 19 동시 보장 필요
 _POOL_SIZE = 10  # 기본 커넥션 수 — Phase 1 동시성 + 마진
-_MAX_OVERFLOW = 15  # 초과 허용 — 최대 25개 (RDS max_connections=81 내)
+_MAX_OVERFLOW = 15  # 초과 허용 — 최대 25개 (RDS max_connections=191 내)
 _POOL_TIMEOUT = 30  # 커넥션 대기 타임아웃(초)
 _POOL_PRE_PING = True  # 끊긴 커넥션 자동 재연결
+# RDS 연결 누수 방지 — uvicorn dev reload 시 idle 연결이 계속 쌓이는 문제 차단
+# (이전 진단: 1h↑ idle 102개 누수 → 102 강제 종료)
+_POOL_RECYCLE = 1800  # 30분 후 연결 재사용 (idle 누수 차단)
 
 load_dotenv()
 
@@ -75,6 +78,7 @@ class LegalVectorDB:
                     max_overflow=_MAX_OVERFLOW,
                     pool_timeout=_POOL_TIMEOUT,
                     pool_pre_ping=_POOL_PRE_PING,
+                    pool_recycle=_POOL_RECYCLE,
                 )
                 self._vectorstore = PGVector(
                     connection=async_engine,
