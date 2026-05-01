@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +104,31 @@ def get_valid_combos(ts: pd.DataFrame) -> list[tuple[str, str]]:
             continue
         valid.append((dong, ind))
     return valid
+
+
+# ---------------------------------------------------------------------------
+# v1 자기회귀 추론 헬퍼
+# ---------------------------------------------------------------------------
+
+
+@torch.no_grad()
+def _autoregressive_predict(
+    model,
+    window_seq: np.ndarray,  # (window_size, input_size), feat_scaler 변환 완료
+    target_idx: int,
+    n_steps: int,
+    tgt_scaler,
+    device,
+) -> list[float]:
+    """v1 자기회귀 추론. n_steps회 반복, expm1 역변환 적용."""
+    model.eval()
+    current_seq = torch.from_numpy(window_seq).unsqueeze(0).to(device)
+    predictions: list[float] = []
+    for _ in range(n_steps):
+        pred_val = model(current_seq).cpu().numpy().flatten()[0]
+        pred_log = tgt_scaler.inverse_transform([[pred_val]])[0][0]
+        predictions.append(float(np.expm1(pred_log)))
+        new_step = current_seq[0, -1, :].clone()
+        new_step[target_idx] = float(pred_val)
+        current_seq = torch.cat([current_seq[:, 1:, :], new_step.unsqueeze(0).unsqueeze(0)], dim=1)
+    return predictions

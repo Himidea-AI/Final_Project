@@ -149,3 +149,40 @@ def test_get_valid_combos_excludes_short_train(sample_ts):
     combos = get_valid_combos(ts_mod)
     assert ("1144010100", "CS100001") not in combos
     assert len(combos) == 3
+
+
+def test_autoregressive_predict_returns_four_values():
+    from scripts.evaluate_model import _autoregressive_predict
+    from unittest.mock import MagicMock
+    import torch
+
+    mock_model = MagicMock()
+    mock_model.return_value = torch.tensor([[0.0]])
+    mock_tgt_scaler = MagicMock()
+    mock_tgt_scaler.inverse_transform.return_value = [[0.0]]
+
+    seq = np.zeros((4, 3), dtype=np.float32)
+    result = _autoregressive_predict(
+        mock_model, seq, target_idx=0, n_steps=4,
+        tgt_scaler=mock_tgt_scaler, device=torch.device("cpu"),
+    )
+    assert len(result) == 4
+    assert all(isinstance(v, float) for v in result)
+
+
+def test_autoregressive_predict_applies_expm1():
+    from scripts.evaluate_model import _autoregressive_predict
+    from unittest.mock import MagicMock
+    import torch
+
+    mock_model = MagicMock()
+    mock_model.return_value = torch.tensor([[0.0]])
+    mock_tgt_scaler = MagicMock()
+    mock_tgt_scaler.inverse_transform.return_value = [[0.0]]  # log1p=0.0 → expm1=0.0
+
+    seq = np.zeros((4, 3), dtype=np.float32)
+    result = _autoregressive_predict(
+        mock_model, seq, target_idx=0, n_steps=1,
+        tgt_scaler=mock_tgt_scaler, device=torch.device("cpu"),
+    )
+    assert result[0] == pytest.approx(0.0)
