@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports"
+
+VAL_QUARTER = 20241  # 검증 시작 분기 (2024Q1 이상 → val)
+
+V2_CONFIG = {
+    "window_size": 8,  # TCN v2 최소 학습 윈도우
+}
+
+EXCLUDE_COMBOS: set[tuple[str, str]] = set()  # 평가 제외 조합 (필요 시 추가)
 
 
 # ---------------------------------------------------------------------------
@@ -67,3 +76,30 @@ def compute_directional_accuracy(q0: np.ndarray, pred: np.ndarray, true: np.ndar
     pred_seq = np.concatenate([q0[:, None], pred], axis=1)
     true_seq = np.concatenate([q0[:, None], true], axis=1)
     return float(np.mean(np.sign(np.diff(pred_seq, axis=1)) == np.sign(np.diff(true_seq, axis=1))) * 100)
+
+
+# ---------------------------------------------------------------------------
+# val 데이터 분리 / 유효 조합 필터링
+# ---------------------------------------------------------------------------
+
+
+def split_train_val(ts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """quarter 기준으로 train / val 분리. VAL_QUARTER 이상 → val."""
+    return ts[ts["quarter"] < VAL_QUARTER].copy(), ts[ts["quarter"] >= VAL_QUARTER].copy()
+
+
+def get_valid_combos(ts: pd.DataFrame) -> list[tuple[str, str]]:
+    """평가 가능한 (dong_code, industry_code) 조합 목록 반환."""
+    train_ts, val_ts = split_train_val(ts)
+    v2_window = V2_CONFIG["window_size"]  # 8
+    valid = []
+    for (dong, ind), train_group in train_ts.groupby(["dong_code", "industry_code"]):
+        if (dong, ind) in EXCLUDE_COMBOS:
+            continue
+        if len(train_group) < v2_window:
+            continue
+        val_group = val_ts[(val_ts["dong_code"] == dong) & (val_ts["industry_code"] == ind)]
+        if len(val_group) < 4:
+            continue
+        valid.append((dong, ind))
+    return valid
