@@ -121,7 +121,7 @@ export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }:
       district: districtForSave,
       brand_name: brand?.brand_name || user?.company_name || brandName || '브랜드 미지정',
       business_type: bizKey || null,
-      scenario: params ?? null,
+      scenario: params ? (params as unknown as Record<string, unknown>) : null,
       simulation_result: simResult,
       ai_verdict_summary: verdictSummary,
       market_entry_signal: signal,
