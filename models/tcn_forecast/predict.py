@@ -1,16 +1,12 @@
 """
 TCN 시계열 추론 — 특정 동x업종의 향후 n분기 매출 예측
 
-GRU predict.py 대비 변경점:
-- GRUForecaster → TCNForecaster import
-- 가중치 로드 경로: tcn_forecast/weights/finetuned_mapo_tcn.pt
-- n_channels=128, dilations=[1,2], kernel_size=2 (train config와 일치)
-- data_prep은 lstm_forecast에서 직접 import 재사용 (GRU와 동일)
-- 자기회귀 4분기 추론 구조 완전 동일
-- 신뢰구간 계산 방식 완전 동일
+DMS(Direct Multi-Step) 예측:
+- window_size 분기 입력 → 4분기 동시 출력 (오차 누적 없음)
+- n_quarters 파라미터는 하위 호환을 위해 유지하나 현재 구현에서는 항상 4 반환.
+- 신뢰구간: val residual std 기반 (residual_std_path pkl 로드)
 
 담당: B2 — 수지니
-참조: models/gru_forecast/predict.py (구조 동일)
 """
 
 from __future__ import annotations
@@ -46,15 +42,15 @@ _MODEL_CACHE: dict = {}
 
 DEFAULT_PREDICT_CONFIG: dict = {
     "db_url": DB_URL,
-    # TCN 파인튜닝 가중치 경로
-    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"),
-    "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers_34f.pkl"),
-    # train config와 일치: window_size=4, n_channels=128, dilations=[1,2]
-    "window_size": 4,
+    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_v2.pt"),
+    "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers_v2.pkl"),
+    "residual_std_path": str(WEIGHTS_DIR / "finetune_tcn_residual_std_v2.pkl"),  # 신규
+    "window_size": 12,
     "n_channels": 128,
     "kernel_size": 2,
-    "dilations": [1, 2],
+    "dilations": [1, 2, 4, 8],
     "dropout": 0.2,
+    "output_size": 4,  # 신규
     "target_col": "monthly_sales",
     "feature_cols": None,
     "confidence_z": 1.96,  # 95% 신뢰구간
@@ -72,12 +68,12 @@ def predict(
     n_quarters: int = 4,
     config: dict | None = None,
 ) -> list[dict]:
-    """특정 동x업종의 향후 n분기 매출을 자기회귀 방식으로 예측한다.
+    """특정 동x업종의 향후 n분기 매출을 DMS 방식으로 예측한다.
 
-    자기회귀(autoregressive) 예측:
-    - 1분기 예측 → 예측값을 입력 시퀀스 끝에 추가 → 2분기 예측 → ...
-    - 스텝이 멀어질수록 불확실성 증가 (5% × step × z)
-    GRU/LSTM과 완전히 동일한 추론 구조 — 공정한 비교를 위해.
+    DMS(Direct Multi-Step) 예측:
+    - window_size 분기 입력 → 4분기 동시 출력 (오차 누적 없음)
+    - n_quarters 파라미터는 하위 호환을 위해 유지하나 현재 구현에서는 항상 4 반환.
+    - 신뢰구간: val residual std 기반 (residual_std_path pkl 로드)
 
     Parameters
     ----------
@@ -114,7 +110,6 @@ def predict(
     weights_path = Path(cfg["weights_path"])
     scalers_path = Path(cfg["scalers_path"])
     window_size = cfg["window_size"]
-    target_col = cfg["target_col"]
     feature_cols = cfg.get("feature_cols")
 
     # 가중치 파일 존재 확인
@@ -144,6 +139,7 @@ def predict(
             kernel_size=cfg["kernel_size"],
             dilations=cfg["dilations"],
             dropout=cfg["dropout"],
+            output_size=cfg.get("output_size", 4),
         )
         model.load_weights(weights_path)
         model.to(device)
@@ -174,61 +170,68 @@ def predict(
     recent = group[actual_features].values.astype(np.float32)
 
     if len(recent) < window_size:
-        raise ValueError(f"과거 데이터가 부족합니다: {len(recent)}분기 (최소 {window_size}분기 필요)")
+        pad_size = window_size - len(recent)
+        recent = np.vstack([np.tile(recent[0], (pad_size, 1)), recent])
+        logger.warning(
+            "데이터 부족 패딩 적용: dong=%s, %d분기 → %d분기 (첫 분기 복사)",
+            dong_code,
+            len(recent) - pad_size,
+            window_size,
+        )
 
     # 피처 스케일링
     seq = feat_scaler.transform(recent[-window_size:])
 
-    # 타겟 컬럼의 인덱스 — 자기회귀 시 예측값을 다음 입력에 반영하기 위해 필요
-    try:
-        target_idx = actual_features.index(target_col)
-    except ValueError:
-        target_idx = 0
-
     # ---------------------------------------------------------------------------
-    # 자기회귀 예측 루프
+    # DMS 예측 — 단일 forward pass
     # ---------------------------------------------------------------------------
     predictions: list[float] = []
 
     with torch.no_grad():
-        # 초기 입력 시퀀스: (1, window_size, input_size)
-        current_seq = torch.from_numpy(seq).unsqueeze(0).to(device)
+        # DMS: 단일 forward → 4개 분기 동시 예측 (오차 누적 없음)
+        input_tensor = torch.from_numpy(seq).unsqueeze(0).to(device)  # (1, window_size, features)
+        pred_all = model(input_tensor)  # (1, 4)
+        pred_scaled_arr = pred_all.cpu().numpy().flatten()  # shape (4,)
 
-        for _ in range(n_quarters):
-            # TCN 순전파 → 스케일된 예측값
-            pred_scaled = model(current_seq)  # (1, 1)
-            pred_val = pred_scaled.cpu().numpy().flatten()[0]
-
-            # 역변환: 스케일 → 로그 → 원래 매출 단위
-            pred_log = tgt_scaler.inverse_transform([[pred_val]])[0][0]
-            pred_original = float(np.expm1(pred_log))  # log1p 역변환
-            predictions.append(pred_original)
-
-            # 다음 입력 시퀀스 구성 (sliding window)
-            # 마지막 타임스텝을 복사하고 타겟 피처만 예측값으로 교체
-            new_step = current_seq[0, -1, :].clone()
-            new_step[target_idx] = float(pred_val)
-            new_step = new_step.unsqueeze(0).unsqueeze(0)  # (1, 1, features)
-            current_seq = torch.cat([current_seq[:, 1:, :], new_step], dim=1)
+    for ps in pred_scaled_arr:
+        pred_log = tgt_scaler.inverse_transform([[float(ps)]])[0][0]
+        predictions.append(float(np.expm1(pred_log)))
 
     # ---------------------------------------------------------------------------
-    # 신뢰구간 계산
+    # 신뢰구간 계산 — residual_std 기반
     # ---------------------------------------------------------------------------
-    # 단순 추정: 스텝이 멀어질수록 불확실성 선형 증가 (GRU/LSTM과 동일)
+    import pickle
+
     confidence_z = cfg["confidence_z"]
+    residual_std_path = Path(cfg.get("residual_std_path", ""))
+    residual_std_list: list[float] | None = None
+
+    if residual_std_path.exists():
+        try:
+            with open(residual_std_path, "rb") as f:
+                residual_std_list = pickle.load(f)  # noqa: S301
+            logger.info("residual_std 로드 완료: %s", residual_std_path)
+        except Exception as exc:
+            logger.warning("residual_std 로드 실패, 하드코딩 CI 사용: %s", exc)
+    else:
+        logger.warning("residual_std 파일 없음, 하드코딩 CI 사용: %s", residual_std_path)
+
     results: list[dict] = []
 
     for i, pred_sales in enumerate(predictions):
-        # 불확실성 증가 계수: 스텝당 3% 증가, 최대 25% 상한
-        # (4분기: 12%, 8분기: 24% — 장기 예측 시 과도한 구간 팽창 방지)
-        uncertainty_factor = min(0.03 * (i + 1), 0.25)
-        margin = abs(pred_sales) * uncertainty_factor * confidence_z
+        if residual_std_list is not None and i < len(residual_std_list):
+            # val residual 기반 CI
+            margin = confidence_z * residual_std_list[i]
+        else:
+            # fallback: 하드코딩 (residual_std 없을 때)
+            uncertainty_factor = min(0.03 * (i + 1), 0.25)
+            margin = abs(pred_sales) * uncertainty_factor * confidence_z
 
         results.append(
             {
                 "quarter_offset": i + 1,
                 "predicted_sales": round(pred_sales, 0),
-                "confidence_lower": round(max(0, pred_sales - margin), 0),
+                "confidence_lower": round(max(0.0, pred_sales - margin), 0),
                 "confidence_upper": round(pred_sales + margin, 0),
             }
         )
