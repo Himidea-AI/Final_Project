@@ -326,6 +326,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
             [
                 SystemMessage(
                     content=(
+                        "[AGENT: demographic_depth] 매출 세그먼트 분해 + 타겟 적합도 에이전트 — LangSmith 식별용 라벨.\n\n"
                         "당신은 마포구 상권 소비자 분석 전문가입니다. 한국어로 응답하세요.\n\n"
                         "역할: 연령·성별·시간대·요일 매출 데이터를 분해해 주 고객층을 식별하고,\n"
                         "브랜드의 타겟 고객층과의 적합도를 0~100점으로 평가합니다.\n\n"

@@ -1037,6 +1037,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
 
     system_content = (
+        "[AGENT: legal] 법률 리스크 분석 에이전트 — LangSmith 식별용 라벨.\n\n"
         f"{LEGAL_AGENT_SYSTEM_PROMPT}\n\n"
         f"리스크 레벨 기준 (창업 전 관점 — 미이행 시 결과 기준으로 판정):\n"
         f"- safe: 해당 업종/지역에 적용되지 않거나, 별도 조치 없이 준수 가능\n"

@@ -265,6 +265,7 @@ async def synthesis_node(state: AgentState) -> dict:
     # Phase 2 (llm_analysis_phase)에서 이미 winner 동 기준으로 분석이 실행됐음
     # target_district == winner_district (graph.py Phase 2에서 교체)
     prompt = (
+        "[AGENT: synthesis] 최종 전략 합성 에이전트 — LangSmith 식별용 라벨.\n\n"
         "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
         f"브랜드:{brand_name}({business_type}) | 추천입지:{winner_district} | 법률리스크:{overall_legal_risk}\n"
         f"입지랭킹: {ranking_summary}\n"
