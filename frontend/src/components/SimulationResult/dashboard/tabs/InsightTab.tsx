@@ -46,7 +46,7 @@ export function InsightTab({ simResult, openModal }: Props) {
       </div>
 
       {/* ═══ Radar Overview (가이드 #7) ═══ */}
-      <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
+      <div className="bg-card border border-border rounded-3xl p-8">
         <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-4">
           8 에이전트 신뢰도 Overview
         </h4>
@@ -67,7 +67,7 @@ export function InsightTab({ simResult, openModal }: Props) {
               key={agent.id}
               className={`border p-6 rounded-3xl h-full flex flex-col transition-all text-left group ${
                 hasData
-                  ? `bg-card/40 ${agent.borderCls}`
+                  ? `bg-card ${agent.borderCls}`
                   : 'bg-card/20 border-dashed border-border opacity-60'
               }`}
             >
@@ -91,7 +91,7 @@ export function InsightTab({ simResult, openModal }: Props) {
 
               {/* verdict (한 줄 판정) */}
               {verdict && (
-                <div className="mb-3 px-2.5 py-1.5 rounded-md bg-card/40 border border-border/40">
+                <div className="mb-3 px-2.5 py-1.5 rounded-md bg-card border border-border">
                   <span className="text-[0.6875rem] font-bold text-foreground leading-tight">
                     {verdict}
                   </span>
@@ -109,7 +109,7 @@ export function InsightTab({ simResult, openModal }: Props) {
                   {sources.slice(0, 3).map((src, i) => (
                     <span
                       key={`${src}-${i}`}
-                      className="text-[0.5rem] font-black text-muted-foreground bg-card/50 px-1.5 py-0.5 rounded border border-border uppercase tracking-tighter"
+                      className="text-[0.5rem] font-black text-muted-foreground bg-card px-1.5 py-0.5 rounded border border-border uppercase tracking-tighter"
                     >
                       {src}
                     </span>

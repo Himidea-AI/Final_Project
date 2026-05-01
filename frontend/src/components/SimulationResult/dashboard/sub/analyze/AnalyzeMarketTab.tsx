@@ -39,7 +39,7 @@ export function AnalyzeMarketTab({ simResult, openModal }: Props) {
       <MarketTab simResult={simResult} openModal={openModal} />
 
       {hasTrendBlock && (
-        <div className="bg-card/40 border border-border/60 rounded-3xl p-8 space-y-5">
+        <div className="rounded-3xl border border-border bg-card p-8 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left leading-none">

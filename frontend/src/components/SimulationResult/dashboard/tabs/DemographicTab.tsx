@@ -51,7 +51,7 @@ export function DemographicTab({ simResult }: Props) {
 
   if (!hasAnyComposition && !hasReport && !hasCustomerSegment) {
     return (
-      <div className="bg-card/30 border border-dashed border-border rounded-3xl p-10 text-center">
+      <div className="bg-card border border-dashed border-border rounded-3xl p-10 text-center">
         <Users className="mx-auto mb-3 text-muted-foreground" size={22} />
         <div className="text-sm font-bold text-muted-foreground">인구 심층 분석 데이터 없음</div>
         <div className="mt-1 text-xs text-muted-foreground">
@@ -65,7 +65,7 @@ export function DemographicTab({ simResult }: Props) {
     <div className="space-y-6">
       {/* 인구 구성 — Donut + StackedAge + WeekdayWeekend (+ optional Heatmap) */}
       {hasAnyComposition && (
-        <div className="bg-card/30 border border-border/40 rounded-3xl p-6">
+        <div className="bg-card border border-border rounded-3xl p-6">
           <div className="mb-4 flex items-center gap-3">
             <h3 className="text-sm font-black text-foreground uppercase tracking-tight">
               인구 구성 상세
@@ -89,7 +89,7 @@ export function DemographicTab({ simResult }: Props) {
 
       {/* 인구 심층 분석 리포트 */}
       {hasReport && (
-        <div className="bg-card/30 border border-border/40 rounded-3xl p-8">
+        <div className="bg-card border border-border rounded-3xl p-8">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic text-left tracking-tight">
               <Users size={22} className="text-primary" /> 인구 심층 분석 리포트
@@ -120,7 +120,7 @@ export function DemographicTab({ simResult }: Props) {
           </div>
 
           {(narrative || rationale) && (
-            <div className="p-6 bg-card/40 border border-border rounded-2xl text-left space-y-2">
+            <div className="p-6 bg-card border border-border rounded-2xl text-left space-y-2">
               {narrative && (
                 <p className="text-sm text-foreground leading-relaxed font-medium">{narrative}</p>
               )}

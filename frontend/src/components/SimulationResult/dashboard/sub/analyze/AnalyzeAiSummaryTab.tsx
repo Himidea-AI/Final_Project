@@ -144,7 +144,7 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
 
       {/* ═══ synthesis 종합 분석 (최상단, 섹션별 블록 구조) ═══ */}
       {summary && (
-        <div className="rounded-3xl border border-border/60 bg-card/60 p-8">
+        <div className="rounded-3xl border border-border bg-card p-8">
           <h3 className="mb-6 text-base font-black uppercase tracking-widest text-foreground">
             synthesis 종합 분석
           </h3>
