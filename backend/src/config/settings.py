@@ -93,11 +93,11 @@ class Settings(BaseSettings):
     multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-4.1-mini")
 
     # Legal Rule Engine — 8 룰 + 4 specialist 하이브리드 (2026-05-02).
-    # default OFF — 활성 시 legacy single-LLM batch 대신 룰엔진 사용.
-    # 비활성 시 기존 12개 단일 LLM 평가 경로(legacy) 그대로 동작.
+    # default ON — 8 결정적 룰은 LLM/RAG 호출 없이 즉시 처리, 4 specialist만 RAG+LLM.
+    # legacy single-LLM batch 경로는 LEGAL_RULE_ENGINE_ENABLED=false로 복귀 가능.
     # 스펙: docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md
     legal_rule_engine_enabled: bool = (
-        os.getenv("LEGAL_RULE_ENGINE_ENABLED", "false").lower() == "true"
+        os.getenv("LEGAL_RULE_ENGINE_ENABLED", "true").lower() == "true"
     )
 
     # NTS (국세청)
