@@ -42,3 +42,35 @@ def test_compute_bias_positive():
 def test_compute_bias_negative():
     from scripts.evaluate_model import compute_bias
     assert compute_bias(np.array([90.0, 180.0]), np.array([100.0, 200.0])) == pytest.approx(-15.0)
+
+
+def test_compute_per_quarter_mape_values():
+    from scripts.evaluate_model import compute_per_quarter_mape
+    pred = np.array([[1100.0, 2200.0, 3300.0, 4400.0]])
+    true = np.array([[1000.0, 2000.0, 3000.0, 4000.0]])
+    assert compute_per_quarter_mape(pred, true) == pytest.approx([10.0, 10.0, 10.0, 10.0])
+
+
+def test_compute_per_quarter_mape_returns_four():
+    from scripts.evaluate_model import compute_per_quarter_mape
+    pred = np.array([[1100.0, 2200.0, 3300.0, 4400.0], [1050.0, 2100.0, 3150.0, 4200.0]])
+    true = np.array([[1000.0, 2000.0, 3000.0, 4000.0], [1000.0, 2000.0, 3000.0, 4000.0]])
+    assert len(compute_per_quarter_mape(pred, true)) == 4
+
+
+def test_compute_directional_accuracy_all_correct():
+    from scripts.evaluate_model import compute_directional_accuracy
+    q0 = np.array([1000.0, 1000.0])
+    pred = np.array([[1100.0, 900.0, 1100.0, 900.0],
+                     [1100.0, 900.0, 1100.0, 900.0]])
+    true = np.array([[1200.0, 800.0, 1300.0, 700.0],
+                     [1200.0, 800.0, 1300.0, 700.0]])
+    assert compute_directional_accuracy(q0, pred, true) == pytest.approx(100.0)
+
+
+def test_compute_directional_accuracy_all_wrong():
+    from scripts.evaluate_model import compute_directional_accuracy
+    q0 = np.array([1000.0])
+    pred = np.array([[900.0, 1100.0, 900.0, 1100.0]])
+    true = np.array([[1200.0, 800.0, 1300.0, 700.0]])
+    assert compute_directional_accuracy(q0, pred, true) == pytest.approx(0.0)
