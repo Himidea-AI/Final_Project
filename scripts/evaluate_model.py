@@ -132,3 +132,21 @@ def _autoregressive_predict(
         new_step[target_idx] = float(pred_val)
         current_seq = torch.cat([current_seq[:, 1:, :], new_step.unsqueeze(0).unsqueeze(0)], dim=1)
     return predictions
+
+
+# ---------------------------------------------------------------------------
+# v2 DMS 추론 헬퍼
+# ---------------------------------------------------------------------------
+
+
+@torch.no_grad()
+def _dms_predict(
+    model,
+    window_seq: np.ndarray,  # (window_size, input_size), feat_scaler 변환 완료
+    tgt_scaler,
+    device,
+) -> list[float]:
+    """v2 DMS 추론. forward 1회 → 4분기 동시 출력, expm1 역변환 적용."""
+    model.eval()
+    pred_scaled = model(torch.from_numpy(window_seq).unsqueeze(0).to(device)).cpu().numpy().flatten()
+    return [float(np.expm1(tgt_scaler.inverse_transform([[v]])[0][0])) for v in pred_scaled]
