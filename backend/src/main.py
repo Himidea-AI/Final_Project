@@ -1446,14 +1446,20 @@ async def predict_districts(input_data: SimulationInput):
 
         segment_profile = _build_segment_profile(input_data)
 
-        results: list[DistrictPredictionResult] = list(
-            await asyncio.gather(
-                *[
-                    _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
-                    for dong in target_districts
-                ]
-            )
+        raw = await asyncio.gather(
+            *[
+                _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
+                for dong in target_districts
+            ],
+            return_exceptions=True,
         )
+        results: list[DistrictPredictionResult] = []
+        for dong, res in zip(target_districts, raw):
+            if isinstance(res, Exception):
+                print(f"[/predict] {dong} 예외 (부분 실패 처리): {res}")
+                results.append(DistrictPredictionResult(district=dong))
+            else:
+                results.append(res)
 
         print(f"--- [/predict] 완료 ({len(results)}개 동) ---")
 
