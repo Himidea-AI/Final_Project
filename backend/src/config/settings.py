@@ -61,11 +61,30 @@ class Settings(BaseSettings):
     hyde_enabled: bool = os.getenv("HYDE_ENABLED", "false").lower() == "true"
 
     # RRF (Reciprocal Rank Fusion) — vector + BM25 결합 가중치
-    # SP3: 외부화 (.env로 조정 가능). 기본값은 검증 전 안전 baseline 0.5/0.5 유지.
-    # bench_rag_accuracy.py로 골든셋 측정 후 최적값 확정 예정.
+    # SP3 grid search 결과 (2026-05-01, 29 케이스 골든셋, BGE-m3 + Kiwi BM25):
+    #   vec=0.3/bm25=0.7  Recall 0.408 NDCG 0.263 Hit 62.1%
+    #   vec=0.4/bm25=0.6  Recall 0.408 NDCG 0.273 Hit 62.1%  ← 최적 (NDCG/MRR 최고)
+    #   vec=0.5/bm25=0.5  Recall 0.351 NDCG 0.248 Hit 55.2%  (이전 baseline)
+    #   vec=0.6/bm25=0.4  Recall 0.316 NDCG 0.235 Hit 48.3%
+    #   vec=0.7/bm25=0.3  Recall 0.333 NDCG 0.241 Hit 48.3%
+    # 한국어 법률 텍스트는 키워드 매칭(BM25)이 의미 매칭(vector)보다 강력.
     rrf_k: int = int(os.getenv("RRF_K", "60"))
-    rrf_vector_weight: float = float(os.getenv("RRF_VECTOR_WEIGHT", "0.5"))
-    rrf_bm25_weight: float = float(os.getenv("RRF_BM25_WEIGHT", "0.5"))
+    rrf_vector_weight: float = float(os.getenv("RRF_VECTOR_WEIGHT", "0.4"))
+    rrf_bm25_weight: float = float(os.getenv("RRF_BM25_WEIGHT", "0.6"))
+
+    # Reranker — Cross-encoder로 top-K 재정렬 (정밀도 ↑, 검색 속도 ↓ ~500ms/쿼리)
+    # 이전 baseline (MiniLM 384D, 4배 중복 데이터) 측정 시 F1 -0.030, 비활성됨.
+    # SP3 후 (BGE-m3 + Kiwi BM25 + 정상 9484 청크) 환경에서 재측정 가치 있음.
+    # default OFF — RERANK_ENABLED=true env로 활성화 후 bench 비교 권장.
+    rerank_enabled: bool = os.getenv("RERANK_ENABLED", "false").lower() == "true"
+    rerank_model: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+    rerank_initial_k: int = int(os.getenv("RERANK_INITIAL_K", "30"))  # 1차 검색 K
+    rerank_final_k: int = int(os.getenv("RERANK_FINAL_K", "10"))  # 재정렬 후 반환 K
+
+    # Chunk Compression — cheap LLM으로 RAG 청크를 1~2문장 핵심 요약 → 메인 LLM 컨텍스트 ↓
+    # default OFF. CHUNK_COMPRESSION_ENABLED=true 활성화. cheap model: gemini-flash/gpt-4o-mini.
+    chunk_compression_enabled: bool = os.getenv("CHUNK_COMPRESSION_ENABLED", "false").lower() == "true"
+    chunk_compression_model: str = os.getenv("CHUNK_COMPRESSION_MODEL", "gpt-4.1-mini")
 
     # NTS (국세청)
     nts_api_key: str = os.getenv("NTS_API_KEY", "")
