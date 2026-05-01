@@ -23,10 +23,23 @@ from .personas import Persona
 
 # LangSmith 토큰/비용 추적 — LANGCHAIN_TRACING_V2=true 일 때만 동작.
 # langsmith 미설치 / 환경변수 OFF 면 no-op 데코레이터로 graceful degrade.
+#
+# ABM trace 그룹화 전략: runner.run_simulation 에 부모 @traceable(run_type="chain")
+# 를 부착하여 ABM 1회 = root trace 1개로 묶고, brain.* / policy_gen.* 호출은 그
+# 부모 run 의 child 로 nested 된다. → LangSmith UI 메인 화면은 abm.simulation_run
+# 1줄로만 보이고, expand 시 200+ LLM 호출이 펼쳐짐. LangGraph 에이전트(synthesis 등)
+# trace 는 별도 root 로 그대로 남아 묻히지 않는다.
+#
+# 옵션: ABM_LANGCHAIN_PROJECT 환경변수로 별도 프로젝트 분리도 가능 (기본 None=같은 프로젝트).
+ABM_LS_PROJECT = os.getenv("ABM_LANGCHAIN_PROJECT") or None
+
 try:
     from langsmith import traceable as _ls_traceable
 
     def traceable(*dargs, **dkwargs):
+        # 환경변수로 별도 프로젝트 명시한 경우에만 라우팅
+        if ABM_LS_PROJECT and "project_name" not in dkwargs:
+            dkwargs["project_name"] = ABM_LS_PROJECT
         return _ls_traceable(*dargs, **dkwargs)
 except Exception:
 
