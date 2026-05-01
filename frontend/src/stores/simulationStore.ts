@@ -154,6 +154,8 @@ export const useSimulationStore = create<SimulationState>()(
           const name = (e as { name?: string })?.name;
           return name === 'CanceledError' || name === 'AbortError' || axios.isCancel(e);
         };
+        const allFailedError = (predictionError: string, analysisError: string): string =>
+          `예측/분석 모두 실패: ${predictionError} | ${analysisError}`;
 
         // /analyze/llm — 백그라운드 실행. /predict 완료 후 대시보드 진입, 분석 완료 시 자동 갱신.
         runAnalyzeLlm(params, abortController.signal)
@@ -176,12 +178,18 @@ export const useSimulationStore = create<SimulationState>()(
             if (t) clearInterval(t);
             const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
             // prediction 이 이미 done 이면 status 도 done 유지 (부분 성공).
-            const predDone = get().prediction.status === 'done';
+            const prediction = get().prediction;
+            const predDone = prediction.status === 'done';
+            const predError = prediction.status === 'error' ? prediction.error : null;
             set({
               analysis: { status: 'error', data: null, error: msg },
               ...(predDone
                 ? { status: 'done', progress: 100, stage: 'COMPLETE' }
-                : { status: 'error', stage: '시뮬 실패', error: msg }),
+                : {
+                    status: 'error',
+                    stage: '시뮬 실패',
+                    error: predError ? allFailedError(predError, msg) : msg,
+                  }),
               _progressTimer: null,
             });
           });
@@ -197,7 +205,20 @@ export const useSimulationStore = create<SimulationState>()(
           if (get().startedAt !== startedAt) return;
           if (isAbortError(err)) return;
           const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
-          set({ prediction: { status: 'error', data: null, error: msg } });
+          const analysis = get().analysis;
+          const analysisError = analysis.status === 'error' ? analysis.error : null;
+          set({
+            prediction: { status: 'error', data: null, error: msg },
+            ...(analysisError
+              ? {
+                  status: 'error',
+                  progress: 100,
+                  stage: '시뮬 실패',
+                  error: allFailedError(msg, analysisError),
+                  _progressTimer: null,
+                }
+              : {}),
+          });
         }
       },
 

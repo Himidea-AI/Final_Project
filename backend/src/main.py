@@ -540,8 +540,12 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
-    final_report = analysis.get("final_report") or {}
-    ai_recommendation = final_report.get("summary") or analysis.get("market_summary", "")[:120] or ""
+    # Keep missing final_report as None so frontend can distinguish "not produced"
+    # from an intentionally populated report.
+    final_report_raw = analysis.get("final_report")
+    final_report = final_report_raw if isinstance(final_report_raw, dict) and final_report_raw else None
+    final_report_dict = final_report or {}
+    ai_recommendation = final_report_dict.get("summary") or analysis.get("market_summary", "")[:120] or ""
 
     # market_report — 프론트엔드 chartData용 7개 정규화 지표 (0~100)
     competition_score = float(metrics.get("competition_score") or 0.5)
@@ -689,7 +693,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
                 "revenue": (_avg_revenue // 10000) if _avg_revenue is not None else None,
                 "bep": (
                     metrics.get("bep_quarters")
-                    or (final_report.get("profit_simulation") or {}).get("bep_quarters")
+                    or (final_report_dict.get("profit_simulation") or {}).get("bep_quarters")
                     or _sim_bep_quarters
                     or None
                 ),

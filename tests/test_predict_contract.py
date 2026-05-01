@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 _BACKEND = Path(__file__).resolve().parents[1] / "backend"
@@ -90,3 +91,60 @@ def test_predict_returns_extended_ml_fields_and_passes_segment_profile(monkeypat
     assert body["data"][0]["customer_segment"] == {"profile_summary": "30s female weekday lunch"}
     assert body["data"][0]["living_pop_forecast"] == {"peak_time_zone": "11-14"}
     assert body["data"][0]["emerging_signal"] == {"signal": "emerging"}
+
+
+def test_predict_response_serializes_numpy_scalars(monkeypatch):
+    import numpy as np
+
+    from src import main
+
+    target_district = MAPO_DISTRICTS[0]
+
+    async def fake_predict_single_district(
+        dong_name: str,
+        industry_code: str,
+        industry_name: str,
+        cost_config: dict,
+        segment_profile: dict | None = None,
+    ):
+        return main.DistrictPredictionResult(
+            district=dong_name,
+            dong_code="11440660",
+            closure_risk={
+                "risk_score": np.float32(0.27),
+                "risk_level": "caution",
+                "top_signals_lgbm": [{"feature": "rent", "contribution": np.float32(0.12)}],
+                "top_signals_tcn": [],
+                "is_mock": False,
+            },
+            living_pop_forecast={
+                "quarters": [
+                    {
+                        "quarter_offset": 1,
+                        "peak_time_zone": np.int64(14),
+                        "peak_pop": np.float32(1234.5),
+                        "all_hours": [{"time_zone": 14, "predicted_pop": np.float32(1234.5)}],
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(main, "_predict_single_district", fake_predict_single_district)
+
+    client = TestClient(main.app, raise_server_exceptions=False)
+    response = client.post(
+        "/predict",
+        json={
+            "target_district": target_district,
+            "target_districts": [target_district],
+            "business_type": "cafe",
+            "brand_name": "Test Brand",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["data"][0]["closure_risk"]["risk_score"] == pytest.approx(0.27)
+    assert body["data"][0]["closure_risk"]["top_signals_lgbm"][0]["contribution"] == pytest.approx(0.12)
+    assert body["data"][0]["living_pop_forecast"]["quarters"][0]["peak_time_zone"] == 14

@@ -32,6 +32,7 @@ WORKDIR /app
 # 런타임에 필수적인 시스템 라이브러리만 설치 (gcc를 제외하여 최종 이미지 대폭 경량화)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    libgomp1 \
     gdal-bin \
     && rm -rf /var/lib/apt/lists/*
 

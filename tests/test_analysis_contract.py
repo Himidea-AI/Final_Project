@@ -42,6 +42,26 @@ def test_map_state_to_simulation_output_includes_final_report(monkeypatch):
     }
 
 
+def test_map_state_to_simulation_output_uses_null_when_final_report_missing(monkeypatch):
+    import src.main as main
+
+    target_district = MAPO_DISTRICTS[0]
+    monkeypatch.setattr(main, "_resolve_dong_code", lambda _dong: "11440660")
+    monkeypatch.setattr(main, "explain_tcn_prediction", lambda dong_code, industry_code: None)
+
+    state = {
+        "target_district": target_district,
+        "target_districts": [target_district],
+        "market_data": {},
+        "analysis_metrics": {},
+        "analysis_results": {"legal_risks": []},
+    }
+
+    output = map_state_to_simulation_output(state, "request-1")
+
+    assert output["final_report"] is None
+
+
 def test_simulate_endpoint_is_kept_as_deprecated_legacy_route():
     routes = [
         route
