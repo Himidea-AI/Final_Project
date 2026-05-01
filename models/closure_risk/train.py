@@ -443,6 +443,22 @@ def train(config: dict | None = None) -> None:
             float(df_labeled["dong_closure_rate_residual_lag1"].min()),
             float(df_labeled["dong_closure_rate_residual_lag1"].max()),
         )
+
+        # Sprint 9 (2026-05-01): B-3 expansion — industry mean lookup pkl 저장 (predict.py production fit)
+        train_df_for_residual = df_labeled[df_labeled["quarter"].isin(train_quarters)]
+        b3_lookup = {
+            "industry_mean_lag1": train_df_for_residual.groupby("industry_code")["closure_rate_lag1"].mean().to_dict(),
+            "global_mean_lag1": float(train_df_for_residual["closure_rate_lag1"].mean()),
+        }
+        b3_path = WEIGHTS_DIR / "b3_dong_residual_lookup.pkl"
+        with open(b3_path, "wb") as f:
+            pickle.dump(b3_lookup, f)
+        logger.info(
+            "B-3 lookup 저장: %s (industries=%d, global_mean=%.4f)",
+            b3_path,
+            len(b3_lookup["industry_mean_lag1"]),
+            b3_lookup["global_mean_lag1"],
+        )
     else:
         logger.info("B-3 dong residual disabled (cfg.enable_b3_dong_residual=False)")
 
