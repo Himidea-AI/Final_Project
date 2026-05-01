@@ -2183,9 +2183,39 @@ function pathToScene(
  * - simResult 가 없으면 /simulator 로 redirect (시뮬 미실행 시 직접 진입 차단).
  * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
  */
+/** 시뮬 진행중 + 데이터 미도착 상태에서 dashboard shell 안에 표시할 로딩 placeholder.
+ *  FloatingWidget 의 "시뮬레이터로 이동" 으로 진입했을 때 본 영역에 진행률을 보여줌. */
+function DashboardRunningPlaceholder() {
+  const progress = useSimulationStore((s) => s.progress);
+  const stage = useSimulationStore((s) => s.stage);
+  return (
+    <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <div className="text-lg font-semibold text-foreground">시뮬레이션 진행 중</div>
+      <div className="text-sm text-muted-foreground">{stage || '준비 중...'}</div>
+      <div className="w-64 max-w-full">
+        <div
+          className="h-1.5 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-primary transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">{Math.round(progress)}%</div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardOutlet() {
   const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const status = useSimulationStore((s) => s.status);
   const { user, brand } = useAuth();
   const brandName = user?.company_name || brand?.brand_name || '';
   const businessType: string | null = null;
@@ -2193,7 +2223,9 @@ function DashboardOutlet() {
   const [modalContent, setModalContent] = useState<DetailModalContent | null>(null);
   const openModal = (content: DetailModalContent) => setModalContent(content);
 
-  if (!simResult) return <Navigate to="/simulator" replace />;
+  // FloatingWidget 의 "시뮬레이터로 이동" 으로 시뮬 진행중에도 진입 가능하도록 변경.
+  // 결과 없음 + 시뮬 미실행 → /simulator 로 복귀 (직접 URL 접근 차단).
+  if (!simResult && status !== 'running') return <Navigate to="/simulator" replace />;
 
   return (
     <div
@@ -2201,19 +2233,27 @@ function DashboardOutlet() {
       className="relative h-screen overflow-y-scroll custom-scrollbar bg-background pb-16 text-foreground"
       style={{ overscrollBehaviorY: 'contain' }}
     >
-      <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
+      {simResult ? (
+        <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
+      ) : (
+        <DashboardRunningPlaceholder />
+      )}
       <DetailModal modalContent={modalContent} onClose={() => setModalContent(null)} />
     </div>
   );
 }
 
 /** Hub index 라우트 — DashboardOutlet 의 simResult 를 store 에서 다시 읽어 DashboardHub 렌더.
- *  DashboardOutlet 의 null guard 가 이미 통과한 시점에서만 마운트되므로 simResult 는 항상 non-null. */
+ *  진행중 무 데이터 상태에서는 DashboardOutlet 이 placeholder 를 직접 렌더하므로 여기엔 도달하지 않음. */
 function DashboardHubRouteElement() {
   const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const status = useSimulationStore((s) => s.status);
   const { user, brand } = useAuth();
-  if (!simResult) return <Navigate to="/simulator" replace />;
+  if (!simResult) {
+    if (status === 'running') return <DashboardRunningPlaceholder />;
+    return <Navigate to="/simulator" replace />;
+  }
   return (
     <DashboardHub
       simResult={simResult}
