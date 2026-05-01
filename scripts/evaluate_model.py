@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -28,11 +29,45 @@ REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports"
 
 VAL_QUARTER = 20241  # 검증 시작 분기 (2024Q1 이상 → val)
 
-V2_CONFIG = {
-    "window_size": 8,  # TCN v2 최소 학습 윈도우
+DB_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/postgres",
+)
+
+# v1: 자기회귀 단일스텝 (window_size=4, output_size=1)
+V1_CONFIG = {
+    "window_size": 4,
+    "n_channels": 128,
+    "dilations": [1, 2],
+    "output_size": 1,
 }
 
+# v2: DMS 4분기 동시출력 (window_size=8, output_size=4)
+V2_CONFIG = {
+    "window_size": 8,  # TCN v2 최소 학습 윈도우
+    "n_channels": 128,
+    "dilations": [1, 2, 4],
+    "output_size": 4,
+}
+
+_WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "models" / "tcn_forecast" / "weights"
+V1_WEIGHTS_PATH = _WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"
+V1_SCALERS_PATH = _WEIGHTS_DIR / "finetune_tcn_scalers_34f.pkl"
+
 EXCLUDE_COMBOS: set[tuple[str, str]] = set()  # 평가 제외 조합 (필요 시 추가)
+
+# ---------------------------------------------------------------------------
+# 외부 의존성 — 모듈 수준 심볼 (테스트 패치 대상). 실제 import는 런타임에 발생.
+# ---------------------------------------------------------------------------
+
+try:
+    from models.lstm_forecast.data_prep import load_timeseries
+    from models.tcn_forecast.model import TCNForecaster
+    from models.tcn_forecast.train import load_scalers
+except Exception:  # noqa: BLE001
+    load_timeseries = None  # type: ignore[assignment]
+    TCNForecaster = None  # type: ignore[assignment,misc]
+    load_scalers = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -259,3 +294,109 @@ def _generate_report(
 
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
+
+
+# ---------------------------------------------------------------------------
+# 통합 평가 실행
+# ---------------------------------------------------------------------------
+
+
+def run_evaluation(
+    v2_weights: Path | str,
+    v2_scalers: Path | str,
+    v1_weights: Path | str = V1_WEIGHTS_PATH,
+    v1_scalers: Path | str = V1_SCALERS_PATH,
+) -> Path:
+    """v1 vs v2 비교 평가 실행. 리포트 파일 Path 반환."""
+    v2_weights, v2_scalers = Path(v2_weights), Path(v2_scalers)
+    v1_weights, v1_scalers = Path(v1_weights), Path(v1_scalers)
+
+    ts = load_timeseries(db_url=DB_URL, dong_prefix="11440")
+    train_ts, val_ts = split_train_val(ts)
+    valid_combos = get_valid_combos(ts)
+    logger.info("평가 대상 조합: %d개", len(valid_combos))
+
+    from models.lstm_forecast.data_prep import ALL_FEATURES
+
+    def _run_model(weights_path, scalers_path, config, is_dms):
+        import torch
+
+        feat_scaler, tgt_scaler = load_scalers(scalers_path)
+        input_size = len(feat_scaler.scale_)
+        model = TCNForecaster(
+            input_size=input_size,
+            n_channels=config["n_channels"],
+            kernel_size=2,
+            dilations=config["dilations"],
+            dropout=0.2,
+            output_size=config["output_size"],
+        )
+        model.load_weights(weights_path)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+
+        feature_cols = [c for c in ALL_FEATURES if c in ts.columns]
+        target_col = "monthly_sales"
+        target_idx = feature_cols.index(target_col) if target_col in feature_cols else 0
+        window_size = config["window_size"]
+
+        preds, trues, q0s = [], [], []
+        for dong, ind in valid_combos:
+            train_g = train_ts[(train_ts["dong_code"] == dong) & (train_ts["industry_code"] == ind)].sort_values(
+                "quarter"
+            )
+            val_g = val_ts[(val_ts["dong_code"] == dong) & (val_ts["industry_code"] == ind)].sort_values("quarter")
+            seq = feat_scaler.transform(train_g[feature_cols].values[-window_size:].astype("float32"))
+            if is_dms:
+                pred = _dms_predict(model, seq, tgt_scaler, device)
+            else:
+                pred = _autoregressive_predict(model, seq, target_idx, 4, tgt_scaler, device)
+            preds.append(pred)
+            trues.append(list(np.expm1(val_g[target_col].values[:4].astype("float64"))))
+            q0s.append(float(np.expm1(train_g[target_col].values[-1])))
+
+        model.cpu()
+        del model
+        torch.cuda.empty_cache()
+        return np.array(preds), np.array(trues), np.array(q0s)
+
+    preds_v1, trues_v1, q0s_v1 = _run_model(v1_weights, v1_scalers, V1_CONFIG, is_dms=False)
+    preds_v2, trues_v2, q0s_v2 = _run_model(v2_weights, v2_scalers, V2_CONFIG, is_dms=True)
+
+    def _metrics(preds, trues, q0s):
+        flat_p, flat_t = preds.flatten(), trues.flatten()
+        return dict(
+            mape=compute_mape(flat_p, flat_t),
+            mae=compute_mae(flat_p, flat_t),
+            rmse=compute_rmse(flat_p, flat_t),
+            da=compute_directional_accuracy(q0s, preds, trues),
+            bias=compute_bias(flat_p, flat_t),
+            pq_mape=compute_per_quarter_mape(preds, trues),
+        )
+
+    warn_combos = []
+    for i, (dong, ind) in enumerate(valid_combos):
+        m = compute_mape(preds_v2[i], trues_v2[i])
+        if not np.isnan(m) and m > 30:
+            warn_combos.append((dong, ind, m))
+
+    residual_std_path = Path(str(v2_scalers).replace("scalers", "residual_std"))
+    residual_std = None
+    if residual_std_path.exists():
+        import pickle
+
+        with open(residual_std_path, "rb") as f:
+            residual_std = pickle.load(f)  # noqa: S301
+
+    report_path = _generate_report(
+        metrics_v1=_metrics(preds_v1, trues_v1, q0s_v1),
+        metrics_v2=_metrics(preds_v2, trues_v2, q0s_v2),
+        v1_weights_name=v1_weights.name,
+        v2_weights_name=v2_weights.name,
+        n_combos=len(valid_combos),
+        reports_dir=REPORTS_DIR,
+        residual_std=residual_std,
+        warn_combos=warn_combos,
+    )
+    logger.info("평가 리포트 저장: %s", report_path)
+    return report_path
