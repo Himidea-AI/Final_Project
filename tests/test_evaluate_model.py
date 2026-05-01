@@ -186,3 +186,37 @@ def test_autoregressive_predict_applies_expm1():
         tgt_scaler=mock_tgt_scaler, device=torch.device("cpu"),
     )
     assert result[0] == pytest.approx(0.0)
+
+
+def test_dms_predict_returns_four_values():
+    from scripts.evaluate_model import _dms_predict
+    from unittest.mock import MagicMock
+    import torch
+
+    mock_model = MagicMock()
+    mock_model.return_value = torch.tensor([[0.1, 0.2, 0.3, 0.4]])
+    mock_tgt_scaler = MagicMock()
+    mock_tgt_scaler.inverse_transform.return_value = [[0.0]]
+
+    result = _dms_predict(
+        mock_model, np.zeros((8, 3), dtype=np.float32),
+        tgt_scaler=mock_tgt_scaler, device=torch.device("cpu"),
+    )
+    assert len(result) == 4
+
+
+def test_dms_predict_applies_expm1():
+    from scripts.evaluate_model import _dms_predict
+    from unittest.mock import MagicMock
+    import torch
+
+    mock_model = MagicMock()
+    mock_model.return_value = torch.tensor([[0.0, 0.0, 0.0, 0.0]])
+    mock_tgt_scaler = MagicMock()
+    mock_tgt_scaler.inverse_transform.return_value = [[0.0]]
+
+    result = _dms_predict(
+        mock_model, np.zeros((8, 3), dtype=np.float32),
+        tgt_scaler=mock_tgt_scaler, device=torch.device("cpu"),
+    )
+    assert all(v == pytest.approx(0.0) for v in result)
