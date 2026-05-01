@@ -15,6 +15,21 @@ if sys.platform == "win32":
     except AttributeError:
         pass
 
+# Python root logger 구성 — backend 코드의 logger.info() / logger.warning() 화면 출력 활성화.
+# LOG_LEVEL env (DEBUG/INFO/WARNING/ERROR) 로 조정. 미설정 시 INFO.
+# force=True: uvicorn이 먼저 root logger에 핸들러 등록한 경우 덮어씀.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    datefmt="%H:%M:%S",
+    force=True,
+)
+# 외부 라이브러리 noise 줄임
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("watchfiles").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # [ModuleNotFoundError 해결] src 디렉토리를 path에 추가하여 'import schemas' 등이 가능하게 함
@@ -26,8 +41,6 @@ if str(current_dir) not in sys.path:
 _project_root = str(Path(__file__).parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
-
-logger = logging.getLogger(__name__)
 
 import redis.asyncio as aioredis
 
