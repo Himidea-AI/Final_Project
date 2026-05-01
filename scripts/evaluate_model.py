@@ -22,8 +22,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-import numpy as np
-import pandas as pd
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -157,12 +157,10 @@ def detect_anomaly_combos(
     result = {}
 
     for dong, ind in valid_combos:
-        train_g = train_ts[
-            (train_ts["dong_code"] == dong) & (train_ts["industry_code"] == ind)
-        ]["monthly_sales"].apply(np.expm1)
-        val_g = val_ts[
-            (val_ts["dong_code"] == dong) & (val_ts["industry_code"] == ind)
-        ].sort_values("quarter")
+        train_g = train_ts[(train_ts["dong_code"] == dong) & (train_ts["industry_code"] == ind)]["monthly_sales"].apply(
+            np.expm1
+        )
+        val_g = val_ts[(val_ts["dong_code"] == dong) & (val_ts["industry_code"] == ind)].sort_values("quarter")
 
         mu = float(train_g.mean())
         sigma = float(train_g.std(ddof=1))
@@ -170,7 +168,7 @@ def detect_anomaly_combos(
             continue
 
         val_vals = np.expm1(val_g["monthly_sales"].values[:4])
-        val_qs   = val_g["quarter"].values[:4].tolist()
+        val_qs = val_g["quarter"].values[:4].tolist()
         z_scores = [(float(v) - mu) / sigma for v in val_vals]
 
         anomaly_idx = [i for i, z in enumerate(z_scores) if abs(z) > z_threshold]
@@ -179,8 +177,7 @@ def detect_anomaly_combos(
 
         # 연속 여부 확인
         consecutive = len(anomaly_idx) >= 2 and all(
-            anomaly_idx[i + 1] - anomaly_idx[i] == 1
-            for i in range(len(anomaly_idx) - 1)
+            anomaly_idx[i + 1] - anomaly_idx[i] == 1 for i in range(len(anomaly_idx) - 1)
         )
         anom_type = "structural_break" if consecutive else "outlier"
 
@@ -405,9 +402,7 @@ def _generate_report(
                 "|---|---|---|---|",
             ]
             for (dong, ind), info in sb:
-                lines.append(
-                    f"| {dong} | {ind} | {info['quarters']} | {info['z_scores']} |"
-                )
+                lines.append(f"| {dong} | {ind} | {info['quarters']} | {info['z_scores']} |")
             lines.append("")
         if ol:
             lines += [
@@ -416,9 +411,7 @@ def _generate_report(
                 "|---|---|---|---|",
             ]
             for (dong, ind), info in ol:
-                lines.append(
-                    f"| {dong} | {ind} | {info['quarters']} | {info['z_scores']} |"
-                )
+                lines.append(f"| {dong} | {ind} | {info['quarters']} | {info['z_scores']} |")
             lines.append("")
         lines.append("---\n")
 
@@ -455,6 +448,15 @@ def run_evaluation(
     """v1 vs v2 비교 평가 실행. 리포트 파일 Path 반환."""
     v2_weights, v2_scalers = Path(v2_weights), Path(v2_scalers)
     v1_weights, v1_scalers = Path(v1_weights), Path(v1_scalers)
+    # 상대 경로인 경우 weights 디렉토리 기준으로 변환
+    if not v2_weights.is_absolute():
+        v2_weights = _WEIGHTS_DIR / v2_weights
+    if not v2_scalers.is_absolute():
+        v2_scalers = _WEIGHTS_DIR / v2_scalers
+    if not v1_weights.is_absolute():
+        v1_weights = _WEIGHTS_DIR / v1_weights
+    if not v1_scalers.is_absolute():
+        v1_scalers = _WEIGHTS_DIR / v1_scalers
 
     ts = load_timeseries(db_url=DB_URL, dong_prefix="11440")
     train_ts, val_ts = split_train_val(ts)
@@ -483,10 +485,7 @@ def run_evaluation(
         # 스케일러 피처 수에 맞게 feature_cols 구성
         # v2 전용 신규 피처: v1 스케일러는 이 3개를 모름
         _V2_ONLY = {"opr_sale_mt_avg", "cls_sale_mt_avg", "industry_trend"}
-        feature_cols = [
-            c for c in ALL_FEATURES
-            if c in ts.columns and (input_size >= 37 or c not in _V2_ONLY)
-        ]
+        feature_cols = [c for c in ALL_FEATURES if c in ts.columns and (input_size >= 37 or c not in _V2_ONLY)]
         target_col = "monthly_sales"
         target_idx = feature_cols.index(target_col) if target_col in feature_cols else 0
         window_size = config["window_size"]
@@ -534,10 +533,10 @@ def run_evaluation(
 
     preds_v1_clean = preds_v1[clean_idx]
     trues_v1_clean = trues_v1[clean_idx]
-    q0s_v1_clean   = q0s_v1[clean_idx]
+    q0s_v1_clean = q0s_v1[clean_idx]
     preds_v2_clean = preds_v2[clean_idx]
     trues_v2_clean = trues_v2[clean_idx]
-    q0s_v2_clean   = q0s_v2[clean_idx]
+    q0s_v2_clean = q0s_v2[clean_idx]
 
     warn_combos = []
     for i, (dong, ind) in enumerate(clean_combos):

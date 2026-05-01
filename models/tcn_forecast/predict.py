@@ -45,10 +45,10 @@ DEFAULT_PREDICT_CONFIG: dict = {
     "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_v2.pt"),
     "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers_v2.pkl"),
     "residual_std_path": str(WEIGHTS_DIR / "finetune_tcn_residual_std_v2.pkl"),  # 신규
-    "window_size": 8,
+    "window_size": 12,
     "n_channels": 128,
     "kernel_size": 2,
-    "dilations": [1, 2, 4],
+    "dilations": [1, 2, 4, 8],
     "dropout": 0.2,
     "output_size": 4,  # 신규
     "target_col": "monthly_sales",
