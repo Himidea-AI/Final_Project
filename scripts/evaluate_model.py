@@ -32,8 +32,8 @@ REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports"
 # ---------------------------------------------------------------------------
 
 def compute_mape(pred: np.ndarray, true: np.ndarray) -> float:
-    """MAPE 계산. true <= 1원(near-zero) 포인트 제외."""
-    mask = true > 1
+    """MAPE 계산. true < 1000원(near-zero) 포인트 제외."""
+    mask = true >= 1000
     if mask.sum() == 0:
         return float("nan")
     return float(np.mean(np.abs(pred[mask] - true[mask]) / true[mask]) * 100)

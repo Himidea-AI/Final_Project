@@ -4,21 +4,26 @@ import pytest
 
 def test_compute_mape_basic():
     from scripts.evaluate_model import compute_mape
-    pred = np.array([110.0, 220.0, 330.0, 440.0])
-    true = np.array([100.0, 200.0, 300.0, 400.0])
+    pred = np.array([1100.0, 2200.0, 3300.0, 4400.0])
+    true = np.array([1000.0, 2000.0, 3000.0, 4000.0])
     assert compute_mape(pred, true) == pytest.approx(10.0)
 
 
 def test_compute_mape_excludes_near_zero():
     from scripts.evaluate_model import compute_mape
-    pred = np.array([110.0, 500.0])
-    true = np.array([100.0, 1.0])   # 1원 → 제외
+    # 999원은 제외, 1000원은 포함 — 경계값 1000원 명확히 검증
+    pred = np.array([110.0, 500.0, 1100.0])
+    true = np.array([100.0, 999.0, 1000.0])  # 999원 제외, 1000원 포함
+    # 포함되는 것: pred=1100, true=1000 → MAPE = 10%
+    # pred=110, true=100 → MAPE = 10%
+    # 평균 = 10%
     assert compute_mape(pred, true) == pytest.approx(10.0)
 
 
 def test_compute_mape_all_near_zero_returns_nan():
     from scripts.evaluate_model import compute_mape
-    assert np.isnan(compute_mape(np.array([1.0]), np.array([0.5])))
+    # 999원 미만 전부 → nan
+    assert np.isnan(compute_mape(np.array([500.0]), np.array([999.0])))
 
 
 def test_compute_mae():
