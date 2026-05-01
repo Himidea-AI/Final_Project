@@ -64,6 +64,9 @@ DEFAULT_CONFIG: dict = {
     # B-3 dong residual feature (2026-05-01) — hierarchical-grounded residual 추가
     # T2 retrain 결과로 keep/rollback 결정 (cfg flag 로 toggle)
     "enable_b3_dong_residual": True,
+    # A-2 additive ensemble (2026-05-01) — Stage 1 industry_prior_pred 를 feature 외 additive 로
+    # final = (1-w) * dong_ensemble + w * scaled_industry_prior, w grid search [0, 0.5] fit
+    "enable_a2_additive": True,
     # 저장 경로
     "tcn_weights_path": str(WEIGHTS_DIR / "closure_risk_tcn.pt"),
     "tcn_scaler_path": str(WEIGHTS_DIR / "closure_risk_tcn_scaler.pkl"),
@@ -667,6 +670,73 @@ def train(config: dict | None = None) -> None:
     else:
         test_metrics = None
 
+    # A-2 additive ensemble (2026-05-01) — Stage 1 industry_prior_pred 의 explicit additive
+    additive_w_industry = 0.0
+    additive_metrics = None
+    if cfg.get("enable_a2_additive", True) and len(val_common) > 10:
+        # val_common keys 의 industry_prior_pred lookup
+        prior_lookup = {
+            (str(row["dong_code"]), str(row["industry_code"]), int(row["quarter"])): float(row["industry_prior_pred"])
+            for _, row in df_labeled.iterrows()
+        }
+        industry_prior_val = np.array([prior_lookup.get(k, 0.0) for k in val_common])
+        # scale 보정: industry_prior_pred 가 0~0.5 mean → 0~1 (X 2)
+        industry_prior_val_scaled = np.clip(industry_prior_val * 2.0, 0.0, 1.0)
+
+        # grid search w_industry [0, 0.5] step 0.05
+        best_auc = float(roc_auc_score(y_val_common, ensemble_val_proba))
+        baseline_auc = best_auc
+        for w_ind in np.arange(0.05, 0.55, 0.05):
+            w_dong = 1.0 - w_ind
+            candidate = w_dong * ensemble_val_proba + w_ind * industry_prior_val_scaled
+            try:
+                auc = float(roc_auc_score(y_val_common, candidate))
+            except ValueError:
+                continue
+            if auc > best_auc:
+                best_auc = auc
+                additive_w_industry = float(w_ind)
+
+        if additive_w_industry > 0 and len(test_common) > 0:
+            industry_prior_test = np.array([prior_lookup.get(k, 0.0) for k in test_common])
+            industry_prior_test_scaled = np.clip(industry_prior_test * 2.0, 0.0, 1.0)
+
+            additive_val_proba = (
+                1 - additive_w_industry
+            ) * ensemble_val_proba + additive_w_industry * industry_prior_val_scaled
+            additive_test_proba = (
+                1 - additive_w_industry
+            ) * ensemble_test_proba + additive_w_industry * industry_prior_test_scaled
+
+            additive_metrics = {
+                "w_industry": additive_w_industry,
+                "val_auc_baseline": baseline_auc,
+                "val_auc_additive": best_auc,
+                "val_metrics": evaluate_model(y_val_common, additive_val_proba, k_pct=10),
+                "test_metrics": evaluate_model(y_test_common, additive_test_proba, k_pct=10),
+            }
+            logger.info(
+                "A-2 additive — w_industry=%.2f, val AUC %.4f → %.4f (+%.4f), test AUC %.4f",
+                additive_w_industry,
+                baseline_auc,
+                best_auc,
+                best_auc - baseline_auc,
+                additive_metrics["test_metrics"]["auc"],
+            )
+        else:
+            logger.info("A-2 additive — grid search 결과 baseline 동일 (w_industry=0). skip.")
+
+        # ensemble_weights.pkl 에 additive_w_industry 추가 저장 (predict.py 가 load)
+        if additive_w_industry > 0:
+            with open(cfg["ensemble_weights_path"], "rb") as f:
+                _ew = pickle.load(f)
+            _ew["additive_w_industry"] = additive_w_industry
+            with open(cfg["ensemble_weights_path"], "wb") as f:
+                pickle.dump(_ew, f)
+            logger.info("ensemble_weights.pkl 갱신 — additive_w_industry=%.2f", additive_w_industry)
+    else:
+        logger.info("A-2 additive disabled or val 부족")
+
     metrics_summary = {
         "split_strategy": cfg["split_strategy"],
         "train_quarters": sorted(set(train_df["quarter"].unique())) if cfg["split_strategy"] == "time" else None,
@@ -675,6 +745,7 @@ def train(config: dict | None = None) -> None:
         "ensemble_weights": {"w_lgbm": w_lgbm, "w_tcn": w_tcn},
         "thresholds": thresholds,
         "calibration_info": calibration_info,
+        "additive_metrics": additive_metrics,  # A-2 additive (2026-05-01)
         "lgbm": {"val": val_metrics["lgbm"], "test": (test_metrics or {}).get("lgbm")},
         "tcn": {"val": val_metrics["tcn"], "test": (test_metrics or {}).get("tcn")},
         "ensemble": {"val": val_metrics["ensemble"], "test": (test_metrics or {}).get("ensemble")},
