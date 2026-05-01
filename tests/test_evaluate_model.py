@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -278,3 +280,72 @@ def test_generate_report_includes_residual_std(tmp_path):
         warn_combos=[],
     )
     assert "신뢰구간" in path.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# run_evaluation 테스트
+# ---------------------------------------------------------------------------
+
+
+from unittest.mock import MagicMock, patch
+
+
+def test_run_evaluation_returns_path(tmp_path, sample_ts):
+    from scripts.evaluate_model import run_evaluation
+    import torch
+
+    fake_w = tmp_path / "v2.pt"
+    fake_s = tmp_path / "v2_scalers.pkl"
+    fake_w.touch(); fake_s.touch()
+
+    mock_feat = MagicMock()
+    mock_feat.transform.side_effect = lambda x: x
+    mock_feat.scale_ = [1.0]
+    mock_tgt = MagicMock()
+    mock_tgt.inverse_transform.return_value = [[0.0]]
+
+    mock_v1 = MagicMock()
+    mock_v1.return_value = torch.tensor([[0.0]])
+    mock_v2 = MagicMock()
+    mock_v2.return_value = torch.tensor([[0.0, 0.0, 0.0, 0.0]])
+
+    with patch("scripts.evaluate_model.load_timeseries", return_value=sample_ts), \
+         patch("scripts.evaluate_model.load_scalers", return_value=(mock_feat, mock_tgt)), \
+         patch("scripts.evaluate_model.TCNForecaster", side_effect=[mock_v1, mock_v2]), \
+         patch("scripts.evaluate_model.REPORTS_DIR", tmp_path / "reports"):
+        result = run_evaluation(v2_weights=fake_w, v2_scalers=fake_s,
+                                v1_weights=fake_w, v1_scalers=fake_s)
+
+    assert isinstance(result, Path)
+    assert result.exists()
+
+
+def test_run_evaluation_report_contains_metrics(tmp_path, sample_ts):
+    from scripts.evaluate_model import run_evaluation
+    import torch
+
+    fake_w = tmp_path / "v2.pt"
+    fake_s = tmp_path / "v2_scalers.pkl"
+    fake_w.touch(); fake_s.touch()
+
+    mock_feat = MagicMock()
+    mock_feat.transform.side_effect = lambda x: x
+    mock_feat.scale_ = [1.0]
+    mock_tgt = MagicMock()
+    mock_tgt.inverse_transform.return_value = [[0.0]]
+
+    mock_v1 = MagicMock()
+    mock_v1.return_value = torch.tensor([[0.0]])
+    mock_v2 = MagicMock()
+    mock_v2.return_value = torch.tensor([[0.0, 0.0, 0.0, 0.0]])
+
+    with patch("scripts.evaluate_model.load_timeseries", return_value=sample_ts), \
+         patch("scripts.evaluate_model.load_scalers", return_value=(mock_feat, mock_tgt)), \
+         patch("scripts.evaluate_model.TCNForecaster", side_effect=[mock_v1, mock_v2]), \
+         patch("scripts.evaluate_model.REPORTS_DIR", tmp_path / "reports"):
+        result = run_evaluation(v2_weights=fake_w, v2_scalers=fake_s,
+                                v1_weights=fake_w, v1_scalers=fake_s)
+
+    content = result.read_text(encoding="utf-8")
+    assert "MAPE" in content
+    assert "결론" in content
