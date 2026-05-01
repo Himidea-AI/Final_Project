@@ -5,6 +5,9 @@ pydantic>=2.11.0
 pydantic-settings>=2.6.0
 python-multipart>=0.0.18
 
+# === Auth ===
+python-jose[cryptography]>=3.3.0
+
 # === ORM / DB ===
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
@@ -50,6 +53,9 @@ pdfplumber>=0.11.0
 
 # === Embeddings (로컬 개발용, EMBEDDING_MODE=local 시 사용) ===
 sentence-transformers>=5.3.0
+
+# === Korean NLP (BM25 형태소 토크나이저) ===
+kiwipiepy>=0.21.0
 
 # === Auth ===
 bcrypt>=4.0.0

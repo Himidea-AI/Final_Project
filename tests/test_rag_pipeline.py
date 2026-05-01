@@ -27,9 +27,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from src.agents.nodes.legal import check_zoning_regulation  # noqa: E402
-from src.config.constants import DISTRICT_ZONE_MAP  # noqa: E402
 from src.chains.retriever import LegalDocumentRetriever  # noqa: E402
-from src.config.constants import MAPO_DISTRICTS  # noqa: E402
+from src.config.constants import (
+    DISTRICT_ZONE_MAP,  # noqa: E402
+    MAPO_DISTRICTS,  # noqa: E402
+)
 
 # ── parse_pdfs 내부 함수 직접 임포트 ─────────────────────────────────────────
 sys.path.insert(0, str(ROOT / "data" / "legal"))
@@ -422,5 +424,3 @@ class TestZoningRegulation:
             state = self._make_state(dong, "음식점")
             result = await check_zoning_regulation(state)
             assert result["level"] == "danger", f"{dong}+음식점이 danger가 아님: {result['level']}"
-
-

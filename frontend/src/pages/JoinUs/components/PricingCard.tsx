@@ -1,10 +1,10 @@
-import { motion } from "framer-motion";
-import { Check, Minus } from "lucide-react";
-import type { Plan } from "../types";
+import { motion } from 'framer-motion';
+import { Check, Minus } from 'lucide-react';
+import type { Plan } from '../types';
 
 interface Props {
   plan: Plan;
-  onSelect: (id: Plan["id"]) => void;
+  onSelect: (id: Plan['id']) => void;
   isVisible: boolean;
 }
 
@@ -28,7 +28,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
         className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
         style={{
           background:
-            "conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)",
+            'conic-gradient(from 0deg, transparent 0%, transparent 40%, #818cf8 50%, #a5b4fc 60%, transparent 100%)',
         }}
       />
 
@@ -39,7 +39,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
           <span className="text-lg">{plan.badge}</span>
           <span className="text-[#e2e8f0] font-bold text-lg">{plan.name}</span>
           {plan.badgeLabel && (
-            <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-[#a5b4fc] text-[10px] font-bold tracking-wider uppercase">
+            <span className="ml-auto px-2.5 py-0.5 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-[#a5b4fc] text-[0.625rem] font-bold tracking-wider uppercase">
               {plan.badgeLabel}
             </span>
           )}
@@ -49,12 +49,8 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
 
         {/* Price */}
         <div className="flex items-baseline gap-1 mb-8">
-          <span className="text-4xl font-bold text-[#e2e8f0] tabular-nums">
-            {plan.price}
-          </span>
-          {plan.priceNote && (
-            <span className="text-[#9ca3af] text-sm">{plan.priceNote}</span>
-          )}
+          <span className="text-4xl font-bold text-[#e2e8f0] tabular-nums">{plan.price}</span>
+          {plan.priceNote && <span className="text-[#9ca3af] text-sm">{plan.priceNote}</span>}
         </div>
 
         {/* Features */}
@@ -66,9 +62,7 @@ export default function PricingCard({ plan, onSelect, isVisible }: Props) {
               ) : (
                 <Minus size={14} className="text-[#3a3633] shrink-0" />
               )}
-              <span className={f.included ? "text-[#9ca3af]" : "text-[#3a3633]"}>
-                {f.text}
-              </span>
+              <span className={f.included ? 'text-[#9ca3af]' : 'text-[#3a3633]'}>{f.text}</span>
             </div>
           ))}
         </div>

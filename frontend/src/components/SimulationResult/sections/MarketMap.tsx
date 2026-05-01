@@ -1,0 +1,377 @@
+import { useEffect, useRef, useState } from 'react';
+import { useKakaoMap } from '../../kakao/useKakaoMap';
+
+export interface Competitor {
+  place_name: string;
+  lat: number;
+  lng: number;
+  distance_m?: number;
+  is_franchise?: boolean;
+  brand_name?: string | null;
+  daily_revenue?: number | null;
+}
+
+export interface RankingEntry {
+  district: string;
+  score: number;
+  closure_rate?: number | null;
+}
+
+export interface MarketMapProps {
+  center: { lat: number; lng: number };
+  competitors?: Competitor[];
+  rankings?: RankingEntry[];
+  radius?: number;
+  winnerDistrict?: string;
+  height?: number | string;
+}
+
+interface KakaoLatLngInstance {
+  getLat: () => number;
+  getLng: () => number;
+}
+
+interface KakaoMapInstance {
+  setCenter: (pos: KakaoLatLngInstance) => void;
+  relayout: () => void;
+}
+
+interface KakaoMapsNamespace {
+  Map: new (el: HTMLElement, opts: { center: unknown; level: number }) => KakaoMapInstance;
+  LatLng: new (lat: number, lng: number) => KakaoLatLngInstance;
+  Circle: new (opts: {
+    center: unknown;
+    radius: number;
+    strokeWeight: number;
+    strokeColor: string;
+    strokeOpacity: number;
+    strokeStyle: string;
+    fillColor: string;
+    fillOpacity: number;
+  }) => { setMap: (m: unknown) => void };
+  Polygon: new (opts: {
+    path: unknown[];
+    strokeWeight: number;
+    strokeColor: string;
+    strokeOpacity: number;
+    fillColor: string;
+    fillOpacity: number;
+  }) => { setMap: (m: unknown) => void };
+  Polyline: new (opts: {
+    path: unknown[];
+    strokeWeight: number;
+    strokeColor: string;
+    strokeOpacity: number;
+    strokeStyle: string;
+  }) => { setMap: (m: unknown) => void };
+  CustomOverlay: new (opts: {
+    position: unknown;
+    content: HTMLElement | string;
+    xAnchor?: number;
+    yAnchor?: number;
+    zIndex?: number;
+  }) => { setMap: (m: unknown) => void };
+  InfoWindow: new (opts: {
+    position?: unknown;
+    content: string | HTMLElement;
+    removable?: boolean;
+  }) => { open: (map: unknown) => void; close: () => void };
+}
+
+function getKakaoMaps(kakao: unknown): KakaoMapsNamespace | null {
+  if (!kakao || typeof kakao !== 'object') return null;
+  const maps = (kakao as { maps?: KakaoMapsNamespace }).maps;
+  return maps ?? null;
+}
+
+interface GeoFeature {
+  type: 'Feature';
+  properties: { dong_name: string };
+  geometry: { type: 'Polygon' | 'MultiPolygon'; coordinates: number[][][] | number[][][][] };
+}
+
+interface GeoCollection {
+  type: 'FeatureCollection';
+  features: GeoFeature[];
+}
+
+function rankingColor(score: number): string {
+  if (score >= 75) return '#10b981';
+  if (score >= 55) return '#f59e0b';
+  return '#6b7280';
+}
+
+function rankingOpacity(score: number): number {
+  return Math.max(0.08, Math.min(0.45, score / 220));
+}
+
+const PULSE_STYLE_ID = 'mm-pulse-style';
+const PULSE_CSS = `
+@keyframes mm-pulse {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.mm-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.55);
+  animation: mm-pulse 2s ease-out infinite;
+}
+.mm-pulse-ring-delay { animation-delay: 1s; }
+`;
+
+function ensurePulseStyle() {
+  if (document.getElementById(PULSE_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = PULSE_STYLE_ID;
+  el.textContent = PULSE_CSS;
+  document.head.appendChild(el);
+}
+
+function buildTargetOverlayContent(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div style="position:relative;width:28px;height:28px;pointer-events:none;">
+      <div class="mm-pulse-ring"></div>
+      <div class="mm-pulse-ring mm-pulse-ring-delay"></div>
+      <div style="position:absolute;inset:9px;border-radius:9999px;background:#f59e0b;border:2px solid #ffffff;box-shadow:0 0 10px rgba(245,158,11,0.8);"></div>
+    </div>
+  `;
+  return wrap;
+}
+
+function formatDistance(m?: number): string {
+  if (m == null) return '—';
+  if (m < 1000) return `${Math.round(m)}m`;
+  return `${(m / 1000).toFixed(2)}km`;
+}
+
+function formatKrwWan(v?: number | null): string {
+  if (v == null) return '—';
+  return `${Math.round(v / 10000).toLocaleString()}만원/일`;
+}
+
+function buildCompetitorInfoHtml(c: Competitor, radius: number): string {
+  const within = (c.distance_m ?? Infinity) <= radius;
+  const accent = within ? '#f59e0b' : '#71717a';
+  const brand = c.brand_name || c.place_name || '경쟁점';
+  return `
+    <div style="font-family:Pretendard,ui-sans-serif,system-ui;min-width:180px;padding:10px 12px;background:rgba(24,24,27,0.95);color:#e4e4e7;border:1px solid #3f3f46;border-radius:6px;backdrop-filter:blur(8px);">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${accent};"></span>
+        <span style="font-size:13px;font-weight:600;">${brand}</span>
+      </div>
+      <div style="font-size:11px;color:#a1a1aa;line-height:1.6;">
+        <div>거리: <span style="color:#f4f4f5;">${formatDistance(c.distance_m)}</span></div>
+        <div>반경: <span style="color:${within ? '#fbbf24' : '#a1a1aa'};">${within ? '내부' : '외부'}</span></div>
+        <div>일매출 추정: <span style="color:#f4f4f5;">${formatKrwWan(c.daily_revenue)}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+export function MarketMap({
+  center,
+  competitors = [],
+  rankings = [],
+  radius = 500,
+  winnerDistrict,
+  height = 520,
+}: MarketMapProps) {
+  const { ready, error, kakao } = useKakaoMap();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const overlayLayersRef = useRef<Array<{ setMap: (m: unknown) => void }>>([]);
+  const infoWindowRef = useRef<{ open: (m: unknown) => void; close: () => void } | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
+
+  useEffect(() => {
+    ensurePulseStyle();
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !containerRef.current) return;
+    const maps = getKakaoMaps(kakao);
+    if (!maps) return;
+
+    const mapInstance = new maps.Map(containerRef.current, {
+      center: new maps.LatLng(center.lat, center.lng),
+      level: 5,
+    });
+
+    overlayLayersRef.current.forEach((layer) => layer.setMap(null));
+    overlayLayersRef.current = [];
+    if (infoWindowRef.current) {
+      infoWindowRef.current.close();
+      infoWindowRef.current = null;
+    }
+
+    // Circle + amber pulse marker 의 좌표 = winner polygon 의 geometric centroid 가 정답.
+    // GeoJSON fetch 후 centroid 계산 → 그 좌표로 layer 생성. fetch 실패 또는 winner
+    // 미발견 시 center prop 으로 fallback (DONG_COORDS 하드코딩이 마지막 안전장치).
+    const fallbackCenter = new maps.LatLng(center.lat, center.lng);
+    const buildCenterLayers = (latLng: unknown) => {
+      const circle = new maps.Circle({
+        center: latLng,
+        radius,
+        strokeWeight: 2,
+        strokeColor: '#f59e0b',
+        strokeOpacity: 0.8,
+        strokeStyle: 'dash',
+        fillColor: '#f59e0b',
+        fillOpacity: 0.05,
+      });
+      circle.setMap(mapInstance);
+      overlayLayersRef.current.push(circle);
+
+      const targetOverlay = new maps.CustomOverlay({
+        position: latLng,
+        content: buildTargetOverlayContent(),
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 5,
+      });
+      targetOverlay.setMap(mapInstance);
+      overlayLayersRef.current.push(targetOverlay);
+    };
+
+    // Layer — (bonus) 16동 choropleth + winner centroid 계산
+    fetch('/mapo-dong.geo.json')
+      .then((r) => {
+        if (!r.ok) throw new Error(`GeoJSON fetch ${r.status}`);
+        return r.json() as Promise<GeoCollection>;
+      })
+      .then((geo) => {
+        if (!geo.features) {
+          buildCenterLayers(fallbackCenter);
+          return;
+        }
+        const rankingMap = new Map(rankings.map((r) => [r.district, r]));
+        let winnerCentroid: { lat: number; lng: number } | null = null;
+        geo.features.forEach((f) => {
+          const dong = f.properties.dong_name;
+          const ranking = rankingMap.get(dong);
+          const score = ranking?.score;
+          const hasScore = typeof score === 'number';
+          const isWinner = dong === winnerDistrict;
+          // 실데이터 원칙: 랭킹 점수 없으면 빗금/투명 중립색 (기존 50 기본값 제거 — 점수 50 동과 구분)
+          const fillColor = isWinner ? '#f59e0b' : hasScore ? rankingColor(score) : '#27272a';
+          const fillOpacity = isWinner ? 0.35 : hasScore ? rankingOpacity(score) : 0.08;
+          const polygons: number[][][] =
+            f.geometry.type === 'MultiPolygon'
+              ? (f.geometry.coordinates as number[][][][]).flatMap((p) => p)
+              : (f.geometry.coordinates as number[][][]);
+
+          if (isWinner) {
+            // winner polygon 의 모든 좌표 평균 = geometric centroid (단순 평균이라
+            // 비대칭 모양에선 약간 어긋날 수 있지만 시각상 박스 내부에 항상 위치).
+            const allCoords = polygons.flat();
+            if (allCoords.length > 0) {
+              const lngSum = allCoords.reduce((s, [lng]) => s + lng, 0);
+              const latSum = allCoords.reduce((s, [, lat]) => s + lat, 0);
+              winnerCentroid = {
+                lat: latSum / allCoords.length,
+                lng: lngSum / allCoords.length,
+              };
+            }
+          }
+
+          polygons.forEach((ring) => {
+            const path = ring.map(([lng, lat]) => new maps.LatLng(lat, lng));
+            const poly = new maps.Polygon({
+              path,
+              strokeWeight: isWinner ? 2 : 1,
+              strokeColor: isWinner ? '#f59e0b' : '#52525b',
+              strokeOpacity: isWinner ? 0.9 : 0.55,
+              fillColor,
+              fillOpacity,
+            });
+            poly.setMap(mapInstance);
+            overlayLayersRef.current.push(poly);
+          });
+        });
+
+        const wc = winnerCentroid as { lat: number; lng: number } | null;
+        const finalCenter = wc ? new maps.LatLng(wc.lat, wc.lng) : fallbackCenter;
+        buildCenterLayers(finalCenter);
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : 'GeoJSON 로드 실패';
+        setGeoError(msg);
+        buildCenterLayers(fallbackCenter);
+      });
+
+    // Layer 2 — 경쟁점 마커 (빨간 삼각형, 반경 내/외 불투명도 구분 + 클릭 InfoWindow)
+    competitors.forEach((c) => {
+      if (typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
+      const within = (c.distance_m ?? Number.POSITIVE_INFINITY) <= radius;
+      const dot = document.createElement('div');
+      dot.style.cssText = within
+        ? 'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #ef4444;filter:drop-shadow(0 0 3px rgba(239,68,68,0.7));cursor:pointer;'
+        : 'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #ef4444;opacity:0.45;cursor:pointer;';
+      dot.title = c.place_name;
+
+      const pos = new maps.LatLng(c.lat, c.lng);
+      dot.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (infoWindowRef.current) infoWindowRef.current.close();
+        const iw = new maps.InfoWindow({
+          position: pos,
+          content: buildCompetitorInfoHtml(c, radius),
+          removable: true,
+        });
+        iw.open(mapInstance);
+        infoWindowRef.current = iw;
+      });
+
+      const overlay = new maps.CustomOverlay({
+        position: pos,
+        content: dot,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 2,
+      });
+      overlay.setMap(mapInstance);
+      overlayLayersRef.current.push(overlay);
+    });
+
+    return () => {
+      overlayLayersRef.current.forEach((layer) => layer.setMap(null));
+      overlayLayersRef.current = [];
+      if (infoWindowRef.current) {
+        infoWindowRef.current.close();
+        infoWindowRef.current = null;
+      }
+    };
+  }, [ready, kakao, center.lat, center.lng, competitors, rankings, radius, winnerDistrict]);
+
+  if (error) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-lg border border-stone-700 bg-stone-900 p-8 text-center"
+        style={{ height }}
+      >
+        <div>
+          <div className="mb-2 text-sm font-semibold text-rose-400">지도를 불러올 수 없습니다</div>
+          <div className="text-xs text-stone-500">{error.message}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative" style={{ height }}>
+      <div ref={containerRef} className="h-full w-full rounded-lg bg-stone-900" />
+      {!ready && (
+        <div className="absolute inset-0 flex items-center justify-center text-sm text-stone-500">
+          지도를 불러오는 중…
+        </div>
+      )}
+      {geoError && (
+        <div className="absolute right-4 top-4 rounded bg-stone-900/80 px-2 py-1 text-[0.625rem] text-rose-400">
+          GeoJSON: {geoError}
+        </div>
+      )}
+    </div>
+  );
+}

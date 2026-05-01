@@ -1,27 +1,62 @@
 import axios from 'axios';
 import { create } from 'zustand';
-import { runSimulation } from '../api/client';
-import type { SimulationInput, SimulationOutput } from '../types';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { runAnalyzeLlm, runPredict } from '../api/client';
+import type {
+  AnalysisOutput,
+  DistrictPredictionResult,
+  SimulationInput,
+  SimulationOutput,
+} from '../types';
 
 export type SimulationStatus = 'idle' | 'running' | 'done' | 'error';
+
+/** 슬라이스(예측/분석)별 상태 — startSimulation 의 Promise.allSettled 부분 성공 표현용. */
+export type SliceStatus = 'idle' | 'running' | 'done' | 'error';
+
+export interface PredictionSlice {
+  status: SliceStatus;
+  data: DistrictPredictionResult[] | null;
+  error: string | null;
+}
+
+export interface AnalysisSlice {
+  status: SliceStatus;
+  data: AnalysisOutput | null;
+  error: string | null;
+}
 
 interface SimulationState {
   status: SimulationStatus;
   progress: number;
   stage: string;
+  /** @deprecated useCombinedSimResult() hook 으로 prediction + analysis 합성. history 복원 경로용 (legacy 단일 SimulationOutput 호환). */
   result: SimulationOutput | null;
   error: string | null;
   params: SimulationInput | null;
   startedAt: number | null;
+  /** 매니저가 [저장] 버튼으로 저장한 이력 ID (SPTR-000142). null이면 DRAFT. R1: store = Single Source of Truth. */
+  savedHistoryId: number | null;
+
+  /** /predict 응답 슬라이스 (IM3-259 분리 호출). */
+  prediction: PredictionSlice;
+  /** /analyze/llm 응답 슬라이스 (IM3-259 분리 호출). */
+  analysis: AnalysisSlice;
 
   _abortController: AbortController | null;
   _progressTimer: ReturnType<typeof setInterval> | null;
 
   startSimulation: (params: SimulationInput) => Promise<void>;
+  retryPrediction: () => Promise<void>;
+  retryAnalysis: () => Promise<void>;
   cancelSimulation: () => void;
   dismissResult: () => void;
+  setSavedHistoryId: (id: number | null) => void;
   reset: () => void;
 }
+
+const initialPrediction: PredictionSlice = { status: 'idle', data: null, error: null };
+const initialAnalysis: AnalysisSlice = { status: 'idle', data: null, error: null };
 
 const INITIAL_STATE = {
   status: 'idle' as SimulationStatus,
@@ -31,6 +66,9 @@ const INITIAL_STATE = {
   error: null,
   params: null,
   startedAt: null,
+  savedHistoryId: null,
+  prediction: initialPrediction,
+  analysis: initialAnalysis,
   _abortController: null,
   _progressTimer: null,
 };
@@ -70,118 +108,186 @@ function stageFor(progress: number): string {
   return current;
 }
 
-export const useSimulationStore = create<SimulationState>((set, get) => ({
-  ...INITIAL_STATE,
+// sessionStorage persist — F5 새로고침 시 result 복원, 탭 닫으면 자연 휘발(DRAFT 의도 유지).
+// status='running'/'error' 상태는 idle로 강제 복원 — 진행 중이던 timer/abortController는
+// in-memory 전용이라 복원 시 가짜 진행률에 멈춤. result만 살아있는 'done' 케이스만 복원 의미가 있다.
+export const useSimulationStore = create<SimulationState>()(
+  persist(
+    (set, get) => ({
+      ...INITIAL_STATE,
 
-  startSimulation: async (params) => {
-    // Replacement policy: if running, cancel first.
-    const { _abortController: prevAbort, _progressTimer: prevTimer } = get();
-    prevAbort?.abort();
-    if (prevTimer) clearInterval(prevTimer);
+      startSimulation: async (params) => {
+        // Replacement policy: if running, cancel first.
+        const { _abortController: prevAbort, _progressTimer: prevTimer } = get();
+        prevAbort?.abort();
+        if (prevTimer) clearInterval(prevTimer);
 
-    const abortController = new AbortController();
-    const startedAt = nextStartedAt();
+        const abortController = new AbortController();
+        const startedAt = nextStartedAt();
 
-    set({
-      status: 'running',
-      progress: 0,
-      stage: 'INITIALIZING AI ENGINE',
-      result: null,
-      error: null,
-      params,
-      startedAt,
-      _abortController: abortController,
-      _progressTimer: null,
-    });
+        set({
+          status: 'running',
+          progress: 0,
+          stage: 'INITIALIZING AI ENGINE',
+          result: null,
+          error: null,
+          params,
+          startedAt,
+          savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
+          prediction: { status: 'running', data: null, error: null },
+          analysis: { status: 'running', data: null, error: null },
+          _abortController: abortController,
+          _progressTimer: null,
+        });
 
-    // Fake-progress ticker: climbs to 90% over ~100s so the user feels motion
-    // while the real request is in flight. Capped at 90 so the jump to 100
-    // on success remains perceptible.
-    const timer = setInterval(() => {
-      const elapsed = (Date.now() - startedAt) / 1000;
-      const p = Math.min(90, elapsed * 0.9);
-      set({ progress: p, stage: stageFor(p) });
-    }, 500);
-    set({ _progressTimer: timer });
+        // Fake-progress ticker: climbs to 90% over ~100s so the user feels motion
+        // while the real request is in flight. Capped at 90 so the jump to 100
+        // on success remains perceptible.
+        const timer = setInterval(() => {
+          const elapsed = (Date.now() - startedAt) / 1000;
+          const p = Math.min(90, elapsed * 0.9);
+          set({ progress: p, stage: stageFor(p) });
+        }, 500);
+        set({ _progressTimer: timer });
 
-    try {
-      const result = await runSimulation(params, abortController.signal);
+        const isAbortError = (e: unknown): boolean => {
+          const name = (e as { name?: string })?.name;
+          return name === 'CanceledError' || name === 'AbortError' || axios.isCancel(e);
+        };
 
-      // Stale response guard — if a newer start has replaced us, abandon.
-      if (get().startedAt !== startedAt) return;
+        // /analyze/llm — 백그라운드 실행. /predict 완료 후 대시보드 진입, 분석 완료 시 자동 갱신.
+        runAnalyzeLlm(params, abortController.signal)
+          .then((data) => {
+            if (get().startedAt !== startedAt) return;
+            const { _progressTimer: t } = get();
+            if (t) clearInterval(t);
+            set({
+              analysis: { status: 'done', data, error: null },
+              status: 'done',
+              progress: 100,
+              stage: 'COMPLETE',
+              _progressTimer: null,
+            });
+          })
+          .catch((err) => {
+            if (get().startedAt !== startedAt) return;
+            if (isAbortError(err)) return;
+            const { _progressTimer: t } = get();
+            if (t) clearInterval(t);
+            const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
+            // prediction 이 이미 done 이면 status 도 done 유지 (부분 성공).
+            const predDone = get().prediction.status === 'done';
+            set({
+              analysis: { status: 'error', data: null, error: msg },
+              ...(predDone
+                ? { status: 'done', progress: 100, stage: 'COMPLETE' }
+                : { status: 'error', stage: '시뮬 실패', error: msg }),
+              _progressTimer: null,
+            });
+          });
 
-      const { _progressTimer } = get();
-      if (_progressTimer) clearInterval(_progressTimer);
+        // /predict — await 후 즉시 prediction 슬라이스 확정 → App.tsx 게이트 통과 → 대시보드 진입 (≈15s).
+        // analyze 는 백그라운드에서 계속 실행 중이므로 status 는 아직 'running' 유지.
+        // (analyze .then()/.catch() 에서 'done'/'error' 로 전환 + 타이머 정리)
+        try {
+          const data = await runPredict(params, abortController.signal);
+          if (get().startedAt !== startedAt) return; // stale guard
+          set({ prediction: { status: 'done', data, error: null } });
+        } catch (err) {
+          if (get().startedAt !== startedAt) return;
+          if (isAbortError(err)) return;
+          const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
+          set({ prediction: { status: 'error', data: null, error: msg } });
+        }
+      },
 
-      set({
-        status: 'done',
-        progress: 100,
-        stage: 'COMPLETE',
-        result,
-        _abortController: null,
-        _progressTimer: null,
-      });
-    } catch (err: unknown) {
-      // Stale check — if replaced, don't touch state
-      if (get().startedAt !== startedAt) return;
+      retryPrediction: async () => {
+        const params = get().params;
+        if (!params) return;
+        set({ prediction: { status: 'running', data: null, error: null } });
+        try {
+          const data = await runPredict(params);
+          set({ prediction: { status: 'done', data, error: null } });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : '예측 재시도 실패';
+          set({ prediction: { status: 'error', data: null, error: msg } });
+        }
+      },
 
-      const isAbort =
-        (err as { name?: string })?.name === 'CanceledError' ||
-        (err as { name?: string })?.name === 'AbortError' ||
-        axios.isCancel(err);
+      retryAnalysis: async () => {
+        const params = get().params;
+        if (!params) return;
+        set({ analysis: { status: 'running', data: null, error: null } });
+        try {
+          const data = await runAnalyzeLlm(params);
+          set({ analysis: { status: 'done', data, error: null } });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : '분석 재시도 실패';
+          set({ analysis: { status: 'error', data: null, error: msg } });
+        }
+      },
 
-      if (isAbort) {
-        // cancelSimulation already cleaned state; nothing to do here
-        return;
-      }
-
-      const { _progressTimer } = get();
-      if (_progressTimer) clearInterval(_progressTimer);
-
-      const message =
-        err instanceof Error ? err.message : typeof err === 'string' ? err : '알 수 없는 오류';
-      set({
-        status: 'error',
-        error: message,
-        _abortController: null,
-        _progressTimer: null,
-      });
-    }
-  },
-  cancelSimulation: () => {
-    const { status, _abortController, _progressTimer } = get();
-    if (status !== 'running') return;
-    _abortController?.abort();
-    if (_progressTimer) clearInterval(_progressTimer);
-    set({
-      status: 'idle',
-      progress: 0,
-      stage: '',
-      result: null,
-      error: null,
-      params: null,
-      startedAt: null,
-      _abortController: null,
-      _progressTimer: null,
-    });
-  },
-  dismissResult: () => {
-    const { status } = get();
-    if (status !== 'done' && status !== 'error') return;
-    set({
-      status: 'idle',
-      progress: 0,
-      stage: '',
-      result: null,
-      error: null,
-      params: null,
-      startedAt: null,
-    });
-  },
-  reset: () => {
-    const { _abortController, _progressTimer } = get();
-    _abortController?.abort();
-    if (_progressTimer) clearInterval(_progressTimer);
-    set(INITIAL_STATE);
-  },
-}));
+      cancelSimulation: () => {
+        const { status, _abortController, _progressTimer } = get();
+        if (status !== 'running') return;
+        _abortController?.abort();
+        if (_progressTimer) clearInterval(_progressTimer);
+        set({
+          status: 'idle',
+          progress: 0,
+          stage: '',
+          result: null,
+          error: null,
+          params: null,
+          startedAt: null,
+          savedHistoryId: null,
+          prediction: initialPrediction,
+          analysis: initialAnalysis,
+          _abortController: null,
+          _progressTimer: null,
+        });
+      },
+      dismissResult: () => {
+        const { status } = get();
+        if (status !== 'done' && status !== 'error') return;
+        set({
+          status: 'idle',
+          progress: 0,
+          stage: '',
+          result: null,
+          error: null,
+          params: null,
+          startedAt: null,
+          savedHistoryId: null,
+          prediction: initialPrediction,
+          analysis: initialAnalysis,
+        });
+      },
+      setSavedHistoryId: (id) => set({ savedHistoryId: id }),
+      reset: () => {
+        const { _abortController, _progressTimer } = get();
+        _abortController?.abort();
+        if (_progressTimer) clearInterval(_progressTimer);
+        set(INITIAL_STATE);
+      },
+    }),
+    {
+      name: 'mapo-simulation-store',
+      storage: createJSONStorage(() => sessionStorage),
+      // 'done' 상태에서 result/params/savedHistoryId만 직렬화. running/error는 idle로 강제.
+      // _abortController, _progressTimer는 비-직렬화 (반환에서 자동 제외).
+      partialize: (state) => ({
+        status: state.status === 'done' ? ('done' as const) : ('idle' as const),
+        result: state.status === 'done' ? state.result : null,
+        params: state.status === 'done' ? state.params : null,
+        savedHistoryId: state.status === 'done' ? state.savedHistoryId : null,
+        startedAt: state.status === 'done' ? state.startedAt : null,
+        stage: state.status === 'done' ? state.stage : '',
+        progress: state.status === 'done' ? 100 : 0,
+        error: null,
+        prediction: state.status === 'done' ? state.prediction : initialPrediction,
+        analysis: state.status === 'done' ? state.analysis : initialAnalysis,
+      }),
+    },
+  ),
+);

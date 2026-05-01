@@ -1,0 +1,38 @@
+=== Phase I PSE N=3 — V1 vs V2 안정성 ===
+
+KT Q1 평균 로드: 384행
+
+[seed=42] ABM 시뮬...
+[loader] 메뉴/매출/감성 보조 데이터 로드 중...
+[loader] 메뉴 3,060개 매장 / 매출 1,649 (동×업종) / 감성 9
+[loader] RDS 로드 완료: 3593개 점포 (853개 스킵)
+[policy_gen] v2 하드코딩 66개 (role×weather×time_block)
+[loader] Nemotron 마포구 persona 7,187건 로드 (nemotron_personas_mapo.parquet)
+[loader] time_age_boost (grid) 13,440개 항목 (24h × 평일/주말)
+[loader] adstrd_flpop_boost 2,688개 항목 (16동 × 24h × 7요일, 분기 안정 평균)
+  V1=+0.3064  V2=+0.6658  (Δ=+0.3594)
+[seed=123] ABM 시뮬...
+[loader] 메뉴/매출/감성 보조 데이터 로드 중...
+[loader] 메뉴 3,060개 매장 / 매출 1,649 (동×업종) / 감성 9
+[loader] RDS 로드 완료: 3593개 점포 (853개 스킵)
+[policy_gen] v2 하드코딩 66개 (role×weather×time_block)
+[loader] Nemotron 마포구 persona 7,187건 로드 (nemotron_personas_mapo.parquet)
+[loader] time_age_boost (grid) 13,440개 항목 (24h × 평일/주말)
+[loader] adstrd_flpop_boost 2,688개 항목 (16동 × 24h × 7요일, 분기 안정 평균)
+  V1=+0.2501  V2=+0.6408  (Δ=+0.3907)
+[seed=7777] ABM 시뮬...
+[loader] 메뉴/매출/감성 보조 데이터 로드 중...
+[loader] 메뉴 3,060개 매장 / 매출 1,649 (동×업종) / 감성 9
+[loader] RDS 로드 완료: 3593개 점포 (853개 스킵)
+[policy_gen] v2 하드코딩 66개 (role×weather×time_block)
+[loader] Nemotron 마포구 persona 7,187건 로드 (nemotron_personas_mapo.parquet)
+[loader] time_age_boost (grid) 13,440개 항목 (24h × 평일/주말)
+[loader] adstrd_flpop_boost 2,688개 항목 (16동 × 24h × 7요일, 분기 안정 평균)
+  V1=+0.2864  V2=+0.6464  (Δ=+0.3600)
+
+============================================================
+V1 (raw Pearson)             : +0.2810 ± 0.0323  range [+0.2501, +0.3064]
+V2 (KT residence subtracted) : +0.6510 ± 0.0148  range [+0.6408, +0.6658]
+Δ (V2 - V1)                  : +0.3700  combined CI ±0.0355
+
+✅ Δ > combined CI (0.3700 > 0.0355) — 통계적 유의 lift

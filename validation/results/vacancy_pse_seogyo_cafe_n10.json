@@ -1,0 +1,211 @@
+{
+  "vacancy_spot": {
+    "dong": "서교동",
+    "lat": 37.5544,
+    "lon": 126.922
+  },
+  "category": "카페",
+  "n_seeds": 10,
+  "days": 1,
+  "popularity_boost": 5.0,
+  "with_cannibalization": true,
+  "per_seed": [
+    {
+      "seed": 42,
+      "visits_per_day": 10.0,
+      "revenue_per_day": 118041.0,
+      "occupancy": 0.3333333333333333,
+      "vacancy_vs_avg_visits_ratio": 49.85,
+      "vacancy_vs_avg_revenue_ratio": 27.12,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": 97.6,
+      "synergy_pct": 356.6,
+      "same_cat_delta_visits": -6,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 123,
+      "visits_per_day": 9.0,
+      "revenue_per_day": 108559.0,
+      "occupancy": 0.3,
+      "vacancy_vs_avg_visits_ratio": 43.57,
+      "vacancy_vs_avg_revenue_ratio": 22.75,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": 59.4,
+      "synergy_pct": -89.4,
+      "same_cat_delta_visits": -2,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 7777,
+      "visits_per_day": 8.0,
+      "revenue_per_day": 86096.0,
+      "occupancy": 0.26666666666666666,
+      "vacancy_vs_avg_visits_ratio": 34.7,
+      "vacancy_vs_avg_revenue_ratio": 17.09,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": 257.0,
+      "synergy_pct": 57.0,
+      "same_cat_delta_visits": -12,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 99,
+      "visits_per_day": 13.0,
+      "revenue_per_day": 145628.0,
+      "occupancy": 0.43333333333333335,
+      "vacancy_vs_avg_visits_ratio": 63.85,
+      "vacancy_vs_avg_revenue_ratio": 31.21,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": 39.1,
+      "synergy_pct": -219.2,
+      "same_cat_delta_visits": -1,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 2024,
+      "visits_per_day": 9.0,
+      "revenue_per_day": 106928.0,
+      "occupancy": 0.3,
+      "vacancy_vs_avg_visits_ratio": 47.71,
+      "vacancy_vs_avg_revenue_ratio": 24.78,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": 73.0,
+      "synergy_pct": -31.9,
+      "same_cat_delta_visits": 2,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 1,
+      "visits_per_day": 8.0,
+      "revenue_per_day": 89654.0,
+      "occupancy": 0.26666666666666666,
+      "vacancy_vs_avg_visits_ratio": 29.69,
+      "vacancy_vs_avg_revenue_ratio": 14.56,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": -172.0,
+      "synergy_pct": 36.1,
+      "same_cat_delta_visits": 9,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 2,
+      "visits_per_day": 10.0,
+      "revenue_per_day": 122759.0,
+      "occupancy": 0.3333333333333333,
+      "vacancy_vs_avg_visits_ratio": 52.19,
+      "vacancy_vs_avg_revenue_ratio": 31.08,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": -10.1,
+      "synergy_pct": 112.3,
+      "same_cat_delta_visits": 1,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 3,
+      "visits_per_day": 14.0,
+      "revenue_per_day": 137952.0,
+      "occupancy": 0.4666666666666667,
+      "vacancy_vs_avg_visits_ratio": 59.19,
+      "vacancy_vs_avg_revenue_ratio": 23.14,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": -145.3,
+      "synergy_pct": -342.5,
+      "same_cat_delta_visits": 2,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 4,
+      "visits_per_day": 12.0,
+      "revenue_per_day": 143149.0,
+      "occupancy": 0.4,
+      "vacancy_vs_avg_visits_ratio": 56.45,
+      "vacancy_vs_avg_revenue_ratio": 27.55,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": -93.5,
+      "synergy_pct": 108.3,
+      "same_cat_delta_visits": 7,
+      "same_cat_n_stores": 147
+    },
+    {
+      "seed": 5,
+      "visits_per_day": 7.0,
+      "revenue_per_day": 86920.0,
+      "occupancy": 0.23333333333333334,
+      "vacancy_vs_avg_visits_ratio": 44.11,
+      "vacancy_vs_avg_revenue_ratio": 27.32,
+      "dong_category_n_stores": 334,
+      "cannibalization_pct": 238.5,
+      "synergy_pct": -18.4,
+      "same_cat_delta_visits": -9,
+      "same_cat_n_stores": 147
+    }
+  ],
+  "pse_summary": {
+    "visits_per_day": {
+      "mean": 10.0,
+      "std": 2.309,
+      "ci95": 1.431,
+      "min": 7.0,
+      "max": 14.0,
+      "n": 10
+    },
+    "revenue_per_day": {
+      "mean": 114568.6,
+      "std": 22846.868,
+      "ci95": 14160.636,
+      "min": 86096.0,
+      "max": 145628.0,
+      "n": 10
+    },
+    "occupancy": {
+      "mean": 0.333,
+      "std": 0.077,
+      "ci95": 0.048,
+      "min": 0.233,
+      "max": 0.467,
+      "n": 10
+    },
+    "vacancy_vs_avg_visits_ratio": {
+      "mean": 48.131,
+      "std": 10.623,
+      "ci95": 6.584,
+      "min": 29.69,
+      "max": 63.85,
+      "n": 10
+    },
+    "vacancy_vs_avg_revenue_ratio": {
+      "mean": 24.66,
+      "std": 5.486,
+      "ci95": 3.4,
+      "min": 14.56,
+      "max": 31.21,
+      "n": 10
+    },
+    "cannibalization_pct": {
+      "mean": 34.37,
+      "std": 145.515,
+      "ci95": 90.191,
+      "min": -172.0,
+      "max": 257.0,
+      "n": 10
+    },
+    "synergy_pct": {
+      "mean": -3.11,
+      "std": 191.678,
+      "ci95": 118.803,
+      "min": -342.5,
+      "max": 356.6,
+      "n": 10
+    },
+    "same_cat_delta_visits": {
+      "mean": -0.9,
+      "std": 6.641,
+      "ci95": 4.116,
+      "min": -12,
+      "max": 9,
+      "n": 10
+    }
+  },
+  "narrative": "서교동 카페 신규 매장 (popularity_boost=5.0, PSE N=10):\n  - 일평균 방문 : 10.0 ± 1.4 명 (95% CI, range [7, 14])\n  - 일평균 매출 : 11 ± 1 만원\n  - 동 평균 대비: 48.1 ± 6.6 배\n  - 카니발 % : +34.4 ± 90.2% (- = 시너지, + = 잠식)"
+}

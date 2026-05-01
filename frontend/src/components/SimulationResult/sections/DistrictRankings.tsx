@@ -1,0 +1,150 @@
+import type { SimulationOutput } from '../../../types';
+import { SectionLabel } from '../shared/SectionLabel';
+
+interface Props {
+  simResult: SimulationOutput;
+}
+
+const ZONING_CLS: Record<string, string> = {
+  safe: 'text-emerald-400',
+  caution: 'text-yellow-400',
+  danger: 'text-rose-400',
+};
+const ZONING_KO: Record<string, string> = {
+  safe: '안전',
+  caution: '주의',
+  danger: '위험',
+};
+
+export function DistrictRankings({ simResult }: Props) {
+  const allRankings = simResult.district_rankings ?? [];
+  const winner = simResult.winner_district;
+  const selectedDongs = simResult.target_districts ?? [];
+  // [/predict 분리 호출] 동별 예측 결과 — is_excluded_combo:true 동은 ML 출력 없음 (회색 + "예측 불가" 배지)
+  const districtPredictions = simResult.district_predictions ?? [];
+
+  // 사용자가 선택한 동(최대 4개)만 필터 + score 내림차순 + 자체 1~N위 재매김.
+  // target_districts 비면 전체 표시 (안전 폴백).
+  const rankings =
+    selectedDongs.length > 0
+      ? allRankings
+          .filter((r) => selectedDongs.includes(r.district))
+          .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      : allRankings;
+
+  if (rankings.length === 0) {
+    return (
+      <section>
+        <SectionLabel label="DISTRICT RANKINGS" subtitle="선택 동 입지 순위" />
+        <div className="rounded-lg border border-stone-700 bg-stone-800 p-6 text-center text-sm text-stone-400">
+          입지 랭킹 데이터가 없습니다
+        </div>
+      </section>
+    );
+  }
+
+  const subtitle =
+    selectedDongs.length > 0
+      ? `선택한 ${rankings.length}개 동 자체 순위`
+      : `마포 ${rankings.length}동 입지 순위`;
+
+  return (
+    <section>
+      <SectionLabel label="DISTRICT RANKINGS" subtitle={subtitle} />
+      <div className="overflow-x-auto rounded-lg border border-stone-700 bg-stone-800">
+        <table className="w-full min-w-[640px]">
+          <thead className="border-b border-stone-700 bg-stone-900/60">
+            <tr>
+              <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">순위</th>
+              <th className="p-3 text-left text-xs font-semibold uppercase text-stone-400">
+                행정동
+              </th>
+              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+                점수
+              </th>
+              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+                매출성장
+              </th>
+              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">
+                폐업위험
+                <span className="ml-1 text-[0.5625rem] font-normal text-stone-600">(ML예측)</span>
+              </th>
+              <th className="p-3 text-right text-xs font-semibold uppercase text-stone-400">BEP</th>
+              <th className="p-3 text-center text-xs font-semibold uppercase text-stone-400">
+                용도지역
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rankings.map((r, i) => {
+              const isWinner = r.district === winner;
+              // /predict 응답에서 동 매칭 — is_excluded_combo:true 면 ML 출력 없음
+              const pred = districtPredictions.find((p) => p.district === r.district);
+              const isExcluded = pred?.is_excluded_combo === true;
+              const rowCls = isExcluded
+                ? 'opacity-50 bg-stone-900/40'
+                : isWinner
+                  ? 'bg-indigo-500/10'
+                  : i < 3
+                    ? 'bg-indigo-500/5'
+                    : '';
+              return (
+                <tr
+                  key={r.district}
+                  className={`border-b border-stone-700/50 last:border-b-0 ${rowCls}`}
+                >
+                  <td className="p-3 font-mono text-sm text-stone-100">
+                    {/* 자체 1~N위 (정렬 후 인덱스). 전체 마포 16동 중 순위는 작게 보조 표시. */}
+                    {i + 1}
+                    {selectedDongs.length > 0 && r.rank != null && r.rank !== i + 1 && (
+                      <span className="ml-1 text-[0.5625rem] font-normal text-stone-500">
+                        (전체 {r.rank}위)
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-3 text-sm font-semibold text-stone-100">
+                    {r.district}
+                    {isExcluded && (
+                      <span className="ml-2 rounded bg-stone-700 px-1.5 py-0.5 font-mono text-[10px] text-stone-400">
+                        예측 불가
+                      </span>
+                    )}
+                    {isWinner && !isExcluded && (
+                      <span className="ml-2 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[0.625rem] font-bold text-indigo-400">
+                        추천
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-3 text-right font-mono text-sm text-stone-100">
+                    {isExcluded ? '—' : r.score.toFixed(1)}
+                  </td>
+                  <td className="p-3 text-right font-mono text-sm text-stone-300">
+                    {/* backend qoq_growth는 이미 percent 단위 (tools.py:300 *100 적용). 추가 ×100 금지 */}
+                    {isExcluded ? '—' : `${r.sales_growth.toFixed(1)}%`}
+                  </td>
+                  <td className="p-3 text-right font-mono text-sm text-rose-400">
+                    {isExcluded
+                      ? '—'
+                      : r.closure_rate != null
+                        ? `${(r.closure_rate * 100).toFixed(1)}%`
+                        : '—'}
+                  </td>
+                  <td className="p-3 text-right font-mono text-sm text-stone-300">
+                    {isExcluded ? '—' : r.bep_quarters != null ? `${r.bep_quarters}분기` : '—'}
+                  </td>
+                  <td
+                    className={`p-3 text-center text-xs font-semibold ${
+                      ZONING_CLS[r.zoning_risk] ?? 'text-stone-400'
+                    }`}
+                  >
+                    ● {ZONING_KO[r.zoning_risk] ?? r.zoning_risk}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}

@@ -4,28 +4,39 @@
 
 /* ═══════════════════════════════════════════════════════
    SPOTTER Design System — Indigo & Stone Theme (Tailwind v3)
+   v4.2 (2026-04-23) — #0C0B0A high-end dark 전역 전환
    ═══════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════
+   Viewport-aware root font scaling (2026-04-29)
+   16인치 노트북 (~1280px) = 16px → 24인치+ 모니터 (~1920px) = 18px.
+   Tailwind 의 모든 rem 기반 utility (text-xs/sm/base/lg ...) 가
+   자동 비례 확대. text-[10px] 등 고정 px 클래스는 영향 받지 않음.
+   ═══════════════════════════════════════════════════════ */
+html {
+  font-size: clamp(16px, 0.32vw + 12px, 18px);
+}
 
 @layer base {
   :root {
-    --background: #1e1b18;
+    --background: #0c0b0a;
     --foreground: #e2e8f0;
-    --card: #2c2825;
+    --card: #1a1a1a;
     --card-foreground: #e2e8f0;
-    --popover: #2c2825;
+    --popover: #1a1a1a;
     --popover-foreground: #e2e8f0;
     --primary: #818cf8;
-    --primary-foreground: #1e1b18;
-    --secondary: #3a3633;
-    --secondary-foreground: #d1d5db;
-    --muted: #2c2825;
-    --muted-foreground: #9ca3af;
-    --accent: #484441;
-    --accent-foreground: #d1d5db;
+    --primary-foreground: #0c0b0a;
+    --secondary: #292524;
+    --secondary-foreground: #d6d3d1;
+    --muted: #1a1a1a;
+    --muted-foreground: #a8a29e;
+    --accent: #44403c;
+    --accent-foreground: #d6d3d1;
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
-    --border: #3a3633;
-    --input: #3a3633;
+    --border: #292524;
+    --input: #292524;
     --ring: #818cf8;
     --radius: 1.25rem;
   }
@@ -42,71 +53,188 @@
 }
 
 /* Global — Chrome, Edge, Safari */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background-color: #3a3633; border-radius: 20px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background-color: #4b5563; }
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #3a3633;
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #4b5563;
+}
 
-.scrollbar-hide::-webkit-scrollbar { display: none; }
-.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 /* ═══════════════════════════════════════════════════════
    Animations
    ═══════════════════════════════════════════════════════ */
 
 @keyframes floatLogo {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-12px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
 }
-.animate-float-logo { animation: floatLogo 6s ease-in-out infinite; }
+.animate-float-logo {
+  animation: floatLogo 6s ease-in-out infinite;
+}
 
 @keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
-.animate-spin-slow { animation: spin-slow 4s linear infinite; }
+.animate-spin-slow {
+  animation: spin-slow 4s linear infinite;
+}
 
 @keyframes marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
-.animate-marquee { animation: marquee 40s linear infinite; }
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
 
 @keyframes drawCircuit {
-  0% { stroke-dashoffset: 600; }
-  100% { stroke-dashoffset: 0; }
+  0% {
+    stroke-dashoffset: 600;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
 }
-.animate-draw { stroke-dasharray: 150 450; animation: drawCircuit 3s linear infinite; }
+.animate-draw {
+  stroke-dasharray: 150 450;
+  animation: drawCircuit 3s linear infinite;
+}
 
-.scene-3d { perspective: 1200px; transform-style: preserve-3d; }
-.hologram-wrapper { transform-style: preserve-3d; animation: float-core 5s ease-in-out infinite; }
+.scene-3d {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+.hologram-wrapper {
+  transform-style: preserve-3d;
+  animation: float-core 5s ease-in-out infinite;
+}
 
 @keyframes float-core {
-  0%, 100% { transform: translateY(0px) scale(1); }
-  50% { transform: translateY(-20px) scale(1.05); }
+  0%,
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
 }
 @keyframes energy-pulse {
-  0%, 100% { text-shadow: 0 0 20px rgba(99,102,241,0.4); transform: translateZ(0px) scale(1); }
-  50% { text-shadow: 0 0 40px rgba(99,102,241,0.8); transform: translateZ(20px) scale(1.02); }
+  0%,
+  100% {
+    text-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    transform: translateZ(0px) scale(1);
+  }
+  50% {
+    text-shadow: 0 0 40px rgba(99, 102, 241, 0.8);
+    transform: translateZ(20px) scale(1.02);
+  }
 }
-@keyframes gyro-1 { 100% { transform: rotateX(70deg) rotateY(10deg) rotateZ(360deg); } }
-@keyframes gyro-2 { 100% { transform: rotateX(50deg) rotateY(60deg) rotateZ(-360deg); } }
-@keyframes gyro-3 { 100% { transform: rotateX(50deg) rotateY(-60deg) rotateZ(360deg); } }
-@keyframes gyro-4 { 100% { transform: rotateX(20deg) rotateY(80deg) rotateZ(360deg); } }
-@keyframes gyro-5 { 100% { transform: rotateX(80deg) rotateY(-30deg) rotateZ(-360deg); } }
+@keyframes gyro-1 {
+  100% {
+    transform: rotateX(70deg) rotateY(10deg) rotateZ(360deg);
+  }
+}
+@keyframes gyro-2 {
+  100% {
+    transform: rotateX(50deg) rotateY(60deg) rotateZ(-360deg);
+  }
+}
+@keyframes gyro-3 {
+  100% {
+    transform: rotateX(50deg) rotateY(-60deg) rotateZ(360deg);
+  }
+}
+@keyframes gyro-4 {
+  100% {
+    transform: rotateX(20deg) rotateY(80deg) rotateZ(360deg);
+  }
+}
+@keyframes gyro-5 {
+  100% {
+    transform: rotateX(80deg) rotateY(-30deg) rotateZ(-360deg);
+  }
+}
 @keyframes fade-out-up {
-  0% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-50px) scale(1.2); filter: blur(10px); pointer-events: none; }
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50px) scale(1.2);
+    filter: blur(10px);
+    pointer-events: none;
+  }
 }
 @keyframes warp-out {
-  0% { opacity: 1; transform: scale(1) translateZ(0); filter: blur(0px); }
-  100% { opacity: 0; transform: scale(4) translateZ(500px); filter: blur(30px); pointer-events: none; }
+  0% {
+    opacity: 1;
+    transform: scale(1) translateZ(0);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(4) translateZ(500px);
+    filter: blur(30px);
+    pointer-events: none;
+  }
 }
 @keyframes main-scene-in {
-  0% { opacity: 0; transform: scale(0.95); filter: blur(15px); }
-  100% { opacity: 1; transform: scale(1); filter: blur(0px); }
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+    filter: blur(15px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
 }
+/* fadeSlideIn: 진입 애니메이션.
+   끝 keyframe을 translateY(0) 대신 'none'으로 둬야 애니메이션 종료 후 ancestor에
+   잔류 transform이 남지 않음. 잔류 transform은 자식 fixed/sticky의 containing block을
+   해당 ancestor로 한정시켜 sticky top-* 값이 viewport가 아닌 ancestor 기준으로 동작
+   → 대시보드 sticky header가 화면 중간에 떠다니는 현상 발생. */
 @keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(40px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

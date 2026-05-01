@@ -1,0 +1,310 @@
+1<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SPOTTER DB 감사 리포트</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; padding: 32px; max-width: 1200px; margin: 0 auto; line-height: 1.6; }
+h1 { text-align: center; color: #fff; font-size: 28px; margin-bottom: 4px; }
+.subtitle { text-align: center; color: #888; font-size: 13px; margin-bottom: 32px; }
+h2 { color: #fff; font-size: 20px; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 2px solid #333; }
+h3 { color: #ccc; font-size: 16px; margin: 24px 0 12px; }
+
+.stats-bar { display: flex; gap: 16px; justify-content: center; margin-bottom: 32px; flex-wrap: wrap; }
+.stat-card { background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 16px 24px; text-align: center; min-width: 140px; }
+.stat-card .num { font-size: 28px; font-weight: 700; color: #6366f1; }
+.stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+
+table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 13px; }
+th { background: #1a1a2e; color: #aaa; text-align: left; padding: 10px 12px; font-weight: 600; border-bottom: 2px solid #333; }
+td { padding: 8px 12px; border-bottom: 1px solid #222; }
+tr:hover td { background: #1a1a2e; }
+.mono { font-family: 'Consolas', monospace; font-size: 12px; }
+
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+.badge-safe { background: #4CAF5033; color: #4CAF50; border: 1px solid #4CAF5055; }
+.badge-warn { background: #FF980033; color: #FF9800; border: 1px solid #FF980055; }
+.badge-danger { background: #F4433633; color: #F44336; border: 1px solid #F4433655; }
+.badge-info { background: #2196F333; color: #2196F3; border: 1px solid #2196F355; }
+.badge-done { background: #4CAF5033; color: #4CAF50; border: 1px solid #4CAF5055; }
+
+.section { background: #16213e; border: 1px solid #1a3a5e; border-radius: 8px; padding: 20px; margin: 16px 0; }
+.section.issue { border-color: #5a2a2e; background: #1e1a24; }
+.section.safe { border-color: #2a5a2e; background: #1a1e24; }
+
+.code { background: #0a0a1a; border: 1px solid #333; border-radius: 6px; padding: 12px 16px; font-family: 'Consolas', monospace; font-size: 12px; overflow-x: auto; margin: 8px 0; white-space: pre; }
+
+.impact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.impact-card { background: #0f0f1a; border: 1px solid #333; border-radius: 6px; padding: 12px; }
+.impact-card .title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.impact-card .desc { font-size: 12px; color: #aaa; }
+
+.legend { display: flex; gap: 24px; margin: 12px 0; font-size: 12px; color: #888; }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+
+.timeline { margin: 16px 0; }
+.timeline-item { display: flex; gap: 12px; padding: 8px 0; border-left: 2px solid #333; margin-left: 8px; padding-left: 16px; }
+.timeline-item .step { color: #6366f1; font-weight: 700; min-width: 24px; }
+.timeline-item .content { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>SPOTTER DB 감사 리포트</h1>
+<div class="subtitle">mapo-simulator RDS PostgreSQL &mdash; 2026-04-25 작성 (A2 봉환)</div>
+
+<div class="stats-bar">
+    <div class="stat-card"><div class="num">73</div><div class="label">테이블</div></div>
+    <div class="stat-card"><div class="num">4.7 GB</div><div class="label">총 용량</div></div>
+    <div class="stat-card"><div class="num">5</div><div class="label">FK 관계</div></div>
+    <div class="stat-card"><div class="num">17.2M</div><div class="label">총 행 수</div></div>
+    <div class="stat-card"><div class="num" style="color:#4CAF50;">3</div><div class="label">삭제 완료 (백업)</div></div>
+</div>
+
+<!-- ============================================ -->
+<h2>1. 완료된 정리</h2>
+<!-- ============================================ -->
+
+<div class="section safe">
+    <h3>백업 테이블 3개 삭제 <span class="badge badge-done">완료</span></h3>
+    <table>
+        <tr><th>삭제된 테이블</th><th>행 수</th><th>원본</th><th>상태</th></tr>
+        <tr><td class="mono">naver_trend_monthly_backup_20260420</td><td>28,570</td><td>naver_trend_monthly (33,985행)</td><td><span class="badge badge-done">삭제됨</span></td></tr>
+        <tr><td class="mono">naver_trend_quarterly_backup_20260420</td><td>7,653</td><td>naver_trend_quarterly (9,205행)</td><td><span class="badge badge-done">삭제됨</span></td></tr>
+        <tr><td class="mono">seoul_adstrd_flpop_backup_20260421</td><td>448</td><td>seoul_adstrd_flpop (11,900행)</td><td><span class="badge badge-done">삭제됨</span></td></tr>
+    </table>
+    <p style="font-size:12px; color:#888;">원본이 모두 백업보다 크므로 데이터 손실 없음. 2026-04-25 삭제 완료.</p>
+</div>
+
+<!-- ============================================ -->
+<h2>2. 현재 문제점</h2>
+<!-- ============================================ -->
+
+<!-- 2-1 빈 테이블 -->
+<div class="section issue">
+    <h3>2-1. 빈 테이블 (0행) <span class="badge badge-warn">유지 중</span></h3>
+    <table>
+        <tr><th>테이블</th><th>행 수</th><th>ORM 정의</th><th>코드 참조</th><th>판단</th></tr>
+        <tr><td class="mono">customers</td><td>0</td><td>O</td><td>모델만</td><td>users 테이블이 별도 존재. 향후 고객 방문 기록용이면 유지, 아니면 삭제</td></tr>
+        <tr><td class="mono">simulation_result</td><td>0</td><td>O</td><td>모델만</td><td>simulation_history로 대체됨. 레거시</td></tr>
+    </table>
+</div>
+
+<!-- 2-2 중복 -->
+<div class="section issue">
+    <h3>2-2. 중복 의심 테이블 <span class="badge badge-danger">검토 필요</span></h3>
+
+    <h3 style="margin-top:16px; font-size:14px;">매출 테이블 3중 존재</h3>
+    <table>
+        <tr><th>테이블</th><th>행 수</th><th>컬럼</th><th>범위</th><th>역할</th></tr>
+        <tr><td class="mono">district_sales</td><td>3,703</td><td>53</td><td>2019Q1~2024Q4</td><td>마포 전용 (seoul_district_sales의 필터 버전)</td></tr>
+        <tr><td class="mono">seoul_district_sales</td><td>87,938</td><td>53</td><td>2019Q1~2024Q4</td><td>서울 전역 (컬럼 100% 동일)</td></tr>
+        <tr><td class="mono">district_sales_seoul</td><td>475,334</td><td>9</td><td>2019Q1~2025Q4</td><td>서울 전역 (다른 구조, raw_json 포함)</td></tr>
+    </table>
+    <p style="font-size:12px; color:#FF9800;">district_sales = seoul_district_sales WHERE dong_code LIKE '114%' 로 대체 가능. 단, 코드 수정 필요.</p>
+
+    <h3 style="margin-top:16px; font-size:14px;">인구 테이블 중복</h3>
+    <table>
+        <tr><th>테이블</th><th>행 수</th><th>컬럼</th><th>범위</th><th>역할</th></tr>
+        <tr><td class="mono">mapo_resident_pop</td><td>408</td><td>4</td><td>2019Q1~2024Q4</td><td>마포 전용</td></tr>
+        <tr><td class="mono">seoul_resident_pop_quarterly</td><td>13,508</td><td>4</td><td>2018Q2~2026Q1</td><td>서울 전역 (컬럼 100% 동일, 범위 더 넓음)</td></tr>
+    </table>
+    <p style="font-size:12px; color:#FF9800;">mapo_resident_pop = seoul_resident_pop_quarterly WHERE dong_code LIKE '114%' 로 대체 가능.</p>
+
+    <h3 style="margin-top:16px; font-size:14px;">공실 테이블</h3>
+    <table>
+        <tr><th>테이블</th><th>행 수</th><th>역할</th></tr>
+        <tr><td class="mono">naver_vacancy</td><td>1,341</td><td>네이버 부동산 공실 원본</td></tr>
+        <tr><td class="mono">vacancy_enriched</td><td>111</td><td>지하철/POI 부가정보 추가 버전</td></tr>
+    </table>
+    <p style="font-size:12px; color:#888;">역할은 다르나, vacancy_enriched가 naver_vacancy의 서브셋인지 확인 필요.</p>
+</div>
+
+<!-- 2-3 FK -->
+<div class="section issue">
+    <h3>2-3. FK 관계 부족 <span class="badge badge-warn">구조 개선</span></h3>
+
+    <p style="margin-bottom:12px;">73개 테이블 중 FK가 설정된 건 <strong>5개뿐</strong>. 나머지는 컬럼명만 같을 뿐 DB 레벨 무결성 보장 없음.</p>
+
+    <table>
+        <tr><th>공유 키</th><th>사용 테이블 수</th><th>FK 설정</th><th>위험</th></tr>
+        <tr><td class="mono">dong_code</td><td>21개</td><td>없음</td><td>잘못된 동코드 INSERT 허용</td></tr>
+        <tr><td class="mono">quarter</td><td>30개</td><td>없음</td><td>타입 불일치 (int vs varchar 혼재)</td></tr>
+        <tr><td class="mono">industry_code</td><td>12개</td><td>없음</td><td>코드-이름 매핑 마스터 없음, 이름 불일치 가능</td></tr>
+        <tr><td class="mono">brand_name</td><td>4개</td><td>없음</td><td>브랜드명 오타/불일치 감지 불가</td></tr>
+    </table>
+
+    <p style="margin-top:12px; font-size:12px; color:#888;">현재 FK 관계 (5개):</p>
+    <div class="code">invite_codes.owner_id       &rarr; users.id
+manager_users.invite_code_id &rarr; invite_codes.id
+manager_users.owner_id       &rarr; users.id
+kakao_store_menu.kakao_id    &rarr; kakao_store.kakao_id
+langchain_pg_embedding.collection_id &rarr; langchain_pg_collection.uuid</div>
+</div>
+
+<!-- 2-4 네이밍 -->
+<div class="section issue">
+    <h3>2-4. 네이밍 일관성 <span class="badge badge-info">개선 권장</span></h3>
+    <table>
+        <tr><th>문제</th><th>사례</th><th>개선안</th></tr>
+        <tr><td>같은 데이터, 다른 접두사</td><td class="mono">golmok_rent vs seoul_golmok_rent</td><td>역할 구분 또는 통합</td></tr>
+        <tr><td>마포 전용 vs 서울 전역 혼재</td><td class="mono">district_sales (마포) vs seoul_district_sales (서울)</td><td>하나로 통합, 필터로 구분</td></tr>
+        <tr><td>서울 통계 3계층 약어</td><td class="mono">adstrd(행정동) / signgu(자치구) / trdar(상권)</td><td>정상 — 서울열린데이터 원본 네이밍</td></tr>
+        <tr><td>언더스코어 vs 축약</td><td class="mono">rent_cost vs rent_cost_summary_2025</td><td>관계 명확화 필요</td></tr>
+    </table>
+</div>
+
+<!-- ============================================ -->
+<h2>3. 개선 제안 &amp; 영향도</h2>
+<!-- ============================================ -->
+
+<div class="section">
+    <h3>안전하게 할 수 있는 것 <span class="badge badge-safe">팀 합의 불필요</span></h3>
+    <div class="impact-grid">
+        <div class="impact-card">
+            <div class="title">brand_logo 데이터 보강</div>
+            <div class="desc">현재 94개 → 주요 프랜차이즈 500개+로 확대. 행 추가만 하므로 기존 코드 영향 없음. 프론트에서 로고가 더 많이 표시됨.</div>
+        </div>
+        <div class="impact-card">
+            <div class="title">industry_master 테이블 신설</div>
+            <div class="desc">industry_code → industry_name 매핑 마스터 테이블 추가. 기존 테이블 안 건드림. 향후 코드 정합성 검증에 활용.</div>
+        </div>
+    </div>
+</div>
+
+<div class="section issue">
+    <h3>팀 합의 필요한 것 <span class="badge badge-danger">코드 수정 동반</span></h3>
+
+    <table>
+        <tr><th>작업</th><th>위험도</th><th>영향 범위</th><th>영향 팀원</th></tr>
+        <tr>
+            <td>dong_code FK 추가</td>
+            <td><span class="badge badge-danger">높음</span></td>
+            <td>21개 테이블 INSERT 검증 추가. 기존 데이터에 잘못된 코드 있으면 FK 추가 자체 실패.</td>
+            <td>수지니(TCN), 강민/혁(수집), 봉환(에이전트)</td>
+        </tr>
+        <tr>
+            <td>quarter 타입 통일</td>
+            <td><span class="badge badge-danger">높음</span></td>
+            <td>30개 테이블 영향. WHERE quarter = 20244 쓰는 모든 코드 수정 필요.</td>
+            <td>전원</td>
+        </tr>
+        <tr>
+            <td>중복 테이블 통합 (district_sales 등)</td>
+            <td><span class="badge badge-warn">중간</span></td>
+            <td>해당 테이블 참조하는 에이전트·서비스 코드 수정 필요.</td>
+            <td>봉환(에이전트), 수지니(학습데이터)</td>
+        </tr>
+        <tr>
+            <td>vacancy 테이블 통합</td>
+            <td><span class="badge badge-warn">중간</span></td>
+            <td>district_ranking, 공실 API 코드 수정.</td>
+            <td>봉환(랭킹 에이전트)</td>
+        </tr>
+    </table>
+</div>
+
+<!-- ============================================ -->
+<h2>4. 권장 진행 순서</h2>
+<!-- ============================================ -->
+
+<div class="section">
+    <div class="timeline">
+        <div class="timeline-item"><span class="step">1</span><div class="content"><strong>현황 공유</strong> &mdash; 이 리포트를 팀에 공유하고 의견 수렴 (즉시)</div></div>
+        <div class="timeline-item"><span class="step">2</span><div class="content"><strong>안전 작업 먼저</strong> &mdash; brand_logo 보강, industry_master 신설 (합의 불필요)</div></div>
+        <div class="timeline-item"><span class="step">3</span><div class="content"><strong>중복 테이블 논의</strong> &mdash; district_sales, mapo_resident_pop 삭제 여부 팀 합의</div></div>
+        <div class="timeline-item"><span class="step">4</span><div class="content"><strong>FK 추가 계획</strong> &mdash; 기존 데이터 정합성 검증 → 마이그레이션 스크립트 작성 → 일괄 적용</div></div>
+        <div class="timeline-item"><span class="step">5</span><div class="content"><strong>quarter 타입 통일</strong> &mdash; 전체 코드 영향 분석 → 마이그레이션 → 코드 일괄 수정 (가장 마지막)</div></div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<h2>5. 전체 테이블 목록 (73개)</h2>
+<!-- ============================================ -->
+
+<div class="section">
+<table>
+<tr><th>#</th><th>테이블</th><th style="text-align:right">행 수</th><th style="text-align:right">크기</th><th>카테고리</th><th>상태</th></tr>
+<tr><td>1</td><td class="mono">living_population_grid</td><td style="text-align:right">10,543,528</td><td style="text-align:right">2.9 GB</td><td>인구</td><td></td></tr>
+<tr><td>2</td><td class="mono">bus_boarding_daily</td><td style="text-align:right">3,710,007</td><td style="text-align:right">640 MB</td><td>교통</td><td></td></tr>
+<tr><td>3</td><td class="mono">living_population</td><td style="text-align:right">968,064</td><td style="text-align:right">602 MB</td><td>인구</td><td></td></tr>
+<tr><td>4</td><td class="mono">seoul_adstrd_stor</td><td style="text-align:right">849,552</td><td style="text-align:right">158 MB</td><td>매출</td><td></td></tr>
+<tr><td>5</td><td class="mono">district_sales_seoul</td><td style="text-align:right">475,334</td><td style="text-align:right">68 MB</td><td>매출</td><td></td></tr>
+<tr><td>6</td><td class="mono">sgis_population</td><td style="text-align:right">224,517</td><td style="text-align:right">29 MB</td><td>인구</td><td></td></tr>
+<tr><td>7</td><td class="mono">golmok_commercial</td><td style="text-align:right">178,840</td><td style="text-align:right">128 MB</td><td>상권</td><td></td></tr>
+<tr><td>8</td><td class="mono">jeonse_monthly_rent</td><td style="text-align:right">168,342</td><td style="text-align:right">76 MB</td><td>부동산</td><td></td></tr>
+<tr><td>9</td><td class="mono">sgis_business</td><td style="text-align:right">137,356</td><td style="text-align:right">17 MB</td><td>인구</td><td></td></tr>
+<tr><td>10</td><td class="mono">seoul_district_stores</td><td style="text-align:right">100,587</td><td style="text-align:right">14 MB</td><td>매출</td><td></td></tr>
+<tr><td>11</td><td class="mono">seoul_district_sales</td><td style="text-align:right">87,938</td><td style="text-align:right">42 MB</td><td>매출</td><td><span class="badge badge-warn">중복?</span></td></tr>
+<tr><td>12</td><td class="mono">seoul_training_dataset</td><td style="text-align:right">87,938</td><td style="text-align:right">13 MB</td><td>매출</td><td></td></tr>
+<tr><td>13</td><td class="mono">kakao_store_menu</td><td style="text-align:right">81,313</td><td style="text-align:right">23 MB</td><td>외식</td><td></td></tr>
+<tr><td>14</td><td class="mono">seoul_signgu_stor</td><td style="text-align:right">69,704</td><td style="text-align:right">13 MB</td><td>매출</td><td></td></tr>
+<tr><td>15</td><td class="mono">seoul_signgu_selng</td><td style="text-align:right">43,043</td><td style="text-align:right">9.3 MB</td><td>매출</td><td></td></tr>
+<tr><td>16</td><td class="mono">ftc_brand_franchise</td><td style="text-align:right">34,725</td><td style="text-align:right">5.5 MB</td><td>브랜드</td><td></td></tr>
+<tr><td>17</td><td class="mono">naver_trend_monthly</td><td style="text-align:right">33,985</td><td style="text-align:right">10 MB</td><td>트렌드</td><td></td></tr>
+<tr><td>18</td><td class="mono">store_info</td><td style="text-align:right">30,488</td><td style="text-align:right">11 MB</td><td>상권</td><td></td></tr>
+<tr><td>19</td><td class="mono">sgis_household</td><td style="text-align:right">25,550</td><td style="text-align:right">3.3 MB</td><td>인구</td><td></td></tr>
+<tr><td>20</td><td class="mono">langchain_pg_embedding</td><td style="text-align:right">23,096</td><td style="text-align:right">54 MB</td><td>법률RAG</td><td></td></tr>
+<tr><td>21</td><td class="mono">golmok_stores</td><td style="text-align:right">15,800</td><td style="text-align:right">2.1 MB</td><td>상권</td><td></td></tr>
+<tr><td>22</td><td class="mono">seoul_resident_pop_quarterly</td><td style="text-align:right">13,508</td><td style="text-align:right">1.6 MB</td><td>인구</td><td></td></tr>
+<tr><td>23</td><td class="mono">seoul_adstrd_change_ix</td><td style="text-align:right">11,900</td><td style="text-align:right">1.9 MB</td><td>트렌드</td><td></td></tr>
+<tr><td>24</td><td class="mono">seoul_adstrd_flpop</td><td style="text-align:right">11,900</td><td style="text-align:right">2.3 MB</td><td>인구</td><td></td></tr>
+<tr><td>25</td><td class="mono">seoul_golmok_rent</td><td style="text-align:right">11,900</td><td style="text-align:right">1.5 MB</td><td>부동산</td><td></td></tr>
+<tr><td>26</td><td class="mono">seoul_population_quarterly</td><td style="text-align:right">10,176</td><td style="text-align:right">816 KB</td><td>인구</td><td></td></tr>
+<tr><td>27</td><td class="mono">small_store_rent_q</td><td style="text-align:right">10,020</td><td style="text-align:right">2.1 MB</td><td>부동산</td><td></td></tr>
+<tr><td>28</td><td class="mono">golmok_sales</td><td style="text-align:right">9,599</td><td style="text-align:right">4.5 MB</td><td>매출</td><td></td></tr>
+<tr><td>29</td><td class="mono">naver_trend_quarterly</td><td style="text-align:right">9,205</td><td style="text-align:right">2.6 MB</td><td>트렌드</td><td></td></tr>
+<tr><td>30</td><td class="mono">molit_nrg_trade</td><td style="text-align:right">8,731</td><td style="text-align:right">1.8 MB</td><td>부동산</td><td></td></tr>
+<tr><td>31</td><td class="mono">apt_trade_real</td><td style="text-align:right">8,578</td><td style="text-align:right">2.5 MB</td><td>부동산</td><td></td></tr>
+<tr><td>32</td><td class="mono">kakao_store</td><td style="text-align:right">4,446</td><td style="text-align:right">2.2 MB</td><td>외식</td><td></td></tr>
+<tr><td>33</td><td class="mono">kakao_store_hours</td><td style="text-align:right">4,026</td><td style="text-align:right">5.2 MB</td><td>외식</td><td></td></tr>
+<tr><td>34</td><td class="mono">store_quarterly</td><td style="text-align:right">3,840</td><td style="text-align:right">728 KB</td><td>상권</td><td></td></tr>
+<tr><td>35</td><td class="mono">district_sales</td><td style="text-align:right">3,703</td><td style="text-align:right">1.7 MB</td><td>매출</td><td><span class="badge badge-warn">중복?</span></td></tr>
+<tr><td>36</td><td class="mono">holiday_calendar</td><td style="text-align:right">3,287</td><td style="text-align:right">600 KB</td><td>날씨</td><td></td></tr>
+<tr><td>37</td><td class="mono">ecos_timeseries</td><td style="text-align:right">2,783</td><td style="text-align:right">728 KB</td><td>경제</td><td></td></tr>
+<tr><td>38</td><td class="mono">weather_daily</td><td style="text-align:right">2,665</td><td style="text-align:right">576 KB</td><td>날씨</td><td></td></tr>
+<tr><td>39</td><td class="mono">seoul_trdar_change_ix</td><td style="text-align:right">1,932</td><td style="text-align:right">408 KB</td><td>트렌드</td><td></td></tr>
+<tr><td>40</td><td class="mono">seoul_trdar_flpop</td><td style="text-align:right">1,932</td><td style="text-align:right">456 KB</td><td>인구</td><td></td></tr>
+<tr><td>41</td><td class="mono">seoul_realtime_hotspots</td><td style="text-align:right">1,837</td><td style="text-align:right">784 KB</td><td>외식</td><td></td></tr>
+<tr><td>42</td><td class="mono">elderly_ratio_region</td><td style="text-align:right">1,566</td><td style="text-align:right">376 KB</td><td>인구</td><td></td></tr>
+<tr><td>43</td><td class="mono">resident_pop_monthly</td><td style="text-align:right">1,479</td><td style="text-align:right">376 KB</td><td>인구</td><td></td></tr>
+<tr><td>44</td><td class="mono">seoul_trdar_fclty</td><td style="text-align:right">1,365</td><td style="text-align:right">328 KB</td><td>집객</td><td></td></tr>
+<tr><td>45</td><td class="mono">naver_vacancy</td><td style="text-align:right">1,341</td><td style="text-align:right">280 KB</td><td>공실</td><td></td></tr>
+<tr><td>46</td><td class="mono">kosis_regional_income</td><td style="text-align:right">1,116</td><td style="text-align:right">408 KB</td><td>경제</td><td></td></tr>
+<tr><td>47</td><td class="mono">signgu_change_ix</td><td style="text-align:right">700</td><td style="text-align:right">168 KB</td><td>트렌드</td><td></td></tr>
+<tr><td>48</td><td class="mono">seoul_signgu_flpop</td><td style="text-align:right">700</td><td style="text-align:right">192 KB</td><td>인구</td><td></td></tr>
+<tr><td>49</td><td class="mono">seoul_signgu_fclty</td><td style="text-align:right">525</td><td style="text-align:right">152 KB</td><td>집객</td><td></td></tr>
+<tr><td>50</td><td class="mono">golmok_rent</td><td style="text-align:right">472</td><td style="text-align:right">128 KB</td><td>부동산</td><td></td></tr>
+<tr><td>51</td><td class="mono">dong_subway_access</td><td style="text-align:right">424</td><td style="text-align:right">160 KB</td><td>교통</td><td></td></tr>
+<tr><td>52</td><td class="mono">mapo_resident_pop</td><td style="text-align:right">408</td><td style="text-align:right">112 KB</td><td>인구</td><td><span class="badge badge-warn">중복?</span></td></tr>
+<tr><td>53</td><td class="mono">mapo_sns_sentiment</td><td style="text-align:right">377</td><td style="text-align:right">144 KB</td><td>외식</td><td></td></tr>
+<tr><td>54</td><td class="mono">seoul_adstrd_fclty</td><td style="text-align:right">336</td><td style="text-align:right">112 KB</td><td>집객</td><td></td></tr>
+<tr><td>55</td><td class="mono">naver_trend_industry</td><td style="text-align:right">319</td><td style="text-align:right">128 KB</td><td>트렌드</td><td></td></tr>
+<tr><td>56</td><td class="mono">rent_cost</td><td style="text-align:right">248</td><td style="text-align:right">88 KB</td><td>부동산</td><td></td></tr>
+<tr><td>57</td><td class="mono">law_precedents</td><td style="text-align:right">222</td><td style="text-align:right">272 KB</td><td>법률</td><td></td></tr>
+<tr><td>58</td><td class="mono">rent_cost_summary_2025</td><td style="text-align:right">148</td><td style="text-align:right">80 KB</td><td>부동산</td><td></td></tr>
+<tr><td>59</td><td class="mono">vacancy_enriched</td><td style="text-align:right">111</td><td style="text-align:right">88 KB</td><td>공실</td><td></td></tr>
+<tr><td>60</td><td class="mono">ecos_key_statistics</td><td style="text-align:right">101</td><td style="text-align:right">64 KB</td><td>경제</td><td></td></tr>
+<tr><td>61</td><td class="mono">brand_logo</td><td style="text-align:right">94</td><td style="text-align:right">88 KB</td><td>브랜드</td><td></td></tr>
+<tr><td>62</td><td class="mono">law_legislations</td><td style="text-align:right">51</td><td style="text-align:right">112 KB</td><td>법률</td><td></td></tr>
+<tr><td>63</td><td class="mono">cpi_dining_quarterly</td><td style="text-align:right">24</td><td style="text-align:right">8 KB</td><td>경제</td><td></td></tr>
+<tr><td>64</td><td class="mono">dong_mapping</td><td style="text-align:right">16</td><td style="text-align:right">32 KB</td><td>매핑</td><td></td></tr>
+<tr><td>65</td><td class="mono">users</td><td style="text-align:right">12</td><td style="text-align:right">64 KB</td><td>사용자</td><td></td></tr>
+<tr><td>66</td><td class="mono">invite_codes</td><td style="text-align:right">4</td><td style="text-align:right">40 KB</td><td>사용자</td><td></td></tr>
+<tr><td>67</td><td class="mono">manager_users</td><td style="text-align:right">4</td><td style="text-align:right">80 KB</td><td>사용자</td><td></td></tr>
+<tr><td>68</td><td class="mono">simulation_history</td><td style="text-align:right">3</td><td style="text-align:right">200 KB</td><td>시뮬</td><td></td></tr>
+<tr><td>69</td><td class="mono">alembic_version</td><td style="text-align:right">1</td><td style="text-align:right">24 KB</td><td>기타</td><td></td></tr>
+<tr><td>70</td><td class="mono">biz_brand_mapping</td><td style="text-align:right">1</td><td style="text-align:right">24 KB</td><td>브랜드</td><td></td></tr>
+<tr><td>71</td><td class="mono">langchain_pg_collection</td><td style="text-align:right">1</td><td style="text-align:right">48 KB</td><td>법률RAG</td><td></td></tr>
+<tr><td>72</td><td class="mono">customers</td><td style="text-align:right">0</td><td style="text-align:right">16 KB</td><td>사용자</td><td><span class="badge badge-warn">EMPTY</span></td></tr>
+<tr><td>73</td><td class="mono">simulation_result</td><td style="text-align:right">0</td><td style="text-align:right">24 KB</td><td>시뮬</td><td><span class="badge badge-warn">EMPTY</span></td></tr>
+</table>
+</div>
+
+<div style="text-align:center; margin-top:32px; padding:16px; color:#666; font-size:11px; border-top:1px solid #333;">
+    SPOTTER DB Audit Report &mdash; Generated 2026-04-25 &mdash; A2 봉환
+</div>
+
+</body>
+</html>

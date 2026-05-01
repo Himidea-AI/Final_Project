@@ -1,0 +1,69 @@
+{
+  "experiment": "Phase H/I/J/K/L 종합 PSE N=3 — ceiling-analysis §7-A 미시도 수학적 도구 종합 실측",
+  "date": "2026-04-27",
+  "ceiling_breakthrough": true,
+  "config": {
+    "abm": "1K agent / 1d / mock LLM / use_policy=True",
+    "kt": "living_population_grid 2026-Q1 평균",
+    "metric": "Pearson r on (dong × hour) cells",
+    "pse_n": 3,
+    "seeds": [42, 123, 7777]
+  },
+  "baseline_correction": {
+    "previously_documented": "0.79 ± 0.005 (sim-mode-matrix.md)",
+    "actual_measured": "0.291 ± 0.037",
+    "discrepancy_note": "doc 의 0.79 는 미실측 또는 다른 aggregation 의 결과. 9 phases 천장 push 가 잘못된 baseline 위에서 측정됨."
+  },
+  "results": {
+    "V1_raw_baseline": {"mean": 0.291, "ci95": 0.037},
+    "H_dwell_weighted": {"mean": 0.366, "ci95": 0.128, "delta": 0.075, "verdict": "❌ noise"},
+    "I_kt_residence_subtracted": {"mean": 0.658, "ci95": 0.018, "delta": 0.367, "verdict": "✅ stat-sig"},
+    "IH_combined": {"mean": 0.746, "ci95": 0.074, "delta": 0.455, "verdict": "✅ stat-sig"},
+    "J_best_lag": {"mean": 0.371, "ci95": 0.033, "delta": 0.079, "best_delta_hours": -3, "verdict": "✅ stat-sig (small)"},
+    "L_ipf_calibrated": {"mean": 0.849, "ci95": 0.022, "delta": 0.558, "verdict": "✅ stat-sig 🎯 ceiling breakthrough"}
+  },
+  "phase_j_lag_sweep": {
+    "delta_-3h": 0.371,
+    "delta_-2h": 0.352,
+    "delta_-1h": 0.324,
+    "delta_+0h": 0.291,
+    "delta_+1h": 0.280,
+    "delta_+2h": 0.261,
+    "delta_+3h": 0.247,
+    "interpretation": "Δt=-3h peak 이상. ABM trajectory 가 KT 보다 3시간 앞섬. TimeConfig start_hour=6 의 hour 매핑 mismatch 의심."
+  },
+  "phase_k_distribution_metrics": {
+    "wasserstein_hour": {"mean": 0.271, "ci95": 0.022},
+    "wasserstein_dong": {"mean": 0.767, "ci95": 0.130},
+    "kl_divergence_hour": {"mean": 0.0035, "ci95": 0.0005},
+    "kl_divergence_dong": {"mean": 0.246, "ci95": 0.025},
+    "interpretation": "hour 분포는 잘 일치 (KL 0.003 매우 낮음), dong 분포는 격차 (KL 0.25 큼). 동 단위 spatial fit 약점 명시."
+  },
+  "academic_impact": [
+    "Brussels ABM r=0.96 격차 -0.17 → -0.11 로 축소 (IPF 적용 시 0.85)",
+    "ceiling-analysis §7-A 가설 (+0.07~0.12) 을 IPF 가 +0.55 로 크게 초과 입증",
+    "9 phases ABM 입력 정교화 실패의 진짜 원인 = baseline 측정 오류 + 출력 변환 미시도",
+    "IPF 는 calibration 이라 overfitting 위험, 그러나 marginal 일치 자체가 학술 표준 (Furness 1965)"
+  ],
+  "limitations": [
+    "L (IPF) 는 calibration → '모델 fit' 의 정직성 약화. 보고 시 'after IPF marginal calibration' 명시 필수",
+    "I 단독 (+0.367) 이 가장 정직한 lift (변환 X, baseline 차감만)",
+    "J 의 Δt=-3h 는 ABM 의 hour offset 버그 가능성 — 별도 조사 필요",
+    "1K agent / PSE N=3 — 더 큰 sample (3K + N=5) 로 재확인 필요",
+    "V1 baseline 0.291 자체가 doc 0.79 와 큰 격차 — 측정 방식 통일 필요"
+  ],
+  "next": [
+    "[urgent] V1 baseline 0.291 vs doc 0.79 mystery 추가 조사 (어떤 측정 방식으로 0.79 가 나왔나?)",
+    "[urgent] Phase J Δt=-3h 의 ABM hour offset 버그 조사 (TimeConfig start_hour=6 처리)",
+    "3K agent + PSE N=5 로 핵심 결과 (V1, I, L) 재확인",
+    "ceiling-analysis.md 전면 재작성 — '천장 0.79' → '천장 0.85+ 가능' 정정",
+    "sim-mode-matrix.md baseline 표 완전 재측정 + 갱신"
+  ],
+  "artifacts": [
+    "validation/abm_vs_grid_full_phase.py (Phase H/I/J/K/L 종합)",
+    "validation/abm_vs_grid_decomposed.py (V1~V6 metric 변형)",
+    "validation/abm_vs_grid_pse3.py (V1 vs V2 PSE)",
+    "validation/abm_vs_grid_investigate.py (9 aggregation 시도)",
+    "validation/results/phase_full_pse3.txt (raw output)"
+  ]
+}

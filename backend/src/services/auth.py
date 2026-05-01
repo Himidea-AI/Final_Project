@@ -122,6 +122,8 @@ class AuthService:
                             )
                             ON CONFLICT (biz_number) DO UPDATE SET
                                 brand_name = EXCLUDED.brand_name,
+                                industry_large = EXCLUDED.industry_large,
+                                industry_medium = EXCLUDED.industry_medium,
                                 franchise_count = EXCLUDED.franchise_count,
                                 avg_sales = EXCLUDED.avg_sales,
                                 mapo_store_count = EXCLUDED.mapo_store_count
@@ -130,8 +132,8 @@ class AuthService:
                             "biz": biz_clean,
                             "company": data["companyName"],
                             "brand": top_brand["brand_name"],
-                            "ind_l": top_brand.get("industry_large", ""),
-                            "ind_m": top_brand.get("industry_medium", ""),
+                            "ind_l": top_brand.get("indutyLclasNm", top_brand.get("industry_large", "")),
+                            "ind_m": top_brand.get("indutyMlsfcNm", top_brand.get("industry_medium", "")),
                             "frc_cnt": top_brand.get("franchise_count", top_brand.get("frcsCnt", 0)),
                             "avg_sales": top_brand.get("avrgSlsAmt", top_brand.get("avg_sales", 0)),
                             "mapo_cnt": top_brand.get("mapo_store_count", 0),
@@ -144,6 +146,7 @@ class AuthService:
                 "status": "success",
                 "user": {
                     "id": user_id,
+                    "role": "master",
                     "company_name": data["companyName"],
                     "contact_name": data["contactName"],
                     "email": data["email"],
@@ -181,7 +184,7 @@ class AuthService:
                 row = conn.execute(
                     text(
                         "SELECT id, company_name, biz_number, contact_name, position, "
-                        "email, phone, store_count, password_hash, plan "
+                        "email, phone, store_count, password_hash, plan, is_active "
                         "FROM users WHERE email = :email"
                     ),
                     {"email": email},
@@ -194,6 +197,16 @@ class AuthService:
 
                 if not _verify_password(password, user["password_hash"]):
                     return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
+
+                if user.get("is_active") is False:
+                    return {"status": "error", "message": "탈퇴 처리된 계정입니다."}
+
+                # 로그인 시각 기록
+                conn.execute(
+                    text("UPDATE users SET last_login_at = now() WHERE id = :id"),
+                    {"id": str(user["id"])},
+                )
+                conn.commit()
 
                 # 브랜드 매핑 — biz_brand_mapping 우선, 없으면 ftc_brand_franchise 검색
                 brand_row = conn.execute(
@@ -230,6 +243,8 @@ class AuthService:
                     },
                     "brand": {
                         "brand_name": brand_data.get("brand_name", ""),
+                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")),
+                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")),
                         "franchise_count": brand_data.get("franchise_count", 0),
                         "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)),
                         "mapo_store_count": brand_data.get("mapo_store_count", 0),
@@ -336,7 +351,7 @@ class AuthService:
                 inv_row = conn.execute(
                     text("""
                         SELECT ic.id, ic.owner_id, ic.max_uses, ic.used_count, ic.is_active, ic.expires_at,
-                               u.company_name, u.biz_number, u.store_count
+                               u.company_name, u.biz_number, u.store_count, u.plan
                         FROM invite_codes ic
                         JOIN users u ON ic.owner_id = u.id
                         WHERE ic.code = :code
@@ -405,6 +420,7 @@ class AuthService:
                     "user": {
                         "id": manager_id,
                         "role": "manager",
+                        "owner_id": str(inv["owner_id"]) if inv.get("owner_id") else None,
                         "contact_name": data["contactName"],
                         "email": data["email"],
                         "phone": data["phone"],
@@ -412,6 +428,7 @@ class AuthService:
                         "company_name": inv["company_name"],
                         "biz_number": inv["biz_number"],
                         "store_count": str(inv["store_count"]) if inv["store_count"] is not None else "",
+                        "plan": inv.get("plan") or "",  # owner 의 plan 상속 (manager_login 응답과 일관)
                     },
                 }
         finally:
@@ -451,6 +468,13 @@ class AuthService:
 
                 if not _verify_password(password, mgr["password_hash"]):
                     return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
+
+                # 로그인 시각 기록
+                conn.execute(
+                    text("UPDATE manager_users SET last_login_at = now() WHERE id = :id"),
+                    {"id": str(mgr["id"])},
+                )
+                conn.commit()
 
                 return {
                     "status": "success",
@@ -589,6 +613,57 @@ class AuthService:
             engine.dispose()
 
     # ------------------------------------------------------------------
+    # 회원 탈퇴 (소프트 삭제)
+    # ------------------------------------------------------------------
+
+    def deactivate_user(self, user_id: str, password: str) -> dict:
+        """
+        팀장 회원 탈퇴 — is_active=false 처리 (데이터 보존, 로그인 차단).
+        소속 매니저도 전부 비활성화.
+        """
+        engine = get_sync_engine(self._db_url)
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT id, password_hash, contact_name FROM users WHERE id = :id AND is_active = true"),
+                    {"id": user_id},
+                ).fetchone()
+
+                if not row:
+                    return {"status": "error", "message": "계정을 찾을 수 없습니다."}
+
+                if not _verify_password(password, row._mapping["password_hash"]):
+                    return {"status": "error", "message": "비밀번호가 일치하지 않습니다."}
+
+                # 본인 비활성화
+                conn.execute(
+                    text("UPDATE users SET is_active = false, updated_at = now() WHERE id = :id"),
+                    {"id": user_id},
+                )
+
+                # 소속 매니저 전부 비활성화
+                result = conn.execute(
+                    text("UPDATE manager_users SET is_active = false, updated_at = now() WHERE owner_id = :owner_id"),
+                    {"owner_id": user_id},
+                )
+
+                # 초대코드 비활성화
+                conn.execute(
+                    text("UPDATE invite_codes SET is_active = false WHERE owner_id = :owner_id"),
+                    {"owner_id": user_id},
+                )
+
+                conn.commit()
+
+                return {
+                    "status": "success",
+                    "message": f"{row._mapping['contact_name']}님의 계정이 탈퇴 처리되었습니다.",
+                    "deactivated_managers": result.rowcount,
+                }
+        finally:
+            engine.dispose()
+
+    # ------------------------------------------------------------------
     # 마이페이지 — 프로필 조회/수정
     # ------------------------------------------------------------------
 
@@ -611,7 +686,7 @@ class AuthService:
 
                 user = dict(row._mapping)
 
-                # 브랜드 매핑 조회
+                # 브랜드 매핑 — biz_brand_mapping 우선, 없으면 ftc_brand_franchise 검색
                 brand_row = conn.execute(
                     text(
                         "SELECT brand_name, industry_large, industry_medium, "
@@ -620,6 +695,13 @@ class AuthService:
                     ),
                     {"biz": user["biz_number"]},
                 ).fetchone()
+
+                if not brand_row:
+                    brands = self._mapper.search_brand_by_company(user["company_name"])
+                    top = brands[0] if brands else None
+                    if top:
+                        top["mapo_store_count"] = self._mapper.count_mapo_stores(top["brand_name"])
+                        brand_row = top  # dict 형태로 fallback
 
                 # 매니저 수
                 mgr_count = conn.execute(
@@ -650,7 +732,9 @@ class AuthService:
                         "manager_count": mgr_count,
                         "invite_code_count": invite_count,
                     },
-                    "brand": dict(brand_row._mapping) if brand_row else None,
+                    "brand": (dict(brand_row._mapping) if hasattr(brand_row, "_mapping") else brand_row)
+                    if brand_row
+                    else None,
                 }
         finally:
             engine.dispose()
@@ -822,7 +906,7 @@ class AuthService:
                     {"id": owner_id},
                 ).fetchall()
 
-                # 브랜드 매핑
+                # 브랜드 매핑 — biz_brand_mapping 우선, 없으면 ftc_brand_franchise 검색
                 brand = conn.execute(
                     text(
                         "SELECT brand_name, franchise_count, avg_sales, mapo_store_count "
@@ -830,6 +914,13 @@ class AuthService:
                     ),
                     {"biz": owner._mapping["biz_number"]},
                 ).fetchone()
+
+                if not brand:
+                    brands = self._mapper.search_brand_by_company(owner._mapping["company_name"])
+                    top = brands[0] if brands else None
+                    if top:
+                        top["mapo_store_count"] = self._mapper.count_mapo_stores(top["brand_name"])
+                        brand = top
 
                 return {
                     "status": "success",
@@ -843,7 +934,7 @@ class AuthService:
                             "store_count": owner._mapping["store_count"],
                             "created_at": str(owner._mapping["created_at"]),
                         },
-                        "brand": dict(brand._mapping) if brand else None,
+                        "brand": (dict(brand._mapping) if hasattr(brand, "_mapping") else brand) if brand else None,
                         "managers": [
                             {
                                 "id": str(m._mapping["id"]),

@@ -3,11 +3,19 @@
 """
 
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
 # [B1 트랙 개선] 어떤 모듈에서 설정을 임포트하더라도 최우선으로 .env를 로드하도록 보강
-load_dotenv()
+# cwd가 backend/ 또는 repo root 어느 쪽이든 repo root의 .env를 찾도록 명시.
+# backend/src/config/settings.py → parents[3] = repo root
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
+if _REPO_ROOT_ENV.exists():
+    load_dotenv(_REPO_ROOT_ENV)
+else:
+    load_dotenv()  # fallback — cwd 기준
 
 
 class Settings(BaseSettings):
@@ -48,6 +56,24 @@ class Settings(BaseSettings):
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     app_mode: str = os.getenv("APP_MODE", "PROD")  # "DEV" | "PROD"
     demo_mode: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
+
+    # HyDE (Hypothetical Document Embeddings) — LLM 기반 쿼리 확장
+    hyde_enabled: bool = os.getenv("HYDE_ENABLED", "false").lower() == "true"
+
+    # RRF (Reciprocal Rank Fusion) — vector + BM25 결합 가중치
+    # SP3: 외부화 (.env로 조정 가능). 기본값은 검증 전 안전 baseline 0.5/0.5 유지.
+    # bench_rag_accuracy.py로 골든셋 측정 후 최적값 확정 예정.
+    rrf_k: int = int(os.getenv("RRF_K", "60"))
+    rrf_vector_weight: float = float(os.getenv("RRF_VECTOR_WEIGHT", "0.5"))
+    rrf_bm25_weight: float = float(os.getenv("RRF_BM25_WEIGHT", "0.5"))
+
+    # NTS (국세청)
+    nts_api_key: str = os.getenv("NTS_API_KEY", "")
+
+    # JWT — dev fallback 제공, 운영에선 반드시 .env의 강력한 secret으로 덮어쓰기
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "dev-only-not-secret-replace-in-prod")
+    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
+    jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 
     class Config:
         env_file = ".env"

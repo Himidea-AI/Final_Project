@@ -66,9 +66,22 @@ def run_migrations_online() -> None:
     In this scenario we need to create an Engine
     and associate a connection with the context.
 
+    Windows 한국어 로케일에서 psycopg2가 DSN 문자열 파싱 중 UnicodeDecodeError 발생하는
+    이슈가 있어, URL을 분해해 connect_args로 넘겨 URL 파싱 경로를 회피한다.
     """
+    from sqlalchemy.engine.url import make_url
+
+    url = make_url(settings.postgres_url)
     connectable = create_engine(
-        settings.postgres_url,
+        "postgresql+psycopg2://",
+        connect_args={
+            "host": url.host,
+            "port": url.port,
+            "user": url.username,
+            "password": url.password,
+            "dbname": url.database,
+            "sslmode": "require",
+        },
         poolclass=pool.NullPool,
     )
 

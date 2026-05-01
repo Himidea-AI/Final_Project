@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Info } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { Info } from 'lucide-react';
 
 export interface HybridSliderInputProps {
   label: string;
@@ -35,7 +35,7 @@ export function HybridSliderInput({
   infoText,
   maxLabel,
   minLabel,
-  className = "",
+  className = '',
 }: HybridSliderInputProps) {
   const [draft, setDraft] = useState<string>(String(value));
 
@@ -51,27 +51,23 @@ export function HybridSliderInput({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/[^0-9]/g, "");
+    const raw = e.target.value.replace(/[^0-9]/g, '');
     setDraft(raw);
   };
 
   const commitDraft = () => {
     let num = Number(draft);
-    if (draft === "" || Number.isNaN(num) || num < min) num = min;
+    if (draft === '' || Number.isNaN(num) || num < min) num = min;
     if (num > max) num = max;
     setDraft(String(num));
     onChange(num);
   };
 
   // 진행률 계산 — draft가 비어있거나 초과값이어도 슬라이더 위치는 clamp
-  const sliderValue = Math.min(
-    max,
-    Math.max(min, draft === "" ? min : Number(draft) || min)
-  );
+  const sliderValue = Math.min(max, Math.max(min, draft === '' ? min : Number(draft) || min));
   const progressPercent = ((sliderValue - min) / (max - min)) * 100;
 
-  const renderMax =
-    maxLabel ?? (max >= 10000 ? `${max / 10000}억` : `${max}${unit}`);
+  const renderMax = maxLabel ?? (max >= 10000 ? `${max / 10000}억` : `${max}${unit}`);
   const renderMin = minLabel ?? `${min}${unit}`;
 
   return (
@@ -83,7 +79,7 @@ export function HybridSliderInput({
           {infoText && (
             <div className="relative flex items-center">
               <Info className="w-3.5 h-3.5 text-[#6b7280] group-hover:text-[#818cf8] transition-colors" />
-              <div className="absolute left-6 top-4 w-48 p-2 bg-[#1e1b18] border border-[#3a3633] rounded-md shadow-xl text-[10px] text-[#a3a3a3] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              <div className="absolute left-6 top-4 w-48 p-2 bg-[#1e1b18] border border-[#3a3633] rounded-md shadow-xl text-[0.625rem] text-[#a3a3a3] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                 {infoText}
               </div>
             </div>
@@ -98,14 +94,12 @@ export function HybridSliderInput({
             onChange={handleInputChange}
             onBlur={commitDraft}
             onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
-            className="w-16 bg-transparent text-right text-xs font-black text-[#818cf8] focus:outline-none placeholder-[#404040]"
+            className="w-16 bg-transparent text-right text-xs font-mono tabular-nums font-black text-[#818cf8] focus:outline-none placeholder-[#404040]"
             placeholder={String(min)}
           />
-          <span className="text-[10px] text-[#9ca3af] ml-1 font-bold">
-            {unit}
-          </span>
+          <span className="text-[0.625rem] text-[#9ca3af] ml-1 font-bold">{unit}</span>
         </div>
       </div>
 
@@ -126,7 +120,7 @@ export function HybridSliderInput({
         />
       </div>
 
-      <div className="flex justify-between text-[10px] text-[#6b7280] font-mono">
+      <div className="flex justify-between text-[0.625rem] text-[#6b7280] font-mono tabular-nums">
         <span>{renderMin}</span>
         <span>{renderMax}</span>
       </div>

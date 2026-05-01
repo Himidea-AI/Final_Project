@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 
 class CandidateAnalysis(BaseModel):
@@ -25,8 +25,11 @@ class ProfitSimulation(BaseModel):
     """수익 시뮬레이션 지표"""
 
     monthly_revenue: int = Field(..., description="월 예상 매출액")
+    monthly_cost: Optional[int] = Field(default=None, description="월 예상 운영비. 미산정 시 None.")
     net_profit: int = Field(..., description="월 예상 순이익")
     margin_rate: float = Field(..., description="수익률 (%)")
+    bep_months: Optional[float] = Field(default=None, description="손익분기점 도달 개월 수 (TCN 예측값)")
+    includes_labor_cost: Optional[bool] = Field(default=None, description="인건비 포함 여부. 미산정 시 None.")
 
 
 class CompetitorAnalysis(BaseModel):
@@ -60,8 +63,11 @@ class LegalRiskItem(BaseModel):
 
     type: str = Field(..., description="법률 항목 식별자 (예: franchise_law, food_hygiene)")
     level: Literal["safe", "caution", "danger"] = Field(..., description="리스크 레벨")
-    summary: str = Field(..., description="검토 요약 (1~2문장)")
-    recommendation: str = Field(default="", description="구체적 행동 권고")
+    summary: str = Field(..., description="법률 개요 — 해당 법률의 목적과 핵심 의무 (1~2문장)")
+    recommendation: str = Field(
+        default="",
+        description="업종·지역 맞춤 창업 체크리스트 (bullet point '•' 사용, 위반 시 제재 포함)",
+    )
 
 
 class LegalBatchOutput(BaseModel):
@@ -80,3 +86,56 @@ class FinalStrategyResult(BaseModel):
     profit_simulation: ProfitSimulation = Field(..., description="수익 시뮬레이션 결과")
     competitor_analysis: CompetitorAnalysis = Field(..., description="경쟁 점포 분석 결과")
     final_recommendation: str = Field(..., description="최종 전략적 제언 및 결론")
+
+
+class CompetitorIntelOutput(BaseModel):
+    """경쟁 지형·카니발·차별화 전략 LLM 구조화 출력."""
+
+    market_entry_signal: Literal["green", "yellow", "red"] = Field(
+        ..., description="시장 진입 신호등 (green=진입 권장, yellow=조건부, red=비권장)"
+    )
+    differentiation_position: str = Field(..., description="경쟁 지형 내 브랜드의 차별화 포지셔닝 한 줄 요약")
+    key_opportunities: List[str] = Field(default_factory=list, description="포착해야 할 기회 요소 2~4개")
+    key_risks: List[str] = Field(default_factory=list, description="주의해야 할 리스크 요소 2~4개")
+    recommended_actions: List[str] = Field(default_factory=list, description="본사 영업팀 추천 액션 2~4개")
+    narrative: str = Field(..., description="3~5줄 본사 보고용 경쟁 상황·카니발·권고 종합 서술")
+
+
+# ──────────────────────────────────────────────────────────
+# Dashboard 15 섹션 통합 리포트 — AgentAttribution (2026-04-21 스펙)
+# ──────────────────────────────────────────────────────────
+
+AgentIdLiteral = Literal[
+    "market_analyst",
+    "population_analyst",
+    "legal",
+    "district_ranking",
+    "inflow",
+    "synthesis",
+    "demographic_depth",
+    "trend_forecaster",
+    "competitor_intel",
+]
+
+AgentKindLiteral = Literal["LLM", "Python", "Hybrid", "RAG"]
+AgentStatusLiteral = Literal["success", "partial", "pending", "error", "skipped"]
+
+
+class AgentAttribution(BaseModel):
+    """각 에이전트의 판단 근거 — §11 UI 카드 + 섹션별 compact 카드 공통 데이터.
+
+    각 노드가 반환 시 agent_attribution 필드에 dict로 넣고,
+    synthesis가 agent_attributions[] 배열로 집계하여 API response에 포함.
+    """
+
+    id: AgentIdLiteral
+    display_name: str = Field(description="사람이 읽는 에이전트 이름 (예: '경쟁 인텔')")
+    kind: AgentKindLiteral
+    sources: list[str] = Field(description="사용한 DB 테이블·모델명 (chip으로 표시)")
+    verdict: str = Field(description="한 줄 판단 (80자 내)")
+    reasoning: str = Field(description="2-3 문장 설명")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    status: AgentStatusLiteral = Field(
+        default="success",
+        description="에이전트 실행 상태. 부분 실패/미실행 구분용.",
+    )

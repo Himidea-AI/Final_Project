@@ -1,15 +1,8 @@
-import { useState, useCallback } from "react";
-import { motion } from "framer-motion";
-import {
-  Eye,
-  EyeOff,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  CheckCircle2,
-  Building2,
-} from "lucide-react";
-import { useToast } from "../../../components/Toast";
+import { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { Eye, EyeOff, CheckCircle, XCircle, Loader2, CheckCircle2, Building2 } from 'lucide-react';
+import { useToast } from '../../../components/Toast';
+import { useAuth } from '../../../auth/AuthContext';
 
 interface Props {
   onSuccess: () => void;
@@ -32,49 +25,50 @@ interface VerifiedWorkspace {
 }
 
 const INITIAL: ManagerForm = {
-  contactName: "",
-  position: "",
-  email: "",
-  phone: "",
-  password: "",
-  passwordConfirm: "",
+  contactName: '',
+  position: '',
+  email: '',
+  phone: '',
+  password: '',
+  passwordConfirm: '',
 };
 
 function formatPhone(v: string) {
-  const n = v.replace(/\D/g, "").slice(0, 11);
+  const n = v.replace(/\D/g, '').slice(0, 11);
   if (n.length <= 3) return n;
   if (n.length <= 7) return `${n.slice(0, 3)}-${n.slice(3)}`;
   return `${n.slice(0, 3)}-${n.slice(3, 7)}-${n.slice(7)}`;
 }
 
 function getPasswordStrength(pw: string): { level: number; label: string; color: string } {
-  if (pw.length === 0) return { level: 0, label: "", color: "" };
+  if (pw.length === 0) return { level: 0, label: '', color: '' };
   let score = 0;
   if (pw.length >= 8) score++;
   if (/[a-zA-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^a-zA-Z0-9]/.test(pw)) score++;
   const map = [
-    { level: 1, label: "약함", color: "bg-red-500" },
-    { level: 2, label: "보통", color: "bg-indigo-500" },
-    { level: 3, label: "강함", color: "bg-emerald-400" },
-    { level: 4, label: "매우 강함", color: "bg-emerald-500" },
+    { level: 1, label: '약함', color: 'bg-red-500' },
+    { level: 2, label: '보통', color: 'bg-indigo-500' },
+    { level: 3, label: '강함', color: 'bg-emerald-400' },
+    { level: 4, label: '매우 강함', color: 'bg-emerald-500' },
   ];
   return map[Math.min(score, 4) - 1] || map[0];
 }
 
 const fieldClass =
-  "w-full px-4 py-3 rounded-xl bg-[#1e1b18] border text-[#e2e8f0] text-sm placeholder-[#9ca3af] outline-none transition-colors duration-200";
-const labelClass = "block text-xs text-[#9ca3af] font-medium mb-1.5";
-const errorClass = "text-[10px] text-red-400 mt-1";
+  'w-full px-4 py-3 rounded-xl bg-[#1e1b18] border text-[#e2e8f0] text-sm placeholder-[#9ca3af] outline-none transition-colors duration-200';
+const labelClass = 'block text-xs text-[#9ca3af] font-medium mb-1.5';
+const errorClass = 'text-[0.625rem] text-red-400 mt-1';
 
 export default function ManagerSignupForm({ onSuccess }: Props) {
   const { showToast } = useToast();
+  const auth = useAuth();
 
   // 1단계: 초대코드 검증
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
-  const [verifyError, setVerifyError] = useState("");
+  const [verifyError, setVerifyError] = useState('');
   const [workspace, setWorkspace] = useState<VerifiedWorkspace | null>(null);
 
   // 2단계: 매니저 정보 입력
@@ -82,41 +76,40 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
   const [showPw, setShowPw] = useState(false);
   const [showPwC, setShowPwC] = useState(false);
   const [touched, setTouched] = useState<Set<string>>(new Set());
-  const [submitError, setSubmitError] = useState("");
+  const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const set = useCallback(
-    (key: keyof ManagerForm, val: string) =>
-      setForm((p) => ({ ...p, [key]: val })),
-    []
+    (key: keyof ManagerForm, val: string) => setForm((p) => ({ ...p, [key]: val })),
+    [],
   );
   const touch = (key: string) => setTouched((p) => new Set(p).add(key));
 
   const handleVerifyInvite = async () => {
     const code = inviteCode.trim().toUpperCase();
     if (code.length < 4 || verifyLoading) return;
-    setVerifyError("");
+    setVerifyError('');
     setVerifyLoading(true);
     try {
-      const res = await fetch("/api/auth/verify-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/auth/verify-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       });
       const data = await res.json();
-      if (data.status === "success") {
+      if (data.status === 'success') {
         setWorkspace({
           company_name: data.company_name,
           biz_number: data.biz_number,
           store_count: data.store_count,
           owner_id: data.owner_id,
         });
-        showToast("success", `${data.company_name} 워크스페이스가 확인되었습니다.`);
+        showToast('success', `${data.company_name} 워크스페이스가 확인되었습니다.`);
       } else {
-        setVerifyError(data.message || "초대코드 검증에 실패했습니다.");
+        setVerifyError(data.message || '초대코드 검증에 실패했습니다.');
       }
     } catch {
-      setVerifyError("서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      setVerifyError('서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setVerifyLoading(false);
     }
@@ -124,47 +117,53 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
 
   const resetVerification = () => {
     setWorkspace(null);
-    setInviteCode("");
-    setVerifyError("");
+    setInviteCode('');
+    setVerifyError('');
   };
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
   const pwStrength = getPasswordStrength(form.password);
-  const pwMatch =
-    form.password === form.passwordConfirm && form.passwordConfirm.length > 0;
+  const pwMatch = form.password === form.passwordConfirm && form.passwordConfirm.length > 0;
   const allValid =
     !!workspace &&
     form.contactName.trim().length > 0 &&
     emailValid &&
-    form.phone.replace(/\D/g, "").length >= 10 &&
+    form.phone.replace(/\D/g, '').length >= 10 &&
     form.password.length >= 8 &&
     pwMatch;
 
   const handleSubmit = async () => {
     if (!allValid || isSubmitting || !workspace) return;
-    setSubmitError("");
+    setSubmitError('');
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/auth/manager/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/auth/manager/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inviteCode: inviteCode.trim().toUpperCase(),
           contactName: form.contactName,
           position: form.position,
           email: form.email,
-          phone: form.phone.replace(/\D/g, ""),
+          phone: form.phone.replace(/\D/g, ''),
           password: form.password,
         }),
       });
       const data = await res.json();
-      if (data.status === "success") {
+      if (data.status === 'success') {
+        if (data.access_token && data.user) {
+          auth.login(
+            { ...data.user, role: 'manager', plan: data.user.plan ?? '' },
+            null,
+            data.access_token,
+          );
+        }
         onSuccess();
       } else {
-        setSubmitError(data.message || "가입 중 오류가 발생했습니다.");
+        setSubmitError(data.message || '가입 중 오류가 발생했습니다.');
       }
     } catch {
-      setSubmitError("서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      setSubmitError('서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);
     }
@@ -188,16 +187,16 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             value={inviteCode}
             onChange={(e) => {
               setInviteCode(e.target.value.toUpperCase());
-              setVerifyError("");
+              setVerifyError('');
             }}
             disabled={!!workspace}
             placeholder="예: SPOTTER-2026"
             className={`flex-1 ${fieldClass} font-mono ${
               workspace
-                ? "border-emerald-500/40 text-emerald-400"
+                ? 'border-emerald-500/40 text-emerald-400'
                 : verifyError
-                ? "border-red-500 text-amber-400"
-                : "border-[#3a3633] text-amber-400 focus:border-amber-500"
+                  ? 'border-red-500 text-amber-400'
+                  : 'border-[#3a3633] text-amber-400 focus:border-amber-500'
             } disabled:opacity-60`}
           />
           {!workspace ? (
@@ -206,15 +205,11 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               disabled={inviteCode.trim().length < 4 || verifyLoading}
               className={`px-5 rounded-xl text-xs font-bold transition-colors ${
                 inviteCode.trim().length >= 4 && !verifyLoading
-                  ? "bg-[#3a3633] text-white hover:bg-[#4a4641]"
-                  : "bg-[#2c2825] text-[#9ca3af] cursor-not-allowed"
+                  ? 'bg-[#3a3633] text-white hover:bg-[#4a4641]'
+                  : 'bg-[#2c2825] text-[#9ca3af] cursor-not-allowed'
               }`}
             >
-              {verifyLoading ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                "검증"
-              )}
+              {verifyLoading ? <Loader2 size={14} className="animate-spin" /> : '검증'}
             </button>
           ) : (
             <button
@@ -227,9 +222,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           )}
         </div>
 
-        {verifyError && (
-          <p className="text-[10px] text-red-400 mt-2">{verifyError}</p>
-        )}
+        {verifyError && <p className="text-[0.625rem] text-red-400 mt-2">{verifyError}</p>}
 
         {workspace && (
           <motion.div
@@ -250,8 +243,8 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
       <div
         className={`flex flex-col gap-4 transition-all duration-500 ${
           workspace
-            ? "opacity-100 max-h-[1200px]"
-            : "opacity-30 max-h-0 overflow-hidden pointer-events-none"
+            ? 'opacity-100 max-h-[1200px]'
+            : 'opacity-30 max-h-0 overflow-hidden pointer-events-none'
         }`}
       >
         {/* 매니저 이름 */}
@@ -264,7 +257,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           <input
             type="text"
             value={form.contactName}
-            onChange={(e) => set("contactName", e.target.value)}
+            onChange={(e) => set('contactName', e.target.value)}
             placeholder="홍길동"
             className={`${fieldClass} border-[#3a3633] focus:border-emerald-500`}
           />
@@ -280,7 +273,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           <input
             type="text"
             value={form.position}
-            onChange={(e) => set("position", e.target.value)}
+            onChange={(e) => set('position', e.target.value)}
             placeholder="권역 매니저"
             className={`${fieldClass} border-[#3a3633] focus:border-emerald-500`}
           />
@@ -296,16 +289,16 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           <input
             type="email"
             value={form.email}
-            onChange={(e) => set("email", e.target.value)}
-            onBlur={() => touch("email")}
+            onChange={(e) => set('email', e.target.value)}
+            onBlur={() => touch('email')}
             placeholder="name@company.com"
             className={`${fieldClass} ${
-              touched.has("email") && form.email && !emailValid
-                ? "border-red-500"
-                : "border-[#3a3633] focus:border-emerald-500"
+              touched.has('email') && form.email && !emailValid
+                ? 'border-red-500'
+                : 'border-[#3a3633] focus:border-emerald-500'
             }`}
           />
-          {touched.has("email") && form.email && !emailValid && (
+          {touched.has('email') && form.email && !emailValid && (
             <p className={errorClass}>올바른 이메일 형식을 입력하세요</p>
           )}
         </motion.div>
@@ -320,7 +313,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           <input
             type="tel"
             value={form.phone}
-            onChange={(e) => set("phone", formatPhone(e.target.value))}
+            onChange={(e) => set('phone', formatPhone(e.target.value))}
             placeholder="010-0000-0000"
             className={`${fieldClass} border-[#3a3633] focus:border-emerald-500`}
           />
@@ -335,9 +328,9 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           <label className={labelClass}>비밀번호</label>
           <div className="relative">
             <input
-              type={showPw ? "text" : "password"}
+              type={showPw ? 'text' : 'password'}
               value={form.password}
-              onChange={(e) => set("password", e.target.value)}
+              onChange={(e) => set('password', e.target.value)}
               placeholder="영문+숫자+특수문자 8자 이상"
               className={`${fieldClass} border-[#3a3633] focus:border-emerald-500 pr-10`}
             />
@@ -356,12 +349,12 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
                   <div
                     key={n}
                     className={`flex-1 rounded-full transition-colors ${
-                      n <= pwStrength.level ? pwStrength.color : "bg-[#2c2825]"
+                      n <= pwStrength.level ? pwStrength.color : 'bg-[#2c2825]'
                     }`}
                   />
                 ))}
               </div>
-              <span className="text-[10px] text-[#9ca3af]">{pwStrength.label}</span>
+              <span className="text-[0.625rem] text-[#9ca3af]">{pwStrength.label}</span>
             </div>
           )}
         </motion.div>
@@ -375,17 +368,17 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           <label className={labelClass}>비밀번호 확인</label>
           <div className="relative">
             <input
-              type={showPwC ? "text" : "password"}
+              type={showPwC ? 'text' : 'password'}
               value={form.passwordConfirm}
-              onChange={(e) => set("passwordConfirm", e.target.value)}
-              onBlur={() => touch("passwordConfirm")}
+              onChange={(e) => set('passwordConfirm', e.target.value)}
+              onBlur={() => touch('passwordConfirm')}
               placeholder="비밀번호 재입력"
               className={`${fieldClass} pr-10 ${
-                touched.has("passwordConfirm") && form.passwordConfirm
+                touched.has('passwordConfirm') && form.passwordConfirm
                   ? pwMatch
-                    ? "border-emerald-500"
-                    : "border-red-500"
-                  : "border-[#3a3633] focus:border-emerald-500"
+                    ? 'border-emerald-500'
+                    : 'border-red-500'
+                  : 'border-[#3a3633] focus:border-emerald-500'
               }`}
             />
             <button
@@ -395,7 +388,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
             >
               {showPwC ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
-            {touched.has("passwordConfirm") && form.passwordConfirm && (
+            {touched.has('passwordConfirm') && form.passwordConfirm && (
               <div className="absolute right-10 top-1/2 -translate-y-1/2">
                 {pwMatch ? (
                   <CheckCircle size={14} className="text-emerald-400" />
@@ -405,7 +398,7 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
               </div>
             )}
           </div>
-          {touched.has("passwordConfirm") && form.passwordConfirm && !pwMatch && (
+          {touched.has('passwordConfirm') && form.passwordConfirm && !pwMatch && (
             <p className={errorClass}>비밀번호가 일치하지 않습니다</p>
           )}
         </motion.div>
@@ -430,11 +423,11 @@ export default function ManagerSignupForm({ onSuccess }: Props) {
           disabled={!allValid || isSubmitting}
           className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wider mt-2 transition-all duration-300 ${
             allValid && !isSubmitting
-              ? "bg-gradient-to-r from-emerald-500 to-emerald-400 text-[#1e1b18] shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:scale-[1.02] active:scale-[0.98]"
-              : "bg-[#2c2825] text-[#9ca3af] cursor-not-allowed"
+              ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-[#1e1b18] shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:scale-[1.02] active:scale-[0.98]'
+              : 'bg-[#2c2825] text-[#9ca3af] cursor-not-allowed'
           }`}
         >
-          {isSubmitting ? "가입 처리 중..." : "팀원으로 합류하기"}
+          {isSubmitting ? '가입 처리 중...' : '팀원으로 합류하기'}
         </motion.button>
       </div>
     </div>

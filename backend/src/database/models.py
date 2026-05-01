@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase
@@ -307,7 +308,7 @@ class GolmokRent(Base):
 
 
 class DongMapping(Base):
-    """행정동 매핑 테이블 — 동코드 ↔ 동명, 인구, 상권 코드 매핑"""
+    """행정동 매핑 테이블 — 동코드 ↔ 동명, 인구, 상권 코드 매핑 (마포 16동 운영 마스터)"""
 
     __tablename__ = "dong_mapping"
 
@@ -318,6 +319,58 @@ class DongMapping(Base):
     avg_age = Column(Float, comment="평균 연령")
     total_households = Column(Integer, comment="총 가구 수")
     trdar_codes = Column(JSONB, comment="상권 코드 목록 (JSON 배열)")
+
+
+class SeoulDongMaster(Base):
+    """서울 행정동 마스터 — 서울 전체 ~425개 행정동 (8자리 코드, ML/분석용)
+
+    alembic d1a2b3c4e5f6 (B-3.1)에서 신설. 마이그레이션이 자식 테이블 union으로 적재.
+    11개 자식 테이블(seoul_*, district_sales_seoul, dong_subway_access 등)이 FK 참조.
+    """
+
+    __tablename__ = "seoul_dong_master"
+
+    dong_code = Column(String(8), primary_key=True, comment="행정동 코드 (8자리)")
+    dong_name = Column(Text, comment="행정동명 (정규화: '?' → '·')")
+    sgg_code = Column(String(5), index=True, comment="자치구 코드 (5자리)")
+    comment = Column(Text, comment="비고")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
+class JeonseDongMaster(Base):
+    """법정동 마스터 — 국토부 전월세 신고 기준 (10자리 코드)
+
+    alembic f3c4d5e6a7b8 (B-3.3)에서 신설. jeonse_monthly_rent.dong_code FK 참조.
+    행정동(8자리)과 별개 체계 — 5번째 자리부터 다름.
+    """
+
+    __tablename__ = "jeonse_dong_master"
+
+    dong_code = Column(String(10), primary_key=True, comment="법정동 코드 (10자리)")
+    dong_name = Column(Text, comment="법정동명")
+    gu_code = Column(String(5), comment="구 코드")
+    gu_name = Column(Text, comment="구명")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
+class DongCentroid(Base):
+    """동 대표 중심점 좌표 — store_info 평균 또는 카카오 좌표 (캐시용)
+
+    alembic a8b2c4d6e8f0에서 신설. commercial_intelligence.get_dong_centroid의
+    영구 storage. 추후 Kakao Geocoding API로 갱신 가능.
+    현재 마포 16동만 적재 (서울 전체 425동 확장 가능).
+    """
+
+    __tablename__ = "dong_centroid"
+
+    dong_code = Column(String(8), primary_key=True, comment="행정동 코드")
+    dong_name = Column(Text, comment="행정동명")
+    lat = Column(Float, nullable=False, comment="위도")
+    lon = Column(Float, nullable=False, comment="경도")
+    source = Column(String(32), nullable=False, default="store_info_avg", comment="데이터 출처")
+    n_stores = Column(Integer, comment="평균 계산에 사용된 매장 수")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+    updated_at = Column(DateTime, server_default=func.now(), comment="수정 일시")
 
 
 # ---------------------------------------------------------------------------
@@ -378,12 +431,34 @@ class User(Base):
         server_default=func.now(),
         comment="가입 일시",
     )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="레코드 최종 수정 시각",
+    )
+    last_login_at = Column(
+        DateTime(timezone=True),
+        comment="마지막 로그인 시각 (auth.login 에서 갱신)",
+    )
+    is_active = Column(
+        Boolean,
+        server_default=text("true"),
+        default=True,
+        comment="계정 활성 여부 (소프트 삭제: false=탈퇴)",
+    )
+    email_verified = Column(
+        Boolean,
+        server_default=text("false"),
+        default=False,
+        comment="이메일 인증 완료 여부",
+    )
 
 
 class FtcBrandFranchise(Base):
     """공정거래위원회 프랜차이즈 브랜드 정보 — 회원가입 시 브랜드 자동 매핑용"""
 
     __tablename__ = "ftc_brand_franchise"
+    __table_args__ = (UniqueConstraint("yr", "corpNm", "brandNm", name="uq_ftc_yr_corp_brand"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     yr = Column(SmallInteger, index=True, comment="기준 연도")
@@ -530,10 +605,25 @@ class ManagerUser(Base):
     password_hash = Column(String(255), nullable=False, comment="비밀번호 해시")
     is_active = Column(Boolean, default=True, comment="활성 여부")
     is_approved = Column(Boolean, default=False, comment="팀장 승인 여부")
+    email_verified = Column(
+        Boolean,
+        server_default=text("false"),
+        default=False,
+        comment="이메일 인증 완료 여부",
+    )
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
         comment="가입 일시",
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="레코드 최종 수정 시각",
+    )
+    last_login_at = Column(
+        DateTime(timezone=True),
+        comment="마지막 로그인 시각 (auth.manager_login 에서 갱신)",
     )
 
 
@@ -1554,3 +1644,150 @@ class WeatherDaily(Base):
     rain_60m_max = Column(Float)
     snow_new = Column(Float)
     snow_max = Column(Float)
+
+
+# ---------------------------------------------------------------------------
+# 고객 (매장 방문 기록)
+# ---------------------------------------------------------------------------
+
+
+class Customer(Base):
+    """고객 — 매장 방문 고객 기본 정보 (고객당 방문 날짜 1건)"""
+
+    __tablename__ = "customers"
+
+    customer_id = Column(String(20), primary_key=True, comment="고객 아이디")
+    customer_name = Column(Text, nullable=False, comment="고객 이름")
+    visit_date = Column(Date, comment="방문 날짜")
+
+
+# ---------------------------------------------------------------------------
+# 시뮬레이션 이력 (매니저 저장 이력)
+# ---------------------------------------------------------------------------
+
+
+class SimulationHistory(Base):
+    """시뮬레이션 이력 — 매니저가 시뮬 실행 후 [저장] 버튼으로 남긴 영구 이력"""
+
+    __tablename__ = "simulation_history"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # index=True 는 복합 idx_simhist_manager_created 의 leftmost prefix 와 중복되므로 제거
+    # ForeignKey 제거: alembic a3b4c5d6e7f8 가 FK drop — master 본인 시뮬은 manager_id가 users.id 가리킴 (manager_users 외 ref)
+    manager_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id (user_type 필드로 구분)",
+    )
+    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
+
+    # 시뮬 입력
+    district = Column(String(50), nullable=False, comment="출점 후보 행정동")
+    brand_name = Column(String(100), nullable=False, comment="브랜드명")
+    business_type = Column(String(50), comment="업종 (cafe/restaurant/convenience)")
+    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터")
+
+    # 시뮬 결과 전체 (8 agent + ABM + B2 ML 9개)
+    simulation_result = Column(JSONB, nullable=False, comment="시뮬 결과 전체")
+
+    # 리스트 표시용 요약 (빠른 조회)
+    ai_verdict_summary = Column(Text, comment="AI 판정 요약")
+    market_entry_signal = Column(String(10), comment="green|yellow|red")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ===========================================================================
+# Emerging Trend B1 — 인구·이동성 (2026-04-29)
+# spec: docs/superpowers/specs/2026-04-29-emerging-trend-data-b1-design.md
+# ===========================================================================
+
+
+class MasterSubwayStation(Base):
+    """서울 전체 지하철역 마스터 — 호선/sigungu_code/좌표"""
+
+    __tablename__ = "master_subway_station"
+
+    station_code = Column(String(10), primary_key=True, comment="역코드 (운영사별 통합)")
+    station_name = Column(String(50), nullable=False, comment="역명")
+    line_name = Column(String(20), comment="호선/노선")
+    sigungu_code = Column(String(5), index=True, comment="자치구 코드 (마포=11440)")
+    lat = Column(Float, comment="위도")
+    lon = Column(Float, comment="경도")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
+class MasterTtareungiStation(Base):
+    """서울 전체 따릉이 대여소 마스터"""
+
+    __tablename__ = "master_ttareungi_station"
+
+    station_id = Column(String(20), primary_key=True, comment="대여소 ID")
+    station_name = Column(String(100), nullable=False, comment="대여소명")
+    sigungu_code = Column(String(5), index=True, comment="자치구 코드")
+    dong_code = Column(
+        String(8),
+        ForeignKey("seoul_dong_master.dong_code"),
+        index=True,
+        comment="행정동 코드 (8자리 FK)",
+    )
+    lat = Column(Float, comment="위도")
+    lon = Column(Float, comment="경도")
+    opened_at = Column(Date, comment="개소일 (있으면)")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
+class SeoulSubwayPassengerDaily(Base):
+    """서울 전체 지하철 일별 승하차"""
+
+    __tablename__ = "seoul_subway_passenger_daily"
+
+    date = Column(Date, primary_key=True, comment="영업일")
+    station_code = Column(
+        String(10),
+        ForeignKey("master_subway_station.station_code"),
+        primary_key=True,
+        comment="역코드",
+    )
+    boarding_cnt = Column(Integer, comment="승차 인원")
+    alighting_cnt = Column(Integer, comment="하차 인원")
+
+    __table_args__ = (Index("ix_subway_passenger_station", "station_code"),)
+
+
+class SeoulDongMigrationMonthly(Base):
+    """서울 전체 동별 월간 전입/전출 (20-30대 별도 컬럼)"""
+
+    __tablename__ = "seoul_dong_migration_monthly"
+
+    ym = Column(Integer, primary_key=True, comment="YYYYMM")
+    dong_code = Column(
+        String(8),
+        ForeignKey("seoul_dong_master.dong_code"),
+        primary_key=True,
+        comment="행정동 코드",
+    )
+    move_in_cnt = Column(Integer, comment="전입 총수")
+    move_out_cnt = Column(Integer, comment="전출 총수")
+    net_move = Column(Integer, comment="순이동 (전입 - 전출)")
+    move_in_2030 = Column(Integer, comment="20-30대 전입자 수")
+    move_out_2030 = Column(Integer, comment="20-30대 전출자 수")
+
+
+class SeoulTtareungiUsageDaily(Base):
+    """서울 전체 따릉이 일×대여소 집계"""
+
+    __tablename__ = "seoul_ttareungi_usage_daily"
+
+    date = Column(Date, primary_key=True, comment="이용일")
+    station_id = Column(
+        String(20),
+        ForeignKey("master_ttareungi_station.station_id"),
+        primary_key=True,
+        comment="대여소 ID",
+    )
+    rent_cnt = Column(Integer, comment="대여 건수")
+    return_cnt = Column(Integer, comment="반납 건수")
+
+    __table_args__ = (Index("ix_ttareungi_usage_station", "station_id"),)

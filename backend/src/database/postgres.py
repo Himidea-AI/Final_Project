@@ -27,8 +27,9 @@ class PostgresClient:
         self.engine = create_async_engine(
             async_url,
             echo=False,
-            pool_size=5 if _DEBUG else 20,
-            max_overflow=5 if _DEBUG else 30,
+            # 7개 에이전트 병렬 실행 시 동시 DB 접근 대응 (RDS max_connections=81 제약)
+            pool_size=10,
+            max_overflow=15,
             pool_timeout=30,
             pool_recycle=3600,
             pool_pre_ping=True,

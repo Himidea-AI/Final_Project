@@ -1,9 +1,9 @@
 """
 폐업위험도 모델 정의
 
-TCNClassifier: TCNForecaster 출력층을 sigmoid로 교체한 이진 분류 모델
+TCNClassifier: TCNForecaster 출력층을 이진 분류기로 교체한 모델
   - pretrained_tcn.pt 가중치에서 TCN 컨볼루션 블록 재사용 (전이학습)
-  - FC head만 새로 초기화 (매출 예측 → 폐업 위험 분류)
+  - self.fc를 새 분류 head로 교체 (매출 예측 회귀 → 폐업 위험 분류 logit)
 
 담당: B2 — 수지니
 참조: models/tcn_forecast/model.py (TCNForecaster 구조 동일)
@@ -34,7 +34,7 @@ class TCNClassifier(nn.Module):
     Parameters
     ----------
     input_size : int
-        입력 피처 수 (기본 33 — data_prep.ALL_FEATURES).
+        입력 피처 수 (기본 34 — data_prep.ALL_FEATURES).
     n_channels : int
         TCN 내부 채널 수 (pretrain과 동일하게 128 유지).
     kernel_size : int
@@ -47,7 +47,7 @@ class TCNClassifier(nn.Module):
 
     def __init__(
         self,
-        input_size: int = 33,
+        input_size: int = 34,
         n_channels: int = 128,
         kernel_size: int = 2,
         dilations: list[int] | None = None,
@@ -67,9 +67,10 @@ class TCNClassifier(nn.Module):
             output_size=1,
         )
 
-        # FC head 교체: 회귀(Linear) → 이진 분류(logit 출력)
+        # FC head 교체: 회귀용 self.fc → 이진 분류용 self.fc 로 덮어씀
+        # TCNForecaster.forward()는 self.fc(out)을 호출하므로 여기서 교체해야 실제로 적용됨
         # Sigmoid는 추론 시에만 적용 — BCEWithLogitsLoss와 수치 안정성 확보
-        self._backbone.fc_head = nn.Sequential(
+        self._backbone.fc = nn.Sequential(
             nn.Linear(n_channels, 64),
             nn.ReLU(),
             nn.Dropout(dropout),
@@ -102,9 +103,15 @@ class TCNClassifier(nn.Module):
             return
 
         state = torch.load(pretrained_path, map_location="cpu", weights_only=True)
+        current_state = self._backbone.state_dict()
 
-        # fc_head 관련 키 제외 — 컨볼루션 블록만 로드
-        tcn_keys = {k: v for k, v in state.items() if not k.startswith("fc_head")}
+        # fc. 제외 + shape 불일치 키 제외 (input_size 변경 시 input_proj 등 호환 불가)
+        # pretrained의 회귀용 fc 가중치는 로드하지 않음 — 분류용 fc는 새로 학습
+        tcn_keys = {
+            k: v
+            for k, v in state.items()
+            if not k.startswith("fc.") and k in current_state and current_state[k].shape == v.shape
+        }
         missing, unexpected = self._backbone.load_state_dict(tcn_keys, strict=False)
 
         logger.info(

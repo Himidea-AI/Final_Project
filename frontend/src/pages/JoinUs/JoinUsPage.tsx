@@ -1,18 +1,18 @@
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams } from "react-router-dom";
-import { ChevronRight, ArrowLeft, CheckCircle2 } from "lucide-react";
-import { PLANS } from "./constants/plans";
-import type { Plan } from "./types";
-import PricingCard from "./components/PricingCard";
-import PlanBadge from "./components/PlanBadge";
-import SignupForm from "./components/SignupForm";
-import EnterpriseContactForm from "./components/EnterpriseContactForm";
-import RoleSelectView from "./components/RoleSelectView";
-import ManagerSignupForm from "./components/ManagerSignupForm";
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
+import { ChevronRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { PLANS } from './constants/plans';
+import type { Plan } from './types';
+import PricingCard from './components/PricingCard';
+import PlanBadge from './components/PlanBadge';
+import SignupForm from './components/SignupForm';
+import EnterpriseContactForm from './components/EnterpriseContactForm';
+import RoleSelectView from './components/RoleSelectView';
+import ManagerSignupForm from './components/ManagerSignupForm';
 
-type Phase = "role_select" | "pricing" | "form" | "manager_form" | "success";
-type Role = "master" | "manager";
+type Phase = 'role_select' | 'pricing' | 'form' | 'manager_form' | 'success';
+type Role = 'master' | 'manager';
 
 interface Props {
   onBack: () => void;
@@ -21,13 +21,13 @@ interface Props {
 export default function JoinUsPage({ onBack }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [searchParams] = useSearchParams();
-  const initialRole = searchParams.get("role") === "manager" ? "manager" : null;
+  const initialRole = searchParams.get('role') === 'manager' ? 'manager' : null;
 
   const [phase, setPhase] = useState<Phase>(
-    initialRole === "manager" ? "manager_form" : "role_select"
+    initialRole === 'manager' ? 'manager_form' : 'role_select',
   );
   const [selectedRole, setSelectedRole] = useState<Role | null>(initialRole);
-  const [selectedPlan, setSelectedPlan] = useState<Plan["id"] | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan['id'] | null>(null);
 
   // 마운트 시 + phase 변경 시 스크롤 최상단으로
   useEffect(() => {
@@ -35,27 +35,27 @@ export default function JoinUsPage({ onBack }: Props) {
   }, [phase]);
 
   const handleSelectMaster = () => {
-    setSelectedRole("master");
-    setPhase("pricing");
+    setSelectedRole('master');
+    setPhase('pricing');
   };
 
   const handleSelectManager = () => {
-    setSelectedRole("manager");
-    setPhase("manager_form");
+    setSelectedRole('manager');
+    setPhase('manager_form');
   };
 
-  const handleSelect = (id: Plan["id"]) => {
+  const handleSelect = (id: Plan['id']) => {
     setSelectedPlan(id);
-    setTimeout(() => setPhase("form"), 100);
+    setTimeout(() => setPhase('form'), 100);
   };
 
   const handleBackToPricing = () => {
-    setPhase("pricing");
+    setPhase('pricing');
     setTimeout(() => setSelectedPlan(null), 500);
   };
 
   const handleBackToRoleSelect = () => {
-    setPhase("role_select");
+    setPhase('role_select');
     setTimeout(() => {
       setSelectedRole(null);
       setSelectedPlan(null);
@@ -65,7 +65,10 @@ export default function JoinUsPage({ onBack }: Props) {
   const selectedPlanData = PLANS.find((p) => p.id === selectedPlan);
 
   return (
-    <div ref={scrollRef} className="absolute inset-0 z-20 flex flex-col bg-[#1e1b18] text-[#e2e8f0] overflow-y-auto custom-scrollbar">
+    <div
+      ref={scrollRef}
+      className="absolute inset-0 z-20 flex flex-col bg-[#1e1b18] text-[#e2e8f0] overflow-y-auto custom-scrollbar"
+    >
       {/* Header */}
       <div className="fixed top-0 left-0 w-full h-24 border-b border-[#2c2825] flex items-center px-8 md:px-16 bg-[#1e1b18]/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-3">
@@ -74,9 +77,7 @@ export default function JoinUsPage({ onBack }: Props) {
             className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
           >
             <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">
-              SPOTTER
-            </span>
+            <span className="text-sm font-bold tracking-wider text-[#e2e8f0]">SPOTTER</span>
           </button>
           <span className="text-[#2c2825]">/</span>
           <button
@@ -93,7 +94,7 @@ export default function JoinUsPage({ onBack }: Props) {
       <div className="flex-1 flex flex-col items-center pt-36 pb-20 px-6">
         <AnimatePresence mode="wait">
           {/* Phase 0: Role Select */}
-          {phase === "role_select" && (
+          {phase === 'role_select' && (
             <RoleSelectView
               key="role_select"
               onSelectMaster={handleSelectMaster}
@@ -102,7 +103,7 @@ export default function JoinUsPage({ onBack }: Props) {
           )}
 
           {/* Phase 1: Pricing Cards */}
-          {phase === "pricing" && (
+          {phase === 'pricing' && (
             <motion.div
               key="pricing"
               initial={{ opacity: 0 }}
@@ -145,19 +146,14 @@ export default function JoinUsPage({ onBack }: Props) {
               {/* Cards */}
               <div className="flex flex-col lg:flex-row gap-6 items-stretch justify-center">
                 {PLANS.map((plan) => (
-                  <PricingCard
-                    key={plan.id}
-                    plan={plan}
-                    onSelect={handleSelect}
-                    isVisible={true}
-                  />
+                  <PricingCard key={plan.id} plan={plan} onSelect={handleSelect} isVisible={true} />
                 ))}
               </div>
             </motion.div>
           )}
 
           {/* Phase 2: Form */}
-          {phase === "form" && selectedPlanData && (
+          {phase === 'form' && selectedPlanData && (
             <motion.div
               key="form"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -180,28 +176,28 @@ export default function JoinUsPage({ onBack }: Props) {
 
               {/* Form heading */}
               <h2 className="text-2xl font-black mb-2">
-                {selectedPlan === "enterprise" ? "Enterprise 도입 문의" : "회원가입"}
+                {selectedPlan === 'enterprise' ? 'Enterprise 도입 문의' : '회원가입'}
               </h2>
               <p className="text-[#9ca3af] text-sm mb-8">
-                {selectedPlan === "enterprise"
-                  ? "담당 영업팀이 맞춤 견적을 안내해드립니다."
-                  : "사업자 정보를 입력하여 계정을 생성하세요."}
+                {selectedPlan === 'enterprise'
+                  ? '담당 영업팀이 맞춤 견적을 안내해드립니다.'
+                  : '사업자 정보를 입력하여 계정을 생성하세요.'}
               </p>
 
               {/* Conditional form */}
-              {selectedPlan === "enterprise" ? (
-                <EnterpriseContactForm onSuccess={() => setPhase("success")} />
+              {selectedPlan === 'enterprise' ? (
+                <EnterpriseContactForm onSuccess={() => setPhase('success')} />
               ) : (
                 <SignupForm
                   planName={selectedPlanData.name}
-                  onSuccess={() => setPhase("success")}
+                  onSuccess={() => setPhase('success')}
                 />
               )}
             </motion.div>
           )}
 
           {/* Phase 2-Manager: Manager Signup Form */}
-          {phase === "manager_form" && (
+          {phase === 'manager_form' && (
             <motion.div
               key="manager_form"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -219,7 +215,7 @@ export default function JoinUsPage({ onBack }: Props) {
                   <ArrowLeft size={14} />
                   가입 유형 재선택
                 </button>
-                <span className="text-[10px] font-mono text-emerald-400 tracking-wider uppercase px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
+                <span className="text-[0.625rem] font-mono text-emerald-400 tracking-wider uppercase px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
                   팀원 가입
                 </span>
               </div>
@@ -229,12 +225,12 @@ export default function JoinUsPage({ onBack }: Props) {
                 팀장에게 받은 초대 코드를 먼저 검증한 후, 매니저 정보를 입력해주세요.
               </p>
 
-              <ManagerSignupForm onSuccess={() => setPhase("success")} />
+              <ManagerSignupForm onSuccess={() => setPhase('success')} />
             </motion.div>
           )}
 
           {/* Phase 3: Success */}
-          {phase === "success" && (
+          {phase === 'success' && (
             <motion.div
               key="success"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -244,41 +240,37 @@ export default function JoinUsPage({ onBack }: Props) {
             >
               <div
                 className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
-                  selectedRole === "manager"
-                    ? "bg-emerald-500/10"
-                    : "bg-[#818cf8]/10"
+                  selectedRole === 'manager' ? 'bg-emerald-500/10' : 'bg-[#818cf8]/10'
                 }`}
               >
                 <CheckCircle2
                   size={40}
-                  className={
-                    selectedRole === "manager" ? "text-emerald-400" : "text-[#818cf8]"
-                  }
+                  className={selectedRole === 'manager' ? 'text-emerald-400' : 'text-[#818cf8]'}
                 />
               </div>
               <h2 className="text-3xl font-black mb-3">
-                {selectedRole === "manager"
-                  ? "팀장 승인 대기 중"
-                  : selectedPlan === "enterprise"
-                  ? "문의가 접수되었습니다"
-                  : "가입이 완료되었습니다"}
+                {selectedRole === 'manager'
+                  ? '팀장 승인 대기 중'
+                  : selectedPlan === 'enterprise'
+                    ? '문의가 접수되었습니다'
+                    : '가입이 완료되었습니다'}
               </h2>
               <p className="text-[#9ca3af] text-sm mb-8 max-w-sm">
-                {selectedRole === "manager"
-                  ? "매니저 가입이 접수되었습니다. 팀장이 HQ에서 승인하면 즉시 로그인할 수 있습니다."
-                  : selectedPlan === "enterprise"
-                  ? "영업팀이 1영업일 내 연락드리겠습니다."
-                  : "SPOTTER의 모든 기능을 사용할 준비가 되었습니다."}
+                {selectedRole === 'manager'
+                  ? '매니저 가입이 접수되었습니다. 팀장이 HQ에서 승인하면 즉시 로그인할 수 있습니다.'
+                  : selectedPlan === 'enterprise'
+                    ? '영업팀이 1영업일 내 연락드리겠습니다.'
+                    : 'SPOTTER의 모든 기능을 사용할 준비가 되었습니다.'}
               </p>
               <button
                 onClick={onBack}
                 className={`px-8 py-3 rounded-xl text-white font-bold text-sm tracking-wider hover:scale-[1.02] active:scale-[0.98] transition-all ${
-                  selectedRole === "manager"
-                    ? "bg-gradient-to-r from-emerald-500 to-emerald-400 text-[#1e1b18]"
-                    : "bg-gradient-to-r from-[#6366f1] to-[#818cf8]"
+                  selectedRole === 'manager'
+                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-[#1e1b18]'
+                    : 'bg-gradient-to-r from-[#6366f1] to-[#818cf8]'
                 }`}
               >
-                {selectedRole === "manager" ? "로그인 화면으로" : "SPOTTER 시작하기"}
+                {selectedRole === 'manager' ? '로그인 화면으로' : 'SPOTTER 시작하기'}
               </button>
             </motion.div>
           )}

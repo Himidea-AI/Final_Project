@@ -5,6 +5,7 @@ from src.schemas.structured_output import MarketAnalysisOutput
 from src.config.settings import settings
 from src.agents.llms import get_fast_llm
 from src.agents.tools import MarketDataTool
+from src.agents.nodes._attribution_helpers import build_attribution
 from src.database.postgres import PostgresClient
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -13,6 +14,7 @@ db_client = PostgresClient(settings.postgres_url)
 market_tool = MarketDataTool(db_client)
 
 _CACHE_TTL = 86400  # 24시간
+
 
 async def market_analyst_node(state: AgentState) -> dict:
     """
@@ -37,11 +39,23 @@ async def market_analyst_node(state: AgentState) -> dict:
             analysis = dict(state.get("analysis_results", {}))
             analysis["market_report"] = cached_data["market_report"]
             await _redis.aclose()
+            _cached_metrics = cached_data.get("metrics", {}) or {}
+            cached_attribution = build_attribution(
+                agent_id="market_analyst",
+                display_name="시장 분석",
+                kind="LLM",
+                sources=["district_sales", "kakao_store", "golmok_rent"],
+                verdict=f"상권 등급 {_cached_metrics.get('district_grade', 'NORMAL')} / 성장률 {_cached_metrics.get('growth_rate', 0)}%",
+                reasoning=str(cached_data.get("market_report", "")) or "시장 분석 데이터 기반 (캐시)",
+                confidence=0.8,
+            )
+            analysis["market_analyst_result"] = {"agent_attribution": cached_attribution}
             return {
                 "market_data": cached_data["market_data"],
                 "analysis_results": analysis,
-                "analysis_metrics": {**state.get("analysis_metrics", {}), **cached_data["metrics"]},
+                "analysis_metrics": {**state.get("analysis_metrics", {}), **_cached_metrics},
                 "current_agent": "market_analyst",
+                "agent_attribution": cached_attribution,
             }
     except Exception as e:
         print(f"[market_analyst] Redis 캐시 조회 실패 (무시하고 계속): {e}")
@@ -59,22 +73,22 @@ async def market_analyst_node(state: AgentState) -> dict:
     # [3] 실데이터 수집 (MarketDataTool 사용)
     # 마포구 16개 행정동 중심 좌표 (경쟁사 반경 분석용)
     _DONG_COORDS: dict = {
-        "아현동":  (37.5502, 126.9594),
-        "공덕동":  (37.5430, 126.9519),
-        "도화동":  (37.5393, 126.9457),
-        "용강동":  (37.5382, 126.9383),
-        "대흥동":  (37.5480, 126.9437),
-        "염리동":  (37.5523, 126.9474),
-        "신수동":  (37.5453, 126.9361),
-        "서강동":  (37.5493, 126.9347),
-        "서교동":  (37.5565, 126.9239),
-        "합정동":  (37.5497, 126.9143),
+        "아현동": (37.5502, 126.9594),
+        "공덕동": (37.5430, 126.9519),
+        "도화동": (37.5393, 126.9457),
+        "용강동": (37.5382, 126.9383),
+        "대흥동": (37.5480, 126.9437),
+        "염리동": (37.5523, 126.9474),
+        "신수동": (37.5453, 126.9361),
+        "서강동": (37.5493, 126.9347),
+        "서교동": (37.5565, 126.9239),
+        "합정동": (37.5497, 126.9143),
         "망원1동": (37.5558, 126.9059),
         "망원2동": (37.5531, 126.9021),
-        "연남동":  (37.5617, 126.9226),
+        "연남동": (37.5617, 126.9226),
         "성산1동": (37.5663, 126.9069),
         "성산2동": (37.5706, 126.9111),
-        "상암동":  (37.5789, 126.8899),
+        "상암동": (37.5789, 126.8899),
     }
     _default_lat, _default_lng = _DONG_COORDS.get(target_district, (37.5565, 126.9239))
     lat = state.get("market_data", {}).get("lat") or _default_lat
@@ -83,14 +97,13 @@ async def market_analyst_node(state: AgentState) -> dict:
 
     # 병렬 데이터 수집 (속도 최적화)
     import asyncio
+
     pop_task = market_tool.get_population_trends(target_district)
     sales_task = market_tool.get_commercial_insights(target_district, business_type)
     comp_task = market_tool.get_competitor_stats(lat, lon, business_type, radius_m=commercial_radius)
     rent_task = market_tool.get_rent_insight(target_district)
 
-    pop_data, sales_data, comp_data, rent_data = await asyncio.gather(
-        pop_task, sales_task, comp_task, rent_task
-    )
+    pop_data, sales_data, comp_data, rent_data = await asyncio.gather(pop_task, sales_task, comp_task, rent_task)
 
     # 데이터 통합
     real_market_data: MarketData = {
@@ -100,13 +113,13 @@ async def market_analyst_node(state: AgentState) -> dict:
         "floating_population": {
             "total": pop_data.get("current_pop", 0),
             "trend": pop_data.get("summary", ""),
-            "qoq_growth": pop_data.get("qoq_growth")
+            "qoq_growth": pop_data.get("qoq_growth"),
         },
         "competition_score": comp_data.get("competitor_count", 0) / 100,
         "average_rent": rent_data.get("avg_rent_3_3m2", 0),
         "sales_insight": sales_data.get("statistical_summary", ""),
         "rent_status": rent_data.get("summary", ""),
-        "financial_metrics": state.get("market_data", {}).get("financial_metrics", {})
+        "financial_metrics": state.get("market_data", {}).get("financial_metrics", {}),
     }
 
     # 4. 전문 요약 및 구조화된 필드 생성 (Gemini 3 Flash 사용)
@@ -122,17 +135,27 @@ async def market_analyst_node(state: AgentState) -> dict:
         f"- 매출 통계: {sales_data.get('statistical_summary')}\n"
         f"- 경쟁 및 밀집도: {comp_data.get('summary')}\n"
         f"- 임대료 및 적절성: {rent_data.get('summary')}\n\n"
-        "report 필드: 상세 분석과 [프랜차이즈 전략팀 총평] 섹션 포함. '가장 큰 기회'와 '리스크' 명시.\n"
-        "grade 필드: EXCELLENT / GOOD / NORMAL / RISKY 중 하나 (대문자).\n"
-        "어조: 수치·사실 중심, 예비 창업자가 바로 이해할 수 있는 직관적 표현."
+        "grade 판정 기준 (반드시 아래 기준으로 판단):\n"
+        "- EXCELLENT: 유동인구 QoQ 증가율 >3% AND 경쟁 포화도 낮음 AND 임대료 시장평균 이하\n"
+        "- GOOD:      위 3가지 중 2가지 충족, 또는 매출 성장 추세가 뚜렷한 경우\n"
+        "- NORMAL:    위 3가지 중 1가지만 충족, 또는 데이터가 부분적인 경우\n"
+        "- RISKY:     유동인구 감소 OR 경쟁 포화 OR 임대료 시장평균 150% 초과 중 하나라도 해당\n\n"
+        "report 필드 필수 구조:\n"
+        "1) 수치 요약 (유동인구·경쟁·임대료·매출 4개 지표)\n"
+        "2) 가장 큰 기회 (구체적 수치 포함)\n"
+        "3) 핵심 리스크 (구체적 수치 포함)\n"
+        "4) [프랜차이즈 전략팀 총평] — 3문장 이내, 예비 창업자 직관적 표현\n"
+        "어조: 수치·사실 중심, 추상적 표현 금지."
     )
 
     try:
         llm = get_fast_llm().with_structured_output(MarketAnalysisOutput)
-        result: MarketAnalysisOutput = await llm.ainvoke([
-            SystemMessage(content=system_content),
-            HumanMessage(content=f"{target_district} {business_type} 업종의 심화 분석을 수행해줘."),
-        ])
+        result: MarketAnalysisOutput = await llm.ainvoke(
+            [
+                SystemMessage(content=system_content),
+                HumanMessage(content=f"{target_district} {business_type} 업종의 심화 분석을 수행해줘."),
+            ]
+        )
 
         market_summary = result.report
         final_metrics = {
@@ -155,11 +178,15 @@ async def market_analyst_node(state: AgentState) -> dict:
         try:
             await _redis.set(
                 cache_key,
-                json.dumps({
-                    "market_report": market_summary,
-                    "market_data": real_market_data,
-                    "metrics": final_metrics,
-                }, ensure_ascii=False, default=str),
+                json.dumps(
+                    {
+                        "market_report": market_summary,
+                        "market_data": real_market_data,
+                        "metrics": final_metrics,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ),
                 ex=_CACHE_TTL,
             )
             print(f"[market_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
@@ -171,9 +198,21 @@ async def market_analyst_node(state: AgentState) -> dict:
             except Exception:
                 pass
 
+    attribution = build_attribution(
+        agent_id="market_analyst",
+        display_name="시장 분석",
+        kind="LLM",
+        sources=["district_sales", "kakao_store", "golmok_rent"],
+        verdict=f"상권 등급 {final_metrics.get('district_grade', 'NORMAL')} / 성장률 {final_metrics.get('growth_rate', 0)}%",
+        reasoning=str(market_summary) if market_summary else "시장 분석 데이터 기반",
+        confidence=0.8,
+    )
+    analysis_results["market_analyst_result"] = {"agent_attribution": attribution}
+
     return {
         "market_data": real_market_data,
         "analysis_results": analysis_results,
         "analysis_metrics": {**state.get("analysis_metrics", {}), **final_metrics},
         "current_agent": "market_analyst",
+        "agent_attribution": attribution,
     }

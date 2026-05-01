@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
+from dotenv import load_dotenv
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
@@ -21,18 +23,23 @@ from torch.utils.data import DataLoader, TensorDataset
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# 프로세스 단위 DB 데이터 캐시 (TTL 5분)
+# ---------------------------------------------------------------------------
+_DATA_CACHE: dict = {}
+_CACHE_TTL: int = 300  # seconds
+
+# ---------------------------------------------------------------------------
 # 기본 경로 / DB 접속 정보
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 
-_pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
-_host = os.environ.get("POSTGRES_HOST", "192.168.0.28")
-_port = os.environ.get("POSTGRES_PORT", "5432")
-_db = os.environ.get("POSTGRES_DB", "mapo_simulator")
+# backend/.env 로드 (POSTGRES_URL 등) — 환경변수 미설정 시 RDS URL 사용
+load_dotenv(PROJECT_ROOT / "backend" / ".env")
+
 DB_URL = os.environ.get(
     "POSTGRES_URL",
-    f"postgresql://postgres:{_pw}@{_host}:{_port}/{_db}",
+    "postgresql://postgres:MapoSpotter1!%23@mapo-simulator.cx8eakyuk1jf.ap-northeast-2.rds.amazonaws.com:5432/mapo_simulator",
 )
 
 # 피처 컬럼 (district_sales 테이블 기준)
@@ -77,6 +84,7 @@ EXTRA_FEATURES = [
     "trend_score",  # 네이버 검색 트렌드 (서울 전체)
     "holiday_count",  # 분기 내 공휴일 수 (holiday_calendar)
     "bus_flpop",  # 동별 분기 버스 승하차 집계 (bus_boarding_daily)
+    "adstrd_flpop",  # 행정동 분기 유동인구 (seoul_adstrd_flpop.total_flpop — 서울 전체 동 커버)
 ]
 
 GOLMOK_FEATURES = [
@@ -94,6 +102,15 @@ EXCLUDE_COMBOS: set[tuple[str, str]] = {
     ("11440610", "CS100002"),  # 염리동 중식
     ("11440720", "CS100005"),  # 성산1동 제과
 }
+
+
+class ExcludedComboError(Exception):
+    """학습 데이터 부족으로 예측을 제공하지 않는 동×업종 조합.
+
+    EXCLUDE_COMBOS에 등록된 조합에 대해 모델 predict() 진입 시 raise된다.
+    interface.py에서 re-raise → B1(graph.py/main.py)에서 HTTP 400 변환 예정.
+    ValueError를 상속하지 않으므로 기존 except ValueError 블록에 잡히지 않는다.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +137,7 @@ def load_sales_data(
     db_url: str = DB_URL,
     csv_path: str | Path | None = None,
     dong_prefix: str | None = None,
+    sales_csv_override: str | Path | None = None,
 ) -> pd.DataFrame:
     """district_sales 데이터를 로드한다.
 
@@ -131,6 +149,8 @@ def load_sales_data(
         CSV 파일 경로 (DB 접속 불가 시 fallback).
     dong_prefix : str, optional
         행정동 코드 접두사 필터 (예: '11440' = 마포구).
+    sales_csv_override : str or Path, optional
+        지정 시 DB를 무시하고 이 CSV를 우선 로드 (imputation 비교 학습용).
 
     Returns
     -------
@@ -139,7 +159,24 @@ def load_sales_data(
     """
     df = None
 
-    # 1) DB에서 로드 시도
+    # 0) sales_csv_override 우선 — DB 시도 자체를 skip
+    if sales_csv_override is not None:
+        ov_path = Path(sales_csv_override)
+        if not ov_path.exists():
+            raise FileNotFoundError(f"sales_csv_override CSV가 존재하지 않습니다: {ov_path}")
+        df = pd.read_csv(ov_path, dtype={"dong_code": str})
+        logger.info("sales_csv_override 로드: %s (%d rows)", ov_path, len(df))
+        if dong_prefix and "dong_code" in df.columns:
+            df = df[df["dong_code"].astype(str).str.startswith(dong_prefix)]
+        return df
+
+    # 1) DB에서 로드 시도 (캐시 우선)
+    _sales_key = ("sales", db_url, str(dong_prefix))
+    if _sales_key in _DATA_CACHE:
+        _cached_df, _cached_ts = _DATA_CACHE[_sales_key]
+        if time.monotonic() - _cached_ts < _CACHE_TTL:
+            logger.debug("캐시 히트 — sales data (%s)", dong_prefix)
+            return _cached_df.copy()
     try:
         # dong_prefix가 없으면 서울 전체 테이블, 있으면 마포구 등 필터링
         table = "seoul_district_sales" if dong_prefix is None else "district_sales"
@@ -147,6 +184,7 @@ def load_sales_data(
         query = f"SELECT * FROM {table}{where} ORDER BY quarter, dong_code"  # noqa: S608
         df = _load_from_db(query, db_url)
         logger.info("DB에서 %s 로드 완료: %d rows", table, len(df))
+        _DATA_CACHE[_sales_key] = (df, time.monotonic())
     except Exception as exc:
         logger.warning("DB 접속 실패, CSV fallback 시도: %s", exc)
 
@@ -156,32 +194,10 @@ def load_sales_data(
             df = pd.read_csv(csv_path, dtype={"dong_code": str})
             logger.info("CSV에서 로드 완료: %s (%d rows)", csv_path, len(df))
         else:
-            # 개별 파일 시도 (dong_prefix 없으면 서울 전체 우선)
             sales_csv = DATA_DIR / ("seoul_district_sales.csv" if dong_prefix is None else "district_sales.csv")
             if sales_csv.exists():
-                df = pd.read_csv(sales_csv, dtype={"dong_code": str, "행정동코드": str})
-                # rename if needed (원본 한글 컬럼명 → 영문)
-                csv_rename = {
-                    "STDR_YYQU_CD": "quarter",
-                    "행정동코드": "dong_code",
-                    "행정동명": "dong_name",
-                    "SVC_INDUTY_CD": "industry_code",
-                    "SVC_INDUTY_CD_NM": "industry_name",
-                    "THSMON_SELNG_AMT": "monthly_sales",
-                    "THSMON_SELNG_CO": "monthly_count",
-                    "MDWK_SELNG_AMT": "weekday_sales",
-                    "WKEND_SELNG_AMT": "weekend_sales",
-                    "ML_SELNG_AMT": "male_sales",
-                    "FML_SELNG_AMT": "female_sales",
-                    "AGRDE_10_SELNG_AMT": "age_10_sales",
-                    "AGRDE_20_SELNG_AMT": "age_20_sales",
-                    "AGRDE_30_SELNG_AMT": "age_30_sales",
-                    "AGRDE_40_SELNG_AMT": "age_40_sales",
-                    "AGRDE_50_SELNG_AMT": "age_50_sales",
-                    "AGRDE_60_ABOVE_SELNG_AMT": "age_60_above_sales",
-                }
-                df = df.rename(columns={k: v for k, v in csv_rename.items() if k in df.columns})
-                logger.info("개별 CSV에서 로드: %s (%d rows)", sales_csv, len(df))
+                df = pd.read_csv(sales_csv, dtype={"dong_code": str})
+                logger.info("CSV에서 로드: %s (%d rows)", sales_csv, len(df))
             else:
                 raise FileNotFoundError(f"데이터를 찾을 수 없습니다. DB 접속 실패 & CSV 없음: {sales_csv}")
 
@@ -199,36 +215,32 @@ def load_store_data(
     """store_quarterly 데이터를 로드한다."""
     df = None
 
+    # 1) DB에서 로드 시도 (캐시 우선)
+    _store_key = ("store", db_url, str(dong_prefix))
+    if _store_key in _DATA_CACHE:
+        _cached_df, _cached_ts = _DATA_CACHE[_store_key]
+        if time.monotonic() - _cached_ts < _CACHE_TTL:
+            logger.debug("캐시 히트 — store data (%s)", dong_prefix)
+            return _cached_df.copy()
     try:
         table = "seoul_district_stores" if dong_prefix is None else "store_quarterly"
         where = f" WHERE dong_code LIKE '{dong_prefix}%'" if dong_prefix else ""
         query = f"SELECT * FROM {table}{where} ORDER BY quarter, dong_code"  # noqa: S608
         df = _load_from_db(query, db_url)
         logger.info("DB에서 %s 로드 완료: %d rows", table, len(df))
+        _DATA_CACHE[_store_key] = (df, time.monotonic())
     except Exception as exc:
         logger.warning("DB 접속 실패, CSV fallback 시도: %s", exc)
 
+    # 2) CSV fallback
     if df is None or df.empty:
         if csv_path and Path(csv_path).exists():
             df = pd.read_csv(csv_path, dtype={"dong_code": str})
         else:
             stores_csv = DATA_DIR / ("seoul_district_stores.csv" if dong_prefix is None else "district_stores.csv")
             if stores_csv.exists():
-                df = pd.read_csv(stores_csv, dtype={"dong_code": str, "행정동코드": str})
-                store_rename = {
-                    "STDR_YYQU_CD": "quarter",
-                    "행정동코드": "dong_code",
-                    "행정동명": "dong_name",
-                    "SVC_INDUTY_CD": "industry_code",
-                    "SVC_INDUTY_CD_NM": "industry_name",
-                    "STOR_CO": "store_count",
-                    "OPBIZ_STOR_CO": "open_count",
-                    "CLSBIZ_STOR_CO": "close_count",
-                    "FRC_STOR_CO": "franchise_count",
-                    "CLSBIZ_RT": "closure_rate",
-                }
-                df = df.rename(columns={k: v for k, v in store_rename.items() if k in df.columns})
-                logger.info("개별 CSV에서 로드: %s (%d rows)", stores_csv, len(df))
+                df = pd.read_csv(stores_csv, dtype={"dong_code": str})
+                logger.info("CSV에서 로드: %s (%d rows)", stores_csv, len(df))
             else:
                 logger.warning("store_quarterly 데이터 없음, 빈 DataFrame 반환")
                 return pd.DataFrame()
@@ -237,6 +249,87 @@ def load_store_data(
         df = df[df["dong_code"].astype(str).str.startswith(dong_prefix)]
 
     return df
+
+
+def load_timeseries(
+    db_url: str = DB_URL,
+    dong_prefix: str | None = None,
+) -> pd.DataFrame:
+    """load_sales_data + load_store_data + build_timeseries 를 합쳐서 캐싱한다.
+
+    build_timeseries 내부에서 seoul_golmok_rent / holiday_calendar /
+    load_adstrd_flpop 등 추가 DB 쿼리가 발생하므로, 결과 전체를 TTL 캐시로
+    보관해 반복 호출 오버헤드를 제거한다.
+
+    Parameters
+    ----------
+    db_url : str
+        PostgreSQL 접속 URL.
+    dong_prefix : str, optional
+        행정동 코드 접두사 필터 (예: '11440' = 마포구).
+
+    Returns
+    -------
+    pd.DataFrame
+        build_timeseries 결과 (dong_code, industry_code, quarter, features).
+    """
+    _ts_key = ("ts", db_url, str(dong_prefix))
+    if _ts_key in _DATA_CACHE:
+        _cached_ts, _cached_time = _DATA_CACHE[_ts_key]
+        if time.monotonic() - _cached_time < _CACHE_TTL:
+            logger.debug("캐시 히트 — timeseries (%s)", dong_prefix)
+            return _cached_ts.copy()
+
+    sales_df = load_sales_data(db_url=db_url, dong_prefix=dong_prefix)
+    store_df = load_store_data(db_url=db_url, dong_prefix=dong_prefix)
+    ts = build_timeseries(sales_df, store_df)
+    _DATA_CACHE[_ts_key] = (ts, time.monotonic())
+    logger.info("timeseries 빌드 완료 → 캐시 저장 (%s, %d rows)", dong_prefix, len(ts))
+    return ts.copy()
+
+
+def load_adstrd_flpop(
+    db_url: str = DB_URL,
+    dong_prefix: str | None = None,
+) -> pd.DataFrame:
+    """seoul_adstrd_flpop에서 행정동 분기 유동인구를 로드한다.
+
+    CSV 캐시 우선(scripts/cache_adstrd_flpop.py 실행 후 생성), 없으면 DB fallback.
+
+    Parameters
+    ----------
+    db_url : str
+        PostgreSQL 접속 URL.
+    dong_prefix : str, optional
+        행정동 코드 접두사 필터 (예: '11440' = 마포구). None이면 서울 전체.
+
+    Returns
+    -------
+    pd.DataFrame
+        컬럼: quarter, dong_code, adstrd_flpop
+    """
+    _csv = DATA_DIR / "adstrd_flpop_quarterly.csv"
+    if _csv.exists():
+        df = pd.read_csv(_csv, dtype={"dong_code": str})
+        df["quarter"] = df["quarter"].astype(int)
+        if dong_prefix:
+            df = df[df["dong_code"].str.startswith(dong_prefix)]
+        logger.info("adstrd_flpop CSV 로드: %s (%d rows)", _csv, len(df))
+        return df[["quarter", "dong_code", "adstrd_flpop"]]
+
+    try:
+        where = f" WHERE dong_code LIKE '{dong_prefix}%'" if dong_prefix else ""
+        query = (
+            f"SELECT quarter, dong_code, total_flpop AS adstrd_flpop "  # noqa: S608
+            f"FROM seoul_adstrd_flpop{where} ORDER BY quarter, dong_code"
+        )
+        df = _load_from_db(query, db_url)
+        df["dong_code"] = df["dong_code"].astype(str)
+        logger.info("DB에서 adstrd_flpop 로드 완료: %d rows", len(df))
+        return df[["quarter", "dong_code", "adstrd_flpop"]]
+    except Exception as exc:
+        logger.warning("adstrd_flpop 로드 실패, 0으로 대체: %s", exc)
+        return pd.DataFrame(columns=["quarter", "dong_code", "adstrd_flpop"])
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +459,13 @@ def _impute_missing(
             lambda x: x.interpolate(method="linear", limit_direction="both")
         )
         df["bus_flpop"] = df["bus_flpop"].fillna(0)
+
+    # 행정동 유동인구: 동별 선형 보간 후 0 대체
+    if "adstrd_flpop" in df.columns:
+        df["adstrd_flpop"] = df.groupby("dong_code")["adstrd_flpop"].transform(
+            lambda x: x.interpolate(method="linear", limit_direction="both")
+        )
+        df["adstrd_flpop"] = df["adstrd_flpop"].fillna(0)
 
     # 나머지 피처: fillna(0)
     if feature_cols is None:
@@ -581,6 +681,15 @@ def build_timeseries(
     except Exception:
         df["bus_flpop"] = 0.0
 
+    # 행정동 유동인구 피처 (seoul_adstrd_flpop.total_flpop — 서울 전체 동 커버)
+    flpop_df = load_adstrd_flpop(db_url=DB_URL)
+    if not flpop_df.empty and "quarter" in df.columns and "dong_code" in df.columns:
+        flpop_df["quarter"] = flpop_df["quarter"].astype(int)
+        df = df.merge(flpop_df, on=["quarter", "dong_code"], how="left")
+        df["adstrd_flpop"] = df["adstrd_flpop"].fillna(0).astype(float)
+    else:
+        df["adstrd_flpop"] = 0.0
+
     # 코로나 시기 가중치 (2020~2021 → 0.5, 나머지 → 1.0)
     if "quarter" in df.columns:
         year = df["quarter"] // 10
@@ -706,6 +815,10 @@ def prepare_dataloaders(
         - csv_path : str
         - target_col : str (default: 'monthly_sales')
         - feature_cols : list[str]
+        - sales_csv_override : str or Path
+            지정 시 DB 무시하고 이 CSV를 매출 소스로 사용 (imputation 비교용).
+        - train_cutoff_quarter : int, optional
+            지정 시 quarter >= cutoff인 row를 학습/검증에서 제외 (데이터 누수 방어).
 
     Returns
     -------
@@ -724,10 +837,38 @@ def prepare_dataloaders(
     target_col = config.get("target_col", "monthly_sales")
     feature_cols = config.get("feature_cols", None)
     csv_path = config.get("csv_path", None)
+    sales_csv_override = config.get("sales_csv_override", None)
 
     # 데이터 로드
-    sales_df = load_sales_data(db_url=db_url, csv_path=csv_path, dong_prefix=dong_prefix)
+    sales_df = load_sales_data(
+        db_url=db_url,
+        csv_path=csv_path,
+        dong_prefix=dong_prefix,
+        sales_csv_override=sales_csv_override,
+    )
     store_df = load_store_data(db_url=db_url, dong_prefix=dong_prefix)
+
+    # train_cutoff_quarter 적용 — 데이터 누수 방어 (백테스트 평가 연도 차단)
+    train_cutoff_quarter = config.get("train_cutoff_quarter", None)
+    if train_cutoff_quarter is not None and "quarter" in sales_df.columns:
+        cutoff = int(train_cutoff_quarter)
+        before_sales = len(sales_df)
+        sales_df = sales_df[sales_df["quarter"] < cutoff].copy()
+        logger.info(
+            "train_cutoff_quarter=%s 적용 (sales_df): %d → %d rows",
+            cutoff,
+            before_sales,
+            len(sales_df),
+        )
+        if "quarter" in store_df.columns:
+            before_store = len(store_df)
+            store_df = store_df[store_df["quarter"] < cutoff].copy()
+            logger.info(
+                "train_cutoff_quarter=%s 적용 (store_df): %d → %d rows",
+                cutoff,
+                before_store,
+                len(store_df),
+            )
 
     # 시계열 구성
     ts = build_timeseries(sales_df, store_df, feature_cols)
