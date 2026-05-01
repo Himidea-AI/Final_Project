@@ -133,6 +133,67 @@ def compute_directional_accuracy(q0: np.ndarray, pred: np.ndarray, true: np.ndar
 
 
 # ---------------------------------------------------------------------------
+# 이상치 / structural break 탐지
+# ---------------------------------------------------------------------------
+
+
+def detect_anomaly_combos(
+    ts: pd.DataFrame,
+    valid_combos: list[tuple[str, str]],
+    z_threshold: float = 2.5,
+) -> dict[tuple[str, str], dict]:
+    """val 4분기에서 조합별 이상(outlier/structural_break) 탐지.
+
+    각 조합의 train 통계(μ, σ) 기반 z-score를 계산해:
+    - |z| > z_threshold 이탈이 1개 분기만  → outlier
+    - |z| > z_threshold 이탈이 2개 이상 연속 → structural_break
+
+    Returns:
+        이상 조합만 포함한 dict.
+        키: (dong_code, industry_code)
+        값: {'type': str, 'quarters': list[int], 'z_scores': list[float]}
+    """
+    train_ts, val_ts = split_train_val(ts)
+    result = {}
+
+    for dong, ind in valid_combos:
+        train_g = train_ts[
+            (train_ts["dong_code"] == dong) & (train_ts["industry_code"] == ind)
+        ]["monthly_sales"].apply(np.expm1)
+        val_g = val_ts[
+            (val_ts["dong_code"] == dong) & (val_ts["industry_code"] == ind)
+        ].sort_values("quarter")
+
+        mu = float(train_g.mean())
+        sigma = float(train_g.std(ddof=1))
+        if sigma == 0 or np.isnan(sigma):
+            continue
+
+        val_vals = np.expm1(val_g["monthly_sales"].values[:4])
+        val_qs   = val_g["quarter"].values[:4].tolist()
+        z_scores = [(float(v) - mu) / sigma for v in val_vals]
+
+        anomaly_idx = [i for i, z in enumerate(z_scores) if abs(z) > z_threshold]
+        if not anomaly_idx:
+            continue
+
+        # 연속 여부 확인
+        consecutive = len(anomaly_idx) >= 2 and all(
+            anomaly_idx[i + 1] - anomaly_idx[i] == 1
+            for i in range(len(anomaly_idx) - 1)
+        )
+        anom_type = "structural_break" if consecutive else "outlier"
+
+        result[(dong, ind)] = {
+            "type": anom_type,
+            "quarters": [val_qs[i] for i in anomaly_idx],
+            "z_scores": [round(z_scores[i], 2) for i in anomaly_idx],
+        }
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # val 데이터 분리 / 유효 조합 필터링
 # ---------------------------------------------------------------------------
 
@@ -224,6 +285,8 @@ def _generate_report(
     reports_dir: Path,
     residual_std: list[float] | None,
     warn_combos: list[tuple[str, str, float]],
+    anomaly_map: dict | None = None,
+    n_anomaly: int = 0,
     training_config: dict | None = None,
 ) -> Path:
     """마크다운 리포트 생성 후 파일 경로 반환."""
@@ -254,7 +317,7 @@ def _generate_report(
         f"v1 가중치: {v1_weights_name}  ",
         f"v2 가중치: {v2_weights_name}  ",
         "val 기간: 2024Q1~2024Q4 (quarter >= 20241)  ",
-        f"평가 조합 수: {n_combos}개\n",
+        f"평가 조합 수: {n_combos}개 (이상 조합 {n_anomaly}개 제외)\n",
         "---\n",
     ]
 
@@ -329,6 +392,36 @@ def _generate_report(
             lines.append(f"| {dong} | {ind} | {mape_val:.1f}% |")
         lines.append("\n---\n")
 
+    if anomaly_map:
+        sb = [(k, v) for k, v in anomaly_map.items() if v["type"] == "structural_break"]
+        ol = [(k, v) for k, v in anomaly_map.items() if v["type"] == "outlier"]
+        lines += [
+            "## 5. 이상 조합 — 평가 제외 목록 (z-score > 2.5)\n",
+        ]
+        if sb:
+            lines += [
+                "### Structural Break (2분기 이상 연속 이탈)\n",
+                "| 동코드 | 업종코드 | 이탈 분기 | z-score |",
+                "|---|---|---|---|",
+            ]
+            for (dong, ind), info in sb:
+                lines.append(
+                    f"| {dong} | {ind} | {info['quarters']} | {info['z_scores']} |"
+                )
+            lines.append("")
+        if ol:
+            lines += [
+                "### Outlier (1분기만 이탈)\n",
+                "| 동코드 | 업종코드 | 이탈 분기 | z-score |",
+                "|---|---|---|---|",
+            ]
+            for (dong, ind), info in ol:
+                lines.append(
+                    f"| {dong} | {ind} | {info['quarters']} | {info['z_scores']} |"
+                )
+            lines.append("")
+        lines.append("---\n")
+
     v2_wins = sum([metrics_v2["mape"] < metrics_v1["mape"], metrics_v2["da"] > metrics_v1["da"]])
     if v2_wins == 2:
         conclusion = "**채택 권장: v2 (DMS)**"
@@ -338,7 +431,7 @@ def _generate_report(
         conclusion = "**판단 필요: MAPE와 Directional Accuracy 결과가 엇갈립니다.**"
 
     lines += [
-        "## 5. 결론\n",
+        "## 6. 결론\n",
         conclusion,
         f"- MAPE: {metrics_v1['mape']:.1f}% → {metrics_v2['mape']:.1f}%",
         f"- Directional Accuracy: {metrics_v1['da']:.1f}% → {metrics_v2['da']:.1f}%",
@@ -433,9 +526,22 @@ def run_evaluation(
             pq_mape=compute_per_quarter_mape(preds, trues),
         )
 
+    # 이상치 / structural break 탐지 → 평가에서 제외
+    anomaly_map = detect_anomaly_combos(ts, valid_combos)
+    clean_idx = [i for i, c in enumerate(valid_combos) if c not in anomaly_map]
+    clean_combos = [valid_combos[i] for i in clean_idx]
+    logger.info("이상 조합: %d개 (outlier/structural_break) → 평가 제외", len(anomaly_map))
+
+    preds_v1_clean = preds_v1[clean_idx]
+    trues_v1_clean = trues_v1[clean_idx]
+    q0s_v1_clean   = q0s_v1[clean_idx]
+    preds_v2_clean = preds_v2[clean_idx]
+    trues_v2_clean = trues_v2[clean_idx]
+    q0s_v2_clean   = q0s_v2[clean_idx]
+
     warn_combos = []
-    for i, (dong, ind) in enumerate(valid_combos):
-        m = compute_mape(preds_v2[i], trues_v2[i])
+    for i, (dong, ind) in enumerate(clean_combos):
+        m = compute_mape(preds_v2_clean[i], trues_v2_clean[i])
         if not np.isnan(m) and m > 30:
             warn_combos.append((dong, ind, m))
 
@@ -482,14 +588,16 @@ def run_evaluation(
     }
 
     report_path = _generate_report(
-        metrics_v1=_metrics(preds_v1, trues_v1, q0s_v1),
-        metrics_v2=_metrics(preds_v2, trues_v2, q0s_v2),
+        metrics_v1=_metrics(preds_v1_clean, trues_v1_clean, q0s_v1_clean),
+        metrics_v2=_metrics(preds_v2_clean, trues_v2_clean, q0s_v2_clean),
         v1_weights_name=v1_weights.name,
         v2_weights_name=v2_weights.name,
-        n_combos=len(valid_combos),
+        n_combos=len(clean_combos),
+        n_anomaly=len(anomaly_map),
         reports_dir=REPORTS_DIR,
         residual_std=residual_std,
         warn_combos=warn_combos,
+        anomaly_map=anomaly_map,
         training_config=training_config,
     )
     logger.info("평가 리포트 저장: %s", report_path)

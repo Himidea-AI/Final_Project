@@ -373,3 +373,77 @@ def test_run_evaluation_report_contains_metrics(tmp_path, sample_ts):
     content = result.read_text(encoding="utf-8")
     assert "MAPE" in content
     assert "결론" in content
+
+
+# ---------------------------------------------------------------------------
+# detect_anomaly_combos 테스트
+# ---------------------------------------------------------------------------
+
+
+def _make_ts(dong, ind, train_sales, val_sales):
+    """조합 하나짜리 DataFrame 생성 헬퍼. 분기 코드 YYYYQ 형식 준수."""
+    def _gen_quarters(n, start_y=2019, start_q=1):
+        qs, y, q = [], start_y, start_q
+        for _ in range(n):
+            qs.append(y * 10 + q)
+            q += 1
+            if q > 4:
+                q = 1
+                y += 1
+        return qs
+
+    train_qs = _gen_quarters(len(train_sales), 2019, 1)
+    val_qs   = _gen_quarters(len(val_sales), 2024, 1)
+    rows = []
+    for q, s in zip(train_qs + val_qs, train_sales + val_sales):
+        rows.append({"dong_code": dong, "industry_code": ind,
+                     "quarter": q, "monthly_sales": np.log1p(s)})
+    return pd.DataFrame(rows)
+
+
+def test_detect_anomaly_normal():
+    """정상 조합 → anomaly 없음."""
+    from scripts.evaluate_model import detect_anomaly_combos
+    # 평균 1M, 표준편차 약 50K인 정상 데이터
+    rng = np.random.default_rng(42)
+    sales = list(1_000_000.0 + rng.normal(0, 50_000, 20))
+    val   = list(1_000_000.0 + rng.normal(0, 30_000, 4))
+    ts = _make_ts("1144010100", "CS100001", sales, val)
+    result = detect_anomaly_combos(ts, [("1144010100", "CS100001")])
+    assert result == {}
+
+
+def test_detect_anomaly_structural_break():
+    """val 2분기 이상 연속 급락 → structural_break."""
+    from scripts.evaluate_model import detect_anomaly_combos
+    rng = np.random.default_rng(42)
+    sales = list(1_000_000.0 + rng.normal(0, 50_000, 20))
+    val   = [100_000.0, 100_000.0, 100_000.0, 100_000.0]  # 급락 (z >> 2.5)
+    ts = _make_ts("1144010100", "CS100001", sales, val)
+    result = detect_anomaly_combos(ts, [("1144010100", "CS100001")])
+    assert ("1144010100", "CS100001") in result
+    assert result[("1144010100", "CS100001")]["type"] == "structural_break"
+
+
+def test_detect_anomaly_outlier():
+    """val 1분기만 급락 → outlier."""
+    from scripts.evaluate_model import detect_anomaly_combos
+    rng = np.random.default_rng(42)
+    sales = list(1_000_000.0 + rng.normal(0, 50_000, 20))
+    val   = [100_000.0, 1_000_000.0, 1_000_000.0, 1_000_000.0]  # Q1만 급락
+    ts = _make_ts("1144010100", "CS100001", sales, val)
+    result = detect_anomaly_combos(ts, [("1144010100", "CS100001")])
+    assert ("1144010100", "CS100001") in result
+    assert result[("1144010100", "CS100001")]["type"] == "outlier"
+
+
+def test_detect_anomaly_returns_affected_quarters():
+    """탐지 결과에 이탈 분기 목록 포함."""
+    from scripts.evaluate_model import detect_anomaly_combos
+    rng = np.random.default_rng(42)
+    sales = list(1_000_000.0 + rng.normal(0, 50_000, 20))
+    val   = [100_000.0, 100_000.0, 1_000_000.0, 1_000_000.0]
+    ts = _make_ts("1144010100", "CS100001", sales, val)
+    result = detect_anomaly_combos(ts, [("1144010100", "CS100001")])
+    assert "quarters" in result[("1144010100", "CS100001")]
+    assert len(result[("1144010100", "CS100001")]["quarters"]) == 2
