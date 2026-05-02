@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     multi_query_n: int = int(os.getenv("MULTI_QUERY_N", "3"))
     multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-4.1-mini")
 
+    # RAG 검색 trace — 각 search() 호출 단계별 후보/점수를 JSONL로 기록
+    # default OFF (성능 영향). RAG_TRACE_ENABLED=true 활성화.
+    rag_trace_enabled: bool = os.getenv("RAG_TRACE_ENABLED", "false").lower() == "true"
+    rag_trace_dir: str = os.getenv("RAG_TRACE_DIR", "validation/results/rag_trace")
+
     # 판례 RAG — specialist 평가 시 관련 판례 동시 검색 (default ON).
     # category='판례' 청크 (대법원 등) 를 검색하여 summary/recommendation 에 인용.
     legal_precedent_enabled: bool = (
