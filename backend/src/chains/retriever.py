@@ -266,11 +266,27 @@ SOURCE_TO_SHORT_MAP = {
 
 
 class LegalDocumentRetriever:
-    """법률 문서 검색기 — 하이브리드 RAG (벡터 + BM25 + RRF)"""
+    """법률 문서 검색기 — 하이브리드 RAG (벡터 + BM25 + RRF).
+
+    싱글톤: 매 specialist 호출마다 새 인스턴스 생성 시 BM25 인덱스가
+    매번 재구축되는 문제 차단 (구축 비용 ~30초). __new__ 기반 싱글톤 +
+    BM25 인덱스/문서 리스트는 인스턴스 변수로 1회 빌드 후 재사용.
+    """
+
+    _instance: "LegalDocumentRetriever | None" = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            inst = super().__new__(cls)
+            inst._db = LegalVectorDB()
+            inst._bm25_index = None
+            inst._bm25_docs = None  # type: ignore[attr-defined]
+            cls._instance = inst
+        return cls._instance
 
     def __init__(self):
-        self._db = LegalVectorDB()
-        self._bm25_index: dict | None = None  # 지연 초기화
+        # 싱글톤 — __new__ 에서 이미 _db / _bm25_index 초기화 완료. 추가 작업 불필요.
+        pass
 
     # ------------------------------------------------------------------
     # HyDE (Hypothetical Document Embeddings) — LLM 가상 조문 생성

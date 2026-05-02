@@ -423,6 +423,7 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
             ? {
                 type: LEGAL_TYPE_LABEL[selected.type] || selected.type,
                 risk_level: normalizeLevel(selected.risk_level),
+                summary: selected.detail,
                 articles: selected.articles,
                 checklist: selected.checklist,
                 recommendation: selected.recommendation,
