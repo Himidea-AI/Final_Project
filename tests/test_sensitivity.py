@@ -232,3 +232,47 @@ def test_sensitivity_endpoint_404_for_unknown_combo(monkeypatch, tmp_path):
 
     response = client.get("/predict/sensitivity?dong_code=99999999&industry_code=CS999999")
     assert response.status_code == 404
+
+
+def test_load_json_missing_file_logs_warning(tmp_path, caplog):
+    """존재하지 않는 경로 → 빈 dict 반환 + warning 로그."""
+    import logging
+    import sys
+    from pathlib import Path
+
+    _BACKEND = Path(__file__).resolve().parents[1] / "backend"
+    if str(_BACKEND) not in sys.path:
+        sys.path.insert(0, str(_BACKEND))
+
+    from src.api.sensitivity import _load_json
+
+    missing = tmp_path / "does_not_exist.json"
+    with caplog.at_level(logging.WARNING, logger="src.api.sensitivity"):
+        result = _load_json(missing)
+
+    assert result == {}
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
+    assert any("not found" in record.getMessage() for record in caplog.records)
+
+
+def test_load_json_invalid_json_logs_error(tmp_path, caplog):
+    """깨진 JSON 파일 → 빈 dict 반환 + error 로그."""
+    import logging
+    import sys
+    from pathlib import Path
+
+    _BACKEND = Path(__file__).resolve().parents[1] / "backend"
+    if str(_BACKEND) not in sys.path:
+        sys.path.insert(0, str(_BACKEND))
+
+    from src.api.sensitivity import _load_json
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not valid json", encoding="utf-8")
+
+    with caplog.at_level(logging.ERROR, logger="src.api.sensitivity"):
+        result = _load_json(broken)
+
+    assert result == {}
+    assert any(record.levelno == logging.ERROR for record in caplog.records)
+    assert any("Failed to parse" in record.getMessage() for record in caplog.records)

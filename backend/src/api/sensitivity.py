@@ -14,12 +14,15 @@ GET /predict/sensitivity — TCN 시나리오 시뮬레이터 탄성치 API
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/predict", tags=["sensitivity"])
 
@@ -34,9 +37,21 @@ _CORR_PATH = Path(os.environ.get("SENSITIVITY_CORR_PATH", str(_DEFAULT_CORR)))
 
 def _load_json(path: Path) -> dict:
     if not path.exists():
+        logger.warning(
+            "Sensitivity cache not found: %s — returning empty dict. Did you run the batch script?",
+            path,
+        )
         return {}
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError as exc:
+        logger.error(
+            "Failed to parse sensitivity cache %s: %s — returning empty dict",
+            path,
+            exc,
+        )
+        return {}
 
 
 # 모듈 로드 시점에 캐시 읽기 (FastAPI startup과 동일 시점)
