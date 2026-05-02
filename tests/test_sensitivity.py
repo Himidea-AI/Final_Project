@@ -139,3 +139,96 @@ def test_scale_quarter_value_standard_zero_std_returns_zero():
 
     result = _scale_quarter_value(scaler, quarter_idx=1, quarter_value=3)
     assert result == 0.0
+
+
+def test_sensitivity_endpoint_returns_correct_structure(monkeypatch, tmp_path):
+    """캐시 파일을 mock으로 주입하여 /predict/sensitivity 응답 구조를 검증."""
+    import json
+    import sys
+    from pathlib import Path
+
+    _BACKEND = Path(__file__).resolve().parents[1] / "backend"
+    if str(_BACKEND) not in sys.path:
+        sys.path.insert(0, str(_BACKEND))
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    mock_cache = {
+        "11440530_CS100001": {
+            "baseline": [15000000.0, 15500000.0, 16000000.0, 15800000.0],
+            "elasticity": {
+                "rent_1f": {"-30": -8.2, "-20": -5.1, "-10": -2.4, "0": 0.0, "+10": 2.6, "+20": 5.3, "+30": 8.1},
+                "vacancy_rate": {"-30": -3.1, "-20": -2.0, "-10": -1.0, "0": 0.0, "+10": 1.1, "+20": 2.2, "+30": 3.4},
+                "floating_pop": {"-30": -12.0, "-20": -8.0, "-10": -4.0, "0": 0.0, "+10": 4.1, "+20": 8.3, "+30": 12.5},
+                "trend_score": {"-30": -5.0, "-20": -3.3, "-10": -1.6, "0": 0.0, "+10": 1.7, "+20": 3.4, "+30": 5.2},
+                "quarter_num": {"Q1": -3.2, "Q2": 1.1, "Q3": 5.8, "Q4": -2.4},
+            },
+        }
+    }
+    mock_corr = {
+        "floating_pop→rent_1f": 0.63,
+        "floating_pop→vacancy_rate": -0.41,
+        "rent_1f→vacancy_rate": -0.38,
+    }
+
+    cache_file = tmp_path / "sensitivity_cache.json"
+    corr_file = tmp_path / "feature_correlations.json"
+    cache_file.write_text(json.dumps(mock_cache), encoding="utf-8")
+    corr_file.write_text(json.dumps(mock_corr), encoding="utf-8")
+
+    monkeypatch.setenv("SENSITIVITY_CACHE_PATH", str(cache_file))
+    monkeypatch.setenv("SENSITIVITY_CORR_PATH", str(corr_file))
+
+    import importlib
+
+    import src.api.sensitivity as sens_mod
+
+    importlib.reload(sens_mod)
+
+    app_test = FastAPI()
+    app_test.include_router(sens_mod.router)
+    client = TestClient(app_test)
+
+    response = client.get("/predict/sensitivity?dong_code=11440530&industry_code=CS100001")
+    assert response.status_code == 200
+    body = response.json()
+    assert "elasticity" in body
+    assert "correlations" in body
+    assert "baseline_sales" in body
+    assert len(body["baseline_sales"]) == 4
+    assert set(body["elasticity"].keys()) == {"rent_1f", "vacancy_rate", "floating_pop", "trend_score", "quarter_num"}
+
+
+def test_sensitivity_endpoint_404_for_unknown_combo(monkeypatch, tmp_path):
+    """캐시에 없는 조합 요청 시 404 반환."""
+    import sys
+    from pathlib import Path
+
+    _BACKEND = Path(__file__).resolve().parents[1] / "backend"
+    if str(_BACKEND) not in sys.path:
+        sys.path.insert(0, str(_BACKEND))
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    cache_file = tmp_path / "sensitivity_cache.json"
+    corr_file = tmp_path / "feature_correlations.json"
+    cache_file.write_text("{}", encoding="utf-8")
+    corr_file.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setenv("SENSITIVITY_CACHE_PATH", str(cache_file))
+    monkeypatch.setenv("SENSITIVITY_CORR_PATH", str(corr_file))
+
+    import importlib
+
+    import src.api.sensitivity as sens_mod
+
+    importlib.reload(sens_mod)
+
+    app_test = FastAPI()
+    app_test.include_router(sens_mod.router)
+    client = TestClient(app_test)
+
+    response = client.get("/predict/sensitivity?dong_code=99999999&industry_code=CS999999")
+    assert response.status_code == 404
