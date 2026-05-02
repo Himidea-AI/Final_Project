@@ -279,7 +279,7 @@ export interface LivingPopForecast {
 }
 
 /**
- * [E — emerging_district] 신흥 상권 조기 감지 (LSTM Autoencoder)
+ * [E — emerging_district] 상권 조기 감지 (LSTM Autoencoder)
  *
  * predict(dong_code, industry_code) 반환 EmergingResult dict.
  * threshold p95 = 0.041380 기준 anomaly_score 0~1 정규화.
@@ -366,7 +366,7 @@ export interface SimulationOutput {
   customer_segment?: CustomerSegment | null;
   // [D — living_pop_forecast] 유동인구 피크 시간 예측 (TCN)
   living_pop_forecast?: LivingPopForecast | null;
-  // [E — emerging_district] 신흥 상권 조기 감지 (LSTM Autoencoder)
+  // [E — emerging_district] 상권 조기 감지 (LSTM Autoencoder)
   emerging_signal?: EmergingSignal | null;
   // [synthesis.FinalStrategyResult] 종합 전략 리포트 — profit_simulation 포함
   final_report?: {
