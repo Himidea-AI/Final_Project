@@ -9,7 +9,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { ListChecks, Plus } from 'lucide-react';
 import type { SimulationOutput } from '../../../types';
 import { formatDocumentId } from '../../../types/simulationHistory';
 import { useSimulationStore } from '../../../stores/simulationStore';
@@ -23,6 +23,8 @@ interface Props {
   savedHistoryId?: number | null;
   /** 지정 시 카드 클릭 → onSelect(view) (button 모드). 미지정 시 Link 라우트 모드. */
   onSelect?: (view: HubView) => void;
+  /** 헤더 우측 "분석 조건" 버튼 클릭 핸들러. 미지정 시 버튼 hide. */
+  onShowConditions?: () => void;
 }
 
 const HUB_IMAGES = {
@@ -51,7 +53,13 @@ const BIZ_LABEL_MAP: Record<string, string> = {
   커피: '커피-음료',
 };
 
-export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }: Props) {
+export function DashboardHub({
+  simResult,
+  brandName,
+  savedHistoryId,
+  onSelect,
+  onShowConditions,
+}: Props) {
   const navigate = useNavigate();
   const docId = formatDocumentId(savedHistoryId ?? null);
   const createdAt = new Date().toLocaleDateString('ko-KR', {
@@ -139,6 +147,16 @@ export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }:
             </div>
             <div className="mt-1 text-[0.6875rem] font-mono text-muted-foreground">{createdAt}</div>
           </div>
+          {onShowConditions && (
+            <button
+              type="button"
+              onClick={onShowConditions}
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-sm font-bold tracking-wider text-foreground transition-all duration-200 hover:bg-secondary hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              <ListChecks className="h-4 w-4" strokeWidth={2.5} />
+              분석 조건
+            </button>
+          )}
           <button
             type="button"
             onClick={handleNewSimulation}

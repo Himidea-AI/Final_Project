@@ -20,7 +20,6 @@ import type {
   SimulationInput,
   SimulationOutput,
   JobStatus,
-  CustomerSegment,
   DistrictPredictionResult,
   AnalysisOutput,
 } from '../types';
@@ -159,6 +158,87 @@ export async function runAnalyzeLlm(
   return body as AnalysisOutput; // legacy raw fallback
 }
 
+/**
+ * Real-time progress 폴링 — /predict/async + /predict/{job_id}/status.
+ * onProgress(ratio: 0~1) 가 매 250ms 마다 호출됨. 완료 시 final data resolve.
+ *
+ * 백엔드가 동별 _predict_single_district 완료마다 progress 갱신 → 4동 시 25%/50%/75%/100%.
+ * 가짜 시간 추정 없음 — 실측 슬라이스 완료 비율 그대로.
+ */
+export async function runPredictPolling(
+  input: SimulationInput,
+  onProgress: (ratio: number, stage: string | null) => void,
+  signal?: AbortSignal,
+): Promise<DistrictPredictionResult[]> {
+  const startResp = await apiClient.post('/predict/async', input, { signal, timeout: 30_000 });
+  const jobId = startResp.data?.job_id;
+  if (!jobId) throw new Error(startResp.data?.message || 'Predict async start failed');
+
+  return pollJobUntilDone<DistrictPredictionResult[]>(
+    `/predict/${jobId}/status`,
+    onProgress,
+    signal,
+  );
+}
+
+/**
+ * Real-time progress 폴링 — /analyze/llm/async + /analyze/llm/{job_id}/status.
+ * 백엔드가 LangGraph 4 노드 완료마다 progress 갱신 → 25%/50%/75%/100%.
+ */
+export async function runAnalyzeLlmPolling(
+  input: SimulationInput,
+  onProgress: (ratio: number, stage: string | null) => void,
+  signal?: AbortSignal,
+): Promise<AnalysisOutput> {
+  const startResp = await apiClient.post('/analyze/llm/async', input, { signal, timeout: 30_000 });
+  const jobId = startResp.data?.job_id;
+  if (!jobId) throw new Error(startResp.data?.message || 'Analyze async start failed');
+
+  return pollJobUntilDone<AnalysisOutput>(`/analyze/llm/${jobId}/status`, onProgress, signal);
+}
+
+/**
+ * 공통 polling 루프 — 250ms 간격으로 status endpoint 조회.
+ * status='done' → data resolve, 'error' → reject, 'running' → onProgress 호출 후 계속.
+ * AbortSignal 가 abort 되면 polling 중단 + reject (axios cancellation 과 동일 시맨틱).
+ */
+async function pollJobUntilDone<T>(
+  statusUrl: string,
+  onProgress: (ratio: number, stage: string | null) => void,
+  signal?: AbortSignal,
+): Promise<T> {
+  const POLL_MS = 250;
+  // 600초 (10분) 안전 cap — 백엔드 timeout 보다 길어 무한 hang 방지.
+  const MAX_POLLS = (600 * 1000) / POLL_MS;
+
+  for (let i = 0; i < MAX_POLLS; i++) {
+    if (signal?.aborted) {
+      const e = new Error('aborted');
+      e.name = 'AbortError';
+      throw e;
+    }
+    let resp;
+    try {
+      resp = await apiClient.get(statusUrl, { signal, timeout: 10_000 });
+    } catch (err) {
+      // 일시적 네트워크 오류는 재시도. 단 abort 는 즉시 propagate.
+      if (signal?.aborted) throw err;
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      continue;
+    }
+    const body = resp.data;
+    const ratio = typeof body?.progress === 'number' ? body.progress : 0;
+    const stage = typeof body?.stage === 'string' ? body.stage : null;
+    onProgress(ratio, stage);
+
+    if (body?.status === 'done') return body.data as T;
+    if (body?.status === 'error') throw new Error(body.error || 'Job failed');
+
+    await new Promise((r) => setTimeout(r, POLL_MS));
+  }
+  throw new Error('Polling timeout — job 이 600초 안에 완료되지 않음');
+}
+
 /** 시뮬레이션 리포트 조회 */
 export async function getReport(requestId: string): Promise<SimulationOutput> {
   const response = await apiClient.get(`/report/${requestId}`);
@@ -175,30 +255,6 @@ export async function getStatus(jobId: string): Promise<JobStatus> {
 export async function getLivePopulation(dongs?: string[]): Promise<any> {
   const params = dongs ? `?dongs=${encodeURIComponent(dongs.join(','))}` : '';
   const response = await apiClient.get(`/population/live${params}`);
-  return response.data;
-}
-
-// ─────────────────────────────────────────────────────────
-// customer_segment — /simulate와 무관한 독립 호출 (~100ms MLP 미리보기)
-// ─────────────────────────────────────────────────────────
-
-export interface CustomerSegmentRequest {
-  target_district: string;
-  business_type: string;
-  target_age_groups: string[];
-  target_gender: 'male' | 'female' | null;
-  target_time_slots: string[];
-  target_day_type: 'weekday' | 'weekend' | null;
-  target_monthly_sales: number | null;
-  quarter_num?: number;
-}
-
-/** customer_revenue MLP 직접 호출 — /simulate와 무관, ~100ms */
-export async function fetchCustomerSegment(
-  req: CustomerSegmentRequest,
-  signal?: AbortSignal,
-): Promise<CustomerSegment> {
-  const response = await apiClient.post('/customer-segment', req, { signal });
   return response.data;
 }
 

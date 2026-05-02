@@ -21,7 +21,7 @@ const TABS: { id: PredictSubTab; label: string; icon: LucideIcon }[] = [
   { id: 'sales_forecast', label: '매출 예측', icon: TrendingUp },
   { id: 'financial_sim', label: '재무 시뮬레이션', icon: Gauge },
   { id: 'customer_flow', label: '고객·유동인구', icon: Users },
-  { id: 'emerging_district', label: '신흥상권 감지', icon: Sparkles },
+  { id: 'emerging_district', label: '상권 조기감지', icon: Sparkles },
   { id: 'scenario', label: '시나리오', icon: Sliders },
 ];
 
