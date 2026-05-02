@@ -90,28 +90,43 @@ async def run_legal_evaluation(
         ``len == 12`` 의 dict 리스트. 각 dict 는 ``type, level, summary, recommendation,
         articles`` 필드를 가지며 ``_RULE_ENGINE_ORDER`` 순서로 정렬됨.
     """
-    # 룰 8 개 — 동기 함수이므로 ``asyncio.to_thread`` 로 병렬화 (사실상 즉시 반환).
-    tasks = [
-        # --- 8 룰 ---
-        asyncio.to_thread(rules.rule_food_hygiene, business_type),
-        asyncio.to_thread(rules.rule_safety_regulation, business_type, store_area_pyeong),
-        asyncio.to_thread(rules.rule_fire_safety, business_type, store_area_pyeong),
-        asyncio.to_thread(rules.rule_accessibility, business_type, store_area_pyeong),
-        asyncio.to_thread(rules.rule_commercial_lease),
-        asyncio.to_thread(rules.rule_labor),
-        asyncio.to_thread(rules.rule_vat),
-        asyncio.to_thread(rules.rule_sewage, business_type),
-        # --- 4 specialist ---
+    # 룰 8 개 — 동기 pure-Python (~ms). asyncio.to_thread executor 점유 회피 위해
+    # 직접 호출 후 dict 로 수집 — 이벤트루프 블로킹 위험 없음.
+    rule_results: list[dict] = []
+    for fn, args in (
+        (rules.rule_food_hygiene, (business_type,)),
+        (rules.rule_safety_regulation, (business_type, store_area_pyeong)),
+        (rules.rule_fire_safety, (business_type, store_area_pyeong)),
+        (rules.rule_accessibility, (business_type, store_area_pyeong)),
+        (rules.rule_commercial_lease, ()),
+        (rules.rule_labor, ()),
+        (rules.rule_vat, ()),
+        (rules.rule_sewage, (business_type,)),
+    ):
+        try:
+            rule_results.append(fn(*args))
+        except Exception as e:
+            type_name = _RULE_ENGINE_ORDER[len(rule_results)]
+            rule_results.append(_fallback_for_type(type_name, e))
+
+    # specialist 4 개 — RAG + LLM (I/O bound) 병렬 실행
+    specialist_tasks = [
         specialists.specialist_franchise_law(brand, business_type, district, ftc_data),
         specialists.specialist_fair_trade_law(brand, business_type, district),
         specialists.specialist_building_law(business_type, district),
         specialists.specialist_privacy_law(brand, business_type, ftc_data),
     ]
-    # python -O 모드에서 assert 비활성화 — 명시적 raise 사용
-    if len(tasks) != len(_RULE_ENGINE_ORDER):
+
+    expected_total = len(rule_results) + len(specialist_tasks)
+    if expected_total != len(_RULE_ENGINE_ORDER):
         raise ValueError(
-            f"tasks/_RULE_ENGINE_ORDER 길이 불일치: {len(tasks)} vs {len(_RULE_ENGINE_ORDER)}"
+            f"rule + specialist 합계와 _RULE_ENGINE_ORDER 길이 불일치: "
+            f"{expected_total} vs {len(_RULE_ENGINE_ORDER)}"
         )
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    return [_to_risk_dict(r, idx) for idx, r in enumerate(results)]
+    specialist_results = await asyncio.gather(*specialist_tasks, return_exceptions=True)
+
+    return rule_results + [
+        _to_risk_dict(r, idx + len(rule_results))
+        for idx, r in enumerate(specialist_results)
+    ]

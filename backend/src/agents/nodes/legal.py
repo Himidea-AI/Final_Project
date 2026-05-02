@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 _ARTICLE_FULL_TEXT: dict[tuple[str, str], str] = {}
 _TOTAL_CHUNK_COUNT: int = 0  # chunks.json 로드 시 실제 청크 수 저장
 _CATEGORY_TO_SOURCES: dict[str, list[str]] = {}  # category → source 파일명 매핑
+# uvicorn 멀티 워커 + 첫 요청 동시 진입 시 chunks.json 중복 로드 방지
+_ARTICLE_INDEX_LOCK = __import__("threading").Lock()
 
 # 의무 조문 → 벌칙/과태료 조문 번호 매핑
 # key: (카테고리, 의무조문), value: (카테고리, 벌칙조문) 리스트
@@ -331,92 +333,98 @@ def _lookup_penalty(category: str, article: str) -> str | None:
 
 
 def _load_article_index() -> None:
-    """chunks.json을 읽어 조문별 전체 본문 인덱스를 구축합니다."""
+    """chunks.json을 읽어 조문별 전체 본문 인덱스를 구축합니다.
+
+    동시 첫 요청에서 중복 로드 + 부분 채워진 dict 노출을 막기 위해 lock 사용.
+    """
     global _ARTICLE_FULL_TEXT, _TOTAL_CHUNK_COUNT, _CATEGORY_TO_SOURCES
     if _ARTICLE_FULL_TEXT:
-        return  # 이미 로드됨
-    from pathlib import Path
+        return  # 이미 로드됨 (lock 외부 빠른 경로)
+    with _ARTICLE_INDEX_LOCK:
+        if _ARTICLE_FULL_TEXT:
+            return  # double-checked locking
+        from pathlib import Path
 
-    chunks_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "legal" / "processed" / "chunks.json"
-    if not chunks_path.exists():
-        logger.warning(f"[legal_node] chunks.json 없음: {chunks_path}")
-        return
-    with open(chunks_path, encoding="utf-8") as f:
-        chunks = json.load(f)
-    _TOTAL_CHUNK_COUNT = len(chunks)
+        chunks_path = (
+            Path(__file__).resolve().parent.parent.parent.parent
+            / "data"
+            / "legal"
+            / "processed"
+            / "chunks.json"
+        )
+        if not chunks_path.exists():
+            logger.warning(f"[legal_node] chunks.json 없음: {chunks_path}")
+            return
+        with open(chunks_path, encoding="utf-8") as f:
+            chunks = json.load(f)
+        _TOTAL_CHUNK_COUNT = len(chunks)
 
-    # category → source 파일명 매핑 구축
-    for c in chunks:
-        cat = c.get("metadata", {}).get("category", "")
-        src = c.get("metadata", {}).get("source", "")
-        if cat and src:
-            _CATEGORY_TO_SOURCES.setdefault(cat, [])
-            if src not in _CATEGORY_TO_SOURCES[cat]:
-                _CATEGORY_TO_SOURCES[cat].append(src)
+        # 이하 lock 보호 영역 — global state 변경
+        # category → source 파일명 매핑 구축
+        for c in chunks:
+            cat = c.get("metadata", {}).get("category", "")
+            src = c.get("metadata", {}).get("source", "")
+            if cat and src:
+                _CATEGORY_TO_SOURCES.setdefault(cat, [])
+                if src not in _CATEGORY_TO_SOURCES[cat]:
+                    _CATEGORY_TO_SOURCES[cat].append(src)
 
-    # (source, article) → [(chunk_id, text)] 그룹핑
-    grouped: dict[tuple[str, str], list[tuple[str, str]]] = {}
-    for c in chunks:
-        meta = c.get("metadata", {})
-        source = meta.get("source", "")
-        article = meta.get("article", "")
-        chunk_id = meta.get("chunk_id", "")
-        text = c.get("text", "")
-        if article and article not in ("전문", "미분류", "N/A") and text:
-            key = (source, article)
-            grouped.setdefault(key, []).append((chunk_id, text))
+        # (source, article) → [(chunk_id, text)] 그룹핑
+        grouped: dict[tuple[str, str], list[tuple[str, str]]] = {}
+        for c in chunks:
+            meta = c.get("metadata", {})
+            source = meta.get("source", "")
+            article = meta.get("article", "")
+            chunk_id = meta.get("chunk_id", "")
+            text = c.get("text", "")
+            if article and article not in ("전문", "미분류", "N/A") and text:
+                key = (source, article)
+                grouped.setdefault(key, []).append((chunk_id, text))
 
-    # 조문 본문 조립:
-    # 1) 모든 청크를 합친 뒤 "제N조(제목)" 위치를 찾아 거기부터 추출
-    # 2) 다음 조문 "제M조(" 이 나오면 거기서 자름
-    # → 목차, 연락처, 장 제목 등 쓰레기가 자동으로 제거됨
-    _next_art_pattern = re.compile(r"(?=제\d+조(?:의\d+)?\s*[\(（])")
-    _chapter_pattern = re.compile(r"\n제\d+장\s")
+        # 조문 본문 조립:
+        # 1) 모든 청크를 합친 뒤 "제N조(제목)" 위치를 찾아 거기부터 추출
+        # 2) 다음 조문 "제M조(" 이 나오면 거기서 자름
+        _next_art_pattern = re.compile(r"(?=제\d+조(?:의\d+)?\s*[\(（])")
+        _chapter_pattern = re.compile(r"\n제\d+장\s")
 
-    for key, pairs in grouped.items():
-        _, article = key
-        pairs.sort(key=lambda x: x[0])
-        raw = "\n".join(t for _, t in pairs)
+        for key, pairs in grouped.items():
+            _, article = key
+            pairs.sort(key=lambda x: x[0])
+            raw = "\n".join(t for _, t in pairs)
 
-        # "제N조(..." 또는 "제N조의M(..." 실제 조문 시작 위치 찾기
-        art_start_re = re.compile(rf"(?={re.escape(article)}\s*[\(（])")
-        match = art_start_re.search(raw)
-        if match:
-            text_from_article = raw[match.start() :]
-            # 본문에서 다음 조문 시작 위치 찾기 (자기 자신 제외)
-            all_matches = list(_next_art_pattern.finditer(text_from_article))
-            if len(all_matches) > 1:
-                # 두 번째 매치가 다음 조문의 시작
-                text_from_article = text_from_article[: all_matches[1].start()].strip()
-            # 조문 뒤에 나오는 노이즈 구분자에서 자르기
-            _noise_patterns = (
-                _chapter_pattern,  # 제N장
-                re.compile(r"\n제\d+편\s"),  # 제N편
-                re.compile(r"\n부칙[\s<]"),  # 부칙
-                re.compile(r"\n\[별표"),  # [별표
-                re.compile(r"\n[가-힣\s]+(?:법|령|규칙|법률)\s*$", re.MULTILINE),  # 법률 제목
-            )
-            for noise_pat in _noise_patterns:
-                noise_match = noise_pat.search(text_from_article)
-                if noise_match:
-                    text_from_article = text_from_article[: noise_match.start()].strip()
-            # 끝이 쉼표면 마지막 완전한 문장까지 자르기
-            if text_from_article.rstrip().endswith(","):
-                last_period = max(
-                    text_from_article.rfind("다."),
-                    text_from_article.rfind(")"),
-                    text_from_article.rfind("한다"),
-                    text_from_article.rfind("]"),
+            art_start_re = re.compile(rf"(?={re.escape(article)}\s*[\(（])")
+            match = art_start_re.search(raw)
+            if match:
+                text_from_article = raw[match.start() :]
+                all_matches = list(_next_art_pattern.finditer(text_from_article))
+                if len(all_matches) > 1:
+                    text_from_article = text_from_article[: all_matches[1].start()].strip()
+                _noise_patterns = (
+                    _chapter_pattern,
+                    re.compile(r"\n제\d+편\s"),
+                    re.compile(r"\n부칙[\s<]"),
+                    re.compile(r"\n\[별표"),
+                    re.compile(r"\n[가-힣\s]+(?:법|령|규칙|법률)\s*$", re.MULTILINE),
                 )
-                if last_period > len(text_from_article) * 0.5:
-                    text_from_article = text_from_article[: last_period + 1]
-            _ARTICLE_FULL_TEXT[key] = text_from_article
-        else:
-            # "제N조(" 패턴을 못 찾으면 가장 긴 청크 사용
-            longest = max(pairs, key=lambda x: len(x[1]))
-            _ARTICLE_FULL_TEXT[key] = longest[1]
+                for noise_pat in _noise_patterns:
+                    noise_match = noise_pat.search(text_from_article)
+                    if noise_match:
+                        text_from_article = text_from_article[: noise_match.start()].strip()
+                if text_from_article.rstrip().endswith(","):
+                    last_period = max(
+                        text_from_article.rfind("다."),
+                        text_from_article.rfind(")"),
+                        text_from_article.rfind("한다"),
+                        text_from_article.rfind("]"),
+                    )
+                    if last_period > len(text_from_article) * 0.5:
+                        text_from_article = text_from_article[: last_period + 1]
+                _ARTICLE_FULL_TEXT[key] = text_from_article
+            else:
+                longest = max(pairs, key=lambda x: len(x[1]))
+                _ARTICLE_FULL_TEXT[key] = longest[1]
 
-    logger.info(f"[legal_node] 조문 인덱스 로드 완료: {len(_ARTICLE_FULL_TEXT)}개 조문")
+        logger.info(f"[legal_node] 조문 인덱스 로드 완료: {len(_ARTICLE_FULL_TEXT)}개 조문")
 
 
 async def _search_ftc_from_db(brand_name: str) -> dict | None:

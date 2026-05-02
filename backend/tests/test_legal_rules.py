@@ -228,9 +228,16 @@ class TestSewage:
         assert r["level"] == "caution"
         assert "그리스트랩" in r["recommendation"] or "유분" in r["recommendation"]
 
-    def test_cafe_safe(self):
+    def test_cafe_caution(self):
+        # 카페(휴게음식점)도 식품위생법 시행규칙 별표 14 시설기준 적용
+        # 세척수·음료 잔여물 배출 → 배수설비 기준 검토 필요
         r = rule_sewage("cafe")
-        assert r["level"] == "safe"
+        assert r["level"] == "caution"
+        assert "휴게음식점" in r["summary"] or "별표 14" in r["recommendation"]
+
+    def test_coffee_korean_caution(self):
+        # "커피" 한글 입력도 카페 정규화 → caution
+        assert rule_sewage("커피")["level"] == "caution"
 
     def test_convenience_safe(self):
         r = rule_sewage("convenience")
