@@ -22,7 +22,13 @@ from src.agents.llms import get_fast_llm
 from src.agents.nodes._attribution_helpers import build_attribution
 from src.chains.prompts import LEGAL_AGENT_SYSTEM_PROMPT
 from src.chains.retriever import LegalDocumentRetriever
-from src.config.constants import BIZ_NORMALIZE, BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, ZONING_RULES
+from src.config.constants import (
+    BIZ_NORMALIZE,
+    BIZ_TYPE_LABEL,
+    DISTRICT_ZONE_MAP,
+    MAPO_DISTRICTS,
+    ZONING_RULES,
+)
 from src.config.settings import settings
 from src.schemas.state import AgentState
 from src.schemas.structured_output import LegalBatchOutput
@@ -1285,24 +1291,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 _ftc_hint = f"\n[브랜드 정보공개서] {_ftc_summary[:300]}\n"
 
         # SP6: 마포구 행정동 hint — 지역 조례 적용 trigger
-        _MAPO_DONGS = {
-            "공덕동",
-            "아현동",
-            "도화동",
-            "용강동",
-            "대흥동",
-            "염리동",
-            "신수동",
-            "서강동",
-            "서교동",
-            "합정동",
-            "망원동",
-            "연남동",
-            "성산동",
-            "상암동",
-            "중동",
-            "상수동",
-        }
+        # constants.MAPO_DISTRICTS 단일 소스 + 법정동 별칭 (specialists.py 와 일치)
+        # "중동"은 동작구 법정동이라 마포구 별칭에서 제외
+        _MAPO_DONGS = set(MAPO_DISTRICTS) | {"망원동", "성산동", "상수동"}
         _district_hint = ""
         if district in _MAPO_DONGS:
             _district_hint = (

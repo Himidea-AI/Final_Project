@@ -688,7 +688,9 @@ class LegalDocumentRetriever:
         """
         vs = self._db.vectorstore
         if vs is None:
-            print(f"[LegalDocumentRetriever] WARNING: vectorstore가 초기화되지 않아 '{query}' 검색을 건너뜁니다.")
+            logger.warning(
+                f"[LegalDocumentRetriever] vectorstore 초기화 실패 — '{query}' 검색 skip"
+            )
             return []
 
         # 0차: 하이브리드 HyDE 쿼리 확장 (사전 + LLM)
@@ -703,7 +705,7 @@ class LegalDocumentRetriever:
             try:
                 mq_variants = await _multi_expand(query, n=_settings.multi_query_n)
             except Exception as e:
-                print(f"[LegalDocumentRetriever] multi-query 실패 (무시): {e}")
+                logger.warning(f"[LegalDocumentRetriever] multi-query 실패 (무시): {e}")
 
         filter_dict = {"source": {"$in": source_filter}} if source_filter else None
 

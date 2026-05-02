@@ -1,9 +1,15 @@
 """specialist_franchise_law 영업지역 정량 룰 unit test.
 
-`_territory_to_level` 임계값 검증. RAG/LLM 의존성 없음.
+`_territory_to_level` 임계값 검증 + `_INDUSTRY_LABEL_MAP` 매핑.
+RAG/LLM 의존성 없음.
 """
 
-from src.agents.legal.specialists import _territory_to_level
+from src.agents.legal.specialists import (
+    _INDUSTRY_DEFAULT,
+    _INDUSTRY_LABEL_MAP,
+    _territory_to_level,
+)
+from src.config.constants import BIZ_NORMALIZE
 
 
 class TestTerritoryRule:
@@ -70,3 +76,54 @@ class TestTerritoryRule:
         }
         level, _ = _territory_to_level(t)
         assert level == "danger"
+
+
+class TestIndustryLabelMap:
+    """_analyze_territory 업종 → industry 라벨 동적 매핑.
+
+    BIZ_NORMALIZE → _INDUSTRY_LABEL_MAP → analyze_cannibalization industry.
+    """
+
+    def _resolve(self, business_type: str) -> str:
+        biz = BIZ_NORMALIZE.get((business_type or "").lower(), business_type or "")
+        return _INDUSTRY_LABEL_MAP.get(biz, _INDUSTRY_DEFAULT)
+
+    def test_cafe_english(self):
+        assert self._resolve("cafe") == "cafe"
+
+    def test_coffee_korean_normalizes_to_cafe(self):
+        # 사용자 신고: "커피"가 카페 매핑돼야 cannibalization 정확 산출
+        assert self._resolve("커피") == "cafe"
+
+    def test_restaurant_korean(self):
+        assert self._resolve("음식점") == "restaurant"
+
+    def test_korean_food_normalizes_to_restaurant(self):
+        for biz in ("한식", "중식", "일식", "분식", "치킨"):
+            assert self._resolve(biz) == "restaurant", f"{biz} → restaurant 기대"
+
+    def test_convenience(self):
+        assert self._resolve("편의점") == "convenience"
+
+    def test_unmapped_falls_back_to_default(self):
+        # BIZ_NORMALIZE 미등록 임의 입력 — cafe 강제 매핑되지 않아야 함
+        assert self._resolve("미용실") == _INDUSTRY_DEFAULT
+        assert self._resolve("스튜디오") == _INDUSTRY_DEFAULT
+
+
+class TestSafeFloorSkip:
+    """rule engine 경로에서 _SAFE_FLOOR 가 safety_regulation safe 를 보존."""
+
+    def test_convenience_large_area_stays_safe(self):
+        # 편의점 200평 → 다중이용업 미해당 → safety_regulation safe
+        from src.agents.legal.rules import rule_safety_regulation
+
+        r = rule_safety_regulation("convenience", 200.0)
+        assert r["level"] == "safe"
+        # rule engine 경로에서는 legal.py _SAFE_FLOOR skip 으로 caution 강제 안 됨
+
+    def test_cafe_small_area_safe(self):
+        from src.agents.legal.rules import rule_safety_regulation
+
+        r = rule_safety_regulation("cafe", 25.0)
+        assert r["level"] == "safe"

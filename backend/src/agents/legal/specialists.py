@@ -68,6 +68,8 @@ def _format_docs(docs: list[dict], max_per_doc: int = 400) -> str:
     lines: list[str] = []
     for i, d in enumerate(docs, 1):
         content = (d.get("content") or "")[:max_per_doc].replace("\n", " ").strip()
+        # 보안: 청크 내부에 prompt 구분자 패턴 있으면 prompt injection 위험 → 치환
+        content = content.replace("<<<", "«").replace(">>>", "»")
         meta = d.get("metadata") or {}
         article = meta.get("article", "")
         source = meta.get("source", "")
@@ -236,25 +238,35 @@ async def specialist_franchise_law(
 ) -> dict:
     """브랜드 정보공개서·영업지역·필수품목·허위과장 평가."""
     type_name = "franchise_law"
+    # 보안: prompt injection 방어 — user 입력 100자 제한
+    brand = (brand or "")[:100]
+    business_type = (business_type or "")[:100]
+    district = (district or "")[:100]
     retriever = LegalDocumentRetriever()
     query = (
         f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 "
         "허위과장 필수품목 카니발리제이션"
     )
     # RAG + 영업지역 정량 분석 병렬 (업종별 거리 감쇠 곡선 적용)
+    # return_exceptions=True — 한쪽 실패가 나머지 task DB 커넥션을 누수시키지 않도록 격리
     territory_task = _analyze_territory(brand, district, business_type)
-    try:
-        docs, territory = await asyncio.gather(
-            retriever.search(
-                query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES
-            ),
-            territory_task,
-            return_exceptions=False,
-        )
-    except Exception as e:
-        logger.warning(f"[specialist_franchise_law] RAG/territory 실패: {e}")
+    docs_raw, territory_raw = await asyncio.gather(
+        retriever.search(
+            query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES
+        ),
+        territory_task,
+        return_exceptions=True,
+    )
+    if isinstance(docs_raw, Exception):
+        logger.warning(f"[specialist_franchise_law] RAG 실패: {docs_raw}")
         docs = []
+    else:
+        docs = docs_raw or []
+    if isinstance(territory_raw, Exception):
+        logger.warning(f"[specialist_franchise_law] territory 실패: {territory_raw}")
         territory = {}
+    else:
+        territory = territory_raw or {}
 
     ftc_hint = _format_ftc_hint(ftc_data)
     rag_text = _format_docs(docs)
@@ -294,6 +306,7 @@ async def specialist_franchise_law(
         # 영업지역 정량 룰 floor — LLM 이 정량 데이터를 무시하고 낮은 level 로 평가하는
         # 케이스 차단. 룰이 산출한 floor 보다 LLM 이 더 높은 level 을 주면 LLM 그대로.
         # floor 강제 상향 시 summary/recommendation 에도 정량 근거 명시 (level↔텍스트 불일치 방지).
+        articles = _articles_from_docs(docs, max_n=3)
         if territory_floor:
             _ORDER = {"safe": 0, "caution": 1, "danger": 2}
             if _ORDER.get(result.level, 0) < _ORDER[territory_floor]:
@@ -304,7 +317,18 @@ async def specialist_franchise_law(
                     f"[근거: 가맹사업법 제12조의4 영업지역 침해 — {_hint_str}]\n"
                     + (result.recommendation or "")
                 )
-        articles = _articles_from_docs(docs, max_n=3)
+                # floor 발동 시 articles 에 제12조의4 prepend (level↔articles 일관성)
+                _territory_article = {
+                    "article_ref": "가맹사업법 제12조의4",
+                    "content": (
+                        "가맹본부는 정당한 사유 없이 가맹점사업자의 영업지역 안에서 "
+                        "동일 업종의 직영점/가맹점을 설치할 수 없다."
+                    ),
+                }
+                # 중복 방지
+                _existing_refs = {a.get("article_ref") for a in articles if isinstance(a, dict)}
+                if _territory_article["article_ref"] not in _existing_refs:
+                    articles = [_territory_article] + articles[:2]
         return _to_dict(result, articles)
     except Exception as e:
         logger.warning(f"[specialist_franchise_law] LLM 실패: {e}")
@@ -337,6 +361,10 @@ async def specialist_fair_trade_law(
 ) -> dict:
     """가맹본부 불공정거래 + 마포구 지역상권 상생협력 조례."""
     type_name = "fair_trade_law"
+    # 보안: prompt injection 방어
+    brand = (brand or "")[:100]
+    business_type = (business_type or "")[:100]
+    district = (district or "")[:100]
     is_mapo = district in _MAPO_DISTRICTS
 
     retriever = LegalDocumentRetriever()
@@ -430,6 +458,9 @@ async def specialist_fair_trade_law(
 async def specialist_building_law(business_type: str, district: str) -> dict:
     """용도지역 × 업종 × 용도변경 조합 평가."""
     type_name = "building_law"
+    # 보안: prompt injection 방어
+    business_type = (business_type or "")[:100]
+    district = (district or "")[:100]
     zone = DISTRICT_ZONE_MAP.get(district, "근린상업지역")
     biz_label = BIZ_TYPE_LABEL.get((business_type or "").lower(), business_type)
     rules = ZONING_RULES.get(zone, {"허용": [], "제한": []})
@@ -547,6 +578,9 @@ async def specialist_privacy_law(
 ) -> dict:
     """멤버십/CRM 운영 추정 + 처리방침/CCTV 의무."""
     type_name = "privacy_law"
+    # 보안: prompt injection 방어
+    brand = (brand or "")[:100]
+    business_type = (business_type or "")[:100]
     ftc_hint = _format_ftc_hint(ftc_data) or ""
 
     has_membership_keyword = any(
