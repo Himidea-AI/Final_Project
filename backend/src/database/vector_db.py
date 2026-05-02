@@ -6,11 +6,15 @@
 - PGVectorDBClient  : pgvector(PostgreSQL) 기반 (프로덕션 대체)
 """
 
+import logging
+
 from langchain_postgres.vectorstores import PGVector
 from langchain_huggingface import HuggingFaceEmbeddings
 from sqlalchemy.ext.asyncio import create_async_engine
 from src.config.settings import settings
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # 커넥션 풀 설정 — RDS max_connections=191 제약 고려
 # legal_node Phase 1 = RAG×13 + 판례×6 = 19 동시 검색 → 풀이 작으면 timeout 후 빈 결과 반환
@@ -68,7 +72,9 @@ class LegalVectorDB:
     def vectorstore(self):
         if self._vectorstore is None:
             if not settings.postgres_url:
-                print("[LegalVectorDB] WARNING: POSTGRES_URL이 설정되지 않아 RAG 검색을 사용할 수 없습니다.")
+                logger.warning(
+                    "[LegalVectorDB] POSTGRES_URL이 설정되지 않아 RAG 검색을 사용할 수 없습니다."
+                )
                 return None
             try:
                 conn_string = settings.postgres_url.replace("postgresql://", "postgresql+psycopg://", 1)
@@ -87,13 +93,15 @@ class LegalVectorDB:
                     use_jsonb=True,
                 )
             except Exception as e:
-                print(f"[LegalVectorDB] WARNING: PGVector 초기화 실패 - RAG 검색 불가 ({e})")
+                logger.warning(f"[LegalVectorDB] PGVector 초기화 실패 - RAG 검색 불가: {e}")
                 return None
         return self._vectorstore
 
     def get_total_count(self) -> int:
         if not settings.postgres_url:
-            print("[LegalVectorDB] WARNING: POSTGRES_URL이 설정되지 않아 count 조회를 건너뜁니다.")
+            logger.warning(
+                "[LegalVectorDB] POSTGRES_URL이 설정되지 않아 count 조회를 건너뜁니다."
+            )
             return 0
         try:
             import psycopg2

@@ -24,32 +24,25 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.llms import get_fast_llm
 from src.chains.retriever import LegalDocumentRetriever
-from src.config.constants import BIZ_TYPE_LABEL, DISTRICT_ZONE_MAP, ZONING_RULES
+from src.config.constants import (
+    BIZ_NORMALIZE,
+    BIZ_TYPE_LABEL,
+    DISTRICT_ZONE_MAP,
+    MAPO_DISTRICTS,
+    ZONING_RULES,
+)
 from src.schemas.structured_output import LegalRiskItem
 
 logger = logging.getLogger(__name__)
 
 
-# 마포구 16 행정동 — fair_trade_law specialist 가 지역 조례 hint 를 주는 데 사용
-_MAPO_DISTRICTS: set[str] = {
-    "공덕동",
-    "아현동",
-    "도화동",
-    "용강동",
-    "대흥동",
-    "염리동",
-    "신수동",
-    "서강동",
-    "서교동",
-    "합정동",
+# 마포구 16 행정동 + 법정동 별칭 — fair_trade_law specialist 가 지역 조례 hint 에 사용
+# constants.MAPO_DISTRICTS 단일 소스 + 법정동 별칭 추가 (망원동/성산동/상수동 등)
+_MAPO_DISTRICTS: set[str] = set(MAPO_DISTRICTS) | {
     "망원동",
-    "망원1동",
-    "망원2동",
-    "연남동",
     "성산동",
-    "상암동",
-    "중동",
     "상수동",
+    "중동",
 }
 
 
@@ -134,12 +127,23 @@ def _make_specialist_fallback(
 # ---------------------------------------------------------------------------
 
 
-async def _analyze_territory(brand: str, district: str) -> dict:
+# 업종 → analyze_cannibalization industry 라벨 매핑.
+# (commercial_intelligence._INDUSTRY_DISTANCE_DECAY 의 키와 일치해야 함)
+_INDUSTRY_LABEL_MAP = {
+    "카페": "cafe",
+    "음식점": "restaurant",
+    "편의점": "convenience",
+}
+
+
+async def _analyze_territory(brand: str, district: str, business_type: str) -> dict:
     """동일 브랜드 인접 매장 카운트 + 자기잠식률 계산.
 
     competitor_intel 노드와 동일 데이터 소스 (commercial_intelligence.analyze_cannibalization)
     이지만 legal_node 와 병렬 실행되므로 specialist 가 직접 재호출.
     Redis 캐시는 commercial_intelligence 내부에서 관리.
+
+    업종별 거리 감쇠 곡선이 다르므로 ``business_type`` 을 industry 인자로 정확히 전달.
 
     Returns:
         ``{"same_brand_500m", "same_brand_2000m", "closest_m", "impact_pct"}``
@@ -154,9 +158,12 @@ async def _analyze_territory(brand: str, district: str) -> dict:
         dong_code = await asyncio.to_thread(resolve_dong_code, district)
         if not dong_code:
             return {}
+        # 업종 정규화 후 industry 라벨 매핑 (default cafe)
+        biz_normalized = BIZ_NORMALIZE.get((business_type or "").lower(), business_type or "")
+        industry = _INDUSTRY_LABEL_MAP.get(biz_normalized, "cafe")
         # 2000m 까지 분석 — 500m bin 별 카운트는 결과의 distance_bins 에서 추출
         result = await asyncio.to_thread(
-            analyze_cannibalization, dong_code, brand, 2000, "neighborhood", "cafe"
+            analyze_cannibalization, dong_code, brand, 2000, "neighborhood", industry
         )
         if not result or "error" in result:
             return {}
@@ -204,7 +211,9 @@ def _territory_to_level(t: dict) -> tuple[str | None, str]:
         return "caution", hint + " — 인접 출점, 영업지역 협의 필요"
     if s2000 >= 3:
         return "caution", hint + " — 자기잠식 위험"
-    return None, hint
+    # 정량 임계값 미달 — LLM 이 hint 수치를 위험 신호로 과잉 해석하지 않도록
+    # "정량 임계값 미달 (참고용)" 맥락 명시
+    return None, hint + " — 정량 임계값 미달 (참고용, level 결정에 사용 안 함)"
 
 
 # ---------------------------------------------------------------------------
@@ -225,8 +234,8 @@ async def specialist_franchise_law(
         f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 "
         "허위과장 필수품목 카니발리제이션"
     )
-    # RAG + 영업지역 정량 분석 병렬
-    territory_task = _analyze_territory(brand, district)
+    # RAG + 영업지역 정량 분석 병렬 (업종별 거리 감쇠 곡선 적용)
+    territory_task = _analyze_territory(brand, district, business_type)
     try:
         docs, territory = await asyncio.gather(
             retriever.search(
@@ -277,10 +286,19 @@ async def specialist_franchise_law(
             result.type = type_name
         # 영업지역 정량 룰 floor — LLM 이 정량 데이터를 무시하고 낮은 level 로 평가하는
         # 케이스 차단. 룰이 산출한 floor 보다 LLM 이 더 높은 level 을 주면 LLM 그대로.
+        # floor 강제 상향 시 summary/recommendation 에도 정량 근거 명시 (level↔텍스트 불일치 방지).
         if territory_floor:
             _ORDER = {"safe": 0, "caution": 1, "danger": 2}
             if _ORDER.get(result.level, 0) < _ORDER[territory_floor]:
                 result.level = territory_floor
+                _floor_note = (
+                    f"[정량 분석 자동 상향: {territory_hint}] "
+                )
+                result.summary = _floor_note + (result.summary or "")
+                result.recommendation = (
+                    f"[근거: 가맹사업법 제12조의4 영업지역 침해 — {territory_hint}]\n"
+                    + (result.recommendation or "")
+                )
         articles = _articles_from_docs(docs, max_n=3)
         return _to_dict(result, articles)
     except Exception as e:
@@ -366,8 +384,17 @@ async def specialist_fair_trade_law(
         if result.type != type_name:
             result.type = type_name
         # 마포구인데 LLM 이 safe 로 반환하면 caution 으로 끌어올림
+        # 동시에 summary/recommendation 에 마포구 조례 근거 prepend (level↔텍스트 일관성)
         if is_mapo and result.level == "safe":
             result.level = "caution"
+            _mapo_note = "[마포구 지역상권 상생협력 조례 적용 — 자동 상향] "
+            result.summary = _mapo_note + (result.summary or "")
+            result.recommendation = (
+                "[근거: 마포구 지역상권 상생협력 조례 + 가맹사업법 제12조]\n"
+                "• 마포구청 상생협력상가위원회 사전 협의\n"
+                "• 골목상권 보호 영역 여부 확인\n"
+                + (result.recommendation or "")
+            )
         articles = _articles_from_docs(docs, max_n=3)
         return _to_dict(result, articles)
     except Exception as e:
@@ -452,8 +479,19 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
         if result.type != type_name:
             result.type = type_name
         # 제한 업종이면 LLM 결과와 무관하게 danger 검토 floor
+        # summary/recommendation 에도 용도지역 근거 prepend (level↔텍스트 일관성)
         if is_restricted and result.level == "safe":
             result.level = "danger"
+            _zone_note = (
+                f"[용도지역 제한 자동 상향: {district} {zone}에서 {biz_label} 영업 제한] "
+            )
+            result.summary = _zone_note + (result.summary or "")
+            result.recommendation = (
+                f"[근거: 건축법 제19조, 국토계획법 시행령 — {zone} 제한 업종]\n"
+                f"• 입지 변경 또는 용도변경 신고 (관할 구청 건축과)\n"
+                f"• 영업신고 전 건물 용도 확인 (건축물대장 발급)\n"
+                + (result.recommendation or "")
+            )
         articles = _articles_from_docs(docs, max_n=3)
         return _to_dict(result, articles)
     except Exception as e:

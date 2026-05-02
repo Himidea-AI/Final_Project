@@ -154,7 +154,8 @@ async def compress_docs_map(
     for (law_type, _), res in zip(docs_map.items(), results, strict=True):
         if isinstance(res, Exception):
             logger.warning(f"[chunk_compressor] {law_type} 예외: {res}")
-            compressed[law_type] = "압축 실패 — raw 청크 fallback"
+            # caller(legal.py)는 "해당 자료 없음" 키를 raw 청크 fallback 트리거로 사용
+            compressed[law_type] = "해당 자료 없음"
         else:
             compressed[law_type] = res
 

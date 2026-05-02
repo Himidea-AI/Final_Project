@@ -1426,6 +1426,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     # SP4: 의무 법률 안전망 — safe 진입만 차단 (caution까지). LLM의 caution/danger 판단은 그대로 신뢰.
     # 이전엔 _MUST_DANGER 5개를 강제 danger로 끌어올려 alert fatigue 발생.
+    # SP7: rule engine 경로에서는 8 룰이 결정적으로 safe 를 산출 (편의점 면적 미달 등)하므로
+    # _SAFE_FLOOR 후처리를 스킵 — 룰 결과를 신뢰. legacy(LLM batch) 경로에서만 적용.
     _SAFE_FLOOR = {
         "franchise_law",
         "commercial_lease_law",
@@ -1436,15 +1438,17 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "building_law",
         "fire_safety_law",
         "labor_law",
-        "safety_regulation",
+        # safety_regulation 제거: rule engine 에서 편의점/소면적은 결정적 safe.
+        # legacy 모드에서도 safe 진입은 룰 매칭 실패 케이스라 caution 강제는 false positive.
     }
-    for _r in risks:
-        if not isinstance(_r, dict):
-            continue
-        rtype = _r.get("type", "")
-        level = _r.get("level", "")
-        if rtype in _SAFE_FLOOR and level == "safe":
-            _r["level"] = "caution"
+    if not _rule_engine_used:
+        for _r in risks:
+            if not isinstance(_r, dict):
+                continue
+            rtype = _r.get("type", "")
+            level = _r.get("level", "")
+            if rtype in _SAFE_FLOOR and level == "safe":
+                _r["level"] = "caution"
 
     # 벌칙 조문 본문을 recommendation에 자동 추가
     _enrich_penalty_info(risks)
@@ -1492,7 +1496,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
             )
             logger.info(f"[legal_node] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
         elif _redis is not None:
-            logger.warning(f"[legal_node] articles 부족({_risks_with_articles}/14) - 캐시 저장 건너뜀 (RAG 실패 의심)")
+            logger.warning(
+                f"[legal_node] articles 부족({_risks_with_articles}/{len(risks)}) - 캐시 저장 건너뜀 (RAG 실패 의심)"
+            )
     except Exception as e:
         logger.warning(f"[legal_node] Redis 캐시 저장 실패 (무시하고 계속): {e}")
     finally:
