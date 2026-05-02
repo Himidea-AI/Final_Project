@@ -189,7 +189,6 @@ class DistrictPredictionResult(BaseModel):
     emerging_signal: dict | None = None
 
 
-
 # ---------------------------------------------------------------------------
 # IM3-259 — AI 분석 응답 스키마 (/analyze/llm)
 # ---------------------------------------------------------------------------
@@ -252,3 +251,10 @@ class AnalysisOutput(BaseModel):
     financial_report: dict = Field(default_factory=dict)
     analysis_metrics: dict = Field(default_factory=dict)
     map_data: MapData | None = None
+    # IM3-144 정합 (2026-05-02): SimulationOutput 에는 있지만 AnalysisOutput 누락이던 3 필드.
+    # main.py:941 의 schema 필터 (`AnalysisOutput.model_fields.keys()`) 가 이 필드를 응답에서
+    # 제거 → frontend 의 CustomerSegmentCard / LivingPopForecast / EmergingSignal 이 placeholder
+    # 로 표시되던 회귀 차단.
+    customer_segment: dict | None = None
+    living_pop_forecast: dict | None = None
+    emerging_signal: dict | None = None
