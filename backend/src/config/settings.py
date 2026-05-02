@@ -92,6 +92,13 @@ class Settings(BaseSettings):
     multi_query_n: int = int(os.getenv("MULTI_QUERY_N", "3"))
     multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-4.1-mini")
 
+    # 판례 RAG — specialist 평가 시 관련 판례 동시 검색 (default ON).
+    # category='판례' 청크 (대법원 등) 를 검색하여 summary/recommendation 에 인용.
+    legal_precedent_enabled: bool = (
+        os.getenv("LEGAL_PRECEDENT_ENABLED", "true").lower() == "true"
+    )
+    legal_precedent_top_k: int = int(os.getenv("LEGAL_PRECEDENT_TOP_K", "2"))
+
     # Legal Rule Engine — 8 룰 + 4 specialist 하이브리드 (2026-05-02).
     # 단일 모드로 전환 (legacy single-LLM batch 경로 제거). flag 자체는 호환을 위해 보존.
     # 스펙: docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md

@@ -1034,6 +1034,86 @@ class LegalDocumentRetriever:
 
         return [d for d, s in filtered[:top_k]]
 
+    async def search_precedents(
+        self,
+        query: str,
+        top_k: int = 3,
+    ) -> list[dict]:
+        """판례 카테고리만 검색 — ``metadata.category == '판례'`` 필터.
+
+        - 단순화: multi-query/HyDE 미사용 (판례는 키워드 직접 매칭이 더 정확).
+        - BM25 보조 매칭은 ``category=='판례'`` 청크에 한정해서 결합.
+        - 실패 시 빈 리스트 반환 (graceful degradation).
+
+        Returns:
+            list[dict]: ``[{"content", "metadata"}]`` (top_k 이내).
+        """
+        vs = self._db.vectorstore
+        if vs is None:
+            logger.warning(f"[search_precedents] vectorstore 미초기화 — '{query}' skip")
+            return []
+
+        # 1차: 벡터 유사도 (PGVector JSONB 메타데이터 필터)
+        filter_dict = {"category": {"$eq": "판례"}}
+        try:
+            docs_with_score = await vs.asimilarity_search_with_relevance_scores(
+                query, k=top_k * 3, filter=filter_dict
+            )
+        except Exception as e:
+            msg = str(e)
+            if "connection" in msg.lower() or "ssl" in msg.lower():
+                logger.warning(f"[search_precedents] 1회 재시도 (transient): {type(e).__name__}")
+                try:
+                    docs_with_score = await vs.asimilarity_search_with_relevance_scores(
+                        query, k=top_k * 3, filter=filter_dict
+                    )
+                except Exception as e2:
+                    logger.warning(f"[search_precedents] 재시도 실패: {e2}")
+                    return []
+            else:
+                logger.warning(f"[search_precedents] 벡터 검색 실패: {e}")
+                return []
+
+        vector_results = [
+            {
+                "content": doc.page_content,
+                "metadata": {**doc.metadata, "relevance": round(score, 4)},
+            }
+            for doc, score in docs_with_score
+            if score >= self.RELEVANCE_THRESHOLD
+        ]
+
+        # 2차: BM25 — 판례 청크만 대상으로 필터 (메모리 인덱스에서 category 필터링).
+        try:
+            self._build_bm25_index()
+        except Exception as e:
+            logger.warning(f"[search_precedents] BM25 index 구축 실패: {e}")
+
+        bm25_ranked: list[tuple[int, float]] = []
+        if self._bm25_index and hasattr(self, "_bm25_docs"):
+            # 전체 BM25 후 category 필터 (인덱스 분리는 비용 대비 이득 적음).
+            raw = self._bm25_search(query, source_filter=None, top_k=top_k * 5)
+            bm25_ranked = [
+                (idx, sc)
+                for idx, sc in raw
+                if (self._bm25_docs[idx][1] or {}).get("category") == "판례"
+            ][: top_k * 2]
+
+        # 3차: RRF 결합
+        if bm25_ranked:
+            merged = self._rrf_merge(
+                vector_results,
+                bm25_ranked,
+                self._bm25_docs,
+                k=self._RRF_K,
+                vector_w=self._VECTOR_WEIGHT,
+                bm25_w=self._BM25_WEIGHT,
+            )
+        else:
+            merged = vector_results
+
+        return merged[:top_k]
+
     async def ingest_from_json(self, json_path: str | Path) -> int:
         """
         processed/chunks.json을 읽어 pgvector에 일괄 적재
