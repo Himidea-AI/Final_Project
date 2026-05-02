@@ -33,4 +33,27 @@ describe('LegalDrawer', () => {
     render(<LegalDrawer risk={mockRisk} open={false} onClose={() => {}} />);
     expect(screen.queryByText('가맹사업법')).not.toBeInTheDocument();
   });
+
+  it('체크박스 토글 가능 + localStorage 영속화', () => {
+    window.localStorage.clear();
+    render(<LegalDrawer risk={mockRisk} open={true} onClose={() => {}} />);
+    const cb = screen.getByLabelText('정보공개서 수령') as HTMLInputElement;
+    expect(cb.disabled).toBe(false);
+    expect(cb.checked).toBe(false);
+    fireEvent.click(cb);
+    expect(cb.checked).toBe(true);
+    const stored = window.localStorage.getItem('legal-checklist-v1:가맹사업법');
+    expect(stored).toBeTruthy();
+    expect(stored).toContain('정보공개서 수령');
+  });
+
+  it('재오픈 시 저장된 체크 상태 복원', () => {
+    window.localStorage.setItem(
+      'legal-checklist-v1:가맹사업법',
+      JSON.stringify({ '0:정보공개서 수령': true }),
+    );
+    render(<LegalDrawer risk={mockRisk} open={true} onClose={() => {}} />);
+    const cb = screen.getByLabelText('정보공개서 수령') as HTMLInputElement;
+    expect(cb.checked).toBe(true);
+  });
 });

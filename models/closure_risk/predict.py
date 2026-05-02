@@ -99,6 +99,7 @@ def _load_models() -> tuple:
             _cache["scaler"],
             _cache.get("stage1"),
             _cache.get("calibrator"),
+            _cache.get("b3_lookup"),
         )
 
     lgbm_path = WEIGHTS_DIR / "closure_risk_lgbm.pkl"
@@ -158,6 +159,18 @@ def _load_models() -> tuple:
             logger.warning("calibrator pkl load 실패 — raw proba 사용: %s", e)
             calibrator = None
 
+    # Sprint 9 (2026-05-01): B-3 dong residual lookup — graceful fallback
+    b3_path = WEIGHTS_DIR / "b3_dong_residual_lookup.pkl"
+    b3_lookup = None
+    if b3_path.exists():
+        try:
+            with open(b3_path, "rb") as f:
+                b3_lookup = pickle.load(f)  # noqa: S301
+            logger.info("B-3 dong residual lookup 로드: %s", b3_path)
+        except Exception as e:
+            logger.warning("B-3 lookup pkl load 실패 — residual=0 fallback: %s", e)
+            b3_lookup = None
+
     _cache.update(
         {
             "lgbm": lgbm,
@@ -166,9 +179,10 @@ def _load_models() -> tuple:
             "scaler": tcn_scaler,
             "stage1": stage1_data,
             "calibrator": calibrator,
+            "b3_lookup": b3_lookup,
         }
     )
-    return lgbm, tcn, ensemble_w, tcn_scaler, stage1_data, calibrator
+    return lgbm, tcn, ensemble_w, tcn_scaler, stage1_data, calibrator, b3_lookup
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +470,7 @@ def predict(
     window_size = 4
 
     try:
-        lgbm_model, tcn_model, ensemble_w, tcn_scaler, stage1_data, calibrator = _load_models()
+        lgbm_model, tcn_model, ensemble_w, tcn_scaler, stage1_data, calibrator, b3_lookup = _load_models()
     except FileNotFoundError as e:
         logger.warning("모델 없음 — mock 반환: %s", e)
         return _mock_result()
@@ -506,10 +520,21 @@ def predict(
                 X_stage1 = matching[STAGE1_FEATURES].fillna(0).values
                 industry_prior_pred = float(stage1_data["model"].predict(X_stage1)[0])
 
-    x_lgbm = np.array(
-        [latest.get(f, 0.0) if f != "industry_prior_pred" else industry_prior_pred for f in LGBM_FEATURES],
-        dtype=np.float32,
-    )
+    # Sprint 9 (2026-05-01): B-3 dong residual lookup at inference
+    dong_residual_lag1 = 0.0
+    if b3_lookup is not None:
+        ind_mean = b3_lookup.get("industry_mean_lag1", {}).get(industry_code, b3_lookup.get("global_mean_lag1", 0.0))
+        closure_lag1 = float(latest.get("closure_rate_lag1", 0.0) or 0.0)
+        dong_residual_lag1 = closure_lag1 - ind_mean
+
+    def _feature_value(f: str) -> float:
+        if f == "industry_prior_pred":
+            return industry_prior_pred
+        if f == "dong_closure_rate_residual_lag1":
+            return dong_residual_lag1
+        return float(latest.get(f, 0.0) or 0.0)
+
+    x_lgbm = np.array([_feature_value(f) for f in LGBM_FEATURES], dtype=np.float32)
     p_lgbm = float(lgbm_model.predict_proba(x_lgbm.reshape(1, -1))[0, 1])
 
     # --- TCN 브랜치 ---

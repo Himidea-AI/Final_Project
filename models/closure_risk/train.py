@@ -52,11 +52,14 @@ DEFAULT_CONFIG: dict = {
     "n_channels": 128,
     "kernel_size": 2,
     "dilations": [1, 2],
-    "dropout": 0.2,
+    "dropout": 0.2,  # sprint 10 시도 0.3 → rollback (test AUC -0.0001 noise)
     # LightGBM
-    "lgbm_num_leaves": 31,
-    "lgbm_n_estimators": 200,
+    "lgbm_num_leaves": 31,  # sprint 11 시도 15 → rollback (test AUC -0.017)
+    "lgbm_n_estimators": 200,  # sprint 12 시도 100 → rollback (test AUC -0.0006 noise)
     "lgbm_learning_rate": 0.05,
+    # LGBM regularization (2026-05-01 sprint 8) — overfit 차단 시도
+    "lgbm_reg_alpha": 0.1,  # L1 (sparse)
+    "lgbm_reg_lambda": 0.1,  # L2 (smooth)
     # D-3 isotonic calibration (default False) — 2026-05-01 retrain 시 test AUC -0.038
     # degradation + threshold collapse (danger==caution) 로 rollback. 코드는 보존되어 미래
     # 변형 (Platt scaling, CV calibration 등) 또는 데이터 추가 후 재시도 가능.
@@ -133,6 +136,8 @@ def train_lgbm(X_train: np.ndarray, y_train: np.ndarray, config: dict) -> object
         num_leaves=config["lgbm_num_leaves"],
         n_estimators=config["lgbm_n_estimators"],
         learning_rate=config["lgbm_learning_rate"],
+        reg_alpha=config.get("lgbm_reg_alpha", 0.0),  # L1 정규화 (sprint 8)
+        reg_lambda=config.get("lgbm_reg_lambda", 0.0),  # L2 정규화 (sprint 8)
         scale_pos_weight=scale_pos_weight,  # 클래스 불균형 처리
         random_state=config["random_state"],
         verbose=-1,
@@ -437,6 +442,22 @@ def train(config: dict | None = None) -> None:
             "B-3 dong residual 추가. range=[%.4f, %.4f]",
             float(df_labeled["dong_closure_rate_residual_lag1"].min()),
             float(df_labeled["dong_closure_rate_residual_lag1"].max()),
+        )
+
+        # Sprint 9 (2026-05-01): B-3 expansion — industry mean lookup pkl 저장 (predict.py production fit)
+        train_df_for_residual = df_labeled[df_labeled["quarter"].isin(train_quarters)]
+        b3_lookup = {
+            "industry_mean_lag1": train_df_for_residual.groupby("industry_code")["closure_rate_lag1"].mean().to_dict(),
+            "global_mean_lag1": float(train_df_for_residual["closure_rate_lag1"].mean()),
+        }
+        b3_path = WEIGHTS_DIR / "b3_dong_residual_lookup.pkl"
+        with open(b3_path, "wb") as f:
+            pickle.dump(b3_lookup, f)
+        logger.info(
+            "B-3 lookup 저장: %s (industries=%d, global_mean=%.4f)",
+            b3_path,
+            len(b3_lookup["industry_mean_lag1"]),
+            b3_lookup["global_mean_lag1"],
         )
     else:
         logger.info("B-3 dong residual disabled (cfg.enable_b3_dong_residual=False)")
