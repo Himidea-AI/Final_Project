@@ -24,7 +24,7 @@ export function TrendDriversRisks({ drivers, risks }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {/* 드라이버 */}
-      <div className="rounded-2xl border border-success/20 bg-success/5 p-4">
+      <div className="rounded-2xl border border-success/20 bg-success/10 p-4">
         <div className="flex items-center gap-1.5 mb-2.5">
           <Sparkles size={12} className="text-success" />
           <span className="text-[0.625rem] font-black uppercase tracking-widest text-success">
@@ -49,7 +49,7 @@ export function TrendDriversRisks({ drivers, risks }: Props) {
       </div>
 
       {/* 리스크 */}
-      <div className="rounded-2xl border border-danger/20 bg-danger/5 p-4">
+      <div className="rounded-2xl border border-danger/20 bg-danger/10 p-4">
         <div className="flex items-center gap-1.5 mb-2.5">
           <AlertTriangle size={12} className="text-danger" />
           <span className="text-[0.625rem] font-black uppercase tracking-widest text-danger">

@@ -168,6 +168,7 @@ export interface TrendForecast {
     dong_name?: string;
     recent_score?: number | null;
     slope_pct?: number | null;
+    max_quarter?: string | null;
     samples?: number[]; // 분기별 점수
     data_staleness_note?: string;
   };
@@ -541,6 +542,7 @@ export type PredictSubTab =
   | 'sales_forecast'
   | 'financial_sim'
   | 'customer_flow'
-  | 'emerging_district';
+  | 'emerging_district'
+  | 'scenario';
 
 export type AnalyzeSubTab = 'ai_summary' | 'market' | 'demographic' | 'legal' | 'agent_insight';

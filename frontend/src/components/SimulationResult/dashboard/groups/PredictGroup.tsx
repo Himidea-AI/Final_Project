@@ -7,7 +7,7 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { TrendingUp, Gauge, Users, Sparkles, type LucideIcon } from 'lucide-react';
+import { TrendingUp, Gauge, Users, Sparkles, Sliders, type LucideIcon } from 'lucide-react';
 import type { SimulationOutput, PredictSubTab } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { GooeyFilter } from '../../../ui/GooeyFilter';
@@ -15,12 +15,14 @@ import { PredictSalesForecastTab } from '../sub/predict/PredictSalesForecastTab'
 import { PredictFinancialSimTab } from '../sub/predict/PredictFinancialSimTab';
 import { PredictCustomerFlowTab } from '../sub/predict/PredictCustomerFlowTab';
 import { PredictEmergingDistrictTab } from '../sub/predict/PredictEmergingDistrictTab';
+import { PredictScenarioSimTab } from '../sub/predict/PredictScenarioSimTab';
 
 const TABS: { id: PredictSubTab; label: string; icon: LucideIcon }[] = [
   { id: 'sales_forecast', label: '매출 예측', icon: TrendingUp },
   { id: 'financial_sim', label: '재무 시뮬레이션', icon: Gauge },
   { id: 'customer_flow', label: '고객·유동인구', icon: Users },
   { id: 'emerging_district', label: '신흥상권 감지', icon: Sparkles },
+  { id: 'scenario', label: '시나리오', icon: Sliders },
 ];
 
 const GOO_FILTER_ID = 'predict-tab-goo';
@@ -35,6 +37,7 @@ const VALID: PredictSubTab[] = [
   'financial_sim',
   'customer_flow',
   'emerging_district',
+  'scenario',
 ];
 
 export function PredictGroup({ simResult, openModal }: Props) {
@@ -140,6 +143,7 @@ export function PredictGroup({ simResult, openModal }: Props) {
                 {activeSub === 'emerging_district' && (
                   <PredictEmergingDistrictTab simResult={simResult} />
                 )}
+                {activeSub === 'scenario' && <PredictScenarioSimTab simResult={simResult} />}
               </motion.div>
             </AnimatePresence>
           </div>
