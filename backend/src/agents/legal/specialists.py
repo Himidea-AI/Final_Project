@@ -17,6 +17,7 @@ RAG + 작은 LLM 으로 평가. 각 specialist 는 ``async`` 함수로 ``dict`` 
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -129,6 +130,84 @@ def _make_specialist_fallback(
 
 
 # ---------------------------------------------------------------------------
+# 영업지역 침해 정량 분석 (가맹사업법 제12조의4)
+# ---------------------------------------------------------------------------
+
+
+async def _analyze_territory(brand: str, district: str) -> dict:
+    """동일 브랜드 인접 매장 카운트 + 자기잠식률 계산.
+
+    competitor_intel 노드와 동일 데이터 소스 (commercial_intelligence.analyze_cannibalization)
+    이지만 legal_node 와 병렬 실행되므로 specialist 가 직접 재호출.
+    Redis 캐시는 commercial_intelligence 내부에서 관리.
+
+    Returns:
+        ``{"same_brand_500m", "same_brand_2000m", "closest_m", "impact_pct"}``
+        또는 ``{}`` (자료 없음/오류).
+    """
+    if not brand or not district:
+        return {}
+    try:
+        from src.services.commercial_intelligence import analyze_cannibalization
+        from src.services.dong_resolver import resolve_dong_code
+
+        dong_code = await asyncio.to_thread(resolve_dong_code, district)
+        if not dong_code:
+            return {}
+        # 2000m 까지 분석 — 500m bin 별 카운트는 결과의 distance_bins 에서 추출
+        result = await asyncio.to_thread(
+            analyze_cannibalization, dong_code, brand, 2000, "neighborhood", "cafe"
+        )
+        if not result or "error" in result:
+            return {}
+        bins = result.get("distance_bins", {})
+        same_brand_500m = bins.get("0-300m", 0) + bins.get("300-500m", 0)
+        return {
+            "same_brand_500m": same_brand_500m,
+            "same_brand_2000m": result.get("same_brand_nearby", 0),
+            "closest_m": result.get("closest_distance_m"),
+            "impact_pct": result.get("estimated_revenue_impact_pct", 0.0),
+        }
+    except Exception as e:
+        logger.warning(f"[_analyze_territory] 실패 brand={brand} district={district}: {e}")
+        return {}
+
+
+def _territory_to_level(t: dict) -> tuple[str | None, str]:
+    """영업지역 침해 정량 룰 → (level_floor, hint).
+
+    가맹사업법 제12조의4: 가맹본부의 동일 업종 직영점/가맹점 인접 출점 금지.
+
+    임계값:
+    - 500m 내 동일 브랜드 ≥1 + 자기잠식률 ≤ -5% → danger
+    - 500m 내 동일 브랜드 ≥1                    → caution
+    - 2000m 내 동일 브랜드 ≥3                    → caution
+    - 그 외                                      → None (LLM 자유 판단)
+    """
+    if not t:
+        return None, ""
+    s500 = t.get("same_brand_500m", 0)
+    s2000 = t.get("same_brand_2000m", 0)
+    closest = t.get("closest_m")
+    impact = t.get("impact_pct", 0.0)
+
+    closest_str = f"{closest:.0f}m" if closest is not None else "N/A"
+    hint = (
+        f"500m 내 동일 브랜드 매장: {s500}개 / "
+        f"2km 내: {s2000}개 / 최근접: {closest_str} / "
+        f"자기잠식률: {impact * 100:.1f}%"
+    )
+
+    if s500 >= 1 and impact <= -0.05:
+        return "danger", hint + " — 가맹사업법 제12조의4 인접 출점 강력 의심"
+    if s500 >= 1:
+        return "caution", hint + " — 인접 출점, 영업지역 협의 필요"
+    if s2000 >= 3:
+        return "caution", hint + " — 자기잠식 위험"
+    return None, hint
+
+
+# ---------------------------------------------------------------------------
 # 1. specialist_franchise_law — 가맹사업법
 # ---------------------------------------------------------------------------
 
@@ -146,31 +225,43 @@ async def specialist_franchise_law(
         f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 "
         "허위과장 필수품목 카니발리제이션"
     )
+    # RAG + 영업지역 정량 분석 병렬
+    territory_task = _analyze_territory(brand, district)
     try:
-        docs = await retriever.search(
-            query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES
+        docs, territory = await asyncio.gather(
+            retriever.search(
+                query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES
+            ),
+            territory_task,
+            return_exceptions=False,
         )
     except Exception as e:
-        logger.warning(f"[specialist_franchise_law] RAG 실패: {e}")
+        logger.warning(f"[specialist_franchise_law] RAG/territory 실패: {e}")
         docs = []
+        territory = {}
 
     ftc_hint = _format_ftc_hint(ftc_data)
     rag_text = _format_docs(docs)
+    territory_floor, territory_hint = _territory_to_level(territory)
 
     user_content = (
         f"브랜드: {brand}\n"
         f"업종: {business_type}\n"
         f"지역: {district}\n"
-        f"FTC 정보공개서: {ftc_hint or '없음'}\n\n"
+        f"FTC 정보공개서: {ftc_hint or '없음'}\n"
+        f"영업지역 분석: {territory_hint or '자료 없음'}\n\n"
         "[평가 기준]\n"
         "- 폐점률 ≥20% → danger 검토\n"
         "- 폐점률 ≥10% → caution\n"
+        "- 500m 내 동일 브랜드 1개 이상 + 자기잠식률 ≤-5% → danger (제12조의4 인접 출점)\n"
+        "- 500m 내 동일 브랜드 1개 이상 → caution (영업지역 협의 필요)\n"
         "- 영업지역 침해(제12조의4)/허위과장(제9조)/필수품목 구입강제(제12조) → danger 후보\n"
         "- 신규 브랜드/직영 → safe~caution\n\n"
         "<<<RAG_CONTEXT>>>\n"
         f"{rag_text}\n"
         "<<<END_RAG_CONTEXT>>>\n\n"
-        f"위 자료를 근거로 type='{type_name}' LegalRiskItem 1 개를 반환하세요."
+        f"위 자료를 근거로 type='{type_name}' LegalRiskItem 1 개를 반환하세요. "
+        "summary 와 recommendation 에 영업지역 분석 수치(N개/거리/잠식률)를 인용하세요."
     )
 
     try:
@@ -184,6 +275,12 @@ async def specialist_franchise_law(
         # type 강제 보정 (LLM 이 다른 type 으로 반환할 위험 차단)
         if result.type != type_name:
             result.type = type_name
+        # 영업지역 정량 룰 floor — LLM 이 정량 데이터를 무시하고 낮은 level 로 평가하는
+        # 케이스 차단. 룰이 산출한 floor 보다 LLM 이 더 높은 level 을 주면 LLM 그대로.
+        if territory_floor:
+            _ORDER = {"safe": 0, "caution": 1, "danger": 2}
+            if _ORDER.get(result.level, 0) < _ORDER[territory_floor]:
+                result.level = territory_floor
         articles = _articles_from_docs(docs, max_n=3)
         return _to_dict(result, articles)
     except Exception as e:
