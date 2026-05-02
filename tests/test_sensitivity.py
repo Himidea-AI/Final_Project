@@ -261,3 +261,77 @@ def test_load_json_invalid_json_logs_error(tmp_path, caplog):
     assert result == {}
     assert any(record.levelno == logging.ERROR for record in caplog.records)
     assert any("Failed to parse" in record.getMessage() for record in caplog.records)
+
+
+def _make_etag_test_client(monkeypatch, tmp_path):
+    """ETag 테스트용 TestClient + 캐시 파일 경로 반환."""
+    import json
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    mock_cache = {
+        "11440530_CS100001": {
+            "baseline": [1000.0, 1000.0, 1000.0, 1000.0],
+            "elasticity": {
+                "rent_1f": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
+                "vacancy_rate": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
+                "floating_pop": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
+                "trend_score": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
+                "quarter_num": {"Q1": 0.0, "Q2": 0.0, "Q3": 0.0, "Q4": 0.0},
+            },
+        }
+    }
+    cache_file = tmp_path / "sensitivity_cache.json"
+    corr_file = tmp_path / "feature_correlations.json"
+    cache_file.write_text(json.dumps(mock_cache), encoding="utf-8")
+    corr_file.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setenv("SENSITIVITY_CACHE_PATH", str(cache_file))
+    monkeypatch.setenv("SENSITIVITY_CORR_PATH", str(corr_file))
+
+    import importlib
+
+    import src.api.sensitivity as sens_mod
+
+    importlib.reload(sens_mod)
+
+    app_test = FastAPI()
+    app_test.include_router(sens_mod.router)
+    return TestClient(app_test), cache_file
+
+
+def test_sensitivity_endpoint_returns_etag_header(monkeypatch, tmp_path):
+    """200 응답에 ETag + Cache-Control 헤더가 설정되어야 한다."""
+    client, _ = _make_etag_test_client(monkeypatch, tmp_path)
+    response = client.get("/predict/sensitivity?dong_code=11440530&industry_code=CS100001")
+    assert response.status_code == 200
+    assert "etag" in {k.lower() for k in response.headers}
+    assert response.headers["etag"].startswith('"') and response.headers["etag"].endswith('"')
+    assert "must-revalidate" in response.headers.get("cache-control", "")
+
+
+def test_sensitivity_endpoint_returns_304_on_etag_match(monkeypatch, tmp_path):
+    """If-None-Match가 현재 ETag와 일치하면 304 + 빈 본문."""
+    client, _ = _make_etag_test_client(monkeypatch, tmp_path)
+    first = client.get("/predict/sensitivity?dong_code=11440530&industry_code=CS100001")
+    etag = first.headers["etag"]
+
+    second = client.get(
+        "/predict/sensitivity?dong_code=11440530&industry_code=CS100001",
+        headers={"If-None-Match": etag},
+    )
+    assert second.status_code == 304
+    assert second.headers["etag"] == etag
+    assert second.content == b""
+
+
+def test_sensitivity_endpoint_returns_200_on_etag_mismatch(monkeypatch, tmp_path):
+    """If-None-Match가 다른 값이면 200으로 본문 반환."""
+    client, _ = _make_etag_test_client(monkeypatch, tmp_path)
+    response = client.get(
+        "/predict/sensitivity?dong_code=11440530&industry_code=CS100001",
+        headers={"If-None-Match": '"stale-etag-value"'},
+    )
+    assert response.status_code == 200
+    assert "elasticity" in response.json()
