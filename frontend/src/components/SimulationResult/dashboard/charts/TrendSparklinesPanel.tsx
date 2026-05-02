@@ -1,13 +1,13 @@
 /**
- * TrendSparklinesPanel — 거시·트렌드 환경 (3 Sparkline + KPI)
+ * TrendSparklinesPanel — 거시·트렌드 환경 (3 KPI 카드)
  *
- * 데이터: trend_forecast.industry_trend.samples / dong_trend.samples / macro.samples
- * 디자인: 3-column bento grid, 각 셀에 헤더 + 현재값 + 변화 + Sparkline
- * Best practice: KPI 숫자는 큰 글씨, 변화율 ± 색상, sparkline은 보조 시각
+ * 데이터: trend_forecast.industry_trend / dong_trend / macro
+ * 디자인: 3-column bento grid, 각 셀에 헤더 + 현재값 + 변화 + valueDescription
+ * 2026-05-02: sparkline 제거(가독성 개선), 동 검색량에 16동 중 N위 표시,
+ *             하단 통합 캡션 제거(셀별 valueDescription 으로 충분).
  */
 
 import { TrendingUp, MapPin, Landmark, AlertTriangle } from 'lucide-react';
-import { Sparkline } from './Sparkline';
 
 interface Props {
   industryTrend?: {
@@ -26,6 +26,8 @@ interface Props {
     samples?: number[];
     data_staleness_note?: string;
   } | null;
+  /** 마포 16동 중 winner 동의 trend_score 기준 순위 (district_rankings 에서 계산). */
+  dongRank?: { rank: number; total: number } | null;
   macro?: {
     current_base_rate?: number | null;
     base_rate_trend?: string;
@@ -39,16 +41,15 @@ interface CellProps {
   subLabel?: string;
   value: string | null;
   unit?: string;
+  /** 큰 숫자 바로 아래 작은 글씨로 표시되는 데이터 정의. */
+  valueDescription?: string;
   delta?: number | null;
   deltaUnit?: string;
   /** delta 색 의미 반전 — 거시 지표(예: 금리 인상=부정)에 사용. 기본 false. */
   deltaInverted?: boolean;
   /** delta > 0 일 때 옆에 작게 표시할 의미 캡션 (예: '↑ 부담↑'). 너무 길면 패스. */
   deltaCaption?: string;
-  samples?: number[];
   stalenessNote?: string;
-  /** 스크린리더용 sparkline 설명 (예: "동 트렌드 8분기 추이") */
-  sparklineAriaLabel?: string;
 }
 
 function TrendCell({
@@ -57,13 +58,12 @@ function TrendCell({
   subLabel,
   value,
   unit,
+  valueDescription,
   delta,
   deltaUnit,
   deltaInverted = false,
   deltaCaption,
-  samples,
   stalenessNote,
-  sparklineAriaLabel,
 }: CellProps) {
   const deltaPositive = delta != null && delta > 0;
   // 기본: +값=success(성장), -값=danger(하락).
@@ -82,7 +82,7 @@ function TrendCell({
           : 'text-muted-foreground';
 
   return (
-    <div className="rounded-2xl border border-border bg-secondary p-4 flex flex-col gap-2 min-h-[180px]">
+    <div className="rounded-2xl border border-border bg-secondary p-4 flex flex-col gap-2 min-h-[140px]">
       <div className="flex items-center gap-2">
         {icon}
         <div className="flex-1 min-w-0">
@@ -114,19 +114,13 @@ function TrendCell({
           </span>
         )}
       </div>
-      <div
-        className="mt-1 -mx-1 h-8"
-        role="img"
-        aria-label={sparklineAriaLabel ?? `${label} 시계열`}
-      >
-        {samples && samples.length > 1 ? (
-          <Sparkline data={samples} height={32} />
-        ) : (
-          <span className="text-xs text-muted-foreground">시계열 데이터 부족</span>
-        )}
-      </div>
+      {valueDescription && (
+        <div className="text-[0.625rem] leading-snug text-muted-foreground -mt-1">
+          {valueDescription}
+        </div>
+      )}
       {stalenessNote && (
-        <div className="flex items-center gap-1.5 rounded-md bg-warning/10 border border-warning/20 px-2 py-1 mt-1">
+        <div className="flex items-center gap-1.5 rounded-md bg-warning/10 border border-warning/20 px-2 py-1 mt-auto">
           <AlertTriangle size={11} className="text-warning shrink-0" />
           <span className="text-xs text-warning leading-snug">{stalenessNote}</span>
         </div>
@@ -135,7 +129,7 @@ function TrendCell({
   );
 }
 
-export function TrendSparklinesPanel({ industryTrend, dongTrend, macro }: Props) {
+export function TrendSparklinesPanel({ industryTrend, dongTrend, dongRank, macro }: Props) {
   const hasAny =
     (industryTrend?.samples && industryTrend.samples.length > 0) ||
     (dongTrend?.samples && dongTrend.samples.length > 0) ||
@@ -154,54 +148,52 @@ export function TrendSparklinesPanel({ industryTrend, dongTrend, macro }: Props)
       ? macro.samples[macro.samples.length - 1] - macro.samples[0]
       : null;
 
+  // 동 검색량 valueDescription 을 N위 정보와 합쳐 동적 생성.
+  // 데이터 출처가 NAVER 분기별 평균 (각 동 자체 시계열 max=100 기준) 이므로
+  // 동 간 직접 비교는 의미 제한적 — N위 라벨이 그 한계를 보완.
+  const dongValueDesc = dongRank
+    ? `마포 ${dongRank.total}동 중 ${dongRank.rank}위 · NAVER 분기별 검색량 평균`
+    : 'NAVER 분기별 검색량 평균 · 동 키워드별 자체 시계열 최댓값=100 기준';
+
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
-        <TrendCell
-          icon={<TrendingUp size={16} className="text-chart-1" />}
-          label="업종 트렌드"
-          subLabel={industryTrend?.industry ?? '—'}
-          value={
-            industryTrend?.current_ratio != null
-              ? Math.round(industryTrend.current_ratio).toString()
-              : null
-          }
-          unit="/100"
-          delta={industryTrend?.yoy_change_pct ?? null}
-          deltaUnit="%"
-          samples={industryTrend?.samples}
-          sparklineAriaLabel={`업종 트렌드 ${industryTrend?.samples?.length ?? 0}개월 추이`}
-        />
-        <TrendCell
-          icon={<MapPin size={16} className="text-chart-3" />}
-          label="동 트렌드"
-          subLabel={dongTrend?.dong_name ?? '—'}
-          value={formatScore(dongTrend?.recent_score)}
-          unit="/100"
-          delta={dongTrend?.slope_pct ?? null}
-          deltaUnit="%"
-          samples={dongTrend?.samples}
-          stalenessNote={dongTrend?.data_staleness_note}
-          sparklineAriaLabel={`동 트렌드 ${dongTrend?.samples?.length ?? 0}분기 추이`}
-        />
-        <TrendCell
-          icon={<Landmark size={16} className="text-chart-4" />}
-          label="한국은행 기준금리"
-          subLabel={macro?.base_rate_trend ?? '—'}
-          value={macro?.current_base_rate != null ? macro.current_base_rate.toFixed(2) : null}
-          unit="%"
-          delta={macroDelta}
-          deltaUnit="%p"
-          deltaInverted
-          deltaCaption="부담↑"
-          samples={macro?.samples}
-          sparklineAriaLabel={`기준금리 ${macro?.samples?.length ?? 0}개월 추이`}
-        />
-      </div>
-      <p className="text-[0.6875rem] text-muted-foreground leading-relaxed">
-        업종/동 트렌드 = naver 검색 기반 0~100 지수. 변동률(%) = YoY/기간 시작 대비. 기준금리
-        변동(%p) = 절대 변화(퍼센트포인트).
-      </p>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
+      <TrendCell
+        icon={<TrendingUp size={16} className="text-chart-1" />}
+        label="업종 검색량 추이"
+        subLabel={industryTrend?.industry ?? '—'}
+        value={
+          industryTrend?.current_ratio != null
+            ? Math.round(industryTrend.current_ratio).toString()
+            : null
+        }
+        unit="/100"
+        valueDescription="NAVER DataLab · 24개월 중 최댓값=100 기준 · 최근 월값"
+        delta={industryTrend?.yoy_change_pct ?? null}
+        deltaUnit="%"
+      />
+      <TrendCell
+        icon={<MapPin size={16} className="text-chart-3" />}
+        label="동 검색량 추이"
+        subLabel={dongTrend?.dong_name ?? '—'}
+        value={formatScore(dongTrend?.recent_score)}
+        unit="/100"
+        valueDescription={dongValueDesc}
+        delta={dongTrend?.slope_pct ?? null}
+        deltaUnit="%"
+        stalenessNote={dongTrend?.data_staleness_note}
+      />
+      <TrendCell
+        icon={<Landmark size={16} className="text-chart-4" />}
+        label="한국은행 기준금리"
+        subLabel={macro?.base_rate_trend ?? '—'}
+        value={macro?.current_base_rate != null ? macro.current_base_rate.toFixed(2) : null}
+        unit="%"
+        valueDescription="ECOS API · 월별 기준금리 · 인상 시 창업 자금 부담 ↑"
+        delta={macroDelta}
+        deltaUnit="%p"
+        deltaInverted
+        deltaCaption="부담↑"
+      />
     </div>
   );
 }
