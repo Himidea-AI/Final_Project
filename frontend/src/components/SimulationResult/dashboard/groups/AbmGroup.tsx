@@ -1,6 +1,7 @@
 /**
  * AbmGroup — ABM 시뮬레이터 (단일, /vacancy_evaluation 독립)
- * 기존 AbmTab 그대로 wrapping. 서브탭 없음.
+ * AnalyzeGroup 과 동일 패턴: page(white) → panel(cool gray bg-secondary) → card(white) 퐁당퐁당.
+ * 서브탭 없으므로 Gooey filter / pill 없이 panel 만 적용.
  */
 
 import type { SimulationOutput } from '../../../../types';
@@ -14,5 +15,9 @@ interface Props {
 }
 
 export function AbmGroup({ simResult, brandName, businessType }: Props) {
-  return <AbmTab simResult={simResult} brandName={brandName} businessType={businessType} />;
+  return (
+    <div className="rounded-3xl bg-secondary p-4 sm:p-6">
+      <AbmTab simResult={simResult} brandName={brandName} businessType={businessType} />
+    </div>
+  );
 }

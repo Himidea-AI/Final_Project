@@ -1520,13 +1520,14 @@ export default function AbmPersonaMap({
       }
       ctx.clearRect(0, 0, W, H);
 
-      // 전체 canvas fill — 외부도 내부도 동일 흰색.
+      // 전체 canvas fill — 외부도 내부도 cool gray (slate-100 #f1f5f9).
+      // alpha 1.0 — 카카오맵 비침 차단해 analyze panel bg-secondary 와 정확히 동일 색.
       if (
         hexGridRef.current.length > 0 &&
         densityGridRef.current &&
         trajectoryPathsRef.current.size > 0
       ) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.97)';
+        ctx.fillStyle = '#f1f5f9';
         ctx.fillRect(0, 0, W, H);
       }
 
@@ -2342,8 +2343,8 @@ export default function AbmPersonaMap({
   const timeLabel = `${String((Math.floor(elapsedMin / 60) + 8) % 24).padStart(2, '0')}:${String(elapsedMin % 60).padStart(2, '0')}`;
 
   return (
-    <div className="flex-1 w-full h-full min-h-[88vh] mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-6">
-      <div className="flex-1 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
+    <div className="flex-1 w-full mt-4 relative animate-in zoom-in-95 fade-in duration-500 flex flex-col pb-3">
+      <div className="flex-1 bg-secondary border border-border rounded-2xl overflow-hidden shadow-2xl flex flex-col relative">
         {/* 헤더 — AI 에이전트 맵과 동일 스타일 */}
         <div className="h-14 bg-muted/90 backdrop-blur-md border-b border-border flex justify-between items-center px-6 shrink-0 z-10">
           <h3 className="text-sm font-black text-foreground flex items-center gap-3">
@@ -2392,10 +2393,10 @@ export default function AbmPersonaMap({
           </div>
         </div>
 
-        {/* 좌우 분할 — 지도 (좌, 75%) + 결과 패널 (우, 25%) */}
-        <div className="flex-1 flex flex-row min-h-0">
-          {/* 맵 + 캔버스 오버레이 레이어 — 좌측 */}
-          <div className="flex-[3] relative min-w-0">
+        {/* 좌(제너럴 패널 풀높이) + 우(상 지도 3/4 · 하 결과 1/4) 그리드 */}
+        <div className="flex-1 grid grid-cols-[380px_1fr] grid-rows-[3fr_1fr] gap-2 min-h-[820px] p-2">
+          {/* 맵 + 캔버스 오버레이 레이어 — 우상 (col 2, row 1) */}
+          <div className="col-start-2 row-start-1 relative min-w-0 min-h-[420px] rounded-2xl overflow-hidden border border-border">
             {/* KakaoMap 베이스 레이어 */}
             <div ref={mapContainerRef} className="absolute inset-0" />
             {/* S-2: API 키 없으면 mock 대신 안내 UI로 명시 */}
@@ -2639,10 +2640,158 @@ export default function AbmPersonaMap({
               </div>
             )}
           </div>
-          {/* 우측 결과 패널 — 좌우 분할 모드 (지도 75% / 결과 25%) */}
-          <div className="relative px-5 py-5 flex flex-col gap-4 shrink-0 w-[28%] min-w-[340px] max-w-[480px] bg-background border-l border-border overflow-y-auto">
-            {/* 백그라운드 무드 조명 */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_rgba(79,70,229,0.05)_0%,_transparent_60%)] pointer-events-none" />
+          {/* 결과 카드 — 우하 (col 2, row 2). 원본 좌측 패널 4 metric 카드 디자인 그대로. */}
+          <div className="col-start-2 row-start-2 relative p-2 bg-secondary rounded-2xl overflow-hidden">
+            {abmResult ? (
+              <div className="grid grid-cols-4 gap-3 h-full">
+                {[
+                  {
+                    label: '일 방문',
+                    value: abmResult.daily_visits_mean?.toLocaleString() ?? '-',
+                    suffix: '회',
+                    sub:
+                      abmResult.daily_visits_std > 0
+                        ? `σ ${abmResult.daily_visits_std}`
+                        : '시뮬 평균',
+                    color: '#00BA7A',
+                    glow: 'rgba(52,211,153,0.18)',
+                    icon: (
+                      <path
+                        d="M3 12L9 18L21 6"
+                        stroke="#000"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ),
+                  },
+                  {
+                    label: 'Total Earning',
+                    value: abmResult.monthly_revenue_estimate
+                      ? Math.round(abmResult.monthly_revenue_estimate / 10000).toLocaleString()
+                      : '-',
+                    suffix: '만 ₩',
+                    sub: '월 매출 (일×25)',
+                    color: '#FF7940',
+                    glow: 'rgba(251,191,36,0.18)',
+                    icon: (
+                      <text
+                        x="12"
+                        y="17"
+                        textAnchor="middle"
+                        fontSize="14"
+                        fontWeight="900"
+                        fill="#000"
+                      >
+                        ₩
+                      </text>
+                    ),
+                  },
+                  {
+                    label: 'Peak Hours',
+                    value:
+                      abmResult.peak_hours && abmResult.peak_hours.length > 0
+                        ? abmResult.peak_hours
+                            .slice(0, 3)
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            .map((h: any) => `${h}`)
+                            .join(' · ')
+                        : '-',
+                    suffix: '시',
+                    sub: '상위 3 시간대',
+                    color: '#00E0D1',
+                    glow: 'rgba(34,211,238,0.18)',
+                    icon: (
+                      <>
+                        <circle cx="12" cy="12" r="9" stroke="#000" strokeWidth="2" />
+                        <path
+                          d="M12 6v6l4 2"
+                          stroke="#000"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </>
+                    ),
+                  },
+                  {
+                    label: 'Active Agents',
+                    value: abmResult.n_personas ? abmResult.n_personas.toLocaleString() : '-',
+                    suffix: '명',
+                    sub: 'Tier S 50 · LLM thought',
+                    color: '#002CD1',
+                    glow: 'rgba(0,44,209,0.18)',
+                    icon: (
+                      <>
+                        <circle cx="9" cy="8" r="3" stroke="#000" strokeWidth="2" />
+                        <circle cx="17" cy="9" r="2.5" stroke="#000" strokeWidth="2" />
+                        <path
+                          d="M3 19c0-3 3-5 6-5s6 2 6 5M14 18c.5-2 2-3.5 4-3.5s3.5 1.5 4 3.5"
+                          stroke="#000"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </>
+                    ),
+                  },
+                ].map((m) => (
+                  <div
+                    key={m.label}
+                    className="relative bg-card/90 backdrop-blur-xl border border-border rounded-[20px] p-3 shadow-xl flex flex-col gap-2 overflow-hidden min-w-0"
+                    style={{ boxShadow: `0 0 24px ${m.glow}` }}
+                  >
+                    {/* 상단 글로스 highlight */}
+                    <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-foreground/[0.04] to-transparent pointer-events-none" />
+                    {/* 헤더 — 색 박스 아이콘 + 라벨 */}
+                    <div className="relative z-10 flex items-center gap-2 min-w-0">
+                      <div
+                        className="w-4 h-4 rounded-md flex items-center justify-center border border-border shrink-0"
+                        style={{ backgroundColor: m.color }}
+                      >
+                        <svg
+                          width="9"
+                          height="9"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden="true"
+                        >
+                          {m.icon}
+                        </svg>
+                      </div>
+                      <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none truncate">
+                        {m.label}
+                      </span>
+                    </div>
+                    {/* 숫자 — 컨테이너 폭에 맞게 적응 */}
+                    <div className="relative z-10 flex items-baseline gap-1 min-w-0 flex-wrap">
+                      <span className="text-xl font-black text-foreground italic tracking-tight leading-none tabular-nums break-all">
+                        {m.value}
+                      </span>
+                      <span className="text-[10px] font-bold text-muted-foreground italic tracking-tight">
+                        {m.suffix}
+                      </span>
+                    </div>
+                    <div className="relative z-10 w-full h-px bg-foreground/[0.06]" />
+                    {/* 서브라인 */}
+                    <div className="relative z-10 flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-tighter min-w-0">
+                      <div
+                        className="w-1 h-1 rounded-full shrink-0"
+                        style={{ backgroundColor: m.color }}
+                      />
+                      <span className="truncate">{m.sub}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground py-4 text-center">
+                공실 스팟 클릭 후 시뮬 실행 → 결과 표시
+              </p>
+            )}
+          </div>
+          {/* 좌측 결과 패널 — col 1, row span 2 (전체 높이) */}
+          <div className="col-start-1 row-start-1 row-span-2 relative px-5 py-5 flex flex-col gap-4 bg-secondary border border-border rounded-2xl overflow-y-auto">
+            {/* 백그라운드 무드 조명 — 보라 tint 제거 (canvas/analyze panel 과 동일 톤 유지) */}
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
             {abmResult ? (
               <div className="relative w-full flex flex-col gap-4">
@@ -2673,7 +2822,7 @@ export default function AbmPersonaMap({
                         {sortedThoughts.length}
                       </span>
                     </div>
-                    <div className="relative max-h-[280px] overflow-y-auto rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent">
+                    <div className="relative max-h-[600px] flex-1 overflow-y-auto rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent">
                       {sortedThoughts.map((th, idx) => {
                         const aid = th.agent_id;
                         const archetype = th.archetype || '';
@@ -2720,155 +2869,15 @@ export default function AbmPersonaMap({
                     </div>
                   </div>
                 )}
-                {/* 메인 지표 4칸 — 1열 (narrow column) */}
-                <div className="grid grid-cols-1 gap-3">
-                  {[
-                    {
-                      label: '일 방문',
-                      value: abmResult.daily_visits_mean?.toLocaleString() ?? '-',
-                      suffix: '회',
-                      sub:
-                        abmResult.daily_visits_std > 0
-                          ? `σ ${abmResult.daily_visits_std}`
-                          : '시뮬 평균',
-                      color: '#00BA7A',
-                      glow: 'rgba(52,211,153,0.18)',
-                      icon: (
-                        <path
-                          d="M3 12L9 18L21 6"
-                          stroke="#000"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      ),
-                    },
-                    {
-                      label: 'Total Earning',
-                      value: abmResult.monthly_revenue_estimate
-                        ? Math.round(abmResult.monthly_revenue_estimate / 10000).toLocaleString()
-                        : '-',
-                      suffix: '만 ₩',
-                      sub: '월 매출 (일×25)',
-                      color: '#FF7940',
-                      glow: 'rgba(251,191,36,0.18)',
-                      icon: (
-                        <text
-                          x="12"
-                          y="17"
-                          textAnchor="middle"
-                          fontSize="14"
-                          fontWeight="900"
-                          fill="#000"
-                        >
-                          ₩
-                        </text>
-                      ),
-                    },
-                    {
-                      label: 'Peak Hours',
-                      value:
-                        abmResult.peak_hours && abmResult.peak_hours.length > 0
-                          ? abmResult.peak_hours
-                              .slice(0, 3)
-                              .map((h: any) => `${h}`)
-                              .join(' · ')
-                          : '-',
-                      suffix: '시',
-                      sub: '상위 3 시간대',
-                      color: '#00E0D1',
-                      glow: 'rgba(34,211,238,0.18)',
-                      icon: (
-                        <>
-                          <circle cx="12" cy="12" r="9" stroke="#000" strokeWidth="2" />
-                          <path
-                            d="M12 6v6l4 2"
-                            stroke="#000"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </>
-                      ),
-                    },
-                    {
-                      label: 'Active Agents',
-                      value: abmResult.n_personas ? abmResult.n_personas.toLocaleString() : '-',
-                      suffix: '명',
-                      sub: 'Tier S 50 · LLM thought',
-                      color: '#002CD1',
-                      glow: 'rgba(0,44,209,0.18)',
-                      icon: (
-                        <>
-                          <circle cx="9" cy="8" r="3" stroke="#000" strokeWidth="2" />
-                          <circle cx="17" cy="9" r="2.5" stroke="#000" strokeWidth="2" />
-                          <path
-                            d="M3 19c0-3 3-5 6-5s6 2 6 5M14 18c.5-2 2-3.5 4-3.5s3.5 1.5 4 3.5"
-                            stroke="#000"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                          />
-                        </>
-                      ),
-                    },
-                  ].map((m) => (
-                    <div
-                      key={m.label}
-                      className="relative bg-card/90 backdrop-blur-xl border border-border rounded-[24px] p-5 shadow-2xl flex flex-col gap-3 overflow-hidden group transition-all hover:border-primary/40"
-                      style={{ boxShadow: `0 0 32px ${m.glow}` }}
-                    >
-                      {/* 상단 글로스 highlight */}
-                      <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-foreground/[0.04] to-transparent pointer-events-none" />
-                      {/* 헤더 — 색 박스 아이콘 + 라벨 */}
-                      <div className="relative z-10 flex items-center gap-2.5">
-                        <div
-                          className="w-5 h-5 rounded-md flex items-center justify-center border border-border shrink-0"
-                          style={{ backgroundColor: m.color }}
-                        >
-                          <svg
-                            width="11"
-                            height="11"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            aria-hidden="true"
-                          >
-                            {m.icon}
-                          </svg>
-                        </div>
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">
-                          {m.label}
-                        </span>
-                      </div>
-                      {/* 큰 숫자 */}
-                      <div className="relative z-10 flex items-baseline gap-1.5">
-                        <span className="text-3xl font-black text-foreground italic tracking-tighter leading-none tabular-nums">
-                          {m.value}
-                        </span>
-                        <span className="text-xs font-bold text-muted-foreground italic tracking-tight">
-                          {m.suffix}
-                        </span>
-                      </div>
-                      <div className="relative z-10 w-full h-px bg-foreground/[0.06]" />
-                      {/* 서브라인 */}
-                      <div className="relative z-10 flex items-center gap-1.5 text-[9.5px] font-bold text-muted-foreground uppercase tracking-tighter">
-                        <div
-                          className="w-1 h-1 rounded-full"
-                          style={{ backgroundColor: m.color }}
-                        />
-                        {m.sub}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
+                {/* 메인 지표 4칸은 우하 result card 로 이동됨 (사용자 요청 2026-05-02). */}
                 {/* 페르소나 분포 (customer_profile_dist) — 큰 막대 + 색 차별화 */}
                 {abmResult.customer_profile_dist &&
                   Object.keys(abmResult.customer_profile_dist).length > 0 && (
-                    <div className="bg-background/90 backdrop-blur-sm border border-border rounded-2xl p-4">
-                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">
+                    <div className="bg-background/90 backdrop-blur-sm border border-border rounded-xl p-2.5">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
                         페르소나 방문 분포
                       </p>
-                      <div className="flex gap-2 items-end h-20">
+                      <div className="flex gap-1 items-end h-12">
                         {Object.entries(abmResult.customer_profile_dist as Record<string, number>)
                           .sort((a, b) => b[1] - a[1])
                           .map(([role, ratio]) => {
@@ -2904,21 +2913,21 @@ export default function AbmPersonaMap({
                             return (
                               <div
                                 key={role}
-                                className="flex-1 flex flex-col items-center gap-1.5 min-w-0"
+                                className="flex-1 flex flex-col items-center gap-0.5 min-w-0"
                               >
-                                <span className="text-sm font-black tabular-nums" style={{ color }}>
+                                <span className="text-[10px] font-black tabular-nums leading-none" style={{ color }}>
                                   {pct}%
                                 </span>
                                 <div
-                                  className="w-full rounded-md transition-all"
+                                  className="w-full rounded transition-all"
                                   style={{
-                                    height: `${Math.max(6, pct * 1.2)}px`,
+                                    height: `${Math.max(4, pct * 0.7)}px`,
                                     backgroundColor: color,
                                     opacity: 0.6,
-                                    boxShadow: `0 0 12px ${color}40`,
+                                    boxShadow: `0 0 8px ${color}40`,
                                   }}
                                 />
-                                <span className="text-[10px] font-bold text-muted-foreground truncate w-full text-center">
+                                <span className="text-[8.5px] font-bold text-muted-foreground truncate w-full text-center leading-none">
                                   {label}
                                 </span>
                               </div>
