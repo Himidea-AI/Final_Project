@@ -34,6 +34,7 @@ from src.agents.legal.specialists import (  # noqa: E402
     _precedent_query_fair_trade,
     _precedent_query_franchise,
     _precedent_query_privacy,
+    _sanitize_law_content,
     _search_precedents_safe,
 )
 from src.chains.retriever import LegalDocumentRetriever  # noqa: E402
@@ -270,6 +271,47 @@ class TestPrecedentQueryBuilders:
         q = _precedent_query_privacy("카페")
         assert "개인정보" in q
         assert "CCTV" in q
+
+
+# ---------------------------------------------------------------------------
+# 7-A. _sanitize_law_content — ingestion 노이즈 제거
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeLawContent:
+    def test_removes_date_n_serial(self) -> None:
+        raw = "조문 본문 시작 20260324 N 0010001 ① 임차인은..."
+        out = _sanitize_law_content(raw)
+        assert "20260324 N 0010001" not in out
+        assert "임차인" in out
+
+    def test_removes_8digit_date(self) -> None:
+        raw = "본문 20251002 본문 계속"
+        out = _sanitize_law_content(raw)
+        assert "20251002" not in out
+
+    def test_removes_choomon_meta(self) -> None:
+        raw = "내용 조문 25 더 많은 내용"
+        out = _sanitize_law_content(raw)
+        assert "조문 25" not in out
+        assert "내용" in out
+
+    def test_removes_revision_inline(self) -> None:
+        raw = "본문 <개정 2008. 1. 31.> 본문 계속"
+        out = _sanitize_law_content(raw)
+        assert "<개정" not in out
+        assert "본문" in out
+
+    def test_removes_bonjo_meta(self) -> None:
+        raw = "[본조신설 2013.8.13] 제10조의4 본문"
+        out = _sanitize_law_content(raw)
+        assert "[본조신설" not in out
+        assert "제10조의4" in out
+
+    def test_collapses_multi_space(self) -> None:
+        raw = "단어1     단어2"
+        out = _sanitize_law_content(raw)
+        assert "  " not in out
 
 
 # ---------------------------------------------------------------------------

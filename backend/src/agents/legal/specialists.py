@@ -770,10 +770,51 @@ async def specialist_privacy_law(
 # ---------------------------------------------------------------------------
 
 
+_NOISE_PATTERNS: list[tuple[str, str]] = [
+    # 시행일자 + N + 일련번호 (예: "20260324 N 0010001")
+    (r"\b\d{8}\s*N\s*\d{5,}\b", ""),
+    # 8자리 시행일자 단독 (예: "20260324")
+    (r"\b\d{8}\b", ""),
+    # "조문 N" 메타 (예: "조문 2", "조문 10") — 공백 1개 이상 필수 ("조문2" 같은
+    # 본문 내 표현은 제외)
+    (r"\s조문\s+\d+\b", " "),
+    # 본조신설/제목개정 메타 (예: "[본조신설 2013.8.13]")
+    (r"\[본조신설[^\]]*\]", ""),
+    (r"\[제목개정[^\]]*\]", ""),
+    (r"\[전문개정[^\]]*\]", ""),
+    # 개정 인라인 메타 (예: "<개정 2008. 1. 31.>")
+    (r"<개정[^>]*>", ""),
+    (r"<신설[^>]*>", ""),
+    # 부칙 헤더
+    (r"\[부칙\]", ""),
+    # 일련번호 (조문/항목) — 단독 N자리 + 점/공백 (예: "0012001 ①", "1. 1.")
+    (r"\b\d{7}\s+[①-⑳]", ""),
+    # 연속 공백 정리
+    (r"\s{3,}", " "),
+]
+
+
+def _sanitize_law_content(content: str) -> str:
+    """법조문 청크 본문에서 ingestion 메타데이터 노이즈 제거.
+
+    chunks.json 원본에 시행일자/일련번호/부칙 헤더 등이 섞여있어
+    사용자 화면에 그대로 노출되면 가독성 저하. regex 기반 정리.
+    """
+    import re
+
+    out = content
+    for pat, repl in _NOISE_PATTERNS:
+        out = re.sub(pat, repl, out)
+    # 시작/끝 공백 + 다중 줄바꿈 정리
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
+
+
 def _articles_from_law_docs(docs: list[dict], max_n: int = 3) -> list[dict]:
     """법조문 RAG 문서 list 에서 ``[{article_ref, content, kind='article'}]`` 추출.
 
     조문 단위 dedup. 판례 청크 (category='판례') 는 자동으로 제외 (별도 헬퍼 사용).
+    content 는 _sanitize_law_content 로 ingestion 메타 노이즈 제거 후 truncate.
     """
     seen: set[str] = set()
     articles: list[dict] = []
@@ -790,7 +831,10 @@ def _articles_from_law_docs(docs: list[dict], max_n: int = 3) -> list[dict]:
         if ref in seen:
             continue
         seen.add(ref)
-        content = (d.get("content") or "").strip()[:300]
+        raw = (d.get("content") or "").strip()
+        if not raw:
+            continue
+        content = _sanitize_law_content(raw)[:300]
         if not content:
             continue
         articles.append({"article_ref": ref, "content": content, "kind": "article"})
@@ -821,7 +865,10 @@ def _articles_from_precedent_docs(docs: list[dict], max_n: int = 2) -> list[dict
         if ref in seen:
             continue
         seen.add(ref)
-        content = (d.get("content") or "").strip()[:400]
+        raw = (d.get("content") or "").strip()
+        if not raw:
+            continue
+        content = _sanitize_law_content(raw)[:400]
         if not content:
             continue
         items.append({"article_ref": ref, "content": content, "kind": "precedent"})
