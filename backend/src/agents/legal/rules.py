@@ -21,7 +21,12 @@ orchestrator/legal_node 가 그대로 다운스트림에 전달한다.
 
 from __future__ import annotations
 
+import logging
+from math import asin, cos, radians, sin, sqrt
+
 from src.config.constants import BIZ_NORMALIZE
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # 면적 임계값 — 시행령 별표 기준
@@ -70,7 +75,12 @@ def _format_recommendation(
 
 
 def rule_food_hygiene(business_type: str) -> dict:
-    """카페/음식점은 영업신고 필수 (danger). 편의점은 즉석조리 시 caution."""
+    """카페/음식점/주점은 영업신고 또는 영업허가 필수 (danger).
+
+    - 카페/음식점(휴게/일반음식점) → 영업신고 (식품위생법 제37조 제4항)
+    - 주점 → 단란/유흥주점은 영업허가 (제37조 제1항), 일반주점은 영업신고
+    - 그 외 업종 → caution (즉석조리 시 신고 의무 발생)
+    """
     biz = _normalize_biz(business_type)
 
     if biz in ("카페", "음식점"):
@@ -97,6 +107,42 @@ def rule_food_hygiene(business_type: str) -> dict:
                     "영업장 소재지 관할 시장·군수·구청장에게 영업신고를 하여야 한다."
                 ),
             }
+        ]
+    elif biz == "주점":
+        # 주점 — 단란/유흥주점은 영업허가, 일반주점(호프 등)은 영업신고
+        level = "danger"
+        summary = (
+            f"{biz} 영업은 식품위생법상 식품접객업으로 단란주점·유흥주점은 영업허가(제37조 제1항), "
+            "일반주점·호프는 영업신고(제37조 제4항) 대상이며, 미이행 시 영업개시 불가합니다."
+        )
+        actions = [
+            "단란주점/유흥주점 → 관할 구청 위생과 영업허가 신청 (식품위생법 제37조 제1항, 시행령 제21조 제8호)",
+            "일반주점/호프 → 관할 구청 위생과 영업신고 (제37조 제4항)",
+            "식품접객업 위생교육 6시간 이수 (제41조)",
+            "영업장 시설기준 적합 확인 — 객실/객석 구조, 환기설비 (제36조, 시행규칙 별표 14)",
+            "유흥주점은 청소년보호법 제2조 청소년출입·고용금지업소 동시 적용",
+        ]
+        recommendation = _format_recommendation(
+            ["식품위생법 제37조 제1항", "제37조 제4항", "시행령 제21조 제8호"],
+            actions,
+            "무허가/무신고 영업 시 5년 이하 징역 또는 5천만원 이하 벌금 (제97조)",
+        )
+        articles = [
+            {
+                "article_ref": "식품위생법 제37조",
+                "content": (
+                    "유흥주점·단란주점 영업은 시·도지사의 허가를 받아야 한다(제1항). "
+                    "휴게음식점·일반음식점·제과점·일반주점 영업은 관할 시장·군수·구청장에게 "
+                    "영업신고를 하여야 한다(제4항)."
+                ),
+            },
+            {
+                "article_ref": "식품위생법 시행령 제21조",
+                "content": (
+                    "식품접객업의 종류: 휴게음식점·일반음식점·단란주점·유흥주점·"
+                    "위탁급식·제과점 영업으로 구분한다."
+                ),
+            },
         ]
     else:
         level = "caution"
@@ -137,12 +183,32 @@ def rule_food_hygiene(business_type: str) -> dict:
 
 
 def rule_safety_regulation(business_type: str, store_area_pyeong: float) -> dict:
-    """면적 ≥100㎡ + 카페/음식점 → danger. <100㎡ → safe."""
+    """다중이용업소법 — 면적 ≥100㎡ + 카페/음식점 → danger. 주점은 면적 무관 danger."""
     biz = _normalize_biz(business_type)
     area_m2 = _pyeong_to_m2(store_area_pyeong)
 
     is_food_biz = biz in ("카페", "음식점")
-    if is_food_biz and area_m2 >= MULTI_USE_THRESHOLD_M2:
+    if biz == "주점":
+        # 다중이용업소법 시행령 제2조 — 단란/유흥주점은 면적 무관 다중이용업.
+        # 일반주점은 100㎡ 기준이지만 보수적으로 모두 danger 처리 (안전사고 위험성 ↑).
+        level = "danger"
+        summary = (
+            f"{biz} 영업장은 다중이용업소법 시행령 제2조에 따라 면적과 무관하게 "
+            "다중이용업으로 분류되어 안전시설 완비증명서 없이는 영업개시가 불가합니다 "
+            f"(현재 {store_area_pyeong:.0f}평 / {area_m2:.1f}㎡)."
+        )
+        actions = [
+            "관할 소방서에 안전시설 등 완비증명서 발급 신청 (다중이용업소법 제9조)",
+            "비상구·간이스프링클러·피난유도등·방염물품 시설기준 충족 (제2조, 제13조)",
+            "다중이용업주 안전교육 4시간 이수 (제8조)",
+            "주점 특화: 객실 내부 잠금장치 금지·내부 구조 점검·화재배상책임보험 가입 (제13조의2)",
+        ]
+        recommendation = _format_recommendation(
+            ["다중이용업소법 제2조", "제9조", "제13조", "제13조의2"],
+            actions,
+            "안전시설 미비/완비증명 미수령 시 1년 이하 징역 또는 1천만원 이하 벌금",
+        )
+    elif is_food_biz and area_m2 >= MULTI_USE_THRESHOLD_M2:
         level = "danger"
         summary = (
             f"{biz} 영업장이 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)으로 100㎡ 이상이므로 "
@@ -213,11 +279,30 @@ def rule_safety_regulation(business_type: str, store_area_pyeong: float) -> dict
 
 
 def rule_fire_safety(business_type: str, store_area_pyeong: float) -> dict:
-    """면적 ≥100㎡ → danger / <100㎡ → caution."""
+    """소방시설법 — 면적 ≥100㎡ → danger / <100㎡ → caution. 주점은 면적 무관 danger."""
     biz = _normalize_biz(business_type)
     area_m2 = _pyeong_to_m2(store_area_pyeong)
 
-    if area_m2 >= MULTI_USE_THRESHOLD_M2:
+    if biz == "주점":
+        # 주점은 다중이용업이자 화재위험 업종 — 면적 무관 소방시설 강화 대상.
+        level = "danger"
+        summary = (
+            f"{biz} 영업은 다중이용업소법·소방시설법상 면적과 무관하게 특정소방대상물로 "
+            "분류되어 소방시설 설치·자체점검·화재배상책임보험 가입이 의무입니다 "
+            f"(현재 {store_area_pyeong:.0f}평 / {area_m2:.1f}㎡)."
+        )
+        actions = [
+            "용도·면적별 소방시설 설치 (소방시설법 제12조, 시행령 별표 4 — 소화기·간이스프링클러)",
+            "소방안전관리자 선임 (제24조 / 주점은 객실 구조상 2급 이상 권장)",
+            "연 1~2회 자체점검 실시 + 결과 보고 (제22조)",
+            "화재배상책임보험 가입 (다중이용업소법 제13조의2 — 주점 의무)",
+        ]
+        recommendation = _format_recommendation(
+            ["소방시설법 제12조", "제22조", "제24조", "다중이용업소법 제13조의2"],
+            actions,
+            "소방시설 미설치 시 3년 이하 징역 또는 3천만원 이하 벌금 (제57조)",
+        )
+    elif area_m2 >= MULTI_USE_THRESHOLD_M2:
         level = "danger"
         summary = (
             f"영업장 면적 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)이 100㎡ 이상으로 "
@@ -275,11 +360,11 @@ def rule_fire_safety(business_type: str, store_area_pyeong: float) -> dict:
 
 
 def rule_accessibility(business_type: str, store_area_pyeong: float) -> dict:
-    """면적 ≥300㎡ + 카페/음식점 → danger. <300㎡ → safe."""
+    """면적 ≥300㎡ + 카페/음식점/주점 → danger. <300㎡ → safe."""
     biz = _normalize_biz(business_type)
     area_m2 = _pyeong_to_m2(store_area_pyeong)
 
-    is_food_biz = biz in ("카페", "음식점")
+    is_food_biz = biz in ("카페", "음식점", "주점")
     if is_food_biz and area_m2 >= ACCESSIBILITY_THRESHOLD_M2:
         level = "danger"
         summary = (
@@ -460,16 +545,17 @@ def rule_vat() -> dict:
 
 
 def rule_sewage(business_type: str) -> dict:
-    """음식점·카페(휴게음식점) 모두 배수설비/그리스트랩 검토 의무.
+    """음식점·카페(휴게음식점)·주점 모두 배수설비/그리스트랩 검토 의무.
 
     - 음식점: 유분 다량 배출 → 그리스트랩 필수 → caution
     - 카페: 휴게음식점 = 식품위생법 시행규칙 별표 14 시설기준 적용 →
             세척수·음료 잔여물 배출 시 배수설비 기준 검토 필요 → caution
-    - 편의점: 식품판매업 (조리 무관) → safe
+    - 주점: 알코올 잔여물·세척수·안주 조리 유분 배출 → 배수설비/그리스트랩 검토 → caution
+    - 그 외: safe (조리 무관 업종)
     """
     biz = _normalize_biz(business_type)
 
-    if biz in ("음식점", "카페"):
+    if biz in ("음식점", "카페", "주점"):
         level = "caution"
         if biz == "음식점":
             summary = (
@@ -481,7 +567,7 @@ def rule_sewage(business_type: str) -> dict:
                 "관할 구청 하수과에 배수설비 설치 신고",
                 "정기 청소·점검으로 유분 누적 방지 — 위반 시 시정명령",
             ]
-        else:
+        elif biz == "카페":
             # 카페 (휴게음식점) — 세척수·음료 잔여물 배출 시 배수설비 기준 적용
             summary = (
                 "카페(휴게음식점)는 식품위생법 시행규칙 별표 14 시설기준에 따라 "
@@ -492,6 +578,19 @@ def rule_sewage(business_type: str) -> dict:
                 "주방·세척대 배수설비를 하수도법 기준에 맞게 설치 (제34조)",
                 "음용수 제조·우유 가공 등 유분/유기물 배출 시 그리스트랩 또는 침전조 설치 검토",
                 "관할 구청 하수과에 배수설비 설치 신고 (식품위생법 별표 14 연계)",
+            ]
+        else:
+            # 주점 — 알코올 잔여물·안주 조리 유분 배출
+            summary = (
+                "주점 영업장은 알코올 잔여물·안주 조리 시 발생하는 유분과 세척수를 "
+                "공공하수도로 직접 배출할 수 없어 유분분리기(그리스트랩) 및 배수설비 설치가 "
+                "요구되며, 식품위생법 시행규칙 별표 14 시설기준이 함께 적용됩니다."
+            )
+            actions = [
+                "주방·세척대 배수구에 유분분리기(그리스트랩) 설치 (하수도법 제34조, 시행규칙 별표 14)",
+                "알코올 폐액·세척수 배수설비를 하수도법 기준에 맞게 연결",
+                "관할 구청 하수과에 배수설비 설치 신고 (식품위생법 별표 14 시설기준 연계)",
+                "정기 청소·점검으로 유분 누적 방지 — 위반 시 시정명령",
             ]
         recommendation = _format_recommendation(
             ["하수도법 제34조", "식품위생법 시행규칙 별표 14"],
@@ -535,4 +634,278 @@ def rule_sewage(business_type: str) -> dict:
         "summary": summary,
         "recommendation": recommendation,
         "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 9. school_zone — 학교환경위생정화구역 (학교보건법 제6조)
+# ---------------------------------------------------------------------------
+
+# 학교보건법 제6조 정화구역 거리
+SCHOOL_ABSOLUTE_ZONE_M: float = 50.0   # 절대정화구역 (모든 술집/노래방 영업금지)
+SCHOOL_RELATIVE_ZONE_M: float = 200.0  # 상대정화구역 (정화위원회 심의 대상)
+
+
+# fallback mock 학교 (DB 미연동/조회 실패 시)
+_MOCK_MAPO_SCHOOLS: list[dict] = [
+    {
+        "name": "망원초등학교",
+        "school_type": "초등학교",
+        "lat": 37.5567,
+        "lon": 126.9038,
+        "district": "망원1동",
+    },
+    {
+        "name": "합정중학교",
+        "school_type": "중학교",
+        "lat": 37.5495,
+        "lon": 126.9112,
+        "district": "합정동",
+    },
+    {
+        "name": "서울서교초등학교",
+        "school_type": "초등학교",
+        "lat": 37.5532,
+        "lon": 126.9217,
+        "district": "서교동",
+    },
+    {
+        "name": "공덕초등학교",
+        "school_type": "초등학교",
+        "lat": 37.5435,
+        "lon": 126.9519,
+        "district": "공덕동",
+    },
+    {
+        "name": "홍익대학교",
+        "school_type": "대학교",
+        "lat": 37.5511,
+        "lon": 126.9249,
+        "district": "서교동",
+    },
+]
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """두 좌표 간 구면 거리 (미터) — services/commercial_intelligence 와 동일 공식."""
+    R = 6_371_000.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = (
+        sin(dlat / 2) ** 2
+        + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    )
+    return 2 * R * asin(sqrt(a))
+
+
+def _fetch_mapo_schools() -> list[dict]:
+    """mapo_schools 테이블 SELECT — DB 미연동 시 mock 5개 fallback.
+
+    실패 시 logger.warning 후 mock 반환 (룰 평가는 caution 으로 진행).
+    """
+    try:
+        import os
+
+        from sqlalchemy import text
+
+        from src.database.sync_engine import get_sync_engine
+
+        db_url = os.environ.get("POSTGRES_URL")
+        if not db_url:
+            logger.warning("[rule_school_zone] POSTGRES_URL 미설정 — mock fallback")
+            return list(_MOCK_MAPO_SCHOOLS)
+
+        sql = text(
+            """
+            SELECT name, school_type, lat, lon, district
+              FROM mapo_schools
+             WHERE lat IS NOT NULL AND lon IS NOT NULL
+            """
+        )
+        engine = get_sync_engine(db_url)
+        with engine.connect() as conn:
+            rows = conn.execute(sql).fetchall()
+
+        out = [
+            {
+                "name": r[0],
+                "school_type": r[1],
+                "lat": float(r[2]),
+                "lon": float(r[3]),
+                "district": r[4],
+            }
+            for r in rows
+            if r[0] and r[2] is not None and r[3] is not None
+        ]
+        if not out:
+            logger.warning("[rule_school_zone] mapo_schools 비어 있음 — mock fallback")
+            return list(_MOCK_MAPO_SCHOOLS)
+        return out
+    except Exception as e:
+        logger.warning(f"[rule_school_zone] mapo_schools 조회 실패 ({e}) — mock fallback")
+        return list(_MOCK_MAPO_SCHOOLS)
+
+
+def rule_school_zone(
+    business_type: str,
+    lat: float | None,
+    lon: float | None,
+    schools: list[dict] | None = None,
+) -> dict:
+    """학교환경위생정화구역 (학교보건법 제6조) 거리 룰.
+
+    - 절대정화구역 50m: 모든 술집/노래방 금지 → 주점 danger
+    - 상대정화구역 200m: 학교환경위생정화위원회 심의 (대부분 거부) → 주점 danger
+    - 카페/음식점은 적용 X (safe)
+
+    schools=None 이면 DB 조회. lat/lon 없으면 caution fallback.
+    """
+    biz = _normalize_biz(business_type)
+
+    # 카페/음식점/그 외 → 적용 안 됨
+    if biz != "주점":
+        return {
+            "type": "school_zone",
+            "level": "safe",
+            "summary": (
+                f"{biz or '해당 업종'}은 학교환경위생정화구역 영업 제한 대상이 아닙니다."
+            ),
+            "recommendation": (
+                "[근거: 학교보건법 제6조] 정화구역 영업제한은 술집·노래방 등에 "
+                "한정 적용 — 카페·음식점은 별도 거리 제한 없음."
+            ),
+            "articles": [
+                {
+                    "article_ref": "학교보건법 제6조",
+                    "content": (
+                        "누구든지 학교환경위생정화구역에서는 「식품위생법」에 따른 "
+                        "유흥주점·단란주점·노래연습장 등 학생의 보건·위생에 영향을 "
+                        "미치는 행위·시설을 하여서는 아니 된다."
+                    ),
+                }
+            ],
+        }
+
+    # 좌표 미입력 시 → 보수적 caution
+    if lat is None or lon is None:
+        return {
+            "type": "school_zone",
+            "level": "caution",
+            "summary": (
+                "주점 영업장 좌표 미입력 — 학교환경위생정화구역 거리 확인이 필요합니다."
+            ),
+            "recommendation": _format_recommendation(
+                ["학교보건법 제6조"],
+                [
+                    "출점 후보지 좌표(lat/lon) 입력 시 절대(50m)/상대(200m) 정화구역 자동 계산",
+                    "관할 교육지원청에 학교환경위생정화구역 도면 사전 확인",
+                    "절대정화구역 내 주점 영업은 원천 금지, 상대정화구역은 정화위원회 심의 필요",
+                ],
+                "정화구역 내 주점 영업 시 영업정지 + 1년 이하 징역 또는 1천만원 이하 벌금",
+            ),
+            "articles": [
+                {
+                    "article_ref": "학교보건법 제6조",
+                    "content": (
+                        "정화구역 안에서는 유흥주점·단란주점·노래연습장 등을 운영할 수 없으며, "
+                        "절대정화구역(50m)은 예외 없이 금지, 상대정화구역(200m)은 학교환경위생"
+                        "정화위원회 심의를 거쳐야 한다."
+                    ),
+                }
+            ],
+        }
+
+    # schools 미주입 시 DB 조회
+    if schools is None:
+        schools = _fetch_mapo_schools()
+
+    nearest_50: list[dict] = []
+    nearest_200: list[dict] = []
+    for s in schools or []:
+        try:
+            s_lat = float(s["lat"])
+            s_lon = float(s["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        d = _haversine_m(lat, lon, s_lat, s_lon)
+        if d <= SCHOOL_ABSOLUTE_ZONE_M:
+            nearest_50.append({**s, "distance_m": round(d, 1)})
+        elif d <= SCHOOL_RELATIVE_ZONE_M:
+            nearest_200.append({**s, "distance_m": round(d, 1)})
+    nearest_50.sort(key=lambda x: x["distance_m"])
+    nearest_200.sort(key=lambda x: x["distance_m"])
+
+    articles_default = [
+        {
+            "article_ref": "학교보건법 제6조",
+            "content": (
+                "누구든지 학교환경위생정화구역에서는 유흥주점·단란주점·노래연습장 등 "
+                "학생의 보건·위생에 영향을 미치는 시설을 운영할 수 없다. "
+                "절대정화구역은 학교 출입문 50미터 이내, 상대정화구역은 200미터 이내이다."
+            ),
+        }
+    ]
+
+    if nearest_50:
+        s = nearest_50[0]
+        return {
+            "type": "school_zone",
+            "level": "danger",
+            "summary": (
+                f"주점 영업 후보지가 '{s.get('name')}' 으로부터 {s['distance_m']:.0f}m 떨어져 "
+                f"있어 학교보건법 제6조 절대정화구역(50m) 내에 위치 — 영업이 원천 금지됩니다."
+            ),
+            "recommendation": _format_recommendation(
+                ["학교보건법 제6조", "시행령 제3조"],
+                [
+                    f"가장 가까운 학교: {s.get('name')} ({s.get('school_type') or '학교'}) "
+                    f"— 거리 {s['distance_m']:.0f}m (절대정화구역 50m 이내)",
+                    "절대정화구역 내 주점·유흥주점·단란주점·노래연습장 영업 원천 금지",
+                    "출점 후보지 변경 또는 비주류(카페/음식점) 업종 전환 검토",
+                ],
+                "절대정화구역 내 영업 시 즉시 영업정지 + 1년 이하 징역 또는 1천만원 이하 벌금",
+            ),
+            "articles": articles_default,
+            "nearest_school": s,
+        }
+    if nearest_200:
+        s = nearest_200[0]
+        return {
+            "type": "school_zone",
+            "level": "danger",
+            "summary": (
+                f"주점 영업 후보지가 '{s.get('name')}' 으로부터 {s['distance_m']:.0f}m 떨어져 "
+                f"있어 학교보건법 제6조 상대정화구역(200m) 내에 위치 — 학교환경위생정화"
+                "위원회 심의 대상이며, 통상 거부됩니다."
+            ),
+            "recommendation": _format_recommendation(
+                ["학교보건법 제6조", "시행령 제3조"],
+                [
+                    f"가장 가까운 학교: {s.get('name')} ({s.get('school_type') or '학교'}) "
+                    f"— 거리 {s['distance_m']:.0f}m (상대정화구역 200m 이내)",
+                    "관할 교육지원청 학교환경위생정화위원회 심의 신청 (대부분 거부 사례)",
+                    "심의 거부 시 출점 불가 — 후보지 변경 또는 업종 전환 권장",
+                ],
+                "심의 미신청·거부 후 영업 시 영업정지 + 1년 이하 징역 또는 1천만원 이하 벌금",
+            ),
+            "articles": articles_default,
+            "nearest_school": s,
+        }
+
+    return {
+        "type": "school_zone",
+        "level": "safe",
+        "summary": (
+            "주점 영업 후보지 반경 200m 이내에 학교가 없어 학교환경위생정화구역 "
+            "영업 제한 대상에서 제외됩니다."
+        ),
+        "recommendation": _format_recommendation(
+            ["학교보건법 제6조"],
+            [
+                "주변 200m 이내 학교 없음 — 정화구역 영업 제한 미해당",
+                "신규 학교 설립 시 정화구역 적용 가능 — 영업 중 학교 신설 모니터링 권장",
+            ],
+            "주변 학교 신설 후 정화구역 편입 시 영업정지 가능",
+        ),
+        "articles": articles_default,
     }

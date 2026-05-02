@@ -151,12 +151,16 @@ def _make_specialist_fallback(
 # (commercial_intelligence._INDUSTRY_DISTANCE_DECAY 의 키와 일치해야 함)
 # 미매핑 업종 fallback = "default" — cafe 곡선 강제 적용을 피해 estimate_cannibalization
 # 의 default 곡선 (0.20) 사용.
+_INDUSTRY_DEFAULT = "default"
 _INDUSTRY_LABEL_MAP = {
     "카페": "cafe",
     "음식점": "restaurant",
+    # 주점 — commercial_intelligence 거리 감쇠 곡선이 별도로 없어 default 사용.
+    # default 곡선(0.20)이 보수적이라 주점 자기잠식 과대평가 방지.
+    "주점": _INDUSTRY_DEFAULT,
+    # 편의점 — 시뮬 미지원이지만 운영 데이터(매장 분류)에서 여전히 등장 가능.
     "편의점": "convenience",
 }
-_INDUSTRY_DEFAULT = "default"
 
 
 async def _analyze_territory(brand: str, district: str, business_type: str) -> dict:
