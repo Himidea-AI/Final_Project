@@ -124,13 +124,14 @@ export async function healthCheck() {
  * 응답 포맷 (backend 수지니 c8ea31f):
  *   { status: "success" | "error", data: DistrictPredictionResult[], message?: string }
  *
- * timeout 120_000 — 4동 병렬 ML 추론 (~10~30s 실측, 명세 일치).
+ * timeout 300_000 — /analyze/llm 동시 호출 시 cold start + SGIS sleep 누적으로
+ * 실측 120s+ 발생 → 5분 buffer (근본 해결: SGIS 토큰 싱글톤 + uvicorn worker 2개).
  */
 export async function runPredict(
   input: SimulationInput,
   signal?: AbortSignal,
 ): Promise<DistrictPredictionResult[]> {
-  const response = await apiClient.post('/predict', input, { signal, timeout: 120_000 });
+  const response = await apiClient.post('/predict', input, { signal, timeout: 300_000 });
   const body = response.data;
   if (body && body.status === 'success' && Array.isArray(body.data)) return body.data;
   if (body && body.status === 'error') throw new Error(body.message || 'Predict failed');

@@ -1520,13 +1520,13 @@ export default function AbmPersonaMap({
       }
       ctx.clearRect(0, 0, W, H);
 
-      // 전체 canvas dark fill — 외부도 내부도 동일 검정.
+      // 전체 canvas fill — 외부도 내부도 동일 흰색.
       if (
         hexGridRef.current.length > 0 &&
         densityGridRef.current &&
         trajectoryPathsRef.current.size > 0
       ) {
-        ctx.fillStyle = 'rgba(7, 7, 9, 0.97)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.97)';
         ctx.fillRect(0, 0, W, H);
       }
 
