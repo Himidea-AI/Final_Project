@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { runAnalyzeLlm, runPredict } from '../api/client';
+import { runAnalyzeLlmPolling, runPredictPolling } from '../api/client';
 import type {
   AnalysisOutput,
   DistrictPredictionResult,
@@ -20,6 +20,10 @@ export interface PredictionSlice {
   error: string | null;
   /** done/error 로 전환된 시점 (Date.now()). running 중에는 null. UI 의 elapsed 카운터 계산용. */
   finishedAt: number | null;
+  /** 실측 진행률 0~1 — backend polling 에서 받은 값. running 중 단계적으로 climb, done 시 1.0. */
+  progress: number;
+  /** 현재 진행 중인 stage 라벨 (backend 전달, 예: "서교동 분석 완료 (1/4)"). */
+  stage: string | null;
 }
 
 export interface AnalysisSlice {
@@ -27,6 +31,8 @@ export interface AnalysisSlice {
   data: AnalysisOutput | null;
   error: string | null;
   finishedAt: number | null;
+  progress: number;
+  stage: string | null;
 }
 
 interface SimulationState {
@@ -63,12 +69,16 @@ const initialPrediction: PredictionSlice = {
   data: null,
   error: null,
   finishedAt: null,
+  progress: 0,
+  stage: null,
 };
 const initialAnalysis: AnalysisSlice = {
   status: 'idle',
   data: null,
   error: null,
   finishedAt: null,
+  progress: 0,
+  stage: null,
 };
 
 const INITIAL_STATE = {
@@ -142,103 +152,197 @@ export const useSimulationStore = create<SimulationState>()(
 
         set({
           status: 'running',
+          // Real-progress 전환: 가짜 fake-progress timer 제거. 글로벌 progress 는
+          // prediction/analysis slice progress 의 평균으로 derive (slice 갱신 시 함께 갱신).
           progress: 0,
-          stage: 'INITIALIZING AI ENGINE',
+          stage: 'INITIALIZING',
           result: null,
           error: null,
           params,
           startedAt,
           savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
-          prediction: { status: 'running', data: null, error: null, finishedAt: null },
-          analysis: { status: 'running', data: null, error: null, finishedAt: null },
+          prediction: { ...initialPrediction, status: 'running' },
+          analysis: { ...initialAnalysis, status: 'running' },
           _abortController: abortController,
           _progressTimer: null,
         });
-
-        // Fake-progress ticker: climbs to 90% over ~100s so the user feels motion
-        // while the real request is in flight. Capped at 90 so the jump to 100
-        // on success remains perceptible.
-        const timer = setInterval(() => {
-          const elapsed = (Date.now() - startedAt) / 1000;
-          const p = Math.min(90, elapsed * 0.9);
-          set({ progress: p, stage: stageFor(p) });
-        }, 500);
-        set({ _progressTimer: timer });
 
         const isAbortError = (e: unknown): boolean => {
           const name = (e as { name?: string })?.name;
           return name === 'CanceledError' || name === 'AbortError' || axios.isCancel(e);
         };
 
-        // /analyze/llm — 백그라운드 실행. /predict 완료 후 대시보드 진입, 분석 완료 시 자동 갱신.
-        runAnalyzeLlm(params, abortController.signal)
+        // 글로벌 progress = (prediction.progress + analysis.progress) / 2 — 양 슬라이스
+        // 평균치. 단일 SimulationFloatingWidget 의 0~100 표시용 (legacy 호환).
+        const recalcGlobal = () => {
+          const { prediction, analysis } = get();
+          const avg = (prediction.progress + analysis.progress) / 2;
+          set({ progress: Math.round(avg * 100), stage: stageFor(avg * 100) });
+        };
+
+        // /predict polling — 동별 완료마다 backend progress 갱신, 250ms 폴링.
+        const predictPromise = runPredictPolling(
+          params,
+          (ratio, stage) => {
+            if (get().startedAt !== startedAt) return; // stale guard
+            const cur = get().prediction;
+            set({ prediction: { ...cur, progress: ratio, stage } });
+            recalcGlobal();
+          },
+          abortController.signal,
+        )
           .then((data) => {
             if (get().startedAt !== startedAt) return;
-            const { _progressTimer: t } = get();
-            if (t) clearInterval(t);
             set({
-              analysis: { status: 'done', data, error: null, finishedAt: Date.now() },
-              status: 'done',
-              progress: 100,
-              stage: 'COMPLETE',
-              _progressTimer: null,
+              prediction: {
+                status: 'done',
+                data,
+                error: null,
+                finishedAt: Date.now(),
+                progress: 1,
+                stage: 'done',
+              },
             });
+            recalcGlobal();
           })
           .catch((err) => {
             if (get().startedAt !== startedAt) return;
             if (isAbortError(err)) return;
-            const { _progressTimer: t } = get();
-            if (t) clearInterval(t);
-            const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
-            // prediction 이 이미 done 이면 status 도 done 유지 (부분 성공).
-            const predDone = get().prediction.status === 'done';
+            const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
+            const cur = get().prediction;
             set({
-              analysis: { status: 'error', data: null, error: msg, finishedAt: Date.now() },
-              ...(predDone
-                ? { status: 'done', progress: 100, stage: 'COMPLETE' }
-                : { status: 'error', stage: '시뮬 실패', error: msg }),
-              _progressTimer: null,
+              prediction: {
+                status: 'error',
+                data: null,
+                error: msg,
+                finishedAt: Date.now(),
+                progress: cur.progress,
+                stage: cur.stage,
+              },
             });
           });
 
-        // /predict — await 후 즉시 prediction 슬라이스 확정 → App.tsx 게이트 통과 → 대시보드 진입 (≈15s).
-        // analyze 는 백그라운드에서 계속 실행 중이므로 status 는 아직 'running' 유지.
-        // (analyze .then()/.catch() 에서 'done'/'error' 로 전환 + 타이머 정리)
-        try {
-          const data = await runPredict(params, abortController.signal);
-          if (get().startedAt !== startedAt) return; // stale guard
-          set({ prediction: { status: 'done', data, error: null, finishedAt: Date.now() } });
-        } catch (err) {
-          if (get().startedAt !== startedAt) return;
-          if (isAbortError(err)) return;
-          const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
-          set({ prediction: { status: 'error', data: null, error: msg, finishedAt: Date.now() } });
+        // /analyze/llm polling — LangGraph 노드 완료마다 progress (25%/50%/75%/100%).
+        const analyzePromise = runAnalyzeLlmPolling(
+          params,
+          (ratio, stage) => {
+            if (get().startedAt !== startedAt) return;
+            const cur = get().analysis;
+            set({ analysis: { ...cur, progress: ratio, stage } });
+            recalcGlobal();
+          },
+          abortController.signal,
+        )
+          .then((data) => {
+            if (get().startedAt !== startedAt) return;
+            set({
+              analysis: {
+                status: 'done',
+                data,
+                error: null,
+                finishedAt: Date.now(),
+                progress: 1,
+                stage: 'done',
+              },
+            });
+            recalcGlobal();
+          })
+          .catch((err) => {
+            if (get().startedAt !== startedAt) return;
+            if (isAbortError(err)) return;
+            const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
+            const cur = get().analysis;
+            set({
+              analysis: {
+                status: 'error',
+                data: null,
+                error: msg,
+                finishedAt: Date.now(),
+                progress: cur.progress,
+                stage: cur.stage,
+              },
+            });
+          });
+
+        // 양쪽 settle 후 글로벌 status 결정 — 하나라도 done 이면 done, 둘 다 error 면 error.
+        await Promise.allSettled([predictPromise, analyzePromise]);
+        if (get().startedAt !== startedAt) return;
+        const { prediction: p, analysis: a } = get();
+        const anyDone = p.status === 'done' || a.status === 'done';
+        if (anyDone) {
+          set({ status: 'done', progress: 100, stage: 'COMPLETE' });
+        } else {
+          set({ status: 'error', stage: '시뮬 실패', error: p.error || a.error });
         }
       },
 
       retryPrediction: async () => {
         const params = get().params;
         if (!params) return;
-        set({ prediction: { status: 'running', data: null, error: null, finishedAt: null } });
+        set({ prediction: { ...initialPrediction, status: 'running' } });
         try {
-          const data = await runPredict(params);
-          set({ prediction: { status: 'done', data, error: null, finishedAt: Date.now() } });
+          const data = await runPredictPolling(params, (ratio, stage) => {
+            const cur = get().prediction;
+            set({ prediction: { ...cur, progress: ratio, stage } });
+          });
+          set({
+            prediction: {
+              status: 'done',
+              data,
+              error: null,
+              finishedAt: Date.now(),
+              progress: 1,
+              stage: 'done',
+            },
+          });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '예측 재시도 실패';
-          set({ prediction: { status: 'error', data: null, error: msg, finishedAt: Date.now() } });
+          const cur = get().prediction;
+          set({
+            prediction: {
+              status: 'error',
+              data: null,
+              error: msg,
+              finishedAt: Date.now(),
+              progress: cur.progress,
+              stage: cur.stage,
+            },
+          });
         }
       },
 
       retryAnalysis: async () => {
         const params = get().params;
         if (!params) return;
-        set({ analysis: { status: 'running', data: null, error: null, finishedAt: null } });
+        set({ analysis: { ...initialAnalysis, status: 'running' } });
         try {
-          const data = await runAnalyzeLlm(params);
-          set({ analysis: { status: 'done', data, error: null, finishedAt: Date.now() } });
+          const data = await runAnalyzeLlmPolling(params, (ratio, stage) => {
+            const cur = get().analysis;
+            set({ analysis: { ...cur, progress: ratio, stage } });
+          });
+          set({
+            analysis: {
+              status: 'done',
+              data,
+              error: null,
+              finishedAt: Date.now(),
+              progress: 1,
+              stage: 'done',
+            },
+          });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '분석 재시도 실패';
-          set({ analysis: { status: 'error', data: null, error: msg, finishedAt: Date.now() } });
+          const cur = get().analysis;
+          set({
+            analysis: {
+              status: 'error',
+              data: null,
+              error: msg,
+              finishedAt: Date.now(),
+              progress: cur.progress,
+              stage: cur.stage,
+            },
+          });
         }
       },
 

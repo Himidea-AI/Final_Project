@@ -43,7 +43,7 @@
  *   - C2: Docker 배포 시 nginx.conf의 /api 프록시가 백엔드를 가리켜야 함
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useId, lazy, Suspense } from 'react';
 import {
   Routes,
   Route,
@@ -80,8 +80,7 @@ import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
-import { getLivePopulation, type CustomerSegmentRequest } from './api/client';
-import { useCustomerSegmentPreview } from './hooks/useCustomerSegmentPreview';
+import { getLivePopulation } from './api/client';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
 import NetworkBackground from './components/NetworkBackground';
 // Phase C Round 2 — PDF 묶음 + Dashboard 묶음 추출 (정적 import 유지)
@@ -707,6 +706,11 @@ function SimulatorDashboard({
   const navigate = useNavigate();
   const location = useLocation();
 
+  // RUN 버튼 disabled 의 진실 — store.status. reportState='loading' 좀비 회귀 방지
+  // (RUN 직후 /dashboard 로 이동하므로 reportState 초기화 동선 없음 → 시뮬 완료 후
+  // 사용자가 simulator 로 복귀 시 'loading' 잔존하면 RUN 영구 잠금).
+  const storeStatus = useSimulationStore((s) => s.status);
+
   // Drawer "조건 수정" 진입 시 폼 자동 채움 — store.params 에서 mount 시 1회 capture.
   // useState lazy init 으로 최초 render 만 평가. 이후 사용자가 폼 변경해도 영향 없음.
   // store.params 단위: monthly_rent / initial_capital 은 원 단위 → 만원 단위로 변환.
@@ -807,34 +811,9 @@ function SimulatorDashboard({
     setStoreLon(nextLon);
   }, []);
 
-  // [customer_segment 미리보기] 좌측 패널 입력 변경 시 ~100ms MLP 호출.
-  // /predict + /analyze/llm (멀티에이전트 파이프라인)와 무관 — RUN 누르기 전 즉시 피드백.
-  const previewReq = useMemo<CustomerSegmentRequest | null>(() => {
-    if (!selectedDongs[0]) return null;
-    return {
-      target_district: selectedDongs[0],
-      business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
-      target_age_groups: targetAgeGroups,
-      target_gender: targetGender,
-      target_time_slots: targetTimeSlots,
-      target_day_type: targetDayType,
-      target_monthly_sales: targetMonthlySales,
-    };
-  }, [
-    // selectedDongs 배열 reference 대신 [0]만 — 새 배열 reference로 setState 시 useMemo 재계산 회피
-    selectedDongs[0],
-    businessType,
-    targetAgeGroups,
-    targetGender,
-    targetTimeSlots,
-    targetDayType,
-    targetMonthlySales,
-  ]);
-  const {
-    data: previewSegment,
-    isLoading: isPreviewLoading,
-    error: previewError,
-  } = useCustomerSegmentPreview(previewReq);
+  // [customer_segment 미리보기] 코드는 dev 머지 시 통합되었으나 hook 파일 부재 + 결과 변수 미사용
+  // 으로 제거. 향후 재도입 시 frontend/src/hooks/useCustomerSegmentPreview.ts 와 InsightsGrid 의
+  // segment prop 와이어링 함께 복원 필요.
 
   // [A1] 유동인구 실시간 데이터
   const [popData, setPopData] = useState<any>(null);
@@ -993,78 +972,50 @@ function SimulatorDashboard({
       return;
     }
     setReportState('loading');
-    try {
-      // [C1 연동] 백엔드 SimulationInput 9개 필드 전부 전송
-      // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환
-      // brand_name: 브랜드 자동매핑(auth 로그인 시 ftc_brand_franchise 조회) 결과 우선,
-      //            없으면 company_name 폴백 (경쟁 분석 _resolve_industry 매핑률 향상)
-      // TODO(existing_stores): 매장 관리 UI 추가 시 실제 데이터 연동 (현재는 빈 배열)
-      const payload = {
-        business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
-        brand_name: brand?.brand_name || user?.company_name || '',
-        target_district: selectedDongs[0] || '서교동',
-        target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
-        existing_stores: [],
-        monthly_rent: budget * 10000, // 만원 → 원
-        scenarios: [],
-        // 신규 7 필드
-        store_area: storeArea,
-        target_price_range: targetPrice,
-        operating_hours: operatingHours,
-        initial_capital: initialCapital * 10000,
-        commercial_radius: radius,
-        population_weight: weighted,
-        industry_filter: BUSINESS_TYPE_CS_CODE[businessType] ?? null,
-        // 출점 후보지 좌표 (선택). 미입력 시 backend rule_school_zone 이 보수적 caution 처리.
-        lat: storeLat,
-        lon: storeLon,
-        // [customer_revenue] A1 찬영 P1-C — target_* 5필드. 선택 안 한 경우 null/빈배열 = 전체 고객.
-        target_age_groups: targetAgeGroups,
-        target_gender: targetGender,
-        target_time_slots: targetTimeSlots,
-        target_day_type: targetDayType,
-        target_monthly_sales: targetMonthlySales,
-      };
+    // [C1 연동] 백엔드 SimulationInput 전 필드 전송.
+    // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환.
+    // brand_name: 브랜드 자동매핑 결과 우선, 없으면 company_name 폴백.
+    // lat/lon: 출점 후보지 좌표 (학교환경위생정화구역 거리 룰 트리거). 미입력 시 backend caution.
+    const payload = {
+      business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
+      brand_name: brand?.brand_name || user?.company_name || '',
+      target_district: selectedDongs[0] || '서교동',
+      target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
+      existing_stores: [],
+      monthly_rent: budget * 10000, // 만원 → 원
+      scenarios: [],
+      store_area: storeArea,
+      target_price_range: targetPrice,
+      operating_hours: operatingHours,
+      initial_capital: initialCapital * 10000,
+      commercial_radius: radius,
+      population_weight: weighted,
+      industry_filter: BUSINESS_TYPE_CS_CODE[businessType] ?? null,
+      // 출점 후보지 좌표 — pub 업종 학교환경위생정화구역 거리 룰. 미입력 시 backend caution.
+      lat: storeLat,
+      lon: storeLon,
+      // [customer_revenue] target_* 5 필드. 미선택은 null/빈배열 = 전체 고객.
+      target_age_groups: targetAgeGroups,
+      target_gender: targetGender,
+      target_time_slots: targetTimeSlots,
+      target_day_type: targetDayType,
+      target_monthly_sales: targetMonthlySales,
+    };
 
-      // [IM3-205] fetch를 simulationStore로 위임 — 페이지 이동해도 fetch가 끊기지 않음
-      // [IM3-259] /predict + /analyze/llm 독립 비동기 호출. predict 완료 즉시 대시보드 진입, analyze 는 백그라운드 완료 후 자동 갱신.
-      await useSimulationStore.getState().startSimulation(payload);
-      const storeState = useSimulationStore.getState();
-      const simRes = buildCombinedResult(
-        storeState.prediction.data,
-        storeState.analysis.data,
-        storeState.params?.target_district ?? undefined,
-      );
-      // prediction 슬라이스만 done 이면 대시보드 진입 허용.
-      // analysis 는 백그라운드에서 계속 실행 — DashboardOutlet 이 store 구독으로 자동 갱신.
-      if (storeState.prediction.status !== 'done' || !simRes) {
-        throw new Error(storeState.error ?? 'Simulation failed');
-      }
-      // [R1] Zustand store.result 가 Single Source of Truth.
-      // 아래 setRawSimResult/setSimResult 는 마운트 복원 로직과 동일 함수 사용.
-      setRawSimResult(simRes);
-      setSimResult(toSimResultViewModel(simRes));
-      setReportState('result');
-    } catch (err) {
-      console.error('Simulation failed:', err);
-      // [B2 수지니 요청] smart mock fallback 제거 — 성공/실패 구분 명확화.
-      // 타임아웃(600s) 또는 LangGraph 실패 시 입력 패널로 복귀 + 재시도 유도 토스트.
-      setRawSimResult(null);
-      setSimResult(null);
-      setReportState('idle');
-      const msg =
-        err instanceof Error && err.message
-          ? `시뮬레이션 실패: ${err.message.slice(0, 80)} — RUN SIMULATION 을 다시 눌러 재시도해주세요.`
-          : '시뮬레이션 실패 — RUN SIMULATION 을 다시 눌러 재시도해주세요.';
-      showToast('error', msg);
-    }
+    // 새 플로우 (2026-05-02): RUN 즉시 /dashboard 진입 → DashboardRunningPlaceholder 의
+    // 슬라이스별 elapsed UI 노출. ML 또는 AI 한 슬라이스라도 done 되는 즉시 buildCombinedResult
+    // 가 truthy 반환 → Hub 의 3 카드 표시 (미완료 슬라이스는 grayscale loading state).
+    // 기존: await startSimulation 으로 predict 완료까지 /simulator 에서 대기. dead.
+    void useSimulationStore.getState().startSimulation(payload);
+    navigate('/dashboard');
   }, [
     setReportState,
+    navigate,
     selectedDongs,
     budget,
     businessType,
     user?.company_name,
-    brand?.brand_name, // line 1322 brand_name 폴백 — 로그아웃 후 재로그인 시 새 brand 반영
+    brand?.brand_name, // brand_name 폴백 — 로그아웃 후 재로그인 시 새 brand 반영
     storeArea,
     targetPrice,
     operatingHours,
@@ -1102,9 +1053,9 @@ function SimulatorDashboard({
         </h1>
         <button
           onClick={runSim}
-          disabled={reportState === 'loading'}
+          disabled={storeStatus === 'running'}
           className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm tracking-wider transition-all duration-200 ${
-            reportState === 'loading'
+            storeStatus === 'running'
               ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground'
               : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98]'
           }`}
@@ -1472,34 +1423,6 @@ function SimulatorDashboard({
                 </p>
               </FormField>
             </div>
-
-            {/* [customer_segment 미리보기] RUN 누르기 전 ~100ms MLP 결과 표시 */}
-            {previewSegment && (
-              <div className="mt-4 px-4 py-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[0.625rem] font-black text-primary uppercase tracking-widest">
-                    실시간 미리보기 · {(previewSegment.segment_ratio * 100).toFixed(1)}% 기여
-                  </span>
-                  {isPreviewLoading && <Loader2 size={12} className="animate-spin text-primary" />}
-                </div>
-                <p className="text-[0.6875rem] text-foreground leading-relaxed">
-                  {previewSegment.profile_summary}
-                </p>
-                {previewSegment.segment_sales != null && (
-                  <p className="text-[0.625rem] text-muted-foreground tabular-nums">
-                    세그먼트 매출 추정: ₩{previewSegment.segment_sales.toLocaleString('ko-KR')}
-                  </p>
-                )}
-                <p className="text-[0.5625rem] text-muted-foreground italic">
-                  * 동·업종 단위 MLP 추정 — RUN SIMULATION 후 종합 결과로 검증
-                </p>
-              </div>
-            )}
-            {previewError && !isPreviewLoading && (
-              <div className="mt-4 px-4 py-2 rounded-lg border border-danger/30 bg-danger/10 text-[0.6875rem] text-danger">
-                미리보기 실패: {previewError}
-              </div>
-            )}
           </div>
         </div>
         {/* /타겟 페르소나 카드 끝 */}
@@ -1621,42 +1544,34 @@ function pathToScene(
  * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
  */
 /** 시뮬 진행중 + 데이터 미도착 상태에서 dashboard shell 안에 표시할 로딩 placeholder.
- *  IM3-259 분리 호출 — /predict (ML 예측) 와 /analyze/llm (AI 분석) 두 슬라이스의 elapsed
- *  시간을 각각 표시. fake progress 없음 — 실제 startedAt → finishedAt 차이만 사용. */
+ *  IM3-259 분리 호출 — /predict (ML 예측) 와 /analyze/llm (AI 분석) 두 슬라이스의
+ *  실측 progress 를 wave 차오름 + % 로 시각화. backend polling 기반 (가짜 시간 추정 0). */
 function DashboardRunningPlaceholder() {
-  const startedAt = useSimulationStore((s) => s.startedAt);
   const predStatus = useSimulationStore((s) => s.prediction.status);
-  const predFinishedAt = useSimulationStore((s) => s.prediction.finishedAt);
   const anaStatus = useSimulationStore((s) => s.analysis.status);
-  const anaFinishedAt = useSimulationStore((s) => s.analysis.finishedAt);
-
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (predStatus !== 'running' && anaStatus !== 'running') return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [predStatus, anaStatus]);
-
-  const elapsedSec = (finishedAt: number | null): number =>
-    startedAt ? Math.max(0, Math.round(((finishedAt ?? now) - startedAt) / 1000)) : 0;
+  const predProgress = useSimulationStore((s) => s.prediction.progress);
+  const anaProgress = useSimulationStore((s) => s.analysis.progress);
+  const predStage = useSimulationStore((s) => s.prediction.stage);
+  const anaStage = useSimulationStore((s) => s.analysis.stage);
 
   return (
     <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-6 px-6">
       <div className="text-lg font-semibold text-foreground">시뮬레이션 진행 중</div>
-      <div className="flex w-full max-w-md flex-col gap-3">
+      {/* 가로 배치 — sm 이상에서 두 박스 좌우 나란히. 모바일 (sm 미만) 에선 세로 fallback. */}
+      <div className="flex w-full max-w-4xl flex-col gap-4 sm:flex-row">
         <SliceProgressRow
           status={predStatus}
           label="ML 예측"
           sublabel="매출 / 폐업률 (TCN + LightGBM)"
-          elapsed={elapsedSec(predFinishedAt)}
-          expected={15}
+          progressRatio={predProgress}
+          stage={predStage}
         />
         <SliceProgressRow
           status={anaStatus}
           label="AI 분석"
           sublabel="멀티 에이전트 종합 판단 (LLM)"
-          elapsed={elapsedSec(anaFinishedAt)}
-          expected={60}
+          progressRatio={anaProgress}
+          stage={anaStage}
         />
       </div>
       <p className="max-w-md text-center text-xs text-muted-foreground leading-relaxed">
@@ -1666,19 +1581,199 @@ function DashboardRunningPlaceholder() {
   );
 }
 
+/** 박스 안 액체 wave animation — 3-layer wave + gradient body + surface sheen.
+ *  fillHeight 가 progressRatio 따라 연속 차오름 → "물이 차오르는" 메타포.
+ *  done 시: calm full fill + 1회 shimmer sweep. */
+function HorizontalWaveBackground({
+  status,
+  progressRatio,
+}: {
+  status: 'idle' | 'running' | 'done' | 'error';
+  progressRatio: number;
+}) {
+  // SVG defs id 충돌 방지 — 동일 페이지에 여러 박스가 있을 때 path id 유일성 확보.
+  const uid = useId().replace(/:/g, '_');
+  const deepId = `wave-deep-${uid}`;
+  const midId = `wave-mid-${uid}`;
+  const surfId = `wave-surf-${uid}`;
+
+  // fillHeight = 표시 % 와 정확히 일치 — progressRatio * 100 직결.
+  // running 중엔 hook 의 0.96 cap 으로 자연스럽게 max 96% (done 직전), done 시 100% 점프 + shimmer.
+  // 시작 직후 (ratio≈0) wave 0% 인 게 정직 — 박스 border/icon 으로 running 인식 충분.
+  const fillHeight = status === 'done' ? 100 : status === 'running' ? progressRatio * 100 : 0;
+
+  // 진행률 클수록 표면 wave 잔잔해짐 — running 끝나갈 때 calm 전이 시각 신호.
+  const surfaceOpacity = status === 'done' ? 0 : Math.max(0.5, 1 - progressRatio * 0.55);
+  const showSurfaceWave = status === 'running';
+  const isDone = status === 'done';
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
+      aria-hidden="true"
+    >
+      <div
+        className="absolute bottom-0 left-0 right-0"
+        style={{
+          height: `${fillHeight}%`,
+          // cubic-bezier(0.22,1,0.36,1) = ease-out-quart — 차오름 끝에서 부드럽게 정착.
+          transition: 'height 600ms cubic-bezier(0.22,1,0.36,1)',
+        }}
+      >
+        {/* Body — vertical gradient: 표면 옅음 → 바닥 진함 (수심 깊이감) */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, transparent) 0%, color-mix(in srgb, var(--primary) 18%, transparent) 60%, color-mix(in srgb, var(--primary) 26%, transparent) 100%)',
+          }}
+        />
+
+        {/* Surface highlight — 수면 sheen (가운데 밝고 양 끝 fade) */}
+        <div
+          className="absolute left-0 right-0 top-0 h-px"
+          style={{
+            background:
+              'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--primary) 50%, transparent) 50%, transparent 100%)',
+          }}
+        />
+
+        {/* Done shimmer — 완료 순간 1회 sweep highlight (퀄리티 폴리시) */}
+        {isDone && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div
+              className="absolute -inset-y-2 -left-1/3 w-1/3"
+              style={{
+                animation: 'water-shimmer 1.4s ease-out 1 forwards',
+                background:
+                  'linear-gradient(100deg, transparent 0%, color-mix(in srgb, white 38%, transparent) 50%, transparent 100%)',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Surface waves — 3 layer (deep slow / mid / surface fast) — running 시만.
+            preserveAspectRatio=none 로 박스 너비에 stretch, 다른 phase·dur 로 swell. */}
+        {showSurfaceWave && (
+          <svg
+            className="absolute -top-4 left-0 right-0 h-8 w-full"
+            viewBox="0 0 1200 32"
+            preserveAspectRatio="none"
+            style={{
+              opacity: surfaceOpacity,
+              transition: 'opacity 700ms ease-out',
+            }}
+          >
+            <defs>
+              {/* Deep — 큰 진폭, 느린 layer (수심 깊은 너울) */}
+              <path id={deepId} d="M0,16 Q200,4 400,16 T800,16 T1200,16 L1200,32 L0,32 Z" />
+              {/* Mid — 중간 진폭/속도 */}
+              <path id={midId} d="M0,18 Q150,9 300,18 T600,18 T900,18 T1200,18 L1200,32 L0,32 Z" />
+              {/* Surface — 잔물결, 빠른 phase */}
+              <path
+                id={surfId}
+                d="M0,22 Q100,15 200,22 T400,22 T600,22 T800,22 T1000,22 T1200,22 L1200,32 L0,32 Z"
+              />
+            </defs>
+
+            {/* Deep — 14s 느린 너울, opacity 16% */}
+            <use
+              href={`#${deepId}`}
+              x="-1200"
+              fill="color-mix(in srgb, var(--primary) 16%, transparent)"
+            >
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                from="0 0"
+                to="1200 0"
+                dur="14s"
+                repeatCount="indefinite"
+              />
+            </use>
+            <use href={`#${deepId}`} fill="color-mix(in srgb, var(--primary) 16%, transparent)">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                from="0 0"
+                to="1200 0"
+                dur="14s"
+                repeatCount="indefinite"
+              />
+            </use>
+
+            {/* Mid — 9s, opacity 24% (가장 진한 layer — 시각 anchor) */}
+            <use
+              href={`#${midId}`}
+              x="-1200"
+              fill="color-mix(in srgb, var(--primary) 24%, transparent)"
+            >
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                from="0 0"
+                to="1200 0"
+                dur="9s"
+                repeatCount="indefinite"
+              />
+            </use>
+            <use href={`#${midId}`} fill="color-mix(in srgb, var(--primary) 24%, transparent)">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                from="0 0"
+                to="1200 0"
+                dur="9s"
+                repeatCount="indefinite"
+              />
+            </use>
+
+            {/* Surface — 5s 빠른 잔물결, opacity 12% */}
+            <use
+              href={`#${surfId}`}
+              x="-1200"
+              fill="color-mix(in srgb, var(--primary) 12%, transparent)"
+            >
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                from="0 0"
+                to="1200 0"
+                dur="5s"
+                repeatCount="indefinite"
+              />
+            </use>
+            <use href={`#${surfId}`} fill="color-mix(in srgb, var(--primary) 12%, transparent)">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                from="0 0"
+                to="1200 0"
+                dur="5s"
+                repeatCount="indefinite"
+              />
+            </use>
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SliceProgressRow({
   status,
   label,
   sublabel,
-  elapsed,
-  expected,
+  progressRatio,
+  stage,
 }: {
   status: 'idle' | 'running' | 'done' | 'error';
   label: string;
   sublabel: string;
-  elapsed: number;
-  /** 평균 예상 시간 (초). 정적 추정치 — fake progress 가 아닌 사용자 안내용 hint. */
-  expected: number;
+  /** Real progress 0~1 — backend polling 으로 store 에 누적된 슬라이스 진행률. */
+  progressRatio: number;
+  /** Backend 가 전달한 현재 진행 단계 라벨 (e.g. "서교동 분석 완료 (2/4)" 또는 LangGraph 노드명). */
+  stage: string | null;
 }) {
   const Icon = status === 'done' ? CheckCircle2 : status === 'error' ? AlertCircle : Loader2;
   const iconColor =
@@ -1689,27 +1784,45 @@ function SliceProgressRow({
         : status === 'running'
           ? 'text-primary'
           : 'text-muted-foreground';
-  const elapsedColor =
+  const stateLabel =
+    status === 'done' ? '완료' : status === 'error' ? '실패' : status === 'idle' ? '대기' : null;
+  const stateLabelColor =
     status === 'done'
       ? 'text-success'
       : status === 'error'
         ? 'text-danger'
         : 'text-muted-foreground';
+  const isRunning = status === 'running';
+
+  // running 시 실측 % — backend 가 보낸 progressRatio (0~1) 그대로 100 곱.
+  // 가짜 시간 추정 없음. 0% 에서 25/50/75 식 실제 노드 완료 단계마다 점프.
+  const progressPct = isRunning ? Math.round(progressRatio * 100) : null;
+
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
+    <div className="relative flex min-h-[200px] min-w-0 flex-1 flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-border bg-card p-6 text-center transition-colors duration-500">
+      <HorizontalWaveBackground status={status} progressRatio={progressRatio} />
       <Icon
-        className={`h-5 w-5 shrink-0 ${iconColor} ${status === 'running' ? 'animate-spin' : ''}`}
+        className={`relative h-7 w-7 shrink-0 ${iconColor} ${isRunning ? 'animate-spin' : ''}`}
       />
-      <div className="min-w-0 flex-1 text-left">
-        <div className="text-sm font-bold text-foreground">
-          {label}{' '}
-          <span className="text-xs font-normal text-muted-foreground">(보통 ~{expected}s)</span>
+      <div className="relative">
+        <div className="text-base font-bold text-foreground">{label}</div>
+        <div className="mt-1 text-xs text-muted-foreground">{sublabel}</div>
+      </div>
+      {isRunning && progressPct !== null ? (
+        <div className="relative flex flex-col items-center gap-1">
+          <div className="flex items-baseline gap-1 tabular-nums">
+            <span className="text-2xl font-black text-primary">{progressPct}</span>
+            <span className="text-base font-black text-primary">%</span>
+          </div>
+          {stage && (
+            <span className="max-w-[180px] truncate text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground">
+              {stage}
+            </span>
+          )}
         </div>
-        <div className="text-xs text-muted-foreground">{sublabel}</div>
-      </div>
-      <div className={`shrink-0 text-sm font-mono tabular-nums ${elapsedColor}`}>
-        {status === 'idle' ? '대기' : `${elapsed}s`}
-      </div>
+      ) : stateLabel ? (
+        <div className={`relative text-sm font-bold ${stateLabelColor}`}>{stateLabel}</div>
+      ) : null}
     </div>
   );
 }
