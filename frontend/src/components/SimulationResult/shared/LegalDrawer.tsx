@@ -1,7 +1,28 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { LegalChecklistItem } from '../../../types';
+
+const STORAGE_PREFIX = 'legal-checklist-v1:';
+
+function loadChecked(typeKey: string): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + typeKey);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveChecked(typeKey: string, state: Record<string, boolean>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STORAGE_PREFIX + typeKey, JSON.stringify(state));
+  } catch {
+    /* quota or privacy mode — ignore */
+  }
+}
 
 interface LegalRiskDetail {
   type: string;
@@ -24,6 +45,25 @@ const RISK_BADGE: Record<string, { cls: string; label: string }> = {
 };
 
 export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
+  const typeKey = risk?.type ?? '';
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!open || !typeKey) return;
+    setChecked(loadChecked(typeKey));
+  }, [open, typeKey]);
+
+  const toggleItem = useCallback(
+    (itemKey: string) => {
+      setChecked((prev) => {
+        const next = { ...prev, [itemKey]: !prev[itemKey] };
+        if (typeKey) saveChecked(typeKey, next);
+        return next;
+      });
+    },
+    [typeKey],
+  );
+
   useEffect(() => {
     if (!open) return;
     const handleEsc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -92,20 +132,31 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
                     창업 체크리스트
                   </h3>
                   <ul className="space-y-2">
-                    {risk.checklist.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          disabled
-                          className="mt-1 shrink-0 cursor-not-allowed"
-                          aria-label={item.text}
-                        />
-                        <span className="text-foreground">
-                          {item.text}
-                          {item.isRequired && <span className="ml-1 text-danger">*</span>}
-                        </span>
-                      </li>
-                    ))}
+                    {risk.checklist.map((item, i) => {
+                      const itemKey = `${i}:${item.text}`;
+                      const isChecked = !!checked[itemKey];
+                      return (
+                        <li key={itemKey} className="flex items-start gap-2 text-sm">
+                          <input
+                            id={`legal-check-${typeKey}-${i}`}
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleItem(itemKey)}
+                            className="mt-1 shrink-0 cursor-pointer accent-primary"
+                            aria-label={item.text}
+                          />
+                          <label
+                            htmlFor={`legal-check-${typeKey}-${i}`}
+                            className={`cursor-pointer select-none ${
+                              isChecked ? 'text-muted-foreground line-through' : 'text-foreground'
+                            }`}
+                          >
+                            {item.text}
+                            {item.isRequired && <span className="ml-1 text-danger">*</span>}
+                          </label>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               )}
