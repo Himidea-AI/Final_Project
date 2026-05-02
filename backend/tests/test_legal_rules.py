@@ -63,6 +63,17 @@ class TestFoodHygiene:
         en = rule_food_hygiene("cafe")
         assert ko["level"] == en["level"] == "danger"
 
+    def test_coffee_normalized_to_cafe(self):
+        # frontend가 "커피"로 보낼 때도 카페와 동일 처리
+        assert rule_food_hygiene("커피")["level"] == "danger"
+
+    def test_bakery_normalized_to_cafe(self):
+        assert rule_food_hygiene("베이커리")["level"] == "danger"
+
+    def test_korean_food_normalized_to_restaurant(self):
+        for biz in ("한식", "중식", "일식", "분식"):
+            assert rule_food_hygiene(biz)["level"] == "danger", f"{biz} should be danger"
+
     def test_unknown_business_type_caution(self):
         r = rule_food_hygiene("unknown_biz")
         assert r["level"] == "caution"
