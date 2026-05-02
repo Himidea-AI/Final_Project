@@ -1,10 +1,13 @@
-"""법률 평가 Orchestrator — 8 룰 + 4 specialist 병렬 실행.
+"""법률 평가 Orchestrator — 9 룰 + 4 specialist 병렬 실행.
 
-진입점: ``run_legal_evaluation`` — ``asyncio.gather`` 로 12 개 평가를
+진입점: ``run_legal_evaluation`` — ``asyncio.gather`` 로 13 개 평가를
 병렬 실행하고 ``return_exceptions=True`` 로 한 항목 실패가 전체에
 영향 주지 않도록 격리.
 
-반환 순서는 ``_RULE_ENGINE_ORDER`` 와 1:1 대응 (12 dict).
+반환 순서는 ``_RULE_ENGINE_ORDER`` 와 1:1 대응 (13 dict).
+
+2026-05-02: school_zone (학교환경위생정화구역) 룰 추가 — 주점 출점 후보지
+좌표 기반 50m/200m 거리 평가. 좌표 미입력 시 caution fallback.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ _RULE_ENGINE_ORDER: list[str] = [
     "safety_regulation",
     "fire_safety_law",
     "accessibility_law",
+    "school_zone",
     "commercial_lease_law",
     "labor_law",
     "vat_law",
@@ -76,21 +80,25 @@ async def run_legal_evaluation(
     district: str,
     store_area_pyeong: float,
     ftc_data: dict | None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> list[dict]:
-    """8 룰 + 4 specialist 병렬 평가 → 12 dict 반환.
+    """9 룰 + 4 specialist 병렬 평가 → 13 dict 반환.
 
     Args:
         brand: 브랜드명 (specialist 입력).
-        business_type: 업종 (cafe/restaurant/convenience 또는 한글).
+        business_type: 업종 (cafe/restaurant/pub 또는 한글; 편의점 등 운영 카테고리도 입력 가능).
         district: 행정동 (마포 16 동 또는 기타).
         store_area_pyeong: 평수 (default 15.0 호출자가 보장).
         ftc_data: ``check_ftc_franchise`` 결과 dict (또는 ``None``).
+        lat: 출점 후보지 위도 (학교환경위생정화구역 거리 계산용; 주점만 트리거).
+        lon: 출점 후보지 경도 (lat 와 함께 입력될 때만 유효).
 
     Returns:
-        ``len == 12`` 의 dict 리스트. 각 dict 는 ``type, level, summary, recommendation,
+        ``len == 13`` 의 dict 리스트. 각 dict 는 ``type, level, summary, recommendation,
         articles`` 필드를 가지며 ``_RULE_ENGINE_ORDER`` 순서로 정렬됨.
     """
-    # 룰 8 개 — 동기 pure-Python (~ms). asyncio.to_thread executor 점유 회피 위해
+    # 룰 9 개 — 동기 pure-Python (~ms). asyncio.to_thread executor 점유 회피 위해
     # 직접 호출 후 dict 로 수집 — 이벤트루프 블로킹 위험 없음.
     rule_results: list[dict] = []
     for fn, args in (
@@ -98,6 +106,7 @@ async def run_legal_evaluation(
         (rules.rule_safety_regulation, (business_type, store_area_pyeong)),
         (rules.rule_fire_safety, (business_type, store_area_pyeong)),
         (rules.rule_accessibility, (business_type, store_area_pyeong)),
+        (rules.rule_school_zone, (business_type, lat, lon)),
         (rules.rule_commercial_lease, ()),
         (rules.rule_labor, ()),
         (rules.rule_vat, ()),

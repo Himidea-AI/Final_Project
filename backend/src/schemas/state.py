@@ -36,6 +36,8 @@ class AgentState(TypedDict):
     target_price_range: str  # 목표 객단가 구간
     operating_hours: list[str]  # 주 타겟 시간대
     initial_capital: int  # 초기 자본금 (원)
+    lat: float | None  # 출점 후보지 위도 (학교환경위생정화구역 거리 룰 트리거)
+    lon: float | None  # 출점 후보지 경도
 
     # 3. 데이터 슬롯 (Track A 및 RAG 결과물 저장)
     market_data: MarketData  # DB에서 가져올 상권 데이터 객체

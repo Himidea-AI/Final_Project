@@ -73,7 +73,7 @@ def patch_specialists(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_returns_12_items(patch_specialists):
+async def test_returns_13_items(patch_specialists):
     risks = await run_legal_evaluation(
         brand="스타벅스",
         business_type="cafe",
@@ -81,7 +81,7 @@ async def test_returns_12_items(patch_specialists):
         store_area_pyeong=20.0,
         ftc_data=None,
     )
-    assert len(risks) == 12
+    assert len(risks) == 13
     types = [r["type"] for r in risks]
     # 순서 확인
     assert types == _RULE_ENGINE_ORDER
@@ -98,7 +98,8 @@ async def test_types_unique_and_complete(patch_specialists):
     )
     types = {r["type"] for r in risks}
     assert types == set(_RULE_ENGINE_ORDER)
-    assert len(types) == 12
+    assert len(types) == 13
+    assert "school_zone" in types
 
 
 @pytest.mark.asyncio
@@ -141,15 +142,15 @@ async def test_specialist_failure_isolated(monkeypatch):
         store_area_pyeong=20.0,
         ftc_data=None,
     )
-    assert len(risks) == 12
+    assert len(risks) == 13
     franchise = next(r for r in risks if r["type"] == "franchise_law")
     assert franchise["level"] == "caution"
     assert franchise.get("is_fallback") is True
-    # 나머지 11 항목은 정상 (fallback 아님)
+    # 나머지 12 항목 중 룰 9 개는 정상 (fallback 아님)
     others = [r for r in risks if r["type"] != "franchise_law"]
     rules_only = [r for r in others if r["type"] in {
         "food_hygiene", "safety_regulation", "fire_safety_law", "accessibility_law",
-        "commercial_lease_law", "labor_law", "vat_law", "sewage_law",
+        "school_zone", "commercial_lease_law", "labor_law", "vat_law", "sewage_law",
     }]
     for r in rules_only:
         assert not r.get("is_fallback"), f"{r['type']} 이 예기치 않게 fallback 처리됨"
@@ -170,7 +171,7 @@ async def test_multiple_specialist_failures(monkeypatch):
         store_area_pyeong=10.0,
         ftc_data=None,
     )
-    assert len(risks) == 12
+    assert len(risks) == 13
     types = {r["type"] for r in risks}
     assert "franchise_law" in types
     assert "fair_trade_law" in types
@@ -211,6 +212,41 @@ async def test_small_area_safe_for_safety(patch_specialists):
 
 
 # ---------------------------------------------------------------------------
+# school_zone — orchestrator 좌표 전달 경로 검증
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_school_zone_safe_for_cafe(patch_specialists):
+    """카페는 좌표와 무관하게 학교 거리 룰 적용 X (safe)."""
+    risks = await run_legal_evaluation(
+        brand="스타벅스",
+        business_type="cafe",
+        district="서교동",
+        store_area_pyeong=15.0,
+        ftc_data=None,
+        lat=37.5532,
+        lon=126.9217,
+    )
+    sz = next(r for r in risks if r["type"] == "school_zone")
+    assert sz["level"] == "safe"
+
+
+@pytest.mark.asyncio
+async def test_school_zone_caution_for_pub_no_coord(patch_specialists):
+    """주점 좌표 미입력 시 caution."""
+    risks = await run_legal_evaluation(
+        brand="펍",
+        business_type="pub",
+        district="서교동",
+        store_area_pyeong=15.0,
+        ftc_data=None,
+    )
+    sz = next(r for r in risks if r["type"] == "school_zone")
+    assert sz["level"] == "caution"
+
+
+# ---------------------------------------------------------------------------
 # _to_risk_dict 단위 동작 검증
 # ---------------------------------------------------------------------------
 
@@ -224,9 +260,10 @@ def test_to_risk_dict_handles_exception():
 
 def test_to_risk_dict_corrects_type():
     """specialist 가 잘못된 type 으로 반환해도 orchestrator 가 보정."""
+    franchise_idx = _RULE_ENGINE_ORDER.index("franchise_law")
     out = orchestrator._to_risk_dict(
         {"type": "wrong_type", "level": "safe", "summary": "x", "recommendation": "y", "articles": []},
-        8,  # franchise_law 위치
+        franchise_idx,
     )
     assert out["type"] == "franchise_law"
 
