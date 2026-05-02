@@ -115,7 +115,7 @@ def perturb_and_predict(
     feature_indices: list[int],
     delta_pct: float,
     model: torch.nn.Module,
-    tgt_scaler: sklearn.preprocessing.StandardScaler,
+    tgt_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
     device: torch.device,
 ) -> float:
     """특정 피처를 delta_pct% 변화시킨 후 TCN v2로 예측하여 4분기 평균 매출(원)을 반환한다.
@@ -130,8 +130,8 @@ def perturb_and_predict(
         변화율 (%). 예: 10.0 → +10%, -20.0 → -20%.
     model : TCNForecaster
         eval 모드의 TCN v2 모델 인스턴스.
-    tgt_scaler : StandardScaler
-        타겟 역변환용 스케일러.
+    tgt_scaler : StandardScaler | MinMaxScaler
+        타겟 역변환용 스케일러 (inverse_transform만 호출하므로 두 종류 모두 호환).
     device : torch.device
         추론 디바이스 (CPU/CUDA).
 
@@ -154,20 +154,56 @@ def perturb_and_predict(
         return max(0.0, float(np.expm1(pred_log)))
 
 
+def _scale_quarter_value(
+    feat_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
+    quarter_idx: int,
+    quarter_value: int,
+) -> float:
+    """quarter_value(1~4)를 feat_scaler가 정의한 스케일 공간 값으로 변환한다.
+
+    MinMaxScaler / StandardScaler 양쪽을 지원하며, 변환식은 sklearn 내부와 동일:
+    - MinMaxScaler  : scaled = x * scale_ + min_
+    - StandardScaler: scaled = (x - mean_) / scale_
+
+    Parameters
+    ----------
+    feat_scaler : StandardScaler | MinMaxScaler
+        학습 시 fit된 피처 스케일러.
+    quarter_idx : int
+        feat_scaler가 fit된 피처 배열 내 quarter_num의 인덱스.
+    quarter_value : int
+        1~4 중 하나. 스케일 공간 값으로 변환된다.
+
+    Returns
+    -------
+    float
+        스케일 공간의 quarter 값.
+    """
+    if hasattr(feat_scaler, "data_min_"):
+        # MinMaxScaler
+        scale_val = float(feat_scaler.scale_[quarter_idx])
+        min_val = float(feat_scaler.min_[quarter_idx])
+        return quarter_value * scale_val + min_val
+    # StandardScaler
+    mean_val = float(feat_scaler.mean_[quarter_idx])
+    std_val = float(feat_scaler.scale_[quarter_idx])
+    return (quarter_value - mean_val) / std_val if std_val > 1e-10 else 0.0
+
+
 def perturb_quarter_and_predict(
     seq_scaled: np.ndarray,
     quarter_idx: int,
     quarter_value: int,
-    feat_scaler: sklearn.preprocessing.StandardScaler,
+    feat_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
     model: torch.nn.Module,
-    tgt_scaler: sklearn.preprocessing.StandardScaler,
+    tgt_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
     device: torch.device,
 ) -> float:
     """quarter_num을 특정 분기값으로 설정 후 예측하여 4분기 평균 매출(원)을 반환한다.
 
     quarter_num은 ±% 섭동이 아닌 절댓값(1~4)으로 교체한다.
     feat_scaler로 다시 역변환 후 재스케일링하는 대신, 스케일링된 공간에서
-    (quarter_value - scaler_mean) / scaler_std 로 직접 치환한다.
+    `_scale_quarter_value`로 직접 치환한다 (StandardScaler / MinMaxScaler 모두 지원).
 
     Parameters
     ----------
@@ -177,8 +213,8 @@ def perturb_quarter_and_predict(
         ALL_FEATURES 내 quarter_num의 인덱스.
     quarter_value : int
         설정할 분기값 (1, 2, 3, 4).
-    feat_scaler : StandardScaler
-        피처 스케일러 (mean_, scale_ 접근용).
+    feat_scaler : StandardScaler | MinMaxScaler
+        피처 스케일러. v1은 StandardScaler, v2는 MinMaxScaler.
     model, tgt_scaler, device : 위와 동일.
 
     Returns
@@ -189,17 +225,7 @@ def perturb_quarter_and_predict(
     import torch
 
     seq_perturbed = seq_scaled.copy()
-    # MinMaxScaler (v2): scaled = x * scale_ + min_
-    # (StandardScaler 호환: mean_/scale_ 가 있으면 (x-mean)/std 사용)
-    if hasattr(feat_scaler, "data_min_"):
-        scale_val = float(feat_scaler.scale_[quarter_idx])
-        min_val = float(feat_scaler.min_[quarter_idx])
-        scaled_quarter = quarter_value * scale_val + min_val
-    else:
-        mean_val = float(feat_scaler.mean_[quarter_idx])
-        std_val = float(feat_scaler.scale_[quarter_idx])
-        scaled_quarter = (quarter_value - mean_val) / std_val if std_val > 1e-10 else 0.0
-    seq_perturbed[:, quarter_idx] = scaled_quarter
+    seq_perturbed[:, quarter_idx] = _scale_quarter_value(feat_scaler, quarter_idx, quarter_value)
 
     with torch.no_grad():
         t = torch.tensor(seq_perturbed, dtype=torch.float32).unsqueeze(0).to(device)
