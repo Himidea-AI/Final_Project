@@ -27,7 +27,7 @@ function saveChecked(typeKey: string, state: Record<string, boolean>): void {
 interface LegalRiskDetail {
   type: string;
   risk_level: 'HIGH' | 'MEDIUM' | 'LOW';
-  articles?: { article_ref: string; content: string }[];
+  articles?: { article_ref: string; content: string; kind?: 'article' | 'precedent' }[];
   checklist?: LegalChecklistItem[];
   recommendation?: string;
 }
@@ -161,23 +161,58 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
                 </section>
               )}
 
-              {risk.articles && risk.articles.length > 0 && (
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                    조항 본문
-                  </h3>
-                  <div className="space-y-3">
-                    {risk.articles.map((a, i) => (
-                      <div key={i} className="border-l-2 border-primary pl-4 py-2">
-                        <div className="text-sm font-semibold text-primary">{a.article_ref}</div>
-                        <div className="mt-1 text-sm text-foreground whitespace-pre-line leading-relaxed">
-                          {a.content}
+              {(() => {
+                const allArticles = risk.articles ?? [];
+                const lawArticles = allArticles.filter((a) => (a.kind ?? 'article') === 'article');
+                const precedents = allArticles.filter((a) => a.kind === 'precedent');
+                return (
+                  <>
+                    {lawArticles.length > 0 && (
+                      <section>
+                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                          조항 본문
+                        </h3>
+                        <div className="space-y-3">
+                          {lawArticles.map((a, i) => (
+                            <div key={`art-${i}`} className="border-l-2 border-primary pl-4 py-2">
+                              <div className="text-sm font-semibold text-primary">
+                                {a.article_ref}
+                              </div>
+                              <div className="mt-1 text-sm text-foreground whitespace-pre-line leading-relaxed">
+                                {a.content}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+                      </section>
+                    )}
+
+                    {precedents.length > 0 && (
+                      <section>
+                        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                          참고 판례
+                        </h3>
+                        <div className="space-y-3">
+                          {precedents.map((a, i) => (
+                            <div
+                              key={`prec-${i}`}
+                              className="border-l-2 border-warning/60 pl-4 py-2 bg-warning/5 rounded"
+                            >
+                              <div className="flex items-center gap-1 text-sm font-semibold text-warning">
+                                <span aria-hidden="true">⚖</span>
+                                <span>{a.article_ref}</span>
+                              </div>
+                              <div className="mt-1 text-sm text-foreground whitespace-pre-line leading-relaxed">
+                                {a.content}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </motion.div>
         </>

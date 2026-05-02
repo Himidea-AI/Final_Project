@@ -106,6 +106,13 @@ export interface DistrictComparison {
 export interface LegalRiskArticle {
   article_ref: string;
   content: string;
+  /**
+   * 항목 종류 — backend specialist agents가 articles에 법조문과 판례를 mixed로 반환.
+   * - 'article' (default): 법조문 본문
+   * - 'precedent': 판례 인용
+   * 미설정 시 기존 데이터 호환을 위해 'article' 로 폴백.
+   */
+  kind?: 'article' | 'precedent';
 }
 
 /** 법률 리스크 */
