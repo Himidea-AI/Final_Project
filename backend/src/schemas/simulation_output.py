@@ -97,6 +97,11 @@ class DistrictRanking(BaseModel):
     sales_score: float = 0.0
     pop_score: float = 0.0
     rent_score: float = 0.0
+    # 2026-05-02: 프론트 "동 검색량 16동 중 N위" 표시용으로 응답에 추가.
+    # 기존엔 schema 미정의로 직렬화 시 drop 됨. None 허용 — 데이터 결측 동 대응.
+    trend_score: float | None = None
+    density_score: float | None = None
+    inflow_score: float | None = None
     vacancy_rate: float = 0.0
     zoning_risk: str | None = None
     bep_quarters: int | None = None
