@@ -3,7 +3,22 @@
 - ``rules`` : 사용자 입력으로 결정 가능한 8개 법률 카테고리를 동기 함수로 평가.
 - ``specialists`` : RAG + 작은 LLM 으로 컨텍스트 의존 4개 카테고리를 평가.
 - ``orchestrator`` : ``asyncio.gather`` 로 12개 평가를 병렬 실행 후 결과 병합.
+- ``categories`` : 카테고리 → 입지/운영 그룹 매핑 단일 소스 (frontend 분리 UI 용).
 
 진입점은 ``backend/src/agents/nodes/legal.py`` 의 ``_run_legal_pipeline`` 이며
 2026-05-02 룰엔진 단일 경로로 전환됨 (legacy single-LLM batch 제거).
 """
+
+from src.agents.legal.categories import (
+    LEGAL_CATEGORY_GROUP,
+    LEGAL_GROUP_LOCATION,
+    LEGAL_GROUP_OPERATION,
+    get_legal_group,
+)
+
+__all__ = [
+    "LEGAL_CATEGORY_GROUP",
+    "LEGAL_GROUP_LOCATION",
+    "LEGAL_GROUP_OPERATION",
+    "get_legal_group",
+]
