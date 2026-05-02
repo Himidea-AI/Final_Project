@@ -189,10 +189,16 @@ def perturb_quarter_and_predict(
     import torch
 
     seq_perturbed = seq_scaled.copy()
-    # StandardScaler: scaled = (x - mean) / std
-    mean_val = float(feat_scaler.mean_[quarter_idx])
-    std_val = float(feat_scaler.scale_[quarter_idx])
-    scaled_quarter = (quarter_value - mean_val) / std_val if std_val > 1e-10 else 0.0
+    # MinMaxScaler (v2): scaled = x * scale_ + min_
+    # (StandardScaler 호환: mean_/scale_ 가 있으면 (x-mean)/std 사용)
+    if hasattr(feat_scaler, "data_min_"):
+        scale_val = float(feat_scaler.scale_[quarter_idx])
+        min_val = float(feat_scaler.min_[quarter_idx])
+        scaled_quarter = quarter_value * scale_val + min_val
+    else:
+        mean_val = float(feat_scaler.mean_[quarter_idx])
+        std_val = float(feat_scaler.scale_[quarter_idx])
+        scaled_quarter = (quarter_value - mean_val) / std_val if std_val > 1e-10 else 0.0
     seq_perturbed[:, quarter_idx] = scaled_quarter
 
     with torch.no_grad():
