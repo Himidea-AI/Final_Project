@@ -113,6 +113,12 @@ export interface LegalRiskArticle {
    * 미설정 시 기존 데이터 호환을 위해 'article' 로 폴백.
    */
   kind?: 'article' | 'precedent';
+  /**
+   * B 단계 — backend specialist 가 LLM 으로 풀어쓴 케이스 맞춤 1~2문장 설명.
+   * 사용자가 200~300자 본문 (content) 직접 읽기 부담 제거.
+   * 미설정/빈 문자열 시 frontend 는 content 만 표시 (graceful).
+   */
+  explanation?: string;
 }
 
 /** 법률 리스크 */

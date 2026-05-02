@@ -28,7 +28,13 @@ interface LegalRiskDetail {
   type: string;
   risk_level: 'HIGH' | 'MEDIUM' | 'LOW';
   summary?: string;
-  articles?: { article_ref: string; content: string; kind?: 'article' | 'precedent' }[];
+  articles?: {
+    article_ref: string;
+    content: string;
+    kind?: 'article' | 'precedent';
+    /** B 단계 — backend LLM 풀어쓰기 결과 (케이스 맞춤 1~2문장). */
+    explanation?: string;
+  }[];
   checklist?: LegalChecklistItem[];
   recommendation?: string;
 }
@@ -200,11 +206,31 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
                                 <div className="text-sm font-semibold text-primary">
                                   {a.article_ref}
                                 </div>
-                                <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
-                                  {a.content.length > 300
-                                    ? a.content.slice(0, 300) + '…'
-                                    : a.content}
-                                </div>
+                                {/* B 단계: explanation primary — 케이스 맞춤 풀어쓰기 (큰 글씨). */}
+                                {a.explanation && (
+                                  <div className="mt-1 text-sm text-foreground font-medium leading-relaxed">
+                                    {a.explanation}
+                                  </div>
+                                )}
+                                {/* 조문 원문은 secondary — explanation 있으면 details 토글, 없으면 fallback 으로 직접 노출. */}
+                                {a.explanation ? (
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                      조문 원문 보기
+                                    </summary>
+                                    <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                      {a.content.length > 300
+                                        ? a.content.slice(0, 300) + '…'
+                                        : a.content}
+                                    </div>
+                                  </details>
+                                ) : (
+                                  <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                    {a.content.length > 300
+                                      ? a.content.slice(0, 300) + '…'
+                                      : a.content}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -226,11 +252,30 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
                                   <span aria-hidden="true">⚖</span>
                                   <span>{a.article_ref}</span>
                                 </div>
-                                <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
-                                  {a.content.length > 300
-                                    ? a.content.slice(0, 300) + '…'
-                                    : a.content}
-                                </div>
+                                {/* B 단계: explanation primary — 케이스 맞춤 풀어쓰기. */}
+                                {a.explanation && (
+                                  <div className="mt-1 text-sm text-foreground font-medium leading-relaxed">
+                                    {a.explanation}
+                                  </div>
+                                )}
+                                {a.explanation ? (
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                      판례 원문 보기
+                                    </summary>
+                                    <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                      {a.content.length > 300
+                                        ? a.content.slice(0, 300) + '…'
+                                        : a.content}
+                                    </div>
+                                  </details>
+                                ) : (
+                                  <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                    {a.content.length > 300
+                                      ? a.content.slice(0, 300) + '…'
+                                      : a.content}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

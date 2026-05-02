@@ -29,6 +29,7 @@ from src.agents.legal import specialists  # noqa: E402
 from src.agents.legal.specialists import (  # noqa: E402
     _articles_from_law_docs,
     _articles_from_precedent_docs,
+    _explain_articles_batch,
     _format_precedents,
     _precedent_query_building,
     _precedent_query_fair_trade,
@@ -88,9 +89,7 @@ class TestArticlesFromPrecedentDocs:
         assert out[1]["article_ref"] == "대법원 2023다100100"
 
     def test_max_n_limit(self) -> None:
-        docs = [
-            _precedent_chunk(f"2024다{i:06d}", f"사건{i}", f"내용{i}") for i in range(5)
-        ]
+        docs = [_precedent_chunk(f"2024다{i:06d}", f"사건{i}", f"내용{i}") for i in range(5)]
         out = _articles_from_precedent_docs(docs, max_n=2)
         assert len(out) == 2
 
@@ -476,3 +475,124 @@ async def test_specialist_disabled_flag_no_precedents(monkeypatch) -> None:
     assert all(a.get("kind") != "precedent" for a in articles)
     # flag OFF 일 때 _search_precedents_safe 가 search_precedents 를 호출하지 않아야 함
     assert called["n"] == 0
+
+
+# ---------------------------------------------------------------------------
+# 8. _explain_articles_batch — B 단계 LLM 풀어쓰기
+# ---------------------------------------------------------------------------
+
+
+class _FakeMessage:
+    """LLM 응답 mock — .content 속성만 노출."""
+
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _FakeExplainLLM:
+    """_explain_articles_batch 전용 stub — JSON 배열 문자열 반환."""
+
+    def __init__(self, payload: str) -> None:
+        self._payload = payload
+
+    async def ainvoke(self, _msgs):
+        return _FakeMessage(self._payload)
+
+
+class TestExplainArticlesBatch:
+    def test_empty_articles_passthrough(self) -> None:
+        out = asyncio.run(_explain_articles_batch([], "스타벅스", "카페", "공덕동", "가맹사업법"))
+        assert out == []
+
+    def test_flag_disabled_returns_original(self, monkeypatch) -> None:
+        from src.config import settings as settings_mod
+
+        monkeypatch.setattr(settings_mod.settings, "legal_article_explanation_enabled", False)
+        articles = [{"article_ref": "가맹사업법 제12조의4", "content": "본문", "kind": "article"}]
+        out = asyncio.run(_explain_articles_batch(articles, "스타벅스", "카페", "공덕동", "가맹사업법"))
+        assert out == articles
+        assert "explanation" not in out[0]
+
+    def test_injects_explanation_from_llm(self, monkeypatch) -> None:
+        from src.config import settings as settings_mod
+
+        monkeypatch.setattr(settings_mod.settings, "legal_article_explanation_enabled", True)
+        payload = (
+            '[{"index": 1, "explanation": "이 사례 인접 출점 협의 의무"},'
+            ' {"index": 2, "explanation": "허위 광고 금지"}]'
+        )
+        monkeypatch.setattr(
+            specialists,
+            "_get_specialist_llm",
+            lambda: _FakeExplainLLM(payload),
+        )
+        articles = [
+            {"article_ref": "가맹사업법 제12조의4", "content": "본문1", "kind": "article"},
+            {"article_ref": "가맹사업법 제9조", "content": "본문2", "kind": "article"},
+        ]
+        out = asyncio.run(_explain_articles_batch(articles, "스타벅스", "카페", "공덕동", "가맹사업법"))
+        assert out[0]["explanation"] == "이 사례 인접 출점 협의 의무"
+        assert out[1]["explanation"] == "허위 광고 금지"
+        # content 보존 (mutate 금지)
+        assert out[0]["content"] == "본문1"
+
+    def test_handles_code_block_wrapping(self, monkeypatch) -> None:
+        from src.config import settings as settings_mod
+
+        monkeypatch.setattr(settings_mod.settings, "legal_article_explanation_enabled", True)
+        payload = '```json\n[{"index": 1, "explanation": "케이스 설명"}]\n```'
+        monkeypatch.setattr(
+            specialists,
+            "_get_specialist_llm",
+            lambda: _FakeExplainLLM(payload),
+        )
+        articles = [{"article_ref": "법 제1조", "content": "본문", "kind": "article"}]
+        out = asyncio.run(_explain_articles_batch(articles, "B", "카페", "공덕동", "가맹사업법"))
+        assert out[0]["explanation"] == "케이스 설명"
+
+    def test_llm_failure_returns_original(self, monkeypatch) -> None:
+        from src.config import settings as settings_mod
+
+        monkeypatch.setattr(settings_mod.settings, "legal_article_explanation_enabled", True)
+
+        class _BoomLLM:
+            async def ainvoke(self, _msgs):
+                raise RuntimeError("LLM down")
+
+        monkeypatch.setattr(specialists, "_get_specialist_llm", lambda: _BoomLLM())
+        articles = [{"article_ref": "법 제1조", "content": "본문", "kind": "article"}]
+        out = asyncio.run(_explain_articles_batch(articles, "B", "카페", "공덕동", "가맹사업법"))
+        assert out == articles
+        assert "explanation" not in out[0]
+
+    def test_invalid_json_returns_original(self, monkeypatch) -> None:
+        from src.config import settings as settings_mod
+
+        monkeypatch.setattr(settings_mod.settings, "legal_article_explanation_enabled", True)
+        monkeypatch.setattr(
+            specialists,
+            "_get_specialist_llm",
+            lambda: _FakeExplainLLM("이건 JSON 이 아닙니다"),
+        )
+        articles = [{"article_ref": "법 제1조", "content": "본문", "kind": "article"}]
+        out = asyncio.run(_explain_articles_batch(articles, "B", "카페", "공덕동", "가맹사업법"))
+        assert out == articles
+
+    def test_partial_index_map(self, monkeypatch) -> None:
+        """LLM 이 일부 index 만 반환해도 누락된 항목은 explanation 없이 반환."""
+        from src.config import settings as settings_mod
+
+        monkeypatch.setattr(settings_mod.settings, "legal_article_explanation_enabled", True)
+        payload = '[{"index": 1, "explanation": "첫번째만"}]'
+        monkeypatch.setattr(
+            specialists,
+            "_get_specialist_llm",
+            lambda: _FakeExplainLLM(payload),
+        )
+        articles = [
+            {"article_ref": "법 제1조", "content": "본문1", "kind": "article"},
+            {"article_ref": "법 제2조", "content": "본문2", "kind": "article"},
+        ]
+        out = asyncio.run(_explain_articles_batch(articles, "B", "카페", "공덕동", "가맹사업법"))
+        assert out[0]["explanation"] == "첫번째만"
+        assert "explanation" not in out[1]

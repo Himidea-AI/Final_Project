@@ -193,9 +193,7 @@ async def _analyze_territory(brand: str, district: str, business_type: str) -> d
                 f"[_analyze_territory] 업종 '{business_type}' (정규화: '{biz_normalized}') 미매핑 — default 곡선 사용"
             )
         # 2000m 까지 분석 — 500m bin 별 카운트는 결과의 distance_bins 에서 추출
-        result = await asyncio.to_thread(
-            analyze_cannibalization, dong_code, brand, 2000, "neighborhood", industry
-        )
+        result = await asyncio.to_thread(analyze_cannibalization, dong_code, brand, 2000, "neighborhood", industry)
         if not result or "error" in result:
             return {}
         bins = result.get("distance_bins", {})
@@ -265,18 +263,13 @@ async def specialist_franchise_law(
     business_type = (business_type or "")[:100]
     district = (district or "")[:100]
     retriever = LegalDocumentRetriever()
-    query = (
-        f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 "
-        "허위과장 필수품목 카니발리제이션"
-    )
+    query = f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 허위과장 필수품목 카니발리제이션"
     # RAG(법령) + 판례 RAG + 영업지역 정량 분석 병렬 (업종별 거리 감쇠 곡선 적용)
     # return_exceptions=True — 한쪽 실패가 나머지 task DB 커넥션을 누수시키지 않도록 격리
     territory_task = _analyze_territory(brand, district, business_type)
     precedent_query = _precedent_query_franchise(brand, business_type)
     docs_raw, precedent_raw, territory_raw = await asyncio.gather(
-        retriever.search(
-            query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES
-        ),
+        retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),
         _search_precedents_safe(precedent_query),
         territory_task,
         return_exceptions=True,
@@ -340,10 +333,7 @@ async def specialist_franchise_law(
         # LLM 이 "자료 없음"으로 safe 반환하는 false negative 차단.
         if brand and brand.strip() and result.level == "safe":
             result.level = "caution"
-            result.summary = (
-                f"[브랜드 입력됨 — 가맹사업법 적용 검토 필요] "
-                + (result.summary or "")
-            )
+            result.summary = "[브랜드 입력됨 — 가맹사업법 적용 검토 필요] " + (result.summary or "")
         # 영업지역 정량 룰 floor — LLM 이 정량 데이터를 무시하고 낮은 level 로 평가하는
         # 케이스 차단. 룰이 산출한 floor 보다 LLM 이 더 높은 level 을 주면 LLM 그대로.
         # floor 강제 상향 시 summary/recommendation 에도 정량 근거 명시 (level↔텍스트 불일치 방지).
@@ -356,9 +346,8 @@ async def specialist_franchise_law(
                 result.level = territory_floor
                 _hint_str = territory_hint or "수치 미확인"
                 result.summary = f"[정량 분석 자동 상향: {_hint_str}] " + (result.summary or "")
-                result.recommendation = (
-                    f"[근거: 가맹사업법 제12조의4 영업지역 침해 — {_hint_str}]\n"
-                    + (result.recommendation or "")
+                result.recommendation = f"[근거: 가맹사업법 제12조의4 영업지역 침해 — {_hint_str}]\n" + (
+                    result.recommendation or ""
                 )
                 # floor 발동 시 articles 에 제12조의4 prepend (level↔articles 일관성)
                 _territory_article = {
@@ -374,15 +363,18 @@ async def specialist_franchise_law(
                 if _territory_article["article_ref"] not in _existing_refs:
                     # territory 조문 prepend, 법조문 1개 + 판례 유지
                     articles = [_territory_article] + law_articles[:1] + precedent_articles
+        # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
+        articles = await _explain_articles_batch(articles, brand, business_type, district, "가맹사업법")
         return _to_dict(result, articles)
     except Exception as e:
         logger.warning(f"[specialist_franchise_law] LLM 실패: {e}")
+        _fallback_articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
+        _fallback_articles = await _explain_articles_batch(
+            _fallback_articles, brand, business_type, district, "가맹사업법"
+        )
         return _make_specialist_fallback(
             type_name,
-            summary=(
-                f"{brand} ({business_type}) 가맹사업법 평가 자동 분석 실패 — "
-                "FTC 정보공개서 직접 검토 권장."
-            ),
+            summary=(f"{brand} ({business_type}) 가맹사업법 평가 자동 분석 실패 — FTC 정보공개서 직접 검토 권장."),
             recommendation=(
                 "[근거: 가맹사업법 제6조의2, 제9조, 제12조의4]\n"
                 "• 가맹본부 정보공개서 수령 및 14일 숙고기간 확보\n"
@@ -390,10 +382,7 @@ async def specialist_franchise_law(
                 "• 영업지역 보장·필수품목 구입조건 계약서 확인\n"
                 "❌ 위반 시: 가맹금 반환 + 손해배상 청구 가능"
             ),
-            articles=(
-                _articles_from_law_docs(docs, max_n=2)
-                + _articles_from_precedent_docs(precedents, max_n=2)
-            ),
+            articles=_fallback_articles,
         )
 
 
@@ -486,17 +475,19 @@ async def specialist_fair_trade_law(
             result.recommendation = (
                 "[근거: 마포구 지역상권 상생협력 조례 + 가맹사업법 제12조]\n"
                 "• 마포구청 상생협력상가위원회 사전 협의\n"
-                "• 골목상권 보호 영역 여부 확인\n"
-                + (result.recommendation or "")
+                "• 골목상권 보호 영역 여부 확인\n" + (result.recommendation or "")
             )
-        articles = (
-            _articles_from_law_docs(docs, max_n=2)
-            + _articles_from_precedent_docs(precedents, max_n=2)
-        )
+        articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
+        # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
+        articles = await _explain_articles_batch(articles, brand, business_type, district, "공정거래법/지역조례")
         return _to_dict(result, articles)
     except Exception as e:
         logger.warning(f"[specialist_fair_trade_law] LLM 실패: {e}")
         level_summary = "마포구 지역상권 상생협력 조례 적용 가능 — " if is_mapo else ""
+        _fallback_articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
+        _fallback_articles = await _explain_articles_batch(
+            _fallback_articles, brand, business_type, district, "공정거래법/지역조례"
+        )
         return _make_specialist_fallback(
             type_name,
             summary=(
@@ -510,10 +501,7 @@ async def specialist_fair_trade_law(
                 "• 부당 표시광고/허위 광고 자료 사전 검토\n"
                 "❌ 위반 시: 공정위 시정명령 + 과징금 (관련 매출의 4% 이내)"
             ),
-            articles=(
-                _articles_from_law_docs(docs, max_n=2)
-                + _articles_from_precedent_docs(precedents, max_n=2)
-            ),
+            articles=_fallback_articles,
         )
 
 
@@ -535,9 +523,7 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
     is_restricted = biz_label in rules.get("제한", [])
 
     retriever = LegalDocumentRetriever()
-    query = (
-        f"{business_type} {district} {zone} 건축물 용도 근린생활시설 용도변경 건축법 위반건축물"
-    )
+    query = f"{business_type} {district} {zone} 건축물 용도 근린생활시설 용도변경 건축법 위반건축물"
     precedent_query = _precedent_query_building(business_type)
     docs_raw, precedent_raw = await asyncio.gather(
         retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.BUILDING_LAW_SOURCES),
@@ -598,20 +584,16 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
         # summary/recommendation 에도 용도지역 근거 prepend (level↔텍스트 일관성)
         if is_restricted and result.level == "safe":
             result.level = "danger"
-            _zone_note = (
-                f"[용도지역 제한 자동 상향: {district} {zone}에서 {biz_label} 영업 제한] "
-            )
+            _zone_note = f"[용도지역 제한 자동 상향: {district} {zone}에서 {biz_label} 영업 제한] "
             result.summary = _zone_note + (result.summary or "")
             result.recommendation = (
                 f"[근거: 건축법 제19조, 국토계획법 시행령 — {zone} 제한 업종]\n"
                 f"• 입지 변경 또는 용도변경 신고 (관할 구청 건축과)\n"
-                f"• 영업신고 전 건물 용도 확인 (건축물대장 발급)\n"
-                + (result.recommendation or "")
+                f"• 영업신고 전 건물 용도 확인 (건축물대장 발급)\n" + (result.recommendation or "")
             )
-        articles = (
-            _articles_from_law_docs(docs, max_n=2)
-            + _articles_from_precedent_docs(precedents, max_n=2)
-        )
+        articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
+        # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
+        articles = await _explain_articles_batch(articles, "", business_type, district, f"건축법/{zone}")
         return _to_dict(result, articles)
     except Exception as e:
         logger.warning(f"[specialist_building_law] LLM 실패: {e}")
@@ -633,6 +615,10 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
                 f"{district} ({zone})에서 '{biz_label}' 영업은 허용되나, "
                 "건축물 용도변경 신고 필요 여부를 확인해야 합니다."
             )
+        _fallback_articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
+        _fallback_articles = await _explain_articles_batch(
+            _fallback_articles, "", business_type, district, f"건축법/{zone}"
+        )
         return {
             "type": type_name,
             "level": level,
@@ -644,10 +630,7 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
                 "• 위반건축물 등재 여부 확인 — 이행강제금 리스크\n"
                 "❌ 위반 시: 위반건축물 이행강제금 (시가표준액의 10~50%, 매년 부과)"
             ),
-            "articles": (
-                _articles_from_law_docs(docs, max_n=2)
-                + _articles_from_precedent_docs(precedents, max_n=2)
-            ),
+            "articles": _fallback_articles,
             "is_fallback": True,
         }
 
@@ -669,15 +652,10 @@ async def specialist_privacy_law(
     business_type = (business_type or "")[:100]
     ftc_hint = _format_ftc_hint(ftc_data) or ""
 
-    has_membership_keyword = any(
-        kw in (ftc_hint + (brand or "")) for kw in ("멤버십", "포인트", "CRM", "회원")
-    )
+    has_membership_keyword = any(kw in (ftc_hint + (brand or "")) for kw in ("멤버십", "포인트", "CRM", "회원"))
 
     retriever = LegalDocumentRetriever()
-    query = (
-        f"{brand} {business_type} 개인정보 수집 동의 처리방침 CCTV 영상정보처리기기 "
-        "멤버십 회원 포인트"
-    )
+    query = f"{brand} {business_type} 개인정보 수집 동의 처리방침 CCTV 영상정보처리기기 멤버십 회원 포인트"
     precedent_query = _precedent_query_privacy(business_type)
     docs_raw, precedent_raw = await asyncio.gather(
         retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.PRIVACY_LAW_SOURCES),
@@ -738,13 +716,16 @@ async def specialist_privacy_law(
         # 멤버십 키워드면 safe 차단
         if has_membership_keyword and result.level == "safe":
             result.level = "caution"
-        articles = (
-            _articles_from_law_docs(docs, max_n=2)
-            + _articles_from_precedent_docs(precedents, max_n=2)
-        )
+        articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
+        # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
+        articles = await _explain_articles_batch(articles, brand, business_type, "", "개인정보보호법")
         return _to_dict(result, articles)
     except Exception as e:
         logger.warning(f"[specialist_privacy_law] LLM 실패: {e}")
+        _fallback_articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
+        _fallback_articles = await _explain_articles_batch(
+            _fallback_articles, brand, business_type, "", "개인정보보호법"
+        )
         return _make_specialist_fallback(
             type_name,
             summary=(
@@ -758,10 +739,7 @@ async def specialist_privacy_law(
                 "• CCTV 설치 시 안내판 + 영상정보처리기기 운영방침 수립\n"
                 "❌ 위반 시: 5천만원 이하 과태료 (제75조)"
             ),
-            articles=(
-                _articles_from_law_docs(docs, max_n=2)
-                + _articles_from_precedent_docs(precedents, max_n=2)
-            ),
+            articles=_fallback_articles,
         )
 
 
@@ -919,27 +897,19 @@ async def _search_precedents_safe(query: str, top_k: int | None = None) -> list[
 
 # specialist 별 판례 검색 쿼리 빌더 — 도메인 키워드 명시
 def _precedent_query_franchise(brand: str, business_type: str) -> str:
-    return (
-        f"{brand} {business_type} 가맹사업법 영업지역 침해 정보공개서 허위과장 차액가맹금"
-    ).strip()
+    return (f"{brand} {business_type} 가맹사업법 영업지역 침해 정보공개서 허위과장 차액가맹금").strip()
 
 
 def _precedent_query_fair_trade(brand: str, business_type: str) -> str:
-    return (
-        f"{brand} {business_type} 가맹본부 불공정거래 거래상지위 남용 부당거래"
-    ).strip()
+    return (f"{brand} {business_type} 가맹본부 불공정거래 거래상지위 남용 부당거래").strip()
 
 
 def _precedent_query_building(business_type: str) -> str:
-    return (
-        f"{business_type} 건축물 용도변경 근린생활시설 불법건축물 이행강제금"
-    ).strip()
+    return (f"{business_type} 건축물 용도변경 근린생활시설 불법건축물 이행강제금").strip()
 
 
 def _precedent_query_privacy(business_type: str) -> str:
-    return (
-        f"{business_type} 개인정보 수집동의 처리방침 CCTV 무단공개"
-    ).strip()
+    return (f"{business_type} 개인정보 수집동의 처리방침 CCTV 무단공개").strip()
 
 
 # 판례 섹션 보안 구분자 — RAG_CONTEXT 와 분리
@@ -956,3 +926,101 @@ def _system_prompt_with_precedent() -> str:
         "예) ``[참고 판례: 대법원 2024다294033 — 권리금 회수기회 보호 인정]``. "
         "관련성이 낮으면 인용하지 않아도 됩니다.\n"
     )
+
+
+# ---------------------------------------------------------------------------
+# B 단계 — articles content (조문/판례 원문) 를 케이스 맞춤 1~2문장으로 풀어쓴
+# explanation 추가. 사용자가 200~300자 본문을 직접 읽는 부담 제거.
+# ---------------------------------------------------------------------------
+
+
+async def _explain_articles_batch(
+    articles: list[dict],
+    brand: str,
+    business_type: str,
+    district: str,
+    category_label: str,
+) -> list[dict]:
+    """articles 본문을 케이스 맞춤 1~2문장 explanation 으로 풀어쓴 결과 반환.
+
+    LLM 1회로 모든 articles 를 한꺼번에 처리 (배치) — specialist 당 +1 호출.
+    실패/flag OFF 시 articles 원본 그대로 반환 (graceful).
+
+    Args:
+        articles: ``[{article_ref, content, kind}]`` 리스트. mutate 안 함.
+        brand/business_type/district: 케이스 컨텍스트.
+        category_label: 카테고리 라벨 (예: ``"가맹사업법"``).
+
+    Returns:
+        ``explanation`` 키가 추가된 articles 사본.
+    """
+    if not articles:
+        return articles
+
+    from src.config.settings import settings
+
+    if not settings.legal_article_explanation_enabled:
+        return articles
+
+    article_blocks = "\n\n".join(
+        f"[{i + 1}] {a.get('article_ref', '')} ({a.get('kind', 'article')})\n{a.get('content', '')}"
+        for i, a in enumerate(articles)
+    )
+    prompt = (
+        f"브랜드: {brand or '미입력'} / 업종: {business_type or '미입력'} / 지역: {district or '미입력'}\n"
+        f"카테고리: {category_label}\n\n"
+        f"아래 법조문/판례 {len(articles)}개를 위 케이스에 맞춰 각각 1~2문장으로 풀어쓰세요.\n"
+        "원칙:\n"
+        "- 일반론 금지. 입력 브랜드/업종/지역에 적용되는 구체적 의미.\n"
+        "- 50~150자 이내.\n"
+        "- 본문 그대로 인용 X. 사용자가 즉시 이해할 평이한 표현.\n\n"
+        f"{article_blocks}\n\n"
+        f'JSON 배열만 반환 (다른 텍스트 금지): [{{"index": 1, "explanation": "..."}}, ...] '
+        f"(총 {len(articles)}개, index 는 위 번호와 일치)"
+    )
+
+    try:
+        from langchain_core.messages import HumanMessage as _HM
+
+        llm = _get_specialist_llm()
+        resp = await llm.ainvoke([_HM(content=prompt)])
+        text = (getattr(resp, "content", "") or "").strip()
+        if not text:
+            return articles
+        import json
+        import re
+
+        # 코드블록 제거 (```json ... ``` 또는 ``` ... ```)
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+        text = re.sub(r"\s*```$", "", text, flags=re.MULTILINE).strip()
+        # 첫 [ ~ 마지막 ] 추출 (LLM 이 앞뒤 잡설 붙여도 graceful)
+        m = re.search(r"\[.*\]", text, flags=re.DOTALL)
+        if m:
+            text = m.group(0)
+        parsed = json.loads(text)
+        if not isinstance(parsed, list):
+            return articles
+        idx_map: dict[int, str] = {}
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            try:
+                idx = int(item.get("index"))
+            except (TypeError, ValueError):
+                continue
+            exp = item.get("explanation")
+            if isinstance(exp, str) and exp.strip():
+                idx_map[idx] = exp.strip()
+        if not idx_map:
+            return articles
+        out: list[dict] = []
+        for i, a in enumerate(articles, 1):
+            new_a = dict(a)
+            exp = idx_map.get(i)
+            if exp:
+                new_a["explanation"] = exp
+            out.append(new_a)
+        return out
+    except Exception as e:
+        logger.warning(f"[_explain_articles_batch] LLM 풀어쓰기 실패 ({category_label}): {e}")
+        return articles
