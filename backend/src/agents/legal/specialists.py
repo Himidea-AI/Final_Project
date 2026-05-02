@@ -37,12 +37,12 @@ logger = logging.getLogger(__name__)
 
 
 # 마포구 16 행정동 + 법정동 별칭 — fair_trade_law specialist 가 지역 조례 hint 에 사용
-# constants.MAPO_DISTRICTS 단일 소스 + 법정동 별칭 추가 (망원동/성산동/상수동 등)
+# constants.MAPO_DISTRICTS 단일 소스 + 법정동 별칭 (망원동/성산동/상수동).
+# "중동"은 동작구 법정동이라 마포구 별칭에서 제외 (오기 위험).
 _MAPO_DISTRICTS: set[str] = set(MAPO_DISTRICTS) | {
     "망원동",
     "성산동",
     "상수동",
-    "중동",
 }
 
 
@@ -129,11 +129,14 @@ def _make_specialist_fallback(
 
 # 업종 → analyze_cannibalization industry 라벨 매핑.
 # (commercial_intelligence._INDUSTRY_DISTANCE_DECAY 의 키와 일치해야 함)
+# 미매핑 업종 fallback = "default" — cafe 곡선 강제 적용을 피해 estimate_cannibalization
+# 의 default 곡선 (0.20) 사용.
 _INDUSTRY_LABEL_MAP = {
     "카페": "cafe",
     "음식점": "restaurant",
     "편의점": "convenience",
 }
+_INDUSTRY_DEFAULT = "default"
 
 
 async def _analyze_territory(brand: str, district: str, business_type: str) -> dict:
@@ -158,9 +161,13 @@ async def _analyze_territory(brand: str, district: str, business_type: str) -> d
         dong_code = await asyncio.to_thread(resolve_dong_code, district)
         if not dong_code:
             return {}
-        # 업종 정규화 후 industry 라벨 매핑 (default cafe)
+        # 업종 정규화 후 industry 라벨 매핑. 미매핑은 default — cafe 곡선 강제 회피.
         biz_normalized = BIZ_NORMALIZE.get((business_type or "").lower(), business_type or "")
-        industry = _INDUSTRY_LABEL_MAP.get(biz_normalized, "cafe")
+        industry = _INDUSTRY_LABEL_MAP.get(biz_normalized, _INDUSTRY_DEFAULT)
+        if industry == _INDUSTRY_DEFAULT and biz_normalized:
+            logger.debug(
+                f"[_analyze_territory] 업종 '{business_type}' (정규화: '{biz_normalized}') 미매핑 — default 곡선 사용"
+            )
         # 2000m 까지 분석 — 500m bin 별 카운트는 결과의 distance_bins 에서 추출
         result = await asyncio.to_thread(
             analyze_cannibalization, dong_code, brand, 2000, "neighborhood", industry
@@ -291,12 +298,10 @@ async def specialist_franchise_law(
             _ORDER = {"safe": 0, "caution": 1, "danger": 2}
             if _ORDER.get(result.level, 0) < _ORDER[territory_floor]:
                 result.level = territory_floor
-                _floor_note = (
-                    f"[정량 분석 자동 상향: {territory_hint}] "
-                )
-                result.summary = _floor_note + (result.summary or "")
+                _hint_str = territory_hint or "수치 미확인"
+                result.summary = f"[정량 분석 자동 상향: {_hint_str}] " + (result.summary or "")
                 result.recommendation = (
-                    f"[근거: 가맹사업법 제12조의4 영업지역 침해 — {territory_hint}]\n"
+                    f"[근거: 가맹사업법 제12조의4 영업지역 침해 — {_hint_str}]\n"
                     + (result.recommendation or "")
                 )
         articles = _articles_from_docs(docs, max_n=3)

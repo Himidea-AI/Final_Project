@@ -674,7 +674,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # Redis 캐시 조회 — 동일 조합 재요청 시 LLM 호출 없이 즉시 반환
     _CACHE_TTL = 86400  # 24시간
     # v5: 룰엔진 도입 + store_area 추가 + brand/district 정규화 → v4 캐시 invalidation
-    cache_key = f"v5:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}"
+    # re{0|1} 접두 — 룰엔진 ON/OFF 결과를 별도 키로 분리. flag 토글 시 stale 캐시 충돌 방지.
+    _re_flag = "1" if settings.legal_rule_engine_enabled else "0"
+    cache_key = (
+        f"v5:re{_re_flag}:legal:{_norm_brand}:{_norm_district}:"
+        f"{_norm_biz}:{float(store_area):.1f}"
+    )
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -1049,11 +1054,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
             label = _rag_labels[idx] if 0 <= idx < len(_rag_labels) else f"idx{idx}"
             if isinstance(r, Exception):
                 _rag_debug.append(f"{label}: EXCEPTION {type(r).__name__}: {r}")
-                print(f"[legal RAG DEBUG] {label}: EXCEPTION {type(r).__name__}: {r}", flush=True)
+                logger.warning(f"[legal RAG] {label}: EXCEPTION {type(r).__name__}: {r}")
                 return []
             result = r if isinstance(r, list) else []
             _rag_debug.append(f"{label}: {len(result)} docs")
-            print(f"[legal RAG DEBUG] {label}: {len(result)} docs", flush=True)
+            logger.debug(f"[legal RAG] {label}: {len(result)} docs")
             return result
 
         (
@@ -1235,8 +1240,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     if len(snippets) > _MAX_PER_LAW:
                         snippets = snippets[:_MAX_PER_LAW] + "…"
                     docs_context += f"[{_BATCH_LABELS[law_type]}] {snippets}\n"
-        print(f"[legal RAG DEBUG] docs_context 길이: {len(docs_context)} chars", flush=True)
-        print(f"[legal RAG DEBUG] docs_map 카운트: {[(k, len(v)) for k, v in docs_map.items()]}", flush=True)
+        logger.debug(f"[legal RAG] docs_context 길이: {len(docs_context)} chars")
+        logger.debug(f"[legal RAG] docs_map 카운트: {[(k, len(v)) for k, v in docs_map.items()]}")
 
         items_desc = "\n".join(f'{i + 1}. type="{t}" — {_BATCH_LABELS[t]}' for i, t in enumerate(_BATCH_TYPES))
 

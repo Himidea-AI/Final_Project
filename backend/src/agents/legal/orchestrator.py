@@ -35,7 +35,7 @@ _RULE_ENGINE_ORDER: list[str] = [
 ]
 
 
-def _fallback_for_type(type_name: str, exc: BaseException) -> dict:
+def _fallback_for_type(type_name: str, exc: Exception) -> dict:
     """예외 발생 시 caution 기본값 dict."""
     logger.warning(f"[legal orchestrator] {type_name} 평가 실패: {exc}")
     return {
@@ -53,9 +53,12 @@ def _fallback_for_type(type_name: str, exc: BaseException) -> dict:
 
 
 def _to_risk_dict(result: Any, idx: int) -> dict:
-    """gather 결과 1 개를 dict 로 정규화. 예외/형식 오류는 fallback."""
+    """gather 결과 1 개를 dict 로 정규화. 예외/형식 오류는 fallback.
+
+    SystemExit/KeyboardInterrupt 등 BaseException 은 의도적 종료라 catch 하지 않음.
+    """
     type_name = _RULE_ENGINE_ORDER[idx] if 0 <= idx < len(_RULE_ENGINE_ORDER) else "unknown"
-    if isinstance(result, BaseException):
+    if isinstance(result, Exception):
         return _fallback_for_type(type_name, result)
     if not isinstance(result, dict):
         return _fallback_for_type(
@@ -104,9 +107,11 @@ async def run_legal_evaluation(
         specialists.specialist_building_law(business_type, district),
         specialists.specialist_privacy_law(brand, business_type, ftc_data),
     ]
-    assert len(tasks) == len(_RULE_ENGINE_ORDER), (
-        f"tasks/_RULE_ENGINE_ORDER 길이 불일치: {len(tasks)} vs {len(_RULE_ENGINE_ORDER)}"
-    )
+    # python -O 모드에서 assert 비활성화 — 명시적 raise 사용
+    if len(tasks) != len(_RULE_ENGINE_ORDER):
+        raise ValueError(
+            f"tasks/_RULE_ENGINE_ORDER 길이 불일치: {len(tasks)} vs {len(_RULE_ENGINE_ORDER)}"
+        )
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
     return [_to_risk_dict(r, idx) for idx, r in enumerate(results)]
