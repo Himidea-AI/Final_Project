@@ -5,7 +5,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 # Windows cp949 콘솔 인코딩 이슈 방지 — ABM simulation 이모지/em-dash 출력 crash 회피
 if sys.platform == "win32":
@@ -214,6 +214,12 @@ DEFAULT_LNG = 126.9015
 # 동일 파라미터 동시 요청 중복 실행 방지 (simulate + analyze 동시 호출 시 파이프라인 공유)
 _pending_pipelines: dict[str, "asyncio.Task[Any]"] = {}
 
+# /predict/async + /analyze/llm/async 의 background task strong ref.
+# asyncio.create_task() 결과를 어디에도 보관 안 하면 event loop 가 weak ref 만 유지 →
+# GC 가 task 를 도중에 수거할 수 있음 (Python docs 공식 함정). progress=0 무한 멈춤 회귀.
+# 완료 시 done_callback 으로 자동 discard.
+_async_job_tasks: set["asyncio.Task[Any]"] = set()
+
 
 def _pipeline_key(input_data: Any) -> str:
     radius = getattr(input_data, "commercial_radius", 500)
@@ -396,6 +402,7 @@ def _safe_json(obj: Any) -> Any:
     """
     try:
         import numpy as np  # numpy가 없는 환경 방어
+
         _has_numpy = True
     except ImportError:
         _has_numpy = False
@@ -437,12 +444,19 @@ async def _predict_single_district(
     industry_name: str,
     cost_config: dict,
     segment_profile: dict | None = None,
+    progress_cb: "Callable[[str], None] | None" = None,
 ) -> DistrictPredictionResult:
-    """단일 동 ML 예측 실행 (/predict 병렬 호출용)"""
+    """단일 동 ML 예측 실행 (/predict 병렬 호출용).
+
+    progress_cb 가 주어지면 4 sub-stage 끝마다 호출됨 (ModelOutput/projection/SHAP/조립).
+    /predict/async 의 real-time progress 와이어링용 — 동 단위 보다 세분화된 % 표시.
+    """
     from models.interface import ModelOutput
 
     dong_code = _resolve_dong_code(dong_name)
     if not dong_code:
+        if progress_cb:
+            progress_cb("dong_code_missing")
         return DistrictPredictionResult(district=dong_name)
 
     try:
@@ -456,10 +470,16 @@ async def _predict_single_district(
             segment_profile,
         )
     except ExcludedComboError:
+        if progress_cb:
+            progress_cb("excluded_combo")
         return DistrictPredictionResult(district=dong_name, dong_code=dong_code, is_excluded_combo=True)
     except Exception as e:
         print(f"[PREDICT] {dong_name} ML 실패: {e}")
+        if progress_cb:
+            progress_cb("ml_failed")
         return DistrictPredictionResult(district=dong_name, dong_code=dong_code)
+    if progress_cb:
+        progress_cb("ml_done")
 
     # quarterly_projection + 시나리오 빌드
     quarterly: list = []
@@ -479,6 +499,8 @@ async def _predict_single_district(
         )
     except Exception as e:
         print(f"[PREDICT] {dong_name} projection 빌드 실패: {e}")
+    if progress_cb:
+        progress_cb("projection_done")
 
     # SHAP 빌드
     shap_result = None
@@ -487,10 +509,12 @@ async def _predict_single_district(
         shap_result = shap_raw if shap_raw else None
     except Exception as e:
         print(f"[PREDICT] {dong_name} SHAP 실패 (무시): {e}")
+    if progress_cb:
+        progress_cb("shap_done")
 
     is_mock = sim_result["revenue_forecast"].get("is_mock", False)
 
-    return DistrictPredictionResult(
+    result = DistrictPredictionResult(
         district=dong_name,
         dong_code=dong_code,
         is_excluded_combo=False,
@@ -505,6 +529,9 @@ async def _predict_single_district(
         living_pop_forecast=sim_result.get("living_pop_forecast"),
         emerging_signal=sim_result.get("emerging_signal"),
     )
+    if progress_cb:
+        progress_cb("assembled")
+    return result
 
 
 def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> dict[str, Any]:
@@ -566,15 +593,9 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
 
     # 랭킹 데이터 — analysis_results 누락 시 state top-level (ranking_phase) 폴백.
     # synthesis 캐시 히트 등으로 analysis_results 에 ranking 결과가 안 실리는 케이스 방어.
-    district_rankings = _sanitize(
-        analysis.get("district_rankings") or state.get("scouting_results") or []
-    )
-    winner_district = _sanitize(
-        analysis.get("winner_district") or state.get("winner_district") or target_dist
-    )
-    top_3_candidates = _sanitize(
-        analysis.get("top_3_candidates") or state.get("top_3_candidates") or []
-    )
+    district_rankings = _sanitize(analysis.get("district_rankings") or state.get("scouting_results") or [])
+    winner_district = _sanitize(analysis.get("winner_district") or state.get("winner_district") or target_dist)
+    top_3_candidates = _sanitize(analysis.get("top_3_candidates") or state.get("top_3_candidates") or [])
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
@@ -947,6 +968,118 @@ async def analyze_llm(input_data: SimulationInput):
     payload["target_district"] = full.get("target_district") or input_data.target_district
 
     return {"status": "success", "data": payload}
+
+
+# ---------------------------------------------------------------------------
+# Real-time progress 지원 — /analyze/llm/async + /analyze/llm/{job_id}/status.
+# slow_graph.astream(stream_mode="updates") 로 노드 완료 이벤트 hook.
+# 4 노드 (inflow → ranking_phase → llm_analysis_phase → synthesis) 기준 25%/50%/75%/100%.
+# stream_mode="values" 와 동시 수신해 final_state 도 같은 루프에서 캡처.
+# ---------------------------------------------------------------------------
+_SLOW_GRAPH_NODE_TOTAL = 4
+
+
+@app.post("/analyze/llm/async")
+async def analyze_llm_async(input_data: SimulationInput) -> dict[str, Any]:
+    """AI 분석 비동기 시작 — 즉시 job_id 반환. LangGraph 노드별 진행률 추적."""
+    from src.config.constants import MAPO_DISTRICTS
+    from src.schemas.simulation_output import AnalysisOutput
+    from src.services.job_progress_store import (
+        create_job,
+        set_done,
+        set_error,
+        set_progress,
+    )
+
+    if input_data.target_district not in MAPO_DISTRICTS:
+        return {
+            "status": "error",
+            "message": f"지원하지 않는 행정동입니다: {input_data.target_district}.",
+        }
+
+    job_id = create_job("analyze_llm")
+    request_id = str(uuid.uuid4())
+    print(
+        f"[/analyze/llm/async] 시작 job={job_id[:8]} target={input_data.target_district} biz={input_data.business_type}"
+    )
+
+    async def _run() -> None:
+        print(f"[/analyze/llm/async] _run 진입 job={job_id[:8]}")
+        try:
+            if os.getenv("LLM_AGENTS_DISABLED", "").strip() == "1":
+                # mock 경로도 진행률 시뮬 (인스턴트 done)
+                payload = _mock_simulation_response(input_data.target_district, request_id)
+                set_done(job_id, payload)
+                return
+
+            initial_state = _build_initial_state(input_data)
+            done_count = 0
+            final_state: dict[str, Any] | None = None
+
+            # multi-mode stream — "updates" 로 노드 완료 이벤트, "values" 로 누적 state.
+            async for mode, chunk in slow_graph.astream(initial_state, stream_mode=["updates", "values"]):
+                if mode == "updates":
+                    # chunk = {"node_name": state_diff_dict}
+                    for node_name in chunk.keys():
+                        if node_name.startswith("__"):  # langgraph internal
+                            continue
+                        done_count += 1
+                        set_progress(
+                            job_id,
+                            min(1.0, done_count / _SLOW_GRAPH_NODE_TOTAL),
+                            stage=node_name,
+                        )
+                elif mode == "values":
+                    # 매 yield 가 누적 state — 마지막이 최종.
+                    if isinstance(chunk, dict):
+                        final_state = chunk
+
+            if final_state is None:
+                set_error(job_id, "LangGraph stream 이 final state 를 반환하지 않음")
+                return
+
+            full = map_state_to_simulation_output(final_state, request_id)
+            winner = full.get("winner_district") or input_data.target_district
+            top3 = full.get("top_3_candidates") or []
+            try:
+                full["all_competitor_locations"] = await _collect_all_competitor_locations(
+                    winner, top3, input_data.business_type
+                )
+            except Exception as ce:
+                print(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
+                full["all_competitor_locations"] = []
+
+            analysis_keys = set(AnalysisOutput.model_fields.keys())
+            payload = {k: v for k, v in full.items() if k in analysis_keys}
+            payload["request_id"] = request_id
+            payload["target_district"] = full.get("target_district") or input_data.target_district
+            set_done(job_id, _safe_json(payload))
+            print(f"[/analyze/llm/async] 완료 job={job_id[:8]}")
+        except Exception as e:
+            import traceback
+
+            print(f"[/analyze/llm/async] 오류: {e}\n{traceback.format_exc()}")
+            set_error(job_id, str(e))
+
+    # GC race 방지 — strong ref 보관, 완료 시 자동 discard.
+    task = asyncio.create_task(_run())
+    _async_job_tasks.add(task)
+    task.add_done_callback(_async_job_tasks.discard)
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/analyze/llm/{job_id}/status")
+async def analyze_llm_job_status(job_id: str) -> dict[str, Any]:
+    """AI 분석 async job 상태 조회."""
+    from src.services.job_progress_store import get_job, serialize_status
+
+    job = get_job(job_id)
+    if job is None or job["kind"] != "analyze_llm":
+        return JSONResponse(
+            status_code=404,
+            content={"status": "error", "message": f"job {job_id} not found"},
+        )
+    return serialize_status(job)
 
 
 # ---------------------------------------------------------------------------
@@ -1493,11 +1626,125 @@ async def predict_districts(input_data: SimulationInput):
 
     except Exception as e:
         import traceback
+
         print(f"[/predict] 예상치 못한 오류: {e}\n{traceback.format_exc()}")
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": f"예측 처리 중 오류가 발생했습니다: {e}"},
         )
+
+
+# ---------------------------------------------------------------------------
+# Real-time progress 지원 — /predict/async + /predict/{job_id}/status.
+# 기존 sync /predict 는 회귀 방지 위해 그대로 유지. frontend 가 async 모드로
+# 전환 후 실측 진행률(슬라이스 완료 비율)을 250ms polling 으로 받음.
+# 단계: 동별 _predict_single_district 가 끝날 때마다 progress = done/total.
+# ---------------------------------------------------------------------------
+@app.post("/predict/async")
+async def predict_districts_async(input_data: SimulationInput) -> dict[str, Any]:
+    """ML 예측 비동기 시작 — 즉시 job_id 반환. 진행률은 status endpoint 폴링."""
+    from src.config.constants import MAPO_DISTRICTS
+    from src.services.job_progress_store import (
+        create_job,
+        set_done,
+        set_error,
+        set_progress,
+    )
+
+    target_districts = getattr(input_data, "target_districts", None) or [input_data.target_district]
+    target_districts = [d for d in target_districts if d in MAPO_DISTRICTS][:4]
+    if not target_districts:
+        return {"status": "error", "message": "유효한 마포구 행정동이 없습니다."}
+
+    job_id = create_job("predict")
+    print(f"[/predict/async] 시작 job={job_id[:8]} dongs={target_districts} biz={input_data.business_type}")
+
+    async def _run() -> None:
+        print(f"[/predict/async] _run 진입 job={job_id[:8]}")
+        try:
+            normalized_biz = _BIZ_TYPE_NORMALIZE.get(
+                (input_data.business_type or "").lower(),
+                input_data.business_type or "커피-음료",
+            )
+            industry_code = _BIZ_TO_INDUSTRY_CODE.get(normalized_biz, "CS100010")
+            cost_config = BEPCalculator.get_default_costs(
+                normalized_biz,
+                initial_capital=getattr(input_data, "initial_capital", 50_000_000),
+                monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
+            )
+            segment_profile = _build_segment_profile(input_data)
+
+            total = len(target_districts)
+            # 동별 4 sub-stage (ml_done / projection_done / shap_done / assembled).
+            # 단일 동 시뮬도 0% → 25% → 50% → 75% → 100% 단계로 보임.
+            # 4동 병렬이면 16 step 누적 — 매 sub-step 마다 6.25%p 진행.
+            sub_total = total * 4
+            sub_done = 0
+
+            def make_cb(dong: str) -> Callable[[str], None]:
+                def cb(label: str) -> None:
+                    nonlocal sub_done
+                    sub_done += 1
+                    set_progress(
+                        job_id,
+                        min(1.0, sub_done / sub_total),
+                        stage=f"{dong} {label}",
+                    )
+
+                return cb
+
+            async def _one(dong: str) -> tuple[str, Any]:
+                try:
+                    r = await _predict_single_district(
+                        dong,
+                        industry_code,
+                        normalized_biz,
+                        cost_config,
+                        segment_profile,
+                        progress_cb=make_cb(dong),
+                    )
+                except Exception as exc:
+                    r = exc
+                return dong, r
+
+            raw = await asyncio.gather(*[_one(d) for d in target_districts])
+
+            results: list[DistrictPredictionResult] = []
+            for dong, res in raw:
+                if isinstance(res, Exception):
+                    print(f"[/predict/async] {dong} 예외 (부분 실패 처리): {res}")
+                    results.append(DistrictPredictionResult(district=dong))
+                else:
+                    results.append(res)
+
+            payload = _safe_json([r.model_dump() for r in results])
+            set_done(job_id, payload)
+            print(f"[/predict/async] 완료 job={job_id[:8]} count={len(results)}")
+        except Exception as e:
+            import traceback
+
+            print(f"[/predict/async] 예상치 못한 오류: {e}\n{traceback.format_exc()}")
+            set_error(job_id, str(e))
+
+    # GC race 방지 — strong ref 보관, 완료 시 자동 discard.
+    task = asyncio.create_task(_run())
+    _async_job_tasks.add(task)
+    task.add_done_callback(_async_job_tasks.discard)
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/predict/{job_id}/status")
+async def predict_job_status(job_id: str) -> dict[str, Any]:
+    """ML 예측 async job 상태 조회 — running/done/error + progress 0~1."""
+    from src.services.job_progress_store import get_job, serialize_status
+
+    job = get_job(job_id)
+    if job is None or job["kind"] != "predict":
+        return JSONResponse(
+            status_code=404,
+            content={"status": "error", "message": f"job {job_id} not found"},
+        )
+    return serialize_status(job)
 
 
 @app.post("/simulate", deprecated=True)
