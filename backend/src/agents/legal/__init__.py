@@ -5,5 +5,5 @@
 - ``orchestrator`` : ``asyncio.gather`` 로 12개 평가를 병렬 실행 후 결과 병합.
 
 진입점은 ``backend/src/agents/nodes/legal.py`` 의 ``_run_legal_pipeline`` 이며
-``settings.legal_rule_engine_enabled`` 플래그로 legacy single-LLM 모드와 분기된다.
+2026-05-02 룰엔진 단일 경로로 전환됨 (legacy single-LLM batch 제거).
 """

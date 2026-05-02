@@ -93,8 +93,7 @@ class Settings(BaseSettings):
     multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-4.1-mini")
 
     # Legal Rule Engine — 8 룰 + 4 specialist 하이브리드 (2026-05-02).
-    # default ON — 8 결정적 룰은 LLM/RAG 호출 없이 즉시 처리, 4 specialist만 RAG+LLM.
-    # legacy single-LLM batch 경로는 LEGAL_RULE_ENGINE_ENABLED=false로 복귀 가능.
+    # 단일 모드로 전환 (legacy single-LLM batch 경로 제거). flag 자체는 호환을 위해 보존.
     # 스펙: docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md
     legal_rule_engine_enabled: bool = (
         os.getenv("LEGAL_RULE_ENGINE_ENABLED", "true").lower() == "true"
