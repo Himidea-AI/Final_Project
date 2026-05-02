@@ -154,6 +154,21 @@ from src.api.customer_segment import router as _customer_segment_router  # noqa:
 
 app.include_router(_customer_segment_router)
 
+# --- simulation_foresee REST (예측 결과 저장, JWT Bearer 요구) ---
+from src.api.simulation_foresee import router as _sim_foresee_router  # noqa: E402
+
+app.include_router(_sim_foresee_router)
+
+# --- simulation_ai REST (AI 분석 저장, JWT Bearer 요구) ---
+from src.api.simulation_ai import router as _sim_ai_router  # noqa: E402
+
+app.include_router(_sim_ai_router)
+
+# --- sensitivity REST (TCN 시나리오 시뮬레이터 탄성치 캐시 서빙) ---
+from src.api.sensitivity import router as _sensitivity_router  # noqa: E402
+
+app.include_router(_sensitivity_router)
+
 
 # customer_revenue MLP 모델 startup 시 워밍업 — 첫 미리보기 호출 latency 0.5~1초 → ~100ms.
 # 가중치 부재 환경에선 silent skip (배포 서버 분리 케이스 보호).

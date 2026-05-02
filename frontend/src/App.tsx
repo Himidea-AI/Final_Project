@@ -1446,6 +1446,7 @@ function SimulatorDashboard({
             {/* loading UI(가짜 progress + ETA + 단계 ticker) 제거 — §3.7 거짓 신호 +
                 좌측 옵션 패널 풀폭 가독성 ↑. 백그라운드 진행은 SimulationFloatingWidget 담당.
                 결과 도착 시 runSim 함수가 setReportState('result')로 자동 전환. */}
+
           </div>
 
           {/* RUN 버튼은 우5 패널의 핵심 파라미터 카드 밑으로 이동됨 (라인 ~1678 부근) */}
