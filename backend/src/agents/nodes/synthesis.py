@@ -82,6 +82,18 @@ async def synthesis_node(state: AgentState) -> dict:
             # [#3] 캐시 히트 시 legal_risks 복원 (캐시에 저장된 값 우선, 없으면 state에서 유지)
             if "legal_risks" in cached_data:
                 analysis["legal_risks"] = cached_data["legal_risks"]
+            # ranking 결과는 캐시되지 않음 — Phase 1 ranking_phase가 state top-level에 둔 값을 analysis_results로 승격.
+            # 누락 시 main.py 응답의 district_rankings/winner_district/top_3_candidates 가 비어 프론트에서
+            # "입지 랭킹 데이터가 없습니다" 가 표시되던 회귀를 막는다.
+            _state_scouting = state.get("scouting_results") or []
+            if _state_scouting or not analysis.get("district_rankings"):
+                analysis["district_rankings"] = _state_scouting or analysis.get("district_rankings", [])
+            _state_winner = state.get("winner_district")
+            if _state_winner or not analysis.get("winner_district"):
+                analysis["winner_district"] = _state_winner or analysis.get("winner_district")
+            _state_top3 = state.get("top_3_candidates") or []
+            if _state_top3 or not analysis.get("top_3_candidates"):
+                analysis["top_3_candidates"] = _state_top3 or analysis.get("top_3_candidates", [])
             await _redis.aclose()
 
             # 캐시 히트 시에도 agent_attributions 집계 — 다른 에이전트의 attribution은 state/analysis에서 수집
@@ -253,6 +265,7 @@ async def synthesis_node(state: AgentState) -> dict:
     # Phase 2 (llm_analysis_phase)에서 이미 winner 동 기준으로 분석이 실행됐음
     # target_district == winner_district (graph.py Phase 2에서 교체)
     prompt = (
+        "[AGENT: synthesis] 최종 전략 합성 에이전트 — LangSmith 식별용 라벨.\n\n"
         "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
         f"브랜드:{brand_name}({business_type}) | 추천입지:{winner_district} | 법률리스크:{overall_legal_risk}\n"
         f"입지랭킹: {ranking_summary}\n"
@@ -288,6 +301,9 @@ async def synthesis_node(state: AgentState) -> dict:
         "     ## 리스크 및 대응\n"
         "     ## 창업 타이밍 제언\n"
         "   - 한 줄에 모든 내용을 몰아쓰지 말 것. 줄글이라도 2~3 문장마다 문단 분리\n"
+        "   - 시간 범위·수치 범위 표기 시 물결표(~) 대신 하이픈(-) 사용 "
+        "(예: '11시-14시', '30대-40대', '월 200-300만원'). "
+        "물결표는 마크다운 취소선(~~text~~)과 충돌해 텍스트가 잘려 보일 수 있음.\n"
         "9. summary 는 한 줄(80자 내) 짧은 헤드라인으로 작성 — final_recommendation 과 중복 금지\n"
         + (
             "7. profit_simulation에 ML 실측 수치를 반드시 사용:\n"

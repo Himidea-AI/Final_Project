@@ -1520,13 +1520,13 @@ export default function AbmPersonaMap({
       }
       ctx.clearRect(0, 0, W, H);
 
-      // 전체 canvas dark fill — 외부도 내부도 동일 검정.
+      // 전체 canvas fill — 외부도 내부도 동일 흰색.
       if (
         hexGridRef.current.length > 0 &&
         densityGridRef.current &&
         trajectoryPathsRef.current.size > 0
       ) {
-        ctx.fillStyle = 'rgba(7, 7, 9, 0.97)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.97)';
         ctx.fillRect(0, 0, W, H);
       }
 
@@ -1869,7 +1869,7 @@ export default function AbmPersonaMap({
             if (pix.x < -10 || pix.y < -10 || pix.x > W + 10 || pix.y > H + 10) return;
 
             // action 별 색·alpha — role 색이 base, action 으로 modulate.
-            let fill = roleColor[prev.role] || '#EAE9E1';
+            let fill = roleColor[prev.role] || '#cbd5e1';
             let alpha = 1;
             if (action === 'rest') {
               fill = '#6B6A63'; // gray — 휴식
@@ -3030,7 +3030,7 @@ export default function AbmPersonaMap({
                               <path
                                 d="M4.5 7.5 a3 3 0 0 1 0.3 -5.9 a4 4 0 0 1 7.6 0.4 a2.8 2.8 0 0 1 3.6 4.5 a2.5 2.5 0 0 1 -1.8 0.7 Z"
                                 fill="#6B6A63"
-                                stroke="#EAE9E1"
+                                stroke="#cbd5e1"
                                 strokeWidth="0.7"
                               />
                               <g stroke="#002CD1" strokeWidth="1.3" strokeLinecap="round">

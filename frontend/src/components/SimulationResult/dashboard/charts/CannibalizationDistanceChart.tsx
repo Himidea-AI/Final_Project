@@ -49,14 +49,14 @@ export function CannibalizationDistanceChart({ bins, closestM, impactPct, height
   const total = entries.reduce((s, e) => s + e.count, 0);
   if (total === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-xs text-muted-foreground">
+      <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
         2km 반경 내 자사 매장 없음
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/40 p-4">
+    <div className="rounded-2xl border border-border bg-secondary p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
           자사 매장 거리 분포

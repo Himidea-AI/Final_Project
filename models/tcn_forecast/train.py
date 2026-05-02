@@ -42,7 +42,8 @@ DEFAULT_PRETRAIN_CONFIG: dict = {
     "db_url": DB_URL,
     "dong_prefix": None,  # 서울 전체 데이터로 사전학습
     "csv_path": None,
-    "window_size": 4,  # 4분기(1년) 입력 — receptive field=4와 일치
+    "window_size": 12,  # 12분기(3년) 입력 — 계절 사이클 3회 커버
+    "output_size": 4,  # 4분기 멀티스텝 예측 (DMS)
     "batch_size": 64,
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
@@ -50,7 +51,7 @@ DEFAULT_PRETRAIN_CONFIG: dict = {
     # 모델 하이퍼파라미터
     "n_channels": 128,  # GRU의 hidden_size=128과 동일 조건
     "kernel_size": 2,  # receptive field 최적 커널 크기
-    "dilations": [1, 2],  # receptive field = 1 + 1×(1+2) = 4 (window_size=4 커버)
+    "dilations": [1, 2, 4, 8],  # receptive field = 1 + 1×(1+2+4+8) = 16 (window_size=12 초과 커버)
     "dropout": 0.2,
     # 학습 하이퍼파라미터
     "epochs": 100,
@@ -58,14 +59,16 @@ DEFAULT_PRETRAIN_CONFIG: dict = {
     "weight_decay": 1e-5,
     "patience": 10,  # 조기종료: 10에폭 동안 개선 없으면 종료
     # 출력 경로 — tcn_forecast/weights/ 사용
-    "save_path": str(WEIGHTS_DIR / "pretrained_tcn.pt"),
+    "save_path": str(WEIGHTS_DIR / "pretrained_tcn_v2.pt"),
 }
 
 DEFAULT_FINETUNE_CONFIG: dict = {
     "db_url": DB_URL,
     "dong_prefix": "11440",  # 마포구만 파인튜닝
     "csv_path": None,
-    "window_size": 4,  # 4분기(1년) 입력 — pretrain과 동일 조건
+    "window_size": 12,  # 12분기(3년) 입력 — pretrain과 동일 조건
+    "output_size": 4,  # 4분기 멀티스텝 예측 (DMS)
+    "val_quarter": 20241,  # 이 분기 이후를 val로 분리
     "batch_size": 32,  # 파인튜닝은 배치 작게 (데이터 적음)
     "val_ratio": 0.2,
     "target_col": "monthly_sales",
@@ -73,10 +76,10 @@ DEFAULT_FINETUNE_CONFIG: dict = {
     # 모델 하이퍼파라미터
     "n_channels": 128,
     "kernel_size": 2,
-    "dilations": [1, 2],  # receptive field = 4 (pretrain과 동일)
+    "dilations": [1, 2, 4, 8],  # receptive field = 16 (pretrain과 동일)
     "dropout": 0.2,
     # 파인튜닝 하이퍼파라미터
-    "pretrained_path": str(WEIGHTS_DIR / "pretrained_tcn_seed2026.pt"),
+    "pretrained_path": str(WEIGHTS_DIR / "pretrained_tcn_v2.pt"),
     "freeze_epochs": 10,  # 1단계: TCN 고정, FC만 학습
     "freeze_lr": 5e-4,
     "unfreeze_epochs": 50,  # 2단계: 전체 파라미터 낮은 학습률로 학습
@@ -84,7 +87,7 @@ DEFAULT_FINETUNE_CONFIG: dict = {
     "weight_decay": 1e-5,
     "patience": 10,
     # 출력 경로
-    "save_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn.pt"),
+    "save_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_v2.pt"),
 }
 
 
@@ -172,6 +175,87 @@ def _validate(
         n_batches += 1
 
     return total_loss / max(n_batches, 1)
+
+
+@torch.no_grad()
+def _compute_metrics_and_residuals(
+    model: nn.Module,
+    val_loader: torch.utils.data.DataLoader,
+    tgt_scaler: object,
+    device: torch.device,
+) -> dict:
+    """val 세트로 6개 지표 + per-quarter residual std 계산.
+
+    모든 지표는 log1p 역변환 후(원 단위)에서 계산.
+
+    Returns
+    -------
+    dict
+        mape, mae, rmse, dir_acc, pq_mape (4개), bias, residual_std (4개 float)
+    """
+    import numpy as np
+
+    model.eval()
+    preds_list: list[np.ndarray] = []
+    targets_list: list[np.ndarray] = []
+
+    for batch in val_loader:
+        X_batch = batch[0].to(device)
+        y_batch = batch[1].cpu().numpy()  # (batch, output_size)
+        pred = model(X_batch).cpu().numpy()  # (batch, output_size)
+        preds_list.append(pred)
+        targets_list.append(y_batch)
+
+    preds = np.concatenate(preds_list, axis=0)  # (N, output_size)
+    targets = np.concatenate(targets_list, axis=0)
+
+    output_size = preds.shape[1]
+
+    # 역변환: MinMaxScaler inverse → log1p 역 → 원 매출 단위
+    def _inv(arr: np.ndarray) -> np.ndarray:
+        out = np.zeros_like(arr)
+        for i in range(output_size):
+            log_val = tgt_scaler.inverse_transform(arr[:, i : i + 1])
+            out[:, i] = np.expm1(log_val.flatten())
+        return out
+
+    pred_orig = _inv(preds)  # (N, output_size)
+    tgt_orig = _inv(targets)  # (N, output_size)
+
+    eps = 1e-6
+    # MAPE
+    mape = float(np.mean(np.abs((tgt_orig - pred_orig) / (np.abs(tgt_orig) + eps))) * 100)
+    # MAE
+    mae = float(np.mean(np.abs(tgt_orig - pred_orig)))
+    # RMSE
+    rmse = float(np.sqrt(np.mean((tgt_orig - pred_orig) ** 2)))
+    # Directional Accuracy
+    if output_size > 1:
+        pred_dirs = np.sign(pred_orig[:, 1:] - pred_orig[:, :-1])
+        tgt_dirs = np.sign(tgt_orig[:, 1:] - tgt_orig[:, :-1])
+        dir_acc = float(np.mean(pred_dirs == tgt_dirs) * 100)
+    else:
+        dir_acc = float("nan")
+    # Per-Quarter MAPE
+    pq_mape = [
+        float(np.mean(np.abs((tgt_orig[:, i] - pred_orig[:, i]) / (np.abs(tgt_orig[:, i]) + eps))) * 100)
+        for i in range(output_size)
+    ]
+    # Bias
+    bias = float(np.mean(pred_orig - tgt_orig))
+    # Residual std per quarter
+    residuals = pred_orig - tgt_orig
+    residual_std = residuals.std(axis=0).tolist()
+
+    return {
+        "mape": round(mape, 2),
+        "mae": round(mae, 0),
+        "rmse": round(rmse, 0),
+        "dir_acc": round(dir_acc, 2),
+        "pq_mape": [round(m, 2) for m in pq_mape],
+        "bias": round(bias, 0),
+        "residual_std": residual_std,
+    }
 
 
 def _train_loop(
@@ -448,6 +532,25 @@ def finetune(config: dict | None = None) -> Path:
     _ft_suffix = save_path.stem.replace("finetuned_mapo_tcn", "")
     _save_scalers(feat_scaler, tgt_scaler, save_path.parent / f"finetune_tcn_scalers{_ft_suffix}.pkl")
 
+    # val 지표 계산 + residual_std 저장
+    logger.info("=== val 지표 계산 + residual_std 저장 ===")
+    metrics = _compute_metrics_and_residuals(model, val_loader, tgt_scaler, device)
+    logger.info(
+        "val 지표 — MAPE=%.2f%%  MAE=%.0f  RMSE=%.0f  DirAcc=%.1f%%  Bias=%.0f",
+        metrics["mape"],
+        metrics["mae"],
+        metrics["rmse"],
+        metrics["dir_acc"],
+        metrics["bias"],
+    )
+    logger.info("Per-Quarter MAPE: Q1=%.2f%%  Q2=%.2f%%  Q3=%.2f%%  Q4=%.2f%%", *metrics["pq_mape"])
+
+    _ft_residual_suffix = save_path.stem.replace("finetuned_mapo_tcn", "")
+    _save_residual_std(
+        metrics["residual_std"],
+        save_path.parent / f"finetune_tcn_residual_std{_ft_residual_suffix}.pkl",
+    )
+
     return save_path
 
 
@@ -473,6 +576,21 @@ def _save_scalers(
     with open(path, "wb") as f:
         pickle.dump({"feature_scaler": feature_scaler, "target_scaler": target_scaler}, f)
     logger.info("스케일러 저장: %s", path)
+
+
+def _save_residual_std(residual_std: list[float], path: Path) -> None:
+    """val residual std를 pickle로 저장한다.
+
+    predict.py에서 CI 계산에 사용.
+    residual_std: [std_Q1, std_Q2, std_Q3, std_Q4]
+    """
+    import pickle
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump(residual_std, f)
+    logger.info("residual_std 저장: %s  값=%s", path, [round(v, 0) for v in residual_std])
 
 
 def load_scalers(path: str | Path) -> tuple:

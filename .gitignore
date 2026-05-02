@@ -123,6 +123,15 @@ models/**/weights/*.pkl
 validation/results/*.db
 validation/results/imputed_mapo_*.csv
 validation/results/checkpoints_v4/
+validation/results/multi_brand_*/
+validation/results/sweep_boost_*/
+
+# 벤치마크 결과 (재실행 가능 — repo에 보관 X)
+bench_ragas.json
+bench_*.json
+
+# 법률 RAG 빌드 산출물 (build_parent_articles.py로 재생성 가능)
+backend/data/legal/processed/parent_articles.json
 
 # Claude Code 로컬 설정 (frontend 하위)
 frontend/.claude/

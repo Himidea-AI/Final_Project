@@ -4,12 +4,12 @@
  * BEP 누적이익 + 과거 12개월 폐업률 + LightGBM/TCN 폐업위험도 + 생존률 KPI.
  */
 
-import { Activity } from 'lucide-react';
+import { Activity, History, ShieldAlert, TrendingUp } from 'lucide-react';
 import type { ClosureRate, ClosureRisk, SimulationOutput } from '../../../../../types';
 import { formatKrw, formatPct, quarterlyToMonthly } from '../../utils/formatters';
 import { BepCumulativeProfitChart } from '../../charts/BepCumulativeProfitChart';
-import { SurvivalRateKpi } from '../../charts/SurvivalRateKpi';
 import { ClosureRatePanel } from '../../charts/ClosureRatePanel';
+import { ClosureRiskHeatmap } from '../../charts/ClosureRiskHeatmap';
 import { ClosureRiskPanel } from '../../charts/ClosureRiskPanel';
 
 interface Props {
@@ -53,40 +53,40 @@ export function PredictFinancialSimTab({ simResult }: Props) {
       />
 
       {hasAnyProjection && (
-        <div className="bg-card/40 border border-border/60 rounded-3xl p-6">
-          <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2 mb-3">
-            투자 회수 곡선
-          </h4>
+        <div className="rounded-3xl border border-border bg-card p-8">
+          <div className="mb-8 flex items-start justify-between gap-6">
+            <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
+              <TrendingUp className="text-primary" /> 투자 회수 곡선
+            </h3>
+          </div>
           <BepCumulativeProfitChart series={bepSeries} />
         </div>
       )}
 
-      <SurvivalRateKpi
-        survivalRate={simResult.market_report?.survival_rate}
-        closureRate={simResult.market_report?.closure_rate}
-      />
-
       {dpredicts.length > 0 ? (
         <>
-          <div>
-            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-3">
-              동별 폐업위험도 (LightGBM + TCN 예측)
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {dpredicts.map((p) => (
-                <ClosureRiskPanel
-                  key={p.district}
-                  district={p.district}
-                  closure={p.closure_risk as ClosureRisk | null}
-                />
-              ))}
+          <div className="rounded-3xl border border-border bg-card p-8">
+            <div className="mb-8 flex items-start justify-between gap-6">
+              <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
+                <ShieldAlert className="text-primary" /> 동별 폐업위험도
+              </h3>
             </div>
+            {/* Heatmap — 4동 × 피처 (LightGBM / TCN 분리). 셀 색강도 = SHAP contribution.
+                양수=빨강(위험↑), 음수=초록(위험↓). 동마다 다른 피처가 위험 결정에 기여한 것을 한눈에. */}
+            <ClosureRiskHeatmap
+              rows={dpredicts.map((p) => ({
+                district: p.district,
+                closure: p.closure_risk as ClosureRisk | null,
+              }))}
+            />
           </div>
-          <div>
-            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-3">
-              동별 12개월 폐업률 추이 (실측)
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-3xl border border-border bg-card p-8">
+            <div className="mb-8 flex items-start justify-between gap-6">
+              <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
+                <History className="text-primary" /> 동별 최근 4분기 폐업률 추이
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {dpredicts.map((p) => (
                 <ClosureRatePanel
                   key={p.district}
@@ -127,19 +127,19 @@ function ProfitSimulationPanelFull({
     { label: '월 운영비 (총계)', val: monthlyCost, accent: 'text-muted-foreground' },
   ];
   return (
-    <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h4 className="text-sm font-black text-foreground uppercase tracking-tight flex items-center gap-2">
-          <Activity size={16} className="text-primary" /> 상세 수익성 시뮬레이션
-        </h4>
+    <div className="rounded-3xl border border-border bg-card p-8">
+      <div className="mb-8 flex items-start justify-between gap-6">
+        <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
+          <Activity className="text-primary" /> 상세 수익성 시뮬레이션
+        </h3>
         <div className="flex items-center gap-2">
           {margin != null && (
-            <div className="px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-[0.6875rem] font-black text-primary tabular-nums">
+            <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[0.6875rem] font-black tabular-nums text-primary">
               마진 {formatPct(margin)}
             </div>
           )}
           {bepMonths != null && (
-            <div className="px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-[0.6875rem] font-black text-primary tabular-nums">
+            <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[0.6875rem] font-black tabular-nums text-primary">
               BEP {bepMonths.toFixed(1)}개월
             </div>
           )}

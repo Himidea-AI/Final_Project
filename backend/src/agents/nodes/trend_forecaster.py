@@ -143,6 +143,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
     change_ix_current = change_ix_data.get("current") or {}
 
     system_content = (
+        "[AGENT: trend_forecaster] 시장 트렌드 예측 에이전트 — LangSmith 식별용 라벨.\n\n"
         "당신은 프랜차이즈 본사 영업팀을 지원하는 상권 분석 전문가입니다. "
         "업종 검색량·지역 모멘텀·상권 변화 지표·거시 기준금리 4개 시계열을 "
         "종합하여 향후 12개월 시장 전망을 판단하세요.\n\n"

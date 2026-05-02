@@ -9,6 +9,9 @@
  *     → models/interface.py generate (dict 래핑)
  *     → backend/src/main.py response_data.living_pop_forecast
  *     → PredictCustomerFlowTab → PeakHourCard
+ *
+ * 렌더링 계약: 부모 (PredictCustomerFlowTab 등) 가 항상 <div bg-card border rounded-3xl> 로
+ * 감싸므로 자체 outer chrome 없이 bare 컨텐츠만 렌더 — 퐁당퐁당 (card→card 중첩 방지).
  */
 
 import { Activity, Clock } from 'lucide-react';
@@ -33,7 +36,7 @@ function formatPop(pop: number): string {
 export function PeakHourCard({ data }: Props) {
   if (!data || !Array.isArray(data.quarters) || data.quarters.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-border bg-card/40 p-6 text-center">
+      <div className="text-center">
         <Activity className="mx-auto text-muted-foreground mb-2" size={22} />
         <p className="text-xs text-muted-foreground">유동인구 피크 시간 예측 데이터 없음</p>
         <p className="mt-1 text-[0.625rem] text-muted-foreground">
@@ -51,7 +54,7 @@ export function PeakHourCard({ data }: Props) {
   const peakPop = q1.peak_pop;
 
   return (
-    <div className="bg-card/40 border border-border/60 rounded-3xl p-8 space-y-6">
+    <div className="space-y-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
@@ -126,7 +129,7 @@ export function PeakHourCard({ data }: Props) {
             {data.quarters.map((q) => (
               <div
                 key={q.quarter_offset}
-                className="bg-card/40 border border-border rounded-xl p-3 text-left"
+                className="bg-secondary border border-border rounded-xl p-3 text-left"
               >
                 <div className="text-[0.5625rem] font-black text-muted-foreground uppercase tracking-widest">
                   +{q.quarter_offset}분기
@@ -144,7 +147,7 @@ export function PeakHourCard({ data }: Props) {
       )}
 
       {/* Disclaimer */}
-      <div className="pt-4 border-t border-border/50 space-y-1">
+      <div className="pt-4 border-t border-border space-y-1">
         <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
           ※ TCN 모델 — 코로나 시기(2020~2021) 가중치 0.5 보정 적용.
         </p>

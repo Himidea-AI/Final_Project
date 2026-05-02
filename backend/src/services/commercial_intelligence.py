@@ -219,9 +219,11 @@ def estimate_cannibalization(
     base_by_industry = {
         "cafe": 0.25,
         "coffee": 0.25,
+        "restaurant": 0.18,  # legal specialist 호출 — 일반 음식점 평균
         "chicken": 0.10,
         "burger": 0.20,
         "korean": 0.15,
+        "convenience": 0.10,  # 편의점 — 자기잠식 효과 약함
         "default": 0.20,
     }
     base_rate = base_by_industry.get(industry, 0.20)

@@ -86,6 +86,19 @@ class Settings(BaseSettings):
     chunk_compression_enabled: bool = os.getenv("CHUNK_COMPRESSION_ENABLED", "false").lower() == "true"
     chunk_compression_model: str = os.getenv("CHUNK_COMPRESSION_MODEL", "gpt-4.1-mini")
 
+    # Multi-query expansion — cheap LLM이 1쿼리 → N개 변형 → 병렬 검색 후 RRF fusion.
+    # 기대: Recall +10~15%. 비용: cheap LLM 1회 + RAG 검색 N배.
+    multi_query_enabled: bool = os.getenv("MULTI_QUERY_ENABLED", "false").lower() == "true"
+    multi_query_n: int = int(os.getenv("MULTI_QUERY_N", "3"))
+    multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-4.1-mini")
+
+    # Legal Rule Engine — 8 룰 + 4 specialist 하이브리드 (2026-05-02).
+    # 단일 모드로 전환 (legacy single-LLM batch 경로 제거). flag 자체는 호환을 위해 보존.
+    # 스펙: docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md
+    legal_rule_engine_enabled: bool = (
+        os.getenv("LEGAL_RULE_ENGINE_ENABLED", "true").lower() == "true"
+    )
+
     # NTS (국세청)
     nts_api_key: str = os.getenv("NTS_API_KEY", "")
 

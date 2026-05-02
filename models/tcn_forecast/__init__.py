@@ -11,6 +11,7 @@ LSTM/GRU 대비 TCN 구조 사용:
 참조: models/lstm_forecast/ (data_prep 재사용), models/gru_forecast/ (구조 참조)
 """
 
-from models.tcn_forecast.predict import predict
+from models.tcn_forecast import predict  # noqa: F401 — 모듈 자체 노출 (테스트 호환)
+from models.tcn_forecast.predict import predict as predict_fn
 
-__all__ = ["predict"]
+__all__ = ["predict", "predict_fn"]

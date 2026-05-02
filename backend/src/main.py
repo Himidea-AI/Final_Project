@@ -556,10 +556,17 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
             return {k: _sanitize(v) for k, v in val.items()}
         return val
 
-    # 랭킹 데이터
-    district_rankings = _sanitize(analysis.get("district_rankings", []))
-    winner_district = _sanitize(analysis.get("winner_district", target_dist))
-    top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
+    # 랭킹 데이터 — analysis_results 누락 시 state top-level (ranking_phase) 폴백.
+    # synthesis 캐시 히트 등으로 analysis_results 에 ranking 결과가 안 실리는 케이스 방어.
+    district_rankings = _sanitize(
+        analysis.get("district_rankings") or state.get("scouting_results") or []
+    )
+    winner_district = _sanitize(
+        analysis.get("winner_district") or state.get("winner_district") or target_dist
+    )
+    top_3_candidates = _sanitize(
+        analysis.get("top_3_candidates") or state.get("top_3_candidates") or []
+    )
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
@@ -1456,14 +1463,20 @@ async def predict_districts(input_data: SimulationInput):
 
         segment_profile = _build_segment_profile(input_data)
 
-        results: list[DistrictPredictionResult] = list(
-            await asyncio.gather(
-                *[
-                    _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
-                    for dong in target_districts
-                ]
-            )
+        raw = await asyncio.gather(
+            *[
+                _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
+                for dong in target_districts
+            ],
+            return_exceptions=True,
         )
+        results: list[DistrictPredictionResult] = []
+        for dong, res in zip(target_districts, raw):
+            if isinstance(res, Exception):
+                print(f"[/predict] {dong} 예외 (부분 실패 처리): {res}")
+                results.append(DistrictPredictionResult(district=dong))
+            else:
+                results.append(res)
 
         print(f"--- [/predict] 완료 ({len(results)}개 동) ---")
 

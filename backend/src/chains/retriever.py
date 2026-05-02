@@ -2,6 +2,7 @@
 RAG 문서 검색 — 하이브리드 (벡터 유사도 + BM25 키워드) + RRF 결합 + HyDE 쿼리 확장 + Cross-encoder Reranker
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -11,6 +12,24 @@ from pathlib import Path
 from ..database.vector_db import LegalVectorDB
 
 logger = logging.getLogger(__name__)
+
+
+# S-5 Parent-child: chunk_id → parent_text 매핑 모듈 top-level pre-load (race condition 회피)
+def _load_parent_articles_eager() -> dict:
+    path = Path(__file__).resolve().parent.parent.parent / "data" / "legal" / "processed" / "parent_articles.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        logger.info(f"[retriever] parent_articles 로드: {len(data)} 매핑")
+        return data
+    except Exception as e:
+        logger.warning(f"[retriever] parent_articles 로드 실패: {e}")
+        return {}
+
+
+_PARENT_ARTICLES: dict = _load_parent_articles_eager()
 
 
 # HyDE용 일상 용어 → 법률 용어 매핑 (LLM 호출 없이 빠르게 치환)
@@ -232,8 +251,8 @@ class LegalDocumentRetriever:
             if cached:
                 hyde_text = cached
                 logger.info(f"[HyDE] cache HIT: {cache_key[:20]}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[HyDE] Redis 조회 실패: {e}")
 
         # 캐시 미스 -> LLM 호출
         if hyde_text is None:
@@ -294,8 +313,8 @@ class LegalDocumentRetriever:
                 if hyde_text and _redis:
                     try:
                         await _redis.setex(cache_key, 86400, hyde_text)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"[HyDE] Redis 캐시 저장 실패: {e}")
 
                 if hyde_text:
                     logger.info(f"[HyDE] LLM 생성 완료 ({len(hyde_text)}자)")
@@ -310,8 +329,8 @@ class LegalDocumentRetriever:
                 if _redis:
                     try:
                         await _redis.aclose()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"[HyDE] Redis aclose 실패: {e}")
 
         # 결합: 원문 + 사전 확장 + 가상 조문
         if hyde_text:
@@ -669,21 +688,41 @@ class LegalDocumentRetriever:
         """
         vs = self._db.vectorstore
         if vs is None:
-            print(f"[LegalDocumentRetriever] WARNING: vectorstore가 초기화되지 않아 '{query}' 검색을 건너뜁니다.")
+            logger.warning(
+                f"[LegalDocumentRetriever] vectorstore 초기화 실패 — '{query}' 검색 skip"
+            )
             return []
 
         # 0차: 하이브리드 HyDE 쿼리 확장 (사전 + LLM)
         expanded_query = await self._expand_query_hybrid(query)
 
+        # 0.5차: S-2 Multi-query — cheap LLM이 1쿼리 → N개 변형 (settings.multi_query_enabled)
+        from src.chains.multi_query import expand_query as _multi_expand
+        from src.config.settings import settings as _settings
+
+        mq_variants: list[str] = []
+        if _settings.multi_query_enabled:
+            try:
+                mq_variants = await _multi_expand(query, n=_settings.multi_query_n)
+            except Exception as e:
+                logger.warning(f"[LegalDocumentRetriever] multi-query 실패 (무시): {e}")
+
         filter_dict = {"source": {"$in": source_filter}} if source_filter else None
 
-        # 1차: 벡터 유사도 검색 — 원래 쿼리 + 확장 쿼리 모두 검색 후 합침
-        docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k * 2, filter=filter_dict)
+        # 1차: 벡터 유사도 검색 — 원래 + HyDE 확장 + Multi-query 변형 모두 병렬 검색 후 합침
+        async def _vsearch(q: str, k: int) -> list:
+            return await vs.asimilarity_search_with_relevance_scores(q, k=k, filter=filter_dict)
+
+        search_queries = [(query, top_k * 2)]
         if expanded_query != query:
-            # 확장 쿼리로 추가 검색
-            extra_docs = await vs.asimilarity_search_with_relevance_scores(expanded_query, k=top_k, filter=filter_dict)
-            # 중복 제거하여 합침
-            seen_contents = {doc.page_content[:100] for doc, _ in docs_with_score}
+            search_queries.append((expanded_query, top_k))
+        for v in mq_variants:
+            search_queries.append((v, top_k))
+
+        all_results = await asyncio.gather(*[_vsearch(q, k) for q, k in search_queries])
+        docs_with_score = list(all_results[0])
+        seen_contents = {doc.page_content[:100] for doc, _ in docs_with_score}
+        for extra_docs in all_results[1:]:
             for doc, score in extra_docs:
                 if doc.page_content[:100] not in seen_contents:
                     docs_with_score.append((doc, score))
@@ -753,7 +792,30 @@ class LegalDocumentRetriever:
         # 6차: 오답 방지 필터 (비활성 — 페널티가 정답까지 밀어내는 역효과 확인)
         # merged = self._apply_failure_filter(merged, source_filter)
 
+        # 7차: Parent-child 후처리 — chunk_id → parent_text 치환 + parent 단위 dedup
+        # 검색은 작은 child로 (정밀), 반환은 article 단위 parent로 (cover ↑)
+        parent_map = _PARENT_ARTICLES
+        if parent_map:
+            seen_parents: set[str] = set()
+            deduped: list[dict] = []
+            for d in merged:
+                cid = d.get("metadata", {}).get("chunk_id")
+                parent_text = parent_map.get(cid) if cid else None
+                if parent_text:
+                    parent_key = parent_text[:100]
+                    if parent_key in seen_parents:
+                        continue
+                    seen_parents.add(parent_key)
+                    new_d = dict(d)
+                    new_d["content"] = parent_text
+                    new_d["metadata"] = {**d.get("metadata", {}), "is_parent": True}
+                    deduped.append(new_d)
+                else:
+                    deduped.append(d)
+            merged = deduped
+
         return merged[:top_k]
+
 
     @classmethod
     def _load_confusion_map(cls) -> dict:

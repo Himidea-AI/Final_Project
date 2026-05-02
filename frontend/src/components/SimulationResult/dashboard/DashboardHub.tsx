@@ -9,6 +9,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import type { SimulationOutput } from '../../../types';
 import { formatDocumentId } from '../../../types/simulationHistory';
 import { useSimulationStore } from '../../../stores/simulationStore';
@@ -32,12 +33,25 @@ const HUB_IMAGES = {
   abm: 'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?w=800&auto=format&fit=crop&q=80',
 };
 
-export function DashboardHub({
-  simResult: _simResult,
-  brandName,
-  savedHistoryId,
-  onSelect,
-}: Props) {
+/**
+ * Backend short key → UI 풀 라벨 역매핑 (App.tsx:636 BUSINESS_TYPE_BACKEND_KEY 의 inverse).
+ * store.params.business_type 이 backend key 형식("커피", "한식" 등)으로 저장되므로
+ * 사용자에게 보이는 라벨로 다시 풀어서 표시.
+ */
+const BIZ_LABEL_MAP: Record<string, string> = {
+  한식: '한식음식점',
+  중식: '중식음식점',
+  일식: '일식음식점',
+  양식: '양식음식점',
+  제과점: '제과점',
+  패스트푸드: '패스트푸드점',
+  치킨: '치킨전문점',
+  분식: '분식전문점',
+  호프: '호프-간이주점',
+  커피: '커피-음료',
+};
+
+export function DashboardHub({ simResult, brandName, savedHistoryId, onSelect }: Props) {
   const navigate = useNavigate();
   const docId = formatDocumentId(savedHistoryId ?? null);
   const createdAt = new Date().toLocaleDateString('ko-KR', {
@@ -45,6 +59,20 @@ export function DashboardHub({
     month: '2-digit',
     day: '2-digit',
   });
+
+  // 시뮬 입력 컨텍스트 — store.params 가 SoT (사용자가 1~4동 선택 + 업종).
+  // simResult 의 target_districts 는 기본 fallback (history 복원 등 store 비어있는 경로 대비).
+  const params = useSimulationStore((s) => s.params);
+  const targetDongs: string[] = (() => {
+    const fromParams = params?.target_districts;
+    if (fromParams && fromParams.length > 0) return fromParams;
+    if (params?.target_district) return [params.target_district];
+    if (simResult.target_districts && simResult.target_districts.length > 0)
+      return simResult.target_districts;
+    return simResult.target_district ? [simResult.target_district] : [];
+  })();
+  const bizKey = params?.business_type ?? '';
+  const bizLabel = BIZ_LABEL_MAP[bizKey] ?? bizKey;
 
   // 슬라이스별 status — error 시 카드 비활성화 + 사용자 안내 + 재시도 hint.
   // ABM 은 별도 endpoint(/simulate-abm) 라 store 슬라이스 미연동 — 일단 활성 유지.
@@ -63,28 +91,74 @@ export function DashboardHub({
     navigate('/simulator');
   };
 
+  // 시뮬 이력 저장 버튼은 hub 가 아닌 각 결과 페이지(예측/분석) 헤더로 분산.
+  // IM3-259 분리 호출이라 두 슬라이스가 다른 시점 도착 — "내가 보던 결과 화면" 에 저장 버튼이
+  // 있어야 UX 자연. 공통 컴포넌트: SaveSimulationActions (components/SimulationHistory/).
+
   return (
-    <div className="mx-auto max-w-[1728px] px-8 pt-28 pb-12">
-      <header className="mb-12 flex items-end justify-between border-b border-border/60 pb-6">
-        <h1 className="text-2xl font-black text-foreground tracking-tight">{brandName || '—'}</h1>
+    <div className="mx-auto max-w-[1728px] px-8 pt-32 pb-12">
+      {/* header height 는 우측 박스 (DOC ID + 새 시뮬 버튼) 자연 높이(~44px)에 의해 결정.
+          좌측은 가로 레이아웃 (h1 + 동/업종 한 줄) 으로 자연 height ~35px → 우측보다 작아
+          self-center 로 그 안에 가운데 정렬. 우측은 그대로 items-end (= header bottom). */}
+      <header className="flex items-end justify-between gap-8">
+        {/* 좌측 — h1 옆에 동·업종 chip 을 가로 배치. self-center 로 우측 박스 높이 안 가운데. */}
+        <div className="flex min-w-0 items-center gap-5 self-center">
+          <h1 className="shrink-0 truncate text-2xl font-black text-foreground tracking-tight">
+            {brandName || '—'}
+          </h1>
+          {(targetDongs.length > 0 || bizLabel) && (
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              {/* 동 — 지역 의미. 1~4개 sub-tone separator 로 묶음. */}
+              {targetDongs.length > 0 && (
+                <span className="truncate text-xs font-medium text-muted-foreground">
+                  {targetDongs.map((d, i) => (
+                    <span key={d}>
+                      {d}
+                      {i < targetDongs.length - 1 && (
+                        <span className="mx-1.5 text-border" aria-hidden>
+                          ·
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </span>
+              )}
+              {/* 동/업종 시각 분리 — 업종은 카테고리 의미라 별도 chip 으로 격리. */}
+              {bizLabel && (
+                <span className="inline-flex items-center rounded-md border border-border bg-secondary px-2 py-0.5 text-[0.6875rem] font-bold tracking-wider text-foreground/80">
+                  {bizLabel}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         <div className="flex items-end gap-6">
+          <div className="text-right">
+            <div className="text-[0.6875rem] font-mono uppercase tracking-widest text-muted-foreground">
+              {docId}
+            </div>
+            <div className="mt-1 text-[0.6875rem] font-mono text-muted-foreground">{createdAt}</div>
+          </div>
           <button
             type="button"
             onClick={handleNewSimulation}
-            className="inline-flex items-center rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-primary transition-all hover:border-primary/60 hover:bg-primary/20 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold tracking-wider text-primary-foreground shadow-md shadow-primary/20 transition-all duration-200 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            새로운 시뮬레이션
+            <Plus className="h-4 w-4" strokeWidth={3} />새 시뮬레이션
           </button>
-          <div className="text-right">
-            <div className="text-[0.625rem] font-mono uppercase tracking-widest text-muted-foreground">
-              {docId}
-            </div>
-            <div className="mt-1 text-[0.625rem] font-mono text-muted-foreground">{createdAt}</div>
-          </div>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Result Modules introducer — 헤더와 3카드 그룹 사이 시각적 단절 + 다음 섹션 라벨링. */}
+      <div className="mb-8 mt-10 flex items-center gap-4">
+        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-border" />
+        <span className="text-[0.625rem] font-mono uppercase tracking-[0.25em] text-muted-foreground">
+          Result Modules
+        </span>
+        <div className="h-px flex-1 bg-gradient-to-l from-transparent via-border to-border" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {onSelect ? (
           <HubCard
             onClick={() => onSelect('predict')}
@@ -92,7 +166,8 @@ export function DashboardHub({
             description="ML 기반 매출 · 재무 · 폐업 위험도 정량 예측"
             imgSrc={HUB_IMAGES.predict}
             imgAlt="데이터 차트 시각화"
-            accent="indigo"
+            accent="predict"
+            ctaLabel="예측 보기"
             disabled={isPredictDisabled}
             disabledReason={predictError ?? undefined}
           />
@@ -103,7 +178,8 @@ export function DashboardHub({
             description="ML 기반 매출 · 재무 · 폐업 위험도 정량 예측"
             imgSrc={HUB_IMAGES.predict}
             imgAlt="데이터 차트 시각화"
-            accent="indigo"
+            accent="predict"
+            ctaLabel="예측 보기"
             disabled={isPredictDisabled}
             disabledReason={predictError ?? undefined}
           />
@@ -115,7 +191,8 @@ export function DashboardHub({
             description="LLM 기반 상권 · 인구 · 법률 · 경쟁 정성 분석"
             imgSrc={HUB_IMAGES.analyze}
             imgAlt="도시 거리 풍경"
-            accent="cyan"
+            accent="analyze"
+            ctaLabel="분석 보기"
             disabled={isAnalyzeDisabled}
             disabledReason={analyzeError ?? undefined}
           />
@@ -126,7 +203,8 @@ export function DashboardHub({
             description="LLM 기반 상권 · 인구 · 법률 · 경쟁 정성 분석"
             imgSrc={HUB_IMAGES.analyze}
             imgAlt="도시 거리 풍경"
-            accent="cyan"
+            accent="analyze"
+            ctaLabel="분석 보기"
             disabled={isAnalyzeDisabled}
             disabledReason={analyzeError ?? undefined}
           />
@@ -138,7 +216,8 @@ export function DashboardHub({
             description="100명 에이전트 행동 시뮬레이션 + 공실 평가"
             imgSrc={HUB_IMAGES.abm}
             imgAlt="사람들이 다니는 거리"
-            accent="amber"
+            accent="abm"
+            ctaLabel="시뮬 실행"
           />
         ) : (
           <HubCard
@@ -147,7 +226,8 @@ export function DashboardHub({
             description="100명 에이전트 행동 시뮬레이션 + 공실 평가"
             imgSrc={HUB_IMAGES.abm}
             imgAlt="사람들이 다니는 거리"
-            accent="amber"
+            accent="abm"
+            ctaLabel="시뮬 실행"
           />
         )}
       </div>

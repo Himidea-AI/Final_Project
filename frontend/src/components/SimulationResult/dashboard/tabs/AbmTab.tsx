@@ -56,10 +56,11 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   const abmLoading = abmStatus === 'running';
 
   // mount 시 persist 복원된 running jobId 가 있으면 polling 재개.
-  // 또한 done 상태로 복원된 결과가 있으면 ABM 모드로 자동 진입.
+  // running 일 때만 ABM 모드 자동 진입 — done 결과는 map 모드에서
+  // 공실 스팟 다시 고를 수 있도록 자동 진입 제외 (사용자가 토글로 결과 확인).
   useEffect(() => {
     resumePollingIfNeeded();
-    if ((abmStatus === 'running' || abmStatus === 'done') && focusSpot) {
+    if (abmStatus === 'running' && focusSpot) {
       setMode('abm');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,7 +219,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
 
       {/* 지도 / ABM 뷰 */}
       {mode === 'map' ? (
-        <div className="bg-card/30 border border-border rounded-3xl p-4">
+        <div className="bg-card border border-border rounded-3xl p-4">
           <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">
             <h4 className="text-xs font-black text-foreground flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,44,209,0.8)]" />

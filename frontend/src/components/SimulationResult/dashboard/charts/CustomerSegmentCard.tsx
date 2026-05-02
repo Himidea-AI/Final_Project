@@ -8,12 +8,20 @@ interface Props {
 
 export function CustomerSegmentCard({ segment }: Props) {
   if (!segment) {
+    // Layer 2 outer card — panel(cool gray) 위에서 명확히 떠 있는 white surface.
+    // 헤더는 일반 모드와 동일 위계로 유지 → 데이터 없어도 "칸"이 사라지지 않음.
     return (
-      <div className="rounded-2xl border border-dashed border-border bg-card/40 p-6 text-center">
-        <Users className="mx-auto text-muted-foreground mb-2" size={24} />
-        <p className="text-xs text-muted-foreground">
-          타겟 고객 프로필을 입력하면 분석 결과가 표시됩니다
-        </p>
+      <div className="rounded-3xl border border-border bg-card p-8">
+        <h3 className="mb-6 flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
+          <Users className="text-primary" /> 타겟 고객 매출 기여
+        </h3>
+        <div className="rounded-2xl border border-dashed border-border bg-secondary p-10 text-center">
+          <Users className="mx-auto mb-3 text-muted-foreground" size={28} />
+          <p className="text-sm font-bold text-foreground">타겟 고객 프로필 미입력</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            연령·성별·시간대·요일 chip 을 1개 이상 선택하면 세그먼트 매출 분석이 표시됩니다.
+          </p>
+        </div>
       </div>
     );
   }
@@ -30,16 +38,13 @@ export function CustomerSegmentCard({ segment }: Props) {
     .slice(0, 6);
 
   return (
-    <div className="bg-card/40 border border-border/60 rounded-3xl p-8 space-y-6">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
-          <Users size={16} className="text-primary" /> 타겟 고객 매출 기여
-          <span className="text-[0.625rem] font-black text-muted-foreground normal-case tracking-normal">
-            customer_revenue
-          </span>
-        </h4>
-        <div className="px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-[0.6875rem] font-black text-primary tabular-nums">
+    <div className="rounded-3xl border border-border bg-card p-8 space-y-6">
+      {/* 헤더 — 분기별 예상 매출과 동일 위계 */}
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
+          <Users className="text-primary" /> 타겟 고객 매출 기여
+        </h3>
+        <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[0.6875rem] font-black tabular-nums text-primary">
           전체의 {ratioPct}%
         </div>
       </div>
@@ -49,7 +54,7 @@ export function CustomerSegmentCard({ segment }: Props) {
 
       {/* 매출 요약 */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-card/40 border border-border rounded-xl p-4">
+        <div className="rounded-xl border border-border bg-secondary p-4">
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
             세그먼트 매출
           </div>
@@ -57,7 +62,7 @@ export function CustomerSegmentCard({ segment }: Props) {
             {sales != null ? `₩${formatKrw(sales)}` : '—'}
           </div>
         </div>
-        <div className="bg-card/40 border border-border rounded-xl p-4">
+        <div className="rounded-xl border border-border bg-secondary p-4">
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
             식별 매출
           </div>
@@ -65,7 +70,7 @@ export function CustomerSegmentCard({ segment }: Props) {
             {identified != null ? `₩${formatKrw(identified)}` : '—'}
           </div>
         </div>
-        <div className="bg-card/40 border border-border rounded-xl p-4">
+        <div className="rounded-xl border border-border bg-secondary p-4">
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
             전체 매출 기준
           </div>

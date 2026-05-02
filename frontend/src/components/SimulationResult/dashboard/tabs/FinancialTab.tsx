@@ -44,10 +44,7 @@ export function FinancialTab({ simResult }: Props) {
         bepMonths={bepMonths}
       />
 
-      <SurvivalRateKpi
-        survivalRate={simResult.market_report?.survival_rate}
-        closureRate={simResult.market_report?.closure_rate}
-      />
+      <SurvivalRateKpi closureRate={simResult.market_report?.closure_rate} />
 
       <ClosureRatePanel rate={simResult.closure_rate} />
 
@@ -77,7 +74,7 @@ function ProfitSimulationPanelFull({
   ];
 
   return (
-    <div className="bg-card/40 border border-border/60 rounded-3xl p-8">
+    <div className="bg-card border border-border rounded-3xl p-8">
       <div className="flex items-center justify-between mb-6">
         <h4 className="text-sm font-black text-foreground uppercase tracking-tight flex items-center gap-2">
           <Activity size={16} className="text-primary" /> 상세 수익성 시뮬레이션

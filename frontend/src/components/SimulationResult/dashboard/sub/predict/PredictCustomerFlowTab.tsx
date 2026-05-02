@@ -53,7 +53,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
             return (
               <div
                 key={p.district}
-                className="bg-card/40 border border-border/60 rounded-3xl p-4 space-y-3"
+                className="bg-card border border-border rounded-3xl p-4 space-y-3"
               >
                 <div className="text-xs font-bold text-foreground">{p.district}</div>
                 {livingPop ? (
@@ -85,7 +85,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
   if (!hasLivingPop) {
     return (
       <div className="space-y-6">
-        <div className="rounded-3xl border border-dashed border-border bg-card/40 p-6 text-center">
+        <div className="rounded-3xl border border-dashed border-border bg-card p-6 text-center">
           <Activity className="mx-auto text-muted-foreground mb-2" size={22} />
           <p className="text-xs text-muted-foreground">유동인구 피크 시간 예측 데이터 없음</p>
           <p className="mt-1 text-[0.625rem] text-muted-foreground">

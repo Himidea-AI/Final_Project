@@ -23,12 +23,6 @@ interface Props {
   openModal: (content: DetailModalContent) => void;
 }
 
-const AGENT_ICON = {
-  synthesis: { icon: BrainCircuit, color: 'text-foreground', borderCls: 'border-border/60' },
-  legal: { icon: AlertTriangle, color: 'text-danger', borderCls: 'border-danger/50' },
-  competitor: { icon: ShieldAlert, color: 'text-warning', borderCls: 'border-warning/50' },
-};
-
 // risk_level 두 패턴 정규화 — InsightsGrid.normalizeLevel 와 동일 매핑
 function isHazard(level: string): boolean {
   const up = level.toUpperCase();
@@ -44,7 +38,7 @@ export function LegalTab({ simResult, openModal }: Props) {
   return (
     <div className="space-y-6">
       {/* ═══ 법률·규제 검토 본문 ═══ */}
-      <div className="bg-card/40 border border-border/60 p-8 rounded-3xl">
+      <div className="bg-card border border-border p-8 rounded-3xl">
         <div className="flex justify-between items-center mb-6">
           <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
             <AlertTriangle size={16} className="text-danger" /> 법률·규제 검토
@@ -78,7 +72,7 @@ export function LegalTab({ simResult, openModal }: Props) {
         </div>
 
         {/* 등급 분포 막대 */}
-        <div className="bg-card/40 border border-border/60 rounded-2xl p-6 mb-4">
+        <div className="bg-card border border-border rounded-2xl p-6 mb-4">
           <h5 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-3">
             법률 리스크 등급 분포
           </h5>

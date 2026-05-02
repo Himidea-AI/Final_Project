@@ -175,7 +175,7 @@ class TemporalBlock(nn.Module):
 
         # 메인 경로: Conv → Norm → ReLU → Dropout (×2)
         # LayerNorm은 (batch, seq_len, channels) 형태를 기대하므로 transpose 필요
-        out = self.conv1(x)                                    # (batch, out_ch, seq_len)
+        out = self.conv1(x)  # (batch, out_ch, seq_len)
         out = self.norm1(out.transpose(1, 2)).transpose(1, 2)  # LayerNorm 적용
         out = self.relu1(out)
         out = self.dropout1(out)
@@ -206,7 +206,7 @@ class TCNForecaster(nn.Module):
         2. TemporalBlock(dilation=1): receptive field 2
         3. TemporalBlock(dilation=2): receptive field 4 (누적)
         4. TemporalBlock(dilation=4): receptive field 8 (누적)
-        5. FC Head: Linear → ReLU → Dropout → Linear(1)
+        5. FC Head: Linear → ReLU → Dropout → Linear(output_size)
 
     window_size=8 기준 dilation 선택 이유:
         RF = 1 + (kernel_size-1) × sum(dilations)
@@ -220,30 +220,31 @@ class TCNForecaster(nn.Module):
         TCN 내부 채널 수. GRU의 hidden_size에 대응. 기본 128.
     kernel_size : int
         컨볼루션 커널 크기 (기본 2 — receptive field 최적화).
-    dilations : list[int]
-        각 TemporalBlock의 팽창 계수 목록. 기본 [1, 2].
+    dilations : list[int] | None
+        각 TemporalBlock의 팽창 계수 목록. 기본 [1, 2, 4] — window_size=8 최적.
     dropout : float
         Dropout 비율.
     output_size : int
-        출력 차원 (기본 1 = 매출 예측값).
+        출력 차원 (기본 4 = 분기별 예측값).
     """
 
     def __init__(
         self,
         input_size: int = 10,
-        n_channels: int = 128,     # GRU의 hidden_size에 대응 — 실험 최적값 128
-        kernel_size: int = 2,      # window_size=4 기준 최적 커널 크기
-        dilations: list[int] | None = None,  # 기본 [1, 2]
+        n_channels: int = 128,  # GRU의 hidden_size에 대응 — 실험 최적값 128
+        kernel_size: int = 2,  # window_size=8 기준 최적 커널 크기
+        dilations: list[int] | None = None,  # 기본 [1, 2, 4] — window_size=8 최적
         dropout: float = 0.2,
-        output_size: int = 1,
+        output_size: int = 4,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.n_channels = n_channels
 
-        # dilation 기본값: [1, 2] — window_size=4에 딱 맞는 receptive field
+        # dilation 기본값: [1, 2, 4] — window_size=8과 RF가 정확히 일치
+        # RF = 1 + (kernel_size-1) × sum([1,2,4]) = 1 + 1×7 = 8
         if dilations is None:
-            dilations = [1, 2]
+            dilations = [1, 2, 4]
         self.dilations = dilations
 
         # 1. Input Projection: 피처 차원 → TCN 채널 차원

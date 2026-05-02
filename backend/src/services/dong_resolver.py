@@ -7,11 +7,14 @@ DongMapping 테이블 또는 하드코딩 매핑 사용.
 담당: A1 — 데이터 엔지니어 (찬영)
 """
 
+import logging
 import os
 
 from sqlalchemy import text
 
 from src.database.sync_engine import get_sync_engine
+
+logger = logging.getLogger(__name__)
 
 _pw = os.environ.get("POSTGRES_PASSWORD", "postgres")
 DB_URL = os.environ.get(
@@ -67,8 +70,8 @@ def resolve_dong_code(dong_name: str, db_url: str | None = None) -> str | None:
             if row:
                 return str(row[0])
         engine.dispose()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[resolve_dong_code] DB 조회 실패 dong={dong_name}: {e}")
 
     return None
 
@@ -96,7 +99,7 @@ def resolve_dong_name(dong_code: str, db_url: str | None = None) -> str | None:
             if row:
                 return str(row[0])
         engine.dispose()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[resolve_dong_name] DB 조회 실패 code={dong_code}: {e}")
 
     return None

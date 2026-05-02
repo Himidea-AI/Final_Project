@@ -1,0 +1,538 @@
+"""법률 룰 엔진 — 8개 결정적 카테고리.
+
+사용자 입력(``business_type``, ``store_area_pyeong``, ``district``)으로
+결정 가능한 항목은 룰로 처리. RAG/LLM 호출 없음 — 즉시 (~ms) 반환.
+
+각 룰은 ``dict`` 를 반환:
+    {
+        "type": "<_BATCH_TYPES>",
+        "level": "safe" | "caution" | "danger",
+        "summary": "<업종/면적 맞춤 1~2문장>",
+        "recommendation": "<체크리스트 형식>",
+        "articles": [{"article_ref": "...", "content": "..."}],
+    }
+
+``LegalRiskItem`` Pydantic schema 와 직접 1:1 대응되지는 않는다
+(schema 에는 ``articles`` 필드가 없음). 다운스트림 호환을 위해 dict 로 반환하며
+orchestrator/legal_node 가 그대로 다운스트림에 전달한다.
+
+설계 근거: ``docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md``
+"""
+
+from __future__ import annotations
+
+from src.config.constants import BIZ_NORMALIZE
+
+# ---------------------------------------------------------------------------
+# 면적 임계값 — 시행령 별표 기준
+# ---------------------------------------------------------------------------
+
+# 다중이용업소법 시행령 제2조: 휴게/일반음식점 다중이용업 정의 (≥100㎡)
+MULTI_USE_THRESHOLD_M2: float = 100.0
+
+# 장애인편의증진법 시행령 별표 1: 편의시설 의무 대상 (≥300㎡)
+ACCESSIBILITY_THRESHOLD_M2: float = 300.0
+
+# 평 → ㎡ 환산 계수 (1평 = 3.305785㎡, UI 표기 단순화 위해 3.3 사용)
+_PYEONG_TO_M2: float = 3.3
+
+
+def _pyeong_to_m2(pyeong: float) -> float:
+    """평수를 제곱미터로 환산. 0 미만은 0 으로 보정."""
+    if pyeong is None or pyeong < 0:
+        return 0.0
+    return float(pyeong) * _PYEONG_TO_M2
+
+
+def _normalize_biz(business_type: str) -> str:
+    """영문/한글 혼용 입력을 한글 라벨로 정규화. 미상이면 입력 그대로."""
+    if not business_type:
+        return ""
+    return BIZ_NORMALIZE.get(business_type.lower(), business_type)
+
+
+def _format_recommendation(
+    article_refs: list[str],
+    actions: list[str],
+    penalty: str,
+) -> str:
+    """``[근거: ...] / • 행동 / ❌ 위반 시: ...`` 형식 recommendation 텍스트 생성."""
+    refs = ", ".join(article_refs) if article_refs else "관련 법령"
+    head = f"[근거: {refs}]"
+    body = "\n".join(f"• {a}" for a in actions)
+    tail = f"❌ 위반 시: {penalty}"
+    return f"{head}\n{body}\n{tail}"
+
+
+# ---------------------------------------------------------------------------
+# 1. food_hygiene — 식품위생법 영업신고
+# ---------------------------------------------------------------------------
+
+
+def rule_food_hygiene(business_type: str) -> dict:
+    """카페/음식점은 영업신고 필수 (danger). 편의점은 즉석조리 시 caution."""
+    biz = _normalize_biz(business_type)
+
+    if biz in ("카페", "음식점"):
+        level = "danger"
+        summary = (
+            f"{biz} 영업은 식품위생법상 식품접객업으로 분류되어 영업신고 및 위생교육 이수가 "
+            "필수이며, 미이행 시 영업개시 자체가 불가합니다."
+        )
+        actions = [
+            "관할 구청 위생과에 영업신고 (식품위생법 제37조, 영업신고증 수령)",
+            "식품접객업 위생교육 6시간 이수 (제41조, 한국외식업중앙회 등 지정 교육기관)",
+            "영업장 시설기준 적합 확인 (제36조, 조리장·화장실·환기설비)",
+        ]
+        recommendation = _format_recommendation(
+            ["식품위생법 제37조", "제41조", "제36조"],
+            actions,
+            "무신고 영업 시 5년 이하 징역 또는 5천만원 이하 벌금 (제97조)",
+        )
+        articles = [
+            {
+                "article_ref": "식품위생법 제37조",
+                "content": (
+                    "휴게음식점·일반음식점·제과점 등 식품접객업을 하려는 자는 "
+                    "영업장 소재지 관할 시장·군수·구청장에게 영업신고를 하여야 한다."
+                ),
+            }
+        ]
+    else:
+        level = "caution"
+        summary = (
+            f"{biz or '해당 업종'}은 일반 식품판매업은 영업신고 의무 없으나, "
+            "즉석조리·도시락 등 식품접객 행위가 포함되면 휴게음식점 영업신고가 "
+            "필수 (시행령 제21조 제8호) — 미신고 시 즉시 danger."
+        )
+        actions = [
+            "즉석조리·도시락 판매 여부 사전 확인 (포함 시 휴게음식점 신고 = danger)",
+            "식품접객 무관 시 식품판매업 신고만 진행 (관할 구청 위생과)",
+            "포함 시 휴게음식점 영업신고 + 위생교육 이수 필수",
+        ]
+        recommendation = _format_recommendation(
+            ["식품위생법 제37조", "시행령 제21조"],
+            actions,
+            "즉석조리 포함 매장이 무신고 시 5년 이하 징역 또는 5천만원 이하 벌금 (제97조)",
+        )
+        articles = [
+            {
+                "article_ref": "식품위생법 제37조",
+                "content": "식품접객업 영업신고 의무 — 즉석조리·도시락 판매 시 적용.",
+            }
+        ]
+
+    return {
+        "type": "food_hygiene",
+        "level": level,
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 2. safety_regulation — 다중이용업소법
+# ---------------------------------------------------------------------------
+
+
+def rule_safety_regulation(business_type: str, store_area_pyeong: float) -> dict:
+    """면적 ≥100㎡ + 카페/음식점 → danger. <100㎡ → safe."""
+    biz = _normalize_biz(business_type)
+    area_m2 = _pyeong_to_m2(store_area_pyeong)
+
+    is_food_biz = biz in ("카페", "음식점")
+    if is_food_biz and area_m2 >= MULTI_USE_THRESHOLD_M2:
+        level = "danger"
+        summary = (
+            f"{biz} 영업장이 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)으로 100㎡ 이상이므로 "
+            "다중이용업소법상 안전관리 대상이며, 안전시설 등 완비증명서 없이는 영업개시 불가."
+        )
+        actions = [
+            "관할 소방서에 안전시설 등 완비증명서 발급 신청 (다중이용업소법 제9조)",
+            "비상구·간이스프링클러·피난유도등·방염물품 등 시설기준 충족 (제2조, 제13조)",
+            "다중이용업주 안전교육 4시간 이수 (제8조)",
+        ]
+        recommendation = _format_recommendation(
+            ["다중이용업소법 제2조", "제9조", "제13조"],
+            actions,
+            "안전시설 미비/완비증명 미수령 시 1년 이하 징역 또는 1천만원 이하 벌금",
+        )
+    elif is_food_biz:
+        level = "safe"
+        summary = (
+            f"{biz} 영업장이 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)으로 100㎡ 미만이므로 "
+            "다중이용업소법상 다중이용업 정의에 해당하지 않습니다."
+        )
+        actions = [
+            "면적 확장 시 100㎡ 이상이 되면 안전시설 완비증명 의무 발생 — 사전 확인",
+        ]
+        recommendation = _format_recommendation(
+            ["다중이용업소법 시행령 제2조"],
+            actions,
+            "면적 ≥100㎡ 확장 후 미신고 시 시정명령 + 과태료",
+        )
+    else:
+        level = "safe"
+        summary = (
+            f"{biz or '해당 업종'}은 다중이용업소법상 다중이용업 분류 대상에서 제외되어 "
+            "안전시설 완비증명 의무가 발생하지 않습니다."
+        )
+        actions = [
+            "노래연습장·주점 등 영업 추가 시 다중이용업 해당 여부 재검토",
+        ]
+        recommendation = _format_recommendation(
+            ["다중이용업소법 제2조"],
+            actions,
+            "다중이용업 신규 추가 시 영업개시 전 안전시설 완비증명 필수",
+        )
+
+    articles = [
+        {
+            "article_ref": "다중이용업소법 제2조",
+            "content": (
+                "다중이용업이란 영업장의 바닥면적의 합계가 100제곱미터 이상인 휴게음식점·"
+                "일반음식점·제과점 영업 등 화재 등 재난 발생 시 생명·신체·재산상의 피해가 "
+                "발생할 우려가 높은 영업을 말한다."
+            ),
+        }
+    ]
+
+    return {
+        "type": "safety_regulation",
+        "level": level,
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 3. fire_safety_law — 소방시설법
+# ---------------------------------------------------------------------------
+
+
+def rule_fire_safety(business_type: str, store_area_pyeong: float) -> dict:
+    """면적 ≥100㎡ → danger / <100㎡ → caution."""
+    biz = _normalize_biz(business_type)
+    area_m2 = _pyeong_to_m2(store_area_pyeong)
+
+    if area_m2 >= MULTI_USE_THRESHOLD_M2:
+        level = "danger"
+        summary = (
+            f"영업장 면적 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)이 100㎡ 이상으로 "
+            "소방시설법상 특정소방대상물에 해당하여 소방시설 설치 및 자체점검 의무가 발생합니다."
+        )
+        actions = [
+            "용도·면적별 소방시설 설치 (소방시설법 제12조, 시행령 별표 4 — 소화기·간이스프링클러 등)",
+            "소방안전관리자 선임 (제24조 / 영업장 규모에 따라 1·2·3급)",
+            "연 1~2회 자체점검 실시 + 결과 보고 (제22조)",
+        ]
+        recommendation = _format_recommendation(
+            ["소방시설법 제12조", "제22조", "제24조"],
+            actions,
+            "소방시설 미설치 시 3년 이하 징역 또는 3천만원 이하 벌금 (제57조)",
+        )
+    else:
+        level = "caution"
+        summary = (
+            f"영업장 면적 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)이 100㎡ 미만이지만 "
+            "소화기 비치, 비상구 확보 등 기본 소방시설 의무는 모든 영업장에 적용됩니다."
+        )
+        actions = [
+            "소화기 1대 이상 비치 (소방시설법 시행령 별표 4)",
+            "비상구·피난통로 확보 및 폐쇄 금지",
+            "전기·가스시설 안전 점검",
+        ]
+        recommendation = _format_recommendation(
+            ["소방시설법 제12조", "제22조"],
+            actions,
+            "소화기 미비치 등 기본 시설 미흡 시 200만원 이하 과태료 (제61조)",
+        )
+
+    articles = [
+        {
+            "article_ref": "소방시설법 제12조",
+            "content": (
+                "특정소방대상물의 관계인은 대통령령으로 정하는 소방시설을 화재안전기준에 따라 "
+                "설치·관리하여야 한다."
+            ),
+        }
+    ]
+
+    return {
+        "type": "fire_safety_law",
+        "level": level,
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 4. accessibility_law — 장애인편의증진법
+# ---------------------------------------------------------------------------
+
+
+def rule_accessibility(business_type: str, store_area_pyeong: float) -> dict:
+    """면적 ≥300㎡ + 카페/음식점 → danger. <300㎡ → safe."""
+    biz = _normalize_biz(business_type)
+    area_m2 = _pyeong_to_m2(store_area_pyeong)
+
+    is_food_biz = biz in ("카페", "음식점")
+    if is_food_biz and area_m2 >= ACCESSIBILITY_THRESHOLD_M2:
+        level = "danger"
+        summary = (
+            f"{biz} 영업장이 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)으로 300㎡ 이상이므로 "
+            "장애인편의증진법상 편의시설 설치 의무 대상시설(공중이용시설)에 해당합니다."
+        )
+        actions = [
+            "주출입구 경사로·점자블록 설치 (편의증진법 제8조, 시행령 별표 2)",
+            "장애인 화장실 1실 이상 설치 (객실/화장실 모두 의무)",
+            "장애인 주차구역 1면 이상 (시행규칙 별표 1)",
+        ]
+        recommendation = _format_recommendation(
+            ["장애인편의증진법 제7조", "제8조"],
+            actions,
+            "편의시설 미설치 시 시정명령 + 3천만원 이하 이행강제금",
+        )
+    else:
+        level = "safe"
+        summary = (
+            f"영업장 면적 {store_area_pyeong:.0f}평({area_m2:.1f}㎡)이 300㎡ 미만으로 "
+            "장애인편의증진법상 편의시설 설치 의무 대상시설에 해당하지 않습니다."
+        )
+        actions = [
+            "면적 확장 시 300㎡ 이상이 되면 편의시설 의무 발생 — 사전 시설 계획 검토",
+            "권장: 주출입구 경사로·접근통로 등 임의 설치로 고객층 확대",
+        ]
+        recommendation = _format_recommendation(
+            ["장애인편의증진법 제7조"],
+            actions,
+            "면적 확장 후 미설치 시 시정명령 + 이행강제금",
+        )
+
+    articles = [
+        {
+            "article_ref": "장애인편의증진법 제7조",
+            "content": (
+                "공중이용시설 중 대통령령으로 정하는 시설의 시설주는 장애인등이 그 시설을 "
+                "이용함에 있어 불편이 없도록 편의시설을 설치하여야 한다."
+            ),
+        }
+    ]
+
+    return {
+        "type": "accessibility_law",
+        "level": level,
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 5. commercial_lease_law — 상가임대차보호법 (항상 caution)
+# ---------------------------------------------------------------------------
+
+
+def rule_commercial_lease() -> dict:
+    """모든 임차 영업에 적용 — 항상 caution."""
+    summary = (
+        "상가건물 임대차계약 체결 시 권리금 회수기회 보호(제10조의4)·계약갱신요구권(10년)"
+        "·환산보증금(서울 9억) 등을 반드시 사전 검토해야 합니다."
+    )
+    actions = [
+        "확정일자 부여로 대항력·우선변제권 확보 (상가임대차보호법 제5조)",
+        "권리금 회수기회 보호 조항 명문화 — 임대인 방해 금지 (제10조의4)",
+        "계약갱신요구권 10년 한도 사전 고지 및 갱신 거절 사유 확인 (제10조)",
+        "환산보증금 (서울 9억원) 초과 여부 확인 — 초과 시 보호 범위 축소",
+    ]
+    recommendation = _format_recommendation(
+        ["상가임대차보호법 제10조", "제10조의4", "제5조"],
+        actions,
+        "임대인의 권리금 회수 방해 시 손해배상 청구 가능 (제10조의4 제3항)",
+    )
+    articles = [
+        {
+            "article_ref": "상가임대차보호법 제10조의4",
+            "content": (
+                "임대인은 임대차기간이 끝나기 6개월 전부터 임대차 종료 시까지 정당한 사유 "
+                "없이 임차인이 주선한 신규임차인이 되려는 자로부터 권리금을 지급받는 것을 "
+                "방해하여서는 아니 된다."
+            ),
+        }
+    ]
+    return {
+        "type": "commercial_lease_law",
+        "level": "caution",
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 6. labor_law — 근로기준법 + 최저임금법 (항상 caution)
+# ---------------------------------------------------------------------------
+
+
+def rule_labor() -> dict:
+    """근로자 채용 시 항상 적용 — 항상 caution."""
+    summary = (
+        "근로자(아르바이트 포함) 채용 시 근로계약서 서면 작성·교부, 최저임금 준수, "
+        "주휴수당·가산임금 지급, 4대보험 가입은 모든 사업장에 의무 적용됩니다."
+    )
+    actions = [
+        "근로계약서 서면 작성·교부 (근로기준법 제17조, 미교부 시 500만원 이하 과태료)",
+        "최저임금 준수 (최저임금법 제6조, 2026년 시간당 기준 확인)",
+        "주 15시간 이상 근무 시 주휴수당 지급 (제55조)",
+        "연장·야간·휴일근로 시 가산임금 50% 지급 (제56조)",
+        "4대보험 (국민연금·건강보험·고용보험·산재보험) 가입",
+    ]
+    recommendation = _format_recommendation(
+        ["근로기준법 제17조", "제56조", "최저임금법 제6조"],
+        actions,
+        "임금 미지급 시 3년 이하 징역 또는 3천만원 이하 벌금 (제109조)",
+    )
+    articles = [
+        {
+            "article_ref": "근로기준법 제17조",
+            "content": (
+                "사용자는 근로계약을 체결할 때에 근로자에게 임금, 소정근로시간, 휴일, "
+                "연차 유급휴가 등 대통령령으로 정하는 사항을 명시하여야 한다. "
+                "근로조건을 서면으로 명시하고 근로자에게 교부하여야 한다."
+            ),
+        }
+    ]
+    return {
+        "type": "labor_law",
+        "level": "caution",
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 7. vat_law — 부가가치세법 (항상 caution)
+# ---------------------------------------------------------------------------
+
+
+def rule_vat() -> dict:
+    """모든 사업자에 적용 — 항상 caution."""
+    summary = (
+        "사업 개시 전 사업자등록(개업일 전 20일 이내), 일반과세/간이과세 선택, "
+        "세금계산서 발행 의무는 모든 영업자에 공통 적용됩니다."
+    )
+    actions = [
+        "사업자등록 신청 (부가가치세법 제8조, 개업일 전 20일 이내 관할 세무서)",
+        "직전연도 공급대가 8천만원 미만 개인사업자는 간이과세자 선택 가능 (제61조)",
+        "전자세금계산서 발행 의무 확인 (제32조, 법인사업자/직전연도 공급가액 8천만원 이상)",
+        "분기 또는 6개월 단위 부가가치세 신고·납부",
+    ]
+    recommendation = _format_recommendation(
+        ["부가가치세법 제8조", "제32조", "제61조"],
+        actions,
+        "사업자 미등록 영업 시 공급가액의 1% 가산세 + 매입세액 불공제",
+    )
+    articles = [
+        {
+            "article_ref": "부가가치세법 제8조",
+            "content": (
+                "사업자는 사업장마다 사업 개시일부터 20일 이내에 사업자등록을 신청하여야 한다. "
+                "신규로 사업을 시작하려는 자는 사업 개시일 이전이라도 사업자등록을 신청할 수 있다."
+            ),
+        }
+    ]
+    return {
+        "type": "vat_law",
+        "level": "caution",
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 8. sewage_law — 하수도법
+# ---------------------------------------------------------------------------
+
+
+def rule_sewage(business_type: str) -> dict:
+    """음식점·카페(휴게음식점) 모두 배수설비/그리스트랩 검토 의무.
+
+    - 음식점: 유분 다량 배출 → 그리스트랩 필수 → caution
+    - 카페: 휴게음식점 = 식품위생법 시행규칙 별표 14 시설기준 적용 →
+            세척수·음료 잔여물 배출 시 배수설비 기준 검토 필요 → caution
+    - 편의점: 식품판매업 (조리 무관) → safe
+    """
+    biz = _normalize_biz(business_type)
+
+    if biz in ("음식점", "카페"):
+        level = "caution"
+        if biz == "음식점":
+            summary = (
+                f"{biz} 영업장은 조리과정에서 발생하는 유분(기름)을 공공하수도로 직접 배출할 수 없어 "
+                "유분분리기(그리스트랩) 등 개인하수처리시설 또는 배수설비 설치가 요구됩니다."
+            )
+            actions = [
+                "주방 배수구에 유분분리기(그리스트랩) 설치 (하수도법 제34조, 시행규칙 별표 14)",
+                "관할 구청 하수과에 배수설비 설치 신고",
+                "정기 청소·점검으로 유분 누적 방지 — 위반 시 시정명령",
+            ]
+        else:
+            # 카페 (휴게음식점) — 세척수·음료 잔여물 배출 시 배수설비 기준 적용
+            summary = (
+                "카페(휴게음식점)는 식품위생법 시행규칙 별표 14 시설기준에 따라 "
+                "싱크대·세척대 배수구를 하수도법 기준에 맞게 연결해야 하며, "
+                "음료 잔여물·세척수 배출 형태에 따라 그리스트랩 설치 검토 필요합니다."
+            )
+            actions = [
+                "주방·세척대 배수설비를 하수도법 기준에 맞게 설치 (제34조)",
+                "음용수 제조·우유 가공 등 유분/유기물 배출 시 그리스트랩 또는 침전조 설치 검토",
+                "관할 구청 하수과에 배수설비 설치 신고 (식품위생법 별표 14 연계)",
+            ]
+        recommendation = _format_recommendation(
+            ["하수도법 제34조", "식품위생법 시행규칙 별표 14"],
+            actions,
+            "배수설비 미설치/기준 위반 시 1천만원 이하 과태료 (제80조)",
+        )
+        articles = [
+            {
+                "article_ref": "하수도법 제34조",
+                "content": (
+                    "공공하수도의 사용자는 공공하수도에 하수를 유입시키기 위하여 필요한 "
+                    "배수설비를 설치하여야 한다. 식품접객업(휴게/일반음식점)은 "
+                    "유분·유기물 배출량에 따라 개인하수처리시설 설치가 의무이다."
+                ),
+            }
+        ]
+    else:
+        level = "safe"
+        summary = (
+            f"{biz or '해당 업종'}은 조리 시설이 없거나 유분 배출량이 적어 "
+            "하수도법상 개인하수처리시설(유분분리기) 설치 의무 대상이 아닙니다."
+        )
+        actions = [
+            "조리시설 추가 시 배수설비/유분분리기 설치 의무 재검토",
+        ]
+        recommendation = _format_recommendation(
+            ["하수도법 제34조"],
+            actions,
+            "조리시설 추가 후 배수설비 미신고 시 시정명령",
+        )
+        articles = [
+            {
+                "article_ref": "하수도법 제34조",
+                "content": "공공하수도 사용자의 배수설비 설치 의무 — 음식점 외 적용 범위 한정.",
+            }
+        ]
+
+    return {
+        "type": "sewage_law",
+        "level": level,
+        "summary": summary,
+        "recommendation": recommendation,
+        "articles": articles,
+    }

@@ -10,6 +10,9 @@
  *     → models/interface.py generate
  *     → backend/src/main.py response_data.emerging_signal
  *     → MarketTab → EmergingSignalCard
+ *
+ * 렌더링 계약: 부모 (PredictEmergingDistrictTab 등) 가 항상 <div bg-card border rounded-3xl>
+ * 로 감싸므로 자체 outer chrome 없이 bare 컨텐츠만 렌더 — 퐁당퐁당 (card→card 중첩 방지).
  */
 
 import { Sparkles, TrendingDown, Minus, AlertCircle } from 'lucide-react';
@@ -35,7 +38,7 @@ const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
     ring: 'ring-success/40',
     text: 'text-success',
     bg: 'bg-success/10',
-    border: 'border-success/30',
+    border: 'border-success/20',
     bar: 'bg-success',
     Icon: Sparkles,
   },
@@ -44,7 +47,7 @@ const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
     ring: 'ring-danger/40',
     text: 'text-danger',
     bg: 'bg-danger/10',
-    border: 'border-danger/30',
+    border: 'border-danger/20',
     bar: 'bg-danger',
     Icon: TrendingDown,
   },
@@ -53,7 +56,7 @@ const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
     ring: 'ring-border/40',
     text: 'text-foreground',
     bg: 'bg-muted/10',
-    border: 'border-border/30',
+    border: 'border-border/20',
     bar: 'bg-muted',
     Icon: Minus,
   },
@@ -62,7 +65,7 @@ const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
 export function EmergingSignalCard({ signal }: Props) {
   if (!signal) {
     return (
-      <div className="rounded-3xl border border-dashed border-border bg-card/40 p-6 text-center">
+      <div className="text-center">
         <Sparkles className="mx-auto text-muted-foreground mb-2" size={22} />
         <p className="text-xs text-muted-foreground">신흥 상권 조기 감지 데이터 없음</p>
         <p className="mt-1 text-[0.625rem] text-muted-foreground">
@@ -78,7 +81,7 @@ export function EmergingSignalCard({ signal }: Props) {
   const consecutive = signal.consecutive_anomaly_quarters;
 
   return (
-    <div className="bg-card/40 border border-border/60 rounded-3xl p-8 space-y-6">
+    <div className="space-y-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
@@ -106,7 +109,7 @@ export function EmergingSignalCard({ signal }: Props) {
           </div>
         </div>
 
-        <div className="col-span-1 bg-card/40 border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
+        <div className="col-span-1 bg-secondary border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
           <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
             {scorePct}
           </div>
@@ -118,7 +121,7 @@ export function EmergingSignalCard({ signal }: Props) {
           </div>
         </div>
 
-        <div className="col-span-1 bg-card/40 border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
+        <div className="col-span-1 bg-secondary border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
           <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
             {consecutive}
           </div>
@@ -129,14 +132,18 @@ export function EmergingSignalCard({ signal }: Props) {
         </div>
       </div>
 
-      {/* anomaly_score 게이지 */}
+      {/* anomaly_score 게이지 — 원본 score (≈0.04 범위, MSE-like) 는 3자리로 절단해 노이즈
+          줄이고, 정규화 백분율은 좌측 신호등 아래 scorePct 카드에서 별도로 강조. */}
       <div>
         <div className="flex justify-between items-center mb-2">
           <span className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
-            Anomaly Score (threshold p95 = 0.0414 기준 정규화)
+            Anomaly Score (threshold p95 = 0.041 기준 정규화)
           </span>
           <span className="text-[0.6875rem] font-black text-muted-foreground tabular-nums">
-            {signal.anomaly_score.toFixed(4)}
+            {new Intl.NumberFormat('ko-KR', {
+              minimumFractionDigits: 3,
+              maximumFractionDigits: 3,
+            }).format(signal.anomaly_score)}
           </span>
         </div>
         <div className="w-full bg-card h-2 rounded-full overflow-hidden">
@@ -150,14 +157,14 @@ export function EmergingSignalCard({ signal }: Props) {
       </div>
 
       {/* 자연어 요약 */}
-      <div className="p-4 bg-card/40 border border-border rounded-2xl">
+      <div className="p-4 bg-secondary border border-border rounded-2xl">
         <p className="text-[0.8125rem] text-foreground leading-relaxed">{signal.summary}</p>
       </div>
 
       {/* Disclaimer */}
-      <div className="pt-4 border-t border-border/50 space-y-1">
+      <div className="pt-4 border-t border-border space-y-1">
         <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
-          ※ LSTM Autoencoder 비지도 학습 — threshold p95 = 0.041380 기준 anomaly_score 정규화 (1.0에
+          ※ LSTM Autoencoder 비지도 학습 — threshold p95 ≈ 0.041 기준 anomaly_score 정규화 (1.0에
           클리핑).
         </p>
         <p className="text-[0.625rem] text-muted-foreground leading-relaxed">

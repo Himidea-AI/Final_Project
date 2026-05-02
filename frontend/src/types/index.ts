@@ -8,6 +8,8 @@ export interface SimulationInput {
   business_subtype?: string;
   brand_name: string;
   target_district: string;
+  /** 다중 동 비교 시 선택 동 리스트 (1~4개). target_district 는 대표(=0번) 동. App.tsx:1242 에서 항상 동시 전송. */
+  target_districts?: string[];
   existing_stores: ExistingStore[];
   monthly_rent: number;
   scenarios: string[];

@@ -87,8 +87,16 @@ def inject_vacancy_as_store(
 
     if not dong:
         raise VacancyInjectionError("vacancy_spot 에 'dong' 또는 'district' 키 필요")
-    if dong not in world.dongs:
-        raise VacancyInjectionError(f"'{dong}' 가 world.dongs 에 없음 (등록된 동: {len(world.dongs)}개)")
+    # 법정동 → 행정동 정규화 (kakao_store '동교동' → '서교동' 등 26→16 매핑).
+    # world_loader 가 매장 등록 시 적용하던 alias 를 vacancy 주입에도 동일 적용 — 회귀 fix.
+    from .world_loader import _normalize_dong
+
+    dong_normalized = _normalize_dong(dong) or dong
+    if dong_normalized not in world.dongs:
+        raise VacancyInjectionError(
+            f"'{dong}' (정규화: '{dong_normalized}') 가 world.dongs 에 없음 (등록된 동: {len(world.dongs)}개)"
+        )
+    dong = dong_normalized
     if lat is None or lon is None:
         raise VacancyInjectionError(f"vacancy_spot lat/lon 누락 (dong={dong})")
     if category not in ALLOWED_CATEGORIES:

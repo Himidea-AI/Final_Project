@@ -28,7 +28,7 @@
  *
  * [테마 시스템]
  *   - CSS Variables (index.css :root) — 라이트 모드 단일 (v5.0 2026-04-30 다크 폐기)
- *   - System A 배경/구조 6색 (warm-white #FAF9F5 / 카드 #FFFFFF / cream #F8F7E8 등 중립 인프라)
+ *   - System A 배경/구조 (page #FFFFFF / 카드 #FFFFFF / surface slate-100 #F1F5F9 / border slate-300 #CBD5E1 — 2026-05-01 cool gray 전환)
  *   - System B 12색 팔레트 (모든 유의미한 색 — 데이터/상태/액센트/장식 단일 진실)
  *   - 시맨틱 클래스: bg-background, text-foreground, bg-card, text-primary, bg-success/warning/danger, var(--chart-1..4) 등
  *
@@ -66,27 +66,16 @@ import {
 import DashboardPredictPage from './pages/dashboard/DashboardPredictPage';
 import DashboardAnalyzePage from './pages/dashboard/DashboardAnalyzePage';
 import DashboardAbmPage from './pages/dashboard/DashboardAbmPage';
-import { SaveButton } from './components/SimulationHistory/SaveButton';
-import { SaveDialog } from './components/SimulationHistory/SaveDialog';
-import { useSaveSimulation } from './hooks/useSaveSimulation';
-import { formatDocumentId } from './types/simulationHistory';
 import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
 import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
-import { useAbmStore } from './stores/abmStore';
 import { getLivePopulation, type CustomerSegmentRequest } from './api/client';
 import { useCustomerSegmentPreview } from './hooks/useCustomerSegmentPreview';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
 import NetworkBackground from './components/NetworkBackground';
 // Phase C Round 2 — PDF 묶음 + Dashboard 묶음 추출 (정적 import 유지)
-import {
-  HiddenPDFTemplate,
-  type CannRow,
-  type NeighborhoodRow,
-} from './components/PDF/HiddenPDFTemplate';
-import DashboardPanelView from './components/dashboard/DashboardPanelView';
 
 // Phase C Round 1 — 마케팅 페이지 4종 lazy 분리 (App.tsx에서 추출)
 const IntroScene = lazy(() => import('./pages/landing/IntroScene'));
@@ -106,15 +95,8 @@ import {
   Sliders,
   MapPin,
   Play,
-  ChevronDown,
   X,
-  Zap,
-  Calendar,
-  Download,
-  FileText,
-  Database,
   Store,
-  Columns,
   Terminal,
   UserCheck,
   Loader2,
@@ -671,42 +653,6 @@ const PRICE_RANGES = [
 const OPERATING_HOURS_OPTIONS = ['오전', '점심', '저녁', '심야'];
 
 /* ═══════════════════════════════════════════════════════
-   상세 데이터 테이블 — 정렬 가능한 row data (Mock)
-   CannRow / NeighborhoodRow 타입은 components/PDF/HiddenPDFTemplate.tsx로 이동.
-   ═══════════════════════════════════════════════════════ */
-
-// 정렬용 값 추출 (문자열 컬럼은 그대로, 숫자 컬럼은 파싱)
-function extractSortValue(row: Record<string, string>, key: string): number | string {
-  const v = row[key];
-  if (v === undefined || v === null) return ''; // 다른 뷰의 컬럼 키일 때 안전 fallback
-  if (key === 'distance') {
-    // "450m" → 450, "1.2km" → 1200
-    const num = parseFloat(v);
-    return v.endsWith('km') ? num * 1000 : num;
-  }
-  // "-2.1%", "82%", "87 / 100", "3.5 개월" 모두 parseFloat로 첫 숫자 추출
-  if (['impact', 'score', 'closureRate', 'bep'].includes(key)) {
-    return parseFloat(v);
-  }
-  return v; // name, status는 문자열 정렬
-}
-
-function sortRows<T extends Record<string, string>>(
-  rows: T[],
-  key: string | null,
-  dir: 'asc' | 'desc',
-): T[] {
-  if (!key) return rows;
-  return [...rows].sort((a, b) => {
-    const av = extractSortValue(a, key);
-    const bv = extractSortValue(b, key);
-    if (av < bv) return dir === 'asc' ? -1 : 1;
-    if (av > bv) return dir === 'asc' ? 1 : -1;
-    return 0;
-  });
-}
-
-/* ═══════════════════════════════════════════════════════
    DRILL-DOWN DRAWER — DrawerKey 타입은 ./components/DetailDrawer 로 이동 (Phase C Round 3)
    ═══════════════════════════════════════════════════════ */
 
@@ -753,12 +699,6 @@ function SimulatorDashboard({
   // SimResult는 camelCase로 변환된 뷰 모델. IntegratedReport는 snake_case SimulationOutput을 직접 소비하므로 원본도 별도 보존.
   const [rawSimResult, setRawSimResult] = useState<SimulationOutput | null>(null);
 
-  // [R4] saveDialogOpen 은 UI-only 로컬. savedHistoryId 는 [R1] store 에서 파생.
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
-  const setSavedHistoryId = useSimulationStore((s) => s.setSavedHistoryId);
-  const saveSim = useSaveSimulation();
-  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   // 마포구 외 다른 자치구 미지원 — useState 트릭 제거하고 const 로 노출.
   // 향후 다른 구 확장 시 useState<GuName>('마포구') + setter 로 복원.
   const selectedGu = '마포구' as const;
@@ -799,7 +739,6 @@ function SimulatorDashboard({
   const [targetPrice, setTargetPrice] = useState('5to10k');
   const [operatingHours, setOperatingHours] = useState<string[]>(['점심', '저녁']);
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
-  const [isSplitMode, setIsSplitMode] = useState(false);
   const [initialCapital, setInitialCapital] = useState(5000); // 만원
 
   // [customer_revenue] 타겟 고객 프로필 — A1 찬영 P1-C 연동. 빈 선택 = 전체 고객
@@ -840,25 +779,6 @@ function SimulatorDashboard({
 
   // [A1] 유동인구 실시간 데이터
   const [popData, setPopData] = useState<any>(null);
-  const [popLoading, setPopLoading] = useState(false);
-
-  // [ABM] 행동 시뮬레이션 — useAbmStore (zustand+persist+AbortController) 로 이관.
-  // 새로고침/탭 이동/dashboardMode 토글에도 in-flight 시뮬 결과를 잃지 않음.
-  const abmResult = useAbmStore((s) => s.result);
-  const abmStatus = useAbmStore((s) => s.status);
-  const abmError = useAbmStore((s) => s.error);
-  const abmFocusSpot = useAbmStore((s) => s.focusSpot);
-  const startAbm = useAbmStore((s) => s.startAbm);
-  const dismissAbmResult = useAbmStore((s) => s.dismissResult);
-  const setAbmFocusSpot = useAbmStore((s) => s.setFocusSpot);
-  const resumeAbmPolling = useAbmStore((s) => s.resumePollingIfNeeded);
-  const abmLoading = abmStatus === 'running';
-
-  // mount 시 persist 복원된 running jobId 가 있으면 polling 재개.
-  useEffect(() => {
-    resumeAbmPolling();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (reportState !== 'result') return;
@@ -885,246 +805,6 @@ function SimulatorDashboard({
   // [v8.0/v8.1] Drill-down Drawer + 테이블 행 확장 + 정렬 상태
   const [activeDrawer, setActiveDrawer] = useState<DrawerKey>(null);
   const [selectedLegalType, setSelectedLegalType] = useState<string | null>(null);
-  // sortKey/sortDir 은 dead 분기 제거(2026-04-30) 후 setter 가 호출되지 않아
-  // 사실상 정적 상수가 되었으나, sortRows() 시그니처 호환을 위해 유지.
-  // PDF/Excel 내보내기는 입력 순서대로 출력됨.
-  const sortKey: string | null = null;
-  const sortDir: 'asc' | 'desc' = 'asc';
-
-  // 정렬된 행 데이터 — 가맹점 간섭도는 competitor_intel.samples 실데이터 우선
-  // Pancras 2013 거리 감쇠: (1 - 0.281)^(1/1.609) ≈ 0.813 per km
-  // base_rate는 업종별 차등 (backend commercial_intelligence.py와 동기화).
-  // allCompetitorLocations 우선 사용 (winner+top3 전체 동), fallback은 winner 단일 동
-  const _competitorSamples: any[] = simResult?.allCompetitorLocations?.length
-    ? simResult.allCompetitorLocations.map((s) => ({
-        place_name: s.place_name || s.brand_name,
-        distance_m: s.distance_m ?? 0,
-        is_franchise: s.is_franchise,
-        source_dong: s.source_dong,
-      }))
-    : (simResult?.competitorIntel?.competition_500m?.samples ?? []);
-
-  const dynamicCannRows: CannRow[] = _competitorSamples.length
-    ? _competitorSamples.slice(0, 12).map((s) => {
-        const dist = s.distance_m;
-        // Industry base rates mirror backend commercial_intelligence.py:estimate_cannibalization
-        const INDUSTRY_BASE: Record<string, number> = {
-          cafe: 0.25,
-          coffee: 0.25,
-          chicken: 0.1,
-          burger: 0.2,
-          korean: 0.15,
-        };
-        const btKey = (BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType || '').toLowerCase();
-        // 한국어 업종명을 영어 키로 매핑 (커피/카페→coffee, 치킨→chicken, 햄버거→burger, 한식→korean)
-        const industryKey =
-          btKey.includes('커피') || btKey.includes('카페') || btKey === 'coffee' || btKey === 'cafe'
-            ? 'coffee'
-            : btKey.includes('치킨') || btKey === 'chicken'
-              ? 'chicken'
-              : btKey.includes('햄버거') || btKey.includes('패스트푸드') || btKey === 'burger'
-                ? 'burger'
-                : btKey.includes('한식') || btKey === 'korean'
-                  ? 'korean'
-                  : '';
-        const baseRate = INDUSTRY_BASE[industryKey] ?? 0.2;
-        const impactPct = -baseRate * Math.pow(0.813, dist / 1000) * 100;
-        const status = dist < 300 ? 'Danger' : dist < 800 ? 'Caution' : 'Safe';
-        return {
-          name: s.place_name || '경쟁업체',
-          distance: dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`,
-          impact: `${impactPct.toFixed(1)}%`,
-          status,
-        };
-      })
-    : [];
-  const sortedCannRows = sortRows(dynamicCannRows, sortKey, sortDir);
-
-  // 행정동은 district_rankings 실응답 우선, 없으면 빈 배열 (mock 제거)
-  const dynamicNeighborhoodRows: NeighborhoodRow[] = simResult?.districtRankings?.length
-    ? simResult.districtRankings.slice(0, 16).map((r) => ({
-        name: r.district || '-',
-        score: typeof r.score === 'number' ? String(Math.round(r.score)) : '—',
-        closureRate:
-          typeof r.closure_rate === 'number' ? `${Math.round(r.closure_rate * 100)}%` : '—',
-        // 2026-04-27: DistrictRanking은 bep_quarters(분기 단위)로 마이그레이션됨
-        bep: typeof r.bep_quarters === 'number' ? `${r.bep_quarters}분기` : '—',
-      }))
-    : [];
-  const sortedNeighborhoodRows = sortRows(dynamicNeighborhoodRows, sortKey, sortDir);
-
-  // 오늘 날짜 (리포트 생성 시점)
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  const reportMonthLabel = `${yyyy}. ${mm}.`;
-  const reportFullDate = `${yyyy}.${mm}.${dd}`;
-
-  // [v12.0] PDF/Excel 다운로드용 ref + 로딩 상태
-  const pdfTemplateRef = useRef<HTMLDivElement>(null);
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
-
-  const handleDownloadPDF = useCallback(async () => {
-    if (!pdfTemplateRef.current) return;
-    setIsDownloadOpen(false);
-    setIsGeneratingPDF(true);
-
-    try {
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-        import('jspdf'),
-        import('html2canvas'),
-      ]);
-
-      const template = pdfTemplateRef.current;
-      const pages = Array.from(template.children) as HTMLElement[];
-
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-
-      for (let i = 0; i < pages.length; i++) {
-        const canvas = await html2canvas(pages[i], {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          logging: false,
-        });
-        const imgData = canvas.toDataURL('image/png');
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      }
-
-      const dateStr = reportFullDate.replace(/\./g, '');
-      const districtName = selectedDongs[0] || '연남동';
-      pdf.save(`SPOTTER_마포구_${districtName}_${dateStr}.pdf`);
-      showToast('success', 'PDF 리포트 생성이 완료되었습니다.');
-    } catch (error) {
-      console.error('PDF Generation Failed:', error);
-      showToast('error', 'PDF 생성 중 오류가 발생했습니다.');
-    } finally {
-      setIsGeneratingPDF(false);
-    }
-  }, [reportFullDate, selectedDongs, showToast]);
-
-  const handleDownloadExcel = useCallback(async () => {
-    setIsDownloadOpen(false);
-    setIsGeneratingExcel(true);
-
-    try {
-      const XLSX = await import('xlsx');
-      const districtName = selectedDongs[0] || '연남동';
-
-      const wb = XLSX.utils.book_new();
-
-      // Sheet 1: 요약
-      const summary: (string | number)[][] = [
-        ['SPOTTER · AI Franchise Intelligence Report'],
-        [],
-        ['분석 대상', `마포구 ${districtName}`],
-        ['생성 일시', reportFullDate],
-        ['Document ID', formatDocumentId(savedHistoryId)],
-        [],
-        ['KPI 요약'],
-        ['지표', '값', '트렌드'],
-        // §3.7 — 데이터 없을 때 임의 default 금지. mock 트렌드/등급 모두 '—'로 통일.
-        [
-          '예상 월 매출 (추정)',
-          simResult?.revenue != null
-            ? `₩ ${(simResult.revenue * 10000).toLocaleString()}`
-            : '데이터 없음',
-          '—',
-        ],
-        [
-          '상권 종합 매력도',
-          simResult?.score != null ? `${simResult.score} / 100` : '데이터 없음',
-          '—',
-        ],
-        [
-          '일일 유동인구',
-          popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '데이터 없음',
-          popData?.date ?? '—',
-        ],
-        [
-          '카니발리제이션 위험',
-          simResult?.riskLevel != null ? simResult.riskLevel : '데이터 없음',
-          '—',
-        ],
-        [],
-        ['7 Core Metrics (레이더 차트)'],
-        ['항목', '점수'],
-        ...(simResult?.chartData ?? []).map((d) => [d.label, d.value]),
-      ];
-      const ws1 = XLSX.utils.aoa_to_sheet(summary);
-      ws1['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 15 }];
-      XLSX.utils.book_append_sheet(wb, ws1, '요약');
-
-      // Sheet 2: 가맹점 간섭도 (실데이터만. 없으면 헤더만 출력)
-      const cannRowsForExport = sortedCannRows;
-      const cann: (string | number)[][] = [
-        ['가맹점명', '거리', '예상 매출 하락', '상태'],
-        ...cannRowsForExport.map((r) => [r.name, r.distance, r.impact, r.status]),
-      ];
-      const ws2 = XLSX.utils.aoa_to_sheet(cann);
-      ws2['!cols'] = [{ wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, ws2, '가맹점 간섭도');
-
-      // Sheet 3: 행정동 비교 (실데이터만. 없으면 헤더만 출력)
-      const neighborhoodRowsForExport = sortedNeighborhoodRows;
-      const neighborhoods: (string | number)[][] = [
-        ['행정동', 'AI 점수', '폐업률', '예상 BEP'],
-        ...neighborhoodRowsForExport.map((r) => [r.name, r.score, r.closureRate, r.bep]),
-      ];
-      const ws3 = XLSX.utils.aoa_to_sheet(neighborhoods);
-      ws3['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
-      XLSX.utils.book_append_sheet(wb, ws3, '행정동 비교');
-
-      // Sheet 4: AI 인사이트
-      const insights: (string | number)[][] = [
-        ['SPOTTER AI 인사이트 — LangGraph Multi-Agent'],
-        [],
-        ['Severity', 'Title', 'Description'],
-        [
-          'ADVISORY',
-          '저녁 시간대 매출 집중형',
-          '18시 이후 유동인구가 급증. 야간 메뉴 강화를 권장합니다.',
-        ],
-        [
-          'CRITICAL',
-          '법률 리스크 경고 (Legal Node)',
-          simResult?.recommendation ||
-            '상가임대차보호법 위반 사례 존재 권역. 최근 3년 평균 임대료 인상률이 5%를 초과하여 계약 갱신 시 법적 분쟁 리스크가 감지되었습니다.',
-        ],
-        [
-          'OPPORTUNITY',
-          '2030 여성 타겟 구역',
-          'SNS 친화적 인테리어 도입 시 수익 창출 확률 34% 증가.',
-        ],
-      ];
-      const ws4 = XLSX.utils.aoa_to_sheet(insights);
-      ws4['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 60 }];
-      XLSX.utils.book_append_sheet(wb, ws4, 'AI 인사이트');
-
-      const dateStr = reportFullDate.replace(/\./g, '');
-      XLSX.writeFile(wb, `SPOTTER_마포구_${districtName}_${dateStr}.xlsx`);
-      showToast('success', 'Excel 데이터가 다운로드되었습니다.');
-    } catch (error) {
-      console.error('Excel Generation Failed:', error);
-      showToast('error', 'Excel 생성 중 오류가 발생했습니다.');
-    } finally {
-      setIsGeneratingExcel(false);
-    }
-  }, [
-    reportFullDate,
-    selectedDongs,
-    simResult,
-    showToast,
-    popData,
-    sortedCannRows,
-    sortedNeighborhoodRows,
-    savedHistoryId, // line 1114에서 formatDocumentId(savedHistoryId) 사용 — 시뮬 저장 직후 stale closure 방지
-  ]);
 
   const toggleOperatingHour = useCallback((hour: string) => {
     setOperatingHours((prev) =>
@@ -1194,11 +874,11 @@ function SimulatorDashboard({
   // 새 시뮬 완료 시 setRawSimResult(simRes) 로 reference 가 바뀌면 ref 비교 실패 → navigate 재발동.
   const navigatedForResultRef = useRef<SimulationOutput | null>(null);
   useEffect(() => {
-    if (!isSplitMode && rawSimResult && navigatedForResultRef.current !== rawSimResult) {
+    if (rawSimResult && navigatedForResultRef.current !== rawSimResult) {
       navigatedForResultRef.current = rawSimResult;
       navigate('/dashboard', { replace: true });
     }
-  }, [rawSimResult, isSplitMode, navigate]);
+  }, [rawSimResult, navigate]);
 
   const MAX_DONGS = 4;
 
@@ -1297,7 +977,6 @@ function SimulatorDashboard({
       // 아래 setRawSimResult/setSimResult 는 마운트 복원 로직과 동일 함수 사용.
       setRawSimResult(simRes);
       setSimResult(toSimResultViewModel(simRes));
-      saveSim.reset(); // SaveDialog 에러 메시지 초기화 (store.savedHistoryId 는 startSimulation 에서 이미 null 리셋됨)
       setReportState('result');
     } catch (err) {
       console.error('Simulation failed:', err);
@@ -1331,7 +1010,6 @@ function SimulatorDashboard({
     targetTimeSlots,
     targetDayType,
     targetMonthlySales,
-    saveSim, // line 1359 saveSim.reset() 호출 — useSaveSimulation 인스턴스 변경 추적
   ]);
 
   // 로딩 UI 제거(2026-04-28)와 함께 store progress/stage 미러 useEffect도 dead → 제거.
@@ -1414,7 +1092,10 @@ function SimulatorDashboard({
                     />
                   </button>
                   {dongDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
+                    <div
+                      className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar"
+                      style={{ overscrollBehavior: 'contain' }}
+                    >
                       <button
                         onClick={toggleAllDongs}
                         className="w-full text-left px-3 py-2 text-xs font-medium border-b border-border transition-colors text-primary hover:bg-primary/10"
@@ -1525,9 +1206,7 @@ function SimulatorDashboard({
 
         {/* ─────── ScopeHint 띠 — Cell row2 col-12 (lg:order-3).
             핵심파라미터 박스 안에서 분리되어 row 사이 full-width 시각 띠로 동적 피드백 노출. ─────── */}
-        <div
-          className={`lg:col-span-12 lg:order-3 ${reportState === 'result' ? 'hidden' : ''}`}
-        >
+        <div className={`lg:col-span-12 lg:order-3 ${reportState === 'result' ? 'hidden' : ''}`}>
           <ScopeHint selectedDongCount={selectedDongs.length} />
         </div>
 
@@ -1768,168 +1447,6 @@ function SimulatorDashboard({
                 좌측 옵션 패널 풀폭 가독성 ↑. 백그라운드 진행은 SimulationFloatingWidget 담당.
                 결과 도착 시 runSim 함수가 setReportState('result')로 자동 전환. */}
 
-            {reportState === 'result' && (
-              <div className="absolute inset-0 z-40 bg-card text-foreground font-sans p-4 md:p-6 pt-24 md:pt-28 overflow-y-auto custom-scrollbar flex flex-col animate-[fadeSlideIn_0.8s_ease-out]">
-                <div className="max-w-[1920px] w-full mx-auto flex flex-col gap-4 xl:px-10 2xl:px-16 transition-all duration-500 pb-12">
-                  {/* Header & Nav */}
-                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 shrink-0">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <Zap className="w-5 h-5 text-primary" />
-                        <h1 className="text-2xl md:text-3xl font-black tracking-tight text-foreground">
-                          상권 분석 리포트
-                        </h1>
-                        {simResult?.winnerDistrict && (
-                          <span className="ml-2 px-2.5 py-0.5 bg-primary/10 border border-primary/40 rounded-full text-[0.625rem] font-bold text-primary uppercase tracking-wider">
-                            AI 추천 1위 · {simResult.winnerDistrict}
-                          </span>
-                        )}
-                        {simResult?.vacancyApplied === false && (
-                          <span
-                            className="ml-2 px-2.5 py-0.5 bg-warning/10 border border-warning/40 rounded-full text-[0.625rem] font-bold text-warning uppercase tracking-wider"
-                            title="공실 DB 로드 실패 — 랭킹에 공실 페널티 미반영"
-                          >
-                            공실 미반영
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-muted-foreground text-sm">
-                        서울특별시 마포구 {selectedDongs[0] || '연남동'} 일대 시뮬레이션 결과
-                        {simResult?.topCandidates && simResult.topCandidates.length > 0 && (
-                          <span className="ml-2 text-muted-foreground">
-                            · Top 3: {simResult.topCandidates.join(', ')}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setIsSplitMode(!isSplitMode)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[0.6875rem] font-bold transition-all duration-300 border ${
-                          isSplitMode
-                            ? 'bg-warning text-warning-foreground border-warning shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                            : 'bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted'
-                        }`}
-                      >
-                        {isSplitMode ? (
-                          <X className="w-3.5 h-3.5" />
-                        ) : (
-                          <Columns className="w-3.5 h-3.5" />
-                        )}
-                        {isSplitMode ? '비교 모드 종료' : 'VS 비교 모드'}
-                      </button>
-                      <button
-                        onClick={() => showToast('info', '과거 데이터 조회 기능은 준비 중입니다.')}
-                        className="flex items-center gap-2 px-3 py-1.5 border border-border bg-card hover:bg-muted rounded-md text-xs font-medium transition-colors"
-                      >
-                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />{' '}
-                        {reportMonthLabel}
-                      </button>
-                      {/* [시뮬 이력 저장] — 저장 성공 시 Document ID가 정식 번호로 격상됨 */}
-                      {rawSimResult && (
-                        <SaveButton
-                          onClick={() => setSaveDialogOpen(true)}
-                          saved={savedHistoryId != null}
-                          label={
-                            savedHistoryId != null
-                              ? `저장됨 · ${formatDocumentId(savedHistoryId)}`
-                              : undefined
-                          }
-                        />
-                      )}
-                      <div className="relative">
-                        <button
-                          onClick={() => setIsDownloadOpen(!isDownloadOpen)}
-                          disabled={isGeneratingPDF || isGeneratingExcel}
-                          className="flex items-center gap-2 px-3 py-2 bg-transparent border border-primary/60 text-primary hover:bg-primary/10 hover:border-primary rounded-lg text-[0.6875rem] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          {isGeneratingPDF || isGeneratingExcel ? '생성 중...' : '다운로드'}
-                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
-                        </button>
-                        {isDownloadOpen && !isGeneratingPDF && !isGeneratingExcel && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={() => setIsDownloadOpen(false)}
-                            />
-                            <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-2xl py-1.5 z-50 flex flex-col gap-0.5">
-                              <button
-                                onClick={handleDownloadPDF}
-                                className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted flex items-center gap-2 transition-colors group"
-                              >
-                                <FileText className="w-3.5 h-3.5 text-primary group-hover:scale-110 transition-transform" />{' '}
-                                PDF 리포트{' '}
-                                <span className="text-[0.625rem] text-muted-foreground ml-auto">
-                                  보고용
-                                </span>
-                              </button>
-                              <button
-                                onClick={handleDownloadExcel}
-                                className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted flex items-center gap-2 transition-colors group"
-                              >
-                                <Database className="w-3.5 h-3.5 text-primary group-hover:scale-110 transition-transform" />{' '}
-                                Raw Data{' '}
-                                <span className="text-[0.625rem] text-muted-foreground ml-auto">
-                                  XLSX
-                                </span>
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Split Mode: 최대 4패널 비교 뷰 (선택 동 수에 맞춰 동적) */}
-                  {isSplitMode &&
-                    (() => {
-                      const panelDongs = selectedDongs.slice(0, 4);
-                      const panelCount = panelDongs.length;
-                      const gridClass =
-                        panelCount <= 1
-                          ? 'grid-cols-1'
-                          : panelCount === 2
-                            ? 'grid-cols-1 2xl:grid-cols-2'
-                            : panelCount === 3
-                              ? 'grid-cols-1 xl:grid-cols-3'
-                              : 'grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4';
-                      const panelColors = [
-                        'text-chart-1',
-                        'text-chart-2',
-                        'text-chart-3',
-                        'text-chart-4',
-                      ];
-
-                      return (
-                        <div className={`grid ${gridClass} gap-4 relative`}>
-                          {panelDongs.map((dong, idx) => (
-                            <DashboardPanelView
-                              key={dong}
-                              districtName={`마포구 ${dong}`}
-                              isVariantB={idx > 0}
-                              popData={popData}
-                              dongName={dong}
-                              accentOverride={panelColors[idx]}
-                              panelIndex={idx}
-                              simResult={simResult}
-                            />
-                          ))}
-                        </div>
-                      );
-                    })()}
-
-                  {/* [H4] 시뮬 완료 시 /dashboard 로 자동 이동 — useEffect 가 navigate 처리.
-                      교체 직후 한 프레임 동안만 노출되는 placeholder. */}
-                  {!isSplitMode && rawSimResult && (
-                    <div className="flex items-center justify-center p-8 text-muted-foreground">
-                      분석 결과로 이동 중...
-                    </div>
-                  )}
-                  {/* Legacy 대시보드 블록 제거됨 (2026-05-01 light-mode 통합) */}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* RUN 버튼은 우5 패널의 핵심 파라미터 카드 밑으로 이동됨 (라인 ~1678 부근) */}
@@ -1995,162 +1512,6 @@ function SimulatorDashboard({
           selectedLegalType={selectedLegalType}
         />
       </Suspense>
-
-      {/* 시뮬 이력 저장 다이얼로그 */}
-      <SaveDialog
-        open={saveDialogOpen}
-        onClose={() => {
-          setSaveDialogOpen(false);
-          saveSim.reset();
-        }}
-        meta={{
-          brandName: user?.company_name || simResult?.recommendation?.slice(0, 20) || '브랜드',
-          district: selectedDongs[0] || '연남동',
-          managerName: user?.contact_name || user?.email || '매니저',
-        }}
-        isSaving={saveSim.isSaving}
-        errorMessage={saveSim.error}
-        onConfirm={async (clientName) => {
-          if (!rawSimResult) return;
-          const compIntel = rawSimResult.competitor_intel as
-            | Record<string, unknown>
-            | null
-            | undefined;
-          const signalRaw = compIntel?.['market_entry_signal'];
-          const signal =
-            signalRaw === 'green' || signalRaw === 'yellow' || signalRaw === 'red'
-              ? signalRaw
-              : null;
-          const verdictSummary =
-            rawSimResult.ai_recommendation?.split(/[.!?。]/)[0]?.slice(0, 200) ??
-            rawSimResult.analysis_report?.slice(0, 200) ??
-            null;
-
-          const res = await saveSim.save({
-            client_name: clientName,
-            district: selectedDongs[0] || '연남동',
-            brand_name: brand?.brand_name || user?.company_name || '브랜드 미지정',
-            business_type: businessType,
-            scenario: null, // Phase 1: scenario 입력 UI 아직 없음
-            simulation_result: rawSimResult,
-            ai_verdict_summary: verdictSummary,
-            market_entry_signal: signal,
-          });
-          if (res) {
-            setSavedHistoryId(res.id);
-            setSaveDialogOpen(false);
-            showToast(
-              'success',
-              `${clientName} 고객님 시뮬 이력이 저장되었습니다. (${formatDocumentId(res.id)})`,
-            );
-          }
-        }}
-      />
-
-      {/* [v12.0] Hidden A4 PDF Template — html2canvas 캡처용 (화면 밖) */}
-      <HiddenPDFTemplate
-        ref={pdfTemplateRef}
-        districtFull={`마포구 ${rawSimResult?.winner_district || selectedDongs[0] || '연남동'}`}
-        stats={(() => {
-          const qp = rawSimResult?.quarterly_projection ?? [];
-          const q1Rev = qp[0]?.revenue;
-          const monthly = typeof q1Rev === 'number' ? Math.round(q1Rev / 3) : null;
-          const growthTrend = (() => {
-            if (qp.length < 2) return '';
-            const a = qp[0]?.revenue ?? 0;
-            const b = qp[1]?.revenue ?? 0;
-            if (!a) return '';
-            const g = ((b - a) / a) * 100;
-            return `${g >= 0 ? '+' : ''}${g.toFixed(1)}% (Q2/Q1)`;
-          })();
-          const ci = rawSimResult?.competitor_intel as Record<string, any> | null | undefined;
-          const cannImpact = ci?.cannibalization?.estimated_revenue_impact_pct;
-          const cannSig = ci?.market_entry_signal;
-          return [
-            {
-              title: '예상 월 매출 (추정)',
-              value: monthly != null ? `₩ ${monthly.toLocaleString('ko-KR')}` : '—',
-              trend: growthTrend,
-            },
-            {
-              title: '상권 종합 매력도',
-              value: simResult?.score != null ? `${Math.round(simResult.score)} / 100` : '—',
-              trend: '',
-            },
-            {
-              title: '일일 유동인구',
-              value: popData?.daily_average ? `${popData.daily_average.toLocaleString()} 명` : '—',
-              trend: popData?.date ? `기준 ${popData.date}` : '',
-            },
-            {
-              title: '카니발리제이션 영향',
-              value: typeof cannImpact === 'number' ? `${(cannImpact * 100).toFixed(1)}%` : '—',
-              trend: typeof cannSig === 'string' ? cannSig : '',
-            },
-          ];
-        })()}
-        cannibalizationRows={sortedCannRows}
-        neighborhoodRows={sortedNeighborhoodRows}
-        insights={(() => {
-          // 실데이터 기반 동적 조립 — 없으면 빈 배열 → PDF 페이지 4 empty state
-          const items: {
-            severity: 'critical' | 'advisory' | 'opportunity';
-            title: string;
-            desc: string;
-          }[] = [];
-          if (!rawSimResult) return items;
-
-          // critical: 고위험 법률 1건
-          const dangerRisk = (rawSimResult.legal_risks ?? []).find((r) => {
-            const lvl = String(r.risk_level).toLowerCase();
-            return lvl === 'high' || lvl === 'danger';
-          });
-          if (dangerRisk) {
-            items.push({
-              severity: 'critical',
-              title: `법률 리스크: ${dangerRisk.type || '미분류'}`,
-              desc:
-                dangerRisk.detail ||
-                dangerRisk.recommendation ||
-                '해당 법률 위반 가능성이 감지되었습니다. drawer 에서 조문·체크리스트를 확인하세요.',
-            });
-          }
-
-          // advisory: 피크 소비 시간대 (demographic_report.peak_consumption_hours)
-          const demo = rawSimResult.demographic_report;
-          const peak = demo?.peak_consumption_hours?.[0];
-          if (peak) {
-            items.push({
-              severity: 'advisory',
-              title: `피크 소비 시간대: ${peak}`,
-              desc: `유동인구가 ${peak}에 집중. 해당 시간대 메뉴 및 인력 운영 최적화 권장.`,
-            });
-          }
-
-          // opportunity: competitor_intel.key_opportunities 최상위 1건, 없으면 core_demographic 기반
-          const ci = rawSimResult.competitor_intel as Record<string, any> | null | undefined;
-          const firstOpp = ci?.key_opportunities?.[0];
-          if (typeof firstOpp === 'string' && firstOpp.length > 0) {
-            items.push({
-              severity: 'opportunity',
-              title: '경쟁 인텔 기회 요소',
-              desc: firstOpp,
-            });
-          } else if (demo?.core_demographic) {
-            const match = demo.brand_target_match_score;
-            items.push({
-              severity: 'opportunity',
-              title: `핵심 소비층: ${demo.core_demographic.age} ${demo.core_demographic.gender}`,
-              desc: `해당 타겟이 주 소비층입니다. 브랜드 매칭 점수 ${match != null ? Math.round(match) + '/100' : '—'}. ${demo.match_rationale ?? ''}`.trim(),
-            });
-          }
-
-          return items;
-        })()}
-        reportDate={reportFullDate}
-        savedHistoryId={savedHistoryId}
-        customerSegment={rawSimResult?.customer_segment ?? null}
-      />
     </div>
   );
 }
@@ -2204,9 +1565,39 @@ function pathToScene(
  * - simResult 가 없으면 /simulator 로 redirect (시뮬 미실행 시 직접 진입 차단).
  * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
  */
+/** 시뮬 진행중 + 데이터 미도착 상태에서 dashboard shell 안에 표시할 로딩 placeholder.
+ *  FloatingWidget 의 "시뮬레이터로 이동" 으로 진입했을 때 본 영역에 진행률을 보여줌. */
+function DashboardRunningPlaceholder() {
+  const progress = useSimulationStore((s) => s.progress);
+  const stage = useSimulationStore((s) => s.stage);
+  return (
+    <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <div className="text-lg font-semibold text-foreground">시뮬레이션 진행 중</div>
+      <div className="text-sm text-muted-foreground">{stage || '준비 중...'}</div>
+      <div className="w-64 max-w-full">
+        <div
+          className="h-1.5 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-primary transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground">{Math.round(progress)}%</div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardOutlet() {
   const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const status = useSimulationStore((s) => s.status);
   const { user, brand } = useAuth();
   const brandName = user?.company_name || brand?.brand_name || '';
   const businessType: string | null = null;
@@ -2214,7 +1605,9 @@ function DashboardOutlet() {
   const [modalContent, setModalContent] = useState<DetailModalContent | null>(null);
   const openModal = (content: DetailModalContent) => setModalContent(content);
 
-  if (!simResult) return <Navigate to="/simulator" replace />;
+  // FloatingWidget 의 "시뮬레이터로 이동" 으로 시뮬 진행중에도 진입 가능하도록 변경.
+  // 결과 없음 + 시뮬 미실행 → /simulator 로 복귀 (직접 URL 접근 차단).
+  if (!simResult && status !== 'running') return <Navigate to="/simulator" replace />;
 
   return (
     <div
@@ -2222,19 +1615,27 @@ function DashboardOutlet() {
       className="relative h-screen overflow-y-scroll custom-scrollbar bg-background pb-16 text-foreground"
       style={{ overscrollBehaviorY: 'contain' }}
     >
-      <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
+      {simResult ? (
+        <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
+      ) : (
+        <DashboardRunningPlaceholder />
+      )}
       <DetailModal modalContent={modalContent} onClose={() => setModalContent(null)} />
     </div>
   );
 }
 
 /** Hub index 라우트 — DashboardOutlet 의 simResult 를 store 에서 다시 읽어 DashboardHub 렌더.
- *  DashboardOutlet 의 null guard 가 이미 통과한 시점에서만 마운트되므로 simResult 는 항상 non-null. */
+ *  진행중 무 데이터 상태에서는 DashboardOutlet 이 placeholder 를 직접 렌더하므로 여기엔 도달하지 않음. */
 function DashboardHubRouteElement() {
   const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const status = useSimulationStore((s) => s.status);
   const { user, brand } = useAuth();
-  if (!simResult) return <Navigate to="/simulator" replace />;
+  if (!simResult) {
+    if (status === 'running') return <DashboardRunningPlaceholder />;
+    return <Navigate to="/simulator" replace />;
+  }
   return (
     <DashboardHub
       simResult={simResult}

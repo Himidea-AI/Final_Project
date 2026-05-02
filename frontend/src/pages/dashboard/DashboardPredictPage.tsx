@@ -8,19 +8,22 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import type { SimulationOutput } from '../../types';
 import type { DetailModalContent } from '../../components/SimulationResult/dashboard/shared/DetailModal';
 import { PredictGroup } from '../../components/SimulationResult/dashboard/groups/PredictGroup';
+import { SaveSimulationActions } from '../../components/SimulationHistory/SaveSimulationActions';
 
 interface OutletCtx {
   simResult: SimulationOutput;
+  brandName: string;
+  savedHistoryId?: number | null;
   openModal: (content: DetailModalContent) => void;
 }
 
 export default function DashboardPredictPage() {
-  const { simResult, openModal } = useOutletContext<OutletCtx>();
+  const { simResult, brandName, savedHistoryId, openModal } = useOutletContext<OutletCtx>();
   const navigate = useNavigate();
 
   return (
     <div className="mx-auto max-w-[1728px] px-8 pt-28 pb-8">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <button
           type="button"
           onClick={() => navigate('/dashboard')}
@@ -29,6 +32,12 @@ export default function DashboardPredictPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Hub
         </button>
+        {/* IM3-259 분리 호출 — 예측 결과 화면 헤더에 저장 버튼 (slice 별 위치). */}
+        <SaveSimulationActions
+          simResult={simResult}
+          brandName={brandName}
+          savedHistoryId={savedHistoryId}
+        />
       </div>
       <PredictGroup simResult={simResult} openModal={openModal} />
     </div>
