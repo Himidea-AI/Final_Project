@@ -18,12 +18,15 @@ export interface PredictionSlice {
   status: SliceStatus;
   data: DistrictPredictionResult[] | null;
   error: string | null;
+  /** done/error 로 전환된 시점 (Date.now()). running 중에는 null. UI 의 elapsed 카운터 계산용. */
+  finishedAt: number | null;
 }
 
 export interface AnalysisSlice {
   status: SliceStatus;
   data: AnalysisOutput | null;
   error: string | null;
+  finishedAt: number | null;
 }
 
 interface SimulationState {
@@ -55,8 +58,18 @@ interface SimulationState {
   reset: () => void;
 }
 
-const initialPrediction: PredictionSlice = { status: 'idle', data: null, error: null };
-const initialAnalysis: AnalysisSlice = { status: 'idle', data: null, error: null };
+const initialPrediction: PredictionSlice = {
+  status: 'idle',
+  data: null,
+  error: null,
+  finishedAt: null,
+};
+const initialAnalysis: AnalysisSlice = {
+  status: 'idle',
+  data: null,
+  error: null,
+  finishedAt: null,
+};
 
 const INITIAL_STATE = {
   status: 'idle' as SimulationStatus,
@@ -136,8 +149,8 @@ export const useSimulationStore = create<SimulationState>()(
           params,
           startedAt,
           savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
-          prediction: { status: 'running', data: null, error: null },
-          analysis: { status: 'running', data: null, error: null },
+          prediction: { status: 'running', data: null, error: null, finishedAt: null },
+          analysis: { status: 'running', data: null, error: null, finishedAt: null },
           _abortController: abortController,
           _progressTimer: null,
         });
@@ -164,7 +177,7 @@ export const useSimulationStore = create<SimulationState>()(
             const { _progressTimer: t } = get();
             if (t) clearInterval(t);
             set({
-              analysis: { status: 'done', data, error: null },
+              analysis: { status: 'done', data, error: null, finishedAt: Date.now() },
               status: 'done',
               progress: 100,
               stage: 'COMPLETE',
@@ -180,7 +193,7 @@ export const useSimulationStore = create<SimulationState>()(
             // prediction 이 이미 done 이면 status 도 done 유지 (부분 성공).
             const predDone = get().prediction.status === 'done';
             set({
-              analysis: { status: 'error', data: null, error: msg },
+              analysis: { status: 'error', data: null, error: msg, finishedAt: Date.now() },
               ...(predDone
                 ? { status: 'done', progress: 100, stage: 'COMPLETE' }
                 : { status: 'error', stage: '시뮬 실패', error: msg }),
@@ -194,38 +207,38 @@ export const useSimulationStore = create<SimulationState>()(
         try {
           const data = await runPredict(params, abortController.signal);
           if (get().startedAt !== startedAt) return; // stale guard
-          set({ prediction: { status: 'done', data, error: null } });
+          set({ prediction: { status: 'done', data, error: null, finishedAt: Date.now() } });
         } catch (err) {
           if (get().startedAt !== startedAt) return;
           if (isAbortError(err)) return;
           const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
-          set({ prediction: { status: 'error', data: null, error: msg } });
+          set({ prediction: { status: 'error', data: null, error: msg, finishedAt: Date.now() } });
         }
       },
 
       retryPrediction: async () => {
         const params = get().params;
         if (!params) return;
-        set({ prediction: { status: 'running', data: null, error: null } });
+        set({ prediction: { status: 'running', data: null, error: null, finishedAt: null } });
         try {
           const data = await runPredict(params);
-          set({ prediction: { status: 'done', data, error: null } });
+          set({ prediction: { status: 'done', data, error: null, finishedAt: Date.now() } });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '예측 재시도 실패';
-          set({ prediction: { status: 'error', data: null, error: msg } });
+          set({ prediction: { status: 'error', data: null, error: msg, finishedAt: Date.now() } });
         }
       },
 
       retryAnalysis: async () => {
         const params = get().params;
         if (!params) return;
-        set({ analysis: { status: 'running', data: null, error: null } });
+        set({ analysis: { status: 'running', data: null, error: null, finishedAt: null } });
         try {
           const data = await runAnalyzeLlm(params);
-          set({ analysis: { status: 'done', data, error: null } });
+          set({ analysis: { status: 'done', data, error: null, finishedAt: Date.now() } });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '분석 재시도 실패';
-          set({ analysis: { status: 'error', data: null, error: msg } });
+          set({ analysis: { status: 'error', data: null, error: msg, finishedAt: Date.now() } });
         }
       },
 

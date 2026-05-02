@@ -44,7 +44,15 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
-import { Routes, Route, useNavigate, useLocation, Outlet, Navigate } from 'react-router-dom';
+import {
+  Routes,
+  Route,
+  useNavigate,
+  useLocation,
+  Outlet,
+  Navigate,
+  useOutletContext,
+} from 'react-router-dom';
 import { TransitionContext } from './contexts/TransitionContext';
 import JoinUsPage from './pages/JoinUs/JoinUsPage';
 import HQCommandCenter from './pages/HQCommandCenter';
@@ -59,6 +67,7 @@ import { type SimResult, toSimResultViewModel } from './viewmodels/simResult';
 // [H4] TabbedDashboard 직접 import 제거 — /dashboard 라우트로 분리 후 미사용.
 // SimulationHistoryDetail 은 여전히 자체 import 로 사용 중 (H7 에서 정리 예정).
 import { DashboardHub } from './components/SimulationResult/dashboard/DashboardHub';
+import { DashboardConditionDrawer } from './components/SimulationResult/dashboard/DashboardConditionDrawer';
 import {
   DetailModal,
   type DetailModalContent,
@@ -100,6 +109,8 @@ import {
   Terminal,
   UserCheck,
   Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 import HybridSliderInput from './components/ui/HybridSliderInput';
@@ -629,6 +640,11 @@ const BUSINESS_TYPE_BACKEND_KEY: Record<string, string> = {
   '커피-음료': '커피',
 };
 
+/** Backend short key → UI 풀 라벨 역매핑. mount 시 store.params.business_type 복원용. */
+const FRONTEND_LABEL_FROM_BACKEND_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(BUSINESS_TYPE_BACKEND_KEY).map(([k, v]) => [v, k]),
+);
+
 // UI 업종 라벨 → CS 업종 코드 (demographic 연령/성별 분석 업종 필터링용)
 const BUSINESS_TYPE_CS_CODE: Record<string, string> = {
   한식음식점: 'CS100001',
@@ -688,9 +704,18 @@ function SimulatorDashboard({
   setReportState: (s: 'idle' | 'loading' | 'result') => void;
 }) {
   const navigate = useNavigate();
-  const [radius, setRadius] = useState(500);
-  const [budget, setBudget] = useState(200);
-  const [weighted, setWeighted] = useState(false);
+  const location = useLocation();
+
+  // Drawer "조건 수정" 진입 시 폼 자동 채움 — store.params 에서 mount 시 1회 capture.
+  // useState lazy init 으로 최초 render 만 평가. 이후 사용자가 폼 변경해도 영향 없음.
+  // store.params 단위: monthly_rent / initial_capital 은 원 단위 → 만원 단위로 변환.
+  const [initParams] = useState(() => useSimulationStore.getState().params);
+
+  const [radius, setRadius] = useState(initParams?.commercial_radius ?? 500);
+  const [budget, setBudget] = useState(
+    initParams?.monthly_rent != null ? Math.round(initParams.monthly_rent / 10000) : 200,
+  );
+  const [weighted, setWeighted] = useState(initParams?.population_weight ?? false);
   // loadingText/loadingProgress state는 로딩 UI 제거(2026-04-28)와 함께 dead.
   // SimulationFloatingWidget이 store status를 직접 구독해 진행 표시.
   const { showToast } = useToast();
@@ -703,9 +728,11 @@ function SimulatorDashboard({
   // 향후 다른 구 확장 시 useState<GuName>('마포구') + setter 로 복원.
   const selectedGu = '마포구' as const;
   // [UX] 동 선택 1~4개 제한 — 파이프라인 성능 + 레이더 차트 가독성 한계
-  const [selectedDongs, setSelectedDongs] = useState<string[]>(() =>
-    DONG_DATA['마포구'].slice(0, 4),
-  );
+  const [selectedDongs, setSelectedDongs] = useState<string[]>(() => {
+    const stored = initParams?.target_districts;
+    if (stored && stored.length > 0) return stored.slice(0, 4);
+    return DONG_DATA['마포구'].slice(0, 4);
+  });
   const [dongDropdownOpen, setDongDropdownOpen] = useState(false);
 
   // FTC 업종 중분류 → 프론트 드롭다운 업종명 매핑
@@ -726,27 +753,49 @@ function SimulatorDashboard({
   };
   const defaultBizType =
     (brand?.industry_medium && FTC_TO_FRONTEND_INDUSTRY[brand.industry_medium]) || '커피-음료';
-  const [businessType, setBusinessType] = useState(defaultBizType);
-  // 로그인 후 brand 정보가 비동기 로드되면 업종 자동 반영
+  // initParams.business_type 은 backend short key ("커피") 형식 — frontend 라벨로 역매핑.
+  const [businessType, setBusinessType] = useState(
+    initParams?.business_type
+      ? (FRONTEND_LABEL_FROM_BACKEND_KEY[initParams.business_type] ?? defaultBizType)
+      : defaultBizType,
+  );
+  // 로그인 후 brand 정보가 비동기 로드되면 업종 자동 반영.
+  // 단, store.params 에서 이미 복원된 경우 (drawer "조건 수정" 진입) skip — 사용자 의도 보존.
   useEffect(() => {
+    if (initParams?.business_type) return;
     if (brand?.industry_medium) {
       const mapped = FTC_TO_FRONTEND_INDUSTRY[brand.industry_medium];
       if (mapped) setBusinessType(mapped);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brand?.industry_medium]);
   const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
-  const [storeArea, setStoreArea] = useState(15); // 평
-  const [targetPrice, setTargetPrice] = useState('5to10k');
-  const [operatingHours, setOperatingHours] = useState<string[]>(['점심', '저녁']);
+  const [storeArea, setStoreArea] = useState(initParams?.store_area ?? 15); // 평
+  const [targetPrice, setTargetPrice] = useState(initParams?.target_price_range ?? '5to10k');
+  const [operatingHours, setOperatingHours] = useState<string[]>(
+    initParams?.operating_hours ?? ['점심', '저녁'],
+  );
   const [isWorkflowOpen, setIsWorkflowOpen] = useState(false);
-  const [initialCapital, setInitialCapital] = useState(5000); // 만원
+  const [initialCapital, setInitialCapital] = useState(
+    initParams?.initial_capital != null ? Math.round(initParams.initial_capital / 10000) : 5000,
+  ); // 만원
 
   // [customer_revenue] 타겟 고객 프로필 — A1 찬영 P1-C 연동. 빈 선택 = 전체 고객
-  const [targetAgeGroups, setTargetAgeGroups] = useState<string[]>([]);
-  const [targetGender, setTargetGender] = useState<'male' | 'female' | null>(null);
-  const [targetTimeSlots, setTargetTimeSlots] = useState<string[]>([]);
-  const [targetDayType, setTargetDayType] = useState<'weekday' | 'weekend' | null>(null);
-  const [targetMonthlySales, setTargetMonthlySales] = useState<number | null>(null);
+  const [targetAgeGroups, setTargetAgeGroups] = useState<string[]>(
+    initParams?.target_age_groups ?? [],
+  );
+  const [targetGender, setTargetGender] = useState<'male' | 'female' | null>(
+    initParams?.target_gender ?? null,
+  );
+  const [targetTimeSlots, setTargetTimeSlots] = useState<string[]>(
+    initParams?.target_time_slots ?? [],
+  );
+  const [targetDayType, setTargetDayType] = useState<'weekday' | 'weekend' | null>(
+    initParams?.target_day_type ?? null,
+  );
+  const [targetMonthlySales, setTargetMonthlySales] = useState<number | null>(
+    initParams?.target_monthly_sales ?? null,
+  );
 
   // [customer_segment 미리보기] 좌측 패널 입력 변경 시 ~100ms MLP 호출.
   // /predict + /analyze/llm (멀티에이전트 파이프라인)와 무관 — RUN 누르기 전 즉시 피드백.
@@ -845,8 +894,10 @@ function SimulatorDashboard({
     }
   }, [reportState]);
 
-  // [R2] 마운트 시 store 에서 복원 — 다른 페이지로 나갔다가 /simulator 복귀 시 결과 유지.
-  // buildCombinedResult 로 prediction + analysis 슬라이스를 합성. 로컬 state 가 비어있으면 toSimResultViewModel 로 재현.
+  // [R2] 마운트 시 store 에서 복원 — legacy 호환만 유지 (rawSimResult/simResult 로컬 state).
+  // simulator 페이지는 input 전용 — result 상태 transition 안 함 (/dashboard 라우트가 담당).
+  // 옛 dashboard JSX 제거(commit edfd4d7) 후속: setReportState('result') 호출 제거 →
+  // /dashboard 에서 BACK 시 빈 outline 박스만 보이던 회귀 차단.
   useEffect(() => {
     const s = useSimulationStore.getState();
     const combined = buildCombinedResult(
@@ -854,10 +905,9 @@ function SimulatorDashboard({
       s.analysis.data,
       s.params?.target_district ?? undefined,
     );
-    if (reportState === 'idle' && s.status === 'done' && combined) {
+    if (s.status === 'done' && combined) {
       setRawSimResult(combined);
       setSimResult(toSimResultViewModel(combined));
-      setReportState('result');
     }
     // mount 1회만
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -872,13 +922,17 @@ function SimulatorDashboard({
   // navigatedForResultRef: 동일 result 인스턴스에 대해 한 번만 navigate. 사용자가 /dashboard
   // 에서 뒤로가기 → /simulator 복귀 시 mount-restore 가 다시 rawSimResult 를 채워도 재navigate 안 함.
   // 새 시뮬 완료 시 setRawSimResult(simRes) 로 reference 가 바뀌면 ref 비교 실패 → navigate 재발동.
+  // location.state.intent === 'edit' (DashboardConditionDrawer 의 "조건 수정" 버튼) → auto-redirect
+  // skip. 사용자가 명시적으로 simulator 로 들어왔으니 다시 dashboard 로 튕기지 않음.
   const navigatedForResultRef = useRef<SimulationOutput | null>(null);
   useEffect(() => {
+    const intent = (location.state as { intent?: string } | null)?.intent;
+    if (intent === 'edit') return;
     if (rawSimResult && navigatedForResultRef.current !== rawSimResult) {
       navigatedForResultRef.current = rawSimResult;
       navigate('/dashboard', { replace: true });
     }
-  }, [rawSimResult, navigate]);
+  }, [rawSimResult, navigate, location.state]);
 
   const MAX_DONGS = 4;
 
@@ -1027,11 +1081,7 @@ function SimulatorDashboard({
           mt-28 = 초기 위치는 App 헤더(80px)와 32px 갭.
           sticky top-20 = 스크롤 시 App 헤더 바닥에 flush 로 붙음 → 갭 사이 컨텐츠 비침 차단.
           (top-28 로 갭 유지하면 갭 사이로 스크롤되는 컨텐츠가 비치는 이슈) */}
-      <div
-        className={`sticky top-20 z-30 flex items-center justify-between px-8 py-4 mt-28 bg-card/90 backdrop-blur-xl ${
-          reportState === 'result' ? 'hidden' : ''
-        }`}
-      >
+      <div className="sticky top-20 z-30 flex items-center justify-between px-8 py-4 mt-28 bg-card/90 backdrop-blur-xl">
         <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">
           SIMULATION SETUP
         </h1>
@@ -1054,9 +1104,7 @@ function SimulatorDashboard({
           default items-stretch 로 row 1 의 두 박스 키 같게 유지. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-8 max-w-[1650px] mx-auto">
         {/* ─────── 핵심 파라미터 카드 — Cell row1·col5 (lg:order-2 로 시각 우측) ─────── */}
-        <div
-          className={`lg:col-span-5 lg:order-2 box-glass rounded-2xl p-6 transition-all duration-700 ${reportState === 'result' ? 'hidden' : ''}`}
-        >
+        <div className="lg:col-span-5 lg:order-2 box-glass rounded-2xl p-6 transition-all duration-700">
           <SectionLabel icon={MapPin} title="핵심 파라미터" sub="Core Parameters · 필수 항목" />
           {/* 단일 컬럼 flow — 내부 박스 wrapper 3개 제거 (강조용 bg-card+border-primary+shadow-xl 중첩 외피).
               box-glass 표면 위에 FormField 들 직접 배치. 균등 space-y-5 로 시각 리듬. */}
@@ -1206,14 +1254,12 @@ function SimulatorDashboard({
 
         {/* ─────── ScopeHint 띠 — Cell row2 col-12 (lg:order-3).
             핵심파라미터 박스 안에서 분리되어 row 사이 full-width 시각 띠로 동적 피드백 노출. ─────── */}
-        <div className={`lg:col-span-12 lg:order-3 ${reportState === 'result' ? 'hidden' : ''}`}>
+        <div className="lg:col-span-12 lg:order-3">
           <ScopeHint selectedDongCount={selectedDongs.length} />
         </div>
 
         {/* ─────── 섹션 2: 운영 조건 — Cell row1·col7. p-5 + gap-3 으로 row 1 height 정상화 ─────── */}
-        <div
-          className={`lg:col-span-7 lg:order-1 box-glass rounded-2xl p-5 transition-all duration-700 ${reportState === 'result' ? 'hidden' : ''}`}
-        >
+        <div className="lg:col-span-7 lg:order-1 box-glass rounded-2xl p-5 transition-all duration-700">
           <SectionLabel icon={Sliders} title="운영 조건" sub="Operating Constraints · 입지·재무" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
             {/* 1. 상권 반경 */}
@@ -1302,9 +1348,7 @@ function SimulatorDashboard({
 
         {/* ─────── 섹션 3: 타겟 페르소나 — Cell row3 full-width (lg:col-span-12 lg:order-4).
             row 2 우측 col-5 자리(RUN 버튼 이관 후 빈 공간)를 없애고 full-width 로 시원하게. ─────── */}
-        <div
-          className={`lg:col-span-12 lg:order-4 box-glass rounded-2xl p-6 transition-all duration-700 ${reportState === 'result' ? 'hidden' : ''}`}
-        >
+        <div className="lg:col-span-12 lg:order-4 box-glass rounded-2xl p-6 transition-all duration-700">
           <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
           <div>
             <div className="flex items-baseline justify-end mb-3">
@@ -1432,25 +1476,8 @@ function SimulatorDashboard({
         </div>
         {/* /타겟 페르소나 카드 끝 */}
 
-        {/* Right panel wrapper — col-span-12 풀폭. RUN SIMULATION 박스(아래)가 이 wrapper의
-            자식이므로 wrapper 자체에 hidden을 걸면 안 됨. 내부 Visualization 박스만 result 시
-            노출 + RUN 박스는 자체 className으로 result 시 hidden(line 3939). */}
-        <div className="lg:col-span-12 flex flex-col gap-6">
-          {/* Right panel — Visualization (result 시에만 표시. idle/loading 시 hidden) */}
-          <div
-            className={`flex-1 rounded-2xl border p-6 min-h-[500px] transition-all duration-700 bg-card border-border shadow-sm ${reportState !== 'result' ? 'hidden' : ''}`}
-          >
-            {/* idle UI(블러 대시보드 실루엣 + 3-step 가이드) 제거 — 좌측 옵션 패널이
-                풀폭으로 노출되어 가이드 역할 자체가 의미 없어짐(2026-04-28). */}
-
-            {/* loading UI(가짜 progress + ETA + 단계 ticker) 제거 — §3.7 거짓 신호 +
-                좌측 옵션 패널 풀폭 가독성 ↑. 백그라운드 진행은 SimulationFloatingWidget 담당.
-                결과 도착 시 runSim 함수가 setReportState('result')로 자동 전환. */}
-
-          </div>
-
-          {/* RUN 버튼은 우5 패널의 핵심 파라미터 카드 밑으로 이동됨 (라인 ~1678 부근) */}
-        </div>
+        {/* 옛 Visualization wrapper 제거 (commit edfd4d7 옛 dashboard 제거 후속).
+            결과 화면은 /dashboard 라우트가 담당 — simulator 페이지는 input 전용. */}
       </div>
 
       {/* ==========================================
@@ -1566,29 +1593,94 @@ function pathToScene(
  * - DetailModal 도 여기서 host (자식 라우트가 openModal 로 띄우는 모달).
  */
 /** 시뮬 진행중 + 데이터 미도착 상태에서 dashboard shell 안에 표시할 로딩 placeholder.
- *  FloatingWidget 의 "시뮬레이터로 이동" 으로 진입했을 때 본 영역에 진행률을 보여줌. */
+ *  IM3-259 분리 호출 — /predict (ML 예측) 와 /analyze/llm (AI 분석) 두 슬라이스의 elapsed
+ *  시간을 각각 표시. fake progress 없음 — 실제 startedAt → finishedAt 차이만 사용. */
 function DashboardRunningPlaceholder() {
-  const progress = useSimulationStore((s) => s.progress);
-  const stage = useSimulationStore((s) => s.stage);
+  const startedAt = useSimulationStore((s) => s.startedAt);
+  const predStatus = useSimulationStore((s) => s.prediction.status);
+  const predFinishedAt = useSimulationStore((s) => s.prediction.finishedAt);
+  const anaStatus = useSimulationStore((s) => s.analysis.status);
+  const anaFinishedAt = useSimulationStore((s) => s.analysis.finishedAt);
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (predStatus !== 'running' && anaStatus !== 'running') return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [predStatus, anaStatus]);
+
+  const elapsedSec = (finishedAt: number | null): number =>
+    startedAt ? Math.max(0, Math.round(((finishedAt ?? now) - startedAt) / 1000)) : 0;
+
   return (
-    <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center">
-      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+    <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-6 px-6">
       <div className="text-lg font-semibold text-foreground">시뮬레이션 진행 중</div>
-      <div className="text-sm text-muted-foreground">{stage || '준비 중...'}</div>
-      <div className="w-64 max-w-full">
-        <div
-          className="h-1.5 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
-          aria-valuenow={Math.round(progress)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-primary to-primary transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
+      <div className="flex w-full max-w-md flex-col gap-3">
+        <SliceProgressRow
+          status={predStatus}
+          label="ML 예측"
+          sublabel="매출 / 폐업률 (TCN + LightGBM)"
+          elapsed={elapsedSec(predFinishedAt)}
+          expected={15}
+        />
+        <SliceProgressRow
+          status={anaStatus}
+          label="AI 분석"
+          sublabel="멀티 에이전트 종합 판단 (LLM)"
+          elapsed={elapsedSec(anaFinishedAt)}
+          expected={60}
+        />
+      </div>
+      <p className="max-w-md text-center text-xs text-muted-foreground leading-relaxed">
+        두 분석은 독립적으로 실행되며, 도착하는 대로 화면이 갱신됩니다.
+      </p>
+    </div>
+  );
+}
+
+function SliceProgressRow({
+  status,
+  label,
+  sublabel,
+  elapsed,
+  expected,
+}: {
+  status: 'idle' | 'running' | 'done' | 'error';
+  label: string;
+  sublabel: string;
+  elapsed: number;
+  /** 평균 예상 시간 (초). 정적 추정치 — fake progress 가 아닌 사용자 안내용 hint. */
+  expected: number;
+}) {
+  const Icon = status === 'done' ? CheckCircle2 : status === 'error' ? AlertCircle : Loader2;
+  const iconColor =
+    status === 'done'
+      ? 'text-success'
+      : status === 'error'
+        ? 'text-danger'
+        : status === 'running'
+          ? 'text-primary'
+          : 'text-muted-foreground';
+  const elapsedColor =
+    status === 'done'
+      ? 'text-success'
+      : status === 'error'
+        ? 'text-danger'
+        : 'text-muted-foreground';
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
+      <Icon
+        className={`h-5 w-5 shrink-0 ${iconColor} ${status === 'running' ? 'animate-spin' : ''}`}
+      />
+      <div className="min-w-0 flex-1 text-left">
+        <div className="text-sm font-bold text-foreground">
+          {label}{' '}
+          <span className="text-xs font-normal text-muted-foreground">(보통 ~{expected}s)</span>
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">{Math.round(progress)}%</div>
+        <div className="text-xs text-muted-foreground">{sublabel}</div>
+      </div>
+      <div className={`shrink-0 text-sm font-mono tabular-nums ${elapsedColor}`}>
+        {status === 'idle' ? '대기' : `${elapsed}s`}
       </div>
     </div>
   );
@@ -1598,12 +1690,15 @@ function DashboardOutlet() {
   const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
   const status = useSimulationStore((s) => s.status);
+  const params = useSimulationStore((s) => s.params);
   const { user, brand } = useAuth();
   const brandName = user?.company_name || brand?.brand_name || '';
   const businessType: string | null = null;
 
   const [modalContent, setModalContent] = useState<DetailModalContent | null>(null);
   const openModal = (content: DetailModalContent) => setModalContent(content);
+
+  const [conditionDrawerOpen, setConditionDrawerOpen] = useState(false);
 
   // FloatingWidget 의 "시뮬레이터로 이동" 으로 시뮬 진행중에도 진입 가능하도록 변경.
   // 결과 없음 + 시뮬 미실행 → /simulator 로 복귀 (직접 URL 접근 차단).
@@ -1616,11 +1711,26 @@ function DashboardOutlet() {
       style={{ overscrollBehaviorY: 'contain' }}
     >
       {simResult ? (
-        <Outlet context={{ simResult, brandName, businessType, savedHistoryId, openModal }} />
+        <Outlet
+          context={{
+            simResult,
+            brandName,
+            businessType,
+            savedHistoryId,
+            openModal,
+            openConditionDrawer: () => setConditionDrawerOpen(true),
+          }}
+        />
       ) : (
         <DashboardRunningPlaceholder />
       )}
       <DetailModal modalContent={modalContent} onClose={() => setModalContent(null)} />
+      <DashboardConditionDrawer
+        open={conditionDrawerOpen}
+        onClose={() => setConditionDrawerOpen(false)}
+        params={params}
+        brandFallback={brandName}
+      />
     </div>
   );
 }
@@ -1632,6 +1742,7 @@ function DashboardHubRouteElement() {
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
   const status = useSimulationStore((s) => s.status);
   const { user, brand } = useAuth();
+  const ctx = useOutletContext<{ openConditionDrawer?: () => void }>();
   if (!simResult) {
     if (status === 'running') return <DashboardRunningPlaceholder />;
     return <Navigate to="/simulator" replace />;
@@ -1641,6 +1752,7 @@ function DashboardHubRouteElement() {
       simResult={simResult}
       brandName={user?.company_name || brand?.brand_name || ''}
       savedHistoryId={savedHistoryId}
+      onShowConditions={ctx?.openConditionDrawer}
     />
   );
 }

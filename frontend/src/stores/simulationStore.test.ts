@@ -271,8 +271,8 @@ describe('simulationStore — Promise.allSettled', () => {
     useSimulationStore.getState().reset();
     useSimulationStore.setState({
       status: 'idle',
-      prediction: { status: 'idle', data: null, error: null },
-      analysis: { status: 'idle', data: null, error: null },
+      prediction: { status: 'idle', data: null, error: null, finishedAt: null },
+      analysis: { status: 'idle', data: null, error: null, finishedAt: null },
       params: null,
     });
     vi.restoreAllMocks();
@@ -332,11 +332,12 @@ describe('simulationStore — Promise.allSettled', () => {
   it('retryPrediction 만 재호출 → analysis 슬라이스 보존', async () => {
     useSimulationStore.setState({
       params: { districts: ['공덕동'] } as unknown as SimulationInput,
-      prediction: { status: 'error', data: null, error: 'previous fail' },
+      prediction: { status: 'error', data: null, error: 'previous fail', finishedAt: null },
       analysis: {
         status: 'done',
         data: { winner_district: '공덕동' } as unknown as AnalysisOutput,
         error: null,
+        finishedAt: null,
       },
       status: 'done',
     });
