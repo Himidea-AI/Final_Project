@@ -4,7 +4,9 @@
 
 /** 시뮬레이션 요청 입력 */
 export interface SimulationInput {
-  business_type: string; // "cafe" | "restaurant" | "convenience" 등 확장 가능성 고려
+  // 백엔드 SUPPORTED_BUSINESS_TYPES = {cafe, restaurant, pub} (편의점 제거, 주점 신설).
+  // BIZ_NORMALIZE 가 한식/주점/호프-간이주점 등 한글 라벨도 정규화하므로 string 유지.
+  business_type: string; // "cafe" | "restaurant" | "pub" 등 (BIZ_NORMALIZE 매핑)
   business_subtype?: string;
   brand_name: string;
   target_district: string;
@@ -20,6 +22,10 @@ export interface SimulationInput {
   initial_capital?: number;
   population_weight?: boolean;
   commercial_radius?: number;
+  // 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 룰 트리거.
+  // null/미입력 시 backend 가 보수적 caution 처리.
+  lat?: number | null;
+  lon?: number | null;
   // [customer_revenue] 타겟 고객 프로필 (A1 찬영 P1-C 연동)
   // 값은 SegmentProfile 스펙 그대로 한글/내부키 혼용 (age: "30대", time: "time_11_14", day: "weekday|weekend")
   target_age_groups?: string[];
@@ -106,6 +112,13 @@ export interface LegalRiskArticle {
 export interface LegalRisk {
   type: string;
   risk_level: string;
+  /**
+   * 카테고리 그룹 — backend `LEGAL_CATEGORY_GROUP` 매핑 결과.
+   * - location: 출점 결정 critical (입지/면적/임대차/가맹 영업지역 등)
+   * - operation: 운영 단계 일상 의무 (식품위생/노동/세무/개인정보/하수도)
+   * 구버전 응답엔 미포함 — 누락 시 frontend 에서 'operation' 으로 폴백.
+   */
+  group?: 'location' | 'operation';
   detail: string;
   recommendation?: string;
   articles?: LegalRiskArticle[];

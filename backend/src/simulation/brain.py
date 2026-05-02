@@ -607,17 +607,54 @@ class LLMBrain:
     BATCH_SIZE_PLAN = 10
 
     def generate_daily_plans_batch(self, agents: list["Agent"], world: "World") -> dict[int, list[dict]]:
-        """Tier S agents 에게 하루 일정 생성 (batch). 반환: agent_id → schedule."""
+        """Tier S agents 에게 하루 일정 생성 (batch). 반환: agent_id → schedule.
+
+        chunk 5개 (50 agents) 를 asyncio.gather 로 병렬 실행.
+        sequential 4 × 26s = 106s/sim → parallel ~26s/sim.
+        thought batch 와 동일 패턴.
+        """
         if not agents:
             return {}
         if self.cfg.mock_mode or self._openai is None or self.cfg.tier_s_provider != "openai":
             return {}
 
-        plans: dict[int, list[dict]] = {}
-        for i in range(0, len(agents), self.BATCH_SIZE_PLAN):
-            chunk = agents[i : i + self.BATCH_SIZE_PLAN]
-            plans.update(self._generate_daily_plans_openai(chunk, world))
-        return plans
+        import asyncio as _aio
+
+        chunks = [
+            agents[i : i + self.BATCH_SIZE_PLAN]
+            for i in range(0, len(agents), self.BATCH_SIZE_PLAN)
+        ]
+
+        async def _run_all() -> dict[int, list[dict]]:
+            # OpenAI Tier 1 RPM=500 보호. thought 5 + plan 5 동시 → 8 cap 충분.
+            sem = _aio.Semaphore(8)
+
+            async def _bounded(chunk):
+                async with sem:
+                    try:
+                        return await _aio.to_thread(self._generate_daily_plans_openai, chunk, world)
+                    except Exception as e:
+                        # chunk 1개 실패 → 시뮬 abort 방지. 빈 dict.
+                        print(f"[brain.S/plan] chunk 실패 ({len(chunk)} agents): {e}")
+                        return {}
+
+            results = await _aio.gather(*[_bounded(c) for c in chunks])
+            merged: dict[int, list[dict]] = {}
+            for r in results:
+                merged.update(r)
+            return merged
+
+        try:
+            return _aio.run(_run_all())
+        except RuntimeError as e:
+            msg = str(e)
+            if "running event loop" not in msg and "no current event loop" not in msg:
+                raise
+            loop = _aio.new_event_loop()
+            try:
+                return loop.run_until_complete(_run_all())
+            finally:
+                loop.close()
 
     @traceable(run_type="llm", name="brain.tier_s.plan.openai")
     def _generate_daily_plans_openai(self, agents: list["Agent"], world: "World") -> dict[int, list[dict]]:

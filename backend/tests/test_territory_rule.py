@@ -103,7 +103,14 @@ class TestIndustryLabelMap:
             assert self._resolve(biz) == "restaurant", f"{biz} → restaurant 기대"
 
     def test_convenience(self):
+        # 운영 데이터(매장 분류)에서 "편의점" 카테고리는 보존됨
         assert self._resolve("편의점") == "convenience"
+
+    def test_pub_falls_back_to_default(self):
+        # 주점 — commercial_intelligence 거리 감쇠 곡선 미정의 → default 곡선 사용.
+        assert self._resolve("pub") == _INDUSTRY_DEFAULT
+        assert self._resolve("주점") == _INDUSTRY_DEFAULT
+        assert self._resolve("호프") == _INDUSTRY_DEFAULT
 
     def test_unmapped_falls_back_to_default(self):
         # BIZ_NORMALIZE 미등록 임의 입력 — cafe 강제 매핑되지 않아야 함
@@ -127,3 +134,10 @@ class TestSafeFloorSkip:
 
         r = rule_safety_regulation("cafe", 25.0)
         assert r["level"] == "safe"
+
+    def test_pub_small_area_danger(self):
+        # 주점은 면적 무관 다중이용업 → small area 도 danger
+        from src.agents.legal.rules import rule_safety_regulation
+
+        r = rule_safety_regulation("pub", 10.0)
+        assert r["level"] == "danger"

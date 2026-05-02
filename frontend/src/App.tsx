@@ -108,6 +108,7 @@ import { FormField } from './components/ui/FormField';
 import { ScopeHint } from './components/ui/ScopeHint';
 import { ChipGroup } from './components/ui/ChipGroup';
 import { Toggle } from './components/ui/Toggle';
+import { StoreLocationInput } from './components/ui/StoreLocationInput';
 import { ManagerListProvider } from './hooks/useManagerList';
 
 /* ═══════════════════════════════════════════════════════
@@ -748,6 +749,15 @@ function SimulatorDashboard({
   const [targetDayType, setTargetDayType] = useState<'weekday' | 'weekend' | null>(null);
   const [targetMonthlySales, setTargetMonthlySales] = useState<number | null>(null);
 
+  // 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 룰 트리거.
+  // 미입력 (둘 다 null) 시 backend 가 보수적 caution. 주점(pub) 외 업종은 좌표 영향 없음.
+  const [storeLat, setStoreLat] = useState<number | null>(null);
+  const [storeLon, setStoreLon] = useState<number | null>(null);
+  const handleLocationChange = useCallback((nextLat: number | null, nextLon: number | null) => {
+    setStoreLat(nextLat);
+    setStoreLon(nextLon);
+  }, []);
+
   // [customer_segment 미리보기] 좌측 패널 입력 변경 시 ~100ms MLP 호출.
   // /predict + /analyze/llm (멀티에이전트 파이프라인)와 무관 — RUN 누르기 전 즉시 피드백.
   const previewReq = useMemo<CustomerSegmentRequest | null>(() => {
@@ -951,6 +961,9 @@ function SimulatorDashboard({
         commercial_radius: radius,
         population_weight: weighted,
         industry_filter: BUSINESS_TYPE_CS_CODE[businessType] ?? null,
+        // 출점 후보지 좌표 (선택). 미입력 시 backend rule_school_zone 이 보수적 caution 처리.
+        lat: storeLat,
+        lon: storeLon,
         // [customer_revenue] A1 찬영 P1-C — target_* 5필드. 선택 안 한 경우 null/빈배열 = 전체 고객.
         target_age_groups: targetAgeGroups,
         target_gender: targetGender,
@@ -1010,6 +1023,8 @@ function SimulatorDashboard({
     targetTimeSlots,
     targetDayType,
     targetMonthlySales,
+    storeLat,
+    storeLon,
   ]);
 
   // 로딩 UI 제거(2026-04-28)와 함께 store progress/stage 미러 useEffect도 dead → 제거.
@@ -1289,6 +1304,19 @@ function SimulatorDashboard({
                 cols={4}
               />
             </FormField>
+
+            {/* 7. 출점 후보지 좌표 (선택) — 학교환경위생정화구역 거리 룰 트리거.
+                미입력 시 backend rule_school_zone 이 보수적 caution 처리. 주점에서만 차단 영향. */}
+            <div className="md:col-span-2">
+              <FormField
+                label="출점 후보지 좌표"
+                icon={MapPin}
+                hint="선택 사항"
+                info="주점(pub)일 때 학교환경위생정화구역 200m 이내 여부를 체크합니다. 미입력 시 보수적 caution."
+              >
+                <StoreLocationInput lat={storeLat} lon={storeLon} onChange={handleLocationChange} />
+              </FormField>
+            </div>
 
             {/* 유동인구 가중치 토글은 섹션 1(핵심 파라미터)의 업종 박스 아래로 이관 —
                     좌측 분석 대상 박스 높이 매칭 + 공백 회피(2026-04-28). */}

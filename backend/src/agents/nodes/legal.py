@@ -137,7 +137,7 @@ _CHECKLIST_RULES: list[tuple[list[str], str, str, bool]] = [
     (["약관"], "약관", "표준약관 사용 또는 약관 공정성 검토", False),
     # --- 용도지역 (zoning_regulation) ---
     (["용도지역", "용도지구"], "용도지역", "해당 용도지역 내 영업 허용 여부 확인", True),
-    (["학교환경위생"], "학교정화", "학교정화구역 내 영업제한 대상 확인", True),
+    (["학교환경위생", "정화구역", "학교보건법"], "학교정화", "학교정화구역 내 영업제한 대상 확인", True),
 ]
 
 
@@ -152,6 +152,7 @@ _TYPE_TO_CATEGORY = {
     "privacy_law": "개인정보보호법",
     "accessibility_law": "장애인편의증진법",
     "sewage_law": "하수도법",
+    "school_zone": "학교보건법",
     "fair_trade_law": "공정거래법",
     "zoning_regulation": "용도지역 규제",
     "safety_regulation": "안전관리법",
@@ -200,6 +201,14 @@ _DEFAULT_CHECKLIST: dict[str, list[dict]] = {
     "sewage_law": [
         {"text": "배수설비 설치 및 하수도 연결 신고", "isRequired": True},
         {"text": "개인 오수처리시설(정화조) 설치 의무 확인", "isRequired": True},
+    ],
+    "school_zone": [
+        {"text": "출점 후보지에서 가장 가까운 학교까지의 거리 측정", "isRequired": True},
+        {"text": "절대정화구역(50m)/상대정화구역(200m) 해당 여부 확인", "isRequired": True},
+        {
+            "text": "상대정화구역 내 주점은 학교환경위생정화위원회 심의 신청",
+            "isRequired": False,
+        },
     ],
     "fair_trade_law": [
         {"text": "허위·과장 광고 금지 사항 확인", "isRequired": True},
@@ -655,12 +664,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
     법률 검토 파이프라인 — 룰엔진 단일 경로 (2026-05-02 전환).
 
     흐름:
-      1. brand/district/business_type/store_area 추출 + 정규화
-      2. Redis 캐시 lookup (v6 prefix — 룰엔진 단일 모드)
+      1. brand/district/business_type/store_area/lat/lon 추출 + 정규화
+      2. Redis 캐시 lookup (v7 prefix — school_zone + 좌표 키 포함)
       3. zoning + ftc 병렬 실행
-      4. orchestrator.run_legal_evaluation — 8 룰 + 4 specialist 병렬 (12 dict)
-         실패 시 → 12 항목 caution fallback (_make_fallback_risk)
-      5. risks = orchestrator 12 + zoning + ftc = 14 (인덱스 기반 다운스트림 호환)
+      4. orchestrator.run_legal_evaluation — 9 룰 + 4 specialist 병렬 (13 dict)
+         실패 시 → 13 항목 caution fallback (_make_fallback_risk)
+      5. risks = orchestrator 13 + zoning + ftc = 15 (인덱스 기반 다운스트림 호환)
       6. checklist 보강 + _enrich_penalty_info + overall_legal_risk 계산
       7. Redis 캐시 저장
     """
@@ -675,6 +684,17 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # store_area: 룰 엔진(rule_safety_regulation/rule_accessibility 등)에서 면적 의존.
     # AgentState 누락/None 방어 — default 15.0 평.
     store_area = state.get("store_area", 15.0) or 15.0
+    # 출점 후보지 좌표 — rule_school_zone 트리거. 주점이 아니면 미사용.
+    _raw_lat = state.get("lat")
+    _raw_lon = state.get("lon")
+    try:
+        lat_val: float | None = float(_raw_lat) if _raw_lat is not None else None
+    except (TypeError, ValueError):
+        lat_val = None
+    try:
+        lon_val: float | None = float(_raw_lon) if _raw_lon is not None else None
+    except (TypeError, ValueError):
+        lon_val = None
 
     # 캐시 키 정규화 — brand/district/business_type 모두 strip+lowercase
     # + store_area 는 소수 1자리 반올림으로 동일 키 보장.
@@ -685,10 +705,16 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     # Redis 캐시 조회 — 동일 조합 재요청 시 즉시 반환
     _CACHE_TTL = 86400  # 24시간
-    # v6: 룰엔진 단일 모드 전환 (re flag 제거) → v5/v4 캐시 자동 invalidation.
+    # v7: school_zone 룰 추가(13 룰 + zoning + ftc = 15 risks) + lat/lon 좌표 키 포함.
+    # 좌표 누락 시 "none" 으로 정규화 — 좌표 입력 시 자동 invalidation.
+    _coord_key = (
+        f"{lat_val:.5f},{lon_val:.5f}"
+        if lat_val is not None and lon_val is not None
+        else "none"
+    )
     cache_key = (
-        f"v6:legal:{_norm_brand}:{_norm_district}:"
-        f"{_norm_biz}:{float(store_area):.1f}"
+        f"v7:legal:{_norm_brand}:{_norm_district}:"
+        f"{_norm_biz}:{float(store_area):.1f}:{_coord_key}"
     )
     _redis = None
     try:
@@ -750,6 +776,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     "privacy_law": "개인정보보호법",
                     "accessibility_law": "장애인편의법",
                     "sewage_law": "하수도법",
+                    "school_zone": "학교환경위생정화구역",
                     "fair_trade_law": "공정거래법",
                     "zoning_regulation": "용도지역",
                     "ftc_franchise": "공정위 정보공개서",
@@ -769,8 +796,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         f"미이행 시 영업정지·과태료·형사처벌 위험이 있습니다."
                     )
                 _cached_reasoning = (
-                    f"창업 관련 14개 법률을 검토한 결과 종합 위험도는 '{_cached_overall_label}'로 판정되었습니다. "
-                    f"전체 14개 항목 중 위험 {_cached_high}개, 주의 {_cached_caution}개, 안전 {_cached_safe}개로 "
+                    f"창업 관련 15개 법률을 검토한 결과 종합 위험도는 '{_cached_overall_label}'로 판정되었습니다. "
+                    f"전체 15개 항목 중 위험 {_cached_high}개, 주의 {_cached_caution}개, 안전 {_cached_safe}개로 "
                     f"분류되었으며, 각 법률의 핵심 조문 총 {_cached_total_arts}개를 근거로 검토했습니다. "
                     f"{_cached_summary}"
                 )
@@ -840,7 +867,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     )
     ftc_result = _safe_ftc(_ftc_raw)
 
-    # 룰엔진 결과 invariant 검증용 — orchestrator._RULE_ENGINE_ORDER 와 동일 12종.
+    # 룰엔진 결과 invariant 검증용 — orchestrator._RULE_ENGINE_ORDER 와 동일 13종.
     _BATCH_TYPES = [
         "franchise_law",
         "commercial_lease_law",
@@ -852,6 +879,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "vat_law",
         "privacy_law",
         "accessibility_law",
+        "school_zone",
         "sewage_law",
         "fair_trade_law",
     ]
@@ -878,6 +906,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
             district=district,
             store_area_pyeong=float(store_area),
             ftc_data=ftc_result if isinstance(ftc_result, dict) else None,
+            lat=lat_val,
+            lon=lon_val,
         )
         _rule_seen: set[str] = set()
         for r in engine_results:
@@ -911,7 +941,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # batch_results를 타입별로 인덱싱
     _batch_map = {r["type"]: r for r in batch_results}
 
-    # SP4: 14 risks 구성 — _batch_map(12 LLM 항목) + zoning_result + ftc_result
+    # SP4: 15 risks 구성 — _batch_map(13 룰 항목) + zoning_result + ftc_result
     # 순서는 다운스트림(인덱스 기반) 호환을 위해 유지
     def _r(type_name: str) -> dict:
         return _batch_map.get(type_name, _make_fallback_risk(type_name))
@@ -929,12 +959,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
         _r("vat_law"),
         _r("privacy_law"),
         _r("accessibility_law"),
+        _r("school_zone"),
         _r("sewage_law"),
         _r("fair_trade_law"),
     ]
 
     # §13 드로어 체크리스트 필드 — 각 risk 의 articles 에서 휴리스틱으로 파생
-    # 14개 risks 개수 invariant 유지; checklist 는 항상 1개 이상 반환
+    # 15개 risks 개수 invariant 유지; checklist 는 항상 1개 이상 반환
     for _r in risks:
         if isinstance(_r, dict) and "checklist" not in _r:
             _r["checklist"] = _derive_checklist_from_articles(
@@ -948,12 +979,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
     _enrich_penalty_info(risks)
 
     # SP4: overall_level 결정 — 핵심 카테고리 + 임계값 룰
-    # 핵심 = 미이행 시 영업정지/형사처벌이 직접적인 영역 (식품위생/소방/건축)
+    # 핵심 = 미이행 시 영업정지/형사처벌이 직접적인 영역
+    # (식품위생/소방/건축 + 학교환경위생정화구역)
     # 핵심 1개라도 danger → overall=danger
     # 비핵심 danger 2개 이상 → overall=danger (다중 위험)
     # 그 외 danger 1개 또는 caution 존재 → caution
     # 전부 safe → safe
-    _CRITICAL_TYPES = {"food_hygiene", "fire_safety_law", "building_law"}
+    _CRITICAL_TYPES = {"food_hygiene", "fire_safety_law", "building_law", "school_zone"}
 
     danger_types = [r.get("type", "") for r in risks if isinstance(r, dict) and r.get("level") == "danger"]
     has_critical_danger = any(t in _CRITICAL_TYPES for t in danger_types)
@@ -1023,6 +1055,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
         "privacy_law": "개인정보보호법",
         "accessibility_law": "장애인편의법",
         "sewage_law": "하수도법",
+        "school_zone": "학교환경위생정화구역",
         "fair_trade_law": "공정거래법",
         "zoning_regulation": "용도지역",
         "ftc_franchise": "공정위 정보공개서",
@@ -1040,8 +1073,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
         )
 
     _reasoning = (
-        f"창업 관련 14개 법률을 검토한 결과 종합 위험도는 '{_overall_label}'로 판정되었습니다. "
-        f"전체 14개 항목 중 위험 {_high_count}개, 주의 {_caution_count}개, 안전 {_safe_count}개로 분류되었으며, "
+        f"창업 관련 15개 법률을 검토한 결과 종합 위험도는 '{_overall_label}'로 판정되었습니다. "
+        f"전체 15개 항목 중 위험 {_high_count}개, 주의 {_caution_count}개, 안전 {_safe_count}개로 분류되었으며, "
         f"각 법률의 핵심 조문 총 {_total_articles}개를 근거로 검토했습니다. "
         f"{_summary_line}"
     )
@@ -1073,9 +1106,9 @@ async def legal_node(state) -> dict:
 
     파이프라인(_run_legal_pipeline) 단일 룰엔진 경로:
       - zoning + ftc 병렬
-      - 8 결정적 룰 + 4 specialist (RAG+LLM) 병렬 평가 → 12 risks
-      - + zoning + ftc = 14 risks
-      - Pydantic / TypedDict AgentState 양쪽 지원
+      - 9 결정적 룰 + 4 specialist (RAG+LLM) 병렬 평가 → 13 risks
+      - + zoning + ftc = 15 risks
+      - Pydantic / TypedDict AgentState 양쪽 지원 (lat/lon 좌표 입력 시 학교 거리 룰 활성)
     """
     if not isinstance(state, dict):
         state = state.model_dump()

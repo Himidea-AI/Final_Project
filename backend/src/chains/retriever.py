@@ -710,8 +710,18 @@ class LegalDocumentRetriever:
         filter_dict = {"source": {"$in": source_filter}} if source_filter else None
 
         # 1차: 벡터 유사도 검색 — 원래 + HyDE 확장 + Multi-query 변형 모두 병렬 검색 후 합침
+        # SSL connection abort 등 transient 오류는 1회 재시도 (pool_recycle 적용 후에도 발생).
         async def _vsearch(q: str, k: int) -> list:
-            return await vs.asimilarity_search_with_relevance_scores(q, k=k, filter=filter_dict)
+            try:
+                return await vs.asimilarity_search_with_relevance_scores(q, k=k, filter=filter_dict)
+            except Exception as e:
+                msg = str(e)
+                if "connection" in msg.lower() or "ssl" in msg.lower():
+                    logger.warning(
+                        f"[LegalDocumentRetriever] 1회 재시도 (transient): {type(e).__name__}"
+                    )
+                    return await vs.asimilarity_search_with_relevance_scores(q, k=k, filter=filter_dict)
+                raise
 
         search_queries = [(query, top_k * 2)]
         if expanded_query != query:
