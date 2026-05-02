@@ -35,10 +35,11 @@ _CACHE_PATH = Path(os.environ.get("SENSITIVITY_CACHE_PATH", str(_DEFAULT_CACHE))
 _CORR_PATH = Path(os.environ.get("SENSITIVITY_CORR_PATH", str(_DEFAULT_CORR)))
 
 
-def _load_json(path: Path) -> dict:
+def _load_json(path: Path, *, label: str = "data") -> dict:
     if not path.exists():
         logger.warning(
-            "Sensitivity cache not found: %s — returning empty dict. Did you run the batch script?",
+            "Sensitivity router %s file not found: %s — returning empty dict. Did you run the batch script?",
+            label,
             path,
         )
         return {}
@@ -47,7 +48,8 @@ def _load_json(path: Path) -> dict:
             return json.load(f)
     except json.JSONDecodeError as exc:
         logger.error(
-            "Failed to parse sensitivity cache %s: %s — returning empty dict",
+            "Failed to parse sensitivity router %s file %s: %s — returning empty dict",
+            label,
             path,
             exc,
         )
@@ -55,8 +57,8 @@ def _load_json(path: Path) -> dict:
 
 
 # 모듈 로드 시점에 캐시 읽기 (FastAPI startup과 동일 시점)
-_SENSITIVITY_CACHE: dict[str, Any] = _load_json(_CACHE_PATH)
-_CORRELATIONS: dict[str, float] = _load_json(_CORR_PATH)
+_SENSITIVITY_CACHE: dict[str, Any] = _load_json(_CACHE_PATH, label="sensitivity cache")
+_CORRELATIONS: dict[str, float] = _load_json(_CORR_PATH, label="feature correlations")
 
 
 class SensitivityResponse(BaseModel):

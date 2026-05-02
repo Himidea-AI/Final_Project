@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
@@ -10,8 +11,12 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 _ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_BACKEND = _ROOT / "backend"
+for _p in (_ROOT, _BACKEND):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
+from src.api.sensitivity import _load_json  # noqa: E402
 
 from models.tcn_forecast.sensitivity import (  # noqa: E402
     PERTURBATION_LEVELS,
@@ -236,16 +241,6 @@ def test_sensitivity_endpoint_404_for_unknown_combo(monkeypatch, tmp_path):
 
 def test_load_json_missing_file_logs_warning(tmp_path, caplog):
     """존재하지 않는 경로 → 빈 dict 반환 + warning 로그."""
-    import logging
-    import sys
-    from pathlib import Path
-
-    _BACKEND = Path(__file__).resolve().parents[1] / "backend"
-    if str(_BACKEND) not in sys.path:
-        sys.path.insert(0, str(_BACKEND))
-
-    from src.api.sensitivity import _load_json
-
     missing = tmp_path / "does_not_exist.json"
     with caplog.at_level(logging.WARNING, logger="src.api.sensitivity"):
         result = _load_json(missing)
@@ -257,16 +252,6 @@ def test_load_json_missing_file_logs_warning(tmp_path, caplog):
 
 def test_load_json_invalid_json_logs_error(tmp_path, caplog):
     """깨진 JSON 파일 → 빈 dict 반환 + error 로그."""
-    import logging
-    import sys
-    from pathlib import Path
-
-    _BACKEND = Path(__file__).resolve().parents[1] / "backend"
-    if str(_BACKEND) not in sys.path:
-        sys.path.insert(0, str(_BACKEND))
-
-    from src.api.sensitivity import _load_json
-
     broken = tmp_path / "broken.json"
     broken.write_text("{not valid json", encoding="utf-8")
 
