@@ -37,6 +37,12 @@ class SimulationInput(BaseModel):
         default=None, description="CS 업종 코드 필터 (예: CS100010). 미지정 시 전체 업종."
     )
 
+    # 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 계산 트리거
+    lat: float | None = Field(
+        default=None, description="출점 후보지 위도 (학교 거리 룰 트리거)"
+    )
+    lon: float | None = Field(default=None, description="출점 후보지 경도")
+
     # [customer_revenue P1-C] 타겟 고객 프로필 — models/customer_revenue/predict.py 입력
     # 값은 SegmentProfile 스펙 그대로 (age: "30대", time: "time_11_14", day: "weekday|weekend")
     target_age_groups: list[str] = Field(

@@ -532,6 +532,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
     legal_risks_raw = analysis.get("legal_risks") or []
 
     # 벌칙 조문 자동 매핑 — 캐시/비캐시 모두 대응 (legal_node 내부 캐시 경유 시에도 적용)
+    from src.agents.legal.categories import get_legal_group
     from src.agents.nodes.legal import _enrich_penalty_info
 
     _enrich_penalty_info(legal_risks_raw)
@@ -542,6 +543,8 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
             "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(
                 r.get("level", "safe").lower(), "LOW"
             ),
+            # 입지(location) vs 운영(operation) 그룹 — frontend 분리 UI 에서 사용
+            "group": get_legal_group(r.get("type", "")),
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
             "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
