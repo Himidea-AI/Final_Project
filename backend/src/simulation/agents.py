@@ -135,6 +135,9 @@ class Agent:
     # v11 (2026-04) — 인간다움 Layer 2 (기억) / Layer 3 (내부상태) / Layer 5 (소셜)
     # Layer 2: 장기 방문 이력 — 재방문 패턴·학습
     visit_history: list[dict] = field(default_factory=list)
+    # store_id → (sum, count) — recall_satisfaction O(N) 스캔 회피용 incremental index.
+    # cProfile 측정 시 recall_satisfaction 1.92s tottime / 2.3M call → 거의 0s.
+    _satisfaction_idx: dict[int, tuple[float, int]] = field(default_factory=dict)
     # [{"day": int, "hour": int, "store_id": int, "category": str, "satisfaction": float}]
     learned_prefs: dict[str, float] = field(default_factory=dict)  # category → 0~1 학습 선호
     blacklist: set[int] = field(default_factory=set)  # 만족도 <0.2 매장 ID
@@ -178,15 +181,19 @@ class Agent:
     # -----------------------------------------------------------
     def record_visit(self, day: int, hour: int, store_id: int, category: str, satisfaction: float) -> None:
         """방문 기록 — visit_history append + learned_prefs 업데이트 + blacklist 체크."""
+        sat_round = round(satisfaction, 3)
         self.visit_history.append(
             {
                 "day": day,
                 "hour": hour,
                 "store_id": store_id,
                 "category": category,
-                "satisfaction": round(satisfaction, 3),
+                "satisfaction": sat_round,
             }
         )
+        # incremental satisfaction index — recall_satisfaction O(1) 조회용
+        prev_s, prev_c = self._satisfaction_idx.get(store_id, (0.0, 0))
+        self._satisfaction_idx[store_id] = (prev_s + sat_round, prev_c + 1)
         # 카테고리 학습 (exponential moving average, α=0.3)
         prev = self.learned_prefs.get(category, 0.5)
         self.learned_prefs[category] = round(0.7 * prev + 0.3 * satisfaction, 3)
@@ -197,14 +204,18 @@ class Agent:
         recent_same = [v for v in self.visit_history[-20:] if v["hour"] == hour and v["store_id"] == store_id]
         if len(recent_same) >= 3:
             self.habit_store[hour] = store_id
-        # 히스토리 캡 (최근 100건만 유지)
+        # 히스토리 캡 (최근 100건만 유지) — index 는 cap 안 함 (over-counting 영향 미미,
+        # blacklist 와 동일 원칙. 매일 reset 안 됨 — multi-day 시뮬에서 학습 누적).
         if len(self.visit_history) > 100:
             self.visit_history = self.visit_history[-100:]
 
     def recall_satisfaction(self, store_id: int) -> float | None:
-        """해당 store 의 누적 만족도 평균 (없으면 None)."""
-        recs = [v["satisfaction"] for v in self.visit_history if v["store_id"] == store_id]
-        return sum(recs) / len(recs) if recs else None
+        """해당 store 의 누적 만족도 평균 (없으면 None). O(1) 인덱스 lookup."""
+        rec = self._satisfaction_idx.get(store_id)
+        if not rec:
+            return None
+        s, c = rec
+        return s / c if c > 0 else None
 
     # -----------------------------------------------------------
     # Layer 3: 내부 상태 업데이트
@@ -232,6 +243,11 @@ class Agent:
         self.spent_today = 0.0
         self.budget_left_today = self.budget_today
         self.visited_today = []
+        # daily_plan 도 일별 갱신 — runner.py 가 measurement 일 시작 시 재생성.
+        # 미초기화 시 Day2 부터 전날 plan 시간 슬롯이 wrong hour 매칭 (review HIGH-1).
+        self.daily_plan = []
+        # friend_visits 자정 누적 방지 — 어제 visit 이 오늘 peer influence 로 잘못 활용.
+        self.friend_visits = []
 
     # -----------------------------------------------------------
     # 의사결정 라우터 - tier에 따라 다른 경로

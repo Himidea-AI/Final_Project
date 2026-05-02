@@ -39,6 +39,11 @@ class Scheduler:
     ):
         self.world = world
         self.agents = agents
+        # peer influence O(1) lookup — policy_executor.py:1220 friend resolution.
+        # 이전: O(N) `next((a for a in world.agents if a.agent_id == fid), None)` —
+        # 5000 agents × 5 friends × 24h = 600K linear scan (review HIGH-2 fix).
+        world.agents = agents
+        world.agent_by_id = {a.agent_id: a for a in agents}
         self.rng = random.Random(seed)
         self.hours_map = hours_map
         self.llm_concurrency = max(1, llm_concurrency)
@@ -240,6 +245,12 @@ class Scheduler:
         self.world.weekday = (self.world.weekday + 1) % 7
         self.world.is_weekend = self.world.weekday in (5, 6)
         for a in self.agents:
+            # 예산 갱신 — reset_daily 가 다루지 않는 일별 saving/spending dynamics.
             a.budget_today = max(15000, a.budget_today * 0.5 + 30000)
-            a.spent_today = 0
-            a.visited_today.clear()
+            # Agent.reset_daily 위임 — hunger / fatigue 계산 위해 단발성 필드 모두 리셋.
+            # 이전 budget/spent/visited 만 처리 → daily_plan / friend_visits / hunger /
+            # busy_until_hour 잔존으로 multi-day 시뮬 drift (review H-1 fix).
+            a.reset_daily()
+            # 체류·이동 lock — 자정 넘긴 값 carryover 방지 (Day2 06시에 busy=25 등).
+            a.busy_until_hour = -1
+            a.in_transit_until = -1

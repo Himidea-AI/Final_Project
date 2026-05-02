@@ -1103,10 +1103,15 @@ def policy_decide(
             return Decision(action="work", target_dong=agent.home_dong)
         return Decision(action="rest")
 
-    # 1. 정책 조회 — weather 키 정규화 (약한비 → 비, 기본 → 맑음)
-    weather_key = world.weather if world.weather in ("맑음", "비", "눈") else "맑음"
-    if weather_key == "눈":
-        weather_key = "비"  # 눈은 비 정책 공유 (§3 스펙)
+    # 1. 정책 조회 — weather 키 정규화.
+    # 매핑: 비/눈 → "비" 정책. 그 외 (맑음/흐림/약한비/기타) → "맑음".
+    # 주의: "약한비" 는 별도 정책이 없어 맑음 정책으로 fallback. GameMaster.adjust 가
+    # 별도로 mobility 감쇠 적용. (이전 주석 "약한비 → 비" 는 코드와 모순. 정정.)
+    raw = world.weather
+    if raw in ("비", "눈"):
+        weather_key = "비"
+    else:
+        weather_key = "맑음"
     tb = hour_to_time_block(h)
     # v2: role × weather × time_block 키 우선 조회, 없으면 role × weather fallback
     policy_key_v2 = f"{agent.role.value}_{weather_key}_{tb}"
@@ -1167,8 +1172,11 @@ def policy_decide(
     # 이전 30% 일괄 적용은 1-2시간 모두 동일 → 시간 decay 미반영 회귀 fix.
     friend_store = None
     if agent.friend_visits:
-        # 1시간 내 / 1~2시간 별도 분류
-        fresh_1h = [(sid, fh) for sid, fh in agent.friend_visits if (h - fh) <= 1]
+        # 1시간 내 / 1~2시간 별도 분류.
+        # 자정 경계 (예: h=1, fh=23 → diff=-22) 음수 처리 — 어제 방문이
+        # "1시간 내" 로 잘못 분류되던 버그 fix. 음수는 reset_daily 로 정리되지만
+        # 경계 시각에 잔존 가능 → 0 <= diff 가드 추가.
+        fresh_1h = [(sid, fh) for sid, fh in agent.friend_visits if 0 <= (h - fh) <= 1]
         fresh_2h = [(sid, fh) for sid, fh in agent.friend_visits if 1 < (h - fh) <= 2]
         chosen = None
         if fresh_1h and rng.random() < 0.25:
@@ -1215,9 +1223,12 @@ def policy_decide(
     prev = agent.store_satisfaction.get(store.store_id, 0.3)
     agent.store_satisfaction[store.store_id] = 0.7 * prev + 0.3 * new_sat
 
-    # Realism: 친구들에게 이 방문을 알림 (peer influence)
-    for fid in agent.friends[:5]:  # 상위 5명 친구에게만 (계산 비용 제어)
-        friend = next((a for a in world.agents if a.agent_id == fid), None)
+    # Realism: 친구들에게 이 방문을 알림 (peer influence).
+    # world.agent_by_id 가 있으면 O(1), 없으면 list scan O(N) fallback.
+    # 5000 agents × 5 friends × 24h = 600K hash lookup (이전 linear scan).
+    by_id = getattr(world, "agent_by_id", None)
+    for fid in agent.friends[:5]:  # 상위 5명 친구에게만
+        friend = by_id.get(fid) if by_id else next((a for a in world.agents if a.agent_id == fid), None)
         if friend is not None:
             friend.friend_visits.append((store.store_id, h))
             # 최근 10개만 유지

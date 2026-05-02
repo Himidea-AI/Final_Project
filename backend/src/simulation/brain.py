@@ -33,6 +33,45 @@ from .personas import Persona
 # 옵션: ABM_LANGCHAIN_PROJECT 환경변수로 별도 프로젝트 분리도 가능 (기본 None=같은 프로젝트).
 ABM_LS_PROJECT = os.getenv("ABM_LANGCHAIN_PROJECT") or None
 
+def _slim_inputs(inputs: dict) -> dict:
+    """LangSmith @traceable input filter — World/Agent 통째 직렬화 회피.
+
+    cProfile 측정 시 langsmith repr/json.dumps 가 16x 슬로우다운 (5000 agents
+    + 3592 stores 객체를 매 호출마다 직렬화). 핵심 식별자만 노출:
+      - agent: agent_id / role / tier
+      - world: hour / weekday / weather (식별 가능 minimal)
+      - 그 외 dict / list / primitive 는 그대로 전달
+    """
+    slim: dict = {}
+    for k, v in inputs.items():
+        if k == "self":
+            continue
+        cls_name = type(v).__name__
+        if cls_name == "World":
+            slim[k] = {
+                "hour": getattr(v, "current_hour", None),
+                "weekday": getattr(v, "weekday", None),
+                "weather": getattr(v, "weather", None),
+                "is_weekend": getattr(v, "is_weekend", None),
+            }
+        elif cls_name == "Agent":
+            slim[k] = {
+                "agent_id": getattr(v, "agent_id", None),
+                "role": str(getattr(v, "role", "")),
+                "tier": str(getattr(v, "tier", "")),
+                "current_dong": getattr(v, "current_dong", None),
+            }
+        elif isinstance(v, list) and v and type(v[0]).__name__ == "Agent":
+            # batch — agent_id 만 노출, agent 객체 직렬화 회피
+            slim[k] = {
+                "n_agents": len(v),
+                "agent_ids": [getattr(a, "agent_id", None) for a in v[:10]],
+            }
+        else:
+            slim[k] = v
+    return slim
+
+
 try:
     from langsmith import traceable as _ls_traceable
 
@@ -40,6 +79,9 @@ try:
         # 환경변수로 별도 프로젝트 명시한 경우에만 라우팅
         if ABM_LS_PROJECT and "project_name" not in dkwargs:
             dkwargs["project_name"] = ABM_LS_PROJECT
+        # 기본 input slim — 호출자가 별도 process_inputs 전달 시 그대로 사용.
+        if "process_inputs" not in dkwargs:
+            dkwargs["process_inputs"] = _slim_inputs
         return _ls_traceable(*dargs, **dkwargs)
 except Exception:
 
@@ -123,6 +165,9 @@ class LLMBrain:
         self._openai = None
         self._ollama = None
         self.memory_index = memory_index
+        # 사용자 시나리오 (신규 매장 등) — runner.py 가 sim 시작 시 주입.
+        # plan/decide/thought prompt 에 시나리오 컨텍스트 반영해 입력별 결과 분기.
+        self.scenario_context: dict | None = None
 
         # provider 자동 다운그레이드: 키 없으면 openai → mock 순으로 fallback
         self._auto_downgrade()
@@ -546,7 +591,9 @@ class LLMBrain:
             try:
                 text_one = json.dumps(item, ensure_ascii=False)
                 dec = self._parse_decision(text_one, a, world)
-            except Exception:
+            except Exception as e:
+                # silent fallback 이전 → 어느 agent 가 실패했는지 추적 가능 (review #5).
+                print(f"[brain.S/batch] agent {a.agent_id} parse 실패: {e}")
                 dec = self._mock_decide(a, world, tier="S")
             results.append((a.agent_id, dec))
         return results
@@ -587,16 +634,37 @@ class LLMBrain:
 
         wkd_label = "주말" if getattr(world, "is_weekend", False) else "평일"
         weather = getattr(world, "weather", "맑음")
+
+        # 시나리오 신규 매장 컨텍스트 — 사용자 입력 (district/category/brand) 가
+        # 매 실행마다 다르므로 prompt 에 명시해야 plan 결과 분기. 미주입 시 일반 plan.
+        scenario_block = ""
+        sc = getattr(self, "scenario_context", None)
+        if sc:
+            ns_brand = sc.get("brand") or "신규 매장"
+            ns_dong = sc.get("district") or sc.get("dong") or "?"
+            ns_cat = sc.get("category") or "음식점"
+            ns_target = sc.get("main_target_age") or ""
+            ns_peak = sc.get("peak_time") or ""
+            ns_boost = sc.get("popularity_boost") or 1.0
+            scenario_block = (
+                f"\n\n[오늘 신규 오픈] {ns_dong} '{ns_brand}' ({ns_cat}, popularity_boost={ns_boost})."
+                + (f" 주 타겟: {ns_target}." if ns_target else "")
+                + (f" 피크: {ns_peak}." if ns_peak else "")
+                + " 해당 카테고리 선호 + 인근 동 거주/근무 agent 는 호기심에 1회 방문 자연스럽게 포함."
+            )
+
         user_prompt = (
             "\n".join(user_blocks)
-            + f"\n\n오늘={wkd_label}, 날씨={weather}. "
-            + "각 agent 의 하루 일정을 6시~26시 (=익일 02시) 시간 슬롯으로 생성. "
+            + f"\n\n오늘={wkd_label}, 날씨={weather}."
+            + scenario_block
+            + "\n각 agent 의 하루 일정을 6시~26시 (=익일 02시) 시간 슬롯으로 생성. "
             + 'JSON {"plans":[{"agent_id":int,"schedule":[{"start":int,"end":int,"action":str,'
             + '"dong":str,"category":str|null,"reason":"30자 fragment"}]}]}.\n'
             + "action: work|visit|rest|move 중 하나.\n"
             + "category (visit 슬롯만): 카페|음식점|편의점|주점.\n"
             + "agent 페르소나·home_dong 반영. 점심·저녁·휴식 자연스럽게 분배. "
-            + "슬롯 6~10개. 시간 겹치지 않게 연속 배치. 같은 카테고리 3회 이상 반복 금지."
+            + "슬롯 6~8개. reason 20자 이내. dong 짧게. "
+            + "시간 겹치지 않게 연속 배치. 같은 카테고리 3회 이상 반복 금지."
         )
         system_prompt = (
             "마포구 ABM 시뮬레이터. N명 페르소나의 하루 일정을 시간 슬롯으로 한 번에 생성. "
@@ -606,8 +674,9 @@ class LLMBrain:
 
         # plan 호출도 stat 카운트 — 토큰 추적용
         self.stats.tier_s_calls += len(agents)
-        # plan 1개 당 ~400 tok 응답 가정. 헤드 200 tok 여유.
-        max_out = min(8192, 400 * len(agents) + 200)
+        # 1 agent 당 8 슬롯 × ~80 tok = 640 tok 응답. JSON wrapper + 여유 600 tok.
+        # 이전 4200 cap → "Unterminated string" 절단 발생. 16000 으로 안전마진.
+        max_out = min(16000, 700 * len(agents) + 600)
 
         try:
             resp = self._openai.chat.completions.create(
@@ -631,26 +700,44 @@ class LLMBrain:
             return {}
 
     def _parse_daily_plans(self, text: str, agents: list["Agent"]) -> dict[int, list[dict]]:
-        """plan JSON → agent_id → 슬롯 list. 잘못된 슬롯은 skip."""
+        """plan JSON → agent_id → 슬롯 list. 잘못된 슬롯은 skip.
+
+        truncation 복구: max_tokens cap 도달 시 응답 끝이 `"reason":"...`
+        형태로 잘림 → 마지막 완성된 `]}` (= schedule 닫힘) 직후로 자르고 wrapper 재구성.
+        """
         items: list = []
-        try:
-            data = json.loads(text)
+
+        def _try_parse(t: str):
+            data = json.loads(t)
             if isinstance(data, dict):
                 for k in ("plans", "agents", "schedules"):
                     v = data.get(k)
                     if isinstance(v, list):
-                        items = v
-                        break
-                else:
-                    for v in data.values():
-                        if isinstance(v, list):
-                            items = v
-                            break
+                        return v
+                for v in data.values():
+                    if isinstance(v, list):
+                        return v
             elif isinstance(data, list):
-                items = data
+                return data
+            return []
+
+        try:
+            items = _try_parse(text)
         except Exception as e:
-            print(f"[brain.S/plan] JSON parse 실패: {e}")
-            return {}
+            # 1차 실패 - truncation 복구 시도 (max_tokens cap 도달 시)
+            last_close = text.rfind("]}")
+            if last_close > 0:
+                # 마지막 완성된 schedule 까지 + wrapper 강제 닫기
+                repaired = text[: last_close + 2] + "]}"
+                try:
+                    items = _try_parse(repaired)
+                except Exception as e2:
+                    print(f"[brain.S/plan] JSON parse 실패 (recovery 시도 후): {e2}")
+                    return {}
+                print(f"[brain.S/plan] truncation recovery OK at char {last_close}")
+            else:
+                print(f"[brain.S/plan] JSON parse 실패: {e}")
+                return {}
 
         valid_actions = {"visit", "move", "rest", "work"}
         valid_cats = {"카페", "음식점", "편의점", "주점", None}
@@ -674,7 +761,10 @@ class LLMBrain:
                     end = int(slot.get("end", -1))
                 except (TypeError, ValueError):
                     continue
-                if start < 0 or end <= start or end > 30:
+                # prompt 가 6시~26시 명시 → start<6 또는 end>26 슬롯은 폐기.
+                # 이전 start<0 / end>30 만 차단 → 시뮬 hour 범위 (보통 6~22) 밖
+                # 슬롯이 silent miss 됨 (review #8 fix).
+                if start < 6 or end <= start or end > 26:
                     continue
                 action = slot.get("action", "rest")
                 if action not in valid_actions:
@@ -700,6 +790,179 @@ class LLMBrain:
                 out[aid] = valid_slots
         return out
 
+    # -----------------------------------------------------------
+    # Thought batch — N agents 1 LLM call (10x 호출 절감)
+    # 기존: 50 agents × 16h = 800 단발 호출
+    # 신: 50/10 = 5 batch × 16h = 80 호출
+    # -----------------------------------------------------------
+    BATCH_SIZE_THOUGHT = 10
+
+    def generate_thoughts_batch(self, agents: list["Agent"], world: "World") -> dict[int, str]:
+        """N agents thought 를 batch (10/call) 동시 호출. agent_id → 12자 문장.
+
+        chunk 5개 (50 agents) 를 asyncio.gather 로 병렬 실행.
+        sequential 5 × 1.5s = 7.5s/hour → parallel ~1.5s/hour.
+        16h sim 기준 150s → 30s 절감.
+        """
+        if not agents:
+            return {}
+        if self.cfg.mock_mode or self._openai is None:
+            hour = getattr(world, "current_hour", 0) % 24
+            return {
+                a.agent_id: self._thought_template_fallback(
+                    getattr(a, "persona_id", "office_worker") or "office_worker", hour
+                )
+                for a in agents
+            }
+
+        import asyncio as _aio
+
+        chunks = [
+            agents[i : i + self.BATCH_SIZE_THOUGHT]
+            for i in range(0, len(agents), self.BATCH_SIZE_THOUGHT)
+        ]
+
+        hour_for_fb = getattr(world, "current_hour", 0) % 24
+
+        def _chunk_fallback(chunk: list["Agent"]) -> dict[int, str]:
+            return {
+                a.agent_id: self._thought_template_fallback(
+                    getattr(a, "persona_id", "office_worker") or "office_worker", hour_for_fb
+                )
+                for a in chunk
+            }
+
+        async def _run_all() -> dict[int, str]:
+            # OpenAI Tier 1 RPM=500 보호. 5 chunk + decision/plan 동시 사용 고려해 8 cap.
+            sem = _aio.Semaphore(8)
+
+            async def _bounded(chunk):
+                async with sem:
+                    try:
+                        return await _aio.to_thread(self._generate_thoughts_openai, chunk, world)
+                    except Exception as e:
+                        # chunk 1개 실패 → 시뮬 abort 방지. template fallback.
+                        print(f"[brain.thought.batch] chunk 실패 ({len(chunk)} agents): {e}")
+                        return _chunk_fallback(chunk)
+
+            # return_exceptions=False 이지만 _bounded 가 모든 예외를 swallow → 안전.
+            results = await _aio.gather(*[_bounded(c) for c in chunks])
+            merged: dict[int, str] = {}
+            for r in results:
+                merged.update(r)
+            return merged
+
+        try:
+            return _aio.run(_run_all())
+        except RuntimeError as e:
+            # FastAPI/Jupyter event loop 안에서 호출된 케이스만 좁혀 처리.
+            msg = str(e)
+            if "running event loop" not in msg and "no current event loop" not in msg:
+                raise
+            loop = _aio.new_event_loop()
+            try:
+                return loop.run_until_complete(_run_all())
+            finally:
+                loop.close()
+
+    @traceable(run_type="llm", name="brain.thought.batch.openai")
+    def _generate_thoughts_openai(self, agents: list["Agent"], world: "World") -> dict[int, str]:
+        hour = getattr(world, "current_hour", 0) % 24
+        weather = getattr(world, "weather", "맑음")
+
+        user_blocks: list[str] = []
+        for a in agents:
+            archetype = getattr(a, "persona_id", "office_worker") or "office_worker"
+            mood_label = "high" if a.mood > 0.66 else "low" if a.mood < 0.33 else "neutral"
+            hunger = round(a.hunger, 2)
+            current_dong = getattr(a, "current_dong", None) or getattr(a, "home_dong", None) or "마포"
+            if current_dong == "외부":
+                current_dong = getattr(a, "home_dong", None) or "마포"
+            user_blocks.append(
+                f"#{a.agent_id} archetype={archetype} hour={hour} weather={weather} "
+                f"mood={mood_label} hunger={hunger} dong={current_dong}"
+            )
+
+        user_prompt = (
+            "\n".join(user_blocks)
+            + '\n\n각 #id 마다 12자 한국어 1문장. JSON {"thoughts":[{"agent_id":int,"thought":str}]}.'
+        )
+
+        # 1 thought ≈ 30 tok 응답. 헤드 + JSON overhead 200 tok 여유.
+        max_out = min(8000, 30 * len(agents) + 200)
+
+        try:
+            resp = self._openai.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {"role": "system", "content": _THOUGHT_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=max_out,
+                temperature=1.2,
+                response_format={"type": "json_object"},
+            )
+            text = resp.choices[0].message.content or ""
+            usage = resp.usage
+            # N 단발 등가 — stat 비교 시 1 batch ≠ N call 헷갈림 방지 위해 N 으로 카운트
+            self.stats.thought_calls += len(agents)
+            if usage:
+                self.stats.thought_input_tokens += usage.prompt_tokens
+                self.stats.thought_output_tokens += usage.completion_tokens
+                cached_obj = getattr(usage, "prompt_tokens_details", None)
+                cached_n = getattr(cached_obj, "cached_tokens", 0) if cached_obj else 0
+                self.stats.thought_cache_read += cached_n
+            return self._parse_thoughts(text, agents, hour)
+        except Exception as e:
+            print(f"[brain.thought.batch] 실패: {e}")
+            self.stats.failures += 1
+            return {
+                a.agent_id: self._thought_template_fallback(
+                    getattr(a, "persona_id", "office_worker") or "office_worker", hour
+                )
+                for a in agents
+            }
+
+    def _parse_thoughts(self, text: str, agents: list["Agent"], hour: int) -> dict[int, str]:
+        """thought batch JSON → agent_id → 문장. 누락/파싱실패는 template fallback."""
+        out: dict[int, str] = {}
+        items: list = []
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                for k in ("thoughts", "results", "items"):
+                    v = data.get(k)
+                    if isinstance(v, list):
+                        items = v
+                        break
+                else:
+                    for v in data.values():
+                        if isinstance(v, list):
+                            items = v
+                            break
+            elif isinstance(data, list):
+                items = data
+        except Exception as e:
+            print(f"[brain.thought.batch] JSON parse 실패: {e}")
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                aid = int(item.get("agent_id"))
+            except (TypeError, ValueError):
+                continue
+            thought = (item.get("thought") or "").strip()
+            if thought:
+                out[aid] = thought[:60]
+
+        # 누락 agent → template fallback
+        for a in agents:
+            if a.agent_id not in out:
+                arch = getattr(a, "persona_id", "office_worker") or "office_worker"
+                out[a.agent_id] = self._thought_template_fallback(arch, hour)
+        return out
+
     def decision_from_plan_slot(self, agent: "Agent", world: "World", slot: dict) -> "Decision":
         """plan 슬롯 → Decision 변환 (LLM 호출 X)."""
         action = slot.get("action", "rest")
@@ -712,7 +975,11 @@ class LLMBrain:
         if action == "visit" and cat:
             stores = world.stores_in_dong(target_dong, cat)
             if stores:
-                store = max(stores, key=lambda s: s.rating)
+                # 가중 선택: rating × popularity_boost (최소 0 clamp).
+                # 이전 max(rating) 만 → 신규 매장 popularity_boost 무시되어 입력 시나리오
+                # 변화에도 동일 매장 선택. agents.py:435 weighted random 과 일관.
+                # boost ≤ 0 인 데이터 오류 시 max 가 첫 항목 반환 / 음수면 역전 → clamp.
+                store = max(stores, key=lambda s: s.rating * max(0.0, getattr(s, "popularity_boost", 1.0)))
                 store_id = store.store_id
                 # 카테고리별 기본 지출 추정
                 spend = float(getattr(store, "avg_price", 0) or 8000)
@@ -908,6 +1175,10 @@ class LLMBrain:
             data = json.loads(m.group())
             action = data.get("action", "rest")
             cat = data.get("category")
+            # cat="" 정규화 — _parse_daily_plans 와 일관. visit + cat="" 는 store
+            # 미해결되어 silent drop 되던 버그 → action="rest" 로 명시 폴백.
+            if cat == "":
+                cat = None
             spend = float(data.get("spend") or 0)
             reason = data.get("reason", "")[:100]
             target_dong = data.get("target_dong") or agent.current_dong
@@ -916,8 +1187,12 @@ class LLMBrain:
             if action == "visit" and cat:
                 stores = world.stores_in_dong(target_dong, cat)
                 if stores:
-                    store = max(stores, key=lambda s: s.rating)
+                    # popularity_boost 가중 — decision_from_plan_slot 와 일관.
+                    store = max(stores, key=lambda s: s.rating * max(0.0, getattr(s, "popularity_boost", 1.0)))
                     store_id = store.store_id
+            if action == "visit" and not cat:
+                # category 누락된 visit → rest fallback (apply_decision 무시 대신 명시).
+                action = "rest"
 
             return Decision(
                 action=action,
@@ -926,7 +1201,10 @@ class LLMBrain:
                 spend=spend,
                 reason=reason,
             )
-        except Exception:
+        except Exception as e:
+            # silent fallback 이전 → 어느 agent / 어떤 LLM 응답에서 실패했는지 추적 불가.
+            # _parse_decision 은 Tier S/A 모든 경로의 최종 파서라 디버깅 가시성 필수.
+            print(f"[brain._parse_decision] agent {agent.agent_id} 실패: {e}")
             return self._mock_decide(agent, world, tier="P")
 
     # -----------------------------------------------------------
