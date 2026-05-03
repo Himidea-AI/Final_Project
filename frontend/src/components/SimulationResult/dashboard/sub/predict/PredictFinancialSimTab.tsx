@@ -11,6 +11,7 @@ import { BepCumulativeProfitChart } from '../../charts/BepCumulativeProfitChart'
 import { ClosureRatePanel } from '../../charts/ClosureRatePanel';
 import { ClosureRiskHeatmap } from '../../charts/ClosureRiskHeatmap';
 import { ClosureRiskPanel } from '../../charts/ClosureRiskPanel';
+import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
 
 interface Props {
   simResult: SimulationOutput;
@@ -44,23 +45,34 @@ export function PredictFinancialSimTab({ simResult }: Props) {
 
   return (
     <div className="space-y-6">
-      <ProfitSimulationPanelFull
-        monthlyRev={monthlyRev}
-        monthlyCost={monthlyCost}
-        netProfit={netProfit}
-        margin={margin}
-        bepMonths={bepMonths}
-      />
-
-      {hasAnyProjection && (
-        <div className="rounded-3xl border border-border bg-card p-8">
-          <div className="mb-8 flex items-start justify-between gap-6">
-            <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
-              <TrendingUp className="text-primary" /> 투자 회수 곡선
-            </h3>
+      {/* 좌:우 = 6:4 (투자 회수 곡선 시각 anchor 우위, 상세 수익성 KPI 박스 보조).
+          hasAnyProjection==false 시 우측 패널만 풀 폭. lg 미만 (mobile/tablet) 세로 stack. */}
+      {hasAnyProjection ? (
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[6fr_4fr]">
+          <div className="rounded-3xl border border-border bg-card p-8">
+            <div className="mb-8 flex items-start justify-between gap-6">
+              <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
+                <TrendingUp className="text-primary" /> 투자 회수 곡선
+              </h3>
+            </div>
+            <BepCumulativeProfitChart series={bepSeries} />
           </div>
-          <BepCumulativeProfitChart series={bepSeries} />
+          <ProfitSimulationPanelFull
+            monthlyRev={monthlyRev}
+            monthlyCost={monthlyCost}
+            netProfit={netProfit}
+            margin={margin}
+            bepMonths={bepMonths}
+          />
         </div>
+      ) : (
+        <ProfitSimulationPanelFull
+          monthlyRev={monthlyRev}
+          monthlyCost={monthlyCost}
+          netProfit={netProfit}
+          margin={margin}
+          bepMonths={bepMonths}
+        />
       )}
 
       {dpredicts.length > 0 ? (
@@ -87,11 +99,12 @@ export function PredictFinancialSimTab({ simResult }: Props) {
               </h3>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {dpredicts.map((p) => (
+              {dpredicts.map((p, idx) => (
                 <ClosureRatePanel
                   key={p.district}
                   district={p.district}
                   rate={p.closure_rate as ClosureRate | null}
+                  color={SERIES_COLORS[idx % SERIES_COLORS.length]}
                 />
               ))}
             </div>
