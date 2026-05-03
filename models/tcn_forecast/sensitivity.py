@@ -93,7 +93,7 @@ def compute_correlations(df: pd.DataFrame) -> dict[str, float]:
     Returns
     -------
     dict[str, float]
-        {"floating_pop→rent_1f": 0.63, ...} 형태의 상관계수 딕셔너리.
+        {"vacancy_rate→cpi_index": 0.43, ...} 형태의 상관계수 딕셔너리.
         소수점 4자리 반올림.
     """
     result: dict[str, float] = {}

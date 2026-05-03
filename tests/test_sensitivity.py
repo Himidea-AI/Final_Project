@@ -102,6 +102,7 @@ def test_quarter_values_cover_all_quarters():
 def test_slider_features_has_four_sliders():
     assert set(SLIDER_FEATURES.keys()) == {"vacancy_rate", "trend_score", "cpi_index", "opr_sale_mt_avg"}
     assert SLIDER_FEATURES["vacancy_rate"] == ["vacancy_rate"]
+    assert SLIDER_FEATURES["trend_score"] == ["trend_score"]
     assert SLIDER_FEATURES["cpi_index"] == ["cpi_index"]
     assert SLIDER_FEATURES["opr_sale_mt_avg"] == ["opr_sale_mt_avg"]
 
