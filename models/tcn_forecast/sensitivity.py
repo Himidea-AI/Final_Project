@@ -330,7 +330,6 @@ def run_batch(
         # 기준 예측 (delta=0) — 4분기 list 반환
         baseline_q_raw = perturb_and_predict(seq_scaled, [], 0.0, model, tgt_scaler, device)
         baseline_q = [round(v, 0) for v in baseline_q_raw]
-        baseline_total = sum(baseline_q_raw)
 
         elasticity: dict[str, dict] = {}
 
@@ -371,8 +370,7 @@ def run_batch(
             elasticity["quarter_num"] = q_results
 
         cache[f"{dong_code}_{industry_code}"] = {
-            "baseline_sales": baseline_q,
-            "baseline_total": round(baseline_total, 0),
+            "baseline": baseline_q,
             "elasticity": elasticity,
         }
 
