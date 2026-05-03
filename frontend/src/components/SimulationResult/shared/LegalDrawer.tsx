@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { LegalChecklistItem } from '../../../types';
 
 const STORAGE_PREFIX = 'legal-checklist-v1:';
@@ -82,7 +83,8 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
     };
   }, [open, onClose]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <AnimatePresence>
       {open && risk && (
         <>
@@ -90,7 +92,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/50"
+            className="fixed inset-0 z-30 bg-black/50"
             onClick={onClose}
           />
           <motion.div
@@ -101,9 +103,9 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="legal-drawer-title"
-            className="fixed right-0 top-0 z-50 h-full w-full max-w-[480px] overflow-y-auto bg-card border-l border-border"
+            className="fixed right-0 top-20 bottom-0 z-40 flex w-full max-w-[480px] flex-col bg-card border-l border-border shadow-2xl"
           >
-            <div className="flex items-start justify-between border-b border-border p-6">
+            <div className="flex shrink-0 items-start justify-between border-b-2 border-border bg-card p-6 shadow-sm">
               <div>
                 <h2 id="legal-drawer-title" className="text-xl font-semibold text-foreground">
                   {risk.type}
@@ -123,7 +125,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-6">
               {/* 1. 평가 요약 — 사용자 친화 케이스 맞춤 1~2문장 (primary) */}
               {risk.summary && (
                 <section>
@@ -289,6 +291,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
