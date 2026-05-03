@@ -1,10 +1,19 @@
 """
 TCN 시계열 추론 — 특정 동x업종의 향후 n분기 매출 예측
 
-DMS(Direct Multi-Step) 예측:
-- window_size 분기 입력 → 4분기 동시 출력 (오차 누적 없음)
-- n_quarters 파라미터는 하위 호환을 위해 유지하나 현재 구현에서는 항상 4 반환.
-- 신뢰구간: val residual std 기반 (residual_std_path pkl 로드)
+추론 모드 (config["output_size"] 로 결정):
+- output_size == 1 (자기회귀, v3 기본값):
+    1분기씩 예측 → 직전 예측값을 입력에 재주입 → n_quarters 반복.
+    분기별 변동성 보존(평탄화 회피). 단, step마다 오차가 누적될 수 있음.
+- output_size >= n_quarters (DMS, v2 legacy):
+    한 번의 forward로 n_quarters 동시 출력. 오차 누적 없음.
+    단, 회귀 평균(mean reversion)으로 분기 차이가 평탄화되는 경향.
+
+신뢰구간:
+- val residual std (`residual_std_path` pkl) 기반.
+- 자기회귀(output_size=1) 모델은 학습 시 측정 가능한 step 수가 1개라 Q1 std 만 저장됨.
+  → Q2~Q4는 predict() 내부 fallback (분기 진행에 따라 ±3%/±6%/±9% 등 점진 확장) 사용.
+- 향후 개선 여지: val 셋에서 자기회귀 4-step rollout 측정으로 4-element residual_std 저장.
 
 담당: B2 — 수지니
 """
@@ -42,15 +51,16 @@ _MODEL_CACHE: dict = {}
 
 DEFAULT_PREDICT_CONFIG: dict = {
     "db_url": DB_URL,
-    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_v2.pt"),
-    "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers_v2.pkl"),
-    "residual_std_path": str(WEIGHTS_DIR / "finetune_tcn_residual_std_v2.pkl"),  # 신규
-    "window_size": 12,
+    # v3 채택: 자기회귀 + 37피처. 슬라이더 5개 호환 + 분기 변동성 보존(Q1→Q4 drift +6.7%p).
+    "weights_path": str(WEIGHTS_DIR / "finetuned_mapo_tcn_v3.pt"),
+    "scalers_path": str(WEIGHTS_DIR / "finetune_tcn_scalers_v3.pkl"),
+    "residual_std_path": str(WEIGHTS_DIR / "finetune_tcn_residual_std_v3.pkl"),
+    "window_size": 4,
     "n_channels": 128,
     "kernel_size": 2,
-    "dilations": [1, 2, 4, 8],
+    "dilations": [1, 2],
     "dropout": 0.2,
-    "output_size": 4,  # 신규
+    "output_size": 1,
     "target_col": "monthly_sales",
     "feature_cols": None,
     "confidence_z": 1.96,  # 95% 신뢰구간
@@ -68,12 +78,18 @@ def predict(
     n_quarters: int = 4,
     config: dict | None = None,
 ) -> list[dict]:
-    """특정 동x업종의 향후 n분기 매출을 DMS 방식으로 예측한다.
+    """특정 동x업종의 향후 n분기 매출을 예측한다.
 
-    DMS(Direct Multi-Step) 예측:
-    - window_size 분기 입력 → 4분기 동시 출력 (오차 누적 없음)
-    - n_quarters 파라미터는 하위 호환을 위해 유지하나 현재 구현에서는 항상 4 반환.
-    - 신뢰구간: val residual std 기반 (residual_std_path pkl 로드)
+    추론 모드는 `config["output_size"]`로 결정된다:
+    - output_size == 1 (v3 기본): 자기회귀 — 1분기씩 예측 후 직전 출력을 입력에 재주입,
+      n_quarters 만큼 step 반복. 분기 변동성 보존, 단 오차가 누적될 수 있음.
+    - output_size >= n_quarters (v2 legacy): DMS — 단일 forward로 n_quarters 동시 출력.
+      오차 누적 없음, 단 mean reversion으로 분기 차이가 평탄화되는 경향.
+
+    신뢰구간:
+    - val residual std 기반 (residual_std_path pkl 로드).
+    - 자기회귀 모델은 1-element residual_std만 저장됨 → Q2~Q4는 fallback CI 사용
+      (margin = pred_sales × min(0.03 × q, 0.25) × confidence_z).
 
     Parameters
     ----------
@@ -183,15 +199,30 @@ def predict(
     seq = feat_scaler.transform(recent[-window_size:])
 
     # ---------------------------------------------------------------------------
-    # DMS 예측 — 단일 forward pass
+    # 예측 — output_size에 따라 분기
+    #   output_size=4 → DMS (단일 forward, 4분기 동시 출력)
+    #   output_size=1 → 자기회귀 (n_quarters step loop, 출력을 다음 step 입력으로 재주입)
     # ---------------------------------------------------------------------------
     predictions: list[float] = []
+    output_size = cfg.get("output_size", 4)
+    target_col = cfg.get("target_col", "monthly_sales")
+    target_idx = actual_features.index(target_col) if target_col in actual_features else 0
 
     with torch.no_grad():
-        # DMS: 단일 forward → 4개 분기 동시 예측 (오차 누적 없음)
-        input_tensor = torch.from_numpy(seq).unsqueeze(0).to(device)  # (1, window_size, features)
-        pred_all = model(input_tensor)  # (1, 4)
-        pred_scaled_arr = pred_all.cpu().numpy().flatten()  # shape (4,)
+        if output_size >= n_quarters:
+            input_tensor = torch.from_numpy(seq).unsqueeze(0).to(device)  # (1, window_size, features)
+            pred_all = model(input_tensor)  # (1, output_size)
+            pred_scaled_arr = pred_all.cpu().numpy().flatten()[:n_quarters]
+        else:
+            current = torch.from_numpy(seq).unsqueeze(0).to(device).clone()
+            pred_scaled_list: list[float] = []
+            for _ in range(n_quarters):
+                pred_val = float(model(current).cpu().numpy().flatten()[0])
+                pred_scaled_list.append(pred_val)
+                new_step = current[0, -1, :].clone()
+                new_step[target_idx] = pred_val  # 자기회귀 재주입
+                current = torch.cat([current[:, 1:, :], new_step.unsqueeze(0).unsqueeze(0)], dim=1)
+            pred_scaled_arr = np.array(pred_scaled_list)
 
     for ps in pred_scaled_arr:
         pred_log = tgt_scaler.inverse_transform([[float(ps)]])[0][0]
