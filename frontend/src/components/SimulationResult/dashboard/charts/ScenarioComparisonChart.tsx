@@ -22,7 +22,8 @@ interface Props {
   baseline: number[];
   adjusted: number[];
   quarterLabels?: string[];
-  height?: number;
+  /** number(px) 또는 ResponsiveContainer 호환 string ("100%"). 부모 flex-1 안에서 fill 시 "100%". */
+  height?: number | string;
 }
 
 const formatKRW = (value: number): string => {

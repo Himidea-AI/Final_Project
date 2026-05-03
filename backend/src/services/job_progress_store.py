@@ -63,9 +63,11 @@ def set_progress(job_id: str, progress: float, stage: str | None = None) -> None
         return
     if job["status"] != "running":
         return
-    job["progress"] = max(0.0, min(1.0, float(progress)))
+    clamped = max(0.0, min(1.0, float(progress)))
+    job["progress"] = clamped
     if stage is not None:
         job["stage"] = stage
+    logger.info(f"[job_progress] update id={job_id[:8]} progress={clamped:.2f} stage={stage}")
 
 
 def set_done(job_id: str, data: Any) -> None:
@@ -77,6 +79,7 @@ def set_done(job_id: str, data: Any) -> None:
     job["progress"] = 1.0
     job["data"] = data
     job["finished_at"] = time.time()
+    logger.info(f"[job_progress] done id={job_id[:8]} kind={job['kind']}")
 
 
 def set_error(job_id: str, message: str) -> None:

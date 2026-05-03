@@ -1,7 +1,19 @@
+/**
+ * 시뮬 이력 저장 hooks — 2026-05-02 DB 분리 후 ML(foresee) / AI(ai) 별 분리.
+ *
+ * - useSaveForeseeHistory : POST /simulation-foresee
+ * - useSaveAIHistory      : POST /simulation-ai
+ * - useSaveSimulation     : @deprecated legacy /simulation-history. 다른 곳에서 import 중일 가능성으로 유지.
+ */
 import { useCallback, useState } from 'react';
 import axios from 'axios';
-import { saveSimulationHistory } from '../api/client';
-import type { SaveSimulationPayload, SaveSimulationResponse } from '../types/simulationHistory';
+import { saveAIHistory, saveForeseeHistory, saveSimulationHistory } from '../api/client';
+import type {
+  SaveAIPayload,
+  SaveForeseePayload,
+  SaveSimulationPayload,
+  SaveSimulationResponse,
+} from '../types/simulationHistory';
 
 interface UseSaveSimulationState {
   isSaving: boolean;
@@ -9,8 +21,8 @@ interface UseSaveSimulationState {
   lastResponse: SaveSimulationResponse | null;
 }
 
-export interface UseSaveSimulation extends UseSaveSimulationState {
-  save: (payload: SaveSimulationPayload) => Promise<SaveSimulationResponse | null>;
+export interface UseSaveHistoryHandle<TPayload> extends UseSaveSimulationState {
+  save: (payload: TPayload) => Promise<SaveSimulationResponse | null>;
   reset: () => void;
 }
 
@@ -28,31 +40,44 @@ function parseError(err: unknown): string {
   return err instanceof Error ? err.message : '알 수 없는 오류';
 }
 
-export function useSaveSimulation(): UseSaveSimulation {
-  const [state, setState] = useState<UseSaveSimulationState>({
-    isSaving: false,
-    error: null,
-    lastResponse: null,
-  });
+function makeSaveHook<TPayload>(
+  saveFn: (payload: TPayload) => Promise<SaveSimulationResponse>,
+): () => UseSaveHistoryHandle<TPayload> {
+  return function useSaveHook(): UseSaveHistoryHandle<TPayload> {
+    const [state, setState] = useState<UseSaveSimulationState>({
+      isSaving: false,
+      error: null,
+      lastResponse: null,
+    });
 
-  const save = useCallback(
-    async (payload: SaveSimulationPayload): Promise<SaveSimulationResponse | null> => {
+    const save = useCallback(async (payload: TPayload): Promise<SaveSimulationResponse | null> => {
       setState({ isSaving: true, error: null, lastResponse: null });
       try {
-        const res = await saveSimulationHistory(payload);
+        const res = await saveFn(payload);
         setState({ isSaving: false, error: null, lastResponse: res });
         return res;
       } catch (err) {
         setState({ isSaving: false, error: parseError(err), lastResponse: null });
         return null;
       }
-    },
-    [],
-  );
+    }, []);
 
-  const reset = useCallback(() => {
-    setState({ isSaving: false, error: null, lastResponse: null });
-  }, []);
+    const reset = useCallback(() => {
+      setState({ isSaving: false, error: null, lastResponse: null });
+    }, []);
 
-  return { ...state, save, reset };
+    return { ...state, save, reset };
+  };
 }
+
+/** ML 예측 (Predict 탭) 저장 hook */
+export const useSaveForeseeHistory = makeSaveHook<SaveForeseePayload>(saveForeseeHistory);
+
+/** AI 분석 (Analyze 탭) 저장 hook */
+export const useSaveAIHistory = makeSaveHook<SaveAIPayload>(saveAIHistory);
+
+/** @deprecated legacy /simulation-history. 신규 코드는 useSaveForeseeHistory / useSaveAIHistory 사용. */
+export const useSaveSimulation = makeSaveHook<SaveSimulationPayload>(saveSimulationHistory);
+
+/** legacy alias type — 기존 import 경로 호환 */
+export type UseSaveSimulation = UseSaveHistoryHandle<SaveSimulationPayload>;

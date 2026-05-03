@@ -63,19 +63,6 @@ export function QuarterlyStatStrip({ series, winnerDistrict }: Props) {
   const sum = validRevenues.reduce((a, b) => a + b, 0);
   const avg = validRevenues.length > 0 ? sum / validRevenues.length : null;
 
-  // 시나리오 범위 — TCN 95% 신뢰구간 (confidence_lower/upper) 4분기 평균.
-  // 본부 영업팀이 가맹점주 제안 시 "비관 X억 ~ 낙관 Y억" 자연어로 사용.
-  const lowerVals = quarters
-    .map((d) => d.confidence_lower ?? d.ci_95_lower ?? null)
-    .filter((v): v is number => v != null);
-  const upperVals = quarters
-    .map((d) => d.confidence_upper ?? d.ci_95_upper ?? null)
-    .filter((v): v is number => v != null);
-  const pessimisticAvg =
-    lowerVals.length > 0 ? lowerVals.reduce((a, b) => a + b, 0) / lowerVals.length : null;
-  const optimisticAvg =
-    upperVals.length > 0 ? upperVals.reduce((a, b) => a + b, 0) / upperVals.length : null;
-
   return (
     <div className="flex h-full flex-col">
       <div className="mb-3 flex items-center justify-between">
@@ -124,7 +111,7 @@ export function QuarterlyStatStrip({ series, winnerDistrict }: Props) {
         </div>
       )}
 
-      {/* Q1~Q4 row stack */}
+      {/* 1~4 분기 row stack */}
       <div className="flex flex-col gap-2">
         {rows.map((r) => {
           const deltaSign = r.delta == null ? null : r.delta >= 0 ? 'up' : 'down';
@@ -148,8 +135,8 @@ export function QuarterlyStatStrip({ series, winnerDistrict }: Props) {
               className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2"
             >
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground">
-                  Q{r.quarter}
+                <span className="text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground">
+                  {r.quarter}분기
                 </span>
                 <span className="text-sm font-black tabular-nums text-foreground">
                   {r.revenue != null ? formatKRW(r.revenue) : '—'}
@@ -185,24 +172,6 @@ export function QuarterlyStatStrip({ series, winnerDistrict }: Props) {
           </div>
         </div>
       </div>
-
-      {/* 시나리오 범위 한줄평 — TCN 95% 신뢰구간 4분기 평균 (낙관/비관). 영업 화법용. */}
-      {pessimisticAvg != null && optimisticAvg != null && (
-        <div className="mt-3 rounded-lg border border-border bg-card px-3 py-2.5">
-          <div className="mb-1 text-[0.5625rem] font-bold uppercase tracking-widest text-muted-foreground">
-            시나리오 범위 · 95% 신뢰
-          </div>
-          <div className="flex items-baseline justify-between gap-1 tabular-nums">
-            <span className="text-[0.6875rem] font-bold text-danger">
-              비관 {formatKRW(pessimisticAvg)}
-            </span>
-            <span className="text-[0.625rem] text-muted-foreground">~</span>
-            <span className="text-[0.6875rem] font-bold text-success">
-              낙관 {formatKRW(optimisticAvg)}
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

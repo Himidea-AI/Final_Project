@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, FileDown, Loader2, RotateCw } from 'lucide-react';
 import { useSimulationDetail } from '../hooks/useSimulationDetail';
 import { HistoryDashboardView } from './HistoryDashboardView';
-import { formatDocumentId } from '../types/simulationHistory';
+import { formatDocumentId, type SimulationKind } from '../types/simulationHistory';
 import { HiddenPDFTemplate } from '../components/PDF/HiddenPDFTemplate';
 import { buildPdfPropsFromSimulation } from '../utils/pdfPropsBuilder';
+import { useSimulationStore } from '../stores/simulationStore';
+import type { SimulationInput } from '../types';
 
 function formatWhen(iso: string): string {
   try {
@@ -15,12 +17,38 @@ function formatWhen(iso: string): string {
   }
 }
 
-export default function SimulationHistoryDetail() {
+interface SimulationHistoryDetailProps {
+  /**
+   * 진입 라우트 별 kind 주입 — App.tsx 에서 wrapper element 로 prop 전달.
+   * - 'foresee' : /dashboard/foresee/:id
+   * - 'ai'      : /dashboard/ai/:id
+   * - undefined : /dashboard/history/:id (legacy) — pathname 으로 자동 fallback
+   */
+  kind?: SimulationKind;
+}
+
+export default function SimulationHistoryDetail({
+  kind: kindProp,
+}: SimulationHistoryDetailProps = {}) {
   const { id: raw } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const id = raw ? Number(raw) : null;
-  const { data, isLoading, error, notFound } = useSimulationDetail(Number.isFinite(id) ? id : null);
+
+  // kind: prop 우선 → 없으면 pathname 분기 → 그래도 없으면 null (legacy fallback)
+  const kind: SimulationKind | null = useMemo(() => {
+    if (kindProp) return kindProp;
+    const p = location.pathname;
+    if (p.startsWith('/dashboard/foresee/')) return 'foresee';
+    if (p.startsWith('/dashboard/ai/')) return 'ai';
+    return null;
+  }, [kindProp, location.pathname]);
+
+  const { data, isLoading, error, notFound } = useSimulationDetail(
+    Number.isFinite(id) ? id : null,
+    kind,
+  );
 
   const pdfTemplateRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -88,7 +116,9 @@ export default function SimulationHistoryDetail() {
   }
 
   return (
-    <div className="h-screen overflow-y-auto custom-scrollbar bg-background pb-16 text-foreground">
+    // relative z-10 — 글로벌 NetworkBackground (fixed inset-0 z-0 별자리 캔버스) 가
+    // 페이지 위로 비치는 회귀 차단. dashboard outlet 과 동일 stacking 패턴.
+    <div className="custom-scrollbar relative z-10 h-screen overflow-y-auto bg-background pb-16 text-foreground">
       <div className="mx-auto max-w-[1600px] px-6 pt-20">
         <button
           type="button"
@@ -124,10 +154,21 @@ export default function SimulationHistoryDetail() {
               brandName={data.brand_name}
               district={data.district}
               createdAt={data.created_at}
+              kind={kind}
               onRerun={() => {
-                // Phase 1: SimulatorDashboard가 별도 state로 payload 받는 경로가 없어
-                // 우선 시뮬레이터로 이동. Phase 2에서 sessionStorage 경유 재실행 자동 주입.
-                navigate('/simulator');
+                // Phase 2 (2026-05-03) — saved 시뮬의 scenario(=원본 SimulationInput) 를
+                // simulationStore.params 에 주입 후 /simulator 로 이동. SimulatorDashboard 의
+                // initParams lazy useState 가 mount 시 store.params 에서 폼 자동 채움 (분석조건
+                // drawer "조건 수정" 동선 동일 패턴).
+                // intent='edit' state — App.tsx 의 auto-redirect (rawSimResult 있으면 dashboard
+                // 로 다시 보내는 effect) skip. saved detail 본 후 새 시뮬 돌렸던 회귀 차단.
+                // data.scenario 가 null (DB 컬럼 추가 전) 이면 빈 폼 fallback.
+                const savedInput = (data.scenario as SimulationInput | null) ?? null;
+                useSimulationStore.getState().dismissResult();
+                if (savedInput) {
+                  useSimulationStore.setState({ params: savedInput });
+                }
+                navigate('/simulator', { state: { intent: 'edit' } });
               }}
               onDownloadPDF={handleDownloadPDF}
               isGeneratingPDF={isGeneratingPDF}
@@ -138,6 +179,7 @@ export default function SimulationHistoryDetail() {
                 savedHistoryId={data.id}
                 brandName={data.brand_name}
                 businessType={data.business_type}
+                kind={kind}
               />
             </div>
           </>
@@ -168,6 +210,7 @@ interface DetailHeaderProps {
   brandName: string;
   district: string;
   createdAt: string;
+  kind: SimulationKind | null;
   onRerun: () => void;
   onDownloadPDF: () => void;
   isGeneratingPDF: boolean;
@@ -179,10 +222,18 @@ function DetailHeader({
   brandName,
   district,
   createdAt,
+  kind,
   onRerun,
   onDownloadPDF,
   isGeneratingPDF,
 }: DetailHeaderProps) {
+  const kindLabel = kind === 'foresee' ? 'ML 예측' : kind === 'ai' ? 'AI 분석' : null;
+  const kindCls =
+    kind === 'foresee'
+      ? 'bg-primary/10 text-primary border-primary/40'
+      : kind === 'ai'
+        ? 'bg-chart-4/10 text-chart-4 border-chart-4/40'
+        : '';
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-muted p-5">
       <div>
@@ -190,6 +241,13 @@ function DetailHeader({
           <span className="rounded bg-warning/15 px-2 py-0.5 text-xs font-mono font-bold text-warning">
             {formatDocumentId(id)}
           </span>
+          {kindLabel && (
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.625rem] font-bold ${kindCls}`}
+            >
+              {kindLabel}
+            </span>
+          )}
           <span className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
             읽기 전용
           </span>
