@@ -406,7 +406,10 @@ export interface SimulationOutput {
       monthly_cost?: number;
       net_profit?: number;
       margin_rate?: number;
+      /** @deprecated 2026-05-04: LLM hallucination 위험. bep_quarters 우선 사용. */
       bep_months?: number;
+      /** ML 실측 BEP — 분기 단위 (B1 LLM 응답에 추후 추가 예정, 현재는 미존재 가능). */
+      bep_quarters?: number;
     };
     competitor_analysis?: {
       count?: number;

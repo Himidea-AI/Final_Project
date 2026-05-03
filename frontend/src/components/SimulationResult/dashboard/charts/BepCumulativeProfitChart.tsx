@@ -54,14 +54,20 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
     );
   }
 
-  // 각 동의 첫 4분기만 + quarter 1~4 강제 라벨 (quarterly_projection 필드 보존)
+  // 2026-05-04: 4분기 hard cap → 최대 20분기(5년) 동적 길이.
+  // BEP 도달 시점이 4분기 이후인 경우 그래프에서 잘리던 회귀 차단.
+  // 각 series의 projection 최대 길이 → 20으로 cap. 동마다 길이 다르면 가장 긴 동 기준.
+  const QUARTER_CAP = 20;
+  const maxLen = Math.max(...validSeries.map((s) => s.projection.length));
+  const visibleLen = Math.min(QUARTER_CAP, maxLen);
   const trimmedSeries = validSeries.map((s) => ({
     district: s.district,
-    data: s.projection.slice(0, 4).map((d, i) => ({ ...d, quarter: i + 1 })),
+    data: s.projection.slice(0, visibleLen).map((d, i) => ({ ...d, quarter: i + 1 })),
   }));
 
-  // wide format: row = { quarter, [동]_cumulative, ... }
-  const chartData = [1, 2, 3, 4].map((q) => {
+  // wide format: row = { quarter, [동]_cumulative, ... } — 트림된 길이로 동적 생성
+  const quarterAxis = Array.from({ length: visibleLen }, (_, i) => i + 1);
+  const chartData = quarterAxis.map((q) => {
     const row: Record<string, number | null> = { quarter: q };
     trimmedSeries.forEach((s) => {
       const point = s.data.find((p) => p.quarter === q);
@@ -73,6 +79,8 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   // BEP 기준 = series[0] cumulative_profit ≥ 0 첫 분기
   const bepQuarter =
     trimmedSeries[0]?.data.find((d) => (d.cumulative_profit ?? -1) >= 0)?.quarter ?? null;
+  // BEP가 cap 안에서 도달하지 못한 경우 — "20+분기" 안내
+  const bepBeyondCap = bepQuarter == null && maxLen >= QUARTER_CAP;
 
   // mock 배지 — 임의 동에 mock 분기가 하나라도 있으면 표시
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
@@ -89,6 +97,11 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
         {bepQuarter !== null && (
           <span className="ml-auto text-[0.625rem] font-black tabular-nums text-success">
             BEP {bepQuarter}분기
+          </span>
+        )}
+        {bepBeyondCap && (
+          <span className="ml-auto text-[0.625rem] font-black tabular-nums text-warning">
+            BEP {QUARTER_CAP}+분기
           </span>
         )}
       </div>
