@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   AlertTriangle,
   Layers,
+  MapPin,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -90,6 +91,15 @@ export const AGENTS_LIST: AgentDef[] = [
     borderCls: 'border-primary/30 hover:border-primary/70',
     iconBgCls: 'bg-primary/10 border-primary/30',
     desc: 'district_ranking',
+  },
+  {
+    id: 'inflow',
+    name: '접근성',
+    icon: MapPin,
+    color: 'text-success',
+    borderCls: 'border-success/30 hover:border-success/70',
+    iconBgCls: 'bg-success/10 border-success/30',
+    desc: 'inflow (Hansen + E2SFCA)',
   },
   {
     id: 'synthesis',

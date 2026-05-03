@@ -1,6 +1,6 @@
 /**
  * InsightTab — AI 분석 근거 탭
- * 8 에이전트 카드 grid-cols-4 + 상세 모달 (원본 reasoning)
+ * 9 에이전트 카드 grid-cols-3 + 상세 모달 (원본 reasoning)
  */
 
 import { BrainCircuit, Maximize2 } from 'lucide-react';
@@ -26,6 +26,7 @@ export function InsightTab({ simResult, openModal }: Props) {
     legal: 'legal',
     trend: 'trend_forecaster',
     ranking: 'district_ranking',
+    inflow: 'inflow',
     synthesis: 'synthesis',
   };
 
@@ -38,10 +39,10 @@ export function InsightTab({ simResult, openModal }: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left">
-          <BrainCircuit className="text-primary" /> 8대 멀티 에이전트 상세 리포트
+          <BrainCircuit className="text-primary" /> 멀티 에이전트 상세 리포트
         </h3>
         <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
-          {attributions.length}/8 에이전트 분석 완료
+          {attributions.length}/{AGENTS_LIST.length} 에이전트 분석 완료
         </div>
       </div>
 
@@ -53,7 +54,7 @@ export function InsightTab({ simResult, openModal }: Props) {
         <AgentConfidenceRadar attributions={attributions} />
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         {AGENTS_LIST.map((agent) => {
           const AgentIcon = agent.icon;
           const attr = getAttribution(agent.id);
