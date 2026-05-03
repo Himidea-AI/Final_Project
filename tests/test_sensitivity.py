@@ -46,38 +46,37 @@ def test_get_feature_indices_empty_target():
 def test_compute_correlations_perfect_positive():
     df = pd.DataFrame(
         {
-            "floating_pop": [1.0, 2.0, 3.0, 4.0],
-            "rent_1f": [2.0, 4.0, 6.0, 8.0],
-            "vacancy_rate": [8.0, 6.0, 4.0, 2.0],
+            "vacancy_rate": [1.0, 2.0, 3.0, 4.0],
+            "cpi_index": [2.0, 4.0, 6.0, 8.0],
+            "opr_sale_mt_avg": [8.0, 6.0, 4.0, 2.0],
         }
     )
     result = compute_correlations(df)
-    assert "floating_pop→rent_1f" in result
-    assert "floating_pop→vacancy_rate" in result
-    assert "rent_1f→vacancy_rate" in result
-    assert abs(result["floating_pop→rent_1f"] - 1.0) < 0.001
-    assert abs(result["floating_pop→vacancy_rate"] + 1.0) < 0.001
+    assert "vacancy_rate→cpi_index" in result
+    assert abs(result["vacancy_rate→cpi_index"] - 1.0) < 0.001
+    assert abs(result["vacancy_rate→opr_sale_mt_avg"] + 1.0) < 0.001
+    assert "cpi_index→opr_sale_mt_avg" in result
 
 
 def test_compute_correlations_missing_column():
     df = pd.DataFrame(
         {
-            "floating_pop": [1.0, 2.0, 3.0],
-            "rent_1f": [2.0, 4.0, 6.0],
+            "vacancy_rate": [1.0, 2.0, 3.0],
+            "cpi_index": [2.0, 4.0, 6.0],
         }
     )
     result = compute_correlations(df)
-    assert "floating_pop→rent_1f" in result
-    assert "floating_pop→vacancy_rate" not in result
-    assert "rent_1f→vacancy_rate" not in result
+    assert "vacancy_rate→cpi_index" in result
+    assert "vacancy_rate→opr_sale_mt_avg" not in result
+    assert "cpi_index→opr_sale_mt_avg" not in result
 
 
 def test_compute_correlations_rounds_to_4_decimals():
     df = pd.DataFrame(
         {
-            "floating_pop": [1.0, 2.0, 3.0, 4.0, 5.0],
-            "rent_1f": [1.1, 2.3, 2.9, 4.2, 4.8],
-            "vacancy_rate": [5.0, 4.0, 3.0, 2.0, 1.0],
+            "vacancy_rate": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "cpi_index": [1.1, 2.3, 2.9, 4.2, 4.8],
+            "opr_sale_mt_avg": [5.0, 4.0, 3.0, 2.0, 1.0],
         }
     )
     result = compute_correlations(df)
@@ -100,11 +99,11 @@ def test_quarter_values_cover_all_quarters():
     assert set(QUARTER_VALUES.values()) == {1, 2, 3, 4}
 
 
-def test_slider_features_floating_pop_maps_three_features():
-    assert len(SLIDER_FEATURES["floating_pop"]) == 3
-    assert "bus_flpop" in SLIDER_FEATURES["floating_pop"]
-    assert "adstrd_flpop" in SLIDER_FEATURES["floating_pop"]
-    assert "floating_pop" in SLIDER_FEATURES["floating_pop"]
+def test_slider_features_has_four_sliders():
+    assert set(SLIDER_FEATURES.keys()) == {"vacancy_rate", "trend_score", "cpi_index", "opr_sale_mt_avg"}
+    assert SLIDER_FEATURES["vacancy_rate"] == ["vacancy_rate"]
+    assert SLIDER_FEATURES["cpi_index"] == ["cpi_index"]
+    assert SLIDER_FEATURES["opr_sale_mt_avg"] == ["opr_sale_mt_avg"]
 
 
 def test_scale_quarter_value_minmax_matches_sklearn():

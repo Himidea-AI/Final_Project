@@ -1,8 +1,8 @@
 """
 TCN 시나리오 시뮬레이터 — 사전 배치 섭동 분석
 
-슬라이더 5개(임대료/공실률/유동인구/트렌드/계절)에 대해
-156개 (동×업종) 조합의 탄성치 테이블을 사전 계산하여 JSON으로 저장한다.
+슬라이더 5개(공실률/물가/상권 활성도/트렌드/계절)에 대해
+156개 (동×업종) 조합의 분기별 탄성치 테이블을 사전 계산하여 JSON으로 저장한다.
 
 실행 방법:
     python -m models.tcn_forecast.sensitivity
@@ -34,12 +34,12 @@ logger = logging.getLogger(__name__)
 # 상수
 # ---------------------------------------------------------------------------
 
-# 슬라이더명 → 실제 TCN 피처 목록 (유동인구는 3개 동시 적용)
+# 슬라이더명 → 실제 TCN 피처 목록
 SLIDER_FEATURES: dict[str, list[str]] = {
-    "rent_1f": ["rent_1f"],
     "vacancy_rate": ["vacancy_rate"],
-    "floating_pop": ["bus_flpop", "adstrd_flpop", "floating_pop"],
     "trend_score": ["trend_score"],
+    "cpi_index": ["cpi_index"],
+    "opr_sale_mt_avg": ["opr_sale_mt_avg"],
 }
 
 # ±% 섭동 레벨 (quarter_num 제외)
@@ -50,9 +50,10 @@ QUARTER_VALUES: dict[str, int] = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
 
 # Pearson 상관계수 계산 대상 피처 쌍
 CORRELATION_PAIRS: list[tuple[str, str]] = [
-    ("floating_pop", "rent_1f"),
-    ("floating_pop", "vacancy_rate"),
-    ("rent_1f", "vacancy_rate"),
+    ("vacancy_rate", "cpi_index"),
+    ("vacancy_rate", "opr_sale_mt_avg"),
+    ("cpi_index", "opr_sale_mt_avg"),
+    ("trend_score", "opr_sale_mt_avg"),
 ]
 
 
