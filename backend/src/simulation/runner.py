@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import time
@@ -36,6 +35,8 @@ except Exception:
         if dargs and callable(dargs[0]):
             return dargs[0]
         return _decorator
+
+
 from .config import (
     MAPO_DONGS,
     ModelConfig,
@@ -393,12 +394,18 @@ class SimulationResult:
     new_store_visits: int = 0
     new_store_revenue: float = 0.0
     new_store_visit_share_pct: float = 0.0  # 전체 방문 중 점유율 (%)
+    # 신규 매장 방문자의 role 별 분포 — customer_profile_dist (마포 전체) 와 별도.
+    # 카페 신규 매장이면 ext_commuter dominant 기대 등, 매장 단독 분석용.
+    new_store_role_dist: dict = field(default_factory=dict)
     # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채움
     thoughts: list = field(default_factory=list)  # [{day, hour, agent_id, archetype, thought, lat, lon}, ...]
     thought_calls: int = 0
     thought_input_tokens: int = 0
     thought_output_tokens: int = 0
     thought_cached_tokens: int = 0
+    # Tier S 50명 메타 + daily_plan — 프론트 General 패널 클릭 시 펼침용.
+    # {agent_id: {name, age, gender, role, archetype, home_dong, plan: [slot, ...]}}
+    tier_s_meta: dict | None = None
 
     def get(self, key: str, default=None):
         """dict-like access — B1 엔드포인트 result.get() 호환."""
@@ -525,7 +532,8 @@ def run_simulation(
                 if verbose:
                     print(f"  [NEW] 중복 store_id 감지, 시각 stamp 추가: {new_store_sim_id}", flush=True)
                 import time as _t
-                new_store_sim_id = f"{new_store_sim_id}_{int(_t.time()*1000) % 100000}"
+
+                new_store_sim_id = f"{new_store_sim_id}_{int(_t.time() * 1000) % 100000}"
             # seats — frontend store_area (평) 가 주어지면 평수×2, 아니면 30 default.
             # capacity 모델링: 작은 매장은 일 visit cap 낮음 (10평 = 20 seats = 일 ~20 cap).
             _ns_seats = int(scenario.new_store.get("seats") or 30)
@@ -850,11 +858,10 @@ def run_simulation(
 
             # Hierarchical Planning (Stanford UIST'23) — 측정일 시작 시 Tier S 하루 일정 batch 생성.
             # 매 hour 슬롯 조회로 LLM 호출 회피 + 일관성 보장 (점심 한 번만 등).
-            # 외부 (ext_commuter/visitor) 는 외부 시간엔 결정 X 라 plan 무의미 → 마포 거주/통근만.
+            # ext_commuter/ext_visitor 도 포함 — 마포 시간 (arrival~departure) 범위 슬롯 강제.
+            # 외부 시간 슬롯은 policy_executor 가 무시 (current_dong='외부' 분기로 rest 강제).
             if not is_warmup and use_llm_decisions and hasattr(brain, "generate_daily_plans_batch"):
-                _tier_s_for_plan = [
-                    a for a in agents if a.tier == Tier.S and a.role not in (Role.EXT_COMMUTER, Role.EXT_VISITOR)
-                ]
+                _tier_s_for_plan = [a for a in agents if a.tier == Tier.S]
                 if _tier_s_for_plan:
                     if verbose:
                         print(
@@ -1118,25 +1125,37 @@ def run_simulation(
                             )
 
                 # 매 시간 Tier S 풍선 텍스트 수집.
-                # use_llm_decisions=True 면 smart_decide 가 이미 reason 필드를 채웠으므로
-                # 그걸 재활용 (LLM 호출 0회 추가). False 면 generate_thought 별도 호출.
+                # 우선순위: (1) plan slot.hourly[hour-start] (LLM 이 풍선용으로 미리 작성한 12자) →
+                #          (2) smart_decide 의 dec.reason (실제 결정 reason) →
+                #          (3) slot.reason (slot 단위 fragment)
+                # use_llm_decisions=True 면 위 3개 모두 후보. False 면 별도 generate_thought 호출 (legacy).
                 # ext_commuter/ext_visitor 가 외부에 있을 때는 skip (지도 표시 X).
                 if enable_llm_thought and thought_agents and not is_warmup:
                     _thought_agent_ids = {a.agent_id for a in thought_agents}
                     if use_llm_decisions:
-                        # A 옵션 — smart_decide.reason 을 풍선으로 재활용. 중복 LLM 호출 제거.
-                        for aid, dec in res.decisions:
-                            if aid not in _thought_agent_ids:
-                                continue
+                        _dec_by_aid = {aid: dec for aid, dec in res.decisions}
+                        for aid in _thought_agent_ids:
                             _a = _agent_by_id.get(aid)
                             if _a is None or _a.current_dong == "외부":
                                 continue
-                            if not dec.reason:
-                                continue
                             coord = dong_coords.get(_a.current_dong)
-                            # 좌표 미해결 동 (예: '외부' 누락) → 풍선 시각화 불가, skip.
-                            # 이전 lat/lon=None 으로 저장 → frontend 가 null 처리 안 하면 렌더 오류.
                             if not coord:
+                                continue
+                            text = ""
+                            slot = _a.get_plan_slot(res.hour) if hasattr(_a, "get_plan_slot") else None
+                            if isinstance(slot, dict):
+                                hourly = slot.get("hourly")
+                                if isinstance(hourly, list) and hourly:
+                                    idx = res.hour - int(slot.get("start", res.hour))
+                                    if 0 <= idx < len(hourly):
+                                        text = str(hourly[idx]).strip()[:60]
+                            if not text:
+                                dec = _dec_by_aid.get(aid)
+                                if dec is not None and dec.reason:
+                                    text = dec.reason[:60]
+                            if not text and isinstance(slot, dict):
+                                text = (slot.get("reason") or "")[:60]
+                            if not text:
                                 continue
                             thoughts_log.append(
                                 {
@@ -1144,8 +1163,7 @@ def run_simulation(
                                     "hour": res.hour,
                                     "agent_id": aid,
                                     "archetype": _a.persona_id or "office_worker",
-                                    # reason 은 최대 100자 — 풍선 가독성 위해 60자로 cap.
-                                    "thought": dec.reason[:60],
+                                    "thought": text,
                                     "lat": coord[0],
                                     "lon": coord[1],
                                 }
@@ -1253,12 +1271,23 @@ def run_simulation(
         new_store_visits_val = 0
         new_store_revenue_val = 0.0
         new_store_visit_share_pct_val = 0.0
+        new_store_role_dist_val: dict = {}
         if new_store_sim_id and new_store_sim_id in world.stores:
             ns = world.stores[new_store_sim_id]
             new_store_visits_val = int(ns.visits_today / max(days, 1))
             new_store_revenue_val = ns.revenue_today / max(days, 1)
             if total_visits_all > 0:
                 new_store_visit_share_pct_val = round(100.0 * ns.visits_today / total_visits_all, 3)
+            # 신규 매장 방문자 role 분포 — visited_today 에 신규 매장 store_id 포함된 agent 집계.
+            # 신규 매장은 visit 마다 visited_today.append (agents.py:499) 라 1회 visit = role 1점 가중.
+            ns_role_counts: Counter = Counter()
+            for a in agents:
+                if new_store_sim_id in a.visited_today:
+                    # agent 가 신규 매장 visit 한 횟수만큼 가중 (재방문자 우대 X 라 1회 카운트)
+                    ns_role_counts[a.role.value] += a.visited_today.count(new_store_sim_id)
+            ns_total = sum(ns_role_counts.values())
+            if ns_total > 0:
+                new_store_role_dist_val = {r: round(v / ns_total, 3) for r, v in ns_role_counts.items()}
         # 일일 std — 1일 시뮬이면 0, 다일이면 분산 계산 가능 (단순화)
         daily_visits_std_val = 0.0
         daily_revenue_std_val = 0.0
@@ -1476,11 +1505,28 @@ def run_simulation(
             new_store_visits=new_store_visits_val,
             new_store_revenue=new_store_revenue_val,
             new_store_visit_share_pct=new_store_visit_share_pct_val,
+            new_store_role_dist=new_store_role_dist_val,
             thoughts=thoughts_log if enable_llm_thought else [],
             thought_calls=brain.stats.thought_calls,
             thought_input_tokens=brain.stats.thought_input_tokens,
             thought_output_tokens=brain.stats.thought_output_tokens,
             thought_cached_tokens=brain.stats.thought_cache_read,
+            tier_s_meta=(
+                {
+                    a.agent_id: {
+                        "name": getattr(a, "name", None),
+                        "age": getattr(a, "age", None),
+                        "gender": getattr(a, "gender", None),
+                        "role": a.role.value if hasattr(a, "role") else None,
+                        "archetype": getattr(a, "persona_id", None) or "office_worker",
+                        "home_dong": getattr(a, "home_dong", None),
+                        "plan": list(getattr(a, "daily_plan", []) or []),
+                    }
+                    for a in thought_agents
+                }
+                if enable_llm_thought and thought_agents
+                else None
+            ),
         )
 
         # final partial 저장 (in_progress=False로 덮어쓰기)

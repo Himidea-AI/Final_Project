@@ -3,15 +3,81 @@ RAG 문서 검색 — 하이브리드 (벡터 유사도 + BM25 키워드) + RRF 
 """
 
 import asyncio
+import datetime
 import json
 import logging
 import math
 import os
+import time
 from pathlib import Path
 
 from ..database.vector_db import LegalVectorDB
 
 logger = logging.getLogger(__name__)
+
+
+def _trace_candidate(doc_obj, score, rank: int, max_preview: int = 120) -> dict:
+    """벡터 검색 후보 1건 → trace dict 변환. doc_obj는 langchain Document."""
+    meta = getattr(doc_obj, "metadata", {}) or {}
+    content = getattr(doc_obj, "page_content", "") or ""
+    return {
+        "rank": rank,
+        "chunk_id": meta.get("chunk_id"),
+        "score": round(float(score), 4) if score is not None else None,
+        "source": meta.get("source"),
+        "article": meta.get("article"),
+        "preview": content[:max_preview],
+    }
+
+
+def _trace_bm25_candidate(idx: int, score: float, rank: int, bm25_docs: list, max_preview: int = 120) -> dict:
+    """BM25 후보 1건 (chunk_idx, score) → trace dict."""
+    if 0 <= idx < len(bm25_docs):
+        text, meta = bm25_docs[idx]
+    else:
+        text, meta = "", {}
+    return {
+        "rank": rank,
+        "chunk_idx": idx,
+        "chunk_id": (meta or {}).get("chunk_id"),
+        "score": round(float(score), 4),
+        "source": (meta or {}).get("source"),
+        "article": (meta or {}).get("article"),
+        "preview": (text or "")[:max_preview],
+    }
+
+
+def _trace_merged_doc(doc: dict, rank: int, max_preview: int = 120) -> dict:
+    """RRF/최종 doc dict → trace dict."""
+    meta = doc.get("metadata", {}) or {}
+    return {
+        "rank": rank,
+        "chunk_id": meta.get("chunk_id"),
+        "source": meta.get("source"),
+        "article": meta.get("article"),
+        "relevance": meta.get("relevance"),
+        "is_parent": bool(meta.get("is_parent", False)),
+        "preview": (doc.get("content") or "")[:max_preview],
+    }
+
+
+def _write_trace_jsonl(trace: dict) -> None:
+    """trace 1건을 시간 단위 JSONL 파일에 append. 실패는 무시 (warning).
+
+    파일명: rag_trace_YYYYMMDD_HH.jsonl (UTC).
+    """
+    try:
+        from src.config.settings import settings as _settings
+
+        if not _settings.rag_trace_enabled:
+            return
+        trace_dir = Path(_settings.rag_trace_dir)
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        fname = trace_dir / f"rag_trace_{datetime.datetime.utcnow().strftime('%Y%m%d_%H')}.jsonl"
+        with open(fname, "a", encoding="utf-8") as f:
+            f.write(json.dumps(trace, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.warning(f"[rag_trace] JSONL 기록 실패 (무시): {e}")
 
 
 # S-5 Parent-child: chunk_id → parent_text 매핑 모듈 top-level pre-load (race condition 회피)
@@ -200,11 +266,27 @@ SOURCE_TO_SHORT_MAP = {
 
 
 class LegalDocumentRetriever:
-    """법률 문서 검색기 — 하이브리드 RAG (벡터 + BM25 + RRF)"""
+    """법률 문서 검색기 — 하이브리드 RAG (벡터 + BM25 + RRF).
+
+    싱글톤: 매 specialist 호출마다 새 인스턴스 생성 시 BM25 인덱스가
+    매번 재구축되는 문제 차단 (구축 비용 ~30초). __new__ 기반 싱글톤 +
+    BM25 인덱스/문서 리스트는 인스턴스 변수로 1회 빌드 후 재사용.
+    """
+
+    _instance: "LegalDocumentRetriever | None" = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            inst = super().__new__(cls)
+            inst._db = LegalVectorDB()
+            inst._bm25_index = None
+            inst._bm25_docs = None  # type: ignore[attr-defined]
+            cls._instance = inst
+        return cls._instance
 
     def __init__(self):
-        self._db = LegalVectorDB()
-        self._bm25_index: dict | None = None  # 지연 초기화
+        # 싱글톤 — __new__ 에서 이미 _db / _bm25_index 초기화 완료. 추가 작업 불필요.
+        pass
 
     # ------------------------------------------------------------------
     # HyDE (Hypothetical Document Embeddings) — LLM 가상 조문 생성
@@ -693,19 +775,40 @@ class LegalDocumentRetriever:
             )
             return []
 
+        from src.config.settings import settings as _settings
+
+        # trace 수집용 컨테이너 (rag_trace_enabled 시에만 채움 — 비활성 시 거의 비용 없음)
+        _trace_on = bool(_settings.rag_trace_enabled)
+        trace: dict = {
+            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "kind": "search",
+            "query": query,
+            "source_filter": source_filter,
+            "top_k": top_k,
+            "elapsed_ms": {},
+        }
+        _t_total = time.perf_counter()
+
         # 0차: 하이브리드 HyDE 쿼리 확장 (사전 + LLM)
+        _t = time.perf_counter()
         expanded_query = await self._expand_query_hybrid(query)
+        if _trace_on:
+            trace["expanded_query"] = expanded_query
+            trace["elapsed_ms"]["hyde"] = round((time.perf_counter() - _t) * 1000, 2)
 
         # 0.5차: S-2 Multi-query — cheap LLM이 1쿼리 → N개 변형 (settings.multi_query_enabled)
         from src.chains.multi_query import expand_query as _multi_expand
-        from src.config.settings import settings as _settings
 
+        _t = time.perf_counter()
         mq_variants: list[str] = []
         if _settings.multi_query_enabled:
             try:
                 mq_variants = await _multi_expand(query, n=_settings.multi_query_n)
             except Exception as e:
                 logger.warning(f"[LegalDocumentRetriever] multi-query 실패 (무시): {e}")
+        if _trace_on:
+            trace["multi_query_variants"] = mq_variants
+            trace["elapsed_ms"]["multi_query"] = round((time.perf_counter() - _t) * 1000, 2)
 
         filter_dict = {"source": {"$in": source_filter}} if source_filter else None
 
@@ -729,6 +832,7 @@ class LegalDocumentRetriever:
         for v in mq_variants:
             search_queries.append((v, top_k))
 
+        _t = time.perf_counter()
         all_results = await asyncio.gather(*[_vsearch(q, k) for q, k in search_queries])
         docs_with_score = list(all_results[0])
         seen_contents = {doc.page_content[:100] for doc, _ in docs_with_score}
@@ -741,6 +845,13 @@ class LegalDocumentRetriever:
         if not docs_with_score and source_filter:
             docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k * 2)
 
+        if _trace_on:
+            trace["vector_candidates"] = [
+                _trace_candidate(doc, score, i + 1)
+                for i, (doc, score) in enumerate(docs_with_score[:10])
+            ]
+            trace["elapsed_ms"]["vector_search"] = round((time.perf_counter() - _t) * 1000, 2)
+
         vector_results = [
             {
                 "content": doc.page_content,
@@ -751,9 +862,18 @@ class LegalDocumentRetriever:
         ]
 
         # 2차: BM25 키워드 검색
+        _t = time.perf_counter()
         bm25_ranked = self._bm25_search(query, source_filter, top_k=top_k * 2)
+        if _trace_on:
+            bm25_docs_ref = getattr(self, "_bm25_docs", []) or []
+            trace["bm25_candidates"] = [
+                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref)
+                for i, (idx, sc) in enumerate(bm25_ranked[:10])
+            ]
+            trace["elapsed_ms"]["bm25"] = round((time.perf_counter() - _t) * 1000, 2)
 
         # 3차: RRF 결합
+        _t = time.perf_counter()
         if bm25_ranked and hasattr(self, "_bm25_docs"):
             merged = self._rrf_merge(
                 vector_results,
@@ -765,6 +885,11 @@ class LegalDocumentRetriever:
             )
         else:
             merged = vector_results
+        if _trace_on:
+            trace["rrf_merged"] = [
+                _trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])
+            ]
+            trace["elapsed_ms"]["rrf"] = round((time.perf_counter() - _t) * 1000, 2)
 
         # 4차: Multi-Vector Q2Q — 비활성 (RRF 결합 시 기존 결과를 밀어내는 역효과 확인)
         # 파일럿에서 개별 유사도 +0.1~0.28 개선 확인했으나 전체 F1 -0.012 하락
@@ -804,6 +929,10 @@ class LegalDocumentRetriever:
 
         # 7차: Parent-child 후처리 — chunk_id → parent_text 치환 + parent 단위 dedup
         # 검색은 작은 child로 (정밀), 반환은 article 단위 parent로 (cover ↑)
+        _t = time.perf_counter()
+        _before_count = len(merged)
+        _dropped_chunk_ids: list = []
+        _parent_replacements: list = []
         parent_map = _PARENT_ARTICLES
         if parent_map:
             seen_parents: set[str] = set()
@@ -814,8 +943,12 @@ class LegalDocumentRetriever:
                 if parent_text:
                     parent_key = parent_text[:100]
                     if parent_key in seen_parents:
+                        if _trace_on:
+                            _dropped_chunk_ids.append(cid)
                         continue
                     seen_parents.add(parent_key)
+                    if _trace_on:
+                        _parent_replacements.append([cid, parent_text[:100]])
                     new_d = dict(d)
                     new_d["content"] = parent_text
                     new_d["metadata"] = {**d.get("metadata", {}), "is_parent": True}
@@ -823,8 +956,23 @@ class LegalDocumentRetriever:
                 else:
                     deduped.append(d)
             merged = deduped
+        if _trace_on:
+            trace["parent_dedup"] = {
+                "before_count": _before_count,
+                "after_count": len(merged),
+                "dropped_chunk_ids": _dropped_chunk_ids,
+                "parent_replacements": _parent_replacements,
+            }
+            trace["elapsed_ms"]["parent_dedup"] = round((time.perf_counter() - _t) * 1000, 2)
 
-        return merged[:top_k]
+        final_docs = merged[:top_k]
+        if _trace_on:
+            trace["final_top_k"] = [
+                _trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)
+            ]
+            trace["elapsed_ms"]["total"] = round((time.perf_counter() - _t_total) * 1000, 2)
+            _write_trace_jsonl(trace)
+        return final_docs
 
 
     @classmethod
@@ -1033,6 +1181,129 @@ class LegalDocumentRetriever:
                     filtered.append((d, 0.0))
 
         return [d for d, s in filtered[:top_k]]
+
+    async def search_precedents(
+        self,
+        query: str,
+        top_k: int = 3,
+    ) -> list[dict]:
+        """판례 카테고리만 검색 — ``metadata.category == '판례'`` 필터.
+
+        - 단순화: multi-query/HyDE 미사용 (판례는 키워드 직접 매칭이 더 정확).
+        - BM25 보조 매칭은 ``category=='판례'`` 청크에 한정해서 결합.
+        - 실패 시 빈 리스트 반환 (graceful degradation).
+
+        Returns:
+            list[dict]: ``[{"content", "metadata"}]`` (top_k 이내).
+        """
+        vs = self._db.vectorstore
+        if vs is None:
+            logger.warning(f"[search_precedents] vectorstore 미초기화 — '{query}' skip")
+            return []
+
+        from src.config.settings import settings as _settings
+
+        _trace_on = bool(_settings.rag_trace_enabled)
+        trace: dict = {
+            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "kind": "search_precedents",
+            "query": query,
+            "source_filter": None,
+            "category_filter": "판례",
+            "top_k": top_k,
+            "elapsed_ms": {},
+        }
+        _t_total = time.perf_counter()
+
+        # 1차: 벡터 유사도 (PGVector JSONB 메타데이터 필터)
+        filter_dict = {"category": {"$eq": "판례"}}
+        _t = time.perf_counter()
+        try:
+            docs_with_score = await vs.asimilarity_search_with_relevance_scores(
+                query, k=top_k * 3, filter=filter_dict
+            )
+        except Exception as e:
+            msg = str(e)
+            if "connection" in msg.lower() or "ssl" in msg.lower():
+                logger.warning(f"[search_precedents] 1회 재시도 (transient): {type(e).__name__}")
+                try:
+                    docs_with_score = await vs.asimilarity_search_with_relevance_scores(
+                        query, k=top_k * 3, filter=filter_dict
+                    )
+                except Exception as e2:
+                    logger.warning(f"[search_precedents] 재시도 실패: {e2}")
+                    return []
+            else:
+                logger.warning(f"[search_precedents] 벡터 검색 실패: {e}")
+                return []
+
+        if _trace_on:
+            trace["vector_candidates"] = [
+                _trace_candidate(doc, score, i + 1)
+                for i, (doc, score) in enumerate(docs_with_score[:10])
+            ]
+            trace["elapsed_ms"]["vector_search"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        vector_results = [
+            {
+                "content": doc.page_content,
+                "metadata": {**doc.metadata, "relevance": round(score, 4)},
+            }
+            for doc, score in docs_with_score
+            if score >= self.RELEVANCE_THRESHOLD
+        ]
+
+        # 2차: BM25 — 판례 청크만 대상으로 필터 (메모리 인덱스에서 category 필터링).
+        _t = time.perf_counter()
+        try:
+            self._build_bm25_index()
+        except Exception as e:
+            logger.warning(f"[search_precedents] BM25 index 구축 실패: {e}")
+
+        bm25_ranked: list[tuple[int, float]] = []
+        if self._bm25_index and hasattr(self, "_bm25_docs"):
+            # 전체 BM25 후 category 필터 (인덱스 분리는 비용 대비 이득 적음).
+            raw = self._bm25_search(query, source_filter=None, top_k=top_k * 5)
+            bm25_ranked = [
+                (idx, sc)
+                for idx, sc in raw
+                if (self._bm25_docs[idx][1] or {}).get("category") == "판례"
+            ][: top_k * 2]
+        if _trace_on:
+            bm25_docs_ref = getattr(self, "_bm25_docs", []) or []
+            trace["bm25_candidates"] = [
+                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref)
+                for i, (idx, sc) in enumerate(bm25_ranked[:10])
+            ]
+            trace["elapsed_ms"]["bm25"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        # 3차: RRF 결합
+        _t = time.perf_counter()
+        if bm25_ranked:
+            merged = self._rrf_merge(
+                vector_results,
+                bm25_ranked,
+                self._bm25_docs,
+                k=self._RRF_K,
+                vector_w=self._VECTOR_WEIGHT,
+                bm25_w=self._BM25_WEIGHT,
+            )
+        else:
+            merged = vector_results
+        if _trace_on:
+            trace["rrf_merged"] = [
+                _trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])
+            ]
+            trace["elapsed_ms"]["rrf"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        final_docs = merged[:top_k]
+        if _trace_on:
+            trace["final_top_k"] = [
+                _trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)
+            ]
+            trace["elapsed_ms"]["total"] = round((time.perf_counter() - _t_total) * 1000, 2)
+            _write_trace_jsonl(trace)
+        return final_docs
 
     async def ingest_from_json(self, json_path: str | Path) -> int:
         """

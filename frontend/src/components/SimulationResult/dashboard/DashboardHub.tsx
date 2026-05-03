@@ -30,9 +30,8 @@ interface Props {
 const HUB_IMAGES = {
   predict:
     'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&auto=format&fit=crop&q=80',
-  analyze:
-    'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=800&auto=format&fit=crop&q=80',
-  abm: 'https://images.unsplash.com/photo-1519567241046-7f570eee3ce6?w=800&auto=format&fit=crop&q=80',
+  analyze: '/images/ai-agent.jpg',
+  abm: '/images/abm.png',
 };
 
 /**
@@ -83,6 +82,7 @@ export function DashboardHub({
   const bizLabel = BIZ_LABEL_MAP[bizKey] ?? bizKey;
 
   // 슬라이스별 status — error 시 카드 비활성화 + 사용자 안내 + 재시도 hint.
+  // running 시 카드 grayscale + spinner — 자동 활성화 안내.
   // ABM 은 별도 endpoint(/simulate-abm) 라 store 슬라이스 미연동 — 일단 활성 유지.
   const predictStatus = useSimulationStore((s) => s.prediction.status);
   const predictError = useSimulationStore((s) => s.prediction.error);
@@ -91,6 +91,8 @@ export function DashboardHub({
 
   const isPredictDisabled = predictStatus === 'error';
   const isAnalyzeDisabled = analyzeStatus === 'error';
+  const isPredictLoading = predictStatus === 'running';
+  const isAnalyzeLoading = analyzeStatus === 'running';
 
   // 새 시뮬 시작 — store.result 비우고 /simulator 진입.
   // mount-restore (App.tsx:1297-1308) 가 store.result null 보고 setReportState 호출 안 함 → input UI 정상 표시.
@@ -104,7 +106,7 @@ export function DashboardHub({
   // 있어야 UX 자연. 공통 컴포넌트: SaveSimulationActions (components/SimulationHistory/).
 
   return (
-    <div className="mx-auto max-w-[1728px] px-8 pt-32 pb-12">
+    <div className="mx-auto max-w-[1728px] px-8 pt-12 pb-12">
       {/* header height 는 우측 박스 (DOC ID + 새 시뮬 버튼) 자연 높이(~44px)에 의해 결정.
           좌측은 가로 레이아웃 (h1 + 동/업종 한 줄) 으로 자연 height ~35px → 우측보다 작아
           self-center 로 그 안에 가운데 정렬. 우측은 그대로 items-end (= header bottom). */}
@@ -188,6 +190,7 @@ export function DashboardHub({
             ctaLabel="예측 보기"
             disabled={isPredictDisabled}
             disabledReason={predictError ?? undefined}
+            loading={isPredictLoading}
           />
         ) : (
           <HubCard
@@ -200,6 +203,7 @@ export function DashboardHub({
             ctaLabel="예측 보기"
             disabled={isPredictDisabled}
             disabledReason={predictError ?? undefined}
+            loading={isPredictLoading}
           />
         )}
         {onSelect ? (
@@ -213,6 +217,7 @@ export function DashboardHub({
             ctaLabel="분석 보기"
             disabled={isAnalyzeDisabled}
             disabledReason={analyzeError ?? undefined}
+            loading={isAnalyzeLoading}
           />
         ) : (
           <HubCard
@@ -225,6 +230,7 @@ export function DashboardHub({
             ctaLabel="분석 보기"
             disabled={isAnalyzeDisabled}
             disabledReason={analyzeError ?? undefined}
+            loading={isAnalyzeLoading}
           />
         )}
         {onSelect ? (

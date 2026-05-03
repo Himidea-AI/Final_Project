@@ -999,12 +999,12 @@ async def analyze_llm_async(input_data: SimulationInput) -> dict[str, Any]:
 
     job_id = create_job("analyze_llm")
     request_id = str(uuid.uuid4())
-    print(
+    logger.info(
         f"[/analyze/llm/async] 시작 job={job_id[:8]} target={input_data.target_district} biz={input_data.business_type}"
     )
 
     async def _run() -> None:
-        print(f"[/analyze/llm/async] _run 진입 job={job_id[:8]}")
+        logger.info(f"[/analyze/llm/async] _run 진입 job={job_id[:8]}")
         try:
             if os.getenv("LLM_AGENTS_DISABLED", "").strip() == "1":
                 # mock 경로도 진행률 시뮬 (인스턴트 done)
@@ -1046,7 +1046,7 @@ async def analyze_llm_async(input_data: SimulationInput) -> dict[str, Any]:
                     winner, top3, input_data.business_type
                 )
             except Exception as ce:
-                print(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
+                logger.warning(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
                 full["all_competitor_locations"] = []
 
             analysis_keys = set(AnalysisOutput.model_fields.keys())
@@ -1054,11 +1054,11 @@ async def analyze_llm_async(input_data: SimulationInput) -> dict[str, Any]:
             payload["request_id"] = request_id
             payload["target_district"] = full.get("target_district") or input_data.target_district
             set_done(job_id, _safe_json(payload))
-            print(f"[/analyze/llm/async] 완료 job={job_id[:8]}")
+            logger.info(f"[/analyze/llm/async] 완료 job={job_id[:8]}")
         except Exception as e:
             import traceback
 
-            print(f"[/analyze/llm/async] 오류: {e}\n{traceback.format_exc()}")
+            logger.error(f"[/analyze/llm/async] 오류: {e}\n{traceback.format_exc()}")
             set_error(job_id, str(e))
 
     # GC race 방지 — strong ref 보관, 완료 시 자동 discard.
@@ -1656,10 +1656,10 @@ async def predict_districts_async(input_data: SimulationInput) -> dict[str, Any]
         return {"status": "error", "message": "유효한 마포구 행정동이 없습니다."}
 
     job_id = create_job("predict")
-    print(f"[/predict/async] 시작 job={job_id[:8]} dongs={target_districts} biz={input_data.business_type}")
+    logger.info(f"[/predict/async] 시작 job={job_id[:8]} dongs={target_districts} biz={input_data.business_type}")
 
     async def _run() -> None:
-        print(f"[/predict/async] _run 진입 job={job_id[:8]}")
+        logger.info(f"[/predict/async] _run 진입 job={job_id[:8]}")
         try:
             normalized_biz = _BIZ_TYPE_NORMALIZE.get(
                 (input_data.business_type or "").lower(),
@@ -1693,6 +1693,14 @@ async def predict_districts_async(input_data: SimulationInput) -> dict[str, Any]
                 return cb
 
             async def _one(dong: str) -> tuple[str, Any]:
+                # 진입 즉시 stage 갱신 — progress 는 sub_done 누적 그대로(가짜 % 안 만듦),
+                # stage 만 "ML 모델 로딩 중" 으로 변경해 0% 머무는 동안의 시각 신호 제공.
+                # ModelOutput.generate 가 가장 무거워 첫 sub-stage(ml_done)까지 5~30s 걸릴 수 있음.
+                set_progress(
+                    job_id,
+                    sub_done / sub_total,
+                    stage=f"{dong} ML 모델 추론 중",
+                )
                 try:
                     r = await _predict_single_district(
                         dong,
@@ -1711,18 +1719,18 @@ async def predict_districts_async(input_data: SimulationInput) -> dict[str, Any]
             results: list[DistrictPredictionResult] = []
             for dong, res in raw:
                 if isinstance(res, Exception):
-                    print(f"[/predict/async] {dong} 예외 (부분 실패 처리): {res}")
+                    logger.warning(f"[/predict/async] {dong} 예외 (부분 실패 처리): {res}")
                     results.append(DistrictPredictionResult(district=dong))
                 else:
                     results.append(res)
 
             payload = _safe_json([r.model_dump() for r in results])
             set_done(job_id, payload)
-            print(f"[/predict/async] 완료 job={job_id[:8]} count={len(results)}")
+            logger.info(f"[/predict/async] 완료 job={job_id[:8]} count={len(results)}")
         except Exception as e:
             import traceback
 
-            print(f"[/predict/async] 예상치 못한 오류: {e}\n{traceback.format_exc()}")
+            logger.error(f"[/predict/async] 예상치 못한 오류: {e}\n{traceback.format_exc()}")
             set_error(job_id, str(e))
 
     # GC race 방지 — strong ref 보관, 완료 시 자동 discard.
@@ -2028,8 +2036,9 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     # v4: Tier S/A LLM decisions 도입 (use_llm_decisions, 2026-04-29).
     # v5: 전 Tier OpenAI gpt-4.1-mini 통일 (Haiku/Gemini 제거, 2026-04-29).
     # v6: Tier S 50 전용 LLM 모드 (Tier A/B → policy_decide, 2026-04-29).
+    # v7: ext_commuter LLM plan 활성 + new_store_role_dist + tier_s_meta 응답 추가 (2026-05-03).
     cache_key = (
-        "abm_sim:v6:"
+        "abm_sim:v7:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -2168,12 +2177,14 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "new_store_visits": result.get("new_store_visits", 0),
         "new_store_revenue": result.get("new_store_revenue", 0.0),
         "new_store_visit_share_pct": result.get("new_store_visit_share_pct", 0.0),
+        "new_store_role_dist": result.get("new_store_role_dist", {}),
         # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채워짐
         "thoughts": result.get("thoughts", []),
         "thought_calls": result.get("thought_calls", 0),
         "thought_input_tokens": result.get("thought_input_tokens", 0),
         "thought_output_tokens": result.get("thought_output_tokens", 0),
         "thought_cached_tokens": result.get("thought_cached_tokens", 0),
+        "tier_s_meta": result.get("tier_s_meta"),
         "tier_s_calls": result.get("tier_s_calls", 0),
         "tier_a_calls": result.get("tier_a_calls", 0),
         "estimated_cost_usd": result.get("estimated_cost_usd", 0.0),

@@ -55,7 +55,7 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
 
   const shap = simResult.shap_result;
   // 시나리오 비교 차트 제거 (2026-05-01) — 분기별 예상 매출의 CI band 와 동일 데이터(95% 신뢰구간)라 중복.
-  // 자연어 가치는 QuarterlyStatStrip 의 시나리오 범위 한줄평으로 흡수, 차트 범례는 "낙관/비관 범위" 라벨로.
+  // 시나리오 범위 한줄평 패널도 제거 (2026-05-03 사용자 요청) — QuarterlyStatStrip 정량 row + 합계/평균 만 유지.
 
   return (
     <div className="space-y-6">

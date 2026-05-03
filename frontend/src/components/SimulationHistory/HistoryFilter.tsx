@@ -115,7 +115,7 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
                 key={k}
                 type="button"
                 onClick={() => applyPreset(k)}
-                className={`rounded-md px-2.5 py-1.5 text-[0.6875rem] font-semibold transition-all ${
+                className={`rounded-md px-3 py-2 min-h-[36px] text-[0.6875rem] font-semibold transition-all ${
                   active
                     ? 'bg-primary/15 text-primary border border-primary/40'
                     : 'border border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40'
@@ -156,6 +156,9 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
           <button
             type="button"
             onClick={() => setSortOpen((o) => !o)}
+            aria-haspopup="listbox"
+            aria-expanded={sortOpen}
+            aria-label="정렬 기준 선택"
             className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground hover:border-primary/50 transition-colors min-w-[170px] justify-between"
           >
             <span className="text-muted-foreground tracking-wider uppercase text-[0.625rem]">
@@ -168,13 +171,18 @@ export function HistoryFilter({ value, onChange }: HistoryFilterProps) {
             />
           </button>
           {sortOpen && (
-            <div className="absolute right-0 z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+            <div
+              role="listbox"
+              className="absolute right-0 z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-border bg-card shadow-2xl"
+            >
               {SORT_OPTIONS.map((opt) => {
                 const active = currentSort === opt.value;
                 return (
                   <button
                     key={opt.value}
                     type="button"
+                    role="option"
+                    aria-selected={active}
                     onClick={() => {
                       onChange({ ...value, sort: opt.value, page: 1 });
                       setSortOpen(false);

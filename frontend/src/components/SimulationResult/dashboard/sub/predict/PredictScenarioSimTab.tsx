@@ -183,7 +183,10 @@ export function PredictScenarioSimTab({ simResult }: Props) {
             {data && <QuarterSeasonalityCard quarterElasticity={data.elasticity.quarter_num} />}
           </div>
 
-          <div className="lg:col-span-7 space-y-4">
+          {/* 우측 wrapper — lg 에서 flex-col 로 좌측 합산 높이에 자동 매칭.
+              KpiHero 고정 + 4분기 박스 lg:flex-1 로 남은 공간 채움 → ScenarioComparisonChart
+              가 ResponsiveContainer height="100%" 로 부모 채움. lg 미만 (mobile) 은 fixed height 280 으로 안전. */}
+          <div className="flex flex-col gap-4 lg:col-span-7">
             {data && result ? (
               <>
                 <KpiHero
@@ -191,15 +194,18 @@ export function PredictScenarioSimTab({ simResult }: Props) {
                   baseline={data.baseline_sales}
                   adjusted={result.adjusted}
                 />
-                <div className="rounded-3xl border border-border bg-card p-6">
-                  <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground mb-4">
+                <div className="flex flex-col rounded-3xl border border-border bg-card p-6 lg:flex-1">
+                  <h4 className="mb-4 text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
                     4분기 매출 시뮬 — 기준선 vs 시나리오
                   </h4>
-                  <ScenarioComparisonChart
-                    baseline={data.baseline_sales}
-                    adjusted={result.adjusted}
-                  />
-                  <p className="mt-3 text-[0.625rem] text-muted-foreground leading-relaxed">
+                  <div className="min-h-[280px] lg:flex-1">
+                    <ScenarioComparisonChart
+                      baseline={data.baseline_sales}
+                      adjusted={result.adjusted}
+                      height="100%"
+                    />
+                  </div>
+                  <p className="mt-3 text-[0.625rem] leading-relaxed text-muted-foreground">
                     ※ 매출 = baseline × (1 + Σ slider_pct/100) — 선형 결합 가정. 실제 비선형
                     상호작용은 일부 누락될 수 있습니다.
                   </p>
@@ -266,6 +272,17 @@ function DongDropdown({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // 시뮬 입력의 분석 대상 동만 — 사용자가 RUN 시점에 고른 1~4 동 (target_districts).
+  // store.params 가 없으면 (직접 URL 진입 등) fallback 으로 마포 16동 전체 노출 — UX 차단 회피.
+  const targetDistricts = useSimulationStore((s) => s.params?.target_districts ?? null);
+  const optionDongs = useMemo(() => {
+    if (targetDistricts && targetDistricts.length > 0) {
+      const set = new Set(targetDistricts);
+      return MAPO_DONGS.filter((d) => set.has(d.name));
+    }
+    return MAPO_DONGS;
+  }, [targetDistricts]);
+
   useEffect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
@@ -283,12 +300,12 @@ function DongDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label="행정동 선택"
-        className="flex h-10 min-w-[140px] items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 text-sm text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+        className="relative flex h-10 min-w-[140px] items-center justify-center rounded-lg border border-border bg-card px-9 text-sm text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
       >
         <span className="truncate">{selectedDong}</span>
         <ChevronRight
           size={14}
-          className={`text-muted-foreground transition-transform duration-200 shrink-0 ${
+          className={`absolute right-3 text-muted-foreground transition-transform duration-200 ${
             open ? 'rotate-90' : ''
           }`}
         />
@@ -296,10 +313,10 @@ function DongDropdown({
       {open && (
         <div
           role="listbox"
-          className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar"
+          className="custom-scrollbar absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-2xl"
           style={{ overscrollBehavior: 'contain' }}
         >
-          {MAPO_DONGS.map((d) => {
+          {optionDongs.map((d) => {
             const active = d.name === selectedDong;
             return (
               <button
@@ -310,12 +327,11 @@ function DongDropdown({
                   onSelectDong(d.name);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors ${
+                className={`flex w-full items-center justify-center px-3 py-2 text-center text-xs transition-colors ${
                   active ? 'bg-primary/10 font-bold text-primary' : 'text-foreground hover:bg-muted'
                 }`}
               >
-                <span>{d.name}</span>
-                <span className="text-[0.625rem] text-muted-foreground tabular-nums">{d.code}</span>
+                {d.name}
               </button>
             );
           })}

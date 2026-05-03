@@ -1,7 +1,15 @@
+/**
+ * useSimulationDetail — kind 별 detail fetch.
+ *
+ * 2026-05-02 DB 분리 후 시그니처: (id, kind).
+ * - kind='foresee' → GET /simulation-foresee/{id} (mapForeseeDetailToHistoryDetail)
+ * - kind='ai'      → GET /simulation-ai/{id}      (mapAIDetailToHistoryDetail)
+ * - kind=null      → legacy /simulation-history/{id} fallback (마이그레이션 미진행 row)
+ */
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { getSimulationHistoryDetail } from '../api/client';
-import type { SimulationHistoryDetail } from '../types/simulationHistory';
+import { getAIDetail, getForeseeDetail, getSimulationHistoryDetail } from '../api/client';
+import type { SimulationHistoryDetail, SimulationKind } from '../types/simulationHistory';
 
 interface UseSimulationDetailState {
   data: SimulationHistoryDetail | null;
@@ -23,7 +31,10 @@ function parseError(err: unknown): { message: string; notFound: boolean } {
   return { message: err instanceof Error ? err.message : '알 수 없는 오류', notFound: false };
 }
 
-export function useSimulationDetail(id: number | null): UseSimulationDetailState {
+export function useSimulationDetail(
+  id: number | null,
+  kind: SimulationKind | null,
+): UseSimulationDetailState {
   const [state, setState] = useState<UseSimulationDetailState>({
     data: null,
     isLoading: id != null,
@@ -38,7 +49,15 @@ export function useSimulationDetail(id: number | null): UseSimulationDetailState
     }
     let cancelled = false;
     setState({ data: null, isLoading: true, error: null, notFound: false });
-    getSimulationHistoryDetail(id)
+
+    const fetcher: Promise<SimulationHistoryDetail> =
+      kind === 'foresee'
+        ? getForeseeDetail(id)
+        : kind === 'ai'
+          ? getAIDetail(id)
+          : getSimulationHistoryDetail(id);
+
+    fetcher
       .then((data) => {
         if (cancelled) return;
         setState({ data, isLoading: false, error: null, notFound: false });
@@ -51,7 +70,7 @@ export function useSimulationDetail(id: number | null): UseSimulationDetailState
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, kind]);
 
   return state;
 }
