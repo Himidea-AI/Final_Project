@@ -19,7 +19,7 @@ export default function DashboardAbmPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="mx-auto max-w-[1728px] px-8 pt-28 pb-8">
+    <div className="mx-auto max-w-[1728px] px-8 pt-8 pb-8">
       <div className="mb-6">
         <button
           type="button"

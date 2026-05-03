@@ -92,12 +92,25 @@ class Settings(BaseSettings):
     multi_query_n: int = int(os.getenv("MULTI_QUERY_N", "3"))
     multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-4.1-mini")
 
+    # RAG 검색 trace — 각 search() 호출 단계별 후보/점수를 JSONL로 기록
+    # default OFF (성능 영향). RAG_TRACE_ENABLED=true 활성화.
+    rag_trace_enabled: bool = os.getenv("RAG_TRACE_ENABLED", "false").lower() == "true"
+    rag_trace_dir: str = os.getenv("RAG_TRACE_DIR", "validation/results/rag_trace")
+
+    # 판례 RAG — specialist 평가 시 관련 판례 동시 검색 (default ON).
+    # category='판례' 청크 (대법원 등) 를 검색하여 summary/recommendation 에 인용.
+    legal_precedent_enabled: bool = os.getenv("LEGAL_PRECEDENT_ENABLED", "true").lower() == "true"
+    legal_precedent_top_k: int = int(os.getenv("LEGAL_PRECEDENT_TOP_K", "2"))
+
+    # Articles content 를 LLM 이 풀어쓴 1~2문장 케이스 맞춤 설명으로 변환 (default ON).
+    # specialist 당 LLM 1회 추가 호출. 비용 vs UX trade-off — 사용자가 200~300자
+    # 조문 본문을 직접 읽는 부담 제거 목적.
+    legal_article_explanation_enabled: bool = os.getenv("LEGAL_ARTICLE_EXPLANATION_ENABLED", "true").lower() == "true"
+
     # Legal Rule Engine — 8 룰 + 4 specialist 하이브리드 (2026-05-02).
     # 단일 모드로 전환 (legacy single-LLM batch 경로 제거). flag 자체는 호환을 위해 보존.
     # 스펙: docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md
-    legal_rule_engine_enabled: bool = (
-        os.getenv("LEGAL_RULE_ENGINE_ENABLED", "true").lower() == "true"
-    )
+    legal_rule_engine_enabled: bool = os.getenv("LEGAL_RULE_ENGINE_ENABLED", "true").lower() == "true"
 
     # NTS (국세청)
     nts_api_key: str = os.getenv("NTS_API_KEY", "")

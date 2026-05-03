@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .agents import Decision
-from .config import ModelConfig
+from .config import ModelConfig, log_llm_call
 from .personas import Persona
 
 # LangSmith 토큰/비용 추적 — LANGCHAIN_TRACING_V2=true 일 때만 동작.
@@ -32,6 +32,7 @@ from .personas import Persona
 #
 # 옵션: ABM_LANGCHAIN_PROJECT 환경변수로 별도 프로젝트 분리도 가능 (기본 None=같은 프로젝트).
 ABM_LS_PROJECT = os.getenv("ABM_LANGCHAIN_PROJECT") or None
+
 
 def _slim_inputs(inputs: dict) -> dict:
     """LangSmith @traceable input filter — World/Agent 통째 직렬화 회피.
@@ -620,10 +621,7 @@ class LLMBrain:
 
         import asyncio as _aio
 
-        chunks = [
-            agents[i : i + self.BATCH_SIZE_PLAN]
-            for i in range(0, len(agents), self.BATCH_SIZE_PLAN)
-        ]
+        chunks = [agents[i : i + self.BATCH_SIZE_PLAN] for i in range(0, len(agents), self.BATCH_SIZE_PLAN)]
 
         async def _run_all() -> dict[int, list[dict]]:
             # OpenAI Tier 1 RPM=500 보호. thought 5 + plan 5 동시 → 8 cap 충분.
@@ -665,8 +663,14 @@ class LLMBrain:
             if persona is not None:
                 first = persona.full_profile.split("\n", 1)[0]
                 persona_brief = first[:200]
+            # ext_commuter/ext_visitor 는 마포 체류 시간만 표기 (외부 시간 슬롯은 policy 가 무시).
+            window = ""
+            arr = getattr(a, "arrival_hour", None)
+            dep = getattr(a, "departure_hour", None)
+            if a.role.value in ("ext_commuter", "ext_visitor") and arr is not None and dep is not None:
+                window = f", 마포체류={arr:02d}-{dep:02d}h, work={getattr(a, 'work_dong', None) or '?'}"
             user_blocks.append(
-                f"#{a.agent_id} | home={a.home_dong}, age={a.age}, role={a.role.value} | {persona_brief}"
+                f"#{a.agent_id} | home={a.home_dong}, age={a.age}, role={a.role.value}{window} | {persona_brief}"
             )
 
         wkd_label = "주말" if getattr(world, "is_weekend", False) else "평일"
@@ -674,6 +678,8 @@ class LLMBrain:
 
         # 시나리오 신규 매장 컨텍스트 — 사용자 입력 (district/category/brand) 가
         # 매 실행마다 다르므로 prompt 에 명시해야 plan 결과 분기. 미주입 시 일반 plan.
+        # 주의: 너무 강한 prompt → 모든 agent 가 신규 매장 방문하는 비현실 결과.
+        # "20-30%만 호기심 방문 / 나머지는 평소 routine" 으로 분포 강제.
         scenario_block = ""
         sc = getattr(self, "scenario_context", None)
         if sc:
@@ -684,10 +690,14 @@ class LLMBrain:
             ns_peak = sc.get("peak_time") or ""
             ns_boost = sc.get("popularity_boost") or 1.0
             scenario_block = (
-                f"\n\n[오늘 신규 오픈] {ns_dong} '{ns_brand}' ({ns_cat}, popularity_boost={ns_boost})."
+                f"\n\n[오늘 신규 오픈] {ns_dong} '{ns_brand}' ({ns_cat}). popularity_boost={ns_boost}."
                 + (f" 주 타겟: {ns_target}." if ns_target else "")
                 + (f" 피크: {ns_peak}." if ns_peak else "")
-                + " 해당 카테고리 선호 + 인근 동 거주/근무 agent 는 호기심에 1회 방문 자연스럽게 포함."
+                + " 방문 분포 룰:"
+                + " (1) 10명 중 2-3명만 호기심에 1회 visit 슬롯 추가 — 페르소나가 주 타겟과 일치하거나 home_dong 가 인접한 경우만."
+                + " (2) 나머지 7-8명은 신규 매장 무시. 평소 일과 (재택/식사/휴식) 그대로."
+                + " (3) 신규 매장 방문은 1회만. 동일 매장 두 번 연속 슬롯 금지 (예: 12-13 visit + 14-17 visit 같은 곳 X)."
+                + " (4) 노년층/육아층 등 페르소나 안 맞는 agent 는 호기심 방문 X."
             )
 
         user_prompt = (
@@ -696,12 +706,17 @@ class LLMBrain:
             + scenario_block
             + "\n각 agent 의 하루 일정을 6시~26시 (=익일 02시) 시간 슬롯으로 생성. "
             + 'JSON {"plans":[{"agent_id":int,"schedule":[{"start":int,"end":int,"action":str,'
-            + '"dong":str,"category":str|null,"reason":"30자 fragment"}]}]}.\n'
+            + '"dong":str,"category":str|null,"reason":"30자 fragment","hourly":["12자 한국어",...]}]}]}.\n'
             + "action: work|visit|rest|move 중 하나.\n"
             + "category (visit 슬롯만): 카페|음식점|편의점|주점.\n"
+            + 'hourly: slot 의 (end-start) 길이만큼 12자 한국어 내적독백 array. 시간 흐름 (도착→몰입→마무리) 자연스럽게. 마침표/따옴표 X. 예: ["카페 도착","수다 한참","마저 대화"].\n'
             + "agent 페르소나·home_dong 반영. 점심·저녁·휴식 자연스럽게 분배. "
-            + "슬롯 6~8개. reason 20자 이내. dong 짧게. "
-            + "시간 겹치지 않게 연속 배치. 같은 카테고리 3회 이상 반복 금지."
+            + "슬롯 6~8개. visit 슬롯 0~2개 (대부분 0~1). reason 20자 이내. dong 짧게. "
+            + "시간 겹치지 않게 연속 배치. 같은 카테고리 2회 이상 금지. 같은 매장 연속 슬롯 절대 금지. "
+            + "ext_commuter (외부→마포 출근): 마포체류 범위 안에서만 슬롯. work_dong 위주. "
+            + "출근 직후 (도착~+1h) 카페 visit 1슬롯 강제 권장 (출근길 커피). 점심 (12-13) visit 1슬롯 권장. "
+            + "ext_visitor (외부→마포 저녁 방문): 마포체류 안에서 visit 슬롯 1-2개 (저녁 식사·주점·카페). "
+            + "ext_*는 외부 시간 슬롯 만들지 않음 (마포체류 밖은 자동 외부 처리)."
         )
         system_prompt = (
             "마포구 ABM 시뮬레이터. N명 페르소나의 하루 일정을 시간 슬롯으로 한 번에 생성. "
@@ -711,9 +726,9 @@ class LLMBrain:
 
         # plan 호출도 stat 카운트 — 토큰 추적용
         self.stats.tier_s_calls += len(agents)
-        # 1 agent 당 8 슬롯 × ~80 tok = 640 tok 응답. JSON wrapper + 여유 600 tok.
+        # 1 agent 당 8 슬롯 × ~80 tok + hourly array (~120 tok) = 880 tok 응답. JSON wrapper + 여유 600 tok.
         # 이전 4200 cap → "Unterminated string" 절단 발생. 16000 으로 안전마진.
-        max_out = min(16000, 700 * len(agents) + 600)
+        max_out = min(16000, 1000 * len(agents) + 600)
 
         try:
             resp = self._openai.chat.completions.create(
@@ -729,6 +744,7 @@ class LLMBrain:
             usage = resp.usage
             self.stats.tier_s_input_tokens += getattr(usage, "prompt_tokens", 0) or 0
             self.stats.tier_s_output_tokens += getattr(usage, "completion_tokens", 0) or 0
+            log_llm_call("brain.S.plan.batch", self.cfg.tier_s_model, usage, n_agents=len(agents))
             text = resp.choices[0].message.content or ""
             return self._parse_daily_plans(text, agents)
         except Exception as e:
@@ -811,6 +827,12 @@ class LLMBrain:
                     cat = None
                 if cat not in valid_cats:
                     cat = None
+                hourly_raw = slot.get("hourly")
+                hourly: list[str] = []
+                if isinstance(hourly_raw, list):
+                    for h in hourly_raw:
+                        if isinstance(h, str) and h.strip():
+                            hourly.append(h.strip()[:30])
                 valid_slots.append(
                     {
                         "start": start,
@@ -819,6 +841,7 @@ class LLMBrain:
                         "dong": (slot.get("dong") or "").strip(),
                         "category": cat,
                         "reason": (slot.get("reason") or "")[:60],
+                        "hourly": hourly,
                     }
                 )
             if valid_slots:
@@ -854,10 +877,7 @@ class LLMBrain:
 
         import asyncio as _aio
 
-        chunks = [
-            agents[i : i + self.BATCH_SIZE_THOUGHT]
-            for i in range(0, len(agents), self.BATCH_SIZE_THOUGHT)
-        ]
+        chunks = [agents[i : i + self.BATCH_SIZE_THOUGHT] for i in range(0, len(agents), self.BATCH_SIZE_THOUGHT)]
 
         hour_for_fb = getattr(world, "current_hour", 0) % 24
 
@@ -949,6 +969,7 @@ class LLMBrain:
                 cached_obj = getattr(usage, "prompt_tokens_details", None)
                 cached_n = getattr(cached_obj, "cached_tokens", 0) if cached_obj else 0
                 self.stats.thought_cache_read += cached_n
+                log_llm_call("brain.S.thought.batch", self.cfg.tier_s_model, usage, n_agents=len(agents))
             return self._parse_thoughts(text, agents, hour)
         except Exception as e:
             print(f"[brain.thought.batch] 실패: {e}")

@@ -35,6 +35,8 @@ interface BaseProps {
    */
   disabled?: boolean;
   disabledReason?: string;
+  /** 로딩 중 표시 — DashboardHub 가 슬라이스 status='running' 시 전달. 시각: opacity ↓ + 클릭 차단. */
+  loading?: boolean;
 }
 
 interface LinkProps extends BaseProps {
