@@ -529,8 +529,9 @@ async def district_ranking_node(state: AgentState) -> dict:
     # v7: inflow(교통·집객 접근성) 점수 추가 — Hansen/E2SFCA (v6 무효화)
     # v8: A안 가중치 + 정규화 강제 (매출 5%→35%, 인구 45%→20%, 합 1.0 보장 — v7 무효화)
     # v9: _fetch_naver_trend 외부 API → DB 조회 전환 (v8 trend_score=None 캐시 무효화)
+    # v10: inflow_scorer 가중치(subway 10→25/bus 40/fclty 50→35) + baseline 정규화 도입 (v9 무효화)
     cache_key = (
-        f"v9:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+        f"v10:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
     )
     _redis = None
     try:
