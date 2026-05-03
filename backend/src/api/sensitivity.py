@@ -63,7 +63,7 @@ _CORRELATIONS: dict[str, float] = _load_json(_CORR_PATH, label="feature correlat
 
 
 class SensitivityResponse(BaseModel):
-    elasticity: dict[str, dict[str, float]]
+    elasticity: dict[str, dict[str, list[float]]]
     correlations: dict[str, float]
     baseline_sales: list[float]
 

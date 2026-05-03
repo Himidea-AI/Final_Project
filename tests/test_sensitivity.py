@@ -163,18 +163,55 @@ def test_sensitivity_endpoint_returns_correct_structure(monkeypatch, tmp_path):
         "11440530_CS100001": {
             "baseline": [15000000.0, 15500000.0, 16000000.0, 15800000.0],
             "elasticity": {
-                "rent_1f": {"-30": -8.2, "-20": -5.1, "-10": -2.4, "0": 0.0, "+10": 2.6, "+20": 5.3, "+30": 8.1},
-                "vacancy_rate": {"-30": -3.1, "-20": -2.0, "-10": -1.0, "0": 0.0, "+10": 1.1, "+20": 2.2, "+30": 3.4},
-                "floating_pop": {"-30": -12.0, "-20": -8.0, "-10": -4.0, "0": 0.0, "+10": 4.1, "+20": 8.3, "+30": 12.5},
-                "trend_score": {"-30": -5.0, "-20": -3.3, "-10": -1.6, "0": 0.0, "+10": 1.7, "+20": 3.4, "+30": 5.2},
-                "quarter_num": {"Q1": -3.2, "Q2": 1.1, "Q3": 5.8, "Q4": -2.4},
+                "vacancy_rate": {
+                    "-30": [-3.1, -3.0, -2.9, -2.8],
+                    "-20": [-2.0, -2.0, -1.9, -1.9],
+                    "-10": [-1.0, -1.0, -0.9, -0.9],
+                    "0": [0.0, 0.0, 0.0, 0.0],
+                    "+10": [1.1, 1.1, 1.0, 1.0],
+                    "+20": [2.2, 2.2, 2.1, 2.0],
+                    "+30": [3.4, 3.3, 3.2, 3.1],
+                },
+                "trend_score": {
+                    "-30": [-5.0, -4.9, -4.8, -4.7],
+                    "-20": [-3.3, -3.2, -3.1, -3.0],
+                    "-10": [-1.6, -1.6, -1.5, -1.5],
+                    "0": [0.0, 0.0, 0.0, 0.0],
+                    "+10": [1.7, 1.7, 1.6, 1.6],
+                    "+20": [3.4, 3.3, 3.2, 3.1],
+                    "+30": [5.2, 5.1, 5.0, 4.9],
+                },
+                "cpi_index": {
+                    "-30": [-2.0, -1.9, -1.8, -1.7],
+                    "-20": [-1.3, -1.3, -1.2, -1.1],
+                    "-10": [-0.6, -0.6, -0.5, -0.5],
+                    "0": [0.0, 0.0, 0.0, 0.0],
+                    "+10": [0.6, 0.6, 0.5, 0.5],
+                    "+20": [1.3, 1.2, 1.2, 1.1],
+                    "+30": [2.0, 1.9, 1.8, 1.7],
+                },
+                "opr_sale_mt_avg": {
+                    "-30": [-1.5, -1.4, -1.3, -1.2],
+                    "-20": [-1.0, -1.0, -0.9, -0.8],
+                    "-10": [-0.5, -0.5, -0.4, -0.4],
+                    "0": [0.0, 0.0, 0.0, 0.0],
+                    "+10": [0.5, 0.5, 0.4, 0.4],
+                    "+20": [1.0, 1.0, 0.9, 0.8],
+                    "+30": [1.5, 1.4, 1.3, 1.2],
+                },
+                "quarter_num": {
+                    "Q1": [-3.2, -3.1, -3.0, -2.9],
+                    "Q2": [1.1, 1.1, 1.0, 1.0],
+                    "Q3": [5.8, 5.7, 5.5, 5.3],
+                    "Q4": [-2.4, -2.3, -2.2, -2.1],
+                },
             },
         }
     }
     mock_corr = {
-        "floating_pop→rent_1f": 0.63,
-        "floating_pop→vacancy_rate": -0.41,
-        "rent_1f→vacancy_rate": -0.38,
+        "vacancy_rate→cpi_index": 0.42,
+        "vacancy_rate→opr_sale_mt_avg": -0.31,
+        "cpi_index→opr_sale_mt_avg": -0.18,
     }
 
     cache_file = tmp_path / "sensitivity_cache.json"
@@ -202,7 +239,13 @@ def test_sensitivity_endpoint_returns_correct_structure(monkeypatch, tmp_path):
     assert "correlations" in body
     assert "baseline_sales" in body
     assert len(body["baseline_sales"]) == 4
-    assert set(body["elasticity"].keys()) == {"rent_1f", "vacancy_rate", "floating_pop", "trend_score", "quarter_num"}
+    assert set(body["elasticity"].keys()) == {
+        "vacancy_rate",
+        "trend_score",
+        "cpi_index",
+        "opr_sale_mt_avg",
+        "quarter_num",
+    }
 
 
 def test_sensitivity_endpoint_404_for_unknown_combo(monkeypatch, tmp_path):
@@ -270,15 +313,25 @@ def _make_etag_test_client(monkeypatch, tmp_path):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
+    _zero4 = [0.0, 0.0, 0.0, 0.0]
+    _zero_levels = {
+        "-30": _zero4,
+        "-20": _zero4,
+        "-10": _zero4,
+        "0": _zero4,
+        "+10": _zero4,
+        "+20": _zero4,
+        "+30": _zero4,
+    }
     mock_cache = {
         "11440530_CS100001": {
             "baseline": [1000.0, 1000.0, 1000.0, 1000.0],
             "elasticity": {
-                "rent_1f": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
-                "vacancy_rate": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
-                "floating_pop": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
-                "trend_score": {"-30": 0.0, "-20": 0.0, "-10": 0.0, "0": 0.0, "+10": 0.0, "+20": 0.0, "+30": 0.0},
-                "quarter_num": {"Q1": 0.0, "Q2": 0.0, "Q3": 0.0, "Q4": 0.0},
+                "vacancy_rate": _zero_levels,
+                "trend_score": _zero_levels,
+                "cpi_index": _zero_levels,
+                "opr_sale_mt_avg": _zero_levels,
+                "quarter_num": {"Q1": _zero4, "Q2": _zero4, "Q3": _zero4, "Q4": _zero4},
             },
         }
     }
@@ -384,3 +437,40 @@ def test_perturb_quarter_and_predict_returns_list_of_4_quarters():
 
     assert isinstance(result, list)
     assert len(result) == 4
+
+
+def test_sensitivity_response_elasticity_is_quarterly_list(tmp_path, monkeypatch):
+    """API 응답의 elasticity[slider][level]은 길이 4의 list[float]여야 한다."""
+    cache_path = tmp_path / "cache.json"
+    corr_path = tmp_path / "corr.json"
+    cache_path.write_text(
+        '{"11440660_CS100001": {'
+        '"baseline": [100.0, 110.0, 120.0, 130.0],'
+        '"elasticity": {"vacancy_rate": {"+10": [-1.1, -1.2, -1.3, -1.4], "0": [0.0, 0.0, 0.0, 0.0]}}'
+        "}}",
+        encoding="utf-8",
+    )
+    corr_path.write_text('{"vacancy_rate→cpi_index": 0.42}', encoding="utf-8")
+    monkeypatch.setenv("SENSITIVITY_CACHE_PATH", str(cache_path))
+    monkeypatch.setenv("SENSITIVITY_CORR_PATH", str(corr_path))
+
+    import importlib
+
+    import src.api.sensitivity as sens_mod
+
+    importlib.reload(sens_mod)
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(sens_mod.router)
+    client = TestClient(app)
+
+    res = client.get("/predict/sensitivity?dong_code=11440660&industry_code=CS100001")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert isinstance(body["baseline_sales"], list) and len(body["baseline_sales"]) == 4
+    val = body["elasticity"]["vacancy_rate"]["+10"]
+    assert isinstance(val, list) and len(val) == 4
+    assert val == [-1.1, -1.2, -1.3, -1.4]
