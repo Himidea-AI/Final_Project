@@ -67,7 +67,7 @@ export function EmergingSignalCard({ signal }: Props) {
     return (
       <div className="text-center">
         <Sparkles className="mx-auto text-muted-foreground mb-2" size={22} />
-        <p className="text-xs text-muted-foreground">신흥 상권 조기 감지 데이터 없음</p>
+        <p className="text-xs text-muted-foreground">상권 조기 감지 데이터 없음</p>
         <p className="mt-1 text-[0.625rem] text-muted-foreground">
           emerging_district (LSTM Autoencoder) 모델 호출 실패 시 표시됩니다
         </p>
@@ -85,7 +85,7 @@ export function EmergingSignalCard({ signal }: Props) {
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
-          <Sparkles size={16} className="text-primary" /> 신흥 상권 조기 감지
+          <Sparkles size={16} className="text-primary" /> 상권 조기 감지
           <span className="text-[0.625rem] font-black text-muted-foreground normal-case tracking-normal">
             emerging_district · LSTM AE
           </span>

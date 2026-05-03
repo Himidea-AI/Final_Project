@@ -1,5 +1,5 @@
 /**
- * PredictEmergingDistrictTab — 동별 신흥상권 감지 신호
+ * PredictEmergingDistrictTab — 동별 상권 조기감지 신호
  *
  * /predict 응답의 district_predictions[].emerging_signal 을 동별 카드 grid 로 렌더.
  * 2026-04-29 multi-district visual cycle (M11) — placeholder 해제.
@@ -24,7 +24,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
       <div className="space-y-6">
         <PlaceholderPanel
           modelName="emerging_district (LSTM Autoencoder)"
-          description="신흥상권 감지 신호는 동별 예측 데이터(/predict)가 도착해야 활성화됩니다."
+          description="상권 조기감지 신호는 동별 예측 데이터(/predict)가 도착해야 활성화됩니다."
         />
       </div>
     );
@@ -36,7 +36,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
       <div className="space-y-6">
         <PlaceholderPanel
           modelName="emerging_district (LSTM Autoencoder)"
-          description="동별 신흥상권 신호는 backend /predict 응답에서 미수신 상태입니다 — DistrictPredictionResult.emerging_signal 구현 후 활성화됩니다."
+          description="동별 상권 조기감지 신호는 backend /predict 응답에서 미수신 상태입니다 — DistrictPredictionResult.emerging_signal 구현 후 활성화됩니다."
         />
       </div>
     );
@@ -45,7 +45,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
   return (
     <div className="space-y-6">
       <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest">
-        동별 신흥상권 감지 신호
+        동별 상권 조기감지 신호
       </h4>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {dpredicts.map((p) => (
@@ -57,7 +57,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
               <EmergingSignalCard signal={p.emerging_signal as unknown as EmergingSignal} />
             ) : (
               <div className="rounded-2xl border border-dashed border-border bg-secondary p-4 text-[0.625rem] text-muted-foreground">
-                신흥상권 신호 미수신
+                상권 조기감지 신호 미수신
               </div>
             )}
           </div>

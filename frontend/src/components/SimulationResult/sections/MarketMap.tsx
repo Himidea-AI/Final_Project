@@ -214,12 +214,12 @@ export function MarketMap({
       const circle = new maps.Circle({
         center: latLng,
         radius,
-        strokeWeight: 2,
-        strokeColor: '#ffb6d0', // light-pink — 반경 영역 경계 (12색 팔레트 §Shapes)
-        strokeOpacity: 0.8,
+        strokeWeight: 2.5,
+        strokeColor: '#ff0070', // hot-pink — 반경 가시성↑ (pin 과 같은 hue, dash 로 역할 구분)
+        strokeOpacity: 0.9,
         strokeStyle: 'dash',
-        fillColor: '#ffb6d0',
-        fillOpacity: 0.08,
+        fillColor: '#ff0070',
+        fillOpacity: 0.1,
       });
       circle.setMap(mapInstance);
       overlayLayersRef.current.push(circle);

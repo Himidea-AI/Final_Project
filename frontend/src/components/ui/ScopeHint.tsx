@@ -13,7 +13,7 @@ type Props = {
 export function ScopeHint({ selectedDongCount, estimatePerDong = 537 }: Props) {
   const points = selectedDongCount * estimatePerDong;
   return (
-    <div className="bg-card rounded-2xl border border-primary/20 shadow-sm bg-primary/5 p-5">
+    <div className="box-glass rounded-2xl p-6 ring-1 ring-primary/20">
       <div className="flex gap-3">
         <Info size={18} className="text-primary shrink-0 mt-0.5" />
         <div>

@@ -667,3 +667,22 @@ html {
     transform: none;
   }
 }
+
+/* 로딩 wave 의 base motion 은 SVG <animateTransform> (GPU 합성). CSS keyframe 은
+   slice done 순간 1회 sweep 으로 채워진 물 위로 highlight 가 지나가는 폴리싱용. */
+@keyframes water-shimmer {
+  0% {
+    transform: translateX(0%) skewX(-12deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(420%) skewX(-12deg);
+    opacity: 0;
+  }
+}

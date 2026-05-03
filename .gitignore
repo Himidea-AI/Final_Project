@@ -120,6 +120,7 @@ tmp_*.png
 
 # 모델 학습 산출물 (재현 가능, 용량 큼)
 models/**/weights/*.pkl
+models/**/weights/*.json
 validation/results/*.db
 validation/results/imputed_mapo_*.csv
 validation/results/checkpoints_v4/

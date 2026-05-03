@@ -1,9 +1,12 @@
 /**
  * ContactPage — 벤토 박스 디지털 명함 (App.tsx에서 추출, Phase C Round 1).
  * Mega Typography + Bento Grid (Workspace 4링크, Team, Location, Direct Inquiry).
+ *
+ * 헤더는 App.tsx 의 global header 가 제공 (scene !== 'intro' 일 때 fixed h-20).
+ * 이 페이지는 자체 헤더 없이 본문만 렌더한다.
  */
 
-import { ChevronRight, GitFork, ExternalLink, Mail, MapPin, Phone } from 'lucide-react';
+import { GitFork, ExternalLink, Mail, MapPin, Phone } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
    Contact Page — 벤토 박스 디지털 명함
@@ -13,32 +16,11 @@ import { ChevronRight, GitFork, ExternalLink, Mail, MapPin, Phone } from 'lucide
    - 100vh One-page Fit (스크롤 없음)
 */
 
-export default function ContactPage({ onBack }: { onBack: () => void }) {
+export default function ContactPage(_: { onBack?: () => void }) {
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-card/95 backdrop-blur-sm text-foreground pb-10">
-      {/* Header */}
-      <div className="fixed top-0 left-0 w-full h-24 border-b border-border/50 flex items-center px-8 md:px-16 bg-card/80 backdrop-blur-md z-50">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
-          >
-            <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-foreground">SPOTTER</span>
-          </button>
-          <span className="text-border">/</span>
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
-          >
-            <ChevronRight size={14} className="rotate-180" />
-            BACK
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 flex flex-col justify-center pt-24 px-8 md:px-16 overflow-hidden">
+    <div className="absolute inset-0 z-20 flex flex-col bg-background text-foreground pb-10">
+      {/* Body — global header (h-20) 아래로 시작 */}
+      <div className="flex-1 flex flex-col justify-center pt-20 px-8 md:px-16 overflow-hidden">
         <div className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left — Mega Typography */}
           <div
@@ -73,7 +55,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                     'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
                 }}
               />
-              <div className="relative z-10 h-full w-full bg-card rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
+              <div className="relative z-10 h-full w-full bg-secondary border border-border rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-4 block">
                   Workspace
                 </span>
@@ -90,7 +72,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                       href="https://github.com/Himidea-AI/Final_Project"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="relative z-10 bg-card group-hover/btn:bg-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                      className="relative z-10 bg-card border border-border group-hover/btn:bg-primary group-hover/btn:border-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
                     >
                       <div className="flex items-center gap-3">
                         <GitFork
@@ -119,7 +101,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                       href="https://www.notion.so/333ac2a0181b802b807cf7de2447b890"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="relative z-10 bg-card group-hover/btn:bg-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                      className="relative z-10 bg-card border border-border group-hover/btn:bg-primary group-hover/btn:border-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
                     >
                       <div className="flex items-center gap-3">
                         <ExternalLink
@@ -148,7 +130,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                       href="https://www.figma.com/board/lkjvfmKP4FU5XWBAyWR52a/%EC%A0%9C%EB%AA%A9-%EC%97%86%EC%9D%8C?node-id=0-1&p=f&t=ZITF88ooGHZ2rrHV-0"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="relative z-10 bg-card group-hover/btn:bg-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                      className="relative z-10 bg-card border border-border group-hover/btn:bg-primary group-hover/btn:border-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
                     >
                       <div className="flex items-center gap-3">
                         <ExternalLink
@@ -177,7 +159,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                       href="https://bat981120.atlassian.net/jira/software/projects/IM3/boards/2"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="relative z-10 bg-card group-hover/btn:bg-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
+                      className="relative z-10 bg-card border border-border group-hover/btn:bg-primary group-hover/btn:border-primary rounded-[10px] p-4 flex justify-between items-center transition-colors duration-300"
                     >
                       <div className="flex items-center gap-3">
                         <ExternalLink
@@ -210,7 +192,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                     'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
                 }}
               />
-              <div className="relative z-10 h-full w-full bg-card rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
+              <div className="relative z-10 h-full w-full bg-secondary border border-border rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-2 block">
                   Team
                 </span>
@@ -236,7 +218,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                     'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
                 }}
               />
-              <div className="relative z-10 h-full w-full bg-card rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
+              <div className="relative z-10 h-full w-full bg-secondary border border-border rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-4 block">
                   Location
                 </span>
@@ -263,7 +245,7 @@ export default function ContactPage({ onBack }: { onBack: () => void }) {
                     'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
                 }}
               />
-              <div className="relative z-10 h-full w-full bg-card rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
+              <div className="relative z-10 h-full w-full bg-secondary border border-border rounded-[14px] p-5 md:p-6 flex flex-col justify-center">
                 <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-4 block">
                   Direct Inquiry
                 </span>

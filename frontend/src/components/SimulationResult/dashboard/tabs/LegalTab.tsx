@@ -12,7 +12,7 @@
  * 3) 하단: InsightsGrid legalOnly — 표 + LegalDrawer 상세
  */
 
-import { AlertTriangle, Maximize2 } from 'lucide-react';
+import { AlertTriangle, BrainCircuit, Maximize2, ShieldAlert } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { InsightsGrid } from '../../sections/InsightsGrid';

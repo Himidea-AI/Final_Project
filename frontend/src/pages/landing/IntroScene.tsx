@@ -8,6 +8,7 @@
  */
 
 import { useAuth } from '../../auth/AuthContext';
+import WaveBackground from './WaveBackground';
 
 interface IntroSceneProps {
   onAboutClick: () => void;
@@ -35,8 +36,11 @@ export default function IntroScene({
 
   return (
     <div className="relative z-10 h-full w-full overflow-hidden bg-white flex flex-col">
-      {/* Background — SVG 로고 워터마크 (기존 유지) */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+      {/* Background — Deep Blue 인터랙티브 웨이브 캔버스 (z-0) */}
+      <WaveBackground />
+
+      {/* Background — SVG 로고 워터마크 (z-0, wave 위에 살짝 얹힘) */}
+      <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none select-none">
         <img src="/logo.svg" alt="" className="w-[90vw] max-w-[1400px] h-auto opacity-[0.018]" />
       </div>
 

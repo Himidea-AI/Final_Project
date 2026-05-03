@@ -1698,6 +1698,96 @@ class SimulationHistory(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+# ---------------------------------------------------------------------------
+# 예측 결과 이력 (Predict 탭)
+# ---------------------------------------------------------------------------
+
+
+class SimulationForesee(Base):
+    """예측 결과 이력 — ML 기반 매출/재무/고객/신흥상권 예측 저장"""
+
+    __tablename__ = "simulation_foresee"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    manager_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id",
+    )
+    user_type = Column(String(10), default="manager", comment="master | manager")
+    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
+    brand_name = Column(String(100), nullable=False, comment="브랜드명")
+    business_type = Column(String(50), comment="업종")
+    districts = Column(JSONB, comment="선택 동 목록 (최대 4개)")
+    target_district = Column(String(50), comment="대상 동")
+    winner_district = Column(String(50), comment="1순위 추천 동")
+    district_predictions = Column(
+        JSONB, comment="동별 ML 예측 전체 (quarterly/bep/closure/shap/customer/living_pop/emerging)"
+    )
+    quarterly_projection = Column(JSONB, comment="분기 매출 예측 (단일 동 fallback)")
+    scenarios = Column(JSONB, comment="낙관/기본/비관 시나리오")
+    shap_result = Column(JSONB, comment="SHAP 피처 기여도")
+    bep_months = Column(Integer, comment="BEP 도달 개월수")
+    predicted_monthly_revenue = Column(BigInteger, comment="예측 월매출")
+    closure_rate = Column(JSONB, comment="폐업률 (실측)")
+    closure_risk = Column(JSONB, comment="폐업위험도 (LightGBM+TCN)")
+    final_report = Column(JSONB, comment="수익성 시뮬 (profit_simulation)")
+    market_report = Column(JSONB, comment="7개 지표 (생존율 등)")
+    customer_segment = Column(JSONB, comment="고객 세그먼트 분석")
+    living_pop_forecast = Column(JSONB, comment="유동인구 예측")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_foresee_manager_created", "manager_id", "created_at"),
+        {"comment": "담당: 봉환 | 예측 결과 이력 (Predict 탭) | ML 매출/재무/고객/신흥상권"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# AI 분석 이력 (Analyze 탭)
+# ---------------------------------------------------------------------------
+
+
+class SimulationAI(Base):
+    """AI 분석 이력 — LLM 기반 상권/법률/인구/트렌드/경쟁 분석 저장"""
+
+    __tablename__ = "simulation_ai"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    manager_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id",
+    )
+    user_type = Column(String(10), default="manager", comment="master | manager")
+    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
+    brand_name = Column(String(100), nullable=False, comment="브랜드명")
+    business_type = Column(String(50), comment="업종")
+    target_district = Column(String(50), comment="대상 동")
+    winner_district = Column(String(50), comment="1순위 추천 동")
+    top_3_candidates = Column(JSONB, comment="상위 3동")
+    analysis_report = Column(Text, comment="synthesis 종합 리포트")
+    ai_recommendation = Column(Text, comment="최종 권고")
+    ai_verdict_summary = Column(Text, comment="한 줄 판단 요약")
+    market_entry_signal = Column(String(10), comment="green | yellow | red")
+    overall_legal_risk = Column(String(10), comment="safe | caution | danger")
+    legal_risks = Column(JSONB, comment="14개 법률 리스크")
+    market_report = Column(JSONB, comment="7개 정규화 지표")
+    trend_forecast = Column(JSONB, comment="트렌드 전망")
+    competitor_intel = Column(JSONB, comment="경쟁사 분석")
+    demographic_report = Column(JSONB, comment="인구통계 심화")
+    district_rankings = Column(JSONB, comment="16동 랭킹")
+    agent_attributions = Column(JSONB, comment="에이전트별 판단 근거")
+    vacancy_applied = Column(Boolean, default=False, comment="공실 페널티 반영 여부")
+    all_competitor_locations = Column(JSONB, comment="경쟁점포 좌표 목록")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_ai_manager_created", "manager_id", "created_at"),
+        {"comment": "담당: 봉환 | AI 분석 이력 (Analyze 탭) | LLM 상권/법률/인구/트렌드/경쟁"},
+    )
+
+
 # ===========================================================================
 # Emerging Trend B1 — 인구·이동성 (2026-04-29)
 # spec: docs/superpowers/specs/2026-04-29-emerging-trend-data-b1-design.md

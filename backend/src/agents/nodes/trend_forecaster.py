@@ -42,7 +42,8 @@ async def trend_forecaster_node(state: AgentState) -> dict:
 
     print(f"--- [TREND FORECASTER] {target_district} / {industry} (brand={brand_name or 'N/A'}) 분석 시작 ---")
 
-    cache_key = f"trend_forecast:{target_district}:{industry}:{brand_name or 'none'}"
+    # v2: samples shape 평탄화 (객체배열 → number[]) — 이전 v1 캐시 무효화
+    cache_key = f"v2:trend_forecast:{target_district}:{industry}:{brand_name or 'none'}"
 
     # [1] Redis 캐시 조회 (try/finally aclose — 누수 방지)
     _redis = None
@@ -203,27 +204,30 @@ async def trend_forecaster_node(state: AgentState) -> dict:
         )
 
     # [5] 결과 조립
+    # IM3-144 교훈: 프론트 (TrendSparklinesPanel/Sparkline) 가 number[] 가정 →
+    # backend tools 가 [{period, ratio}] 객체 배열을 보내면 Sparkline 이 NaN.
+    # 여기서 number[] 로 평탄화하여 응답 shape 와 frontend 타입 1:1 동기.
     report = {
         "industry_trend": {
             "industry": industry,
             "current_ratio": industry_data.get("current_ratio"),
             "yoy_change_pct": industry_data.get("yoy_change_pct"),
             "direction": industry_data.get("direction"),
-            "samples": industry_data.get("samples", [])[-12:],
+            "samples": [s["ratio"] for s in industry_data.get("samples", [])][-12:],
         },
         "dong_trend": {
             "dong_name": target_district,
             "recent_score": dong_data.get("recent_score"),
             "slope_pct": dong_data.get("slope_pct"),
             "max_quarter": dong_data.get("max_quarter"),
-            "samples": dong_data.get("samples", []),
+            "samples": [s["score"] for s in dong_data.get("samples", [])],
             "data_staleness_note": "naver_trend_quarterly 최신 2024 Q4 — 참고 지표",
         },
         "change_ix": change_ix_current,
         "macro": {
             "current_base_rate": rate_data.get("current"),
             "base_rate_trend": rate_data.get("trend"),
-            "samples": rate_data.get("samples", []),
+            "samples": [s["rate"] for s in rate_data.get("samples", [])],
         },
         "forecast": {
             "score": parsed.forecast_score,
