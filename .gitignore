@@ -1,6 +1,9 @@
 # Git worktrees (평행 작업 디렉토리)
 .worktrees/
 
+# Superpowers brainstorming companion 산출물
+.superpowers/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -117,6 +120,33 @@ tmp_*.py
 tmp_*.json
 tmp_*.txt
 tmp_*.png
+
+# 로컬 프리뷰 HTML (개인 검증용, repo 비포함)
+tools/sensitivity_preview.html
+frontend/public/sensitivity_preview.html
+
+# 일회성 핸드오프 문서 (메신저로 직접 전달 — repo 비포함)
+docs/superpowers/specs/*-handoff.md
+
+# B2 개인 검증/메모 산출물 (루트 한정, 명시적 이름)
+/comparison.txt
+/coverage_result.txt
+/dong_codes.txt
+/district_combos.txt
+/kakao_cats.txt
+/kakao_dongs.txt
+/kakao_full_coverage.txt
+/sq_review.txt
+/tables.txt
+/test.txt
+/test2.txt
+/kill_port.ps1
+reports/
+
+# 모델 학습 보조 산출물 (재생성 가능)
+models/emerging_district/weights.zip
+models/tcn_forecast/regen_*.py
+models/tcn_forecast/weights/*.bak*
 
 # 모델 학습 산출물 (재현 가능, 용량 큼)
 models/**/weights/*.pkl
