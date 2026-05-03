@@ -24,6 +24,8 @@ import {
 interface Props {
   rates: number[] | undefined;
   height?: number;
+  /** 동별 자동 매핑 색 — SERIES_COLORS[idx] 그대로 전달. 미지정 시 muted-foreground (legacy). */
+  color?: string;
 }
 
 interface Row {
@@ -31,7 +33,8 @@ interface Row {
   rate: number;
 }
 
-export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
+export function ClosureRateHistoryChart({ rates, height = 200, color }: Props) {
+  const lineColor = color ?? 'var(--muted-foreground)';
   if (!rates || rates.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
@@ -106,9 +109,9 @@ export function ClosureRateHistoryChart({ rates, height = 200 }: Props) {
           <Line
             type="monotone"
             dataKey="rate"
-            stroke="var(--muted-foreground)"
+            stroke={lineColor}
             strokeWidth={2}
-            dot={{ r: 2, fill: 'var(--muted-foreground)' }}
+            dot={{ r: 2, fill: lineColor }}
             activeDot={{ r: 4 }}
             isAnimationActive={false}
           />
