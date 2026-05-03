@@ -27,7 +27,7 @@ export function AbmFloatingWidget() {
   if (mainSimStatus === 'running' || mainSimStatus === 'error') return null;
 
   const baseClasses =
-    'fixed bottom-6 right-6 z-50 flex min-w-[280px] max-w-sm flex-col gap-2 rounded-xl bg-card p-4 shadow-2xl ring-1 backdrop-blur';
+    'fixed bottom-6 right-6 z-[60] flex min-w-[280px] max-w-sm flex-col gap-2 rounded-xl bg-card p-4 shadow-2xl ring-1 backdrop-blur';
 
   if (status === 'running') {
     const elapsed = startedAt ? (Date.now() - startedAt) / 1000 : 0;
