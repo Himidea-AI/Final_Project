@@ -327,51 +327,52 @@ def run_batch(
 
         seq_scaled = feat_scaler.transform(recent[-window_size:])
 
-        # 기준 예측 (delta=0)
-        baseline_raw = perturb_and_predict(seq_scaled, [], 0.0, model, tgt_scaler, device)
-        # 4분기 개별 값도 저장 (분기별 차트용)
-        with torch.no_grad():
-            t = torch.tensor(seq_scaled, dtype=torch.float32).unsqueeze(0).to(device)
-            raw = model(t).cpu().numpy().flatten()
-        baseline_q = []
-        for ps in raw:
-            pred_log = float(tgt_scaler.inverse_transform([[float(ps)]])[0][0])
-            baseline_q.append(round(max(0.0, float(np.expm1(pred_log))), 0))
+        # 기준 예측 (delta=0) — 4분기 list 반환
+        baseline_q_raw = perturb_and_predict(seq_scaled, [], 0.0, model, tgt_scaler, device)
+        baseline_q = [round(v, 0) for v in baseline_q_raw]
+        baseline_total = sum(baseline_q_raw)
 
         elasticity: dict[str, dict] = {}
 
-        # ±% 슬라이더 (4개)
+        # ±% 슬라이더 (4개) — 분기별 % 변화율 list 저장
         for slider_name, target_feats in SLIDER_FEATURES.items():
             feat_indices = get_feature_indices(actual_features, target_feats)
             if not feat_indices:
                 continue
-            level_results: dict[str, float] = {}
+            level_results: dict[str, list[float]] = {}
             for delta in PERTURBATION_LEVELS:
-                pred = perturb_and_predict(seq_scaled, feat_indices, float(delta), model, tgt_scaler, device)
-                if baseline_raw > 0:
-                    elast = round((pred - baseline_raw) / baseline_raw * 100.0, 4)
-                else:
-                    elast = 0.0
+                pred_q = perturb_and_predict(seq_scaled, feat_indices, float(delta), model, tgt_scaler, device)
+                per_quarter: list[float] = []
+                for q_idx, p in enumerate(pred_q):
+                    base = baseline_q_raw[q_idx]
+                    if base > 0:
+                        per_quarter.append(round((p - base) / base * 100.0, 4))
+                    else:
+                        per_quarter.append(0.0)
                 key_str = f"{'+' if delta > 0 else ''}{delta}"
-                level_results[key_str] = elast
+                level_results[key_str] = per_quarter
             elasticity[slider_name] = level_results
 
-        # quarter_num 슬라이더 (categorical)
+        # quarter_num 슬라이더 (categorical) — 분기별 % 변화율 list 저장
         if quarter_idx is not None and "quarter_num" in actual_features:
-            q_results: dict[str, float] = {}
+            q_results: dict[str, list[float]] = {}
             for q_label, q_val in QUARTER_VALUES.items():
-                pred = perturb_quarter_and_predict(
+                pred_q = perturb_quarter_and_predict(
                     seq_scaled, quarter_idx, q_val, feat_scaler, model, tgt_scaler, device
                 )
-                if baseline_raw > 0:
-                    elast = round((pred - baseline_raw) / baseline_raw * 100.0, 4)
-                else:
-                    elast = 0.0
-                q_results[q_label] = elast
+                per_quarter = []
+                for q_idx, p in enumerate(pred_q):
+                    base = baseline_q_raw[q_idx]
+                    if base > 0:
+                        per_quarter.append(round((p - base) / base * 100.0, 4))
+                    else:
+                        per_quarter.append(0.0)
+                q_results[q_label] = per_quarter
             elasticity["quarter_num"] = q_results
 
         cache[f"{dong_code}_{industry_code}"] = {
-            "baseline": baseline_q,
+            "baseline_sales": baseline_q,
+            "baseline_total": round(baseline_total, 0),
             "elasticity": elasticity,
         }
 
