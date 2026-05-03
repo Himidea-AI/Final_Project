@@ -360,3 +360,27 @@ def test_perturb_and_predict_returns_list_of_4_quarters():
     assert len(result) == 4
     assert all(isinstance(v, float) for v in result)
     assert all(v >= 0.0 for v in result)
+
+
+def test_perturb_quarter_and_predict_returns_list_of_4_quarters():
+    import torch
+    from sklearn.preprocessing import MinMaxScaler
+
+    from models.tcn_forecast.sensitivity import perturb_quarter_and_predict
+
+    class StubModel(torch.nn.Module):
+        def forward(self, x):
+            return torch.tensor([[0.1, 0.2, 0.3, 0.4]], dtype=torch.float32)
+
+    model = StubModel().eval()
+    tgt_scaler = MinMaxScaler()
+    tgt_scaler.fit(np.array([[0.0], [10.0]]))
+    feat_scaler = MinMaxScaler()
+    feat_scaler.fit(np.array([[1.0, 0.0], [4.0, 1.0]]))  # quarter_num 인덱스 0
+    seq = np.zeros((12, 2), dtype=np.float32)
+    device = torch.device("cpu")
+
+    result = perturb_quarter_and_predict(seq, 0, 2, feat_scaler, model, tgt_scaler, device)
+
+    assert isinstance(result, list)
+    assert len(result) == 4

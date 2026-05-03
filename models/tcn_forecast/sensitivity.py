@@ -202,30 +202,8 @@ def perturb_quarter_and_predict(
     model: torch.nn.Module,
     tgt_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
     device: torch.device,
-) -> float:
-    """quarter_num을 특정 분기값으로 설정 후 예측하여 4분기 평균 매출(원)을 반환한다.
-
-    quarter_num은 ±% 섭동이 아닌 절댓값(1~4)으로 교체한다.
-    feat_scaler로 다시 역변환 후 재스케일링하는 대신, 스케일링된 공간에서
-    `_scale_quarter_value`로 직접 치환한다 (StandardScaler / MinMaxScaler 모두 지원).
-
-    Parameters
-    ----------
-    seq_scaled : np.ndarray
-        shape (window_size, n_features). feat_scaler로 스케일링된 입력 시퀀스.
-    quarter_idx : int
-        ALL_FEATURES 내 quarter_num의 인덱스.
-    quarter_value : int
-        설정할 분기값 (1, 2, 3, 4).
-    feat_scaler : StandardScaler | MinMaxScaler
-        피처 스케일러. v1은 StandardScaler, v2는 MinMaxScaler.
-    model, tgt_scaler, device : 위와 동일.
-
-    Returns
-    -------
-    float
-        4분기 예측 매출 평균 (원 단위).
-    """
+) -> list[float]:
+    """quarter_num을 특정 분기값으로 설정 후 예측하여 분기별 매출(원) list를 반환한다."""
     import torch
 
     seq_perturbed = seq_scaled.copy()
@@ -233,10 +211,13 @@ def perturb_quarter_and_predict(
 
     with torch.no_grad():
         t = torch.tensor(seq_perturbed, dtype=torch.float32).unsqueeze(0).to(device)
-        raw = model(t)  # (1, 4)
-        raw_arr = raw.cpu().numpy().reshape(-1, 1)
-        pred_log = float(tgt_scaler.inverse_transform(raw_arr).mean())
-        return max(0.0, float(np.expm1(pred_log)))
+        raw = model(t).cpu().numpy().flatten()
+
+    quarters: list[float] = []
+    for v in raw:
+        pred_log = float(tgt_scaler.inverse_transform([[float(v)]])[0][0])
+        quarters.append(max(0.0, float(np.expm1(pred_log))))
+    return quarters
 
 
 # ---------------------------------------------------------------------------
