@@ -17,7 +17,6 @@ import { formatPeakHours } from '../utils/formatters';
 import { CoreDemographicDonut } from '../charts/CoreDemographicDonut';
 import { WeekdayWeekendBar } from '../charts/WeekdayWeekendBar';
 import { StackedAgeBar } from '../charts/StackedAgeBar';
-import { CustomerSegmentCard } from '../charts/CustomerSegmentCard';
 
 interface Props {
   simResult: SimulationOutput;
@@ -46,10 +45,9 @@ export function DemographicTab({ simResult }: Props) {
 
   const hasPeakMatrix = Array.isArray(demo?.peak_hour_matrix) && demo.peak_hour_matrix.length === 7;
 
-  const customerSegment = simResult.customer_segment ?? null;
-  const hasCustomerSegment = Boolean(customerSegment);
-
-  if (!hasAnyComposition && !hasReport && !hasCustomerSegment) {
+  // customer_segment 카드는 2026-05-03부로 분석 탭에서 제거됨 — ML 모델(customer_revenue MLP)
+  // 결과는 /predict 영역(PredictCustomerFlowTab)에서만 노출. 카테고리 정합성 + 중복 노출 제거.
+  if (!hasAnyComposition && !hasReport) {
     return (
       <div className="bg-card border border-dashed border-border rounded-3xl p-10 text-center">
         <Users className="mx-auto mb-3 text-muted-foreground" size={22} />
@@ -133,9 +131,6 @@ export function DemographicTab({ simResult }: Props) {
           )}
         </div>
       )}
-
-      {/* [customer_revenue P1-C] 타겟 고객 매출 기여 카드 */}
-      <CustomerSegmentCard segment={customerSegment} />
     </div>
   );
 }

@@ -318,7 +318,7 @@ async def specialist_franchise_law(
         llm = _get_specialist_llm().with_structured_output(LegalRiskItem)
         result: LegalRiskItem = await llm.ainvoke(
             [
-                SystemMessage(content=_SYSTEM_PROMPT_BASE),
+                SystemMessage(content="[AGENT: legal.franchise] 가맹사업법 specialist — LangSmith 식별용 라벨.\n\n" + _SYSTEM_PROMPT_BASE),
                 HumanMessage(content=user_content),
             ]
         )
@@ -440,7 +440,7 @@ async def specialist_fair_trade_law(
         llm = _get_specialist_llm().with_structured_output(LegalRiskItem)
         result: LegalRiskItem = await llm.ainvoke(
             [
-                SystemMessage(content=_SYSTEM_PROMPT_BASE),
+                SystemMessage(content="[AGENT: legal.fair_trade] 공정거래법 specialist — LangSmith 식별용 라벨.\n\n" + _SYSTEM_PROMPT_BASE),
                 HumanMessage(content=user_content),
             ]
         )
@@ -538,7 +538,7 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
         llm = _get_specialist_llm().with_structured_output(LegalRiskItem)
         result: LegalRiskItem = await llm.ainvoke(
             [
-                SystemMessage(content=_SYSTEM_PROMPT_BASE),
+                SystemMessage(content="[AGENT: legal.building] 건축법/용도지역 specialist — LangSmith 식별용 라벨.\n\n" + _SYSTEM_PROMPT_BASE),
                 HumanMessage(content=user_content),
             ]
         )
@@ -660,7 +660,7 @@ async def specialist_privacy_law(
         llm = _get_specialist_llm().with_structured_output(LegalRiskItem)
         result: LegalRiskItem = await llm.ainvoke(
             [
-                SystemMessage(content=_SYSTEM_PROMPT_BASE),
+                SystemMessage(content="[AGENT: legal.privacy] 개인정보보호법 specialist — LangSmith 식별용 라벨.\n\n" + _SYSTEM_PROMPT_BASE),
                 HumanMessage(content=user_content),
             ]
         )

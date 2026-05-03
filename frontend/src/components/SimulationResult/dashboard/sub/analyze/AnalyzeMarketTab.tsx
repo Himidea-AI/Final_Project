@@ -27,16 +27,35 @@ export function AnalyzeMarketTab({ simResult, openModal }: Props) {
   const dongTrend = simResult.trend_forecast?.dong_trend;
   const macro = simResult.trend_forecast?.macro;
 
+  // 동 검색량 셀에 "마포 N동 중 X위" 표시 — district_rankings 의 trend_score 기준 정렬.
+  // dong_trend.recent_score 는 raw AVG(ratio) 라 동 간 비교 단위 미정합 → district_ranking 의
+  // 0~100 정규화된 trend_score 로 순위 산출. 데이터 출처가 다르지만 둘 다 같은 raw 데이터에서
+  // 파생되므로 순위는 일치한다.
+  const dongRank = (() => {
+    const rankings = simResult.district_rankings ?? [];
+    const winner = simResult.winner_district;
+    if (!winner || rankings.length === 0) return null;
+    const scored = rankings
+      .filter((r) => typeof r.trend_score === 'number')
+      .sort(
+        (a, b) =>
+          (typeof b.trend_score === 'number' ? b.trend_score : 0) -
+          (typeof a.trend_score === 'number' ? a.trend_score : 0),
+      );
+    if (scored.length === 0) return null;
+    const idx = scored.findIndex((r) => r.district === winner);
+    if (idx === -1) return null;
+    return { rank: idx + 1, total: scored.length };
+  })();
+
   // forecast_confidence 칩 — Tailwind dynamic class 컴파일 회피 위해 조건부 className.
+  // UX 결정: 신뢰도가 'high'일 때만 배지 노출. 'medium'/'low'는 배지 자체를 숨김.
+  // 사유: "신뢰도 보통" 같은 문구가 추천에 대한 사용자 신뢰를 깎음 — 노출 시 역효과.
   const CONF_LABEL: Record<string, string> = {
     high: '신뢰도 높음',
-    medium: '신뢰도 보통',
-    low: '신뢰도 낮음',
   };
   const CONF_CLASSES: Record<string, string> = {
     high: 'border-success/30 bg-success/10 text-success',
-    medium: 'border-primary/30 bg-primary/10 text-primary',
-    low: 'border-warning/30 bg-warning/10 text-warning',
   };
 
   // §3.7: 알 수 없는 direction 값은 임의 default 가 아니라 placeholder.
@@ -103,7 +122,12 @@ export function AnalyzeMarketTab({ simResult, openModal }: Props) {
             </div>
           </div>
 
-          <TrendSparklinesPanel industryTrend={industryTrend} dongTrend={dongTrend} macro={macro} />
+          <TrendSparklinesPanel
+            industryTrend={industryTrend}
+            dongTrend={dongTrend}
+            dongRank={dongRank}
+            macro={macro}
+          />
 
           {(trendDrivers || trendRisks) && (
             <TrendDriversRisks drivers={trendDrivers} risks={trendRisks} />
