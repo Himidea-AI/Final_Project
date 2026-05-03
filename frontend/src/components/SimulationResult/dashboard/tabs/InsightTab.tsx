@@ -49,7 +49,7 @@ export function InsightTab({ simResult, openModal }: Props) {
       {/* ═══ Radar Overview (가이드 #7) ═══ */}
       <div className="bg-card border border-border rounded-3xl p-8">
         <h4 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-4">
-          8 에이전트 신뢰도 Overview
+          9 에이전트 신뢰도 Overview
         </h4>
         <AgentConfidenceRadar attributions={attributions} />
       </div>
