@@ -169,7 +169,7 @@ class AuthService:
             }
 
         finally:
-            engine.dispose()
+            pass
 
     def login(self, email: str, password: str) -> dict:
         """
@@ -253,7 +253,7 @@ class AuthService:
                     else None,
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 초대코드 발급
@@ -289,7 +289,7 @@ class AuthService:
                     "company_name": owner._mapping["company_name"],
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 초대코드 검증 — 팀장 기업정보 반환
@@ -331,7 +331,7 @@ class AuthService:
                     "owner_id": str(inv["owner_id"]),
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 매니저 회원가입
@@ -432,7 +432,7 @@ class AuthService:
                     },
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 매니저 로그인
@@ -492,7 +492,7 @@ class AuthService:
                     },
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 매니저 승인 관리
@@ -533,7 +533,7 @@ class AuthService:
 
                 return {"status": "success", "managers": managers}
         finally:
-            engine.dispose()
+            pass
 
     def approve_manager(
         self,
@@ -580,7 +580,7 @@ class AuthService:
                     "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 승인했습니다.{dong_info}",
                 }
         finally:
-            engine.dispose()
+            pass
 
     def reject_manager(self, owner_id: str, manager_id: str) -> dict:
         """팀장이 매니저 가입을 거절한다 (비활성화)."""
@@ -610,7 +610,7 @@ class AuthService:
                     "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 거절했습니다.",
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 회원 탈퇴 (소프트 삭제)
@@ -661,7 +661,7 @@ class AuthService:
                     "deactivated_managers": result.rowcount,
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 마이페이지 — 프로필 조회/수정
@@ -737,7 +737,7 @@ class AuthService:
                     else None,
                 }
         finally:
-            engine.dispose()
+            pass
 
     def get_manager_profile(self, manager_id: str) -> dict:
         """매니저 프로필 조회 (소속 팀장 기업정보 포함)."""
@@ -777,7 +777,7 @@ class AuthService:
                     },
                 }
         finally:
-            engine.dispose()
+            pass
 
     def update_user_profile(self, user_id: str, data: dict) -> dict:
         """팀장 프로필 수정 (이름, 직책, 전화번호, 가맹점 수)."""
@@ -807,7 +807,7 @@ class AuthService:
                     "updated_fields": list(updates.keys()),
                 }
         finally:
-            engine.dispose()
+            pass
 
     def update_manager_profile(self, manager_id: str, data: dict) -> dict:
         """매니저 프로필 수정 (이름, 직책, 전화번호)."""
@@ -840,7 +840,7 @@ class AuthService:
                     "updated_fields": list(updates.keys()),
                 }
         finally:
-            engine.dispose()
+            pass
 
     def change_password(self, user_id: str, role: str, old_password: str, new_password: str) -> dict:
         """비밀번호 변경 (팀장/매니저 공용)."""
@@ -868,7 +868,7 @@ class AuthService:
 
                 return {"status": "success", "message": "비밀번호가 변경되었습니다."}
         finally:
-            engine.dispose()
+            pass
 
     def get_organization(self, owner_id: str) -> dict:
         """팀장의 전체 조직 정보 (멀티테넌시 — 팀장 + 매니저 + 초대코드 + 브랜드)."""
@@ -972,4 +972,4 @@ class AuthService:
                     },
                 }
         finally:
-            engine.dispose()
+            pass

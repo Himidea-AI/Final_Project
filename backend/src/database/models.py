@@ -1735,6 +1735,7 @@ class SimulationForesee(Base):
     market_report = Column(JSONB, comment="7개 지표 (생존율 등)")
     customer_segment = Column(JSONB, comment="고객 세그먼트 분석")
     living_pop_forecast = Column(JSONB, comment="유동인구 예측")
+    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터 (재실행용)")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -1780,6 +1781,7 @@ class SimulationAI(Base):
     agent_attributions = Column(JSONB, comment="에이전트별 판단 근거")
     vacancy_applied = Column(Boolean, default=False, comment="공실 페널티 반영 여부")
     all_competitor_locations = Column(JSONB, comment="경쟁점포 좌표 목록")
+    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터 (재실행용)")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (

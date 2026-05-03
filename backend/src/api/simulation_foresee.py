@@ -41,8 +41,6 @@ class ForeseeSaveRequest(BaseModel):
     target_district: str | None = None
     winner_district: str | None = None
     foresee_result: dict
-    # scenario(=원본 SimulationInput) — DB 컬럼 추가 후 별 cycle 에서 service INSERT 에 활성.
-    # schema 만 선반영 — 컬럼 부재 단계에선 pydantic이 받지만 service에서 무시(명시 필드만 INSERT).
     scenario: dict | None = None
 
 
@@ -62,6 +60,7 @@ def save_foresee(
         target_district=body.target_district,
         winner_district=body.winner_district,
         foresee_result=body.foresee_result,
+        scenario=body.scenario,
     )
     return created
 

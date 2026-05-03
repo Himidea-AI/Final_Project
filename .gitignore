@@ -161,6 +161,9 @@ validation/results/sweep_boost_*/
 bench_ragas.json
 bench_*.json
 
+# 시뮬레이션 임시 결과 (루트 디렉토리)
+sim_*.json
+
 # 법률 RAG 빌드 산출물 (build_parent_articles.py로 재생성 가능)
 backend/data/legal/processed/parent_articles.json
 

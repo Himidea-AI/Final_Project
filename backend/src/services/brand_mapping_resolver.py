@@ -69,7 +69,6 @@ def _load_db_brands() -> dict[str, str]:
                     "SELECT DISTINCT brand_name FROM biz_brand_mapping WHERE brand_name IS NOT NULL AND brand_name != ''"
                 )
             ).fetchall()
-        engine.dispose()
         result = {}
         for r in rows:
             name = r[0]
