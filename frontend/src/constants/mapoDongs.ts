@@ -29,3 +29,9 @@ export function resolveDongCode(name: string | undefined | null): string | null 
   if (!name) return null;
   return MAPO_DONGS.find((d) => d.name === name)?.code ?? null;
 }
+
+/** 역방향 — 코드(11440660) → 동 이름(서교동). 사용자 노출 텍스트 안 raw code 휴머나이즈용. */
+export function resolveDongName(code: string | undefined | null): string | null {
+  if (!code) return null;
+  return MAPO_DONGS.find((d) => d.code === code)?.name ?? null;
+}

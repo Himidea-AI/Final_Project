@@ -69,10 +69,10 @@ export default function VacancySpotMarker({
       center: position,
       radius: radiusM,
       strokeWeight: 2,
-      strokeColor: '#FF3800',
+      strokeColor: '#fb565b',
       strokeOpacity: 0.6,
       strokeStyle: 'dashed',
-      fillColor: '#FF3800',
+      fillColor: '#fb565b',
       fillOpacity: 0.05,
     });
     circleRef.current.setMap(map);
