@@ -111,6 +111,43 @@ def compute_correlations(df: pd.DataFrame) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
+def _predict_quarters(
+    seq_scaled: np.ndarray,
+    model: torch.nn.Module,
+    device: torch.device,
+    target_idx: int = 0,
+    n_quarters: int = 4,
+) -> np.ndarray:
+    """모델 output_size에 따라 분기 예측.
+
+    output_size>=n_quarters → 단일 forward (DMS)
+    output_size<n_quarters  → 자기회귀 n_quarters-step loop (출력 재주입)
+
+    Returns shape (n_quarters,) of scaled predictions.
+    """
+    import torch
+
+    with torch.no_grad():
+        t = torch.tensor(seq_scaled, dtype=torch.float32).unsqueeze(0).to(device)
+        first = model(t).cpu().numpy().flatten()
+        if len(first) >= n_quarters:
+            return first[:n_quarters]
+        # 자기회귀 — 추가 step 진행 (첫 step은 first[0] 사용)
+        current = t.clone()
+        outs: list[float] = [float(first[0])]
+        # 첫 step 결과를 입력에 재주입
+        new_step = current[0, -1, :].clone()
+        new_step[target_idx] = float(first[0])
+        current = torch.cat([current[:, 1:, :], new_step.unsqueeze(0).unsqueeze(0)], dim=1)
+        for _ in range(n_quarters - 1):
+            pred_val = float(model(current).cpu().numpy().flatten()[0])
+            outs.append(pred_val)
+            new_step = current[0, -1, :].clone()
+            new_step[target_idx] = pred_val
+            current = torch.cat([current[:, 1:, :], new_step.unsqueeze(0).unsqueeze(0)], dim=1)
+        return np.array(outs)
+
+
 def perturb_and_predict(
     seq_scaled: np.ndarray,
     feature_indices: list[int],
@@ -118,8 +155,9 @@ def perturb_and_predict(
     model: torch.nn.Module,
     tgt_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
     device: torch.device,
+    target_idx: int = 0,
 ) -> list[float]:
-    """특정 피처를 delta_pct% 변화시킨 후 TCN v2로 예측하여 분기별 매출(원) list를 반환한다.
+    """특정 피처를 delta_pct% 변화시킨 후 TCN으로 예측하여 분기별 매출(원) list를 반환한다.
 
     Parameters
     ----------
@@ -130,26 +168,24 @@ def perturb_and_predict(
     delta_pct : float
         변화율 (%). 예: 10.0 → +10%, -20.0 → -20%.
     model : TCNForecaster
-        eval 모드의 TCN v2 모델 인스턴스.
+        eval 모드의 TCN 모델 인스턴스 (v2 DMS 또는 v3 자기회귀).
     tgt_scaler : StandardScaler | MinMaxScaler
         타겟 역변환용 스케일러 (inverse_transform만 호출하므로 두 종류 모두 호환).
     device : torch.device
         추론 디바이스 (CPU/CUDA).
+    target_idx : int
+        자기회귀 모드에서 예측 출력을 재주입할 monthly_sales 컬럼 인덱스.
 
     Returns
     -------
     list[float]
         길이 4의 분기별 매출 예측치 (Q1, Q2, Q3, Q4 순). 각 값은 원 단위, 음수 클립.
     """
-    import torch
-
     seq_perturbed = seq_scaled.copy()
     for idx in feature_indices:
         seq_perturbed[:, idx] *= 1.0 + delta_pct / 100.0
 
-    with torch.no_grad():
-        t = torch.tensor(seq_perturbed, dtype=torch.float32).unsqueeze(0).to(device)
-        raw = model(t).cpu().numpy().flatten()
+    raw = _predict_quarters(seq_perturbed, model, device, target_idx=target_idx, n_quarters=4)
 
     quarters: list[float] = []
     for v in raw:
@@ -202,16 +238,13 @@ def perturb_quarter_and_predict(
     model: torch.nn.Module,
     tgt_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
     device: torch.device,
+    target_idx: int = 0,
 ) -> list[float]:
     """quarter_num을 특정 분기값으로 설정 후 예측하여 분기별 매출(원) list를 반환한다."""
-    import torch
-
     seq_perturbed = seq_scaled.copy()
     seq_perturbed[:, quarter_idx] = _scale_quarter_value(feat_scaler, quarter_idx, quarter_value)
 
-    with torch.no_grad():
-        t = torch.tensor(seq_perturbed, dtype=torch.float32).unsqueeze(0).to(device)
-        raw = model(t).cpu().numpy().flatten()
+    raw = _predict_quarters(seq_perturbed, model, device, target_idx=target_idx, n_quarters=4)
 
     quarters: list[float] = []
     for v in raw:
@@ -254,11 +287,12 @@ def run_batch(
     if output_corr_path is None:
         output_corr_path = WEIGHTS_DIR / "feature_correlations.json"
 
-    weights_path = WEIGHTS_DIR / "finetuned_mapo_tcn_v2.pt"
-    scalers_path = WEIGHTS_DIR / "finetune_tcn_scalers_v2.pkl"
+    # v3 채택: 자기회귀 + 37피처. predict.py DEFAULT_PREDICT_CONFIG와 동기화.
+    weights_path = WEIGHTS_DIR / "finetuned_mapo_tcn_v3.pt"
+    scalers_path = WEIGHTS_DIR / "finetune_tcn_scalers_v3.pkl"
 
     if not weights_path.exists() or not scalers_path.exists():
-        raise FileNotFoundError(f"v2 가중치 또는 스케일러 파일 없음: {weights_path}, {scalers_path}")
+        raise FileNotFoundError(f"v3 가중치 또는 스케일러 파일 없음: {weights_path}, {scalers_path}")
 
     # 모델 + 스케일러 로드
     feat_scaler, tgt_scaler = load_scalers(scalers_path)
@@ -269,17 +303,17 @@ def run_batch(
         input_size=input_size,
         n_channels=128,
         kernel_size=2,
-        dilations=[1, 2, 4, 8],
+        dilations=[1, 2],
         dropout=0.2,
-        output_size=4,
+        output_size=1,
     )
     model.load_weights(weights_path)
     model.to(device)
     model.eval()
-    logger.info("TCNForecaster v2 로드 완료 (input_size=%d)", input_size)
+    logger.info("TCNForecaster v3 로드 완료 (input_size=%d, autoregressive)", input_size)
 
     feature_names = list(ALL_FEATURES)
-    window_size = 12
+    window_size = 4
 
     # 학습 데이터 전체 로드 (상관계수 계산 + 유효 조합 추출)
     logger.info("시계열 데이터 로드 중...")
@@ -327,9 +361,18 @@ def run_batch(
 
         seq_scaled = feat_scaler.transform(recent[-window_size:])
 
+        # v3 자기회귀 재주입용 monthly_sales 인덱스
+        target_idx = actual_features.index("monthly_sales") if "monthly_sales" in actual_features else 0
+
         # 기준 예측 (delta=0) — 4분기 list 반환
-        baseline_q_raw = perturb_and_predict(seq_scaled, [], 0.0, model, tgt_scaler, device)
+        baseline_q_raw = perturb_and_predict(seq_scaled, [], 0.0, model, tgt_scaler, device, target_idx=target_idx)
         baseline_q = [round(v, 0) for v in baseline_q_raw]
+
+        # 점포당 baseline (프론트 표시 단위 일관성)
+        from models.interface import _get_latest_store_count
+
+        store_count = _get_latest_store_count(dong_code, industry_code)
+        baseline_per_store = [round(v / store_count, 0) for v in baseline_q_raw]
 
         elasticity: dict[str, dict] = {}
 
@@ -340,7 +383,9 @@ def run_batch(
                 continue
             level_results: dict[str, list[float]] = {}
             for delta in PERTURBATION_LEVELS:
-                pred_q = perturb_and_predict(seq_scaled, feat_indices, float(delta), model, tgt_scaler, device)
+                pred_q = perturb_and_predict(
+                    seq_scaled, feat_indices, float(delta), model, tgt_scaler, device, target_idx=target_idx
+                )
                 per_quarter: list[float] = []
                 for q_idx, p in enumerate(pred_q):
                     base = baseline_q_raw[q_idx]
@@ -357,7 +402,7 @@ def run_batch(
             q_results: dict[str, list[float]] = {}
             for q_label, q_val in QUARTER_VALUES.items():
                 pred_q = perturb_quarter_and_predict(
-                    seq_scaled, quarter_idx, q_val, feat_scaler, model, tgt_scaler, device
+                    seq_scaled, quarter_idx, q_val, feat_scaler, model, tgt_scaler, device, target_idx=target_idx
                 )
                 per_quarter = []
                 for q_idx, p in enumerate(pred_q):
@@ -371,6 +416,8 @@ def run_batch(
 
         cache[f"{dong_code}_{industry_code}"] = {
             "baseline": baseline_q,
+            "baseline_per_store": baseline_per_store,
+            "store_count": store_count,
             "elasticity": elasticity,
         }
 
