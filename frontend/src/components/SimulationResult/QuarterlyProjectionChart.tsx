@@ -89,10 +89,14 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   // winner 동 결정 — 명시값 없으면 첫 시리즈 (라인 강조용)
   const effectiveWinner = winnerDistrict ?? validSeries[0]!.district;
 
-  // 각 동의 첫 4분기만 + quarter 1~4 강제 라벨
+  // 2026-05-04: 4분기 hard cap → 최대 20분기(5년) 동적 길이.
+  // 백엔드 quarterly_projection이 N분기 시뮬레이션 데이터를 담을 수 있게 되면 자동 대응.
+  const QUARTER_CAP = 20;
+  const maxLen = Math.max(...validSeries.map((s) => s.projection.length));
+  const visibleLen = Math.min(QUARTER_CAP, maxLen);
   const trimmedSeries = validSeries.map((s) => ({
     district: s.district,
-    data: s.projection.slice(0, 4).map((d, i) => ({ ...d, quarter: i + 1 })),
+    data: s.projection.slice(0, visibleLen).map((d, i) => ({ ...d, quarter: i + 1 })),
   }));
 
   // CI 음영 / BEP 라인 기준 시리즈 — 명세상 첫 번째 동(series[0])
@@ -101,7 +105,8 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   // wide format 변환: row = { quarter, [동]_revenue, ci_high?, ci_low?, ... }
   const has95Ci = ciSourceSeries.data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null);
   const has80Ci = ciSourceSeries.data.some((d) => d.ci_80_upper != null && d.ci_80_lower != null);
-  const chartData = [1, 2, 3, 4].map((q) => {
+  const quarterAxis = Array.from({ length: visibleLen }, (_, i) => i + 1);
+  const chartData = quarterAxis.map((q) => {
     const row: Record<string, number | null | undefined> = { quarter: q };
     for (const s of trimmedSeries) {
       const point = s.data.find((p) => p.quarter === q);
