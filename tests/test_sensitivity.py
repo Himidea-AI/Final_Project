@@ -474,3 +474,36 @@ def test_sensitivity_response_elasticity_is_quarterly_list(tmp_path, monkeypatch
     val = body["elasticity"]["vacancy_rate"]["+10"]
     assert isinstance(val, list) and len(val) == 4
     assert val == [-1.1, -1.2, -1.3, -1.4]
+
+
+def test_sensitivity_etag_returns_304_on_match(tmp_path, monkeypatch):
+    cache_path = tmp_path / "cache.json"
+    corr_path = tmp_path / "corr.json"
+    cache_path.write_text(
+        '{"k_v": {"baseline": [1.0, 1.0, 1.0, 1.0],"elasticity": {"vacancy_rate": {"0": [0.0, 0.0, 0.0, 0.0]}}}}',
+        encoding="utf-8",
+    )
+    corr_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("SENSITIVITY_CACHE_PATH", str(cache_path))
+    monkeypatch.setenv("SENSITIVITY_CORR_PATH", str(corr_path))
+
+    import importlib
+
+    import src.api.sensitivity as sens_mod
+
+    importlib.reload(sens_mod)
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(sens_mod.router)
+    client = TestClient(app)
+
+    first = client.get("/predict/sensitivity?dong_code=k&industry_code=v")
+    etag = first.headers["etag"]
+    second = client.get(
+        "/predict/sensitivity?dong_code=k&industry_code=v",
+        headers={"If-None-Match": etag},
+    )
+    assert second.status_code == 304
