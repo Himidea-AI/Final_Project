@@ -41,6 +41,15 @@ BRAND_ALIASES: dict[str, list[str]] = {
 }
 
 
+# 역방향 매핑 — 사용자 입력 alias → canonical brand_name.
+# 예: "메가커피" 입력 → canonical "메가MGC커피" 찾아 모든 변형 검색.
+_REVERSE_ALIASES: dict[str, str] = {
+    alt: canonical
+    for canonical, alts in BRAND_ALIASES.items()
+    for alt in alts
+}
+
+
 def _norm(s: str) -> str:
     """비교용 정규화 — 소문자 + 공백/괄호 제거."""
     return s.lower().replace(" ", "").replace("(", "").replace(")", "")
@@ -115,13 +124,17 @@ def resolve_brand_name(raw_name: str | None) -> str | None:
 def get_all_mapo_stores_by_brand(brand_name: str) -> list[dict]:
     """브랜드명으로 마포 내 모든 매장 좌표 조회 (kakao_store).
 
-    biz_brand_mapping + BRAND_ALIASES 기반으로 표기 변형 모두 검색.
+    biz_brand_mapping + BRAND_ALIASES (양방향) 기반으로 표기 변형 모두 검색.
+    사용자 입력이 alias (예: "메가커피") 여도 canonical (예: "메가MGC커피") 로
+    역추적 후 전체 변형 검색.
     dong_name NULL 인 매장은 제외.
 
     Returns:
         [{kakao_id, place_name, brand_name, lat, lon, dong_name, address}, ...]
     """
-    aliases = list(BRAND_ALIASES.get(brand_name, [])) + [brand_name]
+    # alias 입력 → canonical 역추적, 그 다음 모든 정방향 변형 + 입력 자체 포함
+    canonical = _REVERSE_ALIASES.get(brand_name, brand_name)
+    aliases = list(BRAND_ALIASES.get(canonical, [])) + [canonical, brand_name]
     aliases = sorted(set(aliases))
 
     conditions = " OR ".join(f"brand_name ILIKE :a{i}" for i in range(len(aliases)))

@@ -76,9 +76,11 @@ import DashboardPredictPage from './pages/dashboard/DashboardPredictPage';
 import DashboardAnalyzePage from './pages/dashboard/DashboardAnalyzePage';
 import DashboardAbmPage from './pages/dashboard/DashboardAbmPage';
 import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
+import { AbmFloatingWidget } from './components/simulation/AbmFloatingWidget';
 import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
+import { useAbmCompletionToast } from './hooks/useAbmCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
 import { getLivePopulation } from './api/client';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
@@ -1043,13 +1045,12 @@ function SimulatorDashboard({
   return (
     <div
       ref={dashboardRef}
-      className="relative z-10 h-full w-full bg-card overflow-y-auto custom-scrollbar"
+      className="fixed inset-x-0 top-20 bottom-0 z-10 bg-card overflow-y-auto custom-scrollbar"
     >
       {/* Top bar — 페이지 타이틀(좌) + RUN 버튼(우).
-          mt-28 = 초기 위치는 App 헤더(80px)와 32px 갭.
-          sticky top-20 = 스크롤 시 App 헤더 바닥에 flush 로 붙음 → 갭 사이 컨텐츠 비침 차단.
-          (top-28 로 갭 유지하면 갭 사이로 스크롤되는 컨텐츠가 비치는 이슈) */}
-      <div className="sticky top-20 z-30 flex items-center justify-between px-8 py-4 mt-28 bg-card/90 backdrop-blur-xl">
+          wrapper fixed top-20 = nav 80px 아래에서 시작 (nav 영역 침범 차단).
+          mt-8 = wrapper 안에서 추가 32px 갭. sticky top-0 = wrapper 스크롤 시 wrapper 상단에 flush. */}
+      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-8 bg-card/90 backdrop-blur-xl">
         <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">
           SIMULATION SETUP
         </h1>
@@ -1906,7 +1907,7 @@ function DashboardOutlet() {
   return (
     <div
       data-dashboard-scroll
-      className="relative h-screen overflow-y-scroll custom-scrollbar bg-background pb-16 text-foreground"
+      className="fixed inset-x-0 top-20 bottom-0 overflow-y-scroll custom-scrollbar bg-background pb-16 text-foreground"
       style={{ overscrollBehaviorY: 'contain' }}
     >
       {simResult ? (
@@ -1967,6 +1968,7 @@ export default function App() {
   // Simulation background tracking (IM3-205): store가 페이지 이동과 독립적으로
   // 시뮬레이션 상태를 보유. useCompletionToast는 running→done/error 전이 감지.
   useCompletionToast();
+  useAbmCompletionToast();
 
   // FloatingWidget 의 dismiss(X) 가 store.status='idle' 로 만들 때 reportState 도 동기화.
   // 동기화 안 하면 reportState 가 'result' 로 남아 옛 비교모드 dashboard (dead 1,800줄) 가 노출됨.
@@ -2228,6 +2230,7 @@ export default function App() {
 
               {/* IM3-205: 시뮬레이션 백그라운드 추적 — 라우팅 바깥에 마운트 */}
               <SimulationFloatingWidget />
+              <AbmFloatingWidget />
               <BeforeUnloadGuard />
               <ToastHost />
 
@@ -2490,6 +2493,7 @@ export default function App() {
             </div>
           </TransitionContext.Provider>
           <SimulationFloatingWidget />
+          <AbmFloatingWidget />
         </ToastProvider>
       </ManagerListProvider>
     </AuthProvider>

@@ -27,21 +27,25 @@ def main() -> None:
         chunks = json.load(f)
     print(f"총 청크: {len(chunks)}")
 
-    # (source, article) 그룹핑
-    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    for c in chunks:
+    # (source, article) 그룹핑 — chunks.json list index를 보존해 본문 순서 유지
+    # chunk_id = sha256[:16] hash라 정렬 시 본문 순서가 깨짐 → mid-sentence 시작 문제 발생.
+    # ingestion 시 chunks list가 본문 순서로 들어가 있으므로 list index 사용.
+    groups: dict[tuple[str, str], list[tuple[int, dict]]] = defaultdict(list)
+    for idx, c in enumerate(chunks):
         meta = c.get("metadata", {})
         src = meta.get("source") or "?"
         art = meta.get("article") or ""
         # article 비어있으면 chunk_id 자체가 parent — 단독 그룹
         key = (src, art) if art else (src, meta.get("chunk_id", ""))
-        groups[key].append(c)
+        groups[key].append((idx, c))
 
-    # parent_text = 그룹 내 text 합치기 (chunk_id 순서 안정)
+    # parent_text = 그룹 내 text 합치기 (list index 순서 = 본문 순서 보존)
     parent_map: dict[str, str] = {}
     multi_member = 0
-    for key, members in groups.items():
-        members_sorted = sorted(members, key=lambda x: x["metadata"].get("chunk_id", ""))
+    for key, idx_members in groups.items():
+        # list index 오름차순 정렬 — chunks.json 입력 순서 = 본문 순서
+        idx_members_sorted = sorted(idx_members, key=lambda x: x[0])
+        members_sorted = [m for _, m in idx_members_sorted]
         parent_text = "\n".join(m["text"] for m in members_sorted)
         # 너무 큰 parent는 cap (3K chars — main LLM 토큰 보호)
         if len(parent_text) > 3000:
