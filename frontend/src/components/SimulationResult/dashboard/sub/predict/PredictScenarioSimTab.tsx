@@ -13,8 +13,8 @@
  * simResult 없이도 진입 가능 — params.business_type 만 있으면 OK.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { RotateCcw, Sliders } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, RotateCcw, Sliders } from 'lucide-react';
 import type { SimulationOutput } from '../../../../../types';
 import type { ElasticityFeature } from '../../../../../types/elasticity';
 import { useElasticity } from '../../../../../hooks/useElasticity';
@@ -242,31 +242,86 @@ function Header({
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold transition-colors focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-1">
-            <span className="text-muted-foreground">행정동</span>
-            <select
-              value={selectedDong}
-              onChange={(e) => onSelectDong(e.target.value)}
-              className="bg-transparent text-foreground font-bold focus:outline-none"
-              aria-label="행정동 선택"
-            >
-              {MAPO_DONGS.map((d) => (
-                <option key={d.code} value={d.name}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <DongDropdown selectedDong={selectedDong} onSelectDong={onSelectDong} />
           <button
             type="button"
             onClick={onReset}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
           >
             <RotateCcw size={14} /> 리셋
           </button>
         </div>
       </div>
     </header>
+  );
+}
+
+function DongDropdown({
+  selectedDong,
+  onSelectDong,
+}: {
+  selectedDong: string;
+  onSelectDong: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="행정동 선택"
+        className="flex h-10 min-w-[140px] items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 text-sm text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+      >
+        <span className="truncate">{selectedDong}</span>
+        <ChevronRight
+          size={14}
+          className={`text-muted-foreground transition-transform duration-200 shrink-0 ${
+            open ? 'rotate-90' : ''
+          }`}
+        />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar"
+          style={{ overscrollBehavior: 'contain' }}
+        >
+          {MAPO_DONGS.map((d) => {
+            const active = d.name === selectedDong;
+            return (
+              <button
+                key={d.code}
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  onSelectDong(d.name);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors ${
+                  active ? 'bg-primary/10 font-bold text-primary' : 'text-foreground hover:bg-muted'
+                }`}
+              >
+                <span>{d.name}</span>
+                <span className="text-[0.625rem] text-muted-foreground tabular-nums">{d.code}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -1,9 +1,10 @@
 /**
  * AboutPage — 프로젝트 소개 에디토리얼 랜딩 (App.tsx에서 추출, Phase C Round 1).
  * Hero / 5가지 차별점 / 비교표 / 데이터 + 로드맵.
+ *
+ * 헤더는 App.tsx 의 global header 가 제공 (scene !== 'intro' 일 때 fixed h-20).
+ * 이 페이지는 자체 헤더 없이 본문만 렌더한다.
  */
-
-import { ChevronRight } from 'lucide-react';
 
 const FEATURES = [
   {
@@ -49,13 +50,15 @@ const DATA_SOURCES = [
   '국토부 실거래가',
   '공정위 정보공개서',
   '서울 상권분석 (golmok)',
+  '서울 상권 변화 지수',
   'Naver DataLab',
+  '한국은행 ECOS',
 ];
 
 const ROADMAP = [
-  { phase: 'NOW', label: '서울시 마포구 16개 행정동 분석 지원' },
+  { phase: 'NOW', label: '마포구 16개 행정동 분석 + 프랜차이즈 본부 영업팀 SaaS β 운영' },
   { phase: 'NEXT', label: '서울 전체 25개 구 확장 + 프랜차이즈 브랜드 DB 고도화' },
-  { phase: 'FUTURE', label: '전국 단위 확장 + 실시간 매출 데이터 연동 + B2B SaaS 출시' },
+  { phase: 'FUTURE', label: '전국 단위 확장 + 실시간 매출 데이터 연동 + 글로벌 확장' },
 ];
 
 /* ═══════════════════════════════════════════════════════
@@ -67,33 +70,12 @@ const ROADMAP = [
    - Section 4: 7개 공공데이터 배지 + NOW/NEXT/FUTURE 로드맵
 */
 
-export default function AboutPage({ onBack }: { onBack: () => void }) {
+export default function AboutPage(_: { onBack?: () => void }) {
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-card/95 backdrop-blur-sm text-foreground pb-32 custom-scrollbar">
-      {/* Header */}
-      <div className="fixed top-0 left-0 w-full h-24 border-b border-border/50 flex items-center px-8 md:px-16 bg-card/80 backdrop-blur-md z-50">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
-          >
-            <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-foreground">SPOTTER</span>
-          </button>
-          <span className="text-border">/</span>
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
-          >
-            <ChevronRight size={14} className="rotate-180" />
-            BACK
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-8 md:px-16 pt-24">
+    <div className="absolute inset-0 z-20 overflow-y-auto bg-background text-foreground pb-32 custom-scrollbar">
+      <div className="max-w-5xl mx-auto px-8 md:px-16 pt-20">
         {/* ── Section 1: Hero ── */}
-        <section className="min-h-[80vh] flex flex-col justify-center animate-[fadeSlideIn_1s_ease-out]">
+        <section className="lg:min-h-[80vh] flex flex-col justify-center py-16 lg:py-0 animate-[fadeSlideIn_1s_ease-out]">
           <p className="text-lg md:text-xl text-muted-foreground mb-6 tracking-wide">
             기존 상권분석 도구는{' '}
             <span className="text-primary font-bold text-2xl md:text-3xl">'지금'</span>만
@@ -181,7 +163,7 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
               </h3>
             </div>
             <p className="text-muted-foreground mb-6 text-sm">
-              7개 공공데이터 API 기반 — 신뢰할 수 있는 데이터만 사용합니다.
+              {DATA_SOURCES.length}개 공공데이터 API 기반 — 신뢰할 수 있는 데이터만 사용합니다.
             </p>
             <div className="flex flex-wrap gap-3">
               {DATA_SOURCES.map((src) => (
@@ -210,7 +192,7 @@ export default function AboutPage({ onBack }: { onBack: () => void }) {
                     {r.phase}
                   </span>
                   <div className="flex items-start gap-4">
-                    <div className="mt-2 w-2 h-2 rounded-full bg-primary shrink-0" />
+                    <div className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />
                     <p className="text-foreground leading-relaxed">{r.label}</p>
                   </div>
                 </div>
