@@ -85,6 +85,8 @@ import { useSimulationStore } from './stores/simulationStore';
 import { getLivePopulation } from './api/client';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
 import NetworkBackground from './components/NetworkBackground';
+import WaveBackground from './pages/landing/WaveBackground';
+import PulsatingDots from './components/ui/PulsatingDots';
 // Phase C Round 2 — PDF 묶음 + Dashboard 묶음 추출 (정적 import 유지)
 
 // Phase C Round 1 — 마케팅 페이지 4종 lazy 분리 (App.tsx에서 추출)
@@ -1556,10 +1558,18 @@ function DashboardRunningPlaceholder() {
   const anaStage = useSimulationStore((s) => s.analysis.stage);
 
   return (
-    <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-6 px-6">
-      <div className="text-lg font-semibold text-foreground">시뮬레이션 진행 중</div>
+    <div className="relative flex h-full min-h-[60vh] flex-col items-center justify-center gap-6 overflow-hidden px-6">
+      {/* IntroScene 과 동일 시각 언어 — Deep Blue 가로지르는 wave 캔버스. 마우스 호버 시 진폭 ↑.
+          z-0 absolute, 본문 콘텐츠는 자연 stacking 으로 위에 떠있음. pointer-events-none 이라
+          박스 인터랙션 무방해. */}
+      <WaveBackground />
+
+      <div className="relative z-10 flex items-center gap-3 text-lg font-semibold text-foreground">
+        <span>시뮬레이션 진행 중</span>
+        <PulsatingDots />
+      </div>
       {/* 가로 배치 — sm 이상에서 두 박스 좌우 나란히. 모바일 (sm 미만) 에선 세로 fallback. */}
-      <div className="flex w-full max-w-4xl flex-col gap-4 sm:flex-row">
+      <div className="relative z-10 flex w-full max-w-4xl flex-col gap-4 sm:flex-row">
         <SliceProgressRow
           status={predStatus}
           label="ML 예측"
@@ -1575,7 +1585,7 @@ function DashboardRunningPlaceholder() {
           stage={anaStage}
         />
       </div>
-      <p className="max-w-md text-center text-xs text-muted-foreground leading-relaxed">
+      <p className="relative z-10 max-w-md text-center text-xs text-muted-foreground leading-relaxed">
         두 분석은 독립적으로 실행되며, 도착하는 대로 화면이 갱신됩니다.
       </p>
     </div>
@@ -1761,6 +1771,53 @@ function HorizontalWaveBackground({
   );
 }
 
+/** (b) 옵션 — 단계 사이 시간 보간. 진짜 progressRatio 가 변화 없는 동안 STAGE_DURATION_SEC
+ *  가정으로 다음 step(25%p) 직전(headroom 1%p)까지 천천히 climb. 새 신호 도착 시 즉시 점프.
+ *  ⚠️ 가짜 시간 추정 — 실측 (a 정통) 과 다름. "단계 멈춤" UX 회피용 절충 (2026-05-03 사용자 결정).
+ *  cap = ceil(real * 4) / 4 - headroom 으로 다음 stage 절대 못 넘게 강제. */
+const STAGE_DURATION_SEC = 50;
+const STEP_HEADROOM = 0.01;
+
+function useInterpolatedProgress(
+  realProgress: number,
+  status: 'idle' | 'running' | 'done' | 'error',
+): number {
+  const [display, setDisplay] = useState(realProgress);
+  const lastReal = useRef({ value: realProgress, at: Date.now() });
+
+  // realProgress 변화 시 즉시 점프 + 보간 시작점 갱신.
+  useEffect(() => {
+    if (realProgress !== lastReal.current.value) {
+      lastReal.current = { value: realProgress, at: Date.now() };
+      setDisplay(realProgress);
+    }
+  }, [realProgress]);
+
+  // 시간 보간 timer — running 중에만. 250ms 마다 보간값 재계산.
+  useEffect(() => {
+    if (status !== 'running') return;
+    const id = setInterval(() => {
+      const { value: real, at } = lastReal.current;
+      const elapsed = (Date.now() - at) / 1000;
+      const interpolated = real + (elapsed / STAGE_DURATION_SEC) * 0.25;
+      // 다음 0.25 배수 직전 - headroom — real=0 일 때 cap 음수 회귀(-1%) 차단 위해
+      // floor(real*4)+1 로 항상 real 보다 큰 다음 quarter 보장.
+      const nextQuarter = (Math.floor(real * 4) + 1) / 4;
+      const cap = Math.min(1.0, nextQuarter - STEP_HEADROOM);
+      // real 미만 역행 + cap 초과 둘 다 차단.
+      setDisplay(Math.max(real, Math.min(interpolated, cap)));
+    }, 250);
+    return () => clearInterval(id);
+  }, [status]);
+
+  // done/error/idle 전이 시 real 값 즉시 반영 (cap 해제).
+  useEffect(() => {
+    if (status !== 'running') setDisplay(realProgress);
+  }, [status, realProgress]);
+
+  return display;
+}
+
 function SliceProgressRow({
   status,
   label,
@@ -1776,6 +1833,8 @@ function SliceProgressRow({
   /** Backend 가 전달한 현재 진행 단계 라벨 (e.g. "서교동 분석 완료 (2/4)" 또는 LangGraph 노드명). */
   stage: string | null;
 }) {
+  // (b) 시간 보간 적용 — display 는 wave fillHeight + % 표시 둘 다 같은 값.
+  const display = useInterpolatedProgress(progressRatio, status);
   const Icon = status === 'done' ? CheckCircle2 : status === 'error' ? AlertCircle : Loader2;
   const iconColor =
     status === 'done'
@@ -1795,13 +1854,12 @@ function SliceProgressRow({
         : 'text-muted-foreground';
   const isRunning = status === 'running';
 
-  // running 시 실측 % — backend 가 보낸 progressRatio (0~1) 그대로 100 곱.
-  // 가짜 시간 추정 없음. 0% 에서 25/50/75 식 실제 노드 완료 단계마다 점프.
-  const progressPct = isRunning ? Math.round(progressRatio * 100) : null;
+  // running 시 % — display(보간된 값) 사용. wave fillHeight 와 1:1 일치 유지.
+  const progressPct = isRunning ? Math.round(display * 100) : null;
 
   return (
     <div className="relative flex min-h-[200px] min-w-0 flex-1 flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-border bg-card p-6 text-center transition-colors duration-500">
-      <HorizontalWaveBackground status={status} progressRatio={progressRatio} />
+      <HorizontalWaveBackground status={status} progressRatio={display} />
       <Icon
         className={`relative h-7 w-7 shrink-0 ${iconColor} ${isRunning ? 'animate-spin' : ''}`}
       />
@@ -2135,12 +2193,31 @@ export default function App() {
                       </ProtectedRoute>
                     }
                   />
-                  {/* 저장된 시뮬 이력 재현 — 본인 이력만 조회 가능 (백엔드 권한 검증) */}
+                  {/* 저장된 시뮬 이력 재현 — 본인 이력만 조회 가능 (백엔드 권한 검증).
+                      legacy /dashboard/history/:id (기존 simulation_history) — 3-card hub 진입.
+                      신규 /dashboard/foresee/:id (simulation_foresee) — PredictGroup 직접 진입.
+                      신규 /dashboard/ai/:id (simulation_ai) — AnalyzeGroup 직접 진입. */}
                   <Route
                     path="/dashboard/history/:id"
                     element={
                       <ProtectedRoute>
                         <SimulationHistoryDetail />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/dashboard/foresee/:id"
+                    element={
+                      <ProtectedRoute>
+                        <SimulationHistoryDetail kind="foresee" />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/dashboard/ai/:id"
+                    element={
+                      <ProtectedRoute>
+                        <SimulationHistoryDetail kind="ai" />
                       </ProtectedRoute>
                     }
                   />

@@ -49,6 +49,7 @@ export default function DashboardAnalyzePage() {
           <SaveSimulationActions
             simResult={simResult}
             brandName={brandName}
+            kind="ai"
             savedHistoryId={savedHistoryId}
           />
         </div>

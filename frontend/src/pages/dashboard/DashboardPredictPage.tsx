@@ -49,6 +49,7 @@ export default function DashboardPredictPage() {
           <SaveSimulationActions
             simResult={simResult}
             brandName={brandName}
+            kind="foresee"
             savedHistoryId={savedHistoryId}
           />
         </div>

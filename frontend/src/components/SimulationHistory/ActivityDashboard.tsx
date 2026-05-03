@@ -18,10 +18,6 @@ interface ActivityDashboardProps {
   isLoading: boolean;
 }
 
-function startOfDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
 function formatRelative(iso: string): string {
   const now = Date.now();
   const then = new Date(iso).getTime();
@@ -152,21 +148,27 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
               최근 8주 주간 시뮬 수
             </span>
             <span className="text-[0.625rem] text-muted-foreground">
-              {startOfDay(new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000)) > 0 ? '' : ''}
               {items.length}건 집계 · peak {maxWeek}
             </span>
           </div>
           <div className="flex h-16 items-end gap-1.5">
             {weekly.map((w, i) => {
               const pct = (w.count / maxWeek) * 100;
+              const hasData = w.count > 0;
               return (
                 <div key={i} className="flex flex-1 flex-col items-center justify-end gap-1">
                   <div
-                    className="w-full rounded-t bg-primary/80 transition-all"
-                    style={{ height: `${pct}%`, minHeight: w.count > 0 ? '4px' : '0' }}
+                    className={`w-full rounded-t transition-all ${
+                      hasData ? 'bg-primary/80' : 'bg-muted-foreground/20'
+                    }`}
+                    style={{
+                      // 0건 주차도 2px ghost baseline — "그 주는 시뮬 0건" 시각 신호.
+                      // 데이터 있는 주는 max 기준 비율 + 최소 4px.
+                      height: hasData ? `${Math.max(pct, 8)}%` : '2px',
+                    }}
                     title={`${w.week}: ${w.count}건`}
                   />
-                  <span className="text-[0.5625rem] font-mono text-muted-foreground">{w.week}</span>
+                  <span className="text-[0.6875rem] font-mono text-muted-foreground">{w.week}</span>
                 </div>
               );
             })}
@@ -187,7 +189,7 @@ export function ActivityDashboard({ items, total, isLoading }: ActivityDashboard
               topBrands.map((b, i) => (
                 <div key={b.key} className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2 text-xs text-foreground">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[0.5625rem] font-mono text-muted-foreground">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[0.6875rem] font-mono text-muted-foreground">
                       {i + 1}
                     </span>
                     <span className="truncate">{b.key}</span>
@@ -228,14 +230,16 @@ function StatCard({
           : 'text-foreground';
   return (
     <div className="rounded-xl border border-border bg-card/40 p-4">
-      <div className="mb-2 flex items-center justify-between">
+      {/* 상단 — icon + label 좌측 묶음 */}
+      <div className="mb-2 flex items-center gap-2">
+        {icon}
         <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
           {label}
         </span>
-        {icon}
       </div>
-      <div className={`text-xl font-black tabular-nums ${toneCls}`}>{value}</div>
-      {sub && <div className="mt-1 text-[0.625rem] text-muted-foreground">{sub}</div>}
+      {/* value/sub 만 우측 정렬 */}
+      <div className={`text-right text-xl font-black tabular-nums ${toneCls}`}>{value}</div>
+      {sub && <div className="mt-1 text-right text-[0.625rem] text-muted-foreground">{sub}</div>}
     </div>
   );
 }

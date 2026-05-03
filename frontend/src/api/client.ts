@@ -26,9 +26,12 @@ import type {
 import type {
   HistoryFilterParams,
   HistoryListResponse,
+  SaveAIPayload,
+  SaveForeseePayload,
   SaveSimulationPayload,
   SaveSimulationResponse,
   SimulationHistoryDetail,
+  SimulationHistoryItem,
 } from '../types/simulationHistory';
 import type { TokenUsageResponse } from '../types/tokenUsage';
 
@@ -273,16 +276,232 @@ export async function listSimulationHistory(
   filter: HistoryFilterParams = {},
 ): Promise<HistoryListResponse> {
   const response = await apiClient.get('/simulation-history', { params: filter });
-  return response.data;
+  // legacy row → kind 'ai' 기본 (legacy simulation_history 가 통합이므로 두 슬라이스 다 들어있음).
+  const data = response.data ?? { items: [], total: 0, page: 1, size: 20 };
+  if (Array.isArray(data.items)) {
+    data.items = data.items.map((it: Record<string, unknown>) => ({
+      ...it,
+      kind: it.kind ?? 'ai',
+    }));
+  }
+  return data as HistoryListResponse;
 }
 
 export async function getSimulationHistoryDetail(id: number): Promise<SimulationHistoryDetail> {
   const response = await apiClient.get(`/simulation-history/${id}`);
-  return response.data;
+  // legacy row 는 kind 컬럼이 없음 — 'ai' 기본값 (legacy simulation_history 가 통합 result 였으나
+  // 대시보드 hub 진입 시 기존 3-card 그대로 — kind 분기는 신규 라우트만 적용).
+  // SimulationHistoryDetail 의 kind 필수성을 만족시키기 위해 주입.
+  const data = response.data ?? {};
+  if (!data.kind) data.kind = 'ai';
+  return data as SimulationHistoryDetail;
 }
 
 export async function deleteSimulationHistory(id: number): Promise<void> {
   await apiClient.delete(`/simulation-history/${id}`);
+}
+
+// ─────────────────────────────────────────────────────────
+// 신규 분리 endpoint (2026-05-02) — /simulation-foresee + /simulation-ai
+// ML 예측과 LLM 분석을 별개 row 로 저장. 통합 list 는 useSimulationHistory 가 양쪽 머지.
+// ─────────────────────────────────────────────────────────
+
+/** POST /simulation-foresee — ML 예측 슬라이스 저장 */
+export async function saveForeseeHistory(
+  payload: SaveForeseePayload,
+): Promise<SaveSimulationResponse> {
+  const response = await apiClient.post('/simulation-foresee', payload);
+  return response.data;
+}
+
+/** POST /simulation-ai — LLM 분석 슬라이스 저장 */
+export async function saveAIHistory(payload: SaveAIPayload): Promise<SaveSimulationResponse> {
+  const response = await apiClient.post('/simulation-ai', payload);
+  return response.data;
+}
+
+/** GET /simulation-foresee — 예측 이력 목록 */
+export async function listForeseeHistory(
+  filter: HistoryFilterParams = {},
+): Promise<HistoryListResponse> {
+  const response = await apiClient.get('/simulation-foresee', { params: filter });
+  return response.data;
+}
+
+/** GET /simulation-ai — AI 분석 이력 목록 */
+export async function listAIHistory(
+  filter: HistoryFilterParams = {},
+): Promise<HistoryListResponse> {
+  const response = await apiClient.get('/simulation-ai', { params: filter });
+  return response.data;
+}
+
+/**
+ * GET /simulation-foresee/{id} — 예측 row 상세.
+ * Raw row(컬럼 그대로) 를 SimulationHistoryDetail (SimulationOutput 컨테이너) 로 매핑.
+ * SimulationOutput 의 LLM 슬라이스 필드는 null/undefined 채움 (HistoryDashboardView kind='foresee' 분기에서 미사용).
+ */
+export async function getForeseeDetail(id: number): Promise<SimulationHistoryDetail> {
+  const response = await apiClient.get(`/simulation-foresee/${id}`);
+  return mapForeseeDetailToHistoryDetail(response.data);
+}
+
+/** GET /simulation-ai/{id} — AI 분석 row 상세 */
+export async function getAIDetail(id: number): Promise<SimulationHistoryDetail> {
+  const response = await apiClient.get(`/simulation-ai/${id}`);
+  return mapAIDetailToHistoryDetail(response.data);
+}
+
+/** DELETE /simulation-foresee/{id} */
+export async function deleteForeseeHistory(id: number): Promise<void> {
+  await apiClient.delete(`/simulation-foresee/${id}`);
+}
+
+/** DELETE /simulation-ai/{id} */
+export async function deleteAIHistory(id: number): Promise<void> {
+  await apiClient.delete(`/simulation-ai/${id}`);
+}
+
+/**
+ * Raw simulation_foresee row → SimulationHistoryDetail (SimulationOutput 컨테이너).
+ * Backend 컬럼 분산 (district_predictions, quarterly_projection, ...) 을 SimulationOutput 형태로 합성.
+ * 빠진 LLM 슬라이스 필드는 undefined/null 로 채움.
+ */
+export function mapForeseeDetailToHistoryDetail(row: Record<string, any>): SimulationHistoryDetail {
+  const districts: string[] = Array.isArray(row.districts)
+    ? row.districts
+    : row.target_district
+      ? [row.target_district]
+      : [];
+  const simulationResult: SimulationOutput = {
+    request_id: String(row.id ?? ''),
+    target_district: row.target_district ?? row.winner_district ?? districts[0] ?? '',
+    target_districts: districts,
+    analysis_report: '',
+    analysis_metrics: {
+      district_grade: 'NORMAL',
+      growth_rate: 0,
+      competition_score: 0,
+      rent_affordability: '',
+    },
+    quarterly_projection: row.quarterly_projection ?? [],
+    comparison: [],
+    legal_risks: [],
+    winner_district: row.winner_district ?? undefined,
+    market_report: row.market_report ?? undefined,
+    shap_result: row.shap_result ?? null,
+    scenarios: row.scenarios ?? null,
+    closure_rate: row.closure_rate ?? null,
+    closure_risk: row.closure_risk ?? null,
+    customer_segment: row.customer_segment ?? null,
+    living_pop_forecast: row.living_pop_forecast ?? null,
+    final_report: row.final_report ?? null,
+    district_predictions: row.district_predictions ?? undefined,
+    bep_months: row.bep_months ?? null,
+    predicted_monthly_revenue: row.predicted_monthly_revenue ?? null,
+  };
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? districts[0] ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: null,
+    market_entry_signal: null,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? null,
+    kind: 'foresee',
+    scenario: row.scenario ?? null,
+    simulation_result: simulationResult,
+  };
+}
+
+/**
+ * Raw simulation_ai row → SimulationHistoryDetail.
+ * 빠진 ML 슬라이스(quarterly_projection 등) 는 빈 배열/null 로 채움.
+ */
+export function mapAIDetailToHistoryDetail(row: Record<string, any>): SimulationHistoryDetail {
+  const simulationResult: SimulationOutput = {
+    request_id: String(row.id ?? ''),
+    target_district: row.target_district ?? row.winner_district ?? '',
+    target_districts: row.target_district ? [row.target_district] : [],
+    analysis_report: row.analysis_report ?? '',
+    analysis_metrics: {
+      district_grade: 'NORMAL',
+      growth_rate: 0,
+      competition_score: 0,
+      rent_affordability: '',
+    },
+    quarterly_projection: [],
+    comparison: [],
+    legal_risks: row.legal_risks ?? [],
+    ai_recommendation: row.ai_recommendation ?? undefined,
+    winner_district: row.winner_district ?? undefined,
+    top_3_candidates: row.top_3_candidates ?? undefined,
+    district_rankings: row.district_rankings ?? undefined,
+    overall_legal_risk: row.overall_legal_risk ?? undefined,
+    vacancy_applied: row.vacancy_applied ?? undefined,
+    market_report: row.market_report ?? undefined,
+    trend_forecast: row.trend_forecast ?? null,
+    competitor_intel: row.competitor_intel ?? null,
+    demographic_report: row.demographic_report ?? null,
+    agent_attributions: row.agent_attributions ?? undefined,
+    all_competitor_locations: row.all_competitor_locations ?? undefined,
+  };
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: row.ai_verdict_summary ?? null,
+    market_entry_signal: (row.market_entry_signal as 'green' | 'yellow' | 'red' | null) ?? null,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? null,
+    kind: 'ai',
+    scenario: row.scenario ?? null,
+    simulation_result: simulationResult,
+  };
+}
+
+/**
+ * List 응답 row → SimulationHistoryItem (kind 주입).
+ * Backend list_foresee/list_ai 는 row 컬럼 일부만 select → 누락 필드는 빈 값/null 로.
+ */
+export function mapForeseeListItem(row: Record<string, any>): SimulationHistoryItem {
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: null, // foresee row 엔 LLM verdict 컬럼 없음
+    market_entry_signal: null,
+    created_at: row.created_at ?? '',
+    kind: 'foresee',
+  };
+}
+
+export function mapAIListItem(row: Record<string, any>): SimulationHistoryItem {
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: row.ai_verdict_summary ?? null,
+    market_entry_signal: (row.market_entry_signal as 'green' | 'yellow' | 'red' | null) ?? null,
+    created_at: row.created_at ?? '',
+    kind: 'ai',
+  };
 }
 
 // ─────────────────────────────────────────────────────────
