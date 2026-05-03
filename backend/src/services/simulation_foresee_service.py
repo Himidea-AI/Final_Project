@@ -34,6 +34,7 @@ def create_foresee(
     target_district: Optional[str],
     winner_district: Optional[str],
     foresee_result: dict[str, Any],
+    scenario: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """예측 결과 INSERT. 반환: {id, manager_id, client_name, created_at}"""
     engine = get_sync_engine(_db_url())
@@ -47,7 +48,7 @@ def create_foresee(
                      district_predictions, quarterly_projection, scenarios,
                      shap_result, bep_months, predicted_monthly_revenue,
                      closure_rate, closure_risk, final_report, market_report,
-                     customer_segment, living_pop_forecast)
+                     customer_segment, living_pop_forecast, scenario)
                 VALUES
                     (:manager_id, :user_type, :client_name, :brand_name, :business_type,
                      CAST(:districts AS jsonb), :target_district, :winner_district,
@@ -56,7 +57,8 @@ def create_foresee(
                      :bep_months, :predicted_monthly_revenue,
                      CAST(:closure_rate AS jsonb), CAST(:closure_risk AS jsonb),
                      CAST(:final_report AS jsonb), CAST(:market_report AS jsonb),
-                     CAST(:customer_segment AS jsonb), CAST(:living_pop_forecast AS jsonb))
+                     CAST(:customer_segment AS jsonb), CAST(:living_pop_forecast AS jsonb),
+                     CAST(:scenario AS jsonb))
                 RETURNING id, manager_id, client_name, created_at
                 """
             ),
@@ -81,6 +83,7 @@ def create_foresee(
                 "market_report": json.dumps(foresee_result.get("market_report")),
                 "customer_segment": json.dumps(foresee_result.get("customer_segment")),
                 "living_pop_forecast": json.dumps(foresee_result.get("living_pop_forecast")),
+                "scenario": json.dumps(scenario) if scenario else None,
             },
         ).fetchone()
     return dict(row._mapping)
@@ -185,8 +188,7 @@ def delete_foresee(*, history_id: int, manager_id: UUID, role: str = "manager") 
     """삭제."""
     if role == "master":
         access_filter = (
-            "(manager_id = :manager_id OR manager_id IN "
-            "(SELECT id FROM manager_users WHERE owner_id = :manager_id))"
+            "(manager_id = :manager_id OR manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
         )
     else:
         access_filter = "manager_id = :manager_id"

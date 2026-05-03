@@ -131,7 +131,7 @@ class BizMapper:
             # ftc_brand_franchise 테이블 없거나 접근 불가 시 빈 결과 반환
             return []
         finally:
-            engine.dispose()
+            pass
 
         if not rows:
             return []
@@ -196,7 +196,7 @@ class BizMapper:
                 )
                 return result.scalar() or 0
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 통합 매핑

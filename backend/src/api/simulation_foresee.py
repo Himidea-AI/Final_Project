@@ -41,6 +41,7 @@ class ForeseeSaveRequest(BaseModel):
     target_district: str | None = None
     winner_district: str | None = None
     foresee_result: dict
+    scenario: dict | None = None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -59,6 +60,7 @@ def save_foresee(
         target_district=body.target_district,
         winner_district=body.winner_district,
         foresee_result=body.foresee_result,
+        scenario=body.scenario,
     )
     return created
 

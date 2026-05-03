@@ -33,6 +33,7 @@ def create_ai(
     target_district: Optional[str],
     winner_district: Optional[str],
     ai_result: dict[str, Any],
+    scenario: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """AI 분석 INSERT. 반환: {id, manager_id, client_name, created_at}"""
     engine = get_sync_engine(_db_url())
@@ -48,7 +49,7 @@ def create_ai(
                      legal_risks, market_report, trend_forecast,
                      competitor_intel, demographic_report,
                      district_rankings, agent_attributions,
-                     vacancy_applied, all_competitor_locations)
+                     vacancy_applied, all_competitor_locations, scenario)
                 VALUES
                     (:manager_id, :user_type, :client_name, :brand_name, :business_type,
                      :target_district, :winner_district, CAST(:top_3_candidates AS jsonb),
@@ -58,7 +59,8 @@ def create_ai(
                      CAST(:trend_forecast AS jsonb), CAST(:competitor_intel AS jsonb),
                      CAST(:demographic_report AS jsonb), CAST(:district_rankings AS jsonb),
                      CAST(:agent_attributions AS jsonb),
-                     :vacancy_applied, CAST(:all_competitor_locations AS jsonb))
+                     :vacancy_applied, CAST(:all_competitor_locations AS jsonb),
+                     CAST(:scenario AS jsonb))
                 RETURNING id, manager_id, client_name, created_at
                 """
             ),
@@ -85,6 +87,7 @@ def create_ai(
                 "agent_attributions": json.dumps(ai_result.get("agent_attributions")),
                 "vacancy_applied": ai_result.get("vacancy_applied", False),
                 "all_competitor_locations": json.dumps(ai_result.get("all_competitor_locations")),
+                "scenario": json.dumps(scenario) if scenario else None,
             },
         ).fetchone()
     return dict(row._mapping)
@@ -190,8 +193,7 @@ def delete_ai(*, history_id: int, manager_id: UUID, role: str = "manager") -> bo
     """삭제."""
     if role == "master":
         access_filter = (
-            "(manager_id = :manager_id OR manager_id IN "
-            "(SELECT id FROM manager_users WHERE owner_id = :manager_id))"
+            "(manager_id = :manager_id OR manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
         )
     else:
         access_filter = "manager_id = :manager_id"

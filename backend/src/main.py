@@ -1169,7 +1169,6 @@ async def biz_lookup(req: BizLookupRequest):
                     ),
                     {"biz": biz_clean},
                 ).fetchone()
-            engine.dispose()
             if row:
                 d = dict(row._mapping)
                 return {
