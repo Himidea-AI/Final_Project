@@ -11,6 +11,7 @@
 import type { SimulationOutput, EmergingSignal } from '../../../../../types';
 import { EmergingSignalCard } from '../../charts/EmergingSignalCard';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
+import { resolveDongName } from '../../../../../constants/mapoDongs';
 
 interface Props {
   simResult: SimulationOutput;
@@ -22,10 +23,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
   if (dpredicts.length === 0) {
     return (
       <div className="space-y-6">
-        <PlaceholderPanel
-          modelName="emerging_district (LSTM Autoencoder)"
-          description="상권 조기감지 신호는 동별 예측 데이터(/predict)가 도착해야 활성화됩니다."
-        />
+        <PlaceholderPanel description="동별 예측 데이터가 도착하면 상권 조기감지 신호가 표시됩니다." />
       </div>
     );
   }
@@ -34,10 +32,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
   if (!anyData) {
     return (
       <div className="space-y-6">
-        <PlaceholderPanel
-          modelName="emerging_district (LSTM Autoencoder)"
-          description="동별 상권 조기감지 신호는 backend /predict 응답에서 미수신 상태입니다 — DistrictPredictionResult.emerging_signal 구현 후 활성화됩니다."
-        />
+        <PlaceholderPanel description="동별 상권 조기감지 신호 데이터를 받지 못했습니다. 잠시 후 다시 시도해주세요." />
       </div>
     );
   }
@@ -48,20 +43,27 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
         동별 상권 조기감지 신호
       </h4>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {dpredicts.map((p) => (
-          <div key={p.district} className="bg-card border border-border rounded-3xl p-4 space-y-3">
-            <div className="text-xs font-black text-foreground uppercase tracking-widest">
-              {p.district}
-            </div>
-            {p.emerging_signal ? (
-              <EmergingSignalCard signal={p.emerging_signal as unknown as EmergingSignal} />
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border bg-secondary p-4 text-[0.625rem] text-muted-foreground">
-                상권 조기감지 신호 미수신
+        {dpredicts.map((p) => {
+          // p.district 가 raw code(11440660)로 올 가능성 대비 한국어 이름으로 휴머나이즈.
+          const districtLabel = resolveDongName(p.district) ?? p.district;
+          return (
+            <div
+              key={p.district}
+              className="bg-card border border-border rounded-3xl p-4 space-y-3"
+            >
+              <div className="text-xs font-black text-foreground uppercase tracking-widest">
+                {districtLabel}
               </div>
-            )}
-          </div>
-        ))}
+              {p.emerging_signal ? (
+                <EmergingSignalCard signal={p.emerging_signal as unknown as EmergingSignal} />
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-secondary p-4 text-[0.625rem] text-muted-foreground">
+                  상권 조기감지 신호 미수신
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -59,9 +59,6 @@ export function PeakHourCard({ data }: Props) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
           <Activity size={16} className="text-primary" /> 유동인구 피크 시간 예측
-          <span className="text-[0.625rem] font-black text-muted-foreground normal-case tracking-normal">
-            living_pop_forecast · TCN
-          </span>
         </h4>
         <div className="px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-[0.6875rem] font-black text-primary tabular-nums flex items-center gap-1.5">
           <Clock size={11} />
@@ -149,7 +146,7 @@ export function PeakHourCard({ data }: Props) {
       {/* Disclaimer */}
       <div className="pt-4 border-t border-border space-y-1">
         <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
-          ※ TCN 모델 — 코로나 시기(2020~2021) 가중치 0.5 보정 적용.
+          ※ 코로나 시기(2020~2021) 가중치 0.5 보정 적용.
         </p>
         <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
           ※ 마포구 16동 × 24시간대 단일 학습. 다른 조합/시간대는 외삽 결과로 신뢰도 하락 가능.

@@ -51,3 +51,20 @@ export function resolveBizToIndustry(biz: string | undefined | null): string | n
   if (!biz) return null;
   return BIZ_TO_INDUSTRY_CODE[biz.toLowerCase()] ?? BIZ_TO_INDUSTRY_CODE[biz] ?? null;
 }
+
+/** 역방향 — 업종 코드(CS100001) → 한국어(한식). 사용자 노출 텍스트 안 raw code 휴머나이즈용.
+ *  같은 코드에 여러 한국어 키가 매핑된 경우(한식/한식음식점/음식점/restaurant) 첫 등록만 사용. */
+const INDUSTRY_TO_BIZ_KO: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const [koName, code] of Object.entries(BIZ_TO_INDUSTRY_CODE)) {
+    // 한국어가 아닌 키(restaurant, cafe 등) 는 skip — 가장 자연스러운 한국어 선택.
+    if (!/[가-힣]/.test(koName)) continue;
+    if (!map[code]) map[code] = koName;
+  }
+  return map;
+})();
+
+export function resolveIndustryNameKo(code: string | undefined | null): string | null {
+  if (!code) return null;
+  return INDUSTRY_TO_BIZ_KO[code] ?? null;
+}
