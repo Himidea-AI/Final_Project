@@ -507,3 +507,84 @@ def test_sensitivity_etag_returns_304_on_match(tmp_path, monkeypatch):
         headers={"If-None-Match": etag},
     )
     assert second.status_code == 304
+
+
+def test_sensitivity_response_includes_baseline_per_store_when_present(tmp_path, monkeypatch):
+    """캐시에 baseline_per_store/store_count가 있으면 응답에 노출되어야 한다 (v3+)."""
+    cache_path = tmp_path / "cache.json"
+    corr_path = tmp_path / "corr.json"
+    cache_path.write_text(
+        '{"11440555_CS100001": {'
+        '"baseline": [1400000000.0, 1440000000.0, 1450000000.0, 1460000000.0],'
+        '"baseline_per_store": [15730000.0, 16180000.0, 16290000.0, 16400000.0],'
+        '"store_count": 89,'
+        '"elasticity": {"vacancy_rate": {"0": [0.0, 0.0, 0.0, 0.0]}}'
+        "}}",
+        encoding="utf-8",
+    )
+    corr_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("SENSITIVITY_CACHE_PATH", str(cache_path))
+    monkeypatch.setenv("SENSITIVITY_CORR_PATH", str(corr_path))
+
+    import importlib
+
+    import src.api.sensitivity as sens_mod
+
+    importlib.reload(sens_mod)
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(sens_mod.router)
+    client = TestClient(app)
+
+    res = client.get("/predict/sensitivity?dong_code=11440555&industry_code=CS100001")
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    assert "baseline_per_store" in body
+    assert isinstance(body["baseline_per_store"], list)
+    assert len(body["baseline_per_store"]) == 4
+    assert all(isinstance(v, (int, float)) for v in body["baseline_per_store"])
+
+    assert "store_count" in body
+    assert body["store_count"] == 89
+
+
+def test_sensitivity_response_baseline_per_store_optional_when_missing(tmp_path, monkeypatch):
+    """기존 캐시(baseline_per_store/store_count 없음)도 호환 — None 반환."""
+    cache_path = tmp_path / "cache.json"
+    corr_path = tmp_path / "corr.json"
+    cache_path.write_text(
+        '{"11440660_CS100001": {'
+        '"baseline": [100.0, 110.0, 120.0, 130.0],'
+        '"elasticity": {"vacancy_rate": {"0": [0.0, 0.0, 0.0, 0.0]}}'
+        "}}",
+        encoding="utf-8",
+    )
+    corr_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("SENSITIVITY_CACHE_PATH", str(cache_path))
+    monkeypatch.setenv("SENSITIVITY_CORR_PATH", str(corr_path))
+
+    import importlib
+
+    import src.api.sensitivity as sens_mod
+
+    importlib.reload(sens_mod)
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(sens_mod.router)
+    client = TestClient(app)
+
+    res = client.get("/predict/sensitivity?dong_code=11440660&industry_code=CS100001")
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    assert body.get("baseline_per_store") is None
+    assert body.get("store_count") is None
+    # 기존 baseline_sales는 그대로 동작해야 함
+    assert body["baseline_sales"] == [100.0, 110.0, 120.0, 130.0]
