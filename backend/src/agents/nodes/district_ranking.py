@@ -207,16 +207,38 @@ async def _fetch_semas_density(dong_name: str, business_type: str) -> int | None
 
 
 async def _fetch_naver_trend(dong_name: str, business_type: str) -> float | None:
-    """NAVER DataLab — 동+업종 검색 트렌드 성장률(%). API 키 없거나 실패 시 None."""
-    if _naver_client is None:
-        return None
+    """NAVER 검색 트렌드 점수 — DB(naver_trend_quarterly) 최신 분기 값.
+
+    2026-05-02: 외부 NAVER DataLab API 호출 → DB 조회로 전환.
+    이유: API 키 부재 시 모든 동 None 반환 → trend_score 16동 모두 None →
+    프론트 "동 검색량 16동 중 N위" 산출 불가. DB에는 ETL(`collect_naver_trend_rebuild.py`)
+    로 이미 16동 데이터 적재되어 있음 (AVG(ratio) per quarter, 2024 Q4 stale 노트 별도).
+
+    business_type 인자는 호환성 유지용 (현재 DB 산식이 키워드 평균이라 업종별 분리 X).
+    """
+    _ = business_type  # 시그니처 호환 — 향후 업종별 키워드 분리 시 활성화
     try:
-        biz_label = BIZ_TYPE_LABEL.get(business_type.lower(), business_type)
-        result = await _naver_client.get_district_trend(dong_name, biz_label)
-        growth = result.get("growth_rate")
-        return float(growth) if growth is not None else None
+        if db_client.engine is None:
+            await db_client.connect()
+        async with db_client.get_session() as session:
+            from sqlalchemy import text
+
+            result = await session.execute(
+                text(
+                    """
+                    SELECT trend_score
+                    FROM naver_trend_quarterly
+                    WHERE scope = 'mapo' AND dong_name = :dong
+                    ORDER BY quarter DESC
+                    LIMIT 1
+                    """
+                ),
+                {"dong": dong_name},
+            )
+            row = result.fetchone()
+            return float(row[0]) if row and row[0] is not None else None
     except Exception as e:
-        logger.debug(f"[district_ranking] NAVER 트렌드 조회 실패 ({dong_name}): {e}")
+        logger.debug(f"[district_ranking] DB trend 조회 실패 ({dong_name}): {e}")
         return None
 
 
@@ -508,8 +530,9 @@ async def district_ranking_node(state: AgentState) -> dict:
     # v6: top_3도 선택 동 내로 제한 (v5 잘못된 top_3 캐시 무효화)
     # v7: inflow(교통·집객 접근성) 점수 추가 — Hansen/E2SFCA (v6 무효화)
     # v8: A안 가중치 + 정규화 강제 (매출 5%→35%, 인구 45%→20%, 합 1.0 보장 — v7 무효화)
+    # v9: _fetch_naver_trend 외부 API → DB 조회 전환 (v8 trend_score=None 캐시 무효화)
     cache_key = (
-        f"v8:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+        f"v9:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
     )
     _redis = None
     try:
