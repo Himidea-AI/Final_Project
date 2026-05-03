@@ -118,8 +118,8 @@ def perturb_and_predict(
     model: torch.nn.Module,
     tgt_scaler: sklearn.preprocessing.StandardScaler | sklearn.preprocessing.MinMaxScaler,
     device: torch.device,
-) -> float:
-    """특정 피처를 delta_pct% 변화시킨 후 TCN v2로 예측하여 4분기 평균 매출(원)을 반환한다.
+) -> list[float]:
+    """특정 피처를 delta_pct% 변화시킨 후 TCN v2로 예측하여 분기별 매출(원) list를 반환한다.
 
     Parameters
     ----------
@@ -138,8 +138,8 @@ def perturb_and_predict(
 
     Returns
     -------
-    float
-        4분기 예측 매출 평균 (원 단위).
+    list[float]
+        길이 4의 분기별 매출 예측치 (Q1, Q2, Q3, Q4 순). 각 값은 원 단위, 음수 클립.
     """
     import torch
 
@@ -149,10 +149,13 @@ def perturb_and_predict(
 
     with torch.no_grad():
         t = torch.tensor(seq_perturbed, dtype=torch.float32).unsqueeze(0).to(device)
-        raw = model(t)  # (1, 4)
-        raw_arr = raw.cpu().numpy().reshape(-1, 1)  # (4, 1)
-        pred_log = float(tgt_scaler.inverse_transform(raw_arr).mean())
-        return max(0.0, float(np.expm1(pred_log)))
+        raw = model(t).cpu().numpy().flatten()
+
+    quarters: list[float] = []
+    for v in raw:
+        pred_log = float(tgt_scaler.inverse_transform([[float(v)]])[0][0])
+        quarters.append(max(0.0, float(np.expm1(pred_log))))
+    return quarters
 
 
 def _scale_quarter_value(

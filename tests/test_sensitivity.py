@@ -335,3 +335,28 @@ def test_sensitivity_endpoint_returns_200_on_etag_mismatch(monkeypatch, tmp_path
     )
     assert response.status_code == 200
     assert "elasticity" in response.json()
+
+
+def test_perturb_and_predict_returns_list_of_4_quarters():
+    """perturb_and_predict는 분기별 4개 값의 list[float]를 반환해야 한다."""
+    import torch
+    from sklearn.preprocessing import MinMaxScaler
+
+    from models.tcn_forecast.sensitivity import perturb_and_predict
+
+    class StubModel(torch.nn.Module):
+        def forward(self, x):  # noqa: D401
+            return torch.tensor([[0.1, 0.2, 0.3, 0.4]], dtype=torch.float32)
+
+    model = StubModel().eval()
+    tgt_scaler = MinMaxScaler()
+    tgt_scaler.fit(np.array([[0.0], [10.0]]))
+    seq = np.zeros((12, 5), dtype=np.float32)
+    device = torch.device("cpu")
+
+    result = perturb_and_predict(seq, [], 0.0, model, tgt_scaler, device)
+
+    assert isinstance(result, list)
+    assert len(result) == 4
+    assert all(isinstance(v, float) for v in result)
+    assert all(v >= 0.0 for v in result)
