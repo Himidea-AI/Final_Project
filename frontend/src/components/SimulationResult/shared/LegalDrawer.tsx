@@ -92,7 +92,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-30 bg-black/50"
+            className="fixed inset-0 z-[100] bg-black/50"
             onClick={onClose}
           />
           <motion.div
@@ -103,7 +103,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="legal-drawer-title"
-            className="fixed right-0 top-20 bottom-0 z-40 flex w-full max-w-[480px] flex-col bg-card border-l border-border shadow-2xl"
+            className="fixed right-0 top-20 bottom-0 z-[110] flex w-full max-w-[480px] flex-col bg-card border-l border-border shadow-2xl"
           >
             <div className="flex shrink-0 items-start justify-between border-b-2 border-border bg-card p-6 shadow-sm">
               <div>

@@ -22,7 +22,7 @@ export function SimulationFloatingWidget() {
   const retryAnalysis = useSimulationStore((s) => s.retryAnalysis);
 
   const baseClasses =
-    'fixed bottom-6 right-6 z-50 flex min-w-[280px] max-w-sm flex-col gap-2 rounded-xl bg-card p-4 shadow-2xl ring-1 backdrop-blur';
+    'fixed bottom-6 right-6 z-[60] flex min-w-[280px] max-w-sm flex-col gap-2 rounded-xl bg-card p-4 shadow-2xl ring-1 backdrop-blur';
 
   // [H4] status='done' 자동 dismiss 제거 — Hub Redesign 흐름에서 store.result 가 /dashboard
   // 가드 통과 키이므로 dismiss 하면 옛 화면으로 redirect 됨. done 알림은 useCompletionToast 담당.
