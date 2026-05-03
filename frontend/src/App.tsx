@@ -1554,8 +1554,6 @@ function DashboardRunningPlaceholder() {
   const anaStatus = useSimulationStore((s) => s.analysis.status);
   const predProgress = useSimulationStore((s) => s.prediction.progress);
   const anaProgress = useSimulationStore((s) => s.analysis.progress);
-  const predStage = useSimulationStore((s) => s.prediction.stage);
-  const anaStage = useSimulationStore((s) => s.analysis.stage);
 
   return (
     <div className="relative flex h-full min-h-[60vh] flex-col items-center justify-center gap-6 overflow-hidden px-6">
@@ -1575,14 +1573,12 @@ function DashboardRunningPlaceholder() {
           label="ML 예측"
           sublabel="매출 / 폐업률 (TCN + LightGBM)"
           progressRatio={predProgress}
-          stage={predStage}
         />
         <SliceProgressRow
           status={anaStatus}
           label="AI 분석"
           sublabel="멀티 에이전트 종합 판단 (LLM)"
           progressRatio={anaProgress}
-          stage={anaStage}
         />
       </div>
       <p className="relative z-10 max-w-md text-center text-xs text-muted-foreground leading-relaxed">
@@ -1823,15 +1819,12 @@ function SliceProgressRow({
   label,
   sublabel,
   progressRatio,
-  stage,
 }: {
   status: 'idle' | 'running' | 'done' | 'error';
   label: string;
   sublabel: string;
   /** Real progress 0~1 — backend polling 으로 store 에 누적된 슬라이스 진행률. */
   progressRatio: number;
-  /** Backend 가 전달한 현재 진행 단계 라벨 (e.g. "서교동 분석 완료 (2/4)" 또는 LangGraph 노드명). */
-  stage: string | null;
 }) {
   // (b) 시간 보간 적용 — display 는 wave fillHeight + % 표시 둘 다 같은 값.
   const display = useInterpolatedProgress(progressRatio, status);
@@ -1868,16 +1861,11 @@ function SliceProgressRow({
         <div className="mt-1 text-xs text-muted-foreground">{sublabel}</div>
       </div>
       {isRunning && progressPct !== null ? (
-        <div className="relative flex flex-col items-center gap-1">
-          <div className="flex items-baseline gap-1 tabular-nums">
-            <span className="text-2xl font-black text-primary">{progressPct}</span>
-            <span className="text-base font-black text-primary">%</span>
-          </div>
-          {stage && (
-            <span className="max-w-[180px] truncate text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground">
-              {stage}
-            </span>
-          )}
+        // stage 라벨 표시 제거 — ML(한글) / AI(영문 노드명) 비대칭 + cluttered.
+        // % + 차오름 wave 가 충분한 진행 신호. backend 의 stage 는 store 에 진단용으로만 보존.
+        <div className="relative flex items-baseline gap-1 tabular-nums">
+          <span className="text-2xl font-black text-primary">{progressPct}</span>
+          <span className="text-base font-black text-primary">%</span>
         </div>
       ) : stateLabel ? (
         <div className={`relative text-sm font-bold ${stateLabelColor}`}>{stateLabel}</div>

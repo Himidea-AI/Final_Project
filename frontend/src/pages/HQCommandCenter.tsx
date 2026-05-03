@@ -47,6 +47,12 @@ import {
   Shield,
   Loader2,
   History,
+  Receipt,
+  Download,
+  Key,
+  Copy,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { HistoryList } from '../components/SimulationHistory/HistoryList';
 import { TokenBurnrateSection } from '../components/TokenBurnrate/TokenBurnrateSection';
@@ -222,9 +228,7 @@ function MasterCommandCenter() {
                 </span>
                 <span className="text-[0.5625rem] text-muted-foreground shrink-0">·</span>
                 <span className="text-[0.5625rem] text-muted-foreground truncate">
-                  {user?.role === 'manager'
-                    ? 'Regional Access'
-                    : `${user?.plan || 'Pro'} Plan`}
+                  {user?.role === 'manager' ? 'Regional Access' : `${user?.plan || 'Pro'} Plan`}
                 </span>
               </div>
             </div>
@@ -1246,54 +1250,466 @@ function TeamManagementView({
 /* ═══════════════════════════════════════════════════════
    View 2: Pipeline Kanban Board (출점 파이프라인)
    ═══════════════════════════════════════════════════════ */
+/* ───── 출점 파이프라인 mock 데이터 (시연용) ─────
+   실 backend stage 테이블 구축 시 자동 교체. card 구조: 동·업종·점수·매출·BEP·담당자·태그. */
+type PipelineStageId = 'analysis' | 'review' | 'proposal' | 'confirmed';
+interface PipelineCard {
+  id: string;
+  district: string;
+  bizType: string;
+  brand: string;
+  score: number; // 0~100
+  monthlyRevenue: number; // 원
+  bepMonths: number;
+  closureRisk: 'low' | 'medium' | 'high';
+  manager: string;
+  updatedAgo: string;
+  comments: number;
+  tags: ('priority' | 'fast-track' | 'needs-review' | 'opening-soon')[];
+  openingDate?: string; // confirmed only
+}
+
+const PIPELINE_CARDS: Record<PipelineStageId, PipelineCard[]> = {
+  analysis: [
+    {
+      id: 'p1',
+      district: '합정동',
+      bizType: '카페·음료',
+      brand: '메가엠지씨커피',
+      score: 87,
+      monthlyRevenue: 18_200_000,
+      bepMonths: 8,
+      closureRisk: 'low',
+      manager: '박지윤',
+      updatedAgo: '2일 전',
+      comments: 3,
+      tags: ['fast-track'],
+    },
+    {
+      id: 'p2',
+      district: '서교동',
+      bizType: '한식음식점',
+      brand: '김밥천국',
+      score: 72,
+      monthlyRevenue: 14_500_000,
+      bepMonths: 11,
+      closureRisk: 'medium',
+      manager: '최강민',
+      updatedAgo: '5시간 전',
+      comments: 1,
+      tags: [],
+    },
+    {
+      id: 'p3',
+      district: '망원1동',
+      bizType: '카페·음료',
+      brand: '백다방',
+      score: 68,
+      monthlyRevenue: 12_800_000,
+      bepMonths: 13,
+      closureRisk: 'medium',
+      manager: '이수진',
+      updatedAgo: '1일 전',
+      comments: 5,
+      tags: ['needs-review'],
+    },
+    {
+      id: 'p4',
+      district: '연남동',
+      bizType: '제과점',
+      brand: '베어카페',
+      score: 81,
+      monthlyRevenue: 16_400_000,
+      bepMonths: 9,
+      closureRisk: 'low',
+      manager: '박지윤',
+      updatedAgo: '3시간 전',
+      comments: 2,
+      tags: [],
+    },
+  ],
+  review: [
+    {
+      id: 'p5',
+      district: '상암동',
+      bizType: '카페·음료',
+      brand: '메가엠지씨커피',
+      score: 92,
+      monthlyRevenue: 21_500_000,
+      bepMonths: 6,
+      closureRisk: 'low',
+      manager: '최강민',
+      updatedAgo: '6시간 전',
+      comments: 8,
+      tags: ['priority', 'fast-track'],
+    },
+    {
+      id: 'p6',
+      district: '공덕동',
+      bizType: '카페·음료',
+      brand: '저가커피',
+      score: 84,
+      monthlyRevenue: 17_900_000,
+      bepMonths: 8,
+      closureRisk: 'low',
+      manager: '김서준',
+      updatedAgo: '12시간 전',
+      comments: 4,
+      tags: [],
+    },
+    {
+      id: 'p7',
+      district: '성산1동',
+      bizType: '한식음식점',
+      brand: '한솥',
+      score: 79,
+      monthlyRevenue: 15_700_000,
+      bepMonths: 10,
+      closureRisk: 'medium',
+      manager: '이수진',
+      updatedAgo: '2일 전',
+      comments: 2,
+      tags: ['needs-review'],
+    },
+  ],
+  proposal: [
+    {
+      id: 'p8',
+      district: '도화동',
+      bizType: '카페·음료',
+      brand: '메가엠지씨커피',
+      score: 89,
+      monthlyRevenue: 19_300_000,
+      bepMonths: 7,
+      closureRisk: 'low',
+      manager: '박지윤',
+      updatedAgo: '4일 전',
+      comments: 11,
+      tags: ['priority'],
+    },
+    {
+      id: 'p9',
+      district: '신수동',
+      bizType: '분식전문점',
+      brand: '스쿨푸드',
+      score: 76,
+      monthlyRevenue: 13_900_000,
+      bepMonths: 11,
+      closureRisk: 'medium',
+      manager: '최강민',
+      updatedAgo: '1주 전',
+      comments: 6,
+      tags: [],
+    },
+  ],
+  confirmed: [
+    {
+      id: 'p10',
+      district: '서강동',
+      bizType: '카페·음료',
+      brand: '메가엠지씨커피',
+      score: 91,
+      monthlyRevenue: 20_100_000,
+      bepMonths: 7,
+      closureRisk: 'low',
+      manager: '박지윤',
+      updatedAgo: '2주 전',
+      comments: 14,
+      tags: ['opening-soon'],
+      openingDate: '2026-09-01',
+    },
+    {
+      id: 'p11',
+      district: '합정역 1번출구',
+      bizType: '카페·음료',
+      brand: '메가엠지씨커피',
+      score: 95,
+      monthlyRevenue: 23_400_000,
+      bepMonths: 5,
+      closureRisk: 'low',
+      manager: '최강민',
+      updatedAgo: '3주 전',
+      comments: 22,
+      tags: ['opening-soon'],
+      openingDate: '2026-07-01',
+    },
+  ],
+};
+
+const TAG_LABELS: Record<
+  NonNullable<PipelineCard['tags'][number]>,
+  { label: string; cls: string }
+> = {
+  priority: {
+    label: 'PRIORITY',
+    cls: 'border-danger/40 bg-danger/10 text-danger',
+  },
+  'fast-track': {
+    label: 'FAST TRACK',
+    cls: 'border-primary/40 bg-primary/10 text-primary',
+  },
+  'needs-review': {
+    label: 'NEEDS REVIEW',
+    cls: 'border-warning/40 bg-warning/10 text-warning',
+  },
+  'opening-soon': {
+    label: 'OPENING SOON',
+    cls: 'border-success/40 bg-success/10 text-success',
+  },
+};
+
+const RISK_LABELS: Record<PipelineCard['closureRisk'], { label: string; cls: string }> = {
+  low: { label: '낮음', cls: 'text-success' },
+  medium: { label: '중간', cls: 'text-warning' },
+  high: { label: '높음', cls: 'text-danger' },
+};
+
+function formatRevenue(v: number): string {
+  if (v >= 100_000_000) return `${(v / 100_000_000).toFixed(1)}억`;
+  if (v >= 10_000) return `${Math.round(v / 10_000).toLocaleString('ko-KR')}만`;
+  return `${v.toLocaleString('ko-KR')}원`;
+}
+
+function PipelineCardItem({ card, onAction }: { card: PipelineCard; onAction: () => void }) {
+  const scoreColor =
+    card.score >= 85
+      ? 'text-success'
+      : card.score >= 70
+        ? 'text-primary'
+        : card.score >= 60
+          ? 'text-warning'
+          : 'text-danger';
+  const scoreBarColor =
+    card.score >= 85
+      ? 'bg-success'
+      : card.score >= 70
+        ? 'bg-primary'
+        : card.score >= 60
+          ? 'bg-warning'
+          : 'bg-danger';
+  const risk = RISK_LABELS[card.closureRisk];
+  return (
+    <button
+      type="button"
+      onClick={onAction}
+      className="w-full rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-primary/40 hover:shadow-md cursor-grab active:cursor-grabbing"
+    >
+      {/* Tags */}
+      {card.tags.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1">
+          {card.tags.map((t) => (
+            <span
+              key={t}
+              className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[0.5625rem] font-black uppercase tracking-wider ${TAG_LABELS[t].cls}`}
+            >
+              {TAG_LABELS[t].label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Header — 동·업종 */}
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className="text-base font-black text-foreground tracking-tight">{card.district}</span>
+        <span className="text-[0.6875rem] text-muted-foreground">{card.bizType}</span>
+      </div>
+      <div className="mb-3 text-[0.6875rem] font-bold text-muted-foreground">{card.brand}</div>
+
+      {/* Score */}
+      <div className="mb-3 flex items-baseline justify-between">
+        <span className={`text-2xl font-black tabular-nums ${scoreColor}`}>
+          {card.score}
+          <span className="text-xs font-normal text-muted-foreground"> /100</span>
+        </span>
+        <span className="text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground">
+          종합 점수
+        </span>
+      </div>
+      <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full rounded-full ${scoreBarColor}`}
+          style={{ width: `${card.score}%` }}
+        />
+      </div>
+
+      {/* 재무 지표 */}
+      <dl className="mb-3 grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <dt className="text-[0.5625rem] font-black uppercase tracking-widest text-muted-foreground">
+            월매출
+          </dt>
+          <dd className="text-sm font-black tabular-nums text-foreground">
+            ₩{formatRevenue(card.monthlyRevenue)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[0.5625rem] font-black uppercase tracking-widest text-muted-foreground">
+            BEP
+          </dt>
+          <dd className="text-sm font-black tabular-nums text-foreground">{card.bepMonths}개월</dd>
+        </div>
+      </dl>
+
+      {/* Risk + Opening date */}
+      <div className="mb-3 flex items-center justify-between border-t border-border/50 pt-2">
+        <span className="text-[0.625rem] text-muted-foreground">
+          폐업 위험 <span className={`font-bold ${risk.cls}`}>{risk.label}</span>
+        </span>
+        {card.openingDate && (
+          <span className="text-[0.625rem] font-bold tabular-nums text-success">
+            🎉 {card.openingDate}
+          </span>
+        )}
+      </div>
+
+      {/* Footer — 매니저 + 갱신 + 댓글 */}
+      <div className="flex items-center justify-between text-[0.625rem] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-secondary text-[0.5rem] font-black text-foreground">
+            {card.manager.charAt(0)}
+          </span>
+          {card.manager}
+        </span>
+        <span className="flex items-center gap-2">
+          <span>🕐 {card.updatedAgo}</span>
+          <span>💬 {card.comments}</span>
+        </span>
+      </div>
+    </button>
+  );
+}
+
 function PipelineKanbanView() {
-  // 실데이터 원칙: 파이프라인 스테이지 테이블이 백엔드에 아직 없음
-  // → mock 가맹점주/매출 숫자 전부 제거, 백엔드 스펙 명시한 empty state로 교체
-  const stages = [
-    { title: '상권 분석 중', borderColor: 'border-border', titleColor: 'text-muted-foreground' },
-    { title: '임원 보고 대기', borderColor: 'border-warning/50', titleColor: 'text-warning' },
-    { title: '가맹점주 제안', borderColor: 'border-primary/50', titleColor: 'text-primary' },
-    { title: '출점 확정', borderColor: 'border-success/50', titleColor: 'text-success' },
+  const { showToast } = useToast();
+
+  const stages: {
+    id: PipelineStageId;
+    title: string;
+    titleColor: string;
+    bgColor: string;
+    description: string;
+  }[] = [
+    {
+      id: 'analysis',
+      title: '상권 분석 중',
+      titleColor: 'text-muted-foreground',
+      bgColor: 'border-t-border',
+      description: '시뮬 진행 + 후보지 검토',
+    },
+    {
+      id: 'review',
+      title: '임원 보고 대기',
+      titleColor: 'text-warning',
+      bgColor: 'border-t-warning',
+      description: '본부장 승인 대기',
+    },
+    {
+      id: 'proposal',
+      title: '가맹점주 제안',
+      titleColor: 'text-primary',
+      bgColor: 'border-t-primary',
+      description: '계약 협의 진행',
+    },
+    {
+      id: 'confirmed',
+      title: '출점 확정',
+      titleColor: 'text-success',
+      bgColor: 'border-t-success',
+      description: '오픈 일정 확정',
+    },
   ];
 
+  // 전체 합계 — 헤더 통계용
+  const totalCount = stages.reduce((sum, s) => sum + PIPELINE_CARDS[s.id].length, 0);
+  const totalRevenue = stages.reduce(
+    (sum, s) => sum + PIPELINE_CARDS[s.id].reduce((a, c) => a + c.monthlyRevenue, 0),
+    0,
+  );
+  const confirmedCount = PIPELINE_CARDS.confirmed.length;
+
   return (
-    <div className="flex flex-col gap-4 h-full">
-      <div className="rounded-2xl border border-dashed border-warning/30 bg-warning/5 p-5">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-warning mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <h4 className="text-sm font-bold text-warning mb-1">
-              출점 파이프라인 — 백엔드 연동 대기
-            </h4>
-            <p className="text-xs text-warning/80 leading-relaxed">
-              파이프라인 스테이지 테이블이 백엔드에 아직 구축되지 않아 칸반 표시 보류 중입니다.
-              스펙이 정해지면 매니저가 저장한 시뮬레이션을 단계별로 드래그해 관리할 수 있습니다.
-            </p>
+    <div className="flex h-full flex-col gap-4">
+      {/* Demo notice + summary stats */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[0.6875rem] text-warning">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-bold">시연용 mock 파이프라인</span>
+          <span className="text-warning/70">— 실 backend stage 테이블 구축 시 자동 교체.</span>
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <div>
+            <span className="text-muted-foreground">총 후보지</span>{' '}
+            <span className="font-black tabular-nums text-foreground">{totalCount}곳</span>
+          </div>
+          <div className="h-3 w-px bg-border" />
+          <div>
+            <span className="text-muted-foreground">예상 월매출 합계</span>{' '}
+            <span className="font-black tabular-nums text-primary">
+              ₩{formatRevenue(totalRevenue)}
+            </span>
+          </div>
+          <div className="h-3 w-px bg-border" />
+          <div>
+            <span className="text-muted-foreground">출점 확정</span>{' '}
+            <span className="font-black tabular-nums text-success">{confirmedCount}곳</span>
           </div>
         </div>
       </div>
 
+      {/* Kanban columns */}
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {stages.map((col, idx) => (
-          <div
-            key={idx}
-            className={`flex-1 min-w-[240px] bg-card/40 border border-border rounded-2xl flex flex-col overflow-hidden border-t-2 ${col.borderColor}`}
-          >
-            <div className="p-4 border-b border-border/50 flex justify-between items-center bg-card/30">
-              <h4 className={`text-xs font-bold uppercase tracking-wider ${col.titleColor}`}>
-                {col.title}
-              </h4>
-              <span className="w-5 h-5 rounded-full bg-card flex items-center justify-center text-[0.625rem] font-bold text-muted-foreground border border-border">
-                —
-              </span>
+        {stages.map((col) => {
+          const cards = PIPELINE_CARDS[col.id];
+          return (
+            <div
+              key={col.id}
+              className={`flex min-w-[280px] flex-1 flex-col overflow-hidden rounded-2xl border border-border border-t-4 bg-secondary/40 ${col.bgColor}`}
+            >
+              {/* Column header */}
+              <div className="flex items-center justify-between border-b border-border/50 bg-card/60 p-4">
+                <div>
+                  <h4 className={`text-xs font-black uppercase tracking-wider ${col.titleColor}`}>
+                    {col.title}
+                  </h4>
+                  <p className="mt-0.5 text-[0.625rem] text-muted-foreground">{col.description}</p>
+                </div>
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-card text-[0.6875rem] font-black tabular-nums text-foreground border border-border">
+                  {cards.length}
+                </span>
+              </div>
+
+              {/* Cards */}
+              <div className="flex flex-1 flex-col gap-3 p-3 min-h-[200px]">
+                {cards.length > 0 ? (
+                  cards.map((card) => (
+                    <PipelineCardItem
+                      key={card.id}
+                      card={card}
+                      onAction={() =>
+                        showToast(
+                          'info',
+                          `${card.district} ${card.bizType} 카드 상세는 정식 오픈 후 지원됩니다.`,
+                        )
+                      }
+                    />
+                  ))
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                    대기 중
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => showToast('info', '후보지 추가는 정식 오픈 후 지원됩니다.')}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-card/40 px-3 py-3 text-[0.6875rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:bg-card hover:text-foreground"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  후보지 추가
+                </button>
+              </div>
             </div>
-            <div className="flex-1 p-3 min-h-[140px] flex items-center justify-center">
-              <span className="text-[0.625rem] font-mono text-muted-foreground tracking-widest uppercase">
-                Awaiting backend
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1587,53 +2003,222 @@ function BrandTuningPhase2View() {
 
 /* ═══════════════════════════════════════════════════════
    View 4: Billing & API Token Management (결제 및 토큰)
+   ───────────────────────────────────────────────────────
+   시연용 mock 데이터 — 실 결제/토큰 API 연동 시 교체 예정.
+   "Demo" 배지로 명시. LangSmith 토큰 번레이트만 실데이터.
    ═══════════════════════════════════════════════════════ */
+const MOCK_PLAN = {
+  name: 'Growth',
+  price: 149_000,
+  currency: '₩',
+  billingCycle: 'monthly',
+  status: 'active' as const,
+  nextBillingDate: '2026-06-15',
+  paymentMethod: { brand: '신한카드', last4: '1234', expiry: '08/27' },
+  members: { active: 3, total: 5 },
+};
+
+const MOCK_TOKENS = {
+  used: 743,
+  limit: 1000,
+  resetDate: '2026-06-15',
+  lastMonthUsed: 821,
+  topConsumers: [
+    { name: '박지윤', role: '점포개발 매니저', tokens: 158 },
+    { name: '최강민', role: '본부장', tokens: 124 },
+    { name: '김서준', role: '개발팀장', tokens: 98 },
+  ],
+};
+
+const MOCK_INVOICES = [
+  { id: 'INV-2026-0415', date: '2026-04-15', plan: 'Growth', amount: 149_000, status: 'paid' },
+  { id: 'INV-2026-0315', date: '2026-03-15', plan: 'Growth', amount: 149_000, status: 'paid' },
+  { id: 'INV-2026-0215', date: '2026-02-15', plan: 'Growth', amount: 149_000, status: 'paid' },
+  { id: 'INV-2026-0115', date: '2026-01-15', plan: 'Starter', amount: 49_000, status: 'paid' },
+];
+
+const MOCK_API_KEYS = [
+  {
+    id: 'k_prod_2a9f',
+    label: 'Production',
+    key: 'sk_live_xR7m...3a9f',
+    fullKey: 'sk_live_xR7mP9qV2tNb8wYj4kL5cZ8e3a9f',
+    createdAt: '2026-04-10',
+    lastUsed: '5분 전',
+    scope: 'read+write',
+  },
+  {
+    id: 'k_dev_8b2c',
+    label: 'Development',
+    key: 'sk_test_dQ4n...8b2c',
+    fullKey: 'sk_test_dQ4nF1pH7sLm2vXk6jY9wU8b2c',
+    createdAt: '2026-04-10',
+    lastUsed: '1시간 전',
+    scope: 'read+write',
+  },
+  {
+    id: 'k_legacy_e1d',
+    label: 'Legacy CI',
+    key: 'sk_live_aB3c...e1d4',
+    fullKey: 'sk_live_aB3cF8gH2jK9lM5nO7pQ1rSe1d4',
+    createdAt: '2025-11-22',
+    lastUsed: '12일 전',
+    scope: 'read-only',
+  },
+];
+
+function formatKrwShort(v: number): string {
+  if (v >= 10_000) return `${Math.round(v / 1000) / 10}만원`;
+  return `${v.toLocaleString('ko-KR')}원`;
+}
+
 function BillingManagementView() {
-  // 실데이터 원칙: 결제/구독/토큰 API가 백엔드에 없음 → mock 숫자(Growth/₩660/1000) 제거.
-  // LLM 토큰 번레이트 (LangSmith 실데이터)만 유지.
   const { showToast } = useToast();
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+
+  const usagePct = Math.round((MOCK_TOKENS.used / MOCK_TOKENS.limit) * 100);
+  const usageColor =
+    usagePct >= 90 ? 'text-danger' : usagePct >= 70 ? 'text-warning' : 'text-success';
+  const usageBarColor = usagePct >= 90 ? 'bg-danger' : usagePct >= 70 ? 'bg-warning' : 'bg-success';
+
+  const handleCopyKey = (label: string) => {
+    showToast('success', `${label} API Key 가 클립보드에 복사되었습니다.`);
+  };
 
   return (
     <div className="flex flex-col gap-8 max-w-6xl">
-      {/* 1. 현재 구독 & API 토큰 — 백엔드 연동 대기 */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-card border border-dashed border-warning/30 bg-warning/5 rounded-2xl p-6 flex flex-col justify-center gap-2">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-warning" />
-            <h3 className="text-xs font-black text-warning uppercase tracking-widest">
-              Current Plan
-            </h3>
+      {/* Demo notice — 시연용 데이터 명시 */}
+      <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[0.6875rem] text-warning">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        <span className="font-bold">시연용 mock 데이터</span>
+        <span className="text-warning/70">— 실 결제/토큰 API 연동 시 자동 교체됩니다.</span>
+      </div>
+
+      {/* 1. 현재 구독 & API 토큰 사용량 */}
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Current Plan */}
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-primary" />
+              <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                Current Plan
+              </h3>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-success">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
+              Active
+            </span>
           </div>
-          <div className="text-2xl font-black text-muted-foreground">—</div>
-          <p className="text-[0.6875rem] text-warning/70 leading-relaxed">
-            결제/구독 API 미구축. 스펙 확정 후 현재 요금제·결제 주기·수단이 표시됩니다.
-          </p>
+          <div className="mb-1 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-foreground tracking-tight">
+              {MOCK_PLAN.name}
+            </span>
+            <span className="text-xs text-muted-foreground">/ month</span>
+          </div>
+          <div className="mb-5 text-sm font-bold tabular-nums text-foreground">
+            {MOCK_PLAN.currency}
+            {MOCK_PLAN.price.toLocaleString('ko-KR')}
+          </div>
+          <dl className="space-y-2 text-xs border-t border-border pt-4">
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">다음 결제일</dt>
+              <dd className="font-bold text-foreground tabular-nums">
+                {MOCK_PLAN.nextBillingDate}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">결제 수단</dt>
+              <dd className="font-bold text-foreground">
+                {MOCK_PLAN.paymentMethod.brand} ****{MOCK_PLAN.paymentMethod.last4}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">활성 멤버</dt>
+              <dd className="font-bold text-foreground tabular-nums">
+                {MOCK_PLAN.members.active} / {MOCK_PLAN.members.total} 명
+              </dd>
+            </div>
+          </dl>
           <button
             type="button"
-            onClick={() => showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')}
-            className="mt-2 w-full py-2 bg-card text-muted-foreground border border-border text-[0.6875rem] font-bold rounded-lg cursor-not-allowed"
-            disabled
+            onClick={() => showToast('info', '결제 수단 변경은 정식 오픈 후 지원됩니다.')}
+            className="mt-4 w-full rounded-lg border border-border bg-card py-2 text-xs font-bold text-foreground transition-colors hover:bg-secondary hover:border-primary/40"
           >
-            결제 수단 관리 (대기)
+            결제 수단 관리
           </button>
         </div>
 
-        <div className="lg:col-span-2 bg-card border border-dashed border-warning/30 bg-warning/5 rounded-2xl p-6 flex flex-col justify-center gap-2">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-warning" />
-            <h3 className="text-xs font-black text-warning uppercase tracking-widest">
-              API Tokens Usage (가상 집계)
-            </h3>
+        {/* API Tokens Usage */}
+        <div className="lg:col-span-2 rounded-2xl border border-border bg-card p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                API Tokens Usage
+              </h3>
+            </div>
+            <span className="text-[0.625rem] text-muted-foreground">
+              초기화: {MOCK_TOKENS.resetDate}
+            </span>
           </div>
-          <div className="text-2xl font-black text-muted-foreground">—</div>
-          <p className="text-[0.6875rem] text-warning/70 leading-relaxed">
-            팀별 토큰 한도·사용량 API 미구축. 실측 LLM 비용은 하단 LangSmith 번레이트 참고.
-          </p>
+          <div className="mb-3 flex items-baseline gap-2">
+            <span className={`text-3xl font-black tabular-nums ${usageColor}`}>
+              {MOCK_TOKENS.used.toLocaleString('ko-KR')}
+            </span>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              / {MOCK_TOKENS.limit.toLocaleString('ko-KR')} tokens
+            </span>
+            <span className={`ml-auto text-sm font-black tabular-nums ${usageColor}`}>
+              {usagePct}%
+            </span>
+          </div>
+          <div className="mb-5 h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${usageBarColor}`}
+              style={{ width: `${usagePct}%` }}
+            />
+          </div>
+          <div className="mb-4 flex justify-between text-[0.6875rem] text-muted-foreground">
+            <span>
+              지난달 {MOCK_TOKENS.lastMonthUsed.toLocaleString('ko-KR')} 사용 →{' '}
+              <span
+                className={
+                  MOCK_TOKENS.used < MOCK_TOKENS.lastMonthUsed ? 'text-success' : 'text-warning'
+                }
+              >
+                {MOCK_TOKENS.used < MOCK_TOKENS.lastMonthUsed ? '↓' : '↑'}{' '}
+                {Math.abs(MOCK_TOKENS.used - MOCK_TOKENS.lastMonthUsed)}
+              </span>
+            </span>
+            <span>일 평균 약 26 tokens</span>
+          </div>
+          <div className="border-t border-border pt-4">
+            <h4 className="mb-3 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+              상위 사용자 (Top 3)
+            </h4>
+            <ul className="space-y-2">
+              {MOCK_TOKENS.topConsumers.map((c, i) => (
+                <li key={c.name} className="flex items-center gap-3">
+                  <span className="text-[0.625rem] font-mono font-black text-muted-foreground tabular-nums w-4">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-foreground truncate">{c.name}</div>
+                    <div className="text-[0.625rem] text-muted-foreground truncate">{c.role}</div>
+                  </div>
+                  <span className="text-xs font-black tabular-nums text-foreground shrink-0">
+                    {c.tokens}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
-      {/* 1.5 LLM 토큰 번레이트 (LangSmith 실데이터) — 리서치 #7 */}
-      <section className="mt-4">
+      {/* 2. LangSmith 실데이터 — 유지 */}
+      <section>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground">LLM 토큰 번레이트 (최근 30일)</h3>
           <span className="text-[0.625rem] text-muted-foreground">LangSmith 실데이터 기반</span>
@@ -1641,9 +2226,155 @@ function BillingManagementView() {
         <TokenBurnrateSection />
       </section>
 
-      {/* 2. Plan Upgrade (Pricing Cards) */}
+      {/* 3. 결제 내역 (mock) */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Receipt className="h-4 w-4 text-primary" />
+            결제 내역
+          </h3>
+          <span className="text-[0.625rem] text-muted-foreground">최근 4건</span>
+        </div>
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-secondary border-b border-border">
+              <tr className="text-left">
+                <th className="px-4 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[0.625rem]">
+                  Invoice
+                </th>
+                <th className="px-4 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[0.625rem]">
+                  결제일
+                </th>
+                <th className="px-4 py-3 font-bold text-muted-foreground uppercase tracking-widest text-[0.625rem]">
+                  Plan
+                </th>
+                <th className="px-4 py-3 text-right font-bold text-muted-foreground uppercase tracking-widest text-[0.625rem]">
+                  금액
+                </th>
+                <th className="px-4 py-3 text-center font-bold text-muted-foreground uppercase tracking-widest text-[0.625rem]">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-right font-bold text-muted-foreground uppercase tracking-widest text-[0.625rem]">
+                  영수증
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {MOCK_INVOICES.map((inv, i) => (
+                <tr
+                  key={inv.id}
+                  className={`${i < MOCK_INVOICES.length - 1 ? 'border-b border-border' : ''} hover:bg-secondary/50`}
+                >
+                  <td className="px-4 py-3 font-mono text-[0.6875rem] text-foreground tabular-nums">
+                    {inv.id}
+                  </td>
+                  <td className="px-4 py-3 text-foreground tabular-nums">{inv.date}</td>
+                  <td className="px-4 py-3 font-bold text-foreground">{inv.plan}</td>
+                  <td className="px-4 py-3 text-right font-bold tabular-nums text-foreground">
+                    {formatKrwShort(inv.amount)}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-success">
+                      paid
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        showToast('info', '영수증 다운로드는 정식 오픈 후 지원됩니다.')
+                      }
+                      className="inline-flex items-center gap-1 text-[0.6875rem] font-bold text-primary hover:text-primary/80"
+                    >
+                      <Download className="h-3 w-3" />
+                      다운로드
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 4. API Key 관리 (mock) */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Key className="h-4 w-4 text-primary" />
+            API Key 관리
+          </h3>
+          <button
+            type="button"
+            onClick={() => showToast('info', 'API Key 발급은 정식 오픈 후 지원됩니다.')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Plus className="h-3.5 w-3.5" />새 API Key 발급
+          </button>
+        </div>
+        <div className="space-y-3">
+          {MOCK_API_KEYS.map((k) => {
+            const isRevealed = revealedKey === k.id;
+            return (
+              <div
+                key={k.id}
+                className="rounded-2xl border border-border bg-card p-4 flex items-center gap-4"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary border border-border">
+                  <Key className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-bold text-foreground">{k.label}</span>
+                    <span className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[0.5625rem] font-mono uppercase tracking-wider text-muted-foreground">
+                      {k.scope}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <code className="font-mono text-[0.6875rem] text-foreground bg-secondary px-2 py-0.5 rounded">
+                      {isRevealed ? k.fullKey : k.key}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => setRevealedKey(isRevealed ? null : k.id)}
+                      aria-label={isRevealed ? 'Key 가리기' : 'Key 보기'}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {isRevealed ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyKey(k.label)}
+                      aria-label="Key 복사"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="text-[0.625rem] text-muted-foreground">
+                    생성: {k.createdAt} · 최근 사용: {k.lastUsed}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => showToast('info', 'API Key 폐기는 정식 오픈 후 지원됩니다.')}
+                  className="shrink-0 rounded-lg border border-danger/30 bg-card px-3 py-1.5 text-[0.6875rem] font-bold text-danger transition-colors hover:bg-danger/10"
+                >
+                  폐기
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 5. Plan Upgrade (Pricing Cards) — 현재 플랜 = Growth, 표시 강조 */}
       <section className="mt-4">
-        <h3 className="text-sm font-bold text-foreground mb-4">플랜 업그레이드</h3>
+        <h3 className="text-sm font-bold text-foreground mb-4">플랜 변경</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             {
@@ -1665,54 +2396,74 @@ function BillingManagementView() {
               tokens: 'Unlimited Tokens',
               target: '대형 프랜차이즈 및 컨설팅사',
             },
-          ].map((plan) => (
-            <div
-              key={plan.id}
-              className="group relative w-full rounded-2xl overflow-hidden p-[2px] transition-transform duration-500 ease-out hover:-translate-y-2"
-            >
+          ].map((plan) => {
+            const isCurrent = plan.id === MOCK_PLAN.name;
+            return (
               <div
-                className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                style={{
-                  background:
-                    'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
-                }}
-              />
-              <div className="relative z-10 h-full w-full bg-card rounded-[14px] flex flex-col p-6 transition-colors duration-500 border border-border group-hover:border-transparent">
-                {plan.isPopular && (
-                  <div className="absolute top-4 right-4 inline-flex items-center justify-center h-5 px-2.5 bg-muted border border-primary/30 rounded-full">
-                    <span className="text-[0.5625rem] font-bold text-primary tracking-wider leading-none">
-                      MOST POPULAR
-                    </span>
+                key={plan.id}
+                className={`group relative w-full rounded-2xl overflow-hidden p-[2px] transition-transform duration-500 ease-out hover:-translate-y-2 ${
+                  isCurrent ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                }`}
+              >
+                <div
+                  className="absolute inset-[-50%] z-0 animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                  style={{
+                    background:
+                      'conic-gradient(from 0deg, transparent 0%, transparent 40%, var(--primary) 50%, var(--primary) 60%, transparent 100%)',
+                  }}
+                />
+                <div className="relative z-10 h-full w-full bg-card rounded-[14px] flex flex-col p-6 transition-colors duration-500 border border-border group-hover:border-transparent">
+                  {isCurrent ? (
+                    <div className="absolute top-4 right-4 inline-flex items-center justify-center h-5 px-2.5 bg-primary rounded-full">
+                      <span className="text-[0.5625rem] font-bold text-primary-foreground tracking-wider leading-none">
+                        CURRENT PLAN
+                      </span>
+                    </div>
+                  ) : plan.isPopular ? (
+                    <div className="absolute top-4 right-4 inline-flex items-center justify-center h-5 px-2.5 bg-muted border border-primary/30 rounded-full">
+                      <span className="text-[0.5625rem] font-bold text-primary tracking-wider leading-none">
+                        MOST POPULAR
+                      </span>
+                    </div>
+                  ) : null}
+                  <h4 className="text-lg font-bold text-foreground mb-1">{plan.id}</h4>
+                  <p className="text-[0.625rem] text-muted-foreground mb-4">{plan.target}</p>
+                  <div className="flex items-end gap-1 mb-6 pb-6 border-b border-border">
+                    <span className="text-2xl font-black text-foreground">{plan.price}</span>
+                    <span className="text-[0.625rem] text-muted-foreground mb-1">/ month</span>
                   </div>
-                )}
-                <h4 className="text-lg font-bold text-foreground mb-1">{plan.id}</h4>
-                <p className="text-[0.625rem] text-muted-foreground mb-4">{plan.target}</p>
-                <div className="flex items-end gap-1 mb-6 pb-6 border-b border-border">
-                  <span className="text-2xl font-black text-foreground">{plan.price}</span>
-                  <span className="text-[0.625rem] text-muted-foreground mb-1">/ month</span>
-                </div>
-                <ul className="text-[0.6875rem] text-muted-foreground space-y-3 mb-8">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> {plan.tokens}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> 모든 상권 분석 지표 제공
-                  </li>
-                </ul>
-                <div className="mt-auto">
-                  {/* 현재 구독 API 없음 → "현재 사용 중인 플랜" 판단 불가. 일괄 문의 버튼으로 변경 */}
-                  <button
-                    onClick={() =>
-                      showToast('info', '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.')
-                    }
-                    className="w-full py-3 bg-card text-muted-foreground border border-border text-xs font-bold rounded-xl group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(0,44,209,0)] group-hover:shadow-[0_0_20px_rgba(0,44,209,0.4)]"
-                  >
-                    플랜 문의하기
-                  </button>
+                  <ul className="text-[0.6875rem] text-muted-foreground space-y-3 mb-8">
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> {plan.tokens}
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> 모든 상권 분석 지표 제공
+                    </li>
+                  </ul>
+                  <div className="mt-auto">
+                    <button
+                      onClick={() =>
+                        showToast(
+                          'info',
+                          isCurrent
+                            ? '이미 사용 중인 플랜입니다.'
+                            : '결제 및 플랜 변경은 정식 오픈 후 지원됩니다.',
+                        )
+                      }
+                      disabled={isCurrent}
+                      className={
+                        isCurrent
+                          ? 'w-full py-3 bg-secondary text-muted-foreground border border-border text-xs font-bold rounded-xl cursor-not-allowed'
+                          : 'w-full py-3 bg-card text-muted-foreground border border-border text-xs font-bold rounded-xl group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-transparent transition-all duration-300 shadow-[0_0_20px_rgba(0,44,209,0)] group-hover:shadow-[0_0_20px_rgba(0,44,209,0.4)]'
+                      }
+                    >
+                      {isCurrent ? '현재 플랜' : '플랜 문의하기'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>

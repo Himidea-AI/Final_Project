@@ -292,8 +292,8 @@ export default function AgentMapVisualizer({
           if (!pixel) return null;
           const isFranchise = comp.is_franchise;
           // 라이트 모드 시맨틱 토큰 — 동일 색을 SVG fill·stroke·background 에 모두 사용하기 위해 hex 리터럴 보존.
-          // var(--danger) #FF3800, var(--warning) #FF7940. 33/22 suffix 는 alpha (CSS hex8).
-          const pinColor = isFranchise ? '#FF3800' : '#FF7940';
+          // var(--danger) #fb565b, var(--warning) #ffba00. 33/22 suffix 는 alpha (CSS hex8).
+          const pinColor = isFranchise ? '#fb565b' : '#ffba00';
           const borderClass = isFranchise
             ? 'border-danger shadow-[0_0_8px_rgba(244,63,94,0.5)]'
             : 'border-warning shadow-[0_0_8px_rgba(249,115,22,0.4)]';
@@ -366,8 +366,8 @@ export default function AgentMapVisualizer({
               <svg width="10" height="10" viewBox="0 0 18 18">
                 <polygon
                   points="9,2 16,16 2,16"
-                  fill="#FF380033"
-                  stroke="#FF3800"
+                  fill="#fb565b33"
+                  stroke="#fb565b"
                   strokeWidth="2"
                 />
               </svg>
@@ -377,8 +377,8 @@ export default function AgentMapVisualizer({
               <svg width="10" height="10" viewBox="0 0 18 18">
                 <polygon
                   points="9,2 16,16 2,16"
-                  fill="#FF794033"
-                  stroke="#FF7940"
+                  fill="#ffba0033"
+                  stroke="#ffba00"
                   strokeWidth="2"
                 />
               </svg>

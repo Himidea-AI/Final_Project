@@ -25,19 +25,19 @@ const FALLBACK_CENTER: StoreNode = {
 
 // 에이전트 Action 색 (채움) — gold(결제)·cyan(external halo)·white(테두리)는 별도
 const ACTION_COLOR: Record<string, string> = {
-  visit: '#FF3800', // Red — 매장 방문(결제)
+  visit: '#fb565b', // Red — 매장 방문(결제)
   move: '#002CD1', // Blue — 이동 중
-  work: '#00BA7A', // Green — 근무 (테두리만)
+  work: '#008b00', // Green — 근무 (테두리만)
   rest: '#6B6A63', // Gray — 휴식 (희미)
 };
 
 // Phase 2: 4 거점 floating glassmorphism 카드 — 마포 대표 dong centroid.
 // Orion 레퍼런스의 주요 도시 카드(Chicago/Berlin/Sangam-DMC 등) 패턴 재현.
 const KEY_DONGS: Array<{ name: string; lat: number; lon: number; color: string }> = [
-  { name: 'Hongdae-Ip-Gu', lat: 37.553, lon: 126.918, color: '#FF3800' }, // 서교동·홍대입구
+  { name: 'Hongdae-Ip-Gu', lat: 37.553, lon: 126.918, color: '#fb565b' }, // 서교동·홍대입구
   { name: 'Sangam-DMC', lat: 37.567, lon: 126.916, color: '#002CD1' }, // 성산동
-  { name: 'Gongdeok-Stn', lat: 37.544, lon: 126.953, color: '#FF3800' }, // 공덕동
-  { name: 'Mangwon-Mkt', lat: 37.557, lon: 126.905, color: '#FF7940' }, // 망원동
+  { name: 'Gongdeok-Stn', lat: 37.544, lon: 126.953, color: '#fb565b' }, // 공덕동
+  { name: 'Mangwon-Mkt', lat: 37.557, lon: 126.905, color: '#ffba00' }, // 망원동
 ];
 
 interface PixelCoord {
@@ -369,7 +369,7 @@ function drawPaymentBounce(ctx: CanvasRenderingContext2D, cx: number, baseY: num
   ctx.arc(cx, baseY + 2, 4 * (1 - Math.abs(offsetY) / bounceH) + 2, 0, Math.PI * 2);
   ctx.fill();
   // gold 원
-  ctx.fillStyle = '#FF7940';
+  ctx.fillStyle = '#ffba00';
   ctx.strokeStyle = '#9A4500';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
@@ -1676,7 +1676,7 @@ export default function AbmPersonaMap({
         if (!isCompetitor) return; // 일반 store/공실 후보 의 집모양 제거 — 사용자 피드백.
 
         // 작은 4px dot — 보라 (vacancy 빨강과 구분)
-        const dotColor = recentPay ? '#FF7940' : '#B35CFF';
+        const dotColor = recentPay ? '#ffba00' : '#7928CA';
         ctx.save();
         ctx.shadowColor = 'rgba(167, 139, 250, 0.85)';
         ctx.shadowBlur = 6;
@@ -1710,12 +1710,12 @@ export default function AbmPersonaMap({
           const displayHour = Math.floor(virtualHour);
 
           const roleColor: Record<string, string> = {
-            resident: '#00BA7A',
+            resident: '#008b00',
             commuter: '#002CD1',
             visitor: '#FF0070',
-            owner: '#FF7940',
+            owner: '#ffba00',
             ext_commuter: '#00E0D1',
-            ext_visitor: '#B35CFF',
+            ext_visitor: '#7928CA',
           };
 
           // ─── 히트맵 layer — 헥사 격자 + 네온 글로우 (Orion 스타일 ref) ─────
@@ -1932,10 +1932,10 @@ export default function AbmPersonaMap({
               fill = '#6B6A63'; // gray — 휴식
               alpha = 0.45;
             } else if (action === 'visit') {
-              fill = '#FF3800'; // red — 매장 방문/결제
+              fill = '#fb565b'; // red — 매장 방문/결제
               alpha = 1;
             } else if (action === 'work') {
-              fill = '#00BA7A'; // green — 근무 (정적)
+              fill = '#008b00'; // green — 근무 (정적)
               alpha = 0.85;
             }
 
@@ -1949,7 +1949,7 @@ export default function AbmPersonaMap({
               ctx.beginPath();
               ctx.arc(pix.x, pix.y, 3.2, 0, Math.PI * 2);
               ctx.fill();
-              ctx.strokeStyle = '#FF7940';
+              ctx.strokeStyle = '#ffba00';
               ctx.lineWidth = 1.6;
               ctx.beginPath();
               ctx.arc(pix.x, pix.y, 4.2, 0, Math.PI * 2);
@@ -1995,7 +1995,7 @@ export default function AbmPersonaMap({
               ctx.beginPath();
               roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
               ctx.fill();
-              ctx.strokeStyle = '#FF7940';
+              ctx.strokeStyle = '#ffba00';
               ctx.lineWidth = 1.5;
               ctx.beginPath();
               roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
@@ -2022,7 +2022,7 @@ export default function AbmPersonaMap({
             const pix = tierSPixelsRef.current.get(focusedAid);
             if (pix) {
               ctx.globalAlpha = 1;
-              ctx.strokeStyle = '#FF7940';
+              ctx.strokeStyle = '#ffba00';
               ctx.lineWidth = 3;
               ctx.beginPath();
               ctx.arc(pix.x, pix.y, 16, 0, Math.PI * 2);
@@ -2047,7 +2047,7 @@ export default function AbmPersonaMap({
           const tw2 = ctx.measureText(hourLabel).width;
           roundedRect(ctx, 8, 8, tw2 + 14, 20, 4);
           ctx.fill();
-          ctx.fillStyle = '#00BA7A';
+          ctx.fillStyle = '#008b00';
           ctx.fillText(hourLabel, 15, 22);
         }
       }
@@ -2069,7 +2069,7 @@ export default function AbmPersonaMap({
           ctx.arc(fx, fy, 18 * pulse, 0, Math.PI * 2);
           ctx.stroke();
           // 신규 매장 = green house
-          drawStoreHouse(ctx, fx, fy, 'S', '#00BA7A', 2.5);
+          drawStoreHouse(ctx, fx, fy, 'S', '#008b00', 2.5);
           // 라벨
           const label = `NEW · ${focusSpot.label ?? '선택 스팟'}`;
           ctx.font = 'bold 11px monospace';
@@ -2364,7 +2364,7 @@ export default function AbmPersonaMap({
           ctx.fillStyle = '#6B6A63';
         } else if (p.action === 'work') {
           ctx.globalAlpha = 0.85;
-          ctx.fillStyle = '#00BA7A';
+          ctx.fillStyle = '#008b00';
         } else if (p.action === 'visit') {
           // focusSpot 모드 시 다른 매장 visit 은 단조 색 (빨강 산만 회피)
           ctx.globalAlpha = focusSpot ? 0.7 : 1;
@@ -2566,7 +2566,7 @@ export default function AbmPersonaMap({
                     </div>
                     <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-primary to-danger shadow-[0_0_10px_#FF3800]"
+                        className="h-full bg-gradient-to-r from-primary to-danger shadow-[0_0_10px_#fb565b]"
                         style={{ width: `${(hoveredHex.intensity * 100).toFixed(0)}%` }}
                       />
                     </div>
@@ -2729,7 +2729,7 @@ export default function AbmPersonaMap({
                       abmResult.daily_visits_std > 0
                         ? `σ ${abmResult.daily_visits_std}`
                         : '시뮬 평균',
-                    color: '#00BA7A',
+                    color: '#008b00',
                     glow: 'rgba(52,211,153,0.18)',
                     icon: (
                       <path
@@ -2748,7 +2748,7 @@ export default function AbmPersonaMap({
                       : '-',
                     suffix: '만 ₩',
                     sub: '월 매출 (일×25)',
-                    color: '#FF7940',
+                    color: '#ffba00',
                     glow: 'rgba(251,191,36,0.18)',
                     icon: (
                       <text
@@ -2925,9 +2925,9 @@ export default function AbmPersonaMap({
                             {meta.plan.map((slot, i) => {
                               const catColor =
                                 slot.action === 'visit'
-                                  ? '#FF3800'
+                                  ? '#fb565b'
                                   : slot.action === 'work'
-                                    ? '#00BA7A'
+                                    ? '#008b00'
                                     : slot.action === 'move'
                                       ? '#002CD1'
                                       : '#6B6A63';
@@ -3060,17 +3060,17 @@ export default function AbmPersonaMap({
                                           : role;
                             const color =
                               role === 'resident'
-                                ? '#00BA7A'
+                                ? '#008b00'
                                 : role === 'commuter'
                                   ? '#002CD1'
                                   : role === 'visitor'
                                     ? '#FF0070'
                                     : role === 'owner'
-                                      ? '#FF7940'
+                                      ? '#ffba00'
                                       : role === 'ext_commuter'
                                         ? '#00E0D1'
                                         : role === 'ext_visitor'
-                                          ? '#B35CFF'
+                                          ? '#7928CA'
                                           : '#6B6A63';
                             return (
                               <div
@@ -3130,17 +3130,17 @@ export default function AbmPersonaMap({
                                           : role;
                             const color =
                               role === 'resident'
-                                ? '#00BA7A'
+                                ? '#008b00'
                                 : role === 'commuter'
                                   ? '#002CD1'
                                   : role === 'visitor'
                                     ? '#FF0070'
                                     : role === 'owner'
-                                      ? '#FF7940'
+                                      ? '#ffba00'
                                       : role === 'ext_commuter'
                                         ? '#00E0D1'
                                         : role === 'ext_visitor'
-                                          ? '#B35CFF'
+                                          ? '#7928CA'
                                           : '#6B6A63';
                             return (
                               <div
@@ -3185,7 +3185,7 @@ export default function AbmPersonaMap({
                       >
                         <path
                           d="M12 9v4M12 17h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"
-                          stroke="#FF3800"
+                          stroke="#fb565b"
                           strokeWidth="2.2"
                           strokeLinecap="round"
                         />
@@ -3248,8 +3248,8 @@ export default function AbmPersonaMap({
                               aria-hidden="true"
                               className="shrink-0"
                             >
-                              <circle cx="9" cy="7" r="3.2" fill="#FF7940" />
-                              <g stroke="#FF7940" strokeWidth="1.3" strokeLinecap="round">
+                              <circle cx="9" cy="7" r="3.2" fill="#ffba00" />
+                              <g stroke="#ffba00" strokeWidth="1.3" strokeLinecap="round">
                                 <line x1="9" y1="1" x2="9" y2="2.6" />
                                 <line x1="9" y1="11.4" x2="9" y2="13" />
                                 <line x1="1" y1="7" x2="2.6" y2="7" />
