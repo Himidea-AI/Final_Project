@@ -73,7 +73,7 @@ export function IndustryClosureTrendCard({ trend }: Props) {
   const fmtPct = (v: number | null | undefined) => (v == null ? '—' : `${v.toFixed(2)}%`);
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/40 p-4">
+    <div className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Activity size={14} className="text-muted-foreground" />
@@ -92,7 +92,8 @@ export function IndustryClosureTrendCard({ trend }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-3">
-        <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+        {/* 퐁당퐁당 룰: outer card(white) ↔ inner secondary(cool gray). */}
+        <div className="rounded-lg border border-border bg-secondary p-3">
           <div className="text-[0.5625rem] font-black uppercase tracking-widest text-muted-foreground mb-1">
             현재 분기
           </div>
@@ -100,7 +101,7 @@ export function IndustryClosureTrendCard({ trend }: Props) {
             {fmtPct(cur)}
           </div>
         </div>
-        <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+        <div className="rounded-lg border border-border bg-secondary p-3">
           <div className="text-[0.5625rem] font-black uppercase tracking-widest text-muted-foreground mb-1">
             과거 평균
           </div>

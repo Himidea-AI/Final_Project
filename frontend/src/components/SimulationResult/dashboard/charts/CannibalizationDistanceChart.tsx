@@ -64,7 +64,7 @@ export function CannibalizationDistanceChart({
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-secondary p-4">
+    <div className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
           자사 매장 거리 분포
