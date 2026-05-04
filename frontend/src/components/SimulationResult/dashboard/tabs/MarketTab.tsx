@@ -188,6 +188,7 @@ export function MarketTab({ simResult }: Props) {
               bins={ci.cannibalization.distance_bins ?? null}
               closestM={ci.cannibalization.closest_distance_m ?? null}
               impactPct={ci.cannibalization.estimated_revenue_impact_pct ?? null}
+              impactIsCapped={ci.cannibalization.impact_is_capped ?? null}
             />
           )}
           {ci?.industry_closure_trend && (

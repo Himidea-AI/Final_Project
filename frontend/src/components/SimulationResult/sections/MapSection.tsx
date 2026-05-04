@@ -4,7 +4,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { getDongCount, getGuFromDong } from '../../../data/seoulRegions';
 import { useSimulationStore } from '../../../stores/simulationStore';
 import { SectionLabel } from '../shared/SectionLabel';
-import { MarketMap, type Competitor, type RankingEntry } from './MarketMap';
+import { MarketMap, haversineM, type Competitor, type RankingEntry } from './MarketMap';
 
 interface Props {
   simResult: SimulationOutput;
@@ -94,12 +94,68 @@ function buildCenter(simResult: SimulationOutput): { lat: number; lng: number } 
   return DEFAULT_MAPO_CENTER;
 }
 
+interface VacancySpotRaw {
+  id?: number | string;
+  lat?: unknown;
+  lon?: unknown;
+  dong_name?: unknown;
+  listing_count?: unknown;
+  // winner_district spot 한정으로 backend district_ranking._score_winner_spots 가 채움.
+  score?: unknown;
+  subway_distance_m?: unknown;
+  competitor_count_500m?: unknown;
+}
+
+interface BestVacancy {
+  lat: number;
+  lng: number;
+  listingCount: number;
+  dongName: string;
+  score: number | null;
+  subwayDistanceM: number | null;
+  competitorCount500m: number | null;
+}
+
+// 추천 동(winner_district) 내 공실 중 "가장 출점 적합한 spot" 선정.
+// 기준: backend 가 spot 단위 score 를 부여한 경우(0~100, winner 동 내 상대 점수,
+// 경쟁밀도 0.45 + 지하철 접근성 0.35 + 매물 활성도 0.20 가중합) → score 최대.
+// score 가 없으면 listing_count 최대 fallback (구버전 응답 호환).
+function buildBestVacancy(simResult: SimulationOutput): BestVacancy | null {
+  const sim = simResult as SimulationOutput & Record<string, unknown>;
+  const winner = (sim.winner_district ?? sim.target_district) as string | undefined;
+  if (!winner) return null;
+  const spots = (sim.vacancy_spots as VacancySpotRaw[] | undefined) ?? [];
+  const candidates = spots
+    .filter((s) => s.dong_name === winner)
+    .filter((s) => typeof s.lat === 'number' && typeof s.lon === 'number')
+    .map((s) => ({
+      lat: s.lat as number,
+      lng: s.lon as number,
+      listingCount: typeof s.listing_count === 'number' ? s.listing_count : 0,
+      dongName: String(s.dong_name),
+      score: typeof s.score === 'number' ? s.score : null,
+      subwayDistanceM: typeof s.subway_distance_m === 'number' ? s.subway_distance_m : null,
+      competitorCount500m:
+        typeof s.competitor_count_500m === 'number' ? s.competitor_count_500m : null,
+    }))
+    .sort((a, b) => {
+      const sa = a.score ?? Number.NEGATIVE_INFINITY;
+      const sb = b.score ?? Number.NEGATIVE_INFINITY;
+      if (sa !== sb) return sb - sa;
+      return b.listingCount - a.listingCount;
+    });
+  return candidates[0] ?? null;
+}
+
 export function MapSection({ simResult }: Props) {
   // Memoize 대상: buildCompetitors/buildRankings/buildCenter가 매 렌더마다 새 배열 참조를 만들면
   // MarketMap useEffect deps가 매번 바뀌어 지도·choropleth가 무한 재초기화된다.
   const competitors = useMemo(() => buildCompetitors(simResult), [simResult]);
   const rankings = useMemo(() => buildRankings(simResult), [simResult]);
-  const center = useMemo(() => buildCenter(simResult), [simResult]);
+  const fallbackCenter = useMemo(() => buildCenter(simResult), [simResult]);
+  const bestVacancy = useMemo(() => buildBestVacancy(simResult), [simResult]);
+  // 핀/반경/TARGET 좌표 = 추천 동 내 best 공실 (있으면) → 없으면 동 대표좌표 fallback
+  const center = bestVacancy ? { lat: bestVacancy.lat, lng: bestVacancy.lng } : fallbackCenter;
 
   const { brand: authBrand, user } = useAuth();
   // 사용자 입력 commercial_radius — backend 응답에 echo 안 되므로 store.params 에서 직접.
@@ -114,8 +170,10 @@ export function MapSection({ simResult }: Props) {
 
   const effectiveRadius = userRadius ?? 500;
   const totalCompetitors = competitors.length;
+  // within 판정 = 화면 핀 좌표(center) 기준 haversine. 백엔드 distance_m 은 source 동 centroid
+  // 기준이라 핀 위치와 정합 안 됨 → MarketMap 마커 색·legend 카운트 일치시킴.
   const withinCompetitors = competitors.filter(
-    (c) => (c.distance_m ?? Number.POSITIVE_INFINITY) <= effectiveRadius,
+    (c) => haversineM(center.lat, center.lng, c.lat, c.lng) <= effectiveRadius,
   ).length;
 
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
@@ -163,6 +221,7 @@ export function MapSection({ simResult }: Props) {
           radius={effectiveRadius}
           winnerDistrict={simResult.winner_district}
           height={520}
+          targetSpot={bestVacancy ? { lat: bestVacancy.lat, lng: bestVacancy.lng } : null}
         />
 
         {/* Layer 6 — 좌하단 범례 패널 */}

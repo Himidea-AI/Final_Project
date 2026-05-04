@@ -6,6 +6,7 @@
  */
 
 import type { ClosureRiskSignal } from '../../../../types';
+import { shapStrengthFullLabel } from '../utils/formatters';
 
 interface Props {
   signals: ClosureRiskSignal[] | undefined;
@@ -54,11 +55,14 @@ export function ClosureSignalsBar({ signals, title, accent = 'lgbm' }: Props) {
                   />
                 )}
               </div>
+              {/* 우측 라벨: SHAP 원시값 → "위험 증가 ↑↑" 등급 표기.
+                  화살표 1/2/3개 = 약/중/강 (utils/formatters.ts shapStrengthFullLabel 단일소스).
+                  hover 시 원시값 노출. */}
               <span
-                className={`text-[0.6875rem] font-black tabular-nums w-14 text-right ${labelColor}`}
+                className={`text-[0.6875rem] font-black w-20 text-right ${labelColor}`}
+                title={`원시 SHAP 값: ${positive ? '+' : ''}${s.contribution.toFixed(4)}`}
               >
-                {positive ? '+' : ''}
-                {s.contribution.toFixed(2)}
+                {shapStrengthFullLabel(s.contribution)}
               </span>
             </div>
           );

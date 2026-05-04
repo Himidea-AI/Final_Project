@@ -361,7 +361,9 @@ async def competitor_intel_node(state: AgentState) -> dict:
         }
 
     # Redis 캐시 조회
-    cache_key = f"v2:competitor_intel:{dong_code}:{brand_name}"
+    # v2 → v3: brand_mapping_resolver fix (resolve_brand_name 0차 호출 + canonical 통일) 반영.
+    # v2 캐시는 카니발 0 (브랜드 매칭 실패 결과) 저장되어 있어 무효화 필요.
+    cache_key = f"v3:competitor_intel:{dong_code}:{brand_name}"
     cached = await _try_cache_get(cache_key)
     if cached:
         print(f"[competitor_intel] 캐시 히트: {cache_key}")

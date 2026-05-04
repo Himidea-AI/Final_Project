@@ -82,12 +82,15 @@ def _mock_bep(industry_name: str) -> dict:
     quarterly_simulation_raw = calc.simulate_quarterly([quarterly_revenue] * simulation_quarters)
     simulation = []
     for row in quarterly_simulation_raw:
+        # 2026-05-04 _run_bep 와 동일하게 키 이름 통일 — 프론트 QuarterlySimRow 매칭.
         simulation.append(
             {
                 "quarter": row["quarter"],
                 "revenue": row["revenue"],
-                "cost": row["quarterly_total_cost"],
-                "profit": row["quarterly_profit"],
+                "quarterly_fixed_cost": row["quarterly_fixed_cost"],
+                "quarterly_variable_cost": row["quarterly_variable_cost"],
+                "quarterly_total_cost": row["quarterly_total_cost"],
+                "quarterly_profit": row["quarterly_profit"],
                 "cumulative_profit": row["cumulative_profit"],
                 "bep_reached": row["bep_reached"],
             }
@@ -161,15 +164,22 @@ def _run_gru_forecast(dong_code: str, industry_code: str) -> dict:
 def _get_latest_store_count(dong_code: str, industry_code: str) -> int:
     """해당 동×업종의 최신 분기 점포 수 반환. 조회 실패 시 1.
 
-    store_count와 franchise_count 중 큰 값을 사용한다.
-    공식 통계에서 franchise_count > store_count 인 데이터 오류(주로 치킨·호프 업종)가
-    존재하므로, MAX로 하한선을 보정한다.
+    우선순위: store_count > 0 → store_count.
+    store_count == 0 / 결측이면 franchise_count fallback. 둘 다 없으면 1 floor.
+
+    회귀 배경 (2026-05-04): 기존 `max(store, franchise, 1)` 로직은
+    franchise_count > store_count 인 데이터 오류 케이스(서울열린데이터에서
+    가맹점 정의 모호로 마포 16/16 동에서 발생)에서 분모를 부풀려
+    점포당 매출을 ~3.5배 작게 산출하는 회귀(연남×치킨 월 357만)를 만들었다.
+    franchise ⊆ store 가 정상이라는 도메인 가정에 따라 store_count 를 신뢰한다.
     """
     try:
         from models.lstm_forecast.data_prep import load_store_data
 
         dong_prefix = dong_code[:5] if len(dong_code) >= 5 else dong_code
         store_df = load_store_data(dong_prefix=dong_prefix)
+        if store_df.empty:
+            return 1
         mask = (store_df["dong_code"].astype(str) == dong_code) & (
             store_df["industry_code"].astype(str) == industry_code
         )
@@ -177,9 +187,27 @@ def _get_latest_store_count(dong_code: str, industry_code: str) -> int:
         if subset.empty:
             return 1
         latest = subset.sort_values("quarter").iloc[-1]
-        store_cnt = int(latest.get("store_count", 1) or 1)
+        store_cnt = int(latest.get("store_count", 0) or 0)
         franchise_cnt = int(latest.get("franchise_count", 0) or 0)
-        return max(store_cnt, franchise_cnt, 1)
+        if store_cnt > 0:
+            if franchise_cnt > store_cnt:
+                logger.debug(
+                    "store(%d) < franchise(%d) — store_count 우선 사용 (dong=%s ind=%s)",
+                    store_cnt,
+                    franchise_cnt,
+                    dong_code,
+                    industry_code,
+                )
+            return store_cnt
+        if franchise_cnt > 0:
+            logger.info(
+                "store_count=0 → franchise_count(%d) fallback (dong=%s ind=%s)",
+                franchise_cnt,
+                dong_code,
+                industry_code,
+            )
+            return franchise_cnt
+        return 1
     except Exception as exc:
         logger.warning("store_count 조회 실패 (1로 대체): %s", exc)
         return 1
@@ -226,16 +254,53 @@ def _run_bep(
     quarterly_simulation_raw = calc.simulate_quarterly(quarterly_revenues_list)
     simulation = []
     for row in quarterly_simulation_raw:
+        # 2026-05-04 키 이름 통일 — 프론트(QuarterlySimRow)가 quarterly_total_cost / quarterly_profit
+        # 으로 읽고 있어 옛 cost/profit 축약 키와 매칭 실패 → LLM fallback 으로 우회되던 회귀 차단.
+        # quarterly_fixed_cost / quarterly_variable_cost 도 노출하여 향후 운영비 분리 표시에 재사용.
         simulation.append(
             {
                 "quarter": row["quarter"],
                 "revenue": row["revenue"],
-                "cost": row["quarterly_total_cost"],
-                "profit": row["quarterly_profit"],
+                "quarterly_fixed_cost": row["quarterly_fixed_cost"],
+                "quarterly_variable_cost": row["quarterly_variable_cost"],
+                "quarterly_total_cost": row["quarterly_total_cost"],
+                "quarterly_profit": row["quarterly_profit"],
                 "cumulative_profit": row["cumulative_profit"],
                 "bep_reached": row["bep_reached"],
             }
         )
+
+    # 2026-05-04 점포당 분기 매출 sanity check.
+    # 정상 음식점 점포당 월 매출 ≈ 500만~1억 → 분기 1,500만~3억.
+    # 회귀 배경: 연남×치킨 사건 — store_count 분모 오류로 분기 1,070만(=월 357만)
+    # 까지 작아진 매출이 그대로 BEP 에 들어가 영구 적자(BEP=-1) 결과 산출.
+    # 분모 로직은 별도 수정했으나, 학습 데이터 outlier · 자기회귀 jump 등 다른
+    # 경로로 같은 회귀가 재발할 수 있어 응답 dict 에 sanity_warning 플래그를 둔다.
+    PER_STORE_QUARTER_MIN = 15_000_000  # 분기 1,500만(= 월 500만)
+    PER_STORE_QUARTER_MAX = 300_000_000  # 분기 3억(= 월 1억)
+    sanity_warning: dict | None = None
+    if quarterly_per_store < PER_STORE_QUARTER_MIN:
+        sanity_warning = {
+            "reason": "per_store_revenue_too_low",
+            "quarterly_per_store": quarterly_per_store,
+            "expected_min": PER_STORE_QUARTER_MIN,
+            "message": (
+                f"점포당 분기 매출 {quarterly_per_store:,}원이 비현실적으로 낮습니다 "
+                f"(기준: {PER_STORE_QUARTER_MIN:,}원). store_count 분모 또는 학습 데이터를 점검하세요."
+            ),
+        }
+        logger.warning("BEP sanity: %s", sanity_warning["message"])
+    elif quarterly_per_store > PER_STORE_QUARTER_MAX:
+        sanity_warning = {
+            "reason": "per_store_revenue_too_high",
+            "quarterly_per_store": quarterly_per_store,
+            "expected_max": PER_STORE_QUARTER_MAX,
+            "message": (
+                f"점포당 분기 매출 {quarterly_per_store:,}원이 비현실적으로 높습니다 "
+                f"(기준: {PER_STORE_QUARTER_MAX:,}원). store_count 또는 매출 단위(분기/월)를 점검하세요."
+            ),
+        }
+        logger.warning("BEP sanity: %s", sanity_warning["message"])
 
     return {
         "bep_quarters": bep_result["bep_quarters"],
@@ -245,6 +310,7 @@ def _run_bep(
         "quarterly_simulation": simulation,
         "simulation_quarters": simulation_quarters,
         "is_mock": False,
+        "sanity_warning": sanity_warning,
     }
 
 
@@ -522,8 +588,10 @@ class ModelOutput:
                 store_count=store_count,
             )
             logger.info("BEP 계산 완료")
-        except Exception as exc:
-            logger.warning("BEP 계산 실패 (mock 사용): %s", exc)
+        except Exception:
+            # 2026-05-04 BEP 산식은 사칙연산뿐이라 실패 가능성 낮지만,
+            # 만약 발생 시 silent warning 으로 묻지 말고 stack trace 까지 남긴다.
+            logger.exception("BEP 계산 실패 (mock 사용)")
             bep = _mock_bep(industry_name)
             use_mock = True
 

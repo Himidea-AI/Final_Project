@@ -48,7 +48,13 @@ class AgentState(TypedDict):
     top_3_candidates: list[str]  # 선별된 상위 3개 행정동 리스트
     winner_district: str  # 최종 선정된 1순위 지역명 (Winner)
     brand_analysis: dict[str, Any]  # 브랜드 전국 평균 vs 지역 분석 결과
-    vacancy_spots: list[dict[str, Any]]  # 추천 동들의 실제 공실 좌표 목록
+    # 추천 동들의 실제 공실 좌표 목록.
+    # 공통 필드: id, lat, lon, dong_name, listing_count
+    # winner_district spot 한정 추가 필드 (district_ranking._score_winner_spots):
+    #   - score (0~100, winner 동 내부 상대 점수)
+    #   - subway_distance_m (가장 가까운 마포 지하철역까지 m)
+    #   - competitor_count_500m (반경 500m 동종업종 매장 수)
+    vacancy_spots: list[dict[str, Any]]
     vacancy_applied: bool  # 공실 DB 반영 여부
 
     # 5. 분석 결과 및 상태 제어
