@@ -1682,40 +1682,9 @@ class Customer(Base):
 
 
 # ---------------------------------------------------------------------------
-# 시뮬레이션 이력 (매니저 저장 이력)
+# 시뮬레이션 이력 — simulation_history 는 미구현 기능으로 alembic 91b66e68ec18 에서 drop.
+# 매니저 시뮬 저장은 simulation_ai / simulation_foresee 가 담당.
 # ---------------------------------------------------------------------------
-
-
-class SimulationHistory(Base):
-    """시뮬레이션 이력 — 매니저가 시뮬 실행 후 [저장] 버튼으로 남긴 영구 이력"""
-
-    __tablename__ = "simulation_history"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    # index=True 는 복합 idx_simhist_manager_created 의 leftmost prefix 와 중복되므로 제거
-    # ForeignKey 제거: alembic a3b4c5d6e7f8 가 FK drop — master 본인 시뮬은 manager_id가 users.id 가리킴 (manager_users 외 ref)
-    manager_id = Column(
-        UUID(as_uuid=True),
-        nullable=False,
-        comment="작성자 ID — master면 users.id, manager면 manager_users.id (user_type 필드로 구분)",
-    )
-    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
-
-    # 시뮬 입력
-    district = Column(String(50), nullable=False, comment="출점 후보 행정동")
-    brand_name = Column(String(100), nullable=False, comment="브랜드명")
-    business_type = Column(String(50), comment="업종 (cafe/restaurant/convenience)")
-    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터")
-
-    # 시뮬 결과 전체 (8 agent + ABM + B2 ML 9개)
-    simulation_result = Column(JSONB, nullable=False, comment="시뮬 결과 전체")
-
-    # 리스트 표시용 요약 (빠른 조회)
-    ai_verdict_summary = Column(Text, comment="AI 판정 요약")
-    market_entry_signal = Column(String(10), comment="green|yellow|red")
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 # ---------------------------------------------------------------------------

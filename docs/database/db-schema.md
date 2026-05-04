@@ -1,6 +1,6 @@
 # PostgreSQL 테이블·컬럼 정의서 (DB 실측)
 
-> DB: `mapo_simulator` | **88개 테이블**
+> DB: `mapo_simulator` | **87개 테이블**
 > 출처: `information_schema` 직접 dump (자동 생성)
 > 갱신: `python backend/scripts/diagnostics/gen_db_schema_doc.py`
 
@@ -8,9 +8,9 @@
 
 ## ORM ↔ DB 정합
 
-- DB 실제 테이블: **88**
-- ORM 모델: **78**
-- 공통: **78**
+- DB 실제 테이블: **87**
+- ORM 모델: **77**
+- 공통: **77**
 - ORM zombie (DB 없음): 없음
 - DB only (ORM 없음): alembic_version, langchain_pg_collection, langchain_pg_embedding, living_population_grid, mapo_schools, password_reset_tokens, seoul_district_sales_imputed_v4, seoul_district_sales_imputed_v4_detail, seoul_resident_pop_quarterly, user_usage
 
@@ -33,12 +33,6 @@
 | `ecos_timeseries` | 2,783 | ✓ | stat_code, item_code1, item_code2, period |
 | `kosis_regional_income` | 1,116 | ✓ | id |
 | `molit_nrg_trade` | 8,731 | ✓ | id |
-
-### 기타 (1)
-
-| 테이블 | row 수 | ORM | PK |
-|---|---|---|---|
-| `simulation_history` | 0 | ✓ | id |
 
 ### 네이버 외부수집 (4)
 
@@ -2050,27 +2044,6 @@
 | `living_pop_forecast` | jsonb | ✓ | — |
 | `created_at` | timestamp with time zone | — | now() |
 | `scenario` | jsonb | ✓ | — |
-
-### `simulation_history` — 0 rows
-
-- 도메인: 기타
-- ORM 정의: ✓
-- PK: `id`
-
-| 컬럼 | 타입 | NULL | 기본값 |
-|---|---|---|---|
-| `id` | bigint | — | nextval('simulation_history_id… |
-| `manager_id` | uuid | — | — |
-| `client_name` | character varying(100) | — | — |
-| `district` | character varying(50) | — | — |
-| `brand_name` | character varying(100) | — | — |
-| `business_type` | character varying(50) | ✓ | — |
-| `scenario` | jsonb | ✓ | — |
-| `simulation_result` | jsonb | — | — |
-| `ai_verdict_summary` | text | ✓ | — |
-| `market_entry_signal` | character varying(10) | ✓ | — |
-| `created_at` | timestamp with time zone | — | now() |
-| `updated_at` | timestamp with time zone | ✓ | now() |
 
 ### `small_store_rent_q` — 10,020 rows
 

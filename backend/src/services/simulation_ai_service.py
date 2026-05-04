@@ -1,6 +1,5 @@
 """simulation_ai CRUD — AI 분석 (Analyze 탭) 저장/조회/삭제.
 
-simulation_history_service.py 패턴 재사용.
 master(팀장): 본인 + 소속 매니저 이력 조회/삭제 가능.
 manager: 본인 이력만.
 """
