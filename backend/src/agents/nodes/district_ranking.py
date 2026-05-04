@@ -205,6 +205,21 @@ def _score_winner_spots(
         score = sum(v * (w / w_total) for v, w in parts) * 100.0
         spot["score"] = round(score, 2)
 
+    # 검증 로그 — 가중치 재조정 판단용 (외진 zone 우선 추천 패턴 확인).
+    # top1 의 competitor_count_500m 이 0~1 이면 reverse min-max + 0.45 가중치 의심.
+    sorted_spots = sorted(target_spots, key=lambda s: -(s.get("score") or 0))
+    print(f"[spot_score:{winner_district}] top5 검증 (총 {len(target_spots)}개 spot):")
+    for i, s in enumerate(sorted_spots[:5], 1):
+        lat_v = s.get("lat")
+        lon_v = s.get("lon")
+        coord = f"({lat_v:.4f},{lon_v:.4f})" if isinstance(lat_v, (int, float)) and isinstance(lon_v, (int, float)) else "(좌표X)"
+        print(
+            f"  #{i} score={s.get('score')} | "
+            f"경쟁={s.get('competitor_count_500m')}개 / "
+            f"지하철={s.get('subway_distance_m')}m / "
+            f"매물={s.get('listing_count')} @ {coord}"
+        )
+
 
 async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
     """
