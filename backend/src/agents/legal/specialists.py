@@ -151,6 +151,11 @@ def _make_specialist_fallback(
 # (commercial_intelligence._INDUSTRY_DISTANCE_DECAY 의 키와 일치해야 함)
 # 미매핑 업종 fallback = "default" — cafe 곡선 강제 적용을 피해 estimate_cannibalization
 # 의 default 곡선 (0.20) 사용.
+#
+# ⚠️ 호출 흐름 (audit-2026-05-04 false positive 정정):
+# 입력 → BIZ_NORMALIZE (3 대분류 캐시 키 정규화) → 이 dict lookup → distance decay 곡선.
+# "커피" 입력은 BIZ_NORMALIZE 가 "카페" 로 변환해 들어오므로 이 dict 에 "커피" 키 불필요.
+# 직접 호출자 추가 시 BIZ_NORMALIZE 거치는지 확인.
 _INDUSTRY_DEFAULT = "default"
 _INDUSTRY_LABEL_MAP = {
     "카페": "cafe",

@@ -150,6 +150,11 @@ BIZ_TYPE_LABEL: dict[str, str] = {
 # ── 캐시 키 정규화 매핑 (단일 소스) ──
 # 영문/한글 업종명 혼용 시 동일 캐시 키 생성 보장.
 # 주점 신설 — 편의점은 룰엔진/지원업종에서 제거됐지만 운영 파이프라인에서는 보존.
+#
+# ⚠️ 주의 (audit-2026-05-04 false positive 정정):
+# 이 dict 는 **3 대분류** ("카페"/"음식점"/"주점") 캐시 키 정규화용.
+# `business_type_mapping.normalize_key()` 는 **10종 canonical 키** 정규화 — 다른 용도.
+# "커피"→"카페" 정규화는 cache 키 통일이 목적, BUSINESS_TYPE_MAPPING 와 충돌 아님.
 BIZ_NORMALIZE: dict[str, str] = {
     # 카페
     "cafe": "카페",
