@@ -38,14 +38,34 @@ from data.legal.fetch_law_bodies import _extract_legislation_body  # noqa: E402
 
 POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@localhost:5432/mapo_simulator")
 LAW_OC = os.getenv("LAW_OC", "bat1120")
-BASE_URL = "https://www.law.go.kr/DRF"
+BASE_URL = os.getenv("LAW_BASE_URL", "http://www.law.go.kr/DRF")
 TIMEOUT = 20.0
 
 # (CSV 표기, lawSearch query, 정확 매칭할 법령명 prefix)
-TARGETS: list[tuple[str, str, str]] = [
-    ("공정거래법", "독점규제 및 공정거래에 관한 법률", "독점규제 및 공정거래에 관한 법률"),
-    ("장애인편의법", "장애인·노인·임산부 등의 편의증진 보장에 관한 법률", "장애인"),
-    ("하수도법", "하수도법", "하수도법"),
+# exact_match=True 이면 시행령/시행규칙도 prefix 정확 매칭으로 픽업.
+TARGETS: list[tuple[str, str, str, bool]] = [
+    ("공정거래법", "독점규제 및 공정거래에 관한 법률", "독점규제 및 공정거래에 관한 법률", False),
+    ("장애인편의법", "장애인·노인·임산부 등의 편의증진 보장에 관한 법률", "장애인", False),
+    ("하수도법", "하수도법", "하수도법", False),
+    # 화재예방법 + 시행령 + 시행규칙 — 소방안전관리자 선임 의무(제24~25조) 등 소관
+    (
+        "화재예방법",
+        "화재의 예방 및 안전관리에 관한 법률",
+        "화재의 예방 및 안전관리에 관한 법률",
+        True,
+    ),
+    (
+        "화재예방법 시행령",
+        "화재의 예방 및 안전관리에 관한 법률 시행령",
+        "화재의 예방 및 안전관리에 관한 법률 시행령",
+        True,
+    ),
+    (
+        "화재예방법 시행규칙",
+        "화재의 예방 및 안전관리에 관한 법률 시행규칙",
+        "화재의 예방 및 안전관리에 관한 법률 시행규칙",
+        True,
+    ),
 ]
 
 
@@ -64,8 +84,26 @@ async def _search_law(client: httpx.AsyncClient, query: str) -> list[dict]:
     return laws
 
 
-def _pick_best(laws: list[dict], prefix: str) -> dict | None:
-    """현행, 법률 (시행령/시행규칙 X), 정확 prefix 매칭 우선."""
+def _pick_best(laws: list[dict], prefix: str, exact_match: bool = False) -> dict | None:
+    """현행, 법률 (시행령/시행규칙 X), 정확 prefix 매칭 우선.
+
+    exact_match=True 이면 prefix와 법령명한글이 정확히 일치하는 항목만 후보.
+    시행령/시행규칙 자체를 타겟할 때 사용.
+    """
+    if exact_match:
+        candidates: list[tuple[int, dict]] = []
+        for law in laws:
+            name = (law.get("법령명한글") or "").strip()
+            revision = (law.get("현행연혁코드") or "").strip()
+            if name != prefix:
+                continue
+            score = 10 if revision == "현행" else 0
+            candidates.append((score, law))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda x: -x[0])
+        return candidates[0][1]
+
     candidates = []
     for law in laws:
         name = (law.get("법령명한글") or "").strip()
@@ -144,7 +182,13 @@ async def main() -> None:
     print(f"대상: {len(TARGETS)} 법령\n")
 
     async with httpx.AsyncClient() as client:
-        for csv_label, query, prefix in TARGETS:
+        for entry in TARGETS:
+            # 하위 호환: 3-tuple 도 받아들임
+            if len(entry) == 4:
+                csv_label, query, prefix, exact_match = entry
+            else:
+                csv_label, query, prefix = entry  # type: ignore[misc]
+                exact_match = False
             print(f"=== {csv_label} ({query}) ===")
             try:
                 laws = await _search_law(client, query)
@@ -153,7 +197,7 @@ async def main() -> None:
                 continue
 
             print(f"  검색 결과: {len(laws)}건")
-            picked = _pick_best(laws, prefix)
+            picked = _pick_best(laws, prefix, exact_match=exact_match)
             if not picked:
                 print(f"  매칭 실패 — prefix '{prefix}'\n")
                 continue
@@ -172,7 +216,7 @@ async def main() -> None:
 
             print(f"  본문 길이: {len(body):,} chars")
             _upsert_legislation(item_id, title, short, picked, body)
-            print(f"  DB upsert OK\n")
+            print("  DB upsert OK\n")
 
     print("완료. 다음 단계:")
     print("  python -m data.legal.build_law_chunks")
