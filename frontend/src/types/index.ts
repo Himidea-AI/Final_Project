@@ -486,6 +486,12 @@ export interface DistrictRanking {
   pop_score: number;
   avg_rent: number;
   rent_score: number;
+  /** 2026-05-02 backend 추가: 동 검색량 트렌드 점수 (0~100) */
+  trend_score?: number | null;
+  /** 경쟁 밀도 점수 (0~100, 마포 16동 정규화). IndicatorGrid '경쟁강도' 폴백 매핑. */
+  density_score?: number | null;
+  /** Hansen+E2SFCA 기반 교통/집객 접근성 점수 (0~100). IndicatorGrid '접근성' 폴백 매핑. */
+  inflow_score?: number | null;
   vacancy_rate: number;
   zoning_risk: 'safe' | 'caution' | 'danger';
   /** 2026-04-27 변경: bep_months → bep_quarters (분기 단위) */
