@@ -418,6 +418,9 @@ export interface SimulationOutput {
     distance_m?: number;
     is_franchise?: boolean;
     source_dong?: string;
+    place_url?: string;
+    phone?: string;
+    category?: string;
   }>;
   // winner + top3 4동 안 자사 브랜드 매장 좌표 (로고 아이콘 마커 + 영업구역 반경 원 표시용)
   same_brand_locations?: Array<{

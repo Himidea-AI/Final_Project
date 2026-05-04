@@ -9,6 +9,8 @@ export interface Competitor {
   is_franchise?: boolean;
   brand_name?: string | null;
   daily_revenue?: number | null;
+  place_url?: string | null;
+  phone?: string | null;
 }
 
 export interface RankingEntry {
@@ -185,6 +187,15 @@ function formatKrwWan(v?: number | null): string {
   return `${Math.round(v / 10000).toLocaleString()}만원/일`;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildCompetitorInfoHtml(
   c: Competitor,
   radius: number,
@@ -197,16 +208,30 @@ function buildCompetitorInfoHtml(
   const within = distM <= radius;
   const accent = within ? '#f59e0b' : '#71717a';
   const brand = c.brand_name || c.place_name || '경쟁점';
+  // 매장명 표시 — place_url 있으면 카카오맵 새 창 link, 없으면 plain text.
+  const nameHtml = c.place_url
+    ? `<a href="${escapeHtml(c.place_url)}" target="_blank" rel="noopener noreferrer" style="font-size:13px;font-weight:600;color:#60a5fa;text-decoration:underline;">${escapeHtml(brand)}</a>`
+    : `<span style="font-size:13px;font-weight:600;">${escapeHtml(brand)}</span>`;
+  // 매장 상세 라인 — 본 매장 place_name (브랜드와 다를 때) + 전화번호.
+  const placeNameLine =
+    c.place_name && c.place_name !== brand
+      ? `<div>매장: <span style="color:#f4f4f5;">${escapeHtml(c.place_name)}</span></div>`
+      : '';
+  const phoneLine = c.phone
+    ? `<div>전화: <a href="tel:${escapeHtml(c.phone)}" style="color:#60a5fa;text-decoration:none;">${escapeHtml(c.phone)}</a></div>`
+    : '';
   return `
     <div style="font-family:Pretendard,ui-sans-serif,system-ui;min-width:180px;padding:10px 12px;background:rgba(24,24,27,0.95);color:#e4e4e7;border:1px solid #3f3f46;border-radius:6px;backdrop-filter:blur(8px);">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
         <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${accent};"></span>
-        <span style="font-size:13px;font-weight:600;">${brand}</span>
+        ${nameHtml}
       </div>
       <div style="font-size:11px;color:#a1a1aa;line-height:1.6;">
+        ${placeNameLine}
         <div>거리: <span style="color:#f4f4f5;">${formatDistance(distM)}</span></div>
         <div>반경: <span style="color:${within ? '#fbbf24' : '#a1a1aa'};">${within ? '내부' : '외부'}</span></div>
         <div>일매출 추정: <span style="color:#f4f4f5;">${formatKrwWan(c.daily_revenue)}</span></div>
+        ${phoneLine}
       </div>
     </div>
   `;

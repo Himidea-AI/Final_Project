@@ -329,6 +329,8 @@ async def _collect_all_competitor_locations(
                             "distance_m": s.get("distance_m"),
                             "is_franchise": s.get("is_franchise", False),
                             "category": s.get("category", ""),
+                            "place_url": s.get("place_url"),
+                            "phone": s.get("phone"),
                             "source_dong": dong_name,
                         }
                     )
