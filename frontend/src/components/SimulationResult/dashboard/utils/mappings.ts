@@ -60,12 +60,41 @@ export function mapGender(raw: string | null | undefined): string {
   return raw; // 알 수 없는 값은 원본 유지 (데이터 디버깅 목적)
 }
 
-/** HHI 집중도 해석 (미 법무부/FTC 표준) */
+/**
+ * HHI 집중도 해석 — DOJ/FTC Horizontal Merger Guidelines (2010).
+ * 공식 임계값은 1500 / 2500. ≥ 2500 은 "Highly concentrated" (고집중) 가 정확한 표현이며
+ * 단일 기업 독점에 가까운 5000 이상에서만 통상 "독과점" 으로 칭한다.
+ */
 export function interpretHHI(hhi: number): { label: string; color: string } {
   if (hhi < 1500) return { label: '경쟁 시장', color: 'emerald' };
   if (hhi < 2500) return { label: '중간 집중', color: 'amber' };
+  if (hhi < 5000) return { label: '고집중', color: 'orange' };
   return { label: '독과점', color: 'rose' };
 }
+
+/**
+ * HHI 임계값 가시화용 — DOJ/FTC 2010 + 5000 추가 단계.
+ * 색상 4단계: 초록(경쟁) → 황(중간) → 주황(고집중) → 빨강(독과점).
+ */
+export const HHI_SEGMENTS = [
+  { label: '경쟁', max: 1500, color: 'emerald' },
+  { label: '중간', max: 2500, color: 'amber' },
+  { label: '고집중', max: 5000, color: 'orange' },
+  { label: '독과점', max: 10000, color: 'rose' },
+] as const;
+
+/**
+ * 반경 포화도 임계값 — backend commercial_intelligence._saturation_bucket 와 동일.
+ * 반경 500m 기준 동종업종 매장 수: sparse 0~2 / low 3~5 / medium 6~10 / high 11~20 / saturated 21+.
+ * 다른 반경은 면적비율 (radius/500)² 로 보정한 값에 적용.
+ */
+export const SATURATION_SEGMENTS = [
+  { label: '희박', max: 3, color: 'emerald' },
+  { label: '낮음', max: 6, color: 'lime' },
+  { label: '중간', max: 11, color: 'amber' },
+  { label: '높음', max: 21, color: 'orange' },
+  { label: '포화', max: 40, color: 'rose' },
+] as const;
 
 /** enum 안전 접근 — 키 없으면 fallback */
 export function safeMap<T extends Record<string, unknown>>(

@@ -13,12 +13,19 @@ import { IndicatorGrid } from '../../sections/IndicatorGrid';
 import { DistrictRankings } from '../../sections/DistrictRankings';
 import { AgentCard } from '../../shared/AgentCard';
 import { calcHHI, hhiToDiversity, formatScore, formatKrw } from '../utils/formatters';
-import { interpretHHI, SATURATION_MAP, safeMap } from '../utils/mappings';
+import {
+  interpretHHI,
+  SATURATION_MAP,
+  safeMap,
+  HHI_SEGMENTS,
+  SATURATION_SEGMENTS,
+} from '../utils/mappings';
 import { FlowVsRevenueScatter } from '../charts/FlowVsRevenueScatter';
 import { DifferentiationCard } from '../charts/DifferentiationCard';
 import { CannibalizationDistanceChart } from '../charts/CannibalizationDistanceChart';
 import { IndustryClosureTrendCard } from '../charts/IndustryClosureTrendCard';
 import { Sparkline } from '../charts/Sparkline';
+import { ThresholdBar } from '../charts/ThresholdBar';
 
 interface Props {
   simResult: SimulationOutput;
@@ -41,15 +48,18 @@ export function MarketTab({ simResult }: Props) {
   const winnerDistrict = simResult.winner_district || simResult.target_district;
 
   // 사이드바 핵심 지표
-  // - 동일업종 수: backend가 명시 count를 주면 우선 사용, 없으면 samples.length 폴백
+  // - 동일업종 수: total_competitors > count > samples.length 순. samples 는 top-20 cap 이라
+  //   true 매장 수와 다를 수 있어 명시 필드를 항상 우선.
   // - 평균 거리: samples 중 distance_m 유효값만 평균
   // - 경쟁/임대 인덱스: market_report 0~100 정규화 값
   const sameIndustryCount =
-    typeof ci?.competition_500m?.count === 'number'
-      ? ci.competition_500m.count
-      : samples.length > 0
-        ? samples.length
-        : null;
+    typeof ci?.competition_500m?.total_competitors === 'number'
+      ? ci.competition_500m.total_competitors
+      : typeof ci?.competition_500m?.count === 'number'
+        ? ci.competition_500m.count
+        : samples.length > 0
+          ? samples.length
+          : null;
   const distances = samples
     .map((s) => (typeof s.distance_m === 'number' ? s.distance_m : null))
     .filter((d): d is number => d != null);
@@ -194,47 +204,123 @@ export function MarketTab({ simResult }: Props) {
         </div>
       )}
 
-      {/* ═══ HHI 경쟁 집중도 카드 (실데이터 기반) ═══ */}
-      {samples.length > 0 && (
-        <div className="bg-card border border-border rounded-3xl p-6 grid grid-cols-3 gap-6">
-          <div className="text-left">
-            <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
-              HHI 집중도 지수
+      {/* ═══ 경쟁 집중도 / 다양성 / 포화도 — 4단 구조 (라벨 → 척도 → 수치 → 해석) ═══ */}
+      {/* Tailwind purge 안전: 동적 색 concat 금지 → 명시 매핑. */}
+      {samples.length > 0 &&
+        (() => {
+          const HHI_LABEL_TEXT: Record<string, string> = {
+            emerald: 'text-emerald-500',
+            amber: 'text-amber-500',
+            orange: 'text-orange-500',
+            rose: 'text-rose-500',
+          };
+          const hhiTextClass = HHI_LABEL_TEXT[hhiInfo.color] ?? 'text-foreground';
+          // 매장 총수 — total_competitors 우선, 없으면 count, 마지막으로 samples.length(top-20 cap).
+          // samples.length 만 쓰면 "20" 으로 잘못 보이므로 명시적으로 fallback 우선순위 둠.
+          const totalCount =
+            ci?.competition_500m?.total_competitors ??
+            ci?.competition_500m?.count ??
+            samples.length;
+          // saturation 임계값은 500m 기준 — 다른 반경이면 면적비율 보정 (backend 와 동일).
+          const radiusM = ci?.competition_500m?.radius_m ?? 500;
+          const areaRatio = (radiusM / 500) ** 2;
+          const scaledCount = areaRatio > 0 ? totalCount / areaRatio : totalCount;
+          const SAT_MAX = SATURATION_SEGMENTS[SATURATION_SEGMENTS.length - 1].max;
+          // 브랜드 분포 1위 점유율 — 다양성 카드 텍스트용.
+          const brandCounts: Record<string, number> = {};
+          samples.forEach((s) => {
+            const k = s.brand_name || '독립점';
+            brandCounts[k] = (brandCounts[k] || 0) + 1;
+          });
+          const topEntry = Object.entries(brandCounts).sort((a, b) => b[1] - a[1])[0] ?? null;
+          const topShare = topEntry ? (topEntry[1] / samples.length) * 100 : 0;
+          return (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              {/* ── 카드 1: HHI 집중도 ── */}
+              <div className="rounded-3xl border border-border bg-card p-6">
+                <div className="mb-1 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+                  시장 집중도 (HHI)
+                </div>
+                <div className={`text-xs font-bold ${hhiTextClass}`}>{hhiInfo.label}</div>
+                <div className="mt-4">
+                  <ThresholdBar
+                    value={Math.round(hhi)}
+                    max={10000}
+                    segments={HHI_SEGMENTS}
+                    sourceText="DOJ/FTC Horizontal Merger Guidelines (2010)"
+                  />
+                </div>
+                <div className="mt-3 border-t border-border pt-3">
+                  <div className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                    HHI 값
+                  </div>
+                  <div className="font-mono text-lg font-bold tabular-nums text-foreground">
+                    {Math.round(hhi).toLocaleString('ko-KR')}
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">/ 10,000</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── 카드 2: 시장 다양성 — HHI 의 inverse 임을 명시, 가로바 X (자의적 임계값 회피) ── */}
+              <div className="rounded-3xl border border-border bg-card p-6">
+                <div className="mb-1 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+                  브랜드 다양성
+                </div>
+                <div className="text-xs font-bold text-muted-foreground">
+                  HHI 의 보완 지표 (100 − HHI/100)
+                </div>
+                <div className="mt-4 flex items-baseline gap-2">
+                  <div className="font-mono text-3xl font-black tabular-nums tracking-tighter text-foreground">
+                    {diversity.toFixed(1)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">/ 100</div>
+                </div>
+                <div className="mt-3 border-t border-border pt-3 text-xs leading-relaxed text-muted-foreground">
+                  {topEntry ? (
+                    <>
+                      반경 내 매장의{' '}
+                      <span className="font-bold text-foreground">{topShare.toFixed(0)}%</span> 가{' '}
+                      <span className="font-bold text-foreground">&lsquo;{topEntry[0]}&rsquo;</span>
+                      , 나머지{' '}
+                      <span className="font-bold text-foreground">
+                        {(100 - topShare).toFixed(0)}%
+                      </span>{' '}
+                      는 분산
+                    </>
+                  ) : (
+                    '브랜드 분포 데이터 없음'
+                  )}
+                </div>
+              </div>
+
+              {/* ── 카드 3: 반경 포화도 — backend 산식 임계값 명시 ── */}
+              <div className="rounded-3xl border border-border bg-card p-6">
+                <div className="mb-1 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+                  반경 포화도
+                </div>
+                <div className="text-xs font-bold text-foreground">{saturationLabel}</div>
+                <div className="mt-4">
+                  <ThresholdBar
+                    value={Math.min(scaledCount, SAT_MAX)}
+                    max={SAT_MAX}
+                    segments={SATURATION_SEGMENTS}
+                    valueFormat={(v) => `${Math.round(v)}개`}
+                    sourceText={`반경 500m 환산 매장 수 기준 (실측 ${Math.round(totalCount)}개${radiusM === 500 ? '' : `, 반경 ${radiusM}m`})`}
+                  />
+                </div>
+                <div className="mt-3 border-t border-border pt-3">
+                  <div className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                    반경 {radiusM}m 내 동종 매장
+                  </div>
+                  <div className="font-mono text-lg font-bold tabular-nums text-foreground">
+                    {totalCount.toLocaleString('ko-KR')}
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">개</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
-              {Math.round(hhi).toLocaleString('ko-KR')}
-            </div>
-            <div className={`text-xs font-bold mt-1 text-${hhiInfo.color}-400`}>
-              {hhiInfo.label}
-            </div>
-          </div>
-          <div className="text-left">
-            <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
-              시장 다양성 지수
-            </div>
-            <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
-              {diversity.toFixed(1)}%
-            </div>
-            <div className="w-full bg-card h-1 rounded-full overflow-hidden mt-2">
-              <div
-                className="bg-primary h-full transition-all"
-                style={{ width: `${diversity}%` }}
-              />
-            </div>
-          </div>
-          <div className="text-left">
-            <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
-              반경 포화도
-            </div>
-            <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
-              {saturationLabel}
-            </div>
-            <div className="text-xs font-bold text-muted-foreground mt-1">
-              500m 내 {samples.length}개 매장 분석
-            </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
     </div>
   );
 }
