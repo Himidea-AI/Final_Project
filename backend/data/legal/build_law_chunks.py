@@ -55,6 +55,14 @@ PRECEDENT_SPLIT_OVERLAP = 100
 # 조문 시작 정규식 — parse_pdfs.split_by_article 와 동일 패턴
 _ARTICLE_PATTERN = re.compile(r"(?=제\d+조(?:의\d+)?[\s(])")
 _ARTICLE_NUM = re.compile(r"(제\d+조(?:의\d+)?)")
+# 본문 내 조문 참조 fragment 필터 — parse_pdfs.split_by_article 와 동일 휴리스틱.
+# 직전 part 가 연결 어미로 끝나고 현재 part 의 헤더가 (제목) 또는 공백 2+ 형태가 아니면 fragment.
+_IN_TEXT_REF_TAIL = re.compile(
+    r"(?:,\s*|및\s*|또는\s*|에\s*따라\s*|에\s*따른\s*|에\s*해당하는\s*|"
+    r"부터\s*|까지\s*|이내에서\s*|위반한\s*자는\s*)$"
+)
+_ARTICLE_HEADER_HEAD = re.compile(r"^(제\d+조(?:의\d+)?)(?:\([^)]*\)|\s+\S+\s*\s+\S+|$)")
+_IN_TEXT_HEAD = re.compile(r"^제\d+조(?:의\d+)?\s*(?:본문|단서|또는|및|,|에서|제\d+항|또는\s+제)")
 
 LEGISLATION_CATEGORY = "법령_본문"
 PRECEDENT_CATEGORY = "판례"
@@ -98,6 +106,7 @@ def _build_legislation_chunks(rows: list[tuple[str, str, str, str]]) -> list[dic
             continue
 
         parts = _ARTICLE_PATTERN.split(body)
+        prev_part = ""
         for part in parts:
             part = (part or "").strip()
             if not part:
@@ -105,6 +114,21 @@ def _build_legislation_chunks(rows: list[tuple[str, str, str, str]]) -> list[dic
 
             article_match = _ARTICLE_NUM.match(part)
             article_num = article_match.group(1) if article_match else "미분류"
+
+            # 본문 내 참조 fragment 감지 — 두 신호 중 하나라도 강하면 fragment 로 보고 새 chunk
+            # 생성을 스킵. (1) prev_part 가 연결 어미로 끝남 + 현재 헤더가 진짜 헤더 형태 아님.
+            # (2) 현재 part 가 "제N조 본문/단서/또는/및/," 등 참조 시그니처로 시작.
+            if article_num != "미분류":
+                head_real = bool(_ARTICLE_HEADER_HEAD.match(part))
+                head_ref_frag = bool(_IN_TEXT_HEAD.match(part))
+                if head_ref_frag:
+                    prev_part = prev_part + " " + part
+                    continue
+                if prev_part and _IN_TEXT_REF_TAIL.search(prev_part) and not head_real:
+                    prev_part = prev_part + " " + part
+                    continue
+
+            prev_part = part
 
             if len(part) <= MAX_CHUNK_LEN:
                 chunk = parse_pdfs._make_chunk(part, LEGISLATION_CATEGORY, article_num, source)

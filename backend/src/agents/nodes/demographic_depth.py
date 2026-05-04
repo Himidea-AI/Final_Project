@@ -220,7 +220,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
                 verdict=f"주 소비층 {_age} {_gender} ({_share_pct}%)",
                 reasoning=(_cached_report.get("narrative", "") if isinstance(_cached_report, dict) else "")
                 or "소비자 심층 분석 (캐시)",
-                confidence=0.8,
+                confidence=0.85,
             )
             analysis["demographic_depth_result"] = {"agent_attribution": cached_demo_attr}
             return {
@@ -424,7 +424,7 @@ async def demographic_depth_node(state: AgentState) -> dict:
         reasoning=str(analysis_out.narrative)
         if analysis_out and analysis_out.narrative
         else "소비자 심층 분석 데이터 기반",
-        confidence=0.8,
+        confidence=0.85,
     )
     analysis_results["demographic_depth_result"] = {"agent_attribution": demo_attr}
 

@@ -141,7 +141,12 @@ def _load_dong_coords() -> dict[str, tuple[float, float]]:
     load_dotenv()
     out: dict[str, tuple[float, float]] = {}
     try:
-        e = create_engine(os.environ["POSTGRES_URL"], isolation_level="AUTOCOMMIT")
+        e = create_engine(
+            os.environ["POSTGRES_URL"],
+            isolation_level="AUTOCOMMIT",
+            pool_pre_ping=True,
+            pool_recycle=1800,
+        )
         with e.connect() as c:
             rows = c.execute(text("SELECT dong_name, center_lat, center_lon FROM dong_subway_access")).fetchall()
         out = {r[0]: (float(r[1]), float(r[2])) for r in rows if r[1] and r[2]}
@@ -161,7 +166,12 @@ def _load_weather_recent() -> dict:
 
     load_dotenv()
     try:
-        e = create_engine(os.environ["POSTGRES_URL"], isolation_level="AUTOCOMMIT")
+        e = create_engine(
+            os.environ["POSTGRES_URL"],
+            isolation_level="AUTOCOMMIT",
+            pool_pre_ping=True,
+            pool_recycle=1800,
+        )
         with e.connect() as c:
             row = (
                 c.execute(
@@ -206,7 +216,12 @@ def _load_holidays() -> dict[str, dict]:
     load_dotenv()
     out: dict[str, dict] = {}
     try:
-        e = create_engine(os.environ["POSTGRES_URL"], isolation_level="AUTOCOMMIT")
+        e = create_engine(
+            os.environ["POSTGRES_URL"],
+            isolation_level="AUTOCOMMIT",
+            pool_pre_ping=True,
+            pool_recycle=1800,
+        )
         with e.connect() as c:
             rows = c.execute(
                 text("SELECT date, is_weekend, is_holiday, holiday_name FROM holiday_calendar WHERE year >= 2025")

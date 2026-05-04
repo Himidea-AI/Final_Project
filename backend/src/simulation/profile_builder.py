@@ -134,9 +134,13 @@ def _lifestyle_tag(age: int, gender: str, dong: str, role: Role) -> str:
 # ---------------------------------------------------------------
 class ProfileBuilder:
     def __init__(self, db_url: str | None = None, seed: int = 42):
+        # pool_pre_ping=True — stale connection (RDS idle timeout / network blip) 자동 검출 + reconnect.
+        # pool_recycle 1800 — 30분 마다 connection 강제 재생 (idle close 보호).
         self.engine = create_engine(
             db_url or os.environ["POSTGRES_URL"],
             isolation_level="AUTOCOMMIT",
+            pool_pre_ping=True,
+            pool_recycle=1800,
         )
         self.rng = random.Random(seed)
         self._cache: dict[str, dict] = {}

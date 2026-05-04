@@ -261,7 +261,7 @@ def load_world_from_rds(
     """RDS의 카카오 점포 + 메뉴 + 매출/감성 보정으로 World 구성."""
     load_dotenv()
     db_url = db_url or os.environ["POSTGRES_URL"]
-    engine = create_engine(db_url, echo=False)
+    engine = create_engine(db_url, echo=False, pool_pre_ping=True, pool_recycle=1800)
 
     sql = text("""
         SELECT k.kakao_id, k.place_name, k.brand_name, k.category,

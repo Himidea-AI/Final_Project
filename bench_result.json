@@ -1,113 +1,153 @@
 {
   "rag_metrics": {
     "k": 10,
-    "mean_recall@k": 0.2701,
-    "mean_precision@k": 0.0955,
-    "mean_mrr": 0.1204,
-    "mean_ndcg@k": 0.1473,
-    "hit@k_count": 12,
+    "mean_recall@k": 0.6983,
+    "mean_precision@k": 0.1878,
+    "mean_mrr": 0.5526,
+    "mean_ndcg@k": 0.5169,
+    "hit@k_count": 29,
     "hit@k_total": 29,
-    "hit@k_rate": 0.4138
+    "hit@k_rate": 1.0
   },
   "f1_score": {
-    "micro_precision": 0.0854,
-    "micro_recall": 0.2698,
-    "micro_f1": 0.1298,
-    "macro_f1": 0.1347,
+    "micro_precision": 0.1835,
+    "micro_recall": 0.6986,
+    "micro_f1": 0.2906,
+    "macro_f1": 0.2918,
     "per_query": [
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "precision": 0.167,
-        "recall": 0.333,
-        "f1": 0.222,
-        "tp": 1,
-        "fp": 5,
-        "fn": 2
-      },
-      {
-        "law": "가맹사업법",
-        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
-        "precision": 0.4,
+        "precision": 0.222,
         "recall": 0.667,
-        "f1": 0.5,
+        "f1": 0.333,
         "tp": 2,
-        "fp": 3,
+        "fp": 7,
         "fn": 1
       },
       {
         "law": "가맹사업법",
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "precision": 0.429,
+        "recall": 1.0,
+        "f1": 0.6,
+        "tp": 3,
+        "fp": 4,
+        "fn": 0
+      },
+      {
+        "law": "가맹사업법",
         "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
-        "precision": 0.5,
+        "precision": 0.25,
         "recall": 0.667,
-        "f1": 0.571,
+        "f1": 0.364,
         "tp": 2,
-        "fp": 2,
+        "fp": 6,
         "fn": 1
       },
       {
         "law": "상가임대차보호법",
         "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "precision": 0.25,
+        "precision": 0.222,
         "recall": 1.0,
-        "f1": 0.4,
+        "f1": 0.364,
         "tp": 2,
-        "fp": 6,
+        "fp": 7,
         "fn": 0
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
-        "precision": 0.2,
-        "recall": 0.333,
-        "f1": 0.25,
-        "tp": 1,
-        "fp": 4,
-        "fn": 2
+        "precision": 0.3,
+        "recall": 1.0,
+        "f1": 0.462,
+        "tp": 3,
+        "fp": 7,
+        "fn": 0
       },
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 7,
-        "fn": 3
+        "precision": 0.2,
+        "recall": 0.667,
+        "f1": 0.308,
+        "tp": 2,
+        "fp": 8,
+        "fn": 1
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 4,
-        "fn": 2
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.167,
+        "tp": 1,
+        "fp": 9,
+        "fn": 1
       },
       {
         "law": "식품위생법",
         "query": "위생교육 식품접객업 의무 식품위생법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 5,
-        "fn": 2
+        "precision": 0.25,
+        "recall": 0.667,
+        "f1": 0.364,
+        "tp": 2,
+        "fp": 6,
+        "fn": 1
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "precision": 0.167,
+        "precision": 0.1,
         "recall": 0.5,
-        "f1": 0.25,
+        "f1": 0.167,
         "tp": 1,
-        "fp": 5,
+        "fp": 9,
         "fn": 1
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.167,
+        "tp": 1,
+        "fp": 9,
+        "fn": 1
+      },
+      {
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.167,
+        "tp": 1,
+        "fp": 9,
+        "fn": 1
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.167,
+        "tp": 1,
+        "fp": 9,
+        "fn": 1
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "precision": 0.1,
+        "recall": 0.333,
+        "f1": 0.154,
+        "tp": 1,
+        "fp": 9,
+        "fn": 2
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 자체점검 정기점검 소방시설법",
         "precision": 0.25,
         "recall": 1.0,
         "f1": 0.4,
@@ -116,1300 +156,1757 @@
         "fn": 0
       },
       {
-        "law": "건축법",
-        "query": "건축허가 건축신고 절차 건축법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 4,
-        "fn": 2
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방시설 설치 의무 기준 소방시설법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 5,
-        "fn": 2
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 6,
-        "fn": 2
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방시설 자체점검 정기점검 소방시설법",
-        "precision": 0.333,
-        "recall": 1.0,
-        "f1": 0.5,
-        "tp": 2,
-        "fp": 4,
-        "fn": 0
-      },
-      {
         "law": "근로기준법",
         "query": "근로계약서 서면 명시 의무 근로기준법",
-        "precision": 0.125,
+        "precision": 0.1,
         "recall": 0.5,
-        "f1": 0.2,
+        "f1": 0.167,
         "tp": 1,
-        "fp": 7,
+        "fp": 9,
         "fn": 1
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "precision": 0.2,
+        "recall": 0.667,
+        "f1": 0.308,
+        "tp": 2,
         "fp": 8,
-        "fn": 2
+        "fn": 1
       },
       {
         "law": "근로기준법",
         "query": "근로시간 휴게 휴일 연장근로 근로기준법",
-        "precision": 0.125,
+        "precision": 0.1,
         "recall": 0.333,
-        "f1": 0.182,
+        "f1": 0.154,
         "tp": 1,
-        "fp": 7,
+        "fp": 9,
         "fn": 2
       },
       {
         "law": "부가가치세법",
         "query": "사업자등록 신청 절차 부가가치세법",
-        "precision": 0.143,
-        "recall": 1.0,
-        "f1": 0.25,
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.167,
         "tp": 1,
+        "fp": 9,
+        "fn": 1
+      },
+      {
+        "law": "부가가치세법",
+        "query": "세금계산서 발급 의무 부가가치세법",
+        "precision": 0.4,
+        "recall": 1.0,
+        "f1": 0.571,
+        "tp": 4,
         "fp": 6,
         "fn": 0
       },
       {
         "law": "부가가치세법",
-        "query": "세금계산서 발급 의무 부가가치세법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 7,
-        "fn": 2
-      },
-      {
-        "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
+        "precision": 0.3,
+        "recall": 0.75,
+        "f1": 0.429,
+        "tp": 3,
         "fp": 7,
-        "fn": 2
+        "fn": 1
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 7,
-        "fn": 2
+        "precision": 0.2,
+        "recall": 1.0,
+        "f1": 0.333,
+        "tp": 2,
+        "fp": 8,
+        "fn": 0
       },
       {
         "law": "개인정보보호법",
         "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 9,
-        "fn": 2
+        "precision": 0.222,
+        "recall": 1.0,
+        "f1": 0.364,
+        "tp": 2,
+        "fp": 7,
+        "fn": 0
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "precision": 0.111,
+        "precision": 0.1,
         "recall": 0.5,
-        "f1": 0.182,
+        "f1": 0.167,
         "tp": 1,
-        "fp": 8,
+        "fp": 9,
         "fn": 1
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 10,
-        "fn": 2
+        "precision": 0.2,
+        "recall": 1.0,
+        "f1": 0.333,
+        "tp": 2,
+        "fp": 8,
+        "fn": 0
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 10,
-        "fn": 2
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.167,
+        "tp": 1,
+        "fp": 9,
+        "fn": 1
       },
       {
         "law": "하수도법",
         "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 9,
+        "precision": 0.2,
+        "recall": 0.5,
+        "f1": 0.286,
+        "tp": 2,
+        "fp": 8,
         "fn": 2
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 5,
-        "fn": 2
+        "precision": 0.2,
+        "recall": 1.0,
+        "f1": 0.333,
+        "tp": 2,
+        "fp": 8,
+        "fn": 0
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
+        "precision": 0.2,
+        "recall": 1.0,
+        "f1": 0.333,
+        "tp": 2,
         "fp": 8,
-        "fn": 2
+        "fn": 0
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 8,
-        "fn": 2
+        "precision": 0.1,
+        "recall": 0.5,
+        "f1": 0.167,
+        "tp": 1,
+        "fp": 9,
+        "fn": 1
       }
     ]
   },
   "exact_match": {
-    "hit": 17,
-    "total": 63,
-    "accuracy_pct": 27.0
+    "hit": 51,
+    "total": 73,
+    "accuracy_pct": 69.9
   },
   "llm_judge": {
-    "exact_hit": 17,
-    "llm_relevant": 130,
-    "llm_not_relevant": 52,
-    "total_returned": 199,
-    "relevance_pct": 73.9,
+    "exact_hit": 51,
+    "llm_relevant": 0,
+    "llm_not_relevant": 0,
+    "total_returned": 278,
+    "relevance_pct": 18.3,
     "details": [
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "article": "제1조",
-        "relevant": false
-      },
-      {
-        "law": "가맹사업법",
-        "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
         "article": "제12조의3",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "article": "제14조의3",
-        "relevant": true
+        "article": "제6조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
+        "article": "제1조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
         "article": "제12조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "article": "제3조",
-        "relevant": false
+        "article": "제11조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
-        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
-        "article": "제5조의2",
-        "relevant": true
+        "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
+        "article": "제10조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
-        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
-        "article": "제5조",
-        "relevant": true
+        "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
+        "article": "제2조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
         "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
         "article": "제6조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "article": "제16조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "article": "제6조의5",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "article": "제6조의4",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
         "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
-        "article": "제5조의10",
-        "relevant": false
+        "article": "제9조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "가맹사업법",
         "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
-        "article": "제5조의9",
-        "relevant": true
+        "article": "제11조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
+        "article": "제7조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
+        "article": "제8조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
+        "article": "제31조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "가맹사업법",
+        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
+        "article": "제12조의5",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "권리금 회수 기회 보호 상가임대차보호법",
         "article": "제3조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "article": "제10조의3",
-        "relevant": true
+        "article": "제10조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "article": "제1조",
-        "relevant": false
-      },
-      {
-        "law": "상가임대차보호법",
-        "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "article": "제4조",
-        "relevant": true
-      },
-      {
-        "law": "상가임대차보호법",
-        "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "article": "2018다284226",
-        "relevant": false
+        "article": "제9조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "권리금 회수 기회 보호 상가임대차보호법",
         "article": "제18조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "권리금 회수 기회 보호 상가임대차보호법",
+        "article": "제10조의3",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "권리금 회수 기회 보호 상가임대차보호법",
+        "article": "제5조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "권리금 회수 기회 보호 상가임대차보호법",
+        "article": "제19조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
         "article": "제10조의9",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "계약갱신요구권 임대차 기간 상가건물",
+        "article": "제11조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
         "article": "제10조의3",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
-        "article": "제2조",
-        "relevant": true
+        "article": "제19조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "계약갱신요구권 임대차 기간 상가건물",
+        "article": "제14조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "계약갱신요구권 임대차 기간 상가건물",
+        "article": "제20조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
         "article": "제3조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
-        "article": "제5조",
-        "relevant": true
+        "article": "제10조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
-        "article": "제11조의2",
-        "relevant": true
+        "article": "제10조의9",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
-        "article": "제1조",
-        "relevant": false
-      },
-      {
-        "law": "상가임대차보호법",
-        "query": "환산보증금 차임 증감청구 보증금 보호",
-        "article": "제4조",
-        "relevant": true
-      },
-      {
-        "law": "상가임대차보호법",
-        "query": "환산보증금 차임 증감청구 보증금 보호",
-        "article": "제10조의3",
-        "relevant": true
+        "article": "제9조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
         "article": "제13조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
-        "article": "제6조",
-        "relevant": true
+        "article": "제5조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "환산보증금 차임 증감청구 보증금 보호",
+        "article": "제18조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "환산보증금 차임 증감청구 보증금 보호",
+        "article": "제19조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "환산보증금 차임 증감청구 보증금 보호",
+        "article": "제10조의3",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "제38조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "제40조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "제8조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "slide",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
         "article": "2008도6829",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
-        "article": "slide",
-        "relevant": false
+        "article": "2018노3811",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
         "article": "2011도6561",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
-        "article": "제47조의2",
-        "relevant": true
+        "article": "2008노740",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "2012두18882",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "위생교육 식품접객업 의무 식품위생법",
-        "article": "제40조",
-        "relevant": true
+        "article": "제32조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "위생교육 식품접객업 의무 식품위생법",
+        "article": "제47조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "위생교육 식품접객업 의무 식품위생법",
+        "article": "제19조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "위생교육 식품접객업 의무 식품위생법",
+        "article": "제47조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "위생교육 식품접객업 의무 식품위생법",
         "article": "slide",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "위생교육 식품접객업 의무 식품위생법",
-        "article": "제51조",
-        "relevant": true
-      },
-      {
-        "law": "식품위생법",
-        "query": "위생교육 식품접객업 의무 식품위생법",
-        "article": "2020도13815",
-        "relevant": false
-      },
-      {
-        "law": "식품위생법",
-        "query": "위생교육 식품접객업 의무 식품위생법",
-        "article": "제50조",
-        "relevant": true
+        "article": "제21조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "article": "slide",
-        "relevant": false
+        "article": "제47조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "제35조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
         "article": "제57조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "article": "2011도6561",
-        "relevant": false
+        "article": "제8조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "article": "제21조",
-        "relevant": true
+        "article": "제37조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "article": "제2조",
-        "relevant": false
+        "article": "제36조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
-        "law": "건축법",
-        "query": "건축물 용도변경 근린생활시설 건축법",
-        "article": "제18조",
-        "relevant": true
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "제40조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "slide",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "2004두9302",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
         "article": "제1조",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축물 용도변경 근린생활시설 건축법",
+        "article": "제18조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축물 용도변경 근린생활시설 건축법",
+        "article": "제49조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축물 용도변경 근린생활시설 건축법",
+        "article": "제7조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축물 용도변경 근린생활시설 건축법",
+        "article": "제8조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
         "article": "제13조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
-        "article": "제33조",
-        "relevant": true
+        "article": "제4조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
         "article": "제60조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
-        "article": "제74조",
-        "relevant": true
+        "article": "제55조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "article": "제77조의16",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "article": "제9조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "article": "제29조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
         "article": "제2조",
-        "relevant": false
-      },
-      {
-        "law": "건축법",
-        "query": "건축허가 건축신고 절차 건축법",
-        "article": "제3조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
         "article": "제5조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
-        "article": "제20조",
-        "relevant": true
+        "article": "제10조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
-        "law": "소방시설법",
-        "query": "소방시설 설치 의무 기준 소방시설법",
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "article": "제13조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
         "article": "제1조",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
-        "law": "소방시설법",
-        "query": "소방시설 설치 의무 기준 소방시설법",
-        "article": "제11조",
-        "relevant": true
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방시설 설치 의무 기준 소방시설법",
-        "article": "제3조",
-        "relevant": true
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방시설 설치 의무 기준 소방시설법",
-        "article": "제9조",
-        "relevant": true
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "article": "제4조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "소방시설법",
         "query": "소방시설 설치 의무 기준 소방시설법",
         "article": "제7조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "article": "제19조",
-        "relevant": true
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "article": "제22조",
-        "relevant": true
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
         "article": "제1조",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "article": "제6조",
-        "relevant": true
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
         "article": "제11조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제14조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제14조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제28조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제9조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
         "article": "제5조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제20조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제6조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제1조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제24조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제28조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제32조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제4조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제14조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제33조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
+        "article": "제5조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "소방시설법",
         "query": "소방시설 자체점검 정기점검 소방시설법",
         "article": "제21조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 자체점검 정기점검 소방시설법",
+        "article": "제32조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "소방시설법",
         "query": "소방시설 자체점검 정기점검 소방시설법",
         "article": "제4조",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 자체점검 정기점검 소방시설법",
+        "article": "제20조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 자체점검 정기점검 소방시설법",
+        "article": "제14조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "소방시설법",
         "query": "소방시설 자체점검 정기점검 소방시설법",
         "article": "제25조",
-        "relevant": true
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방시설 자체점검 정기점검 소방시설법",
-        "article": "제19조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제51조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제20조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제11조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제1조",
-        "relevant": false
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제18조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제60조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
         "query": "근로계약서 서면 명시 의무 근로기준법",
         "article": "제16조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제69조",
-        "relevant": true
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제103조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제33조",
-        "relevant": true
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제57조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제26조",
-        "relevant": true
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제66조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제1조",
-        "relevant": false
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제8조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제60조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제63조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제18조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로계약서 서면 명시 의무 근로기준법",
         "article": "제9조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제4조",
-        "relevant": true
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제55조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제2조",
-        "relevant": false
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제51조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
         "article": "제5조의2",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제1조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제3조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제57조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제16조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제70조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
         "query": "근로시간 휴게 휴일 연장근로 근로기준법",
         "article": "제53조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제56조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제59조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제51조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
         "query": "근로시간 휴게 휴일 연장근로 근로기준법",
         "article": "제69조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제70조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제57조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제49조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "근로기준법",
         "query": "근로시간 휴게 휴일 연장근로 근로기준법",
         "article": "제58조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
-        "article": "제8조의2",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
-        "article": "제51조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
-        "article": "제6조",
-        "relevant": true
-      },
-      {
-        "law": "근로기준법",
-        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
-        "article": "제52조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제10조",
-        "relevant": false
+        "article": "제31조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "사업자등록 신청 절차 부가가치세법",
+        "article": "제1조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "사업자등록 신청 절차 부가가치세법",
+        "article": "제10조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "사업자등록 신청 절차 부가가치세법",
+        "article": "제66조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "사업자등록 신청 절차 부가가치세법",
+        "article": "제50조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "사업자등록 신청 절차 부가가치세법",
+        "article": "제106조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "사업자등록 신청 절차 부가가치세법",
+        "article": "제50조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "사업자등록 신청 절차 부가가치세법",
+        "article": "제72조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "사업자등록 신청 절차 부가가치세법",
         "article": "제63조의2",
-        "relevant": false
-      },
-      {
-        "law": "부가가치세법",
-        "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제168조",
-        "relevant": false
-      },
-      {
-        "law": "부가가치세법",
-        "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제14조",
-        "relevant": false
-      },
-      {
-        "law": "부가가치세법",
-        "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제7조",
-        "relevant": false
-      },
-      {
-        "law": "부가가치세법",
-        "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제96조",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제31조",
-        "relevant": true
-      },
-      {
-        "law": "부가가치세법",
-        "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제67조",
-        "relevant": true
-      },
-      {
-        "law": "부가가치세법",
-        "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제90조",
-        "relevant": true
-      },
-      {
-        "law": "부가가치세법",
-        "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제10조의4",
-        "relevant": false
+        "article": "제9조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
         "article": "제34조의2",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제71조의2",
-        "relevant": true
+        "article": "제59조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
         "article": "제106조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "세금계산서 발급 의무 부가가치세법",
+        "article": "제15조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "부가가치세법",
+        "query": "세금계산서 발급 의무 부가가치세법",
+        "article": "제71조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제60조",
-        "relevant": true
+        "article": "제68조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제115조",
-        "relevant": false
+        "article": "제1조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제110조",
-        "relevant": true
+        "article": "제67조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제68조",
-        "relevant": true
+        "article": "제69조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
         "article": "제15조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제1조",
-        "relevant": false
+        "article": "제7조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제6조",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
-        "article": "제1조",
-        "relevant": false
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
-        "article": "제3조",
-        "relevant": true
+        "article": "제66조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
         "article": "제14조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
+        "article": "제18조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
         "article": "제21조",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
-        "article": "제35조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
         "article": "제17조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
+        "article": "제2조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
+        "article": "제22조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
+        "article": "제19조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
         "article": "제36조",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "article": "제35조",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "article": "제57조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
         "article": "제24조의2",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "article": "제27조의3",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "article": "제71조",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "article": "제28조의3",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
         "article": "제11조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "article": "제3조",
-        "relevant": false
+        "article": "제71조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "article": "제23조",
-        "relevant": true
+        "article": "제27조의3",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
-        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제3조",
-        "relevant": false
+        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
+        "article": "제28조의3",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
-        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제2조",
-        "relevant": false
+        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
+        "article": "제24조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
-        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제21조",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제34조의2",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제36조",
-        "relevant": true
-      },
-      {
-        "law": "개인정보보호법",
-        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제16조",
-        "relevant": true
+        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
+        "article": "제57조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
         "article": "제29조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제28조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
         "article": "제30조의2",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제21조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제2조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제24조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제36조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제37조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제22조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제4조",
-        "relevant": true
+        "article": "제6조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제3조",
-        "relevant": true
-      },
-      {
-        "law": "장애인편의법",
-        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제1조",
-        "relevant": false
-      },
-      {
-        "law": "장애인편의법",
-        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제18조",
-        "relevant": true
+        "article": "제2조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
         "article": "제86조의2",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제3조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
         "article": "제46조",
-        "relevant": true
-      },
-      {
-        "law": "장애인편의법",
-        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제91조",
-        "relevant": false
-      },
-      {
-        "law": "장애인편의법",
-        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제15조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
         "article": "제9조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제91조의2",
-        "relevant": false
+        "article": "제16조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제11조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제5조",
-        "relevant": true
+        "article": "제86조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제8조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제6조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
         "article": "제2조",
-        "relevant": false
-      },
-      {
-        "law": "장애인편의법",
-        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제95조",
-        "relevant": false
-      },
-      {
-        "law": "장애인편의법",
-        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제87조",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
         "article": "제3조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제39조",
-        "relevant": true
+        "article": "제9조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제53조",
-        "relevant": true
-      },
-      {
-        "law": "장애인편의법",
-        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제86조의2",
-        "relevant": false
-      },
-      {
-        "law": "장애인편의법",
-        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제91조",
-        "relevant": false
+        "article": "제14조의2",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
         "article": "제46조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제7조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제1조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제27조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제28조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제7조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제31조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제26조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제29조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "하수도법",
         "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
         "article": "제35조",
-        "relevant": true
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제46조",
-        "relevant": true
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제19조의3",
-        "relevant": true
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제11조의5",
-        "relevant": true
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제60조",
-        "relevant": false
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제6조",
-        "relevant": true
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제3조",
-        "relevant": false
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제87조",
-        "relevant": false
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제91조의2",
-        "relevant": false
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제68조",
-        "relevant": true
+        "article": "제26조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제11조의5",
-        "relevant": true
+        "article": "제29조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제5조",
-        "relevant": true
+        "article": "제33조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제86조의2",
-        "relevant": true
+        "article": "제7조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제3조",
-        "relevant": true
+        "article": "제1조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
-        "law": "공정거래법",
-        "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제12조",
-        "relevant": true
+        "law": "하수도법",
+        "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
+        "article": "제31조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
-        "law": "공정거래법",
-        "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제32조의3",
-        "relevant": true
+        "law": "하수도법",
+        "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
+        "article": "제22조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
-        "law": "공정거래법",
-        "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제99조",
-        "relevant": false
-      },
-      {
-        "law": "공정거래법",
-        "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제83조",
-        "relevant": true
+        "law": "하수도법",
+        "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
+        "article": "제14조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
         "article": "제44조",
-        "relevant": true
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제53조의2",
-        "relevant": true
+        "article": "제54조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제12조의4",
-        "relevant": true
+        "article": "제38조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제34조의3",
-        "relevant": true
+        "article": "제48조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "공정거래법",
+        "query": "불공정거래행위 금지 거래강제 공정거래법",
+        "article": "제3조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "공정거래법",
+        "query": "불공정거래행위 금지 거래강제 공정거래법",
+        "article": "제4조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "공정거래법",
+        "query": "불공정거래행위 금지 거래강제 공정거래법",
+        "article": "제76조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "공정거래법",
+        "query": "불공정거래행위 금지 거래강제 공정거래법",
+        "article": "제84조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제12조",
-        "relevant": true
+        "article": "제44조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제14조의2",
-        "relevant": true
+        "article": "제39조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "2015두59686",
-        "relevant": false
+        "article": "제38조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제35조",
-        "relevant": true
+        "article": "제6조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "2022두64808",
-        "relevant": false
+        "article": "제40조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제34조의4",
-        "relevant": true
+        "article": "제54조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제9조",
-        "relevant": true
+        "article": "제25조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제12조의5",
-        "relevant": true
+        "article": "제50조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
+      },
+      {
+        "law": "공정거래법",
+        "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
+        "article": "제41조",
+        "relevant": null,
+        "error": "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-inval*************-401. You can find your API ke"
       }
     ]
   },
@@ -1423,23 +1920,26 @@
         "제14조"
       ],
       "returned": [
-        "제1조",
         "제12조의3",
-        "제14조의3",
+        "제6조",
+        "제12조의4",
+        "제1조",
         "제12조",
-        "제3조",
-        "제12조의4"
+        "제11조의2",
+        "제10조",
+        "제14조",
+        "제2조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 3,
-      "time_ms": 65356,
+      "time_ms": 75264,
       "metrics": {
-        "recall@k": 0.3333,
-        "precision@k": 0.1667,
+        "recall@k": 0.6667,
+        "precision@k": 0.2222,
         "hit@k": 1,
-        "mrr": 0.1667,
-        "ndcg@k": 0.1672,
-        "f1@k": 0.2222
+        "mrr": 0.3333,
+        "ndcg@k": 0.3827,
+        "f1@k": 0.3333
       }
     },
     {
@@ -1451,22 +1951,24 @@
         "제7조"
       ],
       "returned": [
-        "제5조의2",
-        "제5조",
-        "제7조",
         "제6조",
-        "제6조의2"
+        "제16조의2",
+        "제6조의5",
+        "제6조의4",
+        "제6조의2",
+        "제6조의3",
+        "제7조"
       ],
-      "hits": 2,
+      "hits": 3,
       "total": 3,
-      "time_ms": 3591,
+      "time_ms": 413,
       "metrics": {
-        "recall@k": 0.6667,
-        "precision@k": 0.4,
+        "recall@k": 1.0,
+        "precision@k": 0.4286,
         "hit@k": 1,
-        "mrr": 0.3333,
-        "ndcg@k": 0.4162,
-        "f1@k": 0.5
+        "mrr": 0.2,
+        "ndcg@k": 0.5051,
+        "f1@k": 0.6
       }
     },
     {
@@ -1478,21 +1980,25 @@
         "제15조의2"
       ],
       "returned": [
-        "제5조의10",
-        "제5조의9",
         "제15조의2",
-        "제10조"
+        "제10조",
+        "제9조",
+        "제11조",
+        "제7조",
+        "제8조",
+        "제31조",
+        "제12조의5"
       ],
       "hits": 2,
       "total": 3,
-      "time_ms": 3699,
+      "time_ms": 331,
       "metrics": {
         "recall@k": 0.6667,
-        "precision@k": 0.5,
+        "precision@k": 0.25,
         "hit@k": 1,
-        "mrr": 0.3333,
-        "ndcg@k": 0.4367,
-        "f1@k": 0.5714
+        "mrr": 1.0,
+        "ndcg@k": 0.7654,
+        "f1@k": 0.3636
       }
     },
     {
@@ -1503,25 +2009,26 @@
         "제10조의5"
       ],
       "returned": [
-        "제3조",
-        "제10조의3",
         "제10조의4",
-        "제1조",
-        "제4조",
+        "제3조",
+        "제10조의2",
+        "제9조",
         "제10조의5",
-        "2018다284226",
-        "제18조"
+        "제18조",
+        "제10조의3",
+        "제5조",
+        "제19조"
       ],
       "hits": 2,
       "total": 2,
-      "time_ms": 3576,
+      "time_ms": 298,
       "metrics": {
         "recall@k": 1.0,
-        "precision@k": 0.25,
+        "precision@k": 0.2222,
         "hit@k": 1,
-        "mrr": 0.3333,
-        "ndcg@k": 0.525,
-        "f1@k": 0.4
+        "mrr": 1.0,
+        "ndcg@k": 0.8503,
+        "f1@k": 0.3636
       }
     },
     {
@@ -1533,22 +2040,27 @@
         "제9조"
       ],
       "returned": [
-        "제10조의9",
-        "제10조의3",
-        "제2조",
         "제9조",
+        "제10조의2",
+        "제10조의9",
+        "제11조",
+        "제10조의3",
+        "제10조",
+        "제19조",
+        "제14조의2",
+        "제20조",
         "제3조"
       ],
-      "hits": 1,
+      "hits": 3,
       "total": 3,
-      "time_ms": 3969,
+      "time_ms": 423,
       "metrics": {
-        "recall@k": 0.3333,
-        "precision@k": 0.2,
+        "recall@k": 1.0,
+        "precision@k": 0.3,
         "hit@k": 1,
-        "mrr": 0.25,
-        "ndcg@k": 0.2021,
-        "f1@k": 0.25
+        "mrr": 1.0,
+        "ndcg@k": 0.9325,
+        "f1@k": 0.4615
       }
     },
     {
@@ -1560,24 +2072,27 @@
         "제12조"
       ],
       "returned": [
-        "제5조",
-        "제11조의2",
-        "제1조",
-        "제4조",
-        "제10조의3",
+        "제10조의2",
+        "제10조의9",
+        "제12조",
+        "제9조",
         "제13조",
-        "제6조"
+        "제5조",
+        "제18조",
+        "제11조",
+        "제19조",
+        "제10조의3"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 3,
-      "time_ms": 3567,
+      "time_ms": 340,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.6667,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 0.3333,
+        "ndcg@k": 0.3827,
+        "f1@k": 0.3077
       }
     },
     {
@@ -1588,47 +2103,57 @@
         "제36조"
       ],
       "returned": [
-        "2008도6829",
+        "제38조",
+        "제40조",
+        "제8조",
+        "제37조",
         "slide",
+        "2008도6829",
+        "2018노3811",
         "2011도6561",
-        "제47조의2"
+        "2008노740",
+        "2012두18882"
       ],
-      "hits": 0,
+      "hits": 1,
       "total": 2,
-      "time_ms": 5019,
+      "time_ms": 351,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.5,
+        "precision@k": 0.1,
+        "hit@k": 1,
+        "mrr": 0.25,
+        "ndcg@k": 0.2641,
+        "f1@k": 0.1667
       }
     },
     {
       "law": "식품위생법",
       "query": "위생교육 식품접객업 의무 식품위생법",
       "expected": [
+        "제40조",
         "제41조",
-        "제43조"
+        "제51조"
       ],
       "returned": [
         "제40조",
+        "제32조",
+        "제41조",
+        "제47조",
+        "제19조",
+        "제47조의2",
         "slide",
-        "제51조",
-        "2020도13815",
-        "제50조"
+        "제21조"
       ],
-      "hits": 0,
-      "total": 2,
-      "time_ms": 4360,
+      "hits": 2,
+      "total": 3,
+      "time_ms": 293,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.6667,
+        "precision@k": 0.25,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.7039,
+        "f1@k": 0.3636
       }
     },
     {
@@ -1639,23 +2164,27 @@
         "제44조"
       ],
       "returned": [
-        "slide",
-        "제57조",
-        "2011도6561",
-        "제21조",
+        "제47조의2",
         "제44조",
-        "제2조"
+        "제35조",
+        "제57조",
+        "제8조",
+        "제37조",
+        "제36조",
+        "제40조",
+        "slide",
+        "2004두9302"
       ],
       "hits": 1,
       "total": 2,
-      "time_ms": 5223,
+      "time_ms": 343,
       "metrics": {
         "recall@k": 0.5,
-        "precision@k": 0.1667,
+        "precision@k": 0.1,
         "hit@k": 1,
-        "mrr": 0.2,
-        "ndcg@k": 0.2372,
-        "f1@k": 0.25
+        "mrr": 0.5,
+        "ndcg@k": 0.3869,
+        "f1@k": 0.1667
       }
     },
     {
@@ -1666,25 +2195,27 @@
         "제2조"
       ],
       "returned": [
-        "제18조",
-        "제19조",
         "제1조",
+        "제18조",
+        "제49조",
+        "제19조",
+        "제7조",
+        "제8조",
         "제13조",
-        "제2조",
-        "제33조",
+        "제4조",
         "제60조",
-        "제74조"
+        "제55조"
       ],
-      "hits": 2,
+      "hits": 1,
       "total": 2,
-      "time_ms": 4249,
+      "time_ms": 386,
       "metrics": {
-        "recall@k": 1.0,
-        "precision@k": 0.25,
+        "recall@k": 0.5,
+        "precision@k": 0.1,
         "hit@k": 1,
-        "mrr": 0.5,
-        "ndcg@k": 0.6241,
-        "f1@k": 0.4
+        "mrr": 0.25,
+        "ndcg@k": 0.2641,
+        "f1@k": 0.1667
       }
     },
     {
@@ -1695,21 +2226,27 @@
         "제14조"
       ],
       "returned": [
+        "제77조의16",
+        "제9조",
+        "제29조",
+        "제11조",
         "제2조",
-        "제3조",
         "제5조",
-        "제20조"
+        "제10조",
+        "제13조의2",
+        "제1조",
+        "제4조의2"
       ],
-      "hits": 0,
+      "hits": 1,
       "total": 2,
-      "time_ms": 4669,
+      "time_ms": 336,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.5,
+        "precision@k": 0.1,
+        "hit@k": 1,
+        "mrr": 0.25,
+        "ndcg@k": 0.2641,
+        "f1@k": 0.1667
       }
     },
     {
@@ -1720,49 +2257,59 @@
         "제13조"
       ],
       "returned": [
+        "제7조",
         "제1조",
         "제11조",
-        "제3조",
+        "제14조",
+        "제12조",
+        "제14조의2",
+        "제28조의2",
         "제9조",
-        "제7조"
+        "제5조",
+        "제20조의2"
       ],
-      "hits": 0,
+      "hits": 1,
       "total": 2,
-      "time_ms": 3503,
+      "time_ms": 175,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.5,
+        "precision@k": 0.1,
+        "hit@k": 1,
+        "mrr": 0.2,
+        "ndcg@k": 0.2372,
+        "f1@k": 0.1667
       }
     },
     {
       "law": "소방시설법",
-      "query": "소방안전관리자 선임 의무 소방시설법",
+      "query": "소방시설관리사 자격 등록 변경신고 소방시설법",
       "expected": [
-        "제24조",
-        "제25조"
+        "제25조",
+        "제29조",
+        "제31조"
       ],
       "returned": [
-        "제19조",
-        "제22조",
-        "제1조",
         "제6조",
-        "제11조",
+        "제1조",
+        "제25조",
+        "제24조",
+        "제28조",
+        "제32조",
+        "제4조",
+        "제14조",
+        "제33조",
         "제5조"
       ],
-      "hits": 0,
-      "total": 2,
-      "time_ms": 4625,
+      "hits": 1,
+      "total": 3,
+      "time_ms": 209,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.3333,
+        "precision@k": 0.1,
+        "hit@k": 1,
+        "mrr": 0.3333,
+        "ndcg@k": 0.2346,
+        "f1@k": 0.1538
       }
     },
     {
@@ -1775,21 +2322,23 @@
       "returned": [
         "제21조",
         "제22조",
+        "제23조",
+        "제32조",
         "제4조",
-        "제25조",
-        "제19조",
-        "제23조"
+        "제20조",
+        "제14조",
+        "제25조"
       ],
       "hits": 2,
       "total": 2,
-      "time_ms": 3416,
+      "time_ms": 331,
       "metrics": {
         "recall@k": 1.0,
-        "precision@k": 0.3333,
+        "precision@k": 0.25,
         "hit@k": 1,
         "mrr": 0.5,
-        "ndcg@k": 0.6053,
-        "f1@k": 0.5
+        "ndcg@k": 0.6934,
+        "f1@k": 0.4
       }
     },
     {
@@ -1800,54 +2349,59 @@
         "제2조"
       ],
       "returned": [
-        "제51조",
-        "제20조",
-        "제11조",
-        "제1조",
+        "제16조",
         "제17조",
-        "제18조",
+        "제103조",
+        "제57조",
+        "제66조",
+        "제8조",
         "제60조",
-        "제16조"
+        "제63조",
+        "제18조",
+        "제9조"
       ],
       "hits": 1,
       "total": 2,
-      "time_ms": 4486,
+      "time_ms": 346,
       "metrics": {
         "recall@k": 0.5,
-        "precision@k": 0.125,
+        "precision@k": 0.1,
         "hit@k": 1,
-        "mrr": 0.2,
-        "ndcg@k": 0.2372,
-        "f1@k": 0.2
+        "mrr": 0.5,
+        "ndcg@k": 0.3869,
+        "f1@k": 0.1667
       }
     },
     {
       "law": "근로기준법",
-      "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
+      "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
       "expected": [
         "제43조",
-        "제56조"
+        "제56조",
+        "제69조"
       ],
       "returned": [
         "제69조",
-        "제33조",
-        "제26조",
+        "제56조",
+        "제55조",
+        "제51조",
+        "제5조의2",
         "제1조",
-        "제9조",
-        "제4조",
-        "제2조",
-        "제5조의2"
+        "제3조",
+        "제57조",
+        "제16조",
+        "제70조"
       ],
-      "hits": 0,
-      "total": 2,
-      "time_ms": 4220,
+      "hits": 2,
+      "total": 3,
+      "time_ms": 448,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.6667,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.7654,
+        "f1@k": 0.3077
       }
     },
     {
@@ -1860,107 +2414,123 @@
       ],
       "returned": [
         "제53조",
-        "제69조",
-        "제58조",
-        "제8조의2",
-        "제54조",
+        "제56조",
+        "제59조",
         "제51조",
-        "제6조",
-        "제52조"
+        "제69조",
+        "제55조",
+        "제70조",
+        "제57조",
+        "제49조",
+        "제58조"
       ],
       "hits": 1,
       "total": 3,
-      "time_ms": 4363,
+      "time_ms": 396,
       "metrics": {
         "recall@k": 0.3333,
-        "precision@k": 0.125,
+        "precision@k": 0.1,
         "hit@k": 1,
-        "mrr": 0.2,
-        "ndcg@k": 0.1815,
-        "f1@k": 0.1818
+        "mrr": 0.1667,
+        "ndcg@k": 0.1672,
+        "f1@k": 0.1538
       }
     },
     {
       "law": "부가가치세법",
       "query": "사업자등록 신청 절차 부가가치세법",
       "expected": [
+        "제7조",
         "제8조"
       ],
       "returned": [
-        "제10조",
-        "제63조의2",
-        "제168조",
-        "제14조",
+        "제31조",
+        "제1조",
+        "제10조의2",
+        "제66조",
+        "제50조",
+        "제106조",
+        "제50조의2",
         "제7조",
-        "제96조",
-        "제8조"
+        "제72조",
+        "제63조의2"
       ],
       "hits": 1,
-      "total": 1,
-      "time_ms": 4437,
+      "total": 2,
+      "time_ms": 320,
       "metrics": {
-        "recall@k": 1.0,
-        "precision@k": 0.1429,
+        "recall@k": 0.5,
+        "precision@k": 0.1,
         "hit@k": 1,
-        "mrr": 0.1429,
-        "ndcg@k": 0.3333,
-        "f1@k": 0.25
+        "mrr": 0.125,
+        "ndcg@k": 0.1934,
+        "f1@k": 0.1667
       }
     },
     {
       "law": "부가가치세법",
       "query": "세금계산서 발급 의무 부가가치세법",
       "expected": [
+        "제31조",
         "제32조",
+        "제33조",
         "제34조"
       ],
       "returned": [
-        "제31조",
-        "제67조",
-        "제90조",
-        "제10조의4",
+        "제33조",
+        "제34조",
+        "제9조",
+        "제32조",
         "제34조의2",
-        "제71조의2",
-        "제106조"
+        "제59조",
+        "제31조",
+        "제106조",
+        "제15조",
+        "제71조의2"
       ],
-      "hits": 0,
-      "total": 2,
-      "time_ms": 4536,
+      "hits": 4,
+      "total": 4,
+      "time_ms": 326,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 1.0,
+        "precision@k": 0.4,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9349,
+        "f1@k": 0.5714
       }
     },
     {
       "law": "부가가치세법",
       "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
       "expected": [
+        "제60조",
         "제61조",
+        "제62조",
         "제63조"
       ],
       "returned": [
         "제60조",
-        "제115조",
-        "제110조",
-        "제68조",
-        "제15조",
+        "제62조",
+        "제63조",
+        "제68조의2",
         "제1조",
-        "제6조"
+        "제67조",
+        "제69조",
+        "제15조",
+        "제7조",
+        "제66조"
       ],
-      "hits": 0,
-      "total": 2,
-      "time_ms": 4137,
+      "hits": 3,
+      "total": 4,
+      "time_ms": 455,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.75,
+        "precision@k": 0.3,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8319,
+        "f1@k": 0.4286
       }
     },
     {
@@ -1971,24 +2541,27 @@
         "제16조"
       ],
       "returned": [
-        "제1조",
-        "제3조",
+        "제15조",
         "제14조",
+        "제18조",
         "제21조",
-        "제35조",
+        "제16조",
         "제17조",
+        "제2조",
+        "제22조",
+        "제19조",
         "제36조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 3621,
+      "time_ms": 188,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 1.0,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8503,
+        "f1@k": 0.3333
       }
     },
     {
@@ -1999,26 +2572,26 @@
         "제25조의2"
       ],
       "returned": [
-        "제35조",
-        "제57조",
         "제24조의2",
-        "제27조의3",
-        "제71조",
-        "제28조의3",
+        "제25조",
         "제11조",
-        "제3조",
-        "제23조"
+        "제25조의2",
+        "제71조",
+        "제27조의3",
+        "제28조의3",
+        "제24조",
+        "제57조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 4308,
+      "time_ms": 349,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 1.0,
+        "precision@k": 0.2222,
+        "hit@k": 1,
+        "mrr": 0.5,
+        "ndcg@k": 0.6509,
+        "f1@k": 0.3636
       }
     },
     {
@@ -2029,26 +2602,27 @@
         "제31조"
       ],
       "returned": [
-        "제3조",
-        "제2조",
         "제30조",
-        "제21조",
-        "제34조의2",
-        "제36조",
-        "제16조",
         "제29조",
-        "제30조의2"
+        "제28조의2",
+        "제30조의2",
+        "제21조",
+        "제2조",
+        "제24조의2",
+        "제36조",
+        "제37조",
+        "제22조의2"
       ],
       "hits": 1,
       "total": 2,
-      "time_ms": 3626,
+      "time_ms": 371,
       "metrics": {
         "recall@k": 0.5,
-        "precision@k": 0.1111,
+        "precision@k": 0.1,
         "hit@k": 1,
-        "mrr": 0.3333,
-        "ndcg@k": 0.3066,
-        "f1@k": 0.1818
+        "mrr": 1.0,
+        "ndcg@k": 0.6131,
+        "f1@k": 0.1667
       }
     },
     {
@@ -2059,27 +2633,27 @@
         "제8조"
       ],
       "returned": [
-        "제4조",
-        "제3조",
-        "제1조",
-        "제18조",
+        "제6조의2",
+        "제2조",
+        "제7조",
         "제86조의2",
+        "제3조",
         "제46조",
-        "제91조",
-        "제15조",
         "제9조",
-        "제91조의2"
+        "제16조의2",
+        "제8조",
+        "제11조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 3739,
+      "time_ms": 653,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 1.0,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 0.3333,
+        "ndcg@k": 0.4911,
+        "f1@k": 0.3333
       }
     },
     {
@@ -2090,57 +2664,60 @@
         "제17조"
       ],
       "returned": [
-        "제5조",
-        "제2조",
-        "제95조",
-        "제87조",
-        "제3조",
-        "제39조",
-        "제53조",
         "제86조의2",
-        "제91조",
-        "제46조"
+        "제8조",
+        "제6조의2",
+        "제2조",
+        "제3조",
+        "제9조",
+        "제14조의2",
+        "제16조",
+        "제46조",
+        "제7조"
       ],
-      "hits": 0,
+      "hits": 1,
       "total": 2,
-      "time_ms": 2905,
+      "time_ms": 613,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.5,
+        "precision@k": 0.1,
+        "hit@k": 1,
+        "mrr": 0.125,
+        "ndcg@k": 0.1934,
+        "f1@k": 0.1667
       }
     },
     {
       "law": "하수도법",
       "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
       "expected": [
+        "제33조",
         "제34조",
-        "제37조"
+        "제37조",
+        "제38조"
       ],
       "returned": [
-        "제35조",
-        "제46조",
-        "제19조의3",
-        "제11조의5",
-        "제60조",
-        "제6조",
-        "제3조",
-        "제87조",
-        "제91조의2"
+        "제33조",
+        "제38조",
+        "제1조",
+        "제27조",
+        "제28조",
+        "제7조",
+        "제31조",
+        "제26조",
+        "제29조",
+        "제35조"
       ],
-      "hits": 0,
-      "total": 2,
-      "time_ms": 3885,
+      "hits": 2,
+      "total": 4,
+      "time_ms": 446,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.5,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.6367,
+        "f1@k": 0.2857
       }
     },
     {
@@ -2151,22 +2728,27 @@
         "제28조"
       ],
       "returned": [
-        "제68조",
-        "제11조의5",
-        "제5조",
-        "제86조의2",
-        "제3조"
+        "제26조",
+        "제28조",
+        "제29조",
+        "제33조",
+        "제27조",
+        "제7조",
+        "제1조",
+        "제31조",
+        "제22조",
+        "제14조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 3477,
+      "time_ms": 444,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 1.0,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 0.5,
+        "ndcg@k": 0.6241,
+        "f1@k": 0.3333
       }
     },
     {
@@ -2177,25 +2759,27 @@
         "제40조"
       ],
       "returned": [
-        "제12조",
-        "제32조의3",
-        "제99조",
-        "제83조",
         "제44조",
-        "제53조의2",
-        "제12조의4",
-        "제34조의3"
+        "제45조",
+        "제54조",
+        "제38조",
+        "제48조",
+        "제3조",
+        "제40조",
+        "제4조",
+        "제76조",
+        "제84조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 3102,
+      "time_ms": 276,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 1.0,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 0.5,
+        "ndcg@k": 0.5912,
+        "f1@k": 0.3333
       }
     },
     {
@@ -2206,25 +2790,27 @@
         "제55조"
       ],
       "returned": [
-        "제12조",
-        "제14조의2",
-        "2015두59686",
-        "제35조",
-        "2022두64808",
-        "제34조의4",
-        "제9조",
-        "제12조의5"
+        "제44조",
+        "제39조",
+        "제38조",
+        "제6조",
+        "제40조",
+        "제54조",
+        "제25조",
+        "제47조",
+        "제50조",
+        "제41조"
       ],
-      "hits": 0,
+      "hits": 1,
       "total": 2,
-      "time_ms": 3786,
+      "time_ms": 337,
       "metrics": {
-        "recall@k": 0.0,
-        "precision@k": 0.0,
-        "hit@k": 0,
-        "mrr": 0.0,
-        "ndcg@k": 0.0,
-        "f1@k": 0.0
+        "recall@k": 0.5,
+        "precision@k": 0.1,
+        "hit@k": 1,
+        "mrr": 0.125,
+        "ndcg@k": 0.1934,
+        "f1@k": 0.1667
       }
     }
   ]

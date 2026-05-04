@@ -69,7 +69,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
                 ],
                 verdict=f"12개월 전망 {_cached_forecast.get('score', 0)}/100 · {_cached_forecast.get('direction', 'N/A')}",
                 reasoning=str(_cached_narr) if _cached_narr else "추세 예측 (캐시)",
-                confidence=0.75,
+                confidence=0.85,
             )
             _cached_analysis = {
                 **state.get("analysis_results", {}),
@@ -278,7 +278,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
         ],
         verdict=f"12개월 전망 {parsed.forecast_score}/100 · {parsed.forecast_direction}",
         reasoning=str(parsed.narrative) if parsed and parsed.narrative else "추세 예측 데이터 기반",
-        confidence=0.75,
+        confidence=0.85,
     )
 
     return {

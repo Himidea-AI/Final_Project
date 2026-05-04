@@ -64,7 +64,7 @@ async def population_analyst_node(state: AgentState) -> dict:
                 sources=["seoul_adstrd_flpop", "sgis"],
                 verdict=f"주 타겟 {_cached_metrics.get('main_target_age', 'N/A')} · 피크 {_cached_metrics.get('peak_time', '미확인')}",
                 reasoning=str(_cached_report) if _cached_report else "유동인구 분석 (캐시)",
-                confidence=0.8,
+                confidence=0.85,
             )
             analysis["population_analyst_result"] = {"agent_attribution": cached_attribution}
             return {
@@ -215,7 +215,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         sources=["seoul_adstrd_flpop", "sgis"],
         verdict=f"주 타겟 {new_metrics.get('main_target_age', 'N/A')} · 피크 {new_metrics.get('peak_time', '미확인')}",
         reasoning=str(population_report) if population_report else "유동인구 분석 데이터 기반",
-        confidence=0.8,
+        confidence=0.85,
     )
     analysis_results["population_analyst_result"] = {"agent_attribution": attribution}
 

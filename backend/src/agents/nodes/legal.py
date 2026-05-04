@@ -350,11 +350,7 @@ def _load_article_index() -> None:
         from pathlib import Path
 
         chunks_path = (
-            Path(__file__).resolve().parent.parent.parent.parent
-            / "data"
-            / "legal"
-            / "processed"
-            / "chunks.json"
+            Path(__file__).resolve().parent.parent.parent.parent / "data" / "legal" / "processed" / "chunks.json"
         )
         if not chunks_path.exists():
             logger.warning(f"[legal_node] chunks.json 없음: {chunks_path}")
@@ -707,15 +703,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
     _CACHE_TTL = 86400  # 24시간
     # v7: school_zone 룰 추가(13 룰 + zoning + ftc = 15 risks) + lat/lon 좌표 키 포함.
     # 좌표 누락 시 "none" 으로 정규화 — 좌표 입력 시 자동 invalidation.
-    _coord_key = (
-        f"{lat_val:.5f},{lon_val:.5f}"
-        if lat_val is not None and lon_val is not None
-        else "none"
-    )
-    cache_key = (
-        f"v7:legal:{_norm_brand}:{_norm_district}:"
-        f"{_norm_biz}:{float(store_area):.1f}:{_coord_key}"
-    )
+    _coord_key = f"{lat_val:.5f},{lon_val:.5f}" if lat_val is not None and lon_val is not None else "none"
+    cache_key = f"v7:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -805,7 +794,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     agent_id="legal",
                     display_name="법률 리스크",
                     kind="RAG",
-                    sources=[f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})"],
+                    sources=[
+                        f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})",
+                        "ftc_brand_franchise",
+                        "ftc_api",
+                    ],
                     verdict=(
                         f"종합 위험도: {_cached_overall_label} "
                         f"(위험 {_cached_high}건 / 주의 {_cached_caution}건 / 안전 {_cached_safe}건)"
@@ -896,10 +889,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
     try:
         from src.agents.legal.orchestrator import run_legal_evaluation
 
-        logger.info(
-            f"[legal_node] rule engine 실행 "
-            f"(brand={_norm_brand[:20]}, biz={_norm_biz}, area={store_area})"
-        )
+        logger.info(f"[legal_node] rule engine 실행 (brand={_norm_brand[:20]}, biz={_norm_biz}, area={store_area})")
         engine_results = await run_legal_evaluation(
             brand=brand,
             business_type=business_type,
@@ -1082,7 +1072,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
         agent_id="legal",
         display_name="법률 리스크",
         kind="RAG",
-        sources=[f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})"],
+        sources=[
+            f"legal_rag_chunks ({_TOTAL_CHUNK_COUNT})",
+            "ftc_brand_franchise",
+            "ftc_api",
+        ],
         verdict=(
             f"종합 위험도: {_overall_label} (위험 {_high_count}건 / 주의 {_caution_count}건 / 안전 {_safe_count}건)"
         ),
