@@ -9,7 +9,7 @@
  */
 
 import { Sparkles } from 'lucide-react';
-import type { SimulationOutput, EmergingSignal } from '../../../../../types';
+import type { SimulationOutput } from '../../../../../types';
 import { EmergingSignalCard } from '../../charts/EmergingSignalCard';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
 import { resolveDongName } from '../../../../../constants/mapoDongs';
@@ -50,10 +50,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
           return (
             <div key={p.district} className="bg-card border border-border rounded-3xl p-5">
               {p.emerging_signal ? (
-                <EmergingSignalCard
-                  signal={p.emerging_signal as unknown as EmergingSignal}
-                  district={districtLabel}
-                />
+                <EmergingSignalCard signal={p.emerging_signal} district={districtLabel} />
               ) : (
                 <div className="space-y-3">
                   <div className="text-sm font-black text-foreground tracking-tight">
