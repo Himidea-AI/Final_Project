@@ -61,6 +61,7 @@ def _load_model() -> tuple[LSTMAutoencoder, dict]:
         meta = pickle.load(f)  # noqa: S301
 
     import torch as _torch
+
     _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
     model = LSTMAutoencoder(
         input_size=meta["input_size"],
@@ -109,10 +110,15 @@ def _count_consecutive_anomalies(
     meta: dict,
     scaler: MinMaxScaler,
 ) -> int:
-    """뒤에서부터 연속 이상 분기(window) 수 카운트."""
+    """뒤에서부터 분기 단위 연속 이상 분기 수 카운트.
+
+    윈도우는 1분기씩 뒤로 밀지만, 비교는 윈도우의 마지막 timestep MSE만 사용 →
+    "분기 t의 패턴이 평소와 다른가"를 분기 단위로 판정. quarter_threshold 미존재
+    시 기존 threshold 로 fallback (구버전 meta 호환).
+    """
     window_size = meta["window_size"]
     feature_names = meta["feature_names"]
-    threshold = meta["threshold"]
+    quarter_threshold = meta.get("quarter_threshold", meta["threshold"])
 
     group_df = group_df.sort_values("quarter")
     feat_vals = group_df[feature_names].values.astype(np.float32)
@@ -129,8 +135,8 @@ def _count_consecutive_anomalies(
         x_t = torch.from_numpy(seq).unsqueeze(0).to(_dev)  # (1, window, features)
         with torch.no_grad():
             recon = model(x_t)
-        err = float(((recon - x_t) ** 2).mean().item())
-        if err > threshold:
+        last_err = float(((recon[:, -1, :] - x_t[:, -1, :]) ** 2).mean().item())
+        if last_err > quarter_threshold:
             count += 1
         else:
             break

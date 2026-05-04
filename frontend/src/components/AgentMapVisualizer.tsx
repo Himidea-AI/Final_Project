@@ -13,8 +13,11 @@ export interface LocationData {
   name: string;
   lat: number;
   lng: number;
-  type?: 'candidate' | 'vacancy';
+  type?: 'candidate' | 'vacancy' | 'recommended';
   listingCount?: number;
+  /** 신규 추천 에이전트 출력 — score/reason 있으면 마커 강조 + tooltip. */
+  score?: number;
+  reason?: string;
 }
 
 export interface CompetitorPin {

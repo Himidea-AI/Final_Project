@@ -5,9 +5,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select, func, text
 
 from src.database.postgres import PostgresClient
-from src.database.models import StoreInfo, LivingPopulation, DistrictSales, GolmokRent, DongMapping
+from src.database.models import LivingPopulation, DistrictSales, GolmokRent
 from src.services.population_api import MAPO_DONG_CODES
-from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +120,11 @@ class MarketDataTool:
     # 사용자 입력(CS 코드/브랜드/업종명) → naver_trend_industry.industry 값 매핑
     # naver DataLab은 '커피'/'카페'를 분리하지만 CS 코드는 CS100010 (카페/음료) 하나로 통합.
     # 브랜드 단위 정밀 매핑을 위해 브랜드명도 직접 키로 등록.
+    #
+    # ⚠️ DB 실측 (audit-2026-05-04): naver_trend_industry 에 별 industry 13종 존재 —
+    # 한식·중식·일식·양식·제과·패스트푸드·치킨·분식·호프·카페·**피자**·편의점·**커피**.
+    # "피자"/"커피" 가 카페·패스트푸드와 별 카테고리이므로 BUSINESS_TYPE_MAPPING.naver_industry
+    # ("커피"→"카페", "피자"→흡수)와 의도적으로 다름. 변경 시 Naver 트렌드 데이터 손실.
     _NAVER_INDUSTRY_MAP: Dict[str, str] = {
         # CS 업종 코드 → naver industry (AgentState.industry_filter 수용)
         "CS100001": "한식",

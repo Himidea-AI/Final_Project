@@ -72,6 +72,7 @@ class AgentProfile:
     nemotron_occupation: str | None = None  # 통계청 기반 실제 직업 분포
     nemotron_family_type: str | None = None  # 39종 가구형태
     nemotron_persona: str | None = None  # 500토큰 자연어 서사 (Tier S 프롬프트용)
+    name: str | None = None  # nemotron persona 본문에서 추출한 이름 (예: "안채승")
 
     def category_weights(self) -> dict[str, float]:
         return {
@@ -569,6 +570,16 @@ class ProfileBuilder:
         persona_text = str(record.get("persona") or "")
         if persona_text:
             profile.nemotron_persona = persona_text[:500]
+        # 이름 추출 — persona 본문 시작 패턴 "<name> 씨는" / "<name> 씨 ".
+        # nemotron 데이터셋이 한국어 인명 + " 씨" 로 자연어 시작. 정규식 first match.
+        # 길이 2~4자 (한국 이름 보편) 만 허용 — 오추출 방지.
+        import re as _re
+
+        for src in (persona_text, str(record.get("professional_persona") or "")):
+            m = _re.match(r"\s*([가-힣]{2,4})\s*씨", src)
+            if m:
+                profile.name = m.group(1)
+                break
 
     # -----------------------------------------------------------
     # 실데이터 기반 시간×동×연령×요일 가중치

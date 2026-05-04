@@ -1307,13 +1307,10 @@ def run_simulation(
         daily_visits_std_val = 0.0
         daily_revenue_std_val = 0.0
 
-        # peak_hours — 방문 많은 상위 3시간
-        hour_visits: Counter = Counter()
-        for a in agents:
-            if hasattr(a, "_hourly_visits"):
-                hour_visits.update(a._hourly_visits)
-        # fallback: world 시뮬 tick별 visit 집계가 없다면 빈 리스트
-        peak_hours_val = [h for h, _ in hour_visits.most_common(3)] if hour_visits else []
+        # peak_hours — 방문 많은 상위 3시간. visits_log (모든 visit event) 에서 직접 집계.
+        # 이전: agent._hourly_visits 인데 그 attr 정의 안 돼 항상 빈 list 반환 (peak_hours UI 항상 '-' 표시 bug).
+        hour_visits: Counter = Counter(v["hour"] for v in visits_log if isinstance(v.get("hour"), int))
+        peak_hours_val = [h for h, _ in hour_visits.most_common(3)]
 
         # customer_profile_dist — role별 방문 비율
         role_counts: Counter = Counter()

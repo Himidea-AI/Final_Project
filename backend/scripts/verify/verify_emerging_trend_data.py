@@ -15,9 +15,15 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 import psycopg
+from dotenv import load_dotenv
 
+# repo root .env auto-load
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
+if _REPO_ROOT_ENV.exists():
+    load_dotenv(_REPO_ROOT_ENV)
 
 _DEFAULT_DB_URL = os.environ.get(
     "POSTGRES_URL",
@@ -101,6 +107,29 @@ def main() -> int:
                 if dup > 0:
                     print(f"  ERROR: PK duplicates: {dup}")
                     errors += 1
+
+        # 마포 지하철역 좌표 coverage — fill_subway_coords 실행 후 필수.
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM master_subway_station WHERE sigungu_code='11440'")
+            mapo_total = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COUNT(*) FROM master_subway_station "
+                "WHERE sigungu_code='11440' AND lat IS NOT NULL AND lon IS NOT NULL"
+            )
+            mapo_with_coord = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COUNT(*) FROM master_subway_station "
+                "WHERE sigungu_code='11440' AND lat IS NOT NULL "
+                "AND (lat NOT BETWEEN 37.53 AND 37.59 OR lon NOT BETWEEN 126.87 AND 126.97)"
+            )
+            out_of_bbox = cur.fetchone()[0]
+            print(f"[master_subway_station coords]  mapo={mapo_total}  with_coord={mapo_with_coord}")
+            if mapo_with_coord < mapo_total:
+                print(f"  WARN: {mapo_total - mapo_with_coord} mapo stations missing coord")
+                warnings += 1
+            if out_of_bbox > 0:
+                print(f"  ERROR: {out_of_bbox} mapo stations outside Mapo bbox")
+                errors += 1
 
     print()
     print(f"errors={errors}  warnings={warnings}")

@@ -11,7 +11,7 @@ import { formatKrw, formatPct } from '../../utils/formatters';
 import { sortByRanking } from '../../utils/rankSort';
 import { BepCumulativeProfitChart } from '../../charts/BepCumulativeProfitChart';
 import { ClosureRatePanel } from '../../charts/ClosureRatePanel';
-import { ClosureRiskHeatmap } from '../../charts/ClosureRiskHeatmap';
+import { ClosureRiskDetailModal } from '../../charts/ClosureRiskDetailModal';
 import { ClosureRiskPanel } from '../../charts/ClosureRiskPanel';
 import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
 
@@ -62,6 +62,12 @@ export function PredictFinancialSimTab({ simResult }: Props) {
     dpredicts[0];
   const currentDistrict = selectedPred?.district ?? defaultDistrict;
   const bepObj = (selectedPred?.bep as BepDict | null | undefined) ?? null;
+
+  // 폐업위험도 "분석 상세" 모달 — 동별 카드 우하단 버튼 클릭 시 해당 동 데이터로 오픈.
+  const [detailDistrict, setDetailDistrict] = useState<string | null>(null);
+  const detailPred = detailDistrict
+    ? (dpredicts.find((p) => p.district === detailDistrict) ?? null)
+    : null;
 
   // 첫 4분기(=1년 사이클) 평균 산출. quarterly_simulation 은 백엔드
   // bep.simulate_quarterly 결과로 N분기(BEP 도달까지) 들어옴. 첫 4개만 슬라이스.
@@ -145,52 +151,30 @@ export function PredictFinancialSimTab({ simResult }: Props) {
               <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
                 <ShieldAlert className="text-primary" /> 동별 폐업위험도
               </h3>
-              {/* 카드 내 동 전환 chip — ProfitSimulationPanelFull 의 chip 과 동일 selectedDistrict
-                  state 공유. 클릭 시 BulletChart/summary/SignalsBar 가 즉시 해당 동으로 갱신. */}
-              {dpredicts.length > 1 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {dpredicts.map((p, idx) => {
-                    const active = p.district === selectedDistrict;
-                    const color = SERIES_COLORS[idx % SERIES_COLORS.length];
-                    const textColor = ACTIVE_TEXT_BY_INDEX[idx % ACTIVE_TEXT_BY_INDEX.length];
-                    return (
-                      <button
-                        key={p.district}
-                        type="button"
-                        onClick={() => setSelectedDistrict(p.district)}
-                        style={
-                          active
-                            ? { backgroundColor: color, borderColor: color, color: textColor }
-                            : undefined
-                        }
-                        className={`rounded-full border px-3 py-1 text-[0.6875rem] font-bold tabular-nums transition ${
-                          active
-                            ? ''
-                            : 'border-border bg-secondary text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                        }`}
-                      >
-                        {p.district}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
-            {/* 선택된 동의 BulletChart(0~100 점수) + SHAP 자연어 요약 + 기여 피처 막대.
-                카드 헤더 chip 또는 위쪽 ProfitSimulationPanelFull chip 으로 전환 가능. */}
-            <ClosureRiskPanel
-              closure={selectedPred?.closure_risk as ClosureRisk | null}
-              district={currentDistrict}
-            />
-            <div className="mt-6">
-              {/* Heatmap — 4동 × 피처 (LightGBM / TCN 분리). 셀 색강도 = SHAP contribution.
-                  양수=빨강(위험↑), 음수=초록(위험↓). 동마다 다른 피처가 위험 결정에 기여한 것을 한눈에. */}
-              <ClosureRiskHeatmap
-                rows={dpredicts.map((p) => ({
-                  district: p.district,
-                  closure: p.closure_risk as ClosureRisk | null,
-                }))}
-              />
+            {/* 1~4동 통일 카드 그리드. 각 카드는 BulletChart(0~100 점수) + 합본 자연어 요약
+                + 위험 신호 TOP 3 + "분석 상세" 모달 트리거. ML 모델명/기여 피처 같은 ML 용어
+                는 카드에서 모두 제거. 깊은 분석은 모달에서 "과거 데이터 분석 / 최근 추세 분석"
+                두 관점으로 노출 (ClosureRiskDetailModal). */}
+            <div
+              className={`grid grid-cols-1 gap-4 ${
+                dpredicts.length === 2
+                  ? 'sm:grid-cols-2'
+                  : dpredicts.length === 3
+                    ? 'sm:grid-cols-2 lg:grid-cols-3'
+                    : dpredicts.length >= 4
+                      ? 'sm:grid-cols-2 lg:grid-cols-4'
+                      : ''
+              }`}
+            >
+              {dpredicts.map((p) => (
+                <ClosureRiskPanel
+                  key={p.district}
+                  closure={p.closure_risk as ClosureRisk | null}
+                  district={p.district}
+                  onOpenDetail={() => setDetailDistrict(p.district)}
+                />
+              ))}
             </div>
           </div>
           <div className="rounded-3xl border border-border bg-card p-8">
@@ -217,6 +201,14 @@ export function PredictFinancialSimTab({ simResult }: Props) {
           <ClosureRiskPanel closure={simResult.closure_risk} />
         </>
       )}
+
+      {/* 동별 폐업위험도 카드의 "분석 상세" 버튼으로 트리거. 닫으면 detailDistrict=null. */}
+      <ClosureRiskDetailModal
+        open={detailDistrict != null}
+        district={detailPred?.district ?? ''}
+        closure={(detailPred?.closure_risk as ClosureRisk | null) ?? null}
+        onClose={() => setDetailDistrict(null)}
+      />
     </div>
   );
 }

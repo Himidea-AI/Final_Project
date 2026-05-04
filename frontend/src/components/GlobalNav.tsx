@@ -52,7 +52,9 @@ export function WelcomeWidget() {
 
   const brandName = brand?.brand_name || user?.company_name || '';
   const personName = user?.contact_name || '';
-  const roleTitle = user?.position || (user?.role === 'master' ? '팀장' : '매니저');
+  // role 기반 강제 매핑 — user.position(자유 입력 텍스트) 가 무엇이든 무시.
+  // master = 팀장 / manager = 매니저. position 잘못 입력으로 인한 라벨 회귀 차단.
+  const roleTitle = user?.role === 'master' ? '팀장' : '매니저';
 
   if (!brandName && !personName) return null;
 
