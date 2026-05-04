@@ -89,9 +89,9 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
   // winner 동 결정 — 명시값 없으면 첫 시리즈 (라인 강조용)
   const effectiveWinner = winnerDistrict ?? validSeries[0]!.district;
 
-  // 2026-05-04: 4분기 hard cap → 최대 20분기(5년) 동적 길이.
-  // 백엔드 quarterly_projection이 N분기 시뮬레이션 데이터를 담을 수 있게 되면 자동 대응.
-  const QUARTER_CAP = 20;
+  // 2026-05-04: 매출 예측은 TCN 모델이 4분기를 출력하므로 UI 도 4분기까지만 표시.
+  // 백엔드가 그 이상 분기를 보내더라도 매출 예측 탭에서는 4분기로 trim.
+  const QUARTER_CAP = 4;
   const maxLen = Math.max(...validSeries.map((s) => s.projection.length));
   const visibleLen = Math.min(QUARTER_CAP, maxLen);
   const trimmedSeries = validSeries.map((s) => ({
