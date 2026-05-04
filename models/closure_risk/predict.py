@@ -23,9 +23,7 @@ from models.lstm_forecast.data_prep import (
     DB_URL,
     EXCLUDE_COMBOS,
     ExcludedComboError,
-    build_timeseries,
-    load_sales_data,
-    load_store_data,
+    load_timeseries,
 )
 
 logger = logging.getLogger(__name__)
@@ -214,6 +212,9 @@ _FEATURE_KO = {
     "total_pop_yoy": "거주인구 전년동기 변화율",
     "holiday_count": "분기 공휴일 수",
     "cpi_index_yoy": "물가 전년동기 변화율",
+    # Stage 1 / B-3 (2026-05-04 추가) — LGBM 학습 피처에 포함되어 SHAP top_signals 노출됨
+    "industry_prior_pred": "업종 평균 폐업 신호",
+    "dong_closure_rate_residual_lag1": "직전 분기 폐업률",
 }
 
 _RISK_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
@@ -475,12 +476,11 @@ def predict(
         logger.warning("모델 없음 — mock 반환: %s", e)
         return _mock_result()
 
-    # 과거 데이터 로드
+    # 과거 데이터 로드 — load_timeseries 가 build_timeseries 결과까지 TTL=300s 캐싱
+    # (TCN predict 와 동일 패턴: 4-동 병렬 호출 시 build_timeseries 중복 실행 방지)
     dong_prefix = dong_code[:5] if len(dong_code) >= 5 else dong_code
     try:
-        sales_df = load_sales_data(db_url=db_url, dong_prefix=dong_prefix)
-        store_df = load_store_data(db_url=db_url, dong_prefix=dong_prefix)
-        ts = build_timeseries(sales_df, store_df)
+        ts = load_timeseries(db_url=db_url, dong_prefix=dong_prefix)
     except Exception as e:
         logger.warning("데이터 로드 실패 — mock 반환: %s", e)
         return _mock_result()

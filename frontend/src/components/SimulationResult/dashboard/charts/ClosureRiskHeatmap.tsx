@@ -10,6 +10,7 @@
 
 import type { ClosureRisk, ClosureRiskSignal } from '../../../../types';
 import { SERIES_COLORS } from '../../QuarterlyProjectionChart';
+import { shapStrengthLabel } from '../utils/formatters';
 
 interface DistrictRiskRow {
   district: string;
@@ -141,17 +142,18 @@ function HeatmapTable({
                   const alpha = Math.min(1, Math.abs(c) / maxAbs);
                   const color = c > 0 ? 'var(--danger)' : 'var(--success)';
                   const sign = c > 0 ? '+' : '';
+                  // 셀 텍스트는 "↑ 강 / ↑ 중 / ↑ 약" 등급 표기. 원시 SHAP 값은 hover tooltip 으로 보존.
+                  // 임계값(0.02 / 0.05) 은 utils/formatters.ts shapStrength() 정의 단일소스.
                   return (
                     <td
                       key={r.district}
-                      className="px-2 py-2 text-center font-bold tabular-nums text-foreground"
+                      className="px-2 py-2 text-center font-bold text-foreground"
                       style={{
                         backgroundColor: `color-mix(in srgb, ${color} ${Math.round(alpha * 60)}%, transparent)`,
                       }}
-                      title={`${f.feature_label}: ${sign}${c.toFixed(4)} (${c > 0 ? '위험 증가' : '위험 감소'} 방향)`}
+                      title={`${f.feature_label}: ${sign}${c.toFixed(4)} (${c > 0 ? '위험 증가' : '위험 감소'} 방향, 원시 SHAP 값)`}
                     >
-                      {sign}
-                      {c.toFixed(3)}
+                      {shapStrengthLabel(c)}
                     </td>
                   );
                 })}
