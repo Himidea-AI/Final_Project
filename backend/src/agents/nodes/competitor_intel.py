@@ -135,6 +135,11 @@ def _resolve_industry(brand_name: str, business_type: str) -> tuple[str, str | N
     """
     if brand_name in BRAND_INDUSTRY_MAP:
         return BRAND_INDUSTRY_MAP[brand_name]
+    # 2) brand_name에서 괄호 제거 후 재시도 (예: "컴포즈커피(COMPOSE COFFEE)" → "컴포즈커피")
+    stripped = brand_name.split("(")[0].strip() if brand_name else ""
+    if stripped and stripped in BRAND_INDUSTRY_MAP:
+        return BRAND_INDUSTRY_MAP[stripped]
+    # 3) business_type fallback
     if business_type in BUSINESS_TYPE_FALLBACK:
         return BUSINESS_TYPE_FALLBACK[business_type]
     # 안전망: 한식/중식/일식/짜장/스시/맥주 등 → "음식점"/"주점"/"카페"로 정규화 후 재매핑
