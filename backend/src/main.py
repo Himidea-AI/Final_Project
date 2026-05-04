@@ -303,7 +303,9 @@ async def _collect_all_competitor_locations(
             if not dong_code:
                 print(f"[all_competitors] dong_code 없음: {dong_name}")
                 return
-            data = await asyncio.to_thread(_analyze_competition, dong_code, keyword, 500)
+            # 검색 반경 1500m + sample 100개 — 1위 spot 이 동 centroid 와 떨어진 경우에도
+            # spot 주변 500m 매장이 모이도록 검색 영역 충분히 확보. 거리순 정렬 후 cap.
+            data = await asyncio.to_thread(_analyze_competition, dong_code, keyword, 1500, 100)
             samples = data.get("samples") or []
             print(f"[all_competitors] {dong_name}({dong_code}) → {len(samples)}개 샘플")
             _stats["raw"] += len(samples)
