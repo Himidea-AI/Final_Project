@@ -233,6 +233,7 @@ export interface CompetitorIntel {
   };
   cannibalization?: {
     estimated_revenue_impact_pct?: number | null;
+    impact_is_capped?: boolean | null;
     distance_bins?: Record<string, number> | null;
     closest_distance_m?: number | null;
   };

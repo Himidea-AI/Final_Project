@@ -24,6 +24,8 @@ export interface MarketMapProps {
   radius?: number;
   winnerDistrict?: string;
   height?: number | string;
+  // 추천 동 내 "가장 적합한 공실" 좌표. 제공 시 폴리곤 centroid 대신 이 좌표에 핀/반경원을 찍는다.
+  targetSpot?: { lat: number; lng: number } | null;
 }
 
 interface KakaoLatLngInstance {
@@ -147,13 +149,34 @@ function formatDistance(m?: number): string {
   return `${(m / 1000).toFixed(2)}km`;
 }
 
+// 핀 좌표 기준 within/거리 재계산용. 백엔드 distance_m 은 source 동 centroid 기준이라
+// 핀이 best_vacancy spot 으로 이동한 뒤엔 정합 안 됨 → 화면 좌표계로 재계산.
+export function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 function formatKrwWan(v?: number | null): string {
   if (v == null) return '—';
   return `${Math.round(v / 10000).toLocaleString()}만원/일`;
 }
 
-function buildCompetitorInfoHtml(c: Competitor, radius: number): string {
-  const within = (c.distance_m ?? Infinity) <= radius;
+function buildCompetitorInfoHtml(
+  c: Competitor,
+  radius: number,
+  centerLat: number,
+  centerLng: number,
+): string {
+  // 거리·within 모두 핀(centerLat/centerLng) 기준 재계산.
+  // 백엔드 c.distance_m 은 source 동 centroid 기준이라 핀 위치와 정합 안 됨.
+  const distM = haversineM(centerLat, centerLng, c.lat, c.lng);
+  const within = distM <= radius;
   const accent = within ? '#f59e0b' : '#71717a';
   const brand = c.brand_name || c.place_name || '경쟁점';
   return `
@@ -163,7 +186,7 @@ function buildCompetitorInfoHtml(c: Competitor, radius: number): string {
         <span style="font-size:13px;font-weight:600;">${brand}</span>
       </div>
       <div style="font-size:11px;color:#a1a1aa;line-height:1.6;">
-        <div>거리: <span style="color:#f4f4f5;">${formatDistance(c.distance_m)}</span></div>
+        <div>거리: <span style="color:#f4f4f5;">${formatDistance(distM)}</span></div>
         <div>반경: <span style="color:${within ? '#fbbf24' : '#a1a1aa'};">${within ? '내부' : '외부'}</span></div>
         <div>일매출 추정: <span style="color:#f4f4f5;">${formatKrwWan(c.daily_revenue)}</span></div>
       </div>
@@ -178,6 +201,7 @@ export function MarketMap({
   radius = 500,
   winnerDistrict,
   height = 520,
+  targetSpot = null,
 }: MarketMapProps) {
   const { ready, error, kakao } = useKakaoMap();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -206,9 +230,10 @@ export function MarketMap({
       infoWindowRef.current = null;
     }
 
-    // Circle + amber pulse marker 의 좌표 = winner polygon 의 geometric centroid 가 정답.
-    // GeoJSON fetch 후 centroid 계산 → 그 좌표로 layer 생성. fetch 실패 또는 winner
-    // 미발견 시 center prop 으로 fallback (DONG_COORDS 하드코딩이 마지막 안전장치).
+    // 핀/반경원 좌표 우선순위:
+    //   1) targetSpot (추천 동 내 best 공실 — listing_count 최대) — 가장 정확
+    //   2) winner polygon geometric centroid (GeoJSON 기반) — 동 중심점 fallback
+    //   3) center prop (DONG_COORDS 하드코딩) — 최후 안전장치
     const fallbackCenter = new maps.LatLng(center.lat, center.lng);
     const buildCenterLayers = (latLng: unknown) => {
       const circle = new maps.Circle({
@@ -235,6 +260,10 @@ export function MarketMap({
       overlayLayersRef.current.push(targetOverlay);
     };
 
+    // targetSpot 이 있으면 centroid 계산 결과로 핀을 덮어쓰지 않도록 플래그.
+    // choropleth(폴리곤 색칠) 는 그대로 그리고, 핀/반경원만 targetSpot 으로 고정.
+    const hasTargetSpot = targetSpot != null;
+
     // Layer — (bonus) 16동 choropleth + winner centroid 계산
     fetch('/mapo-dong.geo.json')
       .then((r) => {
@@ -243,7 +272,9 @@ export function MarketMap({
       })
       .then((geo) => {
         if (!geo.features) {
-          buildCenterLayers(fallbackCenter);
+          buildCenterLayers(
+            hasTargetSpot ? new maps.LatLng(targetSpot!.lat, targetSpot!.lng) : fallbackCenter,
+          );
           return;
         }
         const rankingMap = new Map(rankings.map((r) => [r.district, r]));
@@ -293,19 +324,31 @@ export function MarketMap({
         });
 
         const wc = winnerCentroid as { lat: number; lng: number } | null;
-        const finalCenter = wc ? new maps.LatLng(wc.lat, wc.lng) : fallbackCenter;
+        const finalCenter = hasTargetSpot
+          ? new maps.LatLng(targetSpot!.lat, targetSpot!.lng)
+          : wc
+            ? new maps.LatLng(wc.lat, wc.lng)
+            : fallbackCenter;
         buildCenterLayers(finalCenter);
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : 'GeoJSON 로드 실패';
         setGeoError(msg);
-        buildCenterLayers(fallbackCenter);
+        buildCenterLayers(
+          hasTargetSpot ? new maps.LatLng(targetSpot!.lat, targetSpot!.lng) : fallbackCenter,
+        );
       });
 
     // Layer 2 — 경쟁점 마커 (빨간 삼각형, 반경 내/외 불투명도 구분 + 클릭 InfoWindow)
+    // within 판정 좌표 = 화면 핀 위치. targetSpot 우선 → props center fallback.
+    // winnerCentroid 는 GeoJSON fetch 비동기라 marker forEach 시점엔 미정 — props center 가 동 중심이라 근사값으로 충분.
+    // 백엔드 c.distance_m 은 source 동 centroid 기준이라 핀과 정합 안 됨 → 무시하고 haversineM 으로 재계산.
+    const withinCenterLat = targetSpot?.lat ?? center.lat;
+    const withinCenterLng = targetSpot?.lng ?? center.lng;
     competitors.forEach((c) => {
       if (typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
-      const within = (c.distance_m ?? Number.POSITIVE_INFINITY) <= radius;
+      const distFromCenter = haversineM(withinCenterLat, withinCenterLng, c.lat, c.lng);
+      const within = distFromCenter <= radius;
       const dot = document.createElement('div');
       dot.style.cssText = within
         ? 'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #ef4444;filter:drop-shadow(0 0 3px rgba(239,68,68,0.7));cursor:pointer;'
@@ -318,7 +361,7 @@ export function MarketMap({
         if (infoWindowRef.current) infoWindowRef.current.close();
         const iw = new maps.InfoWindow({
           position: pos,
-          content: buildCompetitorInfoHtml(c, radius),
+          content: buildCompetitorInfoHtml(c, radius, withinCenterLat, withinCenterLng),
           removable: true,
         });
         iw.open(mapInstance);
@@ -344,7 +387,18 @@ export function MarketMap({
         infoWindowRef.current = null;
       }
     };
-  }, [ready, kakao, center.lat, center.lng, competitors, rankings, radius, winnerDistrict]);
+  }, [
+    ready,
+    kakao,
+    center.lat,
+    center.lng,
+    competitors,
+    rankings,
+    radius,
+    winnerDistrict,
+    targetSpot?.lat,
+    targetSpot?.lng,
+  ]);
 
   if (error) {
     return (
