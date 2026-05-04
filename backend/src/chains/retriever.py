@@ -484,6 +484,15 @@ class LegalDocumentRetriever:
         "소방시설공사업법 시행령",
         "소방시설공사업법 시행규칙",
     ]
+    # 화재예방법 (소방안전관리자 선임 의무 등) — 화재예방법은 소방시설법과 별개 법률
+    FIRE_PREVENTION_SOURCES = [
+        "화재의 예방 및 안전관리에 관한 법률",
+        "화재의 예방 및 안전관리에 관한 법률 시행령",
+        "화재의 예방 및 안전관리에 관한 법률 시행규칙",
+        "화재예방법",
+        "화재예방법 시행령",
+        "화재예방법 시행규칙",
+    ]
     LABOR_LAW_SOURCES = [
         "근로기준법(법률)(20250101)",
         "최저임금법(법률)(제17326호)(20200526)",
@@ -651,13 +660,45 @@ class LegalDocumentRetriever:
         self._bm25_avg_dl = sum(self._bm25_doc_lens) / max(len(self._bm25_doc_lens), 1)
         logger.info(f"[BM25] Kiwi 인덱스 구축 완료: 문서 {self._bm25_doc_count}, 평균 토큰 {self._bm25_avg_dl:.1f}")
 
+    # 부칙(supplementary) 청크 패턴 — 본법의 적용례/경과조치/특례. 본문 article과 같은 번호를
+    # 재사용하지만 의미가 다름 → 정답 article 본문을 BM25 상위에서 밀어내는 주범.
+    _SUPPLEMENTARY_PATTERNS = (
+        "경과조치)",
+        "적용례)",
+        "에 관한 경과조치",
+        "에 관한 적용례",
+        "에 관한 특례",
+        "이 법 시행 당시",
+        "이 법 시행 전에",
+        "이 법 시행 이후",
+        "이 영 시행 당시",
+        "이 영 시행 전에",
+        "이 영 시행 이후",
+        "이 규칙 시행 당시",
+        "이 규칙 시행 전에",
+        "이 규칙 시행 이후",
+        "종전법 시행 당시",
+        "종전의 규정에 따라",
+    )
+
+    @classmethod
+    def _is_supplementary_chunk(cls, text: str) -> bool:
+        """부칙(적용례/경과조치/특례) 청크 여부. text 의 앞쪽 80자 기준."""
+        head = text[:80] if text else ""
+        return any(p in head for p in cls._SUPPLEMENTARY_PATTERNS)
+
     def _bm25_search(
         self,
         query: str,
         source_filter: list[str] | None = None,
         top_k: int = 20,
+        supplementary_penalty: float = 0.0,
     ) -> list[tuple[int, float]]:
-        """BM25 스코어 계산. Returns: [(chunk_idx, score), ...] top_k개."""
+        """BM25 스코어 계산. Returns: [(chunk_idx, score), ...] top_k개.
+
+        supplementary_penalty: 부칙(적용례/경과조치) 청크에 곱해지는 감점 비율 (0.0 = 비활성).
+            예: 0.5 → 부칙 청크 score *= 0.5 (본법 본문 article 우선).
+        """
         self._build_bm25_index()
         if not self._bm25_index:
             return []
@@ -684,6 +725,14 @@ class LegalDocumentRetriever:
                 tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / self._bm25_avg_dl))
                 scores[doc_idx] = scores.get(doc_idx, 0) + idf * tf_norm
 
+        # 부칙 청크 감점 — 본법 본문 article 을 상위로 끌어올림
+        if supplementary_penalty > 0 and supplementary_penalty <= 1.0:
+            multiplier = 1.0 - supplementary_penalty
+            for doc_idx in list(scores.keys()):
+                text, _ = self._bm25_docs[doc_idx]
+                if self._is_supplementary_chunk(text):
+                    scores[doc_idx] *= multiplier
+
         # source_filter 적용
         if source_filter:
             scores = {
@@ -697,6 +746,46 @@ class LegalDocumentRetriever:
         return ranked[:top_k]
 
     @staticmethod
+    def _is_primary_law_source(source: str) -> bool:
+        """주 법률(본법)인지 판별. 시행령/시행규칙/조례/지침/규정/특례 등은 False.
+
+        예:
+            "식품위생법" -> True
+            "식품위생법 시행규칙" -> False
+            "식품위생법(법률)(제21065호)(20251001)" -> True
+            "[한국외식업중앙회] 위생교육교재" -> False (지침/교재)
+        """
+        if not source:
+            return False
+        # 시행령/시행규칙/규칙/규정/특례/지침/조례/직제/계획/사례집/교재 등은 보조 자료
+        secondary_kw = (
+            "시행령",
+            "시행규칙",
+            " 규칙",
+            "규정",
+            "특례규정",
+            "지침",
+            "조례",
+            "직제",
+            "기본계획",
+            "사례집",
+            "교재",
+            "단체소송",
+            "보호 규칙",
+        )
+        for kw in secondary_kw:
+            if kw in source:
+                return False
+        # 시작이 [...] (보조 자료/판례) 인 경우도 비주
+        if source.startswith("["):
+            return False
+        # 판례/사건/위반 키워드 (사건명/판례)
+        case_kw = ("위반", "취소", "반환", "손해배상", "양도", "사건", "청구")
+        if any(kw in source for kw in case_kw):
+            return False
+        return True
+
+    @staticmethod
     def _rrf_merge(
         vector_results: list[dict],
         bm25_results: list[tuple[int, float]],
@@ -704,8 +793,13 @@ class LegalDocumentRetriever:
         k: int = 60,
         vector_w: float = 0.5,
         bm25_w: float = 0.5,
+        primary_law_boost: float = 0.0,
     ) -> list[dict]:
-        """Reciprocal Rank Fusion으로 벡터 + BM25 결과를 결합합니다."""
+        """Reciprocal Rank Fusion으로 벡터 + BM25 결과를 결합합니다.
+
+        primary_law_boost: 주 법률(본법) source 의 RRF 스코어에 곱해지는 보너스 (0.0 = 비활성).
+            예: 0.10 → 본법 청크의 score *= 1.10 (시행령/시행규칙/판례를 본법보다 위로 못 올리게).
+        """
 
         # chunk_id 기반 통합 (없으면 content hash)
         def _key(meta: dict, content: str = "") -> str:
@@ -731,6 +825,13 @@ class LegalDocumentRetriever:
                     "metadata": {**meta, "relevance": 0.4},  # BM25 전용은 고정 관련도
                 }
 
+        # 주 법률(본법) boost — 시행령/시행규칙/판례를 본법보다 위로 못 올리게
+        if primary_law_boost > 0:
+            for key, doc in doc_map.items():
+                src = doc.get("metadata", {}).get("source", "")
+                if LegalDocumentRetriever._is_primary_law_source(src):
+                    rrf_scores[key] = rrf_scores.get(key, 0) * (1.0 + primary_law_boost)
+
         # RRF 스코어 순 정렬
         sorted_keys = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)
         return [doc_map[k] for k in sorted_keys if k in doc_map]
@@ -751,6 +852,7 @@ class LegalDocumentRetriever:
         query: str,
         top_k: int = 10,
         source_filter: list[str] | None = None,
+        prefer_primary_law: bool = True,
     ) -> list[dict]:
         """
         하이브리드 법률 문서 검색 (HyDE 확장 + 벡터 + BM25 + RRF)
@@ -764,15 +866,15 @@ class LegalDocumentRetriever:
             query: 검색 쿼리
             top_k: 반환할 문서 수
             source_filter: 검색할 source 목록
+            prefer_primary_law: True면 RRF 결합 시 본법 source에 가산점 부여 (시행령/시행규칙/판례
+                밀어내기). settings.primary_law_boost 값 사용. False면 boost 0 (legacy 동작).
 
         Returns:
             list[dict]: 관련 법률 문서 리스트
         """
         vs = self._db.vectorstore
         if vs is None:
-            logger.warning(
-                f"[LegalDocumentRetriever] vectorstore 초기화 실패 — '{query}' 검색 skip"
-            )
+            logger.warning(f"[LegalDocumentRetriever] vectorstore 초기화 실패 — '{query}' 검색 skip")
             return []
 
         from src.config.settings import settings as _settings
@@ -820,9 +922,7 @@ class LegalDocumentRetriever:
             except Exception as e:
                 msg = str(e)
                 if "connection" in msg.lower() or "ssl" in msg.lower():
-                    logger.warning(
-                        f"[LegalDocumentRetriever] 1회 재시도 (transient): {type(e).__name__}"
-                    )
+                    logger.warning(f"[LegalDocumentRetriever] 1회 재시도 (transient): {type(e).__name__}")
                     return await vs.asimilarity_search_with_relevance_scores(q, k=k, filter=filter_dict)
                 raise
 
@@ -847,8 +947,7 @@ class LegalDocumentRetriever:
 
         if _trace_on:
             trace["vector_candidates"] = [
-                _trace_candidate(doc, score, i + 1)
-                for i, (doc, score) in enumerate(docs_with_score[:10])
+                _trace_candidate(doc, score, i + 1) for i, (doc, score) in enumerate(docs_with_score[:10])
             ]
             trace["elapsed_ms"]["vector_search"] = round((time.perf_counter() - _t) * 1000, 2)
 
@@ -861,19 +960,25 @@ class LegalDocumentRetriever:
             if score >= self.RELEVANCE_THRESHOLD
         ]
 
-        # 2차: BM25 키워드 검색
+        # 2차: BM25 키워드 검색 — 부칙(적용례/경과조치) 감점 적용 (settings.bm25_supplementary_penalty)
         _t = time.perf_counter()
-        bm25_ranked = self._bm25_search(query, source_filter, top_k=top_k * 2)
+        supp_penalty = float(getattr(_settings, "bm25_supplementary_penalty", 0.0))
+        bm25_ranked = self._bm25_search(
+            query,
+            source_filter,
+            top_k=top_k * 2,
+            supplementary_penalty=supp_penalty,
+        )
         if _trace_on:
             bm25_docs_ref = getattr(self, "_bm25_docs", []) or []
             trace["bm25_candidates"] = [
-                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref)
-                for i, (idx, sc) in enumerate(bm25_ranked[:10])
+                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref) for i, (idx, sc) in enumerate(bm25_ranked[:10])
             ]
             trace["elapsed_ms"]["bm25"] = round((time.perf_counter() - _t) * 1000, 2)
 
-        # 3차: RRF 결합
+        # 3차: RRF 결합 — prefer_primary_law 시 본법 source에 boost 적용
         _t = time.perf_counter()
+        boost = float(getattr(_settings, "primary_law_boost", 0.15)) if prefer_primary_law else 0.0
         if bm25_ranked and hasattr(self, "_bm25_docs"):
             merged = self._rrf_merge(
                 vector_results,
@@ -882,13 +987,12 @@ class LegalDocumentRetriever:
                 k=self._RRF_K,
                 vector_w=self._VECTOR_WEIGHT,
                 bm25_w=self._BM25_WEIGHT,
+                primary_law_boost=boost,
             )
         else:
             merged = vector_results
         if _trace_on:
-            trace["rrf_merged"] = [
-                _trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])
-            ]
+            trace["rrf_merged"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])]
             trace["elapsed_ms"]["rrf"] = round((time.perf_counter() - _t) * 1000, 2)
 
         # 4차: Multi-Vector Q2Q — 비활성 (RRF 결합 시 기존 결과를 밀어내는 역효과 확인)
@@ -967,13 +1071,10 @@ class LegalDocumentRetriever:
 
         final_docs = merged[:top_k]
         if _trace_on:
-            trace["final_top_k"] = [
-                _trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)
-            ]
+            trace["final_top_k"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)]
             trace["elapsed_ms"]["total"] = round((time.perf_counter() - _t_total) * 1000, 2)
             _write_trace_jsonl(trace)
         return final_docs
-
 
     @classmethod
     def _load_confusion_map(cls) -> dict:
@@ -1219,9 +1320,7 @@ class LegalDocumentRetriever:
         filter_dict = {"category": {"$eq": "판례"}}
         _t = time.perf_counter()
         try:
-            docs_with_score = await vs.asimilarity_search_with_relevance_scores(
-                query, k=top_k * 3, filter=filter_dict
-            )
+            docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k * 3, filter=filter_dict)
         except Exception as e:
             msg = str(e)
             if "connection" in msg.lower() or "ssl" in msg.lower():
@@ -1239,8 +1338,7 @@ class LegalDocumentRetriever:
 
         if _trace_on:
             trace["vector_candidates"] = [
-                _trace_candidate(doc, score, i + 1)
-                for i, (doc, score) in enumerate(docs_with_score[:10])
+                _trace_candidate(doc, score, i + 1) for i, (doc, score) in enumerate(docs_with_score[:10])
             ]
             trace["elapsed_ms"]["vector_search"] = round((time.perf_counter() - _t) * 1000, 2)
 
@@ -1264,16 +1362,13 @@ class LegalDocumentRetriever:
         if self._bm25_index and hasattr(self, "_bm25_docs"):
             # 전체 BM25 후 category 필터 (인덱스 분리는 비용 대비 이득 적음).
             raw = self._bm25_search(query, source_filter=None, top_k=top_k * 5)
-            bm25_ranked = [
-                (idx, sc)
-                for idx, sc in raw
-                if (self._bm25_docs[idx][1] or {}).get("category") == "판례"
-            ][: top_k * 2]
+            bm25_ranked = [(idx, sc) for idx, sc in raw if (self._bm25_docs[idx][1] or {}).get("category") == "판례"][
+                : top_k * 2
+            ]
         if _trace_on:
             bm25_docs_ref = getattr(self, "_bm25_docs", []) or []
             trace["bm25_candidates"] = [
-                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref)
-                for i, (idx, sc) in enumerate(bm25_ranked[:10])
+                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref) for i, (idx, sc) in enumerate(bm25_ranked[:10])
             ]
             trace["elapsed_ms"]["bm25"] = round((time.perf_counter() - _t) * 1000, 2)
 
@@ -1291,16 +1386,12 @@ class LegalDocumentRetriever:
         else:
             merged = vector_results
         if _trace_on:
-            trace["rrf_merged"] = [
-                _trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])
-            ]
+            trace["rrf_merged"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])]
             trace["elapsed_ms"]["rrf"] = round((time.perf_counter() - _t) * 1000, 2)
 
         final_docs = merged[:top_k]
         if _trace_on:
-            trace["final_top_k"] = [
-                _trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)
-            ]
+            trace["final_top_k"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)]
             trace["elapsed_ms"]["total"] = round((time.perf_counter() - _t_total) * 1000, 2)
             _write_trace_jsonl(trace)
         return final_docs

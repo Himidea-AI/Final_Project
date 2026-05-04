@@ -80,9 +80,37 @@ def _extract_legislation_body(data: dict) -> str:
     units = units or []
 
     for u in units:
-        # 조문내용 + 항(전부) + 호(전부)을 단일 텍스트로 평탄화
-        # _strip_html은 list/dict/nested 안전 처리
-        merged_unit = " ".join(_strip_html(v) for v in u.values() if v is not None).strip()
+        # 조문 단위 렌더링 — 키 순서를 강제하여 헤더("제N조(제목)")가 본문(항/호)보다 먼저 오도록.
+        # 과거 버그: dict.values() 순서대로 join 시, DRF API가 `항`을 `조문내용`보다 앞 키로 반환하여
+        # 본문이 헤더보다 먼저 나왔고, split_by_article 결과 chunk metadata.article 라벨이 실제 본문과
+        # 한 칸씩 어긋났음 (식품위생법 제41조 식품위생교육 → 제40조 chunk 에 들어가는 등).
+        # 따라서 명시적 우선순위로 재조립: [조문내용, 조문제목, 여부, 항, 호 ...].
+        if not isinstance(u, dict):
+            continue
+        ordered_keys = [
+            "조문내용",  # 헤더: "제N조(제목)" — 반드시 가장 먼저
+            "조문제목",  # 제목 보조
+            "조문여부",  # "조문" / "전문" (장/절 헤더 구분)
+            "항",  # ①②③ 본문 (대부분의 실질 내용)
+            "호",  # 1./2./3. 호 본문 (간헐 사용)
+        ]
+        seen = set()
+        ordered_segments: list[str] = []
+        for key in ordered_keys:
+            if key in u and u[key] is not None:
+                seen.add(key)
+                seg = _strip_html(u[key])
+                if seg:
+                    ordered_segments.append(seg)
+        # 위에서 누락된 메타 키 (조문번호/시행일자/이동키 등) 는 후순위로 보존.
+        # 정규식 split 위치를 흐트러뜨리지 않도록 헤더 다음 그리고 항/호 뒤에 둠.
+        for k, v in u.items():
+            if k in seen or v is None:
+                continue
+            seg = _strip_html(v)
+            if seg:
+                ordered_segments.append(seg)
+        merged_unit = " ".join(ordered_segments).strip()
         if merged_unit:
             parts.append(merged_unit)
 

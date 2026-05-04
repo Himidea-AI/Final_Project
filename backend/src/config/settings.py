@@ -72,6 +72,22 @@ class Settings(BaseSettings):
     rrf_vector_weight: float = float(os.getenv("RRF_VECTOR_WEIGHT", "0.4"))
     rrf_bm25_weight: float = float(os.getenv("RRF_BM25_WEIGHT", "0.6"))
 
+    # Primary-law boost — RRF 결합 시 본법 source(시행령/시행규칙/판례 제외)에 부여하는 가산점.
+    # 0.0 = 비활성, 2.0 = 본법 score *= 3.0. 시행령이 정답 본법 article을 밀어내는 현상 완화.
+    # search(prefer_primary_law=True) 시에만 적용. 기본값은 retriever default (True) 활성.
+    # Bench grid search (29 케이스 v3+, 2026-05-04):
+    #   0.15 -> Hit 86.2% MRR 0.427 NDCG 0.407
+    #   0.50 -> Hit 93.1% MRR 0.543 NDCG 0.501
+    #   1.00 -> Hit 96.6% MRR 0.561 NDCG 0.515
+    #   1.50 -> Hit 100%  MRR 0.565 NDCG 0.522
+    #   2.00 -> Hit 100%  MRR 0.570 NDCG 0.525  ← 최적 (saturate)
+    #   3.00 -> Hit 100%  MRR 0.570 NDCG 0.525  (변화 없음)
+    primary_law_boost: float = float(os.getenv("PRIMARY_LAW_BOOST", "2.0"))
+
+    # 부칙(적용례/경과조치/특례) 청크 BM25 감점 — 본문 article을 같은 번호의 부칙이 밀어내는
+    # 현상 완화. 0.0 = 비활성, 0.5 = score *= 0.5. 본법 본문 chunk 가 BM25 상위로 올라옴.
+    bm25_supplementary_penalty: float = float(os.getenv("BM25_SUPPLEMENTARY_PENALTY", "0.4"))
+
     # Reranker — Cross-encoder로 top-K 재정렬 (정밀도 ↑, 검색 속도 ↓ ~500ms/쿼리)
     # 이전 baseline (MiniLM 384D, 4배 중복 데이터) 측정 시 F1 -0.030, 비활성됨.
     # SP3 후 (BGE-m3 + Kiwi BM25 + 정상 9484 청크) 환경에서 재측정 가치 있음.
