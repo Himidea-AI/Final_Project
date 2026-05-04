@@ -60,7 +60,7 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
           `환영합니다! ${result.user.company_name || 'SPOTTER'} 엔진에 연결되었습니다.`,
         );
       } else {
-        auth.login(result.user, null, result.token);
+        auth.login(result.user, result.brand, result.token);
         showToast('success', `${result.user.contact_name || '매니저'}님, 환영합니다.`);
       }
       nav(destination);
