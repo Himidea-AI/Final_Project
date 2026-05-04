@@ -361,6 +361,22 @@ async def specialist_franchise_law(
     precedent_text = _format_precedents(precedents)
     territory_floor, territory_hint = _territory_to_level(territory)
 
+    # 평가 기준 — 사용자 입력 영업구역 우선. 영업구역 미입력 시만 500m 일반 임계값.
+    if territory_radius_m:
+        _territory_criteria = (
+            f"- 사용자 정의 영업구역 = **{territory_radius_m}m**. 이 거리만 침해 판정 기준으로 사용.\n"
+            f"- {territory_radius_m}m 안 동일 브랜드 1개 이상 → danger (가맹사업법 제12조의4 명백 침해)\n"
+            f"- {territory_radius_m}m 안 동일 브랜드 0개 → safe (정보공개서 기준 충족)\n"
+            "- summary/recommendation 에서 '500m' 같은 다른 거리 임계값 인용 금지. "
+            f"오직 {territory_radius_m}m 영업구역 기준만 사용.\n"
+        )
+    else:
+        _territory_criteria = (
+            "- 500m 내 동일 브랜드 1개 이상 + 자기잠식률 ≤-5% → danger (제12조의4 인접 출점)\n"
+            "- 500m 내 동일 브랜드 1개 이상 → caution (영업지역 협의 필요)\n"
+            "- 2km 내 동일 브랜드 3개 이상 → caution (자기잠식 위험)\n"
+        )
+
     user_content = (
         f"브랜드: {brand}\n"
         f"업종: {business_type}\n"
@@ -370,8 +386,7 @@ async def specialist_franchise_law(
         "[평가 기준]\n"
         "- 폐점률 ≥20% → danger 검토\n"
         "- 폐점률 ≥10% → caution\n"
-        "- 500m 내 동일 브랜드 1개 이상 + 자기잠식률 ≤-5% → danger (제12조의4 인접 출점)\n"
-        "- 500m 내 동일 브랜드 1개 이상 → caution (영업지역 협의 필요)\n"
+        f"{_territory_criteria}"
         "- 영업지역 침해(제12조의4)/허위과장(제9조)/필수품목 구입강제(제12조) → danger 후보\n"
         "- 신규 브랜드/직영 → safe~caution\n\n"
         "<<<RAG_CONTEXT>>>\n"

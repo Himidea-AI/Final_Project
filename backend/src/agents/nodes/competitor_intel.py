@@ -184,11 +184,29 @@ async def _try_cache_set(cache_key: str, payload: dict) -> None:
                 pass
 
 
-def _run_data_collection(dong_code: str, brand_name: str, keyword: str, ind_code: str | None, ind_label: str) -> dict:
-    """Python 서비스 4개 호출 (동기). asyncio.to_thread 로 래핑해서 사용."""
+def _run_data_collection(
+    dong_code: str,
+    brand_name: str,
+    keyword: str,
+    ind_code: str | None,
+    ind_label: str,
+    spot_lat: float | None = None,
+    spot_lon: float | None = None,
+) -> dict:
+    """Python 서비스 4개 호출 (동기). asyncio.to_thread 로 래핑해서 사용.
+
+    spot_lat/spot_lon 입력 시 카니발리제이션 = 매물 좌표 기준 (legal agent 와 일관).
+    좌표 없으면 행정동 centroid 폴백.
+    """
     comp_500 = analyze_competition(dong_code, keyword, radius_m=500)
     comp_1000 = analyze_competition(dong_code, keyword, radius_m=1000)
-    cannibal = analyze_cannibalization(dong_code, brand_name, radius_m=2000, industry=ind_label)
+    if spot_lat is not None and spot_lon is not None:
+        from src.services.commercial_intelligence import analyze_cannibalization_at
+        cannibal = analyze_cannibalization_at(spot_lat, spot_lon, brand_name, radius_m=2000, industry=ind_label)
+        if not cannibal or "error" in cannibal:
+            cannibal = analyze_cannibalization(dong_code, brand_name, radius_m=2000, industry=ind_label)
+    else:
+        cannibal = analyze_cannibalization(dong_code, brand_name, radius_m=2000, industry=ind_label)
     brand_bench = get_brand_benchmark(brand_name)
     peers: list[dict] = []
     if brand_bench.get("benchmark_available") and brand_bench.get("industry_medium"):
@@ -322,6 +340,25 @@ async def competitor_intel_node(state: AgentState) -> dict:
             "agent_attribution": _attr,
         }
 
+    # winner 매물 좌표 (legal agent 와 동일 기준점) — 일관성 확보.
+    # state.vacancy_spots 에서 winner_district 매칭 spot 추출, 없으면 첫 spot.
+    spot_lat: float | None = None
+    spot_lon: float | None = None
+    _vac_spots = state.get("vacancy_spots") or []
+    if isinstance(_vac_spots, list) and _vac_spots and target_district:
+        _matched = [
+            s for s in _vac_spots if isinstance(s, dict) and s.get("dong_name") == target_district
+        ]
+        _spot = _matched[0] if _matched else _vac_spots[0]
+        try:
+            _slat = _spot.get("lat") if isinstance(_spot, dict) else None
+            _slon = _spot.get("lon") if isinstance(_spot, dict) else None
+            if _slat is not None and _slon is not None:
+                spot_lat = float(_slat)
+                spot_lon = float(_slon)
+        except (TypeError, ValueError):
+            pass
+
     # dong 이름 → code
     dong_code = resolve_dong_code(target_district)
     if not dong_code:
@@ -361,9 +398,10 @@ async def competitor_intel_node(state: AgentState) -> dict:
         }
 
     # Redis 캐시 조회
-    # v2 → v3: brand_mapping_resolver fix (resolve_brand_name 0차 호출 + canonical 통일) 반영.
-    # v2 캐시는 카니발 0 (브랜드 매칭 실패 결과) 저장되어 있어 무효화 필요.
-    cache_key = f"v3:competitor_intel:{dong_code}:{brand_name}"
+    # v3 → v4: 카니발리제이션 기준점 = winner 매물 좌표 (legal agent 와 일관).
+    # 캐시 키에 spot 좌표 포함 — 매물 변경 시 자동 invalidation.
+    _spot_key = f"{spot_lat:.5f},{spot_lon:.5f}" if spot_lat is not None and spot_lon is not None else "centroid"
+    cache_key = f"v4:competitor_intel:{dong_code}:{brand_name}:{_spot_key}"
     cached = await _try_cache_get(cache_key)
     if cached:
         print(f"[competitor_intel] 캐시 히트: {cache_key}")
@@ -387,7 +425,9 @@ async def competitor_intel_node(state: AgentState) -> dict:
 
     # Python 서비스 데이터 수집 (동기 DB 호출이라 별도 스레드)
     try:
-        data = await asyncio.to_thread(_run_data_collection, dong_code, brand_name, keyword, ind_code, ind_label)
+        data = await asyncio.to_thread(
+            _run_data_collection, dong_code, brand_name, keyword, ind_code, ind_label, spot_lat, spot_lon
+        )
     except Exception as e:
         logger.exception(f"[competitor_intel] 서비스 호출 실패: {e}")
         _attr = _make_competitor_attr(

@@ -964,9 +964,7 @@ async def analyze_location(input_data: SimulationInput, response: Response):
         result["all_competitor_locations"] = await _collect_all_competitor_locations(
             winner, top3, input_data.business_type
         )
-        result["same_brand_locations"] = await _collect_same_brand_locations(
-            winner, top3, input_data.brand_name
-        )
+        result["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
         return {"status": "success", "data": result}
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
@@ -1031,9 +1029,7 @@ async def analyze_llm(input_data: SimulationInput):
         print(f"[ANALYZE/LLM] all_competitor_locations 수집 실패 (무시): {e}")
         full["all_competitor_locations"] = []
     try:
-        full["same_brand_locations"] = await _collect_same_brand_locations(
-            winner, top3, input_data.brand_name
-        )
+        full["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
     except Exception as e:
         print(f"[ANALYZE/LLM] same_brand_locations 수집 실패 (무시): {e}")
         full["same_brand_locations"] = []
@@ -1126,9 +1122,7 @@ async def analyze_llm_async(input_data: SimulationInput) -> dict[str, Any]:
                 logger.warning(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
                 full["all_competitor_locations"] = []
             try:
-                full["same_brand_locations"] = await _collect_same_brand_locations(
-                    winner, top3, input_data.brand_name
-                )
+                full["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
             except Exception as ce:
                 logger.warning(f"[/analyze/llm/async] same_brand_locations 실패 (무시): {ce}")
                 full["same_brand_locations"] = []
@@ -1868,9 +1862,7 @@ async def run_simulation(input_data: SimulationInput, response: Response):
         winner = result.get("winner_district") or input_data.target_district
         top3 = result.get("top_3_candidates") or []
         try:
-            result["same_brand_locations"] = await _collect_same_brand_locations(
-                winner, top3, input_data.brand_name
-            )
+            result["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
         except Exception as ce:
             logger.warning(f"[/simulate] same_brand_locations 실패 (무시): {ce}")
             result["same_brand_locations"] = []
@@ -2290,8 +2282,10 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     try:
         async with aioredis.from_url(settings.redis_url, decode_responses=True) as r:
             cache_body = {k: v for k, v in response.items() if k != "trajectory"}
-            await r.setex(cache_key, 3600, _json.dumps(cache_body, ensure_ascii=False))
-            logger.info(f"[ABM] cache SET key={cache_key[:16]}... ttl=3600s")
+            # 사용자 피드백 (2026-05-04): TTL 1h → 24h. ABM 시뮬 비용 큼 (gpt-4.1-mini ~$0.05/회) →
+            # 같은 시나리오 재시뮬 회피 위해 캐시 더 오래 유지.
+            await r.setex(cache_key, 86400, _json.dumps(cache_body, ensure_ascii=False))
+            logger.info(f"[ABM] cache SET key={cache_key[:16]}... ttl=86400s")
     except Exception as e:
         logger.warning(f"[ABM] Redis 캐시 저장 실패(무시): {e}")
 
