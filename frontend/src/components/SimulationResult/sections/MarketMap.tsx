@@ -149,11 +149,16 @@ function ensurePulseStyle() {
 
 function buildTargetOverlayContent(): HTMLElement {
   const wrap = document.createElement('div');
+  // 1위 펄싱 핀 위에 "공실 #1 추천" 라벨 추가 — 사용자가 공실 spot 임을 한눈에 인지 가능.
+  // 2~4위 핀과 동일한 라벨 디자인 (검은 배경 + 핫핑크 보더).
   wrap.innerHTML = `
-    <div style="position:relative;width:28px;height:28px;pointer-events:none;">
-      <div class="mm-pulse-ring"></div>
-      <div class="mm-pulse-ring mm-pulse-ring-delay"></div>
-      <div style="position:absolute;inset:9px;border-radius:9999px;background:#ff0070;border:2px solid #ffffff;box-shadow:0 0 10px rgba(255,0,112,0.8);"></div>
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;">
+      <div style="padding:2px 6px;background:rgba(24,24,27,0.85);color:#ffffff;border:1px solid #ff0070;border-radius:4px;font-size:9px;font-weight:900;letter-spacing:0.05em;white-space:nowrap;">공실 #1 추천</div>
+      <div style="position:relative;width:28px;height:28px;">
+        <div class="mm-pulse-ring"></div>
+        <div class="mm-pulse-ring mm-pulse-ring-delay"></div>
+        <div style="position:absolute;inset:9px;border-radius:9999px;background:#ff0070;border:2px solid #ffffff;box-shadow:0 0 10px rgba(255,0,112,0.8);"></div>
+      </div>
     </div>
   `;
   return wrap;
@@ -398,25 +403,10 @@ export function MarketMap({
       overlayLayersRef.current.push(overlay);
     });
 
-    // Layer 3 — 자사 매장 마커 (로고 아이콘) + 영업구역 반경 원 (점선)
+    // Layer 3 — 자사 매장 마커 (로고 아이콘 별표 only — 영업구역 점선 원은 사용자 요구로 제거)
     sameBrandLocations.forEach((s) => {
       if (typeof s.lat !== 'number' || typeof s.lng !== 'number') return;
       const pos = new maps.LatLng(s.lat, s.lng);
-      // 영업구역 반경 원 — territoryRadiusM 입력 시 자사 매장 각각에 점선 원 그리기.
-      if (territoryRadiusM && territoryRadiusM > 0) {
-        const territoryCircle = new maps.Circle({
-          center: pos,
-          radius: territoryRadiusM,
-          strokeWeight: 1.5,
-          strokeColor: '#fbbf24',
-          strokeOpacity: 0.7,
-          strokeStyle: 'shortdash',
-          fillColor: '#fbbf24',
-          fillOpacity: 0.06,
-        });
-        territoryCircle.setMap(mapInstance);
-        overlayLayersRef.current.push(territoryCircle);
-      }
       // 로고 아이콘 마커 — 금색 동그라미 + 작은 펄스 (자사 매장 표시).
       const logo = document.createElement('div');
       logo.style.cssText =
@@ -454,17 +444,35 @@ export function MarketMap({
       overlayLayersRef.current.push(sameBrandOverlay);
     });
 
-    // Layer 4 — 추천 spot 2~4위 번호 라벨 핀 (1위는 buildCenterLayers 가 펄싱 핀으로 그림).
-    // 동일 디자인의 작은 원 + 번호. 사용자가 1·2·3·4 비교해서 볼 수 있게.
+    // Layer 4 — 추천 spot 2~4위 번호 라벨 핀 + 1위와 동일한 핫핑크 반경 원.
+    // 1위는 buildCenterLayers 가 그림 (펄싱 핀 + 반경원). 2~4위도 비교용으로 동일 반경원 표시.
     targetSpots.slice(1, 4).forEach((sp, idx) => {
       const rank = idx + 2; // 2위부터 시작
+      const spotPos = new maps.LatLng(sp.lat, sp.lng);
+      // 반경 원 — 1위와 동일 디자인(핫핑크 dashed). 4 후보 비교 시각화.
+      const spotCircle = new maps.Circle({
+        center: spotPos,
+        radius,
+        strokeWeight: 2,
+        strokeColor: '#ff0070',
+        strokeOpacity: 0.6,
+        strokeStyle: 'shortdash',
+        fillColor: '#ff0070',
+        fillOpacity: 0.05,
+      });
+      spotCircle.setMap(mapInstance);
+      overlayLayersRef.current.push(spotCircle);
+      // 번호 핀 — "공실 #N" 라벨 같이 표시해 인지성 강화.
       const pin = document.createElement('div');
       pin.style.cssText =
-        'position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#ff0070;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 6px rgba(255,0,112,0.6);font-size:11px;font-weight:900;color:#ffffff;cursor:default;';
-      pin.innerHTML = String(rank);
-      pin.title = `추천 spot ${rank}순위`;
+        'position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:default;';
+      pin.innerHTML = `
+        <div style="padding:2px 6px;background:rgba(24,24,27,0.85);color:#ffffff;border:1px solid #ff0070;border-radius:4px;font-size:9px;font-weight:900;letter-spacing:0.05em;white-space:nowrap;">공실 #${rank}</div>
+        <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#ff0070;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 6px rgba(255,0,112,0.6);font-size:11px;font-weight:900;color:#ffffff;">${rank}</div>
+      `;
+      pin.title = `추천 공실 spot ${rank}순위`;
       const pinOverlay = new maps.CustomOverlay({
-        position: new maps.LatLng(sp.lat, sp.lng),
+        position: spotPos,
         content: pin,
         xAnchor: 0.5,
         yAnchor: 0.5,
