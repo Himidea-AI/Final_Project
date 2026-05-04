@@ -9,12 +9,18 @@
  * 본 탭은 단일 동(legacy) 영역 — district prop 미지정.
  */
 
+import { useState } from 'react';
 import { Activity } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import { formatKrw, formatPct } from '../utils/formatters';
 import { SurvivalRateKpi } from '../charts/SurvivalRateKpi';
 import { ClosureRatePanel } from '../charts/ClosureRatePanel';
 import { ClosureRiskPanel } from '../charts/ClosureRiskPanel';
+import { SERIES_COLORS } from '../../QuarterlyProjectionChart';
+
+// 동 chip 활성 시 텍스트 색 — 1~3위는 어두운 배경 위 흰 글씨,
+// 4번째(sunshine-yellow) 만 밝은 배경이라 검정. QuarterlyStatStrip 과 동일 정책.
+const ACTIVE_TEXT_BY_INDEX = ['#ffffff', '#ffffff', '#ffffff', 'var(--color-text-black)'] as const;
 
 // M8 호환: 기존에 `from '../../tabs/FinancialTab'` 으로 import 하던 외부 모듈을 위해 재수출.
 // 새 코드는 charts/ 에서 직접 import 하는 것을 권장.
@@ -37,44 +43,45 @@ type BepDict = {
 };
 
 export function FinancialTab({ simResult }: Props) {
-  const ps = simResult.final_report?.profit_simulation ?? null;
-
-  // 2026-05-04 분기 단위 통일 + ML 실측 우선.
-  // FinancialTab 은 단일 동(legacy) 경로지만 district_predictions 가 있다면 ML 실측 우선 사용.
+  // 2026-05-04 패널 KPI 4분기 평균으로 전환 + LLM/랭킹 fallback 제거.
+  // FinancialTab 은 단일 동(legacy) 경로지만 district_predictions 가 있다면 ML 실측 사용.
+  // 데이터 소스: district_predictions[selected].bep.quarterly_simulation 의 첫 4분기 평균.
+  // 매출-운영비=영업이익 / 마진=영업이익/매출 등식이 같은 4개 row 에서 산출되어 자동 성립.
   const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
-  const winnerPred =
-    dpredicts.find((p) => p.district === simResult.winner_district) ?? dpredicts[0];
-  const winnerDistrict = winnerPred?.district ?? simResult.winner_district ?? '단일';
-  const bepObj = (winnerPred?.bep as BepDict | null | undefined) ?? null;
-  const firstSimQ = bepObj?.quarterly_simulation?.[0];
-  const firstProj = simResult.quarterly_projection?.[0];
+  const defaultDistrict =
+    dpredicts.find((p) => p.district === simResult.winner_district)?.district ??
+    dpredicts[0]?.district ??
+    simResult.winner_district ??
+    '단일';
+  const [selectedDistrict, setSelectedDistrict] = useState<string>(defaultDistrict);
+  const selectedPred =
+    dpredicts.find((p) => p.district === selectedDistrict) ??
+    dpredicts.find((p) => p.district === simResult.winner_district) ??
+    dpredicts[0];
+  const currentDistrict = selectedPred?.district ?? defaultDistrict;
+  const bepObj = (selectedPred?.bep as BepDict | null | undefined) ?? null;
 
-  const quarterlyRev =
-    firstSimQ?.revenue ??
-    (ps?.monthly_revenue != null ? ps.monthly_revenue * 3 : null) ??
-    firstProj?.revenue ??
-    null;
-  const quarterlyCost =
-    firstSimQ?.quarterly_total_cost ?? (ps?.monthly_cost != null ? ps.monthly_cost * 3 : null);
-  const quarterlyProfit =
-    firstSimQ?.quarterly_profit ?? (ps?.net_profit != null ? ps.net_profit * 3 : null);
+  // 첫 4분기 평균 — 1년 사이클 평균이라 계절성에 휘둘리지 않고
+  // top-level bep_quarters 와 동일 base. ML 데이터 없으면 '—' 표시 (LLM hallucination 차단).
+  const sim4 = (bepObj?.quarterly_simulation ?? []).slice(0, 4);
+  const avg =
+    sim4.length > 0
+      ? {
+          revenue: sim4.reduce((s, r) => s + (r.revenue ?? 0), 0) / sim4.length,
+          cost: sim4.reduce((s, r) => s + (r.quarterly_total_cost ?? 0), 0) / sim4.length,
+          profit: sim4.reduce((s, r) => s + (r.quarterly_profit ?? 0), 0) / sim4.length,
+        }
+      : null;
+
+  const quarterlyRev = avg?.revenue ?? null;
+  const quarterlyCost = avg?.cost ?? null;
+  const quarterlyProfit = avg?.profit ?? null;
   const margin =
-    firstSimQ?.revenue != null && firstSimQ.revenue > 0 && firstSimQ?.quarterly_profit != null
-      ? firstSimQ.quarterly_profit / firstSimQ.revenue
-      : (ps?.margin_rate ?? null);
-
-  const dataSource: 'ml' | 'llm' | 'none' =
-    firstSimQ != null ? 'ml' : ps?.monthly_revenue != null ? 'llm' : 'none';
-
-  // BEP 분기 — ML 실측 우선
-  const winnerRanking = simResult.district_rankings?.find(
-    (r) => r.district === simResult.winner_district,
-  );
-  const bepQuarters =
-    bepObj?.bep_quarters ??
-    winnerRanking?.bep_quarters ??
-    ps?.bep_quarters ??
-    (ps?.bep_months != null ? Math.round(ps.bep_months / 3) : null);
+    quarterlyRev != null && quarterlyRev > 0 && quarterlyProfit != null
+      ? quarterlyProfit / quarterlyRev
+      : null;
+  const dataSource: 'ml' | 'none' = avg != null ? 'ml' : 'none';
+  const bepQuarters = bepObj?.bep_quarters ?? null;
 
   return (
     <div className="space-y-6">
@@ -84,8 +91,10 @@ export function FinancialTab({ simResult }: Props) {
         quarterlyProfit={quarterlyProfit}
         margin={margin}
         bepQuarters={bepQuarters}
-        district={winnerDistrict}
+        district={currentDistrict}
         dataSource={dataSource}
+        availableDistricts={dpredicts.map((p) => p.district)}
+        onSelectDistrict={setSelectedDistrict}
       />
 
       <SurvivalRateKpi closureRate={simResult.market_report?.closure_rate} />
@@ -104,7 +113,9 @@ interface ProfitPanelProps {
   margin: number | null | undefined;
   bepQuarters: number | null | undefined;
   district: string;
-  dataSource: 'ml' | 'llm' | 'none';
+  dataSource: 'ml' | 'none';
+  availableDistricts?: string[];
+  onSelectDistrict?: (d: string) => void;
 }
 
 function ProfitSimulationPanelFull({
@@ -115,17 +126,18 @@ function ProfitSimulationPanelFull({
   bepQuarters,
   district,
   dataSource,
+  availableDistricts,
+  onSelectDistrict,
 }: ProfitPanelProps) {
   const rows = [
     { label: '분기 추정 매출', val: quarterlyRev, accent: 'text-foreground' },
     { label: '분기 운영비 (총계)', val: quarterlyCost, accent: 'text-muted-foreground' },
   ];
+  // 2026-05-04: LLM fallback 제거로 'llm' 케이스 없음.
   const sourceBadge =
     dataSource === 'ml'
       ? { label: 'ML 실측', cls: 'border-success/30 bg-success/10 text-success' }
-      : dataSource === 'llm'
-        ? { label: 'LLM 추정', cls: 'border-warning/30 bg-warning/10 text-warning' }
-        : { label: '데이터 없음', cls: 'border-border bg-secondary text-muted-foreground' };
+      : { label: '데이터 없음', cls: 'border-border bg-secondary text-muted-foreground' };
 
   return (
     <div className="bg-card border border-border rounded-3xl p-8">
@@ -159,6 +171,37 @@ function ProfitSimulationPanelFull({
           )}
         </div>
       </div>
+
+      {/* 동 선택 chip — 4동 비교 시뮬에서 다른 동의 수익성 보고 싶을 때 클릭. 단일 동이면 미노출.
+          활성 chip 색은 BEP 누적수익 그래프와 동일 SERIES_COLORS[idx] inline style 주입. */}
+      {availableDistricts && availableDistricts.length > 1 && onSelectDistrict && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {availableDistricts.map((d, idx) => {
+            const active = d === district;
+            const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+            const textColor = ACTIVE_TEXT_BY_INDEX[idx % ACTIVE_TEXT_BY_INDEX.length];
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => onSelectDistrict(d)}
+                style={
+                  active
+                    ? { backgroundColor: color, borderColor: color, color: textColor }
+                    : undefined
+                }
+                className={`rounded-full border px-3 py-1 text-[0.6875rem] font-bold tabular-nums transition ${
+                  active
+                    ? ''
+                    : 'border-border bg-secondary text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                }`}
+              >
+                {d}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* 2026-04-27 BEP 면책 — 백엔드 계산식이 인건비 제외라 명시 필요 */}
       {bepQuarters != null && (
