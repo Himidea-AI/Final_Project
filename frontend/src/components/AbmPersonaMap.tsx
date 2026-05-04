@@ -3,13 +3,10 @@ import { Play, Cloud, Calendar, DollarSign, Sliders, Loader2 } from 'lucide-reac
 import VacancySpotMarker from './VacancySpotMarker';
 import VacancyStatsPanel from './VacancyStatsPanel';
 import PersonaCard, { type PersonaCardData } from './PersonaCard';
-import AbmProgressPanel from './AbmProgressPanel';
 import { FormField } from './ui/FormField';
 import { SectionLabel } from './ui/SectionLabel';
 import type { SpotDongStats } from './abm/SpotInfoCard';
-import { PersonaPreviewStream } from './abm/PersonaPreviewStream';
 import { AbmQueuePanel } from './abm/AbmQueuePanel';
-import { useAbmStore } from '../stores/abmStore';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -418,7 +415,7 @@ export default function AbmPersonaMap({
   vacancyPseSummary = null,
   competitors,
   onPersonaClick,
-  businessType,
+  businessType: _businessType,
   dongStats: _dongStats,
 }: AbmPersonaMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -569,17 +566,9 @@ export default function AbmPersonaMap({
     wanderActiveRef.current = !abmResult;
   }, [abmResult]);
 
-  // 현재 진행 중 시뮬의 spot — focusSpot 과 다르면 사용자가 다른 spot 보는 중 (queue 추가 의도).
-  // 사용자 피드백 (2026-05-05): 시뮬 진행 중 다른 spot 클릭하면 progress panel 만 떠서
-  // 시나리오 form 못 봄 → 진행 중 spot 과 focusSpot 다를 때만 progress 표시 (같은 spot 일 때만).
-  const runningParams = useAbmStore((s) => s.params);
-  const isRunningCurrentSpot =
-    abmLoading &&
-    !!focusSpot &&
-    !!runningParams?.spot_lat &&
-    !!runningParams?.spot_lon &&
-    Math.abs((runningParams.spot_lat ?? 0) - focusSpot.lat) < 1e-5 &&
-    Math.abs((runningParams.spot_lon ?? 0) - focusSpot.lon) < 1e-5;
+  // 사용자 피드백 (2026-05-05): spot 클릭 시 진행 중이라도 항상 시나리오 form 표시
+  // (날씨/요일 변경해서 추가 enqueue 가능). 진행 상태는 우하단 queue 패널 + AbmFloatingWidget
+  // 으로 노출. progress panel 자체 분기 제거.
 
   // vacancy 모드 — 4 endpoint fetch 결과 (mode='vacancy' 시만 사용)
   const [vacancyTrajectory, setVacancyTrajectory] = useState<any[]>([]);
@@ -2838,7 +2827,7 @@ export default function AbmPersonaMap({
                   </span>
                   <span className="h-3 w-px bg-border" />
                   <span className="text-[10.5px] text-foreground font-bold tabular-nums">
-                    {focusSpot?.label ?? '—'}
+                    {focusSpot?.label || targetDistrict || '—'}
                   </span>
                   <span className="text-[10.5px] text-muted-foreground">· 진행 중...</span>
                 </div>
@@ -2994,7 +2983,7 @@ export default function AbmPersonaMap({
           </div>
           {/* 우하 (col 2, row 2). AbmQueuePanel 항상 표시 (사용자 피드백 2026-05-05) —
               abmResult 있을 때도 queue 가 보이도록. metric 4-card 는 좌측 결과 패널에 있음. */}
-          <div className="col-start-2 row-start-2 relative p-2 bg-secondary rounded-2xl overflow-hidden min-h-0">
+          <div className="col-start-2 row-start-2 relative p-2 bg-card border border-border rounded-2xl overflow-hidden min-h-0">
             {/* 결과 시 metric 4-card 는 그대로 유지하면서 우측 1/3 에 queue panel 추가. */}
             {abmResult ? (
               <div className="grid grid-cols-[3fr_1fr] gap-2 h-full">
@@ -3145,7 +3134,7 @@ export default function AbmPersonaMap({
             )}
           </div>
           {/* 좌측 결과 패널 — col 1, row span 2 (전체 높이) */}
-          <div className="col-start-1 row-start-1 row-span-2 relative px-5 py-5 flex flex-col gap-4 bg-secondary border border-border rounded-2xl overflow-y-auto">
+          <div className="col-start-1 row-start-1 row-span-2 relative px-5 py-5 flex flex-col gap-4 bg-card border border-border rounded-2xl overflow-y-auto">
             {/* 백그라운드 무드 조명 — 보라 tint 제거 (canvas/analyze panel 과 동일 톤 유지) */}
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
             {abmResult ? (
@@ -3554,11 +3543,6 @@ export default function AbmPersonaMap({
                     </div>
                   </div>
                 )}
-              </div>
-            ) : isRunningCurrentSpot ? (
-              <div className="w-full flex flex-col gap-3">
-                <AbmProgressPanel />
-                <PersonaPreviewStream businessType={businessType} spotLabel={focusSpot?.label} />
               </div>
             ) : abmError ? (
               <div className="bg-background/90 backdrop-blur-sm border border-warning/30 rounded-xl px-6 py-3">

@@ -246,7 +246,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
             ) : (
               <>
                 <Radar size={16} className="text-primary" /> ABM 페르소나 행동 시뮬 (
-                {focusSpot?.label ?? '—'})
+                {focusSpot?.label || targetDistrict || '—'})
               </>
             )}
           </h3>
@@ -271,7 +271,8 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
         </div>
       )}
 
-      {/* 지도 / ABM 뷰 */}
+      {/* 지도 / ABM 뷰 — 퐁당퐁당: AbmGroup(card white) → 여기 panel(secondary gray)
+          → 안 inner cards(card white). 사용자 피드백 (2026-05-05): 제일 밖 white. */}
       {mode === 'map' ? (
         <div className="bg-secondary border border-border rounded-3xl p-4">
           <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">

@@ -16,7 +16,7 @@ interface Props {
 
 export function AbmGroup({ simResult, brandName, businessType }: Props) {
   return (
-    <div className="rounded-3xl bg-secondary p-4 sm:p-6">
+    <div className="rounded-3xl border border-border bg-card p-4 sm:p-6">
       <AbmTab simResult={simResult} brandName={brandName} businessType={businessType} />
     </div>
   );
