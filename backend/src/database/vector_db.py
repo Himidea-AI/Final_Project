@@ -52,6 +52,7 @@ class LegalVectorDB:
             _singleton_instance.collection_name = collection_name
             _singleton_instance._vectorstore = None
             _singleton_instance._embeddings = None
+            _singleton_instance._async_engine = None
         return _singleton_instance
 
     def __init__(self, collection_name: str = "legal_documents"):
@@ -78,7 +79,7 @@ class LegalVectorDB:
                 return None
             try:
                 conn_string = settings.postgres_url.replace("postgresql://", "postgresql+psycopg://", 1)
-                async_engine = create_async_engine(
+                self._async_engine = create_async_engine(
                     conn_string,
                     pool_size=_POOL_SIZE,
                     max_overflow=_MAX_OVERFLOW,
@@ -87,7 +88,7 @@ class LegalVectorDB:
                     pool_recycle=_POOL_RECYCLE,
                 )
                 self._vectorstore = PGVector(
-                    connection=async_engine,
+                    connection=self._async_engine,
                     embeddings=self.embeddings,
                     collection_name=self.collection_name,
                     use_jsonb=True,
@@ -96,6 +97,13 @@ class LegalVectorDB:
                 logger.warning(f"[LegalVectorDB] PGVector 초기화 실패 - RAG 검색 불가: {e}")
                 return None
         return self._vectorstore
+
+    async def dispose(self) -> None:
+        """async engine을 정리한다 (앱 shutdown 시 호출)."""
+        if self._async_engine is not None:
+            await self._async_engine.dispose()
+            self._async_engine = None
+            self._vectorstore = None
 
     def get_total_count(self) -> int:
         if not settings.postgres_url:
@@ -108,17 +116,19 @@ class LegalVectorDB:
 
             # settings에서 주소를 가져옵니다.
             conn = psycopg2.connect(settings.postgres_url)
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*) FROM langchain_pg_embedding e "
-                "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
-                "WHERE c.name = %s",
-                (self.collection_name,),
-            )
-            count = cur.fetchone()[0]
-            cur.close()
-            conn.close()
-            return count
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(*) FROM langchain_pg_embedding e "
+                    "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
+                    "WHERE c.name = %s",
+                    (self.collection_name,),
+                )
+                count = cur.fetchone()[0]
+                cur.close()
+                return count
+            finally:
+                conn.close()
         except Exception as e:
             print(f"DEBUG: DB Count 조회 실패 - {str(e)}")
             return 0

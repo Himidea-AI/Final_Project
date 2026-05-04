@@ -133,43 +133,30 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
     return startAbm(payload, params.nextFocusSpot ?? null);
   }
 
+  // spot 클릭 — 즉시 시뮬 실행 X. abm 모드 진입 + focusSpot 만 set.
+  // AbmPersonaMap 의 시나리오 패널이 표시되고 사용자가 실행 버튼 누르면 startAbm.
   const handleAgentMapSpotClick = async (loc: { lat: number; lng: number; name: string }) => {
     if (abmLoading) return;
     setMode('abm');
-    const next = { lat: loc.lat, lon: loc.lng, label: loc.name };
-    await runAbm({
-      districtOverride: loc.name,
-      spotLat: loc.lat,
-      spotLon: loc.lng,
-      scenario: {
-        weather_override: null,
-        date_override: null,
-        weekend_force: false,
-        rent_shock_pct: 0.0,
-      },
-      nextFocusSpot: next,
-    });
+    setFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
   };
 
   const handleAbmSpotClick = async (spot: { lat: number; lon: number; dong_name: string }) => {
     if (abmLoading) return;
-    const next = { lat: spot.lat, lon: spot.lon, label: spot.dong_name };
-    await runAbm({
-      districtOverride: spot.dong_name,
-      spotLat: spot.lat,
-      spotLon: spot.lon,
-      scenario: {
-        weather_override: null,
-        date_override: null,
-        weekend_force: false,
-        rent_shock_pct: 0.0,
-      },
-      nextFocusSpot: next,
-    });
+    setFocusSpot({ lat: spot.lat, lon: spot.lon, label: spot.dong_name });
+    // 결과 띄워져 있으면 dismiss → 시나리오 패널 다시 보임
+    if (abmResult) dismissResult();
   };
 
+  // 시나리오 패널 "시뮬 실행" 버튼 — focusSpot 좌표 + scenario 로 startAbm.
   const handleRunSimulation = async (scenario: AbmScenario) => {
-    await runAbm({ scenario, nextFocusSpot: focusSpot });
+    await runAbm({
+      districtOverride: focusSpot?.label,
+      spotLat: focusSpot?.lat,
+      spotLon: focusSpot?.lon,
+      scenario,
+      nextFocusSpot: focusSpot,
+    });
   };
 
   const handleClearResult = () => {

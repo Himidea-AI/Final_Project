@@ -139,10 +139,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Tenant-ID"],
 )
 
-# --- simulation_history REST (JWT Bearer 요구) ---
-from src.api.simulation_history import router as _sim_history_router  # noqa: E402
-
-app.include_router(_sim_history_router)
 
 # --- vacancy_evaluation REST (ABM PSE 평가, 무인증) ---
 from src.api.vacancy_evaluation import router as _vacancy_eval_router  # noqa: E402

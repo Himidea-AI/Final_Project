@@ -243,11 +243,11 @@ class AuthService:
                     },
                     "brand": {
                         "brand_name": brand_data.get("brand_name", ""),
-                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")),
-                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")),
-                        "franchise_count": brand_data.get("franchise_count", 0),
-                        "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)),
-                        "mapo_store_count": brand_data.get("mapo_store_count", 0),
+                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")) or "",
+                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")) or "",
+                        "franchise_count": brand_data.get("franchise_count", 0) or 0,
+                        "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)) or 0,
+                        "mapo_store_count": brand_data.get("mapo_store_count", 0) or 0,
                     }
                     if brand_data
                     else None,
@@ -476,6 +476,27 @@ class AuthService:
                 )
                 conn.commit()
 
+                # 소속 팀장의 브랜드 매핑 조회
+                brand_data = None
+                if mgr.get("biz_number"):
+                    brand_row = conn.execute(
+                        text(
+                            "SELECT brand_name, industry_large, industry_medium, "
+                            "franchise_count, avg_sales, mapo_store_count "
+                            "FROM biz_brand_mapping WHERE biz_number = :biz"
+                        ),
+                        {"biz": mgr["biz_number"]},
+                    ).fetchone()
+
+                    if brand_row:
+                        brand_data = dict(brand_row._mapping)
+                    else:
+                        brands = self._mapper.search_brand_by_company(mgr["company_name"])
+                        top = brands[0] if brands else None
+                        if top:
+                            top["mapo_store_count"] = self._mapper.count_mapo_stores(top["brand_name"])
+                            brand_data = top
+
                 return {
                     "status": "success",
                     "user": {
@@ -490,6 +511,16 @@ class AuthService:
                         "store_count": str(mgr["store_count"]) if mgr["store_count"] is not None else "",
                         "plan": mgr["plan"],
                     },
+                    "brand": {
+                        "brand_name": brand_data.get("brand_name", ""),
+                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")) or "",
+                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")) or "",
+                        "franchise_count": brand_data.get("franchise_count", brand_data.get("frcsCnt", 0)) or 0,
+                        "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)) or 0,
+                        "mapo_store_count": brand_data.get("mapo_store_count", 0) or 0,
+                    }
+                    if brand_data
+                    else None,
                 }
         finally:
             pass

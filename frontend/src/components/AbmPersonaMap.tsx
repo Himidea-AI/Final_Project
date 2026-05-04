@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Play } from 'lucide-react';
+import { Play, Cloud, Calendar, DollarSign, Sliders } from 'lucide-react';
 import VacancySpotMarker from './VacancySpotMarker';
 import VacancyStatsPanel from './VacancyStatsPanel';
 import PersonaCard, { type PersonaCardData } from './PersonaCard';
 import AbmProgressPanel from './AbmProgressPanel';
+import { FormField } from './ui/FormField';
+import { SectionLabel } from './ui/SectionLabel';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -25,19 +27,19 @@ const FALLBACK_CENTER: StoreNode = {
 
 // 에이전트 Action 색 (채움) — gold(결제)·cyan(external halo)·white(테두리)는 별도
 const ACTION_COLOR: Record<string, string> = {
-  visit: '#fb565b', // Red — 매장 방문(결제)
+  visit: '#FF3800', // Red — 매장 방문(결제)
   move: '#002CD1', // Blue — 이동 중
-  work: '#008b00', // Green — 근무 (테두리만)
+  work: '#00BA7A', // Green — 근무 (테두리만)
   rest: '#6B6A63', // Gray — 휴식 (희미)
 };
 
 // Phase 2: 4 거점 floating glassmorphism 카드 — 마포 대표 dong centroid.
 // Orion 레퍼런스의 주요 도시 카드(Chicago/Berlin/Sangam-DMC 등) 패턴 재현.
 const KEY_DONGS: Array<{ name: string; lat: number; lon: number; color: string }> = [
-  { name: 'Hongdae-Ip-Gu', lat: 37.553, lon: 126.918, color: '#fb565b' }, // 서교동·홍대입구
+  { name: 'Hongdae-Ip-Gu', lat: 37.553, lon: 126.918, color: '#FF3800' }, // 서교동·홍대입구
   { name: 'Sangam-DMC', lat: 37.567, lon: 126.916, color: '#002CD1' }, // 성산동
-  { name: 'Gongdeok-Stn', lat: 37.544, lon: 126.953, color: '#fb565b' }, // 공덕동
-  { name: 'Mangwon-Mkt', lat: 37.557, lon: 126.905, color: '#ffba00' }, // 망원동
+  { name: 'Gongdeok-Stn', lat: 37.544, lon: 126.953, color: '#FF3800' }, // 공덕동
+  { name: 'Mangwon-Mkt', lat: 37.557, lon: 126.905, color: '#FF7940' }, // 망원동
 ];
 
 interface PixelCoord {
@@ -276,6 +278,9 @@ function roundedRect(
   r: number,
 ) {
   const maxR = Math.min(r, w / 2, h / 2);
+  // 사용자 피드백 (2026-05-04): beginPath() 누락 시 이전 hex stroke path 누적 →
+  // ctx.fill() 호출 시 누적된 hex 격자 전체 dark fill 되어 검은 blob 처럼 보임.
+  ctx.beginPath();
   if (typeof (ctx as any).roundRect === 'function') {
     (ctx as any).roundRect(x, y, w, h, maxR);
     return;
@@ -288,7 +293,9 @@ function roundedRect(
   ctx.closePath();
 }
 
-// 상점 — 집 모양 (지붕 삼각형 + 몸체 사각형)
+// 상점 — 집 모양 (지붕 삼각형 + 몸체 사각형). 현재 미사용 (focusSpot dot 으로 교체) — 보존.
+// @ts-expect-error unused legacy helper
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function drawStoreHouse(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -369,7 +376,7 @@ function drawPaymentBounce(ctx: CanvasRenderingContext2D, cx: number, baseY: num
   ctx.arc(cx, baseY + 2, 4 * (1 - Math.abs(offsetY) / bounceH) + 2, 0, Math.PI * 2);
   ctx.fill();
   // gold 원
-  ctx.fillStyle = '#ffba00';
+  ctx.fillStyle = '#FF7940';
   ctx.strokeStyle = '#9A4500';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
@@ -1576,16 +1583,8 @@ export default function AbmPersonaMap({
       }
       ctx.clearRect(0, 0, W, H);
 
-      // 전체 canvas fill — 외부도 내부도 cool gray (slate-100 #f1f5f9).
-      // alpha 1.0 — 카카오맵 비침 차단해 analyze panel bg-secondary 와 정확히 동일 색.
-      if (
-        hexGridRef.current.length > 0 &&
-        densityGridRef.current &&
-        trajectoryPathsRef.current.size > 0
-      ) {
-        ctx.fillStyle = '#f1f5f9';
-        ctx.fillRect(0, 0, W, H);
-      }
+      // 사용자 피드백 (2026-05-04): canvas fill 제거 — 카카오맵 비치고 hex 만 위에 그려져
+      // hex 자체로 시각 구성. 이전 #f1f5f9 가 흰배경처럼 보여 답답함.
 
       // ─── dong hover highlight — 마우스 위 행정동 polygon 강조 ──────────────
       // dark mask 위, hex 아래에 그려 dong 형태가 hex 와 함께 보이도록.
@@ -1676,7 +1675,7 @@ export default function AbmPersonaMap({
         if (!isCompetitor) return; // 일반 store/공실 후보 의 집모양 제거 — 사용자 피드백.
 
         // 작은 4px dot — 보라 (vacancy 빨강과 구분)
-        const dotColor = recentPay ? '#ffba00' : '#7928CA';
+        const dotColor = recentPay ? '#FF7940' : '#B35CFF';
         ctx.save();
         ctx.shadowColor = 'rgba(167, 139, 250, 0.85)';
         ctx.shadowBlur = 6;
@@ -1710,12 +1709,12 @@ export default function AbmPersonaMap({
           const displayHour = Math.floor(virtualHour);
 
           const roleColor: Record<string, string> = {
-            resident: '#008b00',
+            resident: '#00BA7A',
             commuter: '#002CD1',
             visitor: '#FF0070',
-            owner: '#ffba00',
+            owner: '#FF7940',
             ext_commuter: '#00E0D1',
-            ext_visitor: '#7928CA',
+            ext_visitor: '#B35CFF',
           };
 
           // ─── 히트맵 layer — 헥사 격자 + 네온 글로우 (Orion 스타일 ref) ─────
@@ -1777,11 +1776,12 @@ export default function AbmPersonaMap({
                   // log-scale intensity — 저활성 셀도 visible (linear 은 핫스팟 가려짐).
                   // log(1+v) / log(1+maxC) 라 v=1 도 충분한 밝기 확보.
                   const logIntensity = Math.log(1 + v) / Math.log(1 + maxC);
-                  // 색 보간: indigo #818cf8 → rose #f43f5e
-                  const r = Math.round(129 + (244 - 129) * logIntensity);
-                  const g = Math.round(140 + (63 - 140) * logIntensity);
-                  const b = Math.round(248 + (94 - 248) * logIntensity);
-                  const alpha = 0.45 + 0.5 * logIntensity; // 0.45 ~ 0.95 — 저활성도 충분히 visible
+                  // 색 보간: pale blue (저, 톤다운) → medium blue (고). 너무 deep 하면 cluster 시
+                  // 검은 blob 처럼 보임 (사용자 피드백 2026-05-04). hue 유지하되 max 명도 ↑ + alpha cap.
+                  const r = Math.round(220 + (37 - 220) * logIntensity);
+                  const g = Math.round(230 + (99 - 230) * logIntensity);
+                  const b = Math.round(250 + (235 - 250) * logIntensity);
+                  const alpha = 0.3 + 0.4 * logIntensity; // 0.3 ~ 0.7 cap (검은 blob 방지)
                   ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
                   ctx.translate(hex.x, hex.y);
                   ctx.fill(hexPath);
@@ -1795,20 +1795,9 @@ export default function AbmPersonaMap({
                 }
                 ctx.restore();
 
-                // ③ 2차 패스 — hot hex 네온 글로우 + 카운트 텍스트
+                // ③ 2차 패스 — hot hex 카운트 텍스트만 (네온 글로우 제거: 사용자 피드백 2026-05-04
+                // — shadowBlur 16 + alpha 0.55 fill 이 여러 셀 겹쳐 검은 blob 처럼 보임).
                 if (hotIndices.length > 0) {
-                  ctx.save();
-                  ctx.shadowColor = 'rgba(244, 63, 94, 0.95)';
-                  ctx.shadowBlur = 16;
-                  for (const h of hotIndices) {
-                    const hex = hexes[h];
-                    ctx.fillStyle = 'rgba(244, 63, 94, 0.55)';
-                    ctx.translate(hex.x, hex.y);
-                    ctx.fill(hexPath);
-                    ctx.translate(-hex.x, -hex.y);
-                  }
-                  ctx.restore();
-
                   // 카운트 텍스트 — 가장 hot 한 상위 8개 hex 에만 (산만함 방지)
                   // intensity 내림차순 정렬해서 top N
                   const topHot = hotIndices
@@ -1932,42 +1921,32 @@ export default function AbmPersonaMap({
               fill = '#6B6A63'; // gray — 휴식
               alpha = 0.45;
             } else if (action === 'visit') {
-              fill = '#fb565b'; // red — 매장 방문/결제
+              fill = '#FF3800'; // red — 매장 방문/결제
               alpha = 1;
             } else if (action === 'work') {
-              fill = '#008b00'; // green — 근무 (정적)
+              fill = '#00BA7A'; // green — 근무 (정적)
               alpha = 0.85;
             }
 
             const isTierS = tierSIdsRef.current.has(agentId);
 
             if (isTierS) {
-              // Tier S — 노란 테두리 + 큰 dot + 풍선 (forEach 후 별도 패스).
-              ctx.globalAlpha = alpha;
               tierSPixelsRef.current.set(agentId, { x: pix.x, y: pix.y });
+              ctx.globalAlpha = Math.max(alpha, 0.95);
               ctx.fillStyle = fill;
               ctx.beginPath();
-              ctx.arc(pix.x, pix.y, 3.2, 0, Math.PI * 2);
+              ctx.arc(pix.x, pix.y, 4.5, 0, Math.PI * 2);
               ctx.fill();
-              ctx.strokeStyle = '#ffba00';
-              ctx.lineWidth = 1.6;
+              ctx.strokeStyle = '#FF7940';
+              ctx.lineWidth = 2;
               ctx.beginPath();
-              ctx.arc(pix.x, pix.y, 4.2, 0, Math.PI * 2);
+              ctx.arc(pix.x, pix.y, 6, 0, Math.PI * 2);
               ctx.stroke();
+              ctx.globalAlpha = 1;
               tierSDrawn++;
-              ctx.globalAlpha = 1;
-            } else {
-              // 4950 non-Tier-S (trajectory sample 250명) — ambient 작은 dot.
-              // 시간대별 통근/visit 이동이 시각적으로 보이도록. action 색·alpha 그대로.
-              ctx.globalAlpha = alpha * 0.7;
-              ctx.fillStyle = fill;
-              ctx.beginPath();
-              // visit 은 살짝 큰 1.6px (action 강조), 그 외 1.0px ambient
-              const r = action === 'visit' ? 1.6 : 1.0;
-              ctx.arc(pix.x, pix.y, r, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.globalAlpha = 1;
             }
+            // non-Tier-S ambient dot 제거 (사용자 피드백 2026-05-04) —
+            // 250 sample 작은 점들이 hex heatmap 시각 노이즈. Tier S 50명만 표시.
             drawn++;
           });
 
@@ -1995,7 +1974,7 @@ export default function AbmPersonaMap({
               ctx.beginPath();
               roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
               ctx.fill();
-              ctx.strokeStyle = '#ffba00';
+              ctx.strokeStyle = '#FF7940';
               ctx.lineWidth = 1.5;
               ctx.beginPath();
               roundedRect(ctx, bx - tw / 2 - padX, by - 8 - padY, tw + padX * 2, 16 + padY * 2, 6);
@@ -2015,23 +1994,30 @@ export default function AbmPersonaMap({
             }
           }
 
-          // 선택된 agent focus halo — General 패널에서 클릭한 agent 의 dot 강조.
-          // hover 풍선과 별개. 다른 agent 위에 그려지도록 마지막에 그림.
+          // 선택된 agent focus — ripple ring pulse (띠링띠링).
+          // 사용자 피드백 (2026-05-04): 색 (orange) 빼고 ring 펄스 애니로.
+          // 3개 ring stagger phase 로 outward expand + alpha fade. 흰색 ring 으로 색 중립.
           const focusedAid = selectedAgentIdRef.current;
           if (focusedAid !== null && tierSPixelsRef.current.size > 0) {
             const pix = tierSPixelsRef.current.get(focusedAid);
             if (pix) {
-              ctx.globalAlpha = 1;
-              ctx.strokeStyle = '#ffba00';
-              ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.arc(pix.x, pix.y, 16, 0, Math.PI * 2);
-              ctx.stroke();
-              ctx.lineWidth = 1.5;
-              ctx.strokeStyle = 'rgba(255,121,64,0.45)';
-              ctx.beginPath();
-              ctx.arc(pix.x, pix.y, 24, 0, Math.PI * 2);
-              ctx.stroke();
+              ctx.save();
+              ctx.fillStyle = 'rgba(0,0,0,0)'; // explicit transparent, no fill
+              const cycle = 1500; // ms
+              const now = Date.now();
+              for (let i = 0; i < 3; i++) {
+                const phase = ((now + i * (cycle / 3)) % cycle) / cycle; // 0~1
+                // 중간 투명 — agent dot 바깥에서 시작 (r=14~)
+                const r = 14 + 36 * phase;
+                const alpha = (1 - phase) * 0.9;
+                ctx.globalAlpha = alpha;
+                ctx.strokeStyle = '#FACC15'; // yellow-400
+                ctx.lineWidth = 2.5 * (1 - phase * 0.5);
+                ctx.beginPath();
+                ctx.arc(pix.x, pix.y, r, 0, Math.PI * 2);
+                ctx.stroke(); // stroke only — fill 호출 X 라 ring 안쪽 투명
+              }
+              ctx.restore();
             }
           }
 
@@ -2047,7 +2033,7 @@ export default function AbmPersonaMap({
           const tw2 = ctx.measureText(hourLabel).width;
           roundedRect(ctx, 8, 8, tw2 + 14, 20, 4);
           ctx.fill();
-          ctx.fillStyle = '#008b00';
+          ctx.fillStyle = '#00BA7A';
           ctx.fillText(hourLabel, 15, 22);
         }
       }
@@ -2061,15 +2047,24 @@ export default function AbmPersonaMap({
           const pix = proj.containerPointFromCoords(latLng);
           const fx = pix.x;
           const fy = pix.y;
-          // 외곽 링 (cyan 펄스)
+          // 신규 매장 마커 — 큰 파란 house 제거 (사용자 피드백 2026-05-04: 검은 blob 처럼 보임).
+          // 작은 cyan dot + 외곽 cyan 펄스 ring 만 유지. 라벨로 위치 명확.
           const pulse = 1 + 0.15 * Math.sin(tickRef.current * 0.1);
           ctx.strokeStyle = 'rgba(34,211,238,0.85)';
           ctx.lineWidth = 2.5;
           ctx.beginPath();
-          ctx.arc(fx, fy, 18 * pulse, 0, Math.PI * 2);
+          ctx.arc(fx, fy, 14 * pulse, 0, Math.PI * 2);
           ctx.stroke();
-          // 신규 매장 = green house
-          drawStoreHouse(ctx, fx, fy, 'S', '#008b00', 2.5);
+          // 작은 cyan center dot
+          ctx.fillStyle = '#00E0D1';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 4, 0, Math.PI * 2);
+          ctx.stroke();
           // 라벨
           const label = `NEW · ${focusSpot.label ?? '선택 스팟'}`;
           ctx.font = 'bold 11px monospace';
@@ -2145,6 +2140,9 @@ export default function AbmPersonaMap({
       personasRef.current.forEach((p) => {
         if (nodes.length < 2) return;
         if (useRealTrajectory) return; // 합성 persona 숨김 — 실데이터만 표시
+        // 사용자 피드백 (2026-05-04): abmResult 있으면 synthetic 숨김. trajectory 없는 결과도
+        // synthetic 5000 dot 이 노드 4개 주변 cluster 로 검은 blob 처럼 보임.
+        if (abmResult) return;
 
         // C-2: 인덱스 모듈러 클램프 — storeNodes가 줄었을 때 OOB 방지
         if (p.targetIdx >= nodes.length) p.targetIdx = p.targetIdx % nodes.length;
@@ -2364,7 +2362,7 @@ export default function AbmPersonaMap({
           ctx.fillStyle = '#6B6A63';
         } else if (p.action === 'work') {
           ctx.globalAlpha = 0.85;
-          ctx.fillStyle = '#008b00';
+          ctx.fillStyle = '#00BA7A';
         } else if (p.action === 'visit') {
           // focusSpot 모드 시 다른 매장 visit 은 단조 색 (빨강 산만 회피)
           ctx.globalAlpha = focusSpot ? 0.7 : 1;
@@ -2537,8 +2535,8 @@ export default function AbmPersonaMap({
                   zIndex: 35,
                 }}
               >
-                <span className="inline-block rounded-md bg-black/85 backdrop-blur-md border border-success/60 px-2 py-1 text-xs font-black tracking-tight text-success leading-none whitespace-nowrap shadow-lg shadow-emerald-500/20">
-                  {hoveredDong.name}
+                <span className="inline-block rounded-md bg-card border border-primary/40 px-2 py-1 text-xs font-black tracking-tight text-primary leading-none whitespace-nowrap shadow-md">
+                  📍 {hoveredDong.name}
                 </span>
               </div>
             )}
@@ -2548,9 +2546,9 @@ export default function AbmPersonaMap({
             {/* Phase 2: hover 시 우하단 active node 카드. */}
             {hoveredHex && trajectoryPathsRef.current.size > 0 && (
               <div className="absolute bottom-4 right-4 z-30 pointer-events-none">
-                <div className="w-56 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_30px_60px_rgba(0,0,0,0.8)]">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse" />
+                <div className="w-56 bg-card/95 backdrop-blur-md border border-primary/40 rounded-2xl p-4 shadow-[0_8px_24px_rgba(0,44,209,0.18)]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                     <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
                       Active Node Analysis
                     </span>
@@ -2560,19 +2558,19 @@ export default function AbmPersonaMap({
                       <span className="text-[10px] font-bold text-muted-foreground uppercase">
                         Density
                       </span>
-                      <span className="text-xl font-black text-white italic tabular-nums">
+                      <span className="text-xl font-black text-foreground italic tabular-nums">
                         {(hoveredHex.intensity * 100).toFixed(1)}%
                       </span>
                     </div>
                     <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-primary to-danger shadow-[0_0_10px_#fb565b]"
+                        className="h-full bg-primary"
                         style={{ width: `${(hoveredHex.intensity * 100).toFixed(0)}%` }}
                       />
                     </div>
                     <div className="flex justify-between text-[10px] font-bold uppercase">
                       <span className="text-muted-foreground">Agents</span>
-                      <span className="text-white font-black tabular-nums">
+                      <span className="text-foreground font-black tabular-nums">
                         {hoveredHex.count.toLocaleString()}
                       </span>
                     </div>
@@ -2647,10 +2645,11 @@ export default function AbmPersonaMap({
                 </div>
               )}
 
-            {/* 시뮬 결과 오버레이 — new_store_visit_share_pct 가 있을 때 (스팟 클릭 시뮬 후) */}
+            {/* 시뮬 결과 오버레이 — new_store_visit_share_pct 가 있을 때 (스팟 클릭 시뮬 후).
+                shadow + backdrop-blur 제거 — 검은 blob 의심 (사용자 피드백 2026-05-04). */}
             {abmResult &&
               (abmResult.new_store_visit_share_pct > 0 || abmResult.new_store_visits > 0) && (
-                <div className="absolute top-3 right-3 w-[300px] bg-background/95 backdrop-blur-md border border-success/60 rounded-lg p-4 z-30 shadow-[0_0_30px_rgba(52,211,153,0.25)]">
+                <div className="absolute top-3 right-3 w-[300px] bg-card border border-primary/40 rounded-lg p-4 z-30">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] font-mono text-success uppercase tracking-wider">
                       스팟 시뮬 결과
@@ -2729,8 +2728,8 @@ export default function AbmPersonaMap({
                       abmResult.daily_visits_std > 0
                         ? `σ ${abmResult.daily_visits_std}`
                         : '시뮬 평균',
-                    color: '#008b00',
-                    glow: 'rgba(52,211,153,0.18)',
+                    color: '#002CD1',
+                    glow: 'rgba(0,44,209,0.18)',
                     icon: (
                       <path
                         d="M3 12L9 18L21 6"
@@ -2748,7 +2747,7 @@ export default function AbmPersonaMap({
                       : '-',
                     suffix: '만 ₩',
                     sub: '월 매출 (일×25)',
-                    color: '#ffba00',
+                    color: '#FF7940',
                     glow: 'rgba(251,191,36,0.18)',
                     icon: (
                       <text
@@ -2886,151 +2885,214 @@ export default function AbmPersonaMap({
                     <span className="text-[9px] font-mono text-success tracking-widest">LIVE</span>
                   </div>
                 </div>
-                {/* 선택된 agent 의 daily plan 펼침 카드 — feed 위쪽에 sticky 로 보임.
-                    행 클릭 시 selectedAgentId set, 다시 클릭하면 해제. */}
-                {selectedAgentId !== null &&
-                  (() => {
-                    const meta = tierSMeta.get(selectedAgentId);
-                    if (!meta) return null;
+                {/* Tier S Agents — 50명 agent 이름 리스트.
+                    행 클릭 → 지도 focus + 리스트 위 overlay 로 plan/thought 카드 표시.
+                    이전: inline accordion expand (목록 늘어남). 변경: absolute overlay. */}
+                {(() => {
+                  // tier_s_meta 기반 agent list. 메타 없으면 thoughts 에서 fallback.
+                  const agentIds: number[] =
+                    tierSMeta.size > 0
+                      ? Array.from(tierSMeta.keys())
+                      : Array.from(new Set(sortedThoughts.map((t) => t.agent_id)));
+                  // agentIds 비어있으면 placeholder 표시 (이전: null return → 패널 자체 사라짐).
+                  if (agentIds.length === 0) {
                     return (
-                      <div className="rounded-xl border border-primary/30 bg-primary/[0.04] p-3 flex flex-col gap-2">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <div className="flex flex-col">
-                            <span className="text-[11px] font-black text-primary tracking-tight">
-                              {meta.name || `Agent #${selectedAgentId}`}
-                              {meta.age ? ` · ${meta.age}` : ''}
-                              {meta.gender ? meta.gender : ''}
-                            </span>
-                            <span className="text-[9px] font-mono text-muted-foreground tracking-wide uppercase">
-                              {meta.archetype}
-                              {meta.home_dong ? ` · ${meta.home_dong}` : ''}
-                              {meta.role ? ` · ${meta.role}` : ''}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedAgentId(null)}
-                            className="text-[10px] text-muted-foreground hover:text-foreground"
-                            aria-label="닫기"
-                          >
-                            ✕
-                          </button>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-[10px] font-black text-warning uppercase tracking-widest">
+                            Tier S · Agents
+                          </span>
                         </div>
-                        {meta.plan.length === 0 ? (
+                        <div className="rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent p-4 text-center">
                           <p className="text-[10px] text-muted-foreground italic">
-                            plan 정보 없음 (Tier S LLM plan 미생성)
+                            Tier S 메타 없음 — backend 재시뮬 필요
+                            <br />
+                            (enable_llm_thought=true 응답에 tier_s_meta 포함)
                           </p>
-                        ) : (
-                          <div className="flex flex-col gap-1.5">
-                            {meta.plan.map((slot, i) => {
-                              const catColor =
-                                slot.action === 'visit'
-                                  ? '#fb565b'
-                                  : slot.action === 'work'
-                                    ? '#008b00'
-                                    : slot.action === 'move'
-                                      ? '#002CD1'
-                                      : '#6B6A63';
-                              return (
-                                <div
-                                  key={`plan-${selectedAgentId}-${i}`}
-                                  className="rounded-md bg-background/80 border border-border/60 px-2 py-1.5"
-                                >
-                                  <div className="flex items-center justify-between gap-2 mb-1">
-                                    <span className="text-[10px] font-mono font-bold tabular-nums">
-                                      {String(slot.start).padStart(2, '0')}–
-                                      {String(slot.end).padStart(2, '0')}
+                        </div>
+                      </div>
+                    );
+                  }
+                  // 안정 정렬 — name asc, name 없으면 aid
+                  const sortedAids = agentIds.slice().sort((a, b) => {
+                    const na = tierSMeta.get(a)?.name || `#${a}`;
+                    const nb = tierSMeta.get(b)?.name || `#${b}`;
+                    return na.localeCompare(nb, 'ko');
+                  });
+                  return (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-[10px] font-black text-warning uppercase tracking-widest">
+                          Tier S · Agents
+                        </span>
+                        <span className="text-[9px] font-mono text-muted-foreground">
+                          {sortedAids.length}명
+                        </span>
+                      </div>
+                      <div className="relative max-h-[600px] flex-1 overflow-hidden rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent">
+                        {/* agent list (스크롤) */}
+                        <div className="absolute inset-0 overflow-y-auto">
+                          {sortedAids.map((aid) => {
+                            const meta = tierSMeta.get(aid);
+                            const displayName = meta?.name || `#${aid}`;
+                            const archetype = meta?.archetype || '';
+                            const isSelected = selectedAgentId === aid;
+                            return (
+                              <button
+                                key={`agent-${aid}`}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedAgentId((cur) => (cur === aid ? null : aid));
+                                }}
+                                className={`w-full text-left px-3 py-2 border-b border-border/60 last:border-b-0 hover:bg-warning/[0.06] transition-colors ${
+                                  isSelected ? 'bg-warning/[0.12] ring-1 ring-warning/40' : ''
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <span className="text-[11px] font-bold text-foreground truncate">
+                                      {displayName}
+                                      {meta?.age ? ` · ${meta.age}` : ''}
+                                      {meta?.gender ?? ''}
                                     </span>
-                                    <span
-                                      className="text-[9px] font-bold uppercase tracking-wider"
-                                      style={{ color: catColor }}
-                                    >
-                                      {slot.action}
-                                      {slot.category ? ` · ${slot.category}` : ''}
+                                    {archetype && (
+                                      <span className="text-[8.5px] font-mono text-muted-foreground tracking-wide uppercase truncate">
+                                        {archetype}
+                                        {meta?.home_dong ? ` · ${meta.home_dong}` : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground shrink-0">
+                                    {isSelected ? '▾' : '▸'}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* 선택된 agent 의 plan/thought overlay — absolute, 리스트 상단 절반에 띄움.
+                            list 는 하단 절반 그대로 보임 (밀림 X, 가려짐 X). */}
+                        {selectedAgentId !== null &&
+                          (() => {
+                            const meta = tierSMeta.get(selectedAgentId);
+                            if (!meta) return null;
+                            const agentThoughts = Array.from(
+                              thoughtsByAgentRef.current.get(selectedAgentId)?.values() ?? [],
+                            ).sort((a, b) => a.day * 24 + a.hour - (b.day * 24 + b.hour));
+                            return (
+                              <div className="absolute top-0 left-0 right-0 max-h-[55%] z-20 bg-card/98 backdrop-blur-sm rounded-xl border border-primary/40 flex flex-col overflow-hidden shadow-lg">
+                                {/* 헤더 */}
+                                <div className="flex items-baseline justify-between gap-2 px-3 py-2 border-b border-border bg-primary/[0.04] shrink-0">
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-[12px] font-black text-primary tracking-tight truncate">
+                                      {meta.name || `Agent #${selectedAgentId}`}
+                                      {meta.age ? ` · ${meta.age}` : ''}
+                                      {meta.gender ?? ''}
+                                    </span>
+                                    <span className="text-[9px] font-mono text-muted-foreground tracking-wide uppercase truncate">
+                                      {meta.archetype}
+                                      {meta.home_dong ? ` · ${meta.home_dong}` : ''}
+                                      {meta.role ? ` · ${meta.role}` : ''}
                                     </span>
                                   </div>
-                                  <p className="text-[10.5px] text-foreground font-medium leading-snug">
-                                    {slot.reason || '—'}
-                                    {slot.dong ? (
-                                      <span className="text-muted-foreground"> @ {slot.dong}</span>
-                                    ) : null}
-                                  </p>
-                                  {slot.hourly && slot.hourly.length > 0 && (
-                                    <div className="mt-1 flex flex-wrap gap-1">
-                                      {slot.hourly.map((h, hi) => (
-                                        <span
-                                          key={hi}
-                                          className="text-[9px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded"
-                                        >
-                                          {String(slot.start + hi).padStart(2, '0')}h · {h}
-                                        </span>
-                                      ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedAgentId(null)}
+                                    className="text-[14px] text-muted-foreground hover:text-foreground shrink-0 px-1"
+                                    aria-label="닫기"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+
+                                {/* body — plan + thought 시퀀스 */}
+                                <div className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-3">
+                                  {/* daily plan */}
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[9px] font-black text-warning uppercase tracking-widest">
+                                      Daily Plan
+                                    </span>
+                                    {meta.plan.length === 0 ? (
+                                      <p className="text-[10px] text-muted-foreground italic">
+                                        plan 정보 없음
+                                      </p>
+                                    ) : (
+                                      <div className="flex flex-col gap-1.5">
+                                        {meta.plan.map((slot, i) => {
+                                          const catColor =
+                                            slot.action === 'visit'
+                                              ? '#FF3800'
+                                              : slot.action === 'work'
+                                                ? '#00BA7A'
+                                                : slot.action === 'move'
+                                                  ? '#002CD1'
+                                                  : '#6B6A63';
+                                          return (
+                                            <div
+                                              key={`plan-${selectedAgentId}-${i}`}
+                                              className="rounded-md bg-background/80 border border-border/60 px-2 py-1.5"
+                                            >
+                                              <div className="flex items-center justify-between gap-2 mb-1">
+                                                <span className="text-[10px] font-mono font-bold tabular-nums">
+                                                  {String(slot.start).padStart(2, '0')}–
+                                                  {String(slot.end).padStart(2, '0')}
+                                                </span>
+                                                <span
+                                                  className="text-[9px] font-bold uppercase tracking-wider"
+                                                  style={{ color: catColor }}
+                                                >
+                                                  {slot.action}
+                                                  {slot.category ? ` · ${slot.category}` : ''}
+                                                </span>
+                                              </div>
+                                              <p className="text-[10.5px] text-foreground font-medium leading-snug">
+                                                {slot.reason || '—'}
+                                                {slot.dong ? (
+                                                  <span className="text-muted-foreground">
+                                                    {' '}
+                                                    @ {slot.dong}
+                                                  </span>
+                                                ) : null}
+                                              </p>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* thoughts 시퀀스 */}
+                                  {agentThoughts.length > 0 && (
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-[9px] font-black text-warning uppercase tracking-widest">
+                                        Hourly Thoughts
+                                      </span>
+                                      <div className="flex flex-col gap-0.5">
+                                        {agentThoughts.map((th, idx) => (
+                                          <div
+                                            key={`th-${selectedAgentId}-${idx}-${th.day}-${th.hour}`}
+                                            className="flex items-start gap-2"
+                                          >
+                                            <span className="text-[9px] font-mono text-warning/80 tracking-wider tabular-nums shrink-0 pt-0.5">
+                                              {String(th.hour % 24).padStart(2, '0')}:00
+                                            </span>
+                                            <p className="text-[11px] leading-snug text-foreground font-medium break-keep">
+                                              {th.thought}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                              </div>
+                            );
+                          })()}
                       </div>
-                    );
-                  })()}
-
-                {/* Tier S Thought Feed — 50명 LLM reason 시간순 스크롤 피드.
-                    풍선 클러터 대신 여기서 전체 흐름 표시. 행 클릭 → 선택 agent plan 펼침. */}
-                {sortedThoughts.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[10px] font-black text-warning uppercase tracking-widest">
-                        Tier S · LLM Thoughts
-                      </span>
-                      <span className="text-[9px] font-mono text-muted-foreground">
-                        {sortedThoughts.length}
-                      </span>
                     </div>
-                    <div className="relative max-h-[600px] flex-1 overflow-y-auto rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent">
-                      {sortedThoughts.map((th, idx) => {
-                        const aid = th.agent_id;
-                        const archetype = th.archetype || '';
-                        const meta = tierSMeta.get(aid);
-                        const displayName = meta?.name || `#${aid}`;
-                        const isSelected = selectedAgentId === aid;
-                        return (
-                          <button
-                            key={`thought-${idx}-${aid}-${th.day}-${th.hour}`}
-                            type="button"
-                            onClick={() => {
-                              if (aid == null) return;
-                              setSelectedAgentId((cur) => (cur === aid ? null : aid));
-                            }}
-                            className={`w-full text-left px-3 py-2 border-b border-border/60 last:border-b-0 hover:bg-warning/[0.06] transition-colors ${
-                              isSelected ? 'bg-warning/[0.12] ring-1 ring-warning/40' : ''
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="text-[9px] font-mono text-warning/80 tracking-wider tabular-nums">
-                                {String(th.hour % 24).padStart(2, '0')}:00
-                              </span>
-                              <span className="text-[10px] font-bold text-foreground tabular-nums truncate">
-                                {displayName}
-                                {meta?.age ? ` (${meta.age})` : ''}
-                              </span>
-                            </div>
-                            <p className="text-[11px] leading-snug text-foreground font-medium break-keep">
-                              {th.thought}
-                            </p>
-                            {archetype && (
-                              <p className="mt-0.5 text-[8.5px] font-mono text-muted-foreground tracking-wide uppercase">
-                                {archetype}
-                                {meta?.home_dong ? ` · ${meta.home_dong}` : ''}
-                              </p>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
                 {/* 메인 지표 4칸은 우하 result card 로 이동됨 (사용자 요청 2026-05-02). */}
                 {/* 신규 매장 방문자 role 분포 — 매장 단독 분석. customer_profile_dist (마포 전체) 와 별도. */}
                 {abmResult.new_store_role_dist &&
@@ -3060,17 +3122,17 @@ export default function AbmPersonaMap({
                                           : role;
                             const color =
                               role === 'resident'
-                                ? '#008b00'
+                                ? '#00BA7A'
                                 : role === 'commuter'
                                   ? '#002CD1'
                                   : role === 'visitor'
                                     ? '#FF0070'
                                     : role === 'owner'
-                                      ? '#ffba00'
+                                      ? '#FF7940'
                                       : role === 'ext_commuter'
                                         ? '#00E0D1'
                                         : role === 'ext_visitor'
-                                          ? '#7928CA'
+                                          ? '#B35CFF'
                                           : '#6B6A63';
                             return (
                               <div
@@ -3130,17 +3192,17 @@ export default function AbmPersonaMap({
                                           : role;
                             const color =
                               role === 'resident'
-                                ? '#008b00'
+                                ? '#00BA7A'
                                 : role === 'commuter'
                                   ? '#002CD1'
                                   : role === 'visitor'
                                     ? '#FF0070'
                                     : role === 'owner'
-                                      ? '#ffba00'
+                                      ? '#FF7940'
                                       : role === 'ext_commuter'
                                         ? '#00E0D1'
                                         : role === 'ext_visitor'
-                                          ? '#7928CA'
+                                          ? '#B35CFF'
                                           : '#6B6A63';
                             return (
                               <div
@@ -3185,7 +3247,7 @@ export default function AbmPersonaMap({
                       >
                         <path
                           d="M12 9v4M12 17h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"
-                          stroke="#fb565b"
+                          stroke="#FF3800"
                           strokeWidth="2.2"
                           strokeLinecap="round"
                         />
@@ -3219,22 +3281,25 @@ export default function AbmPersonaMap({
                 <p className="text-sm text-warning">{abmError}</p>
               </div>
             ) : (
-              /* 시나리오 선택 UI + 실행 버튼 */
-              <div className="w-full max-w-2xl bg-background/90 backdrop-blur-sm border border-border rounded-xl p-4 flex flex-col gap-3">
+              /* 시나리오 선택 UI — 처음 시뮬 form (App.tsx 운영 조건 박스) 와 동일한
+                 box-glass + SectionLabel + FormField 패턴. spot 클릭 후 시뮬 실행 전 노출. */
+              <div className="w-full box-glass rounded-2xl p-5 flex flex-col gap-4">
+                <SectionLabel
+                  icon={Sliders}
+                  title="ABM Scenario"
+                  sub="Game Master · 시뮬 환경 변수"
+                />
                 {/* 날씨 */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0">
-                    날씨
-                  </span>
-                  <div className="flex gap-1.5">
+                <FormField label="날씨" icon={Cloud} info="기온은 현재 RDS 데이터 그대로 사용">
+                  <div className="flex flex-wrap gap-1.5">
                     {([null, '맑음', '흐림', '비', '눈'] as const).map((w) => (
                       <button
                         key={w ?? 'auto'}
                         onClick={() => setScenario((s) => ({ ...s, weather_override: w }))}
                         className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border flex items-center gap-1.5 ${
                           scenario.weather_override === w
-                            ? 'bg-success/20 border-success/60 text-success'
-                            : 'border-border text-muted-foreground hover:text-muted-foreground hover:border-border'
+                            ? 'bg-primary/15 border-primary/60 text-primary'
+                            : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
                         }`}
                       >
                         {w === null ? (
@@ -3248,8 +3313,8 @@ export default function AbmPersonaMap({
                               aria-hidden="true"
                               className="shrink-0"
                             >
-                              <circle cx="9" cy="7" r="3.2" fill="#ffba00" />
-                              <g stroke="#ffba00" strokeWidth="1.3" strokeLinecap="round">
+                              <circle cx="9" cy="7" r="3.2" fill="#FF7940" />
+                              <g stroke="#FF7940" strokeWidth="1.3" strokeLinecap="round">
                                 <line x1="9" y1="1" x2="9" y2="2.6" />
                                 <line x1="9" y1="11.4" x2="9" y2="13" />
                                 <line x1="1" y1="7" x2="2.6" y2="7" />
@@ -3334,18 +3399,19 @@ export default function AbmPersonaMap({
                       </button>
                     ))}
                   </div>
-                </div>
-                {/* 요일 */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0">
-                    요일
-                  </span>
-                  <div className="flex gap-1.5">
+                </FormField>
+
+                {/* 요일 — 평일/주말/공휴일 분기 backend is_weekend / is_holiday 자동 결정 */}
+                <FormField
+                  label="요일"
+                  icon={Calendar}
+                  info="공휴일 = 2026-05-05 어린이날 기준 (평일+공휴일 효과)"
+                >
+                  <div className="flex flex-wrap gap-1.5">
                     {[
                       { label: '오늘', weekend_force: false, date: null },
                       { label: '평일', weekend_force: false, date: '2026-04-21' },
                       { label: '주말', weekend_force: true, date: null },
-                      // 2026-05-05 어린이날 (월) — 평일+공휴일 분기 명확
                       { label: '공휴일', weekend_force: false, date: '2026-05-05' },
                     ].map((opt) => (
                       <button
@@ -3360,21 +3426,23 @@ export default function AbmPersonaMap({
                         className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
                           scenario.weekend_force === opt.weekend_force &&
                           scenario.date_override === opt.date
-                            ? 'bg-success/20 border-success/60 text-success'
-                            : 'border-border text-muted-foreground hover:text-muted-foreground hover:border-border'
+                            ? 'bg-primary/15 border-primary/60 text-primary'
+                            : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
                         }`}
                       >
                         {opt.label}
                       </button>
                     ))}
                   </div>
-                </div>
+                </FormField>
+
                 {/* 임대료 충격 */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground w-16 shrink-0">
-                    임대료
-                  </span>
-                  <div className="flex gap-1.5">
+                <FormField
+                  label="임대료 충격"
+                  icon={DollarSign}
+                  info="신규 매장 임대료 변동 시뮬 — 폐업 압력 분석"
+                >
+                  <div className="flex flex-wrap gap-1.5">
                     {[0, 0.15, 0.3, 0.5].map((pct) => (
                       <button
                         key={pct}
@@ -3382,20 +3450,21 @@ export default function AbmPersonaMap({
                         className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
                           scenario.rent_shock_pct === pct
                             ? pct === 0
-                              ? 'bg-success/20 border-success/60 text-success'
-                              : 'bg-danger/20 border-danger/60 text-danger'
-                            : 'border-border text-muted-foreground hover:text-muted-foreground hover:border-border'
+                              ? 'bg-primary/15 border-primary/60 text-primary'
+                              : 'bg-danger/15 border-danger/60 text-danger'
+                            : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
                         }`}
                       >
                         {pct === 0 ? '현재' : `+${Math.round(pct * 100)}%`}
                       </button>
                     ))}
                   </div>
-                </div>
+                </FormField>
+
                 {/* 실행 버튼 */}
                 <button
                   onClick={() => onRunSimulation(scenario)}
-                  className="mt-1 flex items-center justify-center gap-2 py-2.5 bg-success/20 hover:bg-success/30 border border-success/50 hover:border-success text-success rounded-lg text-sm font-bold transition-all duration-300 shadow-[0_0_20px_rgba(52,211,153,0.15)]"
+                  className="mt-2 flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-black tracking-tight transition-all duration-300 shadow-[0_4px_20px_rgba(0,44,209,0.25)] hover:shadow-[0_6px_28px_rgba(0,44,209,0.35)]"
                 >
                   <Play className="w-4 h-4" />
                   {targetDistrict} · {scenario.weather_override ?? '현재날씨'} ·{' '}
