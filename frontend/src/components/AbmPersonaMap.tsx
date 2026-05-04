@@ -6,6 +6,10 @@ import PersonaCard, { type PersonaCardData } from './PersonaCard';
 import AbmProgressPanel from './AbmProgressPanel';
 import { FormField } from './ui/FormField';
 import { SectionLabel } from './ui/SectionLabel';
+import type { SpotDongStats } from './abm/SpotInfoCard';
+import { PersonaPreviewStream } from './abm/PersonaPreviewStream';
+import { AbmQueuePanel } from './abm/AbmQueuePanel';
+import { useAbmStore } from '../stores/abmStore';
 
 // 스팟 노드 스키마 — 백엔드 /mapo/spots/{dong} 에서 동적 조회 (하드코딩 없음)
 interface StoreNode {
@@ -204,6 +208,10 @@ export interface AbmPersonaMapProps {
    * 부모(AbmTab)가 PersonaCard 모달로 연결.
    */
   onPersonaClick?: (agentId: number, thoughts: AbmThought[]) => void;
+  /** 시뮬 대기화면 SpotInfoCard / PersonaPreviewStream 용 업종. */
+  businessType?: string | null;
+  /** SpotInfoCard 의 동 통계 섹션 — simResult 에서 부모가 추출. */
+  dongStats?: SpotDongStats | null;
 }
 
 function randomBetween(a: number, b: number) {
@@ -410,6 +418,8 @@ export default function AbmPersonaMap({
   vacancyPseSummary = null,
   competitors,
   onPersonaClick,
+  businessType,
+  dongStats: _dongStats,
 }: AbmPersonaMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -551,6 +561,25 @@ export default function AbmPersonaMap({
 
   // abmResult에서 받은 customer_profile_dist를 ref로 유지 (pickType에 전달)
   const customerProfileDistRef = useRef<Record<string, number> | undefined>(undefined);
+
+  // wander 모드 활성 조건 ref — abmResult 없음 (시뮬 전 + 진행 중) 이면 agents 가 마포 전역
+  // 랜덤 픽셀로 wander (node target 무시) — 한 곳 cluster 회피. 결과 도착 후엔 정상 node 타깃.
+  const wanderActiveRef = useRef(!abmResult);
+  useEffect(() => {
+    wanderActiveRef.current = !abmResult;
+  }, [abmResult]);
+
+  // 현재 진행 중 시뮬의 spot — focusSpot 과 다르면 사용자가 다른 spot 보는 중 (queue 추가 의도).
+  // 사용자 피드백 (2026-05-05): 시뮬 진행 중 다른 spot 클릭하면 progress panel 만 떠서
+  // 시나리오 form 못 봄 → 진행 중 spot 과 focusSpot 다를 때만 progress 표시 (같은 spot 일 때만).
+  const runningParams = useAbmStore((s) => s.params);
+  const isRunningCurrentSpot =
+    abmLoading &&
+    !!focusSpot &&
+    !!runningParams?.spot_lat &&
+    !!runningParams?.spot_lon &&
+    Math.abs((runningParams.spot_lat ?? 0) - focusSpot.lat) < 1e-5 &&
+    Math.abs((runningParams.spot_lon ?? 0) - focusSpot.lon) < 1e-5;
 
   // vacancy 모드 — 4 endpoint fetch 결과 (mode='vacancy' 시만 사용)
   const [vacancyTrajectory, setVacancyTrajectory] = useState<any[]>([]);
@@ -822,12 +851,13 @@ export default function AbmPersonaMap({
     }
 
     // mode='general' (default).
-    // 우선순위: competitors prop (선택 공실 근처 동일 카테고리 매장) → spots-all → /mapo/spots/{dong}.
-    // competitors 가 있으면 마포 전역 80 spot 대신 경쟁사 좌표를 storeNodes 로 사용 →
-    // 5000 agents 가 그 매장들에 visit 하는 모습이 의미 있는 "신규 vs 경쟁" 분포 시각화가 됨.
+    // 우선순위:
+    //   - abmResult 없음 (시뮬 실행 전 + 진행 중): 마포 전역 spots-all (~80 spot, 16동 × 5)
+    //     → agents 가 마포 전체로 roam (사용자 피드백 2026-05-05: 한 동 cluster → 전역 분산).
+    //   - abmResult 있음 + competitors: 경쟁업체 좌표 → "신규 vs 경쟁" visit 분포 시각화.
     let cancelled = false;
     setSpotsLoading(true);
-    if (Array.isArray(competitors) && competitors.length > 0) {
+    if (abmResult && Array.isArray(competitors) && competitors.length > 0) {
       const compNodes: StoreNode[] = competitors
         .filter(
           (c) =>
@@ -875,7 +905,7 @@ export default function AbmPersonaMap({
     return () => {
       cancelled = true;
     };
-  }, [mode, vacancyJobId, targetDistrict, competitors]);
+  }, [mode, vacancyJobId, targetDistrict, competitors, abmResult]);
 
   // mode='vacancy' 시 외부에서 prop 으로 주입된 pse_summary 동기화
   useEffect(() => {
@@ -2273,6 +2303,131 @@ export default function AbmPersonaMap({
               });
               p.hasSpawned = true;
             }
+            // 시뮬 진행 중 (abmLoading=true) — 마포 전역 wander.
+            // 사용자 피드백 (2026-05-05): 한 동에 모임 → 매 cycle 새 random 마포 좌표로
+            // 보내 끊임없이 분산 이동.
+            //
+            // bbox source 우선순위:
+            //   1) Kakao map projection 기반 hard-coded 마포 bbox (가장 신뢰)
+            //   2) mapoPolyPixelsRef (zoom/pan 시 갱신되는 최신 polygon 픽셀) bbox
+            //   3) storeNodes bbox — polygon 미로드 fallback
+            //   4) random node + ±150 offset — bbox 둘 다 없을 때
+            if (wanderActiveRef.current) {
+              let wx: number | null = null;
+              let wy: number | null = null;
+              // 1) Kakao projection — 마포 bbox lat 37.535~37.585, lon 126.880~126.965.
+              try {
+                const kakao = (window as any).kakao;
+                const map = mapInstanceRef.current;
+                const proj = map?.getProjection?.();
+                if (kakao?.maps?.LatLng && proj) {
+                  const latMin = 37.535,
+                    latMax = 37.585,
+                    lonMin = 126.88,
+                    lonMax = 126.965;
+                  const latR = randomBetween(latMin, latMax);
+                  const lonR = randomBetween(lonMin, lonMax);
+                  const px = proj.containerPointFromCoords(new kakao.maps.LatLng(latR, lonR));
+                  if (Number.isFinite(px.x) && Number.isFinite(px.y)) {
+                    wx = px.x;
+                    wy = px.y;
+                  }
+                }
+              } catch {
+                /* noop — fallback */
+              }
+              const polyRings = mapoPolyPixelsRef.current;
+              if (wx === null && polyRings.length > 0) {
+                let minX = Infinity,
+                  maxX = -Infinity,
+                  minY = Infinity,
+                  maxY = -Infinity;
+                for (const ring of polyRings) {
+                  for (const pt of ring) {
+                    if (pt.x < minX) minX = pt.x;
+                    if (pt.x > maxX) maxX = pt.x;
+                    if (pt.y < minY) minY = pt.y;
+                    if (pt.y > maxY) maxY = pt.y;
+                  }
+                }
+                if (Number.isFinite(minX) && maxX > minX) {
+                  // polygon 안 검사 (ray casting).
+                  const inside = (px: number, py: number): boolean => {
+                    for (const ring of polyRings) {
+                      let isIn = false;
+                      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                        const xi = ring[i].x;
+                        const yi = ring[i].y;
+                        const xj = ring[j].x;
+                        const yj = ring[j].y;
+                        const intersect =
+                          yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+                        if (intersect) isIn = !isIn;
+                      }
+                      if (isIn) return true;
+                    }
+                    return false;
+                  };
+                  for (let attempt = 0; attempt < 30; attempt++) {
+                    const cx = randomBetween(minX, maxX);
+                    const cy = randomBetween(minY, maxY);
+                    if (inside(cx, cy)) {
+                      wx = cx;
+                      wy = cy;
+                      break;
+                    }
+                  }
+                  if (wx === null) {
+                    // bbox 안에서 polygon 못 찾으면 그냥 bbox random.
+                    wx = randomBetween(minX, maxX);
+                    wy = randomBetween(minY, maxY);
+                  }
+                }
+              }
+              if (wx === null && nodes.length > 0) {
+                // Fallback A: storeNodes bbox (마포 전역 spots-all 이면 마포 bbox 근사).
+                let nMinX = Infinity,
+                  nMaxX = -Infinity,
+                  nMinY = Infinity,
+                  nMaxY = -Infinity;
+                for (const n of nodes) {
+                  if (n.x < nMinX) nMinX = n.x;
+                  if (n.x > nMaxX) nMaxX = n.x;
+                  if (n.y < nMinY) nMinY = n.y;
+                  if (n.y > nMaxY) nMaxY = n.y;
+                }
+                if (Number.isFinite(nMinX) && nMaxX > nMinX) {
+                  wx = randomBetween(nMinX, nMaxX);
+                  wy = randomBetween(nMinY, nMaxY);
+                }
+              }
+              if (wx === null && nodes.length > 0) {
+                // Fallback B: random node + 큰 offset.
+                const rIdx = Math.floor(Math.random() * nodes.length);
+                const rn = nodes[rIdx];
+                wx = rn.x + randomBetween(-150, 150);
+                wy = rn.y + randomBetween(-150, 150);
+              }
+              if (wx !== null && wy !== null) {
+                p.sourceIdx = p.targetIdx;
+                p.tx = wx;
+                p.ty = wy;
+                p.waypoints = [];
+                const sx = p.x;
+                const sy = p.y;
+                const segDx = p.tx - sx;
+                const segDy = p.ty - sy;
+                const segLen = Math.hypot(segDx, segDy) || 1;
+                const perpX = -segDy / segLen;
+                const perpY = segDx / segLen;
+                const offset = randomBetween(0.15, 0.35) * segLen * (Math.random() < 0.5 ? 1 : -1);
+                p.mx = (sx + p.tx) / 2 + perpX * offset;
+                p.my = (sy + p.ty) / 2 + perpY * offset;
+                p.progress = 0;
+                p.action = 'move';
+                return;
+              }
+            }
             // 선호 스팟 순열에서 다음 목적지 (개인별 루틴) + 30% 확률로 랜덤
             let nextIdx: number;
             if (Math.random() < 0.3) {
@@ -2408,22 +2563,28 @@ export default function AbmPersonaMap({
           p.y = it * it * sy + 2 * it * t * p.my + t * t * p.ty;
           p.action = 'move';
           if (p.progress >= 1) {
-            p.waitTicks = Math.floor(randomBetween(60, 200) * p.dwellMultiplier);
-            const payAmt = randomBetween(3000, 15000);
-            p.spend += payAmt;
-            paymentEffectsRef.current.push({
-              nodeIdx: p.targetIdx,
-              amount: Math.round(payAmt),
-              startTick: tickRef.current,
-            });
-            paymentBouncesRef.current.push({
-              nodeIdx: p.targetIdx,
-              startTick: tickRef.current,
-            });
-            const stats = spotStatsRef.current[p.targetIdx];
-            if (stats) {
-              stats.visits++;
-              stats.revenue += payAmt;
+            // wander mode (시뮬 진행 중) — dwell 짧게 (15~50 tick) + 결제/통계 skip.
+            // 진짜 visit 가 아닌 행동 가시화이므로 spotStats 오염 방지.
+            if (wanderActiveRef.current) {
+              p.waitTicks = Math.floor(randomBetween(15, 50));
+            } else {
+              p.waitTicks = Math.floor(randomBetween(60, 200) * p.dwellMultiplier);
+              const payAmt = randomBetween(3000, 15000);
+              p.spend += payAmt;
+              paymentEffectsRef.current.push({
+                nodeIdx: p.targetIdx,
+                amount: Math.round(payAmt),
+                startTick: tickRef.current,
+              });
+              paymentBouncesRef.current.push({
+                nodeIdx: p.targetIdx,
+                startTick: tickRef.current,
+              });
+              const stats = spotStatsRef.current[p.targetIdx];
+              if (stats) {
+                stats.visits++;
+                stats.revenue += payAmt;
+              }
             }
           }
         }
@@ -2831,153 +2992,156 @@ export default function AbmPersonaMap({
               </div>
             )}
           </div>
-          {/* 결과 카드 — 우하 (col 2, row 2). 원본 좌측 패널 4 metric 카드 디자인 그대로. */}
-          <div className="col-start-2 row-start-2 relative p-2 bg-secondary rounded-2xl overflow-hidden">
+          {/* 우하 (col 2, row 2). AbmQueuePanel 항상 표시 (사용자 피드백 2026-05-05) —
+              abmResult 있을 때도 queue 가 보이도록. metric 4-card 는 좌측 결과 패널에 있음. */}
+          <div className="col-start-2 row-start-2 relative p-2 bg-secondary rounded-2xl overflow-hidden min-h-0">
+            {/* 결과 시 metric 4-card 는 그대로 유지하면서 우측 1/3 에 queue panel 추가. */}
             {abmResult ? (
-              <div className="grid grid-cols-4 gap-3 h-full">
-                {[
-                  {
-                    label: '일 방문',
-                    value: abmResult.daily_visits_mean?.toLocaleString() ?? '-',
-                    suffix: '회',
-                    sub:
-                      abmResult.daily_visits_std > 0
-                        ? `σ ${abmResult.daily_visits_std}`
-                        : '시뮬 평균',
-                    color: '#002CD1',
-                    glow: 'rgba(0,44,209,0.18)',
-                    icon: (
-                      <path
-                        d="M3 12L9 18L21 6"
-                        stroke="#000"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    ),
-                  },
-                  {
-                    label: 'Total Earning',
-                    value: abmResult.monthly_revenue_estimate
-                      ? Math.round(abmResult.monthly_revenue_estimate / 10000).toLocaleString()
-                      : '-',
-                    suffix: '만 ₩',
-                    sub: '월 매출 (일×25)',
-                    color: '#FF7940',
-                    glow: 'rgba(251,191,36,0.18)',
-                    icon: (
-                      <text
-                        x="12"
-                        y="17"
-                        textAnchor="middle"
-                        fontSize="14"
-                        fontWeight="900"
-                        fill="#000"
-                      >
-                        ₩
-                      </text>
-                    ),
-                  },
-                  {
-                    label: 'Peak Hours',
-                    value:
-                      abmResult.peak_hours && abmResult.peak_hours.length > 0
-                        ? abmResult.peak_hours
-                            .slice(0, 3)
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            .map((h: any) => `${h}`)
-                            .join(' · ')
-                        : '-',
-                    suffix: '시',
-                    sub: '상위 3 시간대',
-                    color: '#00E0D1',
-                    glow: 'rgba(34,211,238,0.18)',
-                    icon: (
-                      <>
-                        <circle cx="12" cy="12" r="9" stroke="#000" strokeWidth="2" />
+              <div className="grid grid-cols-[3fr_1fr] gap-2 h-full">
+                <div className="grid grid-cols-4 gap-3 h-full">
+                  {[
+                    {
+                      label: '일 방문',
+                      value: abmResult.daily_visits_mean?.toLocaleString() ?? '-',
+                      suffix: '회',
+                      sub:
+                        abmResult.daily_visits_std > 0
+                          ? `σ ${abmResult.daily_visits_std}`
+                          : '시뮬 평균',
+                      color: '#002CD1',
+                      glow: 'rgba(0,44,209,0.18)',
+                      icon: (
                         <path
-                          d="M12 6v6l4 2"
+                          d="M3 12L9 18L21 6"
                           stroke="#000"
                           strokeWidth="2.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
-                      </>
-                    ),
-                  },
-                  {
-                    label: 'Active Agents',
-                    value: abmResult.n_personas ? abmResult.n_personas.toLocaleString() : '-',
-                    suffix: '명',
-                    sub: 'Tier S 50 · LLM thought',
-                    color: '#002CD1',
-                    glow: 'rgba(0,44,209,0.18)',
-                    icon: (
-                      <>
-                        <circle cx="9" cy="8" r="3" stroke="#000" strokeWidth="2" />
-                        <circle cx="17" cy="9" r="2.5" stroke="#000" strokeWidth="2" />
-                        <path
-                          d="M3 19c0-3 3-5 6-5s6 2 6 5M14 18c.5-2 2-3.5 4-3.5s3.5 1.5 4 3.5"
-                          stroke="#000"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                        />
-                      </>
-                    ),
-                  },
-                ].map((m) => (
-                  <div
-                    key={m.label}
-                    className="relative bg-card/90 backdrop-blur-xl border border-border rounded-[20px] p-3 shadow-xl flex flex-col gap-2 overflow-hidden min-w-0"
-                    style={{ boxShadow: `0 0 24px ${m.glow}` }}
-                  >
-                    {/* 상단 글로스 highlight */}
-                    <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-foreground/[0.04] to-transparent pointer-events-none" />
-                    {/* 헤더 — 색 박스 아이콘 + 라벨 */}
-                    <div className="relative z-10 flex items-center gap-2 min-w-0">
-                      <div
-                        className="w-4 h-4 rounded-md flex items-center justify-center border border-border shrink-0"
-                        style={{ backgroundColor: m.color }}
-                      >
-                        <svg
-                          width="9"
-                          height="9"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          aria-hidden="true"
+                      ),
+                    },
+                    {
+                      label: 'Total Earning',
+                      value: abmResult.monthly_revenue_estimate
+                        ? Math.round(abmResult.monthly_revenue_estimate / 10000).toLocaleString()
+                        : '-',
+                      suffix: '만 ₩',
+                      sub: '월 매출 (일×25)',
+                      color: '#FF7940',
+                      glow: 'rgba(251,191,36,0.18)',
+                      icon: (
+                        <text
+                          x="12"
+                          y="17"
+                          textAnchor="middle"
+                          fontSize="14"
+                          fontWeight="900"
+                          fill="#000"
                         >
-                          {m.icon}
-                        </svg>
+                          ₩
+                        </text>
+                      ),
+                    },
+                    {
+                      label: 'Peak Hours',
+                      value:
+                        abmResult.peak_hours && abmResult.peak_hours.length > 0
+                          ? abmResult.peak_hours
+                              .slice(0, 3)
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              .map((h: any) => `${h}`)
+                              .join(' · ')
+                          : '-',
+                      suffix: '시',
+                      sub: '상위 3 시간대',
+                      color: '#00E0D1',
+                      glow: 'rgba(34,211,238,0.18)',
+                      icon: (
+                        <>
+                          <circle cx="12" cy="12" r="9" stroke="#000" strokeWidth="2" />
+                          <path
+                            d="M12 6v6l4 2"
+                            stroke="#000"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </>
+                      ),
+                    },
+                    {
+                      label: 'Active Agents',
+                      value: abmResult.n_personas ? abmResult.n_personas.toLocaleString() : '-',
+                      suffix: '명',
+                      sub: 'Tier S 50 · LLM thought',
+                      color: '#002CD1',
+                      glow: 'rgba(0,44,209,0.18)',
+                      icon: (
+                        <>
+                          <circle cx="9" cy="8" r="3" stroke="#000" strokeWidth="2" />
+                          <circle cx="17" cy="9" r="2.5" stroke="#000" strokeWidth="2" />
+                          <path
+                            d="M3 19c0-3 3-5 6-5s6 2 6 5M14 18c.5-2 2-3.5 4-3.5s3.5 1.5 4 3.5"
+                            stroke="#000"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                        </>
+                      ),
+                    },
+                  ].map((m) => (
+                    <div
+                      key={m.label}
+                      className="relative bg-card/90 backdrop-blur-xl border border-border rounded-[20px] p-3 shadow-xl flex flex-col gap-2 overflow-hidden min-w-0"
+                      style={{ boxShadow: `0 0 24px ${m.glow}` }}
+                    >
+                      {/* 상단 글로스 highlight */}
+                      <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-foreground/[0.04] to-transparent pointer-events-none" />
+                      {/* 헤더 — 색 박스 아이콘 + 라벨 */}
+                      <div className="relative z-10 flex items-center gap-2 min-w-0">
+                        <div
+                          className="w-4 h-4 rounded-md flex items-center justify-center border border-border shrink-0"
+                          style={{ backgroundColor: m.color }}
+                        >
+                          <svg
+                            width="9"
+                            height="9"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            {m.icon}
+                          </svg>
+                        </div>
+                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none truncate">
+                          {m.label}
+                        </span>
                       </div>
-                      <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none truncate">
-                        {m.label}
-                      </span>
+                      {/* 숫자 — 컨테이너 폭에 맞게 적응 */}
+                      <div className="relative z-10 flex items-baseline gap-1 min-w-0 flex-wrap">
+                        <span className="text-xl font-black text-foreground italic tracking-tight leading-none tabular-nums break-all">
+                          {m.value}
+                        </span>
+                        <span className="text-[10px] font-bold text-muted-foreground italic tracking-tight">
+                          {m.suffix}
+                        </span>
+                      </div>
+                      <div className="relative z-10 w-full h-px bg-foreground/[0.06]" />
+                      {/* 서브라인 */}
+                      <div className="relative z-10 flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-tighter min-w-0">
+                        <div
+                          className="w-1 h-1 rounded-full shrink-0"
+                          style={{ backgroundColor: m.color }}
+                        />
+                        <span className="truncate">{m.sub}</span>
+                      </div>
                     </div>
-                    {/* 숫자 — 컨테이너 폭에 맞게 적응 */}
-                    <div className="relative z-10 flex items-baseline gap-1 min-w-0 flex-wrap">
-                      <span className="text-xl font-black text-foreground italic tracking-tight leading-none tabular-nums break-all">
-                        {m.value}
-                      </span>
-                      <span className="text-[10px] font-bold text-muted-foreground italic tracking-tight">
-                        {m.suffix}
-                      </span>
-                    </div>
-                    <div className="relative z-10 w-full h-px bg-foreground/[0.06]" />
-                    {/* 서브라인 */}
-                    <div className="relative z-10 flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-tighter min-w-0">
-                      <div
-                        className="w-1 h-1 rounded-full shrink-0"
-                        style={{ backgroundColor: m.color }}
-                      />
-                      <span className="truncate">{m.sub}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <AbmQueuePanel />
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground py-4 text-center">
-                공실 스팟 클릭 후 시뮬 실행 → 결과 표시
-              </p>
+              <AbmQueuePanel />
             )}
           </div>
           {/* 좌측 결과 패널 — col 1, row span 2 (전체 높이) */}
@@ -3001,6 +3165,7 @@ export default function AbmPersonaMap({
                     <span className="text-[9px] font-mono text-success tracking-widest">LIVE</span>
                   </div>
                 </div>
+
                 {/* Tier S Agents — 50명 agent 이름 리스트.
                     행 클릭 → 지도 focus + 리스트 위 overlay 로 plan/thought 카드 표시.
                     이전: inline accordion expand (목록 늘어남). 변경: absolute overlay. */}
@@ -3390,197 +3555,224 @@ export default function AbmPersonaMap({
                   </div>
                 )}
               </div>
-            ) : abmLoading ? (
-              <AbmProgressPanel />
+            ) : isRunningCurrentSpot ? (
+              <div className="w-full flex flex-col gap-3">
+                <AbmProgressPanel />
+                <PersonaPreviewStream businessType={businessType} spotLabel={focusSpot?.label} />
+              </div>
             ) : abmError ? (
               <div className="bg-background/90 backdrop-blur-sm border border-warning/30 rounded-xl px-6 py-3">
                 <p className="text-sm text-warning">{abmError}</p>
               </div>
             ) : (
-              /* 시나리오 선택 UI — 처음 시뮬 form (App.tsx 운영 조건 박스) 와 동일한
-                 box-glass + SectionLabel + FormField 패턴. spot 클릭 후 시뮬 실행 전 노출. */
-              <div className="w-full box-glass rounded-2xl p-5 flex flex-col gap-4">
-                <SectionLabel
-                  icon={Sliders}
-                  title="ABM Scenario"
-                  sub="Game Master · 시뮬 환경 변수"
-                />
-                {/* 날씨 */}
-                <FormField label="날씨" icon={Cloud} info="기온은 현재 RDS 데이터 그대로 사용">
-                  <div className="flex flex-wrap gap-1.5">
-                    {([null, '맑음', '흐림', '비', '눈'] as const).map((w) => (
-                      <button
-                        key={w ?? 'auto'}
-                        onClick={() => setScenario((s) => ({ ...s, weather_override: w }))}
-                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border flex items-center gap-1.5 ${
-                          scenario.weather_override === w
-                            ? 'bg-primary/15 border-primary/60 text-primary'
-                            : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
-                        }`}
-                      >
-                        {w === null ? (
-                          '현재날씨'
-                        ) : w === '맑음' ? (
-                          <>
-                            <svg
-                              width="18"
-                              height="14"
-                              viewBox="0 0 18 14"
-                              aria-hidden="true"
-                              className="shrink-0"
-                            >
-                              <circle cx="9" cy="7" r="3.2" fill="#FF7940" />
-                              <g stroke="#FF7940" strokeWidth="1.3" strokeLinecap="round">
-                                <line x1="9" y1="1" x2="9" y2="2.6" />
-                                <line x1="9" y1="11.4" x2="9" y2="13" />
-                                <line x1="1" y1="7" x2="2.6" y2="7" />
-                                <line x1="15.4" y1="7" x2="17" y2="7" />
-                                <line x1="3" y1="1.5" x2="4.2" y2="2.7" />
-                                <line x1="13.8" y1="11.3" x2="15" y2="12.5" />
-                                <line x1="3" y1="12.5" x2="4.2" y2="11.3" />
-                                <line x1="13.8" y1="2.7" x2="15" y2="1.5" />
-                              </g>
-                            </svg>
-                            맑음
-                          </>
-                        ) : w === '흐림' ? (
-                          <>
-                            <svg
-                              width="20"
-                              height="14"
-                              viewBox="0 0 20 14"
-                              aria-hidden="true"
-                              className="shrink-0"
-                            >
-                              <path
-                                d="M4.5 8 a3 3 0 0 1 0.3 -5.9 a4 4 0 0 1 7.6 0.4 a2.8 2.8 0 0 1 3.6 4.5 a2.5 2.5 0 0 1 -1.8 0.7 Z"
-                                fill="#9CA3AF"
-                                stroke="#6B7280"
-                                strokeWidth="0.7"
-                              />
-                            </svg>
-                            흐림
-                          </>
-                        ) : w === '비' ? (
-                          <>
-                            <svg
-                              width="20"
-                              height="14"
-                              viewBox="0 0 20 14"
-                              aria-hidden="true"
-                              className="shrink-0"
-                            >
-                              <path
-                                d="M4.5 7.5 a3 3 0 0 1 0.3 -5.9 a4 4 0 0 1 7.6 0.4 a2.8 2.8 0 0 1 3.6 4.5 a2.5 2.5 0 0 1 -1.8 0.7 Z"
-                                fill="#6B6A63"
-                                stroke="#cbd5e1"
-                                strokeWidth="0.7"
-                              />
-                              <g stroke="#002CD1" strokeWidth="1.3" strokeLinecap="round">
-                                <line x1="6" y1="9.5" x2="5" y2="12.5" />
-                                <line x1="10" y1="9.5" x2="9" y2="12.5" />
-                                <line x1="14" y1="9.5" x2="13" y2="12.5" />
-                              </g>
-                            </svg>
-                            비
-                          </>
-                        ) : (
-                          <>
-                            <svg
-                              width="16"
-                              height="14"
-                              viewBox="0 0 16 14"
-                              aria-hidden="true"
-                              className="shrink-0"
-                            >
-                              <g
-                                stroke="#9DB8FF"
-                                strokeWidth="1.2"
-                                strokeLinecap="round"
-                                fill="none"
-                              >
-                                <line x1="8" y1="1.5" x2="8" y2="12.5" />
-                                <line x1="2.7" y1="4" x2="13.3" y2="10" />
-                                <line x1="2.7" y1="10" x2="13.3" y2="4" />
-                                <line x1="6" y1="2.5" x2="8" y2="3.5" />
-                                <line x1="10" y1="2.5" x2="8" y2="3.5" />
-                                <line x1="6" y1="11.5" x2="8" y2="10.5" />
-                                <line x1="10" y1="11.5" x2="8" y2="10.5" />
-                              </g>
-                              <circle cx="8" cy="7" r="1.2" fill="#E6EEFF" />
-                            </svg>
-                            눈
-                          </>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </FormField>
-
-                {/* 요일 — 평일/주말/공휴일 분기 backend is_weekend / is_holiday 자동 결정 */}
-                <FormField
-                  label="요일"
-                  icon={Calendar}
-                  info="공휴일 = 2026-05-05 어린이날 기준 (평일+공휴일 효과)"
+              /* spot 선택 후 시뮬 실행 전 — 시나리오 form 만 (SpotInfoCard 는 지도 아래 가로 배치).
+                 button 을 details 밖 grandparent flex 에 두어 mt-auto 가 panel 끝까지 push. */
+              <div className="w-full flex flex-col gap-3 flex-1 min-h-0">
+                <details
+                  open
+                  className="w-full box-glass rounded-2xl p-5 flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto [&[open]>summary>svg]:rotate-90"
                 >
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { label: '오늘', weekend_force: false, date: null },
-                      { label: '평일', weekend_force: false, date: '2026-04-21' },
-                      { label: '주말', weekend_force: true, date: null },
-                      { label: '공휴일', weekend_force: false, date: '2026-05-05' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.label}
-                        onClick={() =>
-                          setScenario((s) => ({
-                            ...s,
-                            weekend_force: opt.weekend_force,
-                            date_override: opt.date,
-                          }))
-                        }
-                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
-                          scenario.weekend_force === opt.weekend_force &&
-                          scenario.date_override === opt.date
-                            ? 'bg-primary/15 border-primary/60 text-primary'
-                            : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </FormField>
-
-                {/* 임대료 충격 */}
-                <FormField
-                  label="임대료 충격"
-                  icon={DollarSign}
-                  info="신규 매장 임대료 변동 시뮬 — 폐업 압력 분석"
-                >
-                  <div className="flex flex-wrap gap-1.5">
-                    {[0, 0.15, 0.3, 0.5].map((pct) => (
-                      <button
-                        key={pct}
-                        onClick={() => setScenario((s) => ({ ...s, rent_shock_pct: pct }))}
-                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
-                          scenario.rent_shock_pct === pct
-                            ? pct === 0
+                  <summary className="flex items-center gap-2 cursor-pointer list-none select-none mb-2">
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 10 10"
+                      className="transition-transform shrink-0"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M3 1.5 L7 5 L3 8.5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        fill="none"
+                      />
+                    </svg>
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">
+                      시나리오 설정
+                    </span>
+                  </summary>
+                  <SectionLabel
+                    icon={Sliders}
+                    title="ABM Scenario"
+                    sub="Game Master · 시뮬 환경 변수"
+                  />
+                  {/* 날씨 */}
+                  <FormField label="날씨" icon={Cloud} info="기온은 현재 RDS 데이터 그대로 사용">
+                    <div className="flex flex-wrap gap-1.5">
+                      {([null, '맑음', '흐림', '비', '눈'] as const).map((w) => (
+                        <button
+                          key={w ?? 'auto'}
+                          onClick={() => setScenario((s) => ({ ...s, weather_override: w }))}
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border flex items-center gap-1.5 ${
+                            scenario.weather_override === w
                               ? 'bg-primary/15 border-primary/60 text-primary'
-                              : 'bg-danger/15 border-danger/60 text-danger'
-                            : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
-                        }`}
-                      >
-                        {pct === 0 ? '현재' : `+${Math.round(pct * 100)}%`}
-                      </button>
-                    ))}
-                  </div>
-                </FormField>
+                              : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {w === null ? (
+                            '현재날씨'
+                          ) : w === '맑음' ? (
+                            <>
+                              <svg
+                                width="18"
+                                height="14"
+                                viewBox="0 0 18 14"
+                                aria-hidden="true"
+                                className="shrink-0"
+                              >
+                                <circle cx="9" cy="7" r="3.2" fill="#FF7940" />
+                                <g stroke="#FF7940" strokeWidth="1.3" strokeLinecap="round">
+                                  <line x1="9" y1="1" x2="9" y2="2.6" />
+                                  <line x1="9" y1="11.4" x2="9" y2="13" />
+                                  <line x1="1" y1="7" x2="2.6" y2="7" />
+                                  <line x1="15.4" y1="7" x2="17" y2="7" />
+                                  <line x1="3" y1="1.5" x2="4.2" y2="2.7" />
+                                  <line x1="13.8" y1="11.3" x2="15" y2="12.5" />
+                                  <line x1="3" y1="12.5" x2="4.2" y2="11.3" />
+                                  <line x1="13.8" y1="2.7" x2="15" y2="1.5" />
+                                </g>
+                              </svg>
+                              맑음
+                            </>
+                          ) : w === '흐림' ? (
+                            <>
+                              <svg
+                                width="20"
+                                height="14"
+                                viewBox="0 0 20 14"
+                                aria-hidden="true"
+                                className="shrink-0"
+                              >
+                                <path
+                                  d="M4.5 8 a3 3 0 0 1 0.3 -5.9 a4 4 0 0 1 7.6 0.4 a2.8 2.8 0 0 1 3.6 4.5 a2.5 2.5 0 0 1 -1.8 0.7 Z"
+                                  fill="#9CA3AF"
+                                  stroke="#6B7280"
+                                  strokeWidth="0.7"
+                                />
+                              </svg>
+                              흐림
+                            </>
+                          ) : w === '비' ? (
+                            <>
+                              <svg
+                                width="20"
+                                height="14"
+                                viewBox="0 0 20 14"
+                                aria-hidden="true"
+                                className="shrink-0"
+                              >
+                                <path
+                                  d="M4.5 7.5 a3 3 0 0 1 0.3 -5.9 a4 4 0 0 1 7.6 0.4 a2.8 2.8 0 0 1 3.6 4.5 a2.5 2.5 0 0 1 -1.8 0.7 Z"
+                                  fill="#6B6A63"
+                                  stroke="#cbd5e1"
+                                  strokeWidth="0.7"
+                                />
+                                <g stroke="#002CD1" strokeWidth="1.3" strokeLinecap="round">
+                                  <line x1="6" y1="9.5" x2="5" y2="12.5" />
+                                  <line x1="10" y1="9.5" x2="9" y2="12.5" />
+                                  <line x1="14" y1="9.5" x2="13" y2="12.5" />
+                                </g>
+                              </svg>
+                              비
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                width="16"
+                                height="14"
+                                viewBox="0 0 16 14"
+                                aria-hidden="true"
+                                className="shrink-0"
+                              >
+                                <g
+                                  stroke="#9DB8FF"
+                                  strokeWidth="1.2"
+                                  strokeLinecap="round"
+                                  fill="none"
+                                >
+                                  <line x1="8" y1="1.5" x2="8" y2="12.5" />
+                                  <line x1="2.7" y1="4" x2="13.3" y2="10" />
+                                  <line x1="2.7" y1="10" x2="13.3" y2="4" />
+                                  <line x1="6" y1="2.5" x2="8" y2="3.5" />
+                                  <line x1="10" y1="2.5" x2="8" y2="3.5" />
+                                  <line x1="6" y1="11.5" x2="8" y2="10.5" />
+                                  <line x1="10" y1="11.5" x2="8" y2="10.5" />
+                                </g>
+                                <circle cx="8" cy="7" r="1.2" fill="#E6EEFF" />
+                              </svg>
+                              눈
+                            </>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </FormField>
 
-                {/* 실행 버튼 */}
+                  {/* 요일 — 평일/주말/공휴일 분기 backend is_weekend / is_holiday 자동 결정 */}
+                  <FormField
+                    label="요일"
+                    icon={Calendar}
+                    info="공휴일 = 2026-05-05 어린이날 기준 (평일+공휴일 효과)"
+                  >
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: '오늘', weekend_force: false, date: null },
+                        { label: '평일', weekend_force: false, date: '2026-04-21' },
+                        { label: '주말', weekend_force: true, date: null },
+                        { label: '공휴일', weekend_force: false, date: '2026-05-05' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.label}
+                          onClick={() =>
+                            setScenario((s) => ({
+                              ...s,
+                              weekend_force: opt.weekend_force,
+                              date_override: opt.date,
+                            }))
+                          }
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
+                            scenario.weekend_force === opt.weekend_force &&
+                            scenario.date_override === opt.date
+                              ? 'bg-primary/15 border-primary/60 text-primary'
+                              : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </FormField>
+
+                  {/* 임대료 충격 */}
+                  <FormField
+                    label="임대료 충격"
+                    icon={DollarSign}
+                    info="신규 매장 임대료 변동 시뮬 — 폐업 압력 분석"
+                  >
+                    <div className="flex flex-wrap gap-1.5">
+                      {[0, 0.15, 0.3, 0.5].map((pct) => (
+                        <button
+                          key={pct}
+                          onClick={() => setScenario((s) => ({ ...s, rent_shock_pct: pct }))}
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
+                            scenario.rent_shock_pct === pct
+                              ? pct === 0
+                                ? 'bg-primary/15 border-primary/60 text-primary'
+                                : 'bg-danger/15 border-danger/60 text-danger'
+                              : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {pct === 0 ? '현재' : `+${Math.round(pct * 100)}%`}
+                        </button>
+                      ))}
+                    </div>
+                  </FormField>
+                </details>
+                {/* 실행 버튼 — details 밖 grandparent flex 에 mt-auto 두어
+                    좌측 패널 (~820px col) 하단까지 push. */}
                 <button
                   onClick={() => onRunSimulation(scenario)}
-                  className="mt-2 flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-black tracking-tight transition-all duration-300 shadow-[0_4px_20px_rgba(0,44,209,0.25)] hover:shadow-[0_6px_28px_rgba(0,44,209,0.35)]"
+                  className="mt-auto w-full flex items-center justify-center gap-2.5 py-3.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-black tracking-tight transition-all duration-300 shadow-[0_4px_20px_rgba(0,44,209,0.25)] hover:shadow-[0_6px_28px_rgba(0,44,209,0.35)]"
                 >
                   <Play className="w-4 h-4" />
                   시뮬레이션 실행

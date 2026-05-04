@@ -44,13 +44,20 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
 
   // store selector — store 가 single source of truth. focusSpot 도 store 에 둠
   // (새로고침 시 어떤 spot 를 시뮬하던 중인지 같이 살리기 위해).
-  const abmResult = useAbmStore((s) => s.result);
+  // displayResult (history view) 우선, 없으면 active result. 사용자 피드백 (2026-05-05):
+  // history click 으로 active 시뮬이 destroy 되지 않도록 displayResult 채널 분리.
+  const activeResult = useAbmStore((s) => s.result);
+  const displayResult = useAbmStore((s) => s.displayResult);
+  const abmResult = displayResult ?? activeResult;
   const abmStatus = useAbmStore((s) => s.status);
   const abmError = useAbmStore((s) => s.error);
-  const focusSpot = useAbmStore((s) => s.focusSpot);
-  const startAbm = useAbmStore((s) => s.startAbm);
-  const cancelAbm = useAbmStore((s) => s.cancelAbm);
+  const activeFocusSpot = useAbmStore((s) => s.focusSpot);
+  const displayFocusSpot = useAbmStore((s) => s.displayFocusSpot);
+  // displayResult 가 있으면 그 spot, 없으면 active focusSpot.
+  const focusSpot = displayResult ? displayFocusSpot : activeFocusSpot;
+  const enqueueAbm = useAbmStore((s) => s.enqueueAbm);
   const dismissResult = useAbmStore((s) => s.dismissResult);
+  const clearDisplayResult = useAbmStore((s) => s.clearDisplayResult);
   const setFocusSpot = useAbmStore((s) => s.setFocusSpot);
   const resumePollingIfNeeded = useAbmStore((s) => s.resumePollingIfNeeded);
 
@@ -83,7 +90,9 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   // 상권분석과 동일 — winner dong 만 + score 내림차순 → top 4.
   const winnerVacancySpots = allVacancySpots
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((s: any) => s.dong_name === winner && typeof s.lat === 'number' && typeof s.lon === 'number')
+    .filter(
+      (s: any) => s.dong_name === winner && typeof s.lat === 'number' && typeof s.lon === 'number',
+    )
     .slice()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .sort((a: any, b: any) => {
@@ -107,9 +116,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
         : [];
 
   // 동일 브랜드 자사 매장 — winner+top3 4동 안. competitors 와 별도 marker 로 표시.
-  const sameBrandLocations = Array.isArray(r?.same_brand_locations)
-    ? r.same_brand_locations
-    : [];
+  const sameBrandLocations = Array.isArray(r?.same_brand_locations) ? r.same_brand_locations : [];
 
   // recommendedSpots 가 활성이면 'recommended' 타입 + score/reason 전달.
   const isRecommendedMode = recommendedSpots.length > 0;
@@ -159,7 +166,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       })),
   ];
 
-  /** store action wrapper — payload 빌드 + startAbm 호출. */
+  /** store action wrapper — payload 빌드 + enqueueAbm 호출 (active 가 비면 즉시 시작, 아니면 queue). */
   function runAbm(params: {
     districtOverride?: string;
     spotLat?: number;
@@ -185,28 +192,30 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       store_area: storeArea ?? (r as any)?.storeArea ?? (r as any)?.store_area ?? 15,
     };
-    return startAbm(payload, params.nextFocusSpot ?? null);
+    return enqueueAbm(payload, params.nextFocusSpot ?? null);
   }
 
   // spot 클릭 — 즉시 시뮬 실행 X. abm 모드 진입 + focusSpot 만 set.
-  // 사용자 피드백 (2026-05-04): 시뮬 진행 중 (abmLoading=true) 에도 spot 클릭 막지 않음.
-  // 옛 시뮬 cancel → 새 spot 으로 swap 가능 (순차적 처리).
+  // 사용자 피드백 (2026-05-04): 진행 중 시뮬은 cancel 하지 않음. 사용자가 시나리오 패널에서
+  // "시뮬 실행" 누르면 enqueueAbm 으로 queue 에 추가됨 (active 종료 후 자동 pop).
+  // 사용자 피드백 (2026-05-05): spot 새로 클릭 시 직전 abmResult 가 살아있으면 결과 화면이
+  // 바로 나와 시나리오 form 이 안 보임 → dismissResult 호출. result 는 history 에 유지.
   const handleAgentMapSpotClick = async (loc: { lat: number; lng: number; name: string }) => {
-    if (abmLoading) cancelAbm(); // 진행 중 시뮬 abort
-    else if (abmResult) dismissResult(); // 결과만 정리
     setMode('abm');
     setFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
+    clearDisplayResult();
+    if (abmStatus === 'done' || abmStatus === 'error') dismissResult();
   };
 
   const handleAbmSpotClick = async (spot: { lat: number; lon: number; dong_name: string }) => {
-    if (abmLoading) cancelAbm();
-    else if (abmResult) dismissResult();
     setFocusSpot({ lat: spot.lat, lon: spot.lon, label: spot.dong_name });
+    clearDisplayResult();
+    if (abmStatus === 'done' || abmStatus === 'error') dismissResult();
   };
 
-  // 시나리오 패널 "시뮬 실행" 버튼 — focusSpot 좌표 + scenario 로 startAbm.
+  // 시나리오 패널 "시뮬 실행" 버튼 — focusSpot 좌표 + scenario 로 enqueueAbm.
   const handleRunSimulation = async (scenario: AbmScenario) => {
-    await runAbm({
+    runAbm({
       districtOverride: focusSpot?.label,
       spotLat: focusSpot?.lat,
       spotLon: focusSpot?.lon,
@@ -215,11 +224,11 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
     });
   };
 
+  // "지도로 돌아가기" — 진행 중 시뮬은 그대로 둔다 (background 에서 계속). 단순 navigation.
+  // 사용자가 cancel 하려면 별도 cancel UI (e.g. AbmFloatingWidget) 사용.
   const handleClearResult = () => {
-    // 시뮬 진행 중이면 cancel (status='running' 이면 dismissResult noop). running/done 둘 다 정리.
-    if (abmStatus === 'running') cancelAbm();
-    else dismissResult();
     setFocusSpot(null);
+    clearDisplayResult();
     setMode('map');
   };
 
@@ -296,6 +305,11 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
           onClearResult={handleClearResult}
           onSpotClick={handleAbmSpotClick}
           onRunSimulation={handleRunSimulation}
+          businessType={businessType}
+          dongStats={{
+            floating_pop: r?.market_report?.floating_population ?? null,
+            closure_rate: r?.closure_rate?.closure_rate ?? null,
+          }}
         />
       )}
     </div>

@@ -237,7 +237,7 @@ export function DashboardHub({
           <HubCard
             onClick={() => onSelect('abm')}
             title="ABM 시뮬레이터"
-            description="100명 에이전트 행동 시뮬레이션 + 공실 평가"
+            description="5,000명 에이전트 행동 시뮬레이션 + 공실 평가"
             imgSrc={HUB_IMAGES.abm}
             imgAlt="사람들이 다니는 거리"
             accent="abm"
@@ -247,7 +247,7 @@ export function DashboardHub({
           <HubCard
             to="/dashboard/abm"
             title="ABM 시뮬레이터"
-            description="100명 에이전트 행동 시뮬레이션 + 공실 평가"
+            description="5,000명 에이전트 행동 시뮬레이션 + 공실 평가"
             imgSrc={HUB_IMAGES.abm}
             imgAlt="사람들이 다니는 거리"
             accent="abm"

@@ -802,7 +802,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # 좌표 누락 시 "none" 으로 정규화 — 좌표·영업구역 입력 시 자동 invalidation.
     _coord_key = f"{lat_val:.5f},{lon_val:.5f}" if lat_val is not None and lon_val is not None else "none"
     _territory_key = state.get("territory_radius_m") or "none"
-    cache_key = f"v8:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}:{_territory_key}"
+    # v8 → v9: 운영 카테고리 5종 제거 (10 risks). 옛 v8 캐시(15 risks) 자동 무효화.
+    cache_key = f"v9:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}:{_territory_key}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -1026,8 +1027,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # batch_results를 타입별로 인덱싱
     _batch_map = {r["type"]: r for r in batch_results}
 
-    # SP4: 15 risks 구성 — _batch_map(13 룰 항목) + zoning_result + ftc_result
-    # 순서는 다운스트림(인덱스 기반) 호환을 위해 유지
+    # 입지(location) 10 risks 구성 — _batch_map(8 입지 룰) + zoning_result + ftc_result.
+    # 운영(operation) 5종 (food_hygiene/labor/vat/privacy/sewage) 제외 — fallback caution 부풀림 방지.
+    # frontend 카운트와 동기화 위해 risks 리스트 자체에서 운영 카테고리 미포함.
     def _r(type_name: str) -> dict:
         return _batch_map.get(type_name, _make_fallback_risk(type_name))
 
@@ -1035,17 +1037,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
         _r("franchise_law"),
         _r("commercial_lease_law"),
         zoning_result,
-        _r("food_hygiene"),
         _r("safety_regulation"),
         ftc_result,
         _r("building_law"),
         _r("fire_safety_law"),
-        _r("labor_law"),
-        _r("vat_law"),
-        _r("privacy_law"),
         _r("accessibility_law"),
         _r("school_zone"),
-        _r("sewage_law"),
         _r("fair_trade_law"),
     ]
 
@@ -1063,14 +1060,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # 벌칙 조문 본문을 recommendation에 자동 추가
     _enrich_penalty_info(risks)
 
-    # SP4: overall_level 결정 — 핵심 카테고리 + 임계값 룰
-    # 핵심 = 미이행 시 영업정지/형사처벌이 직접적인 영역
-    # (식품위생/소방/건축 + 학교환경위생정화구역)
-    # 핵심 1개라도 danger → overall=danger
-    # 비핵심 danger 2개 이상 → overall=danger (다중 위험)
-    # 그 외 danger 1개 또는 caution 존재 → caution
-    # 전부 safe → safe
-    _CRITICAL_TYPES = {"food_hygiene", "fire_safety_law", "building_law", "school_zone"}
+    # SP4: overall_level 결정 — 핵심 카테고리 + 임계값 룰 (입지 한정).
+    # 운영 카테고리(food_hygiene 등) 평가 제외 — 핵심 set 에서도 제거.
+    # 핵심 = 출점 자체 불가 또는 영업정지 직결 (소방/건축 + 학교환경위생정화구역).
+    _CRITICAL_TYPES = {"fire_safety_law", "building_law", "school_zone"}
 
     danger_types = [r.get("type", "") for r in risks if isinstance(r, dict) and r.get("level") == "danger"]
     has_critical_danger = any(t in _CRITICAL_TYPES for t in danger_types)
