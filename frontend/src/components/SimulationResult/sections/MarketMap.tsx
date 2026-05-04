@@ -257,8 +257,7 @@ export function MarketMap({
     //   3) center prop (DONG_COORDS 하드코딩) — 최후 안전장치
     const fallbackCenter = new maps.LatLng(center.lat, center.lng);
     const buildCenterLayers = (latLng: unknown) => {
-      // fill 제거 — 4 spot 반경원 fill 이 누적되면 안쪽 경쟁점 마커가 핑크 톤에 묻힘.
-      // stroke(dashed) 만으로 반경 표시.
+      // 1위 반경원 — fill 살짝 (0.05) 으로 영역 인지 + 마커 시각성 둘 다 보존.
       const circle = new maps.Circle({
         center: latLng,
         radius,
@@ -267,7 +266,7 @@ export function MarketMap({
         strokeOpacity: 0.9,
         strokeStyle: 'dash',
         fillColor: '#ff0070',
-        fillOpacity: 0,
+        fillOpacity: 0.05,
       });
       circle.setMap(mapInstance);
       overlayLayersRef.current.push(circle);

@@ -127,7 +127,13 @@ function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
   const spots = (sim.vacancy_spots as VacancySpotRaw[] | undefined) ?? [];
   return spots
     .filter((s) => s.dong_name === winner)
-    .filter((s) => typeof s.lat === 'number' && typeof s.lon === 'number')
+    .filter(
+      (s) =>
+        typeof s.lat === 'number' &&
+        typeof s.lon === 'number' &&
+        Number.isFinite(s.lat) &&
+        Number.isFinite(s.lon),
+    )
     .map((s) => ({
       lat: s.lat as number,
       lng: s.lon as number,
