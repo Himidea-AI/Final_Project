@@ -149,16 +149,13 @@ function ensurePulseStyle() {
 
 function buildTargetOverlayContent(): HTMLElement {
   const wrap = document.createElement('div');
-  // 1위 펄싱 핀 위에 "공실 #1 추천" 라벨 추가 — 사용자가 공실 spot 임을 한눈에 인지 가능.
-  // 2~4위 핀과 동일한 라벨 디자인 (검은 배경 + 핫핑크 보더).
+  // 1위 펄싱 핀 + "공실 #1 추천" 라벨 (핀 우측에 absolute 로 띄워 영역 확장 X — 주변 경쟁점 마커 가리지 않음).
   wrap.innerHTML = `
-    <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;">
-      <div style="padding:2px 6px;background:rgba(24,24,27,0.85);color:#ffffff;border:1px solid #ff0070;border-radius:4px;font-size:9px;font-weight:900;letter-spacing:0.05em;white-space:nowrap;">공실 #1 추천</div>
-      <div style="position:relative;width:28px;height:28px;">
-        <div class="mm-pulse-ring"></div>
-        <div class="mm-pulse-ring mm-pulse-ring-delay"></div>
-        <div style="position:absolute;inset:9px;border-radius:9999px;background:#ff0070;border:2px solid #ffffff;box-shadow:0 0 10px rgba(255,0,112,0.8);"></div>
-      </div>
+    <div style="position:relative;width:28px;height:28px;pointer-events:none;">
+      <div class="mm-pulse-ring"></div>
+      <div class="mm-pulse-ring mm-pulse-ring-delay"></div>
+      <div style="position:absolute;inset:9px;border-radius:9999px;background:#ff0070;border:2px solid #ffffff;box-shadow:0 0 10px rgba(255,0,112,0.8);"></div>
+      <div style="position:absolute;top:50%;left:32px;transform:translateY(-50%);padding:2px 6px;background:rgba(24,24,27,0.85);color:#ffffff;border:1px solid #ff0070;border-radius:4px;font-size:9px;font-weight:900;letter-spacing:0.05em;white-space:nowrap;">공실 #1 추천</div>
     </div>
   `;
   return wrap;
@@ -462,13 +459,12 @@ export function MarketMap({
       });
       spotCircle.setMap(mapInstance);
       overlayLayersRef.current.push(spotCircle);
-      // 번호 핀 — "공실 #N" 라벨 같이 표시해 인지성 강화.
+      // 번호 핀 + "공실 #N" 라벨. 핀 우측에 absolute 라벨로 영역 확장 X — 주변 경쟁점 가리지 않음.
       const pin = document.createElement('div');
-      pin.style.cssText =
-        'position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:default;';
+      pin.style.cssText = 'position:relative;width:22px;height:22px;cursor:default;';
       pin.innerHTML = `
-        <div style="padding:2px 6px;background:rgba(24,24,27,0.85);color:#ffffff;border:1px solid #ff0070;border-radius:4px;font-size:9px;font-weight:900;letter-spacing:0.05em;white-space:nowrap;">공실 #${rank}</div>
         <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#ff0070;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 6px rgba(255,0,112,0.6);font-size:11px;font-weight:900;color:#ffffff;">${rank}</div>
+        <div style="position:absolute;top:50%;left:26px;transform:translateY(-50%);padding:2px 6px;background:rgba(24,24,27,0.85);color:#ffffff;border:1px solid #ff0070;border-radius:4px;font-size:9px;font-weight:900;letter-spacing:0.05em;white-space:nowrap;pointer-events:none;">공실 #${rank}</div>
       `;
       pin.title = `추천 공실 spot ${rank}순위`;
       const pinOverlay = new maps.CustomOverlay({
