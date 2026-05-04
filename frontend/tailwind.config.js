@@ -5,6 +5,15 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Pretendard', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: [
+          'JetBrains Mono',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Monaco',
+          'Consolas',
+          'monospace',
+        ],
       },
       colors: {
         // System A — 배경/구조
