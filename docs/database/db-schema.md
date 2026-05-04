@@ -106,7 +106,7 @@
 | `seoul_dong_migration_monthly` | 1,360 | ✓ | ym, dong_code |
 | `seoul_golmok_rent` | 11,900 | ✓ | year, quarter, dong_code |
 | `seoul_population_quarterly` | 10,176 | ✓ | quarter, dong_code |
-| `seoul_realtime_hotspots` | 1,876 | ✓ | id |
+| `seoul_realtime_hotspots` | 1,903 | ✓ | id |
 | `seoul_resident_pop_quarterly` | 13,508 | — | quarter, dong_code |
 | `seoul_subway_passenger_daily` | 199,340 | ✓ | date, station_code |
 | `seoul_training_dataset` | 87,938 | ✓ | quarter, dong_code, industry_code |
@@ -1614,7 +1614,7 @@
 | `dong_code` | text | — | — |
 | `total_pop` | double precision | ✓ | — |
 
-### `seoul_realtime_hotspots` — 1,876 rows
+### `seoul_realtime_hotspots` — 1,903 rows
 
 - 도메인: 서울 전역
 - ORM 정의: ✓

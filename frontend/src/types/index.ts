@@ -311,18 +311,21 @@ export interface LivingPopForecast {
 }
 
 /**
- * [E — emerging_district] 상권 조기 감지 (LSTM Autoencoder)
+ * [E — emerging_district] 상권 조기 감지 (LSTM Autoencoder + 4-tier fallback)
  *
- * predict(dong_code, industry_code) 반환 EmergingResult dict.
- * threshold p95 = 0.041380 기준 anomaly_score 0~1 정규화.
+ * predict 응답. 4-tier fallback (change_ix → classifier → b1_trend → slope → none)
+ * 이 signal/summary/tier/raw 를 1차 결정, autoencoder 가 anomaly_score +
+ * consecutive_anomaly_quarters 보강.
  */
 export interface EmergingSignal {
   dong_code: string;
   industry_code: string;
-  anomaly_score: number; // 0~1 (1에 가까울수록 이상)
+  anomaly_score: number; // 0~1 (1에 가까울수록 평소 패턴과 다름)
   signal: 'emerging' | 'declining' | 'normal';
   consecutive_anomaly_quarters: number;
   summary: string;
+  tier: 'change_ix' | 'classifier' | 'b1_trend' | 'slope' | 'none';
+  raw: Record<string, number | string>;
   is_mock?: boolean;
 }
 
@@ -461,7 +464,7 @@ export interface DistrictPredictionResult {
   shap_result: ShapResult | null;
   customer_segment: Record<string, unknown> | null;
   living_pop_forecast: Record<string, unknown> | null;
-  emerging_signal: Record<string, unknown> | null;
+  emerging_signal: EmergingSignal | null;
 }
 
 /** /analyze/llm 응답. SimulationOutput 의 ML 필드 빠진 subset. spec §3. */
