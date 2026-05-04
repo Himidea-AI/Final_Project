@@ -331,12 +331,12 @@ class DongMapping(Base):
 
 
 class IndustryMaster(Base):
-    """업종 마스터 — 업종 코드 ↔ 업종명 매핑 (101 row, FK 9개 hub).
+    """업종 마스터 — 업종 코드 ↔ 업종명 매핑 (101 row).
 
-    DB 실재 (2026-05-04 audit). FK 9개 자식 테이블이 industry_code 참조:
-      district_sales, store_quarterly, golmok_commercial, golmok_sales, golmok_stores,
-      seoul_adstrd_stor, seoul_district_sales, seoul_district_stores,
-      seoul_signgu_selng, seoul_signgu_stor, seoul_training_dataset.
+    DB 측 FK constraint 9개 (district_sales, store_quarterly, golmok_*, seoul_*) 가
+    industry_code 참조. **ORM ForeignKey 미배선** (자식 클래스의 industry_code 컬럼이
+    `Column(String, ...)` 만 정의, `ForeignKey("industry_master.industry_code")` 없음).
+    DB 무결성은 보장되지만 ORM 양방향 lazy load 불가 — 별 PR 에서 ORM FK 추가 권장.
 
     raw SQL read 사용처 없음 — FK constraint 정합용 마스터.
     Alembic 마이그레이션 정의 없음 (직접 DDL 또는 외부 시드 스크립트로 생성됨).

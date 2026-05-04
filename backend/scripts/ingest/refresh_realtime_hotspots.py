@@ -82,22 +82,32 @@ def main() -> None:
         ).fetchall()
     print(f"Distinct areas: {len(areas)}")
 
-    inserts, errors = 0, []
-    with engine.begin() as conn:
-        for area_cd, area_nm in areas:
-            url = f"http://openapi.seoul.go.kr:8088/{key}/json/citydata/1/1/{up.quote(area_nm)}"
-            try:
-                cd = httpx.get(url, timeout=30).json().get("CITYDATA")
-                if not cd:
-                    errors.append((area_cd, area_nm, "no CITYDATA"))
+    inserts, errors, skipped = 0, [], 0
+    for area_cd, area_nm in areas:
+        url = f"http://openapi.seoul.go.kr:8088/{key}/json/citydata/1/1/{up.quote(area_nm)}"
+        try:
+            resp = httpx.get(url, timeout=30)
+            resp.raise_for_status()
+            cd = resp.json().get("CITYDATA")
+            if not cd:
+                errors.append((area_cd, area_nm, "no CITYDATA"))
+                continue
+            row = _row_from_citydata(cd, area_cd, area_nm)
+            with engine.begin() as conn:
+                # dedupe: 동일 (area_cd, collected_at) 이미 있으면 skip
+                exists = conn.execute(
+                    sa.text("SELECT 1 FROM seoul_realtime_hotspots WHERE area_cd=:a AND collected_at=:t LIMIT 1"),
+                    {"a": row["area_cd"], "t": row["collected_at"]},
+                ).first()
+                if exists:
+                    skipped += 1
                     continue
-                conn.execute(sa.text(INSERT_SQL), _row_from_citydata(cd, area_cd, area_nm))
+                conn.execute(sa.text(INSERT_SQL), row)
                 inserts += 1
-            except Exception as ex:
-                errors.append((area_cd, area_nm, str(ex)[:80]))
-            time.sleep(0.3)
-
-    print(f"Inserted: {inserts}, Errors: {len(errors)}")
+        except Exception as ex:
+            errors.append((area_cd, area_nm, str(ex)[:200]))
+        time.sleep(0.3)
+    print(f"Inserted: {inserts}, Skipped (duplicate): {skipped}, Errors: {len(errors)}")
     for e in errors[:5]:
         print(" ", e)
 
