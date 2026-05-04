@@ -136,19 +136,57 @@ export function PredictFinancialSimTab({ simResult }: Props) {
       {dpredicts.length > 0 ? (
         <>
           <div className="rounded-3xl border border-border bg-card p-8">
-            <div className="mb-8 flex items-start justify-between gap-6">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
                 <ShieldAlert className="text-primary" /> 동별 폐업위험도
               </h3>
+              {/* 카드 내 동 전환 chip — ProfitSimulationPanelFull 의 chip 과 동일 selectedDistrict
+                  state 공유. 클릭 시 BulletChart/summary/SignalsBar 가 즉시 해당 동으로 갱신. */}
+              {dpredicts.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {dpredicts.map((p, idx) => {
+                    const active = p.district === selectedDistrict;
+                    const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+                    const textColor = ACTIVE_TEXT_BY_INDEX[idx % ACTIVE_TEXT_BY_INDEX.length];
+                    return (
+                      <button
+                        key={p.district}
+                        type="button"
+                        onClick={() => setSelectedDistrict(p.district)}
+                        style={
+                          active
+                            ? { backgroundColor: color, borderColor: color, color: textColor }
+                            : undefined
+                        }
+                        className={`rounded-full border px-3 py-1 text-[0.6875rem] font-bold tabular-nums transition ${
+                          active
+                            ? ''
+                            : 'border-border bg-secondary text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                        }`}
+                      >
+                        {p.district}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            {/* Heatmap — 4동 × 피처 (LightGBM / TCN 분리). 셀 색강도 = SHAP contribution.
-                양수=빨강(위험↑), 음수=초록(위험↓). 동마다 다른 피처가 위험 결정에 기여한 것을 한눈에. */}
-            <ClosureRiskHeatmap
-              rows={dpredicts.map((p) => ({
-                district: p.district,
-                closure: p.closure_risk as ClosureRisk | null,
-              }))}
+            {/* 선택된 동의 BulletChart(0~100 점수) + SHAP 자연어 요약 + 기여 피처 막대.
+                카드 헤더 chip 또는 위쪽 ProfitSimulationPanelFull chip 으로 전환 가능. */}
+            <ClosureRiskPanel
+              closure={selectedPred?.closure_risk as ClosureRisk | null}
+              district={currentDistrict}
             />
+            <div className="mt-6">
+              {/* Heatmap — 4동 × 피처 (LightGBM / TCN 분리). 셀 색강도 = SHAP contribution.
+                  양수=빨강(위험↑), 음수=초록(위험↓). 동마다 다른 피처가 위험 결정에 기여한 것을 한눈에. */}
+              <ClosureRiskHeatmap
+                rows={dpredicts.map((p) => ({
+                  district: p.district,
+                  closure: p.closure_risk as ClosureRisk | null,
+                }))}
+              />
+            </div>
           </div>
           <div className="rounded-3xl border border-border bg-card p-8">
             <div className="mb-8 flex items-start justify-between gap-6">

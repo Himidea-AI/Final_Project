@@ -149,6 +149,10 @@ _TCN_FEATURE_KO: dict[str, str] = {
     "floating_pop": "골목상권 유동인구",
     "pop_per_store_gm": "골목상권 점포당 유동인구",
     "normal_ratio": "일반 점포 비율",
+    # TCN-only 추가 피처 (2026-05-04) — TCN ALL_FEATURES 에 포함, SHAP top_signals 노출
+    "opr_sale_mt_avg": "동 평균 개업 수",
+    "cls_sale_mt_avg": "동 평균 폐업 수",
+    "industry_trend": "업종 검색 트렌드",
 }
 
 
