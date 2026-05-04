@@ -249,10 +249,15 @@ def estimate_cannibalization(
     type_modifier = {"neighborhood": 1.0, "office": 0.6, "mall": 0.4}.get(store_type, 1.0)
     total *= type_modifier
 
-    total = min(total, 0.50)  # 현실적 캡: 50%
+    # 50% 캡 적용 — 누적 영향이 그 이상이면 잘림.
+    # is_capped=true 일 때 프론트는 "≥50% (최대치 도달)" 표기로 정직성 확보.
+    raw_total = total
+    is_capped = raw_total > 0.50
+    total = min(raw_total, 0.50)
 
     return {
         "total_impact_pct": -round(total, 3),
+        "is_capped": is_capped,
         "confidence": "medium",
         "method": "Pancras_2013_decay + industry_threshold",
         "references": [
@@ -309,6 +314,7 @@ def analyze_cannibalization(
         "closest_distance_m": nearby[0]["distance_m"] if nearby else None,
         "distance_bins": bins,
         "estimated_revenue_impact_pct": impact["total_impact_pct"],
+        "impact_is_capped": impact.get("is_capped", False),
         "impact_method": impact["method"],
         "impact_references": impact["references"],
         "nearby_stores": nearby[:10],

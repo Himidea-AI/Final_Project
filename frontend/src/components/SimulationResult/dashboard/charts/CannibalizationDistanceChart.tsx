@@ -22,6 +22,8 @@ interface Props {
   bins: Record<string, number> | null | undefined;
   closestM?: number | null;
   impactPct?: number | null;
+  // 50% 캡 도달 여부. true 면 실제 누적 영향이 -50% 이상일 수 있어 정직 표기 필요.
+  impactIsCapped?: boolean | null;
   height?: number;
 }
 
@@ -35,7 +37,13 @@ const BIN_COLORS = [
   'var(--success)',
 ];
 
-export function CannibalizationDistanceChart({ bins, closestM, impactPct, height = 180 }: Props) {
+export function CannibalizationDistanceChart({
+  bins,
+  closestM,
+  impactPct,
+  impactIsCapped,
+  height = 180,
+}: Props) {
   if (!bins || Object.keys(bins).length === 0) {
     return null;
   }
@@ -71,7 +79,21 @@ export function CannibalizationDistanceChart({ bins, closestM, impactPct, height
             </span>
           )}
           {impactPct != null && (
-            <span className="text-danger">잠식 {(impactPct * 100).toFixed(1)}%</span>
+            <span
+              className="text-danger"
+              title={
+                impactIsCapped
+                  ? '실제 누적 영향이 -50% 이상이나 산식 최대치(50%)로 표시됨'
+                  : undefined
+              }
+            >
+              잠식 {impactIsCapped ? '≥50%' : `${(impactPct * 100).toFixed(1)}%`}
+              {impactIsCapped && (
+                <span className="ml-1 text-[0.5rem] font-bold uppercase tracking-widest text-warning">
+                  최대치
+                </span>
+              )}
+            </span>
           )}
         </div>
       </div>
