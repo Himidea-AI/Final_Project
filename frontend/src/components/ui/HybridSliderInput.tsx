@@ -24,6 +24,9 @@ export interface HybridSliderInputProps {
  * 내부 draft state가 "타이핑 중"을 수용 (e.g., 빈 문자열) 하고, blur/Enter 시점에
  * min/max로 clamp 후 부모에 커밋한다.
  */
+// 1000 이상부터 천 단위 콤마. 미만은 raw 숫자 (콤마 없음).
+const fmt = (n: number): string => (n >= 1000 ? n.toLocaleString('en-US') : String(n));
+
 export function HybridSliderInput({
   label,
   value,
@@ -38,6 +41,8 @@ export function HybridSliderInput({
   className = '',
 }: HybridSliderInputProps) {
   const [draft, setDraft] = useState<string>(String(value));
+  // focus 중엔 raw 숫자(편집 편의), blur 후엔 콤마 적용 표시.
+  const [focused, setFocused] = useState(false);
 
   // 외부에서 value가 바뀌면 draft 동기화 (프리셋 적용 등)
   useEffect(() => {
@@ -51,6 +56,7 @@ export function HybridSliderInput({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // 콤마/공백 등 비숫자 모두 제거 → 사용자가 콤마 타이핑해도 raw 만 저장.
     const raw = e.target.value.replace(/[^0-9]/g, '');
     setDraft(raw);
   };
@@ -67,8 +73,18 @@ export function HybridSliderInput({
   const sliderValue = Math.min(max, Math.max(min, draft === '' ? min : Number(draft) || min));
   const progressPercent = ((sliderValue - min) / (max - min)) * 100;
 
-  const renderMax = maxLabel ?? (max >= 10000 ? `${max / 10000}억` : `${max}${unit}`);
-  const renderMin = minLabel ?? `${min}${unit}`;
+  // input 표시 값: focus 중엔 raw, blur 시 1000+ 콤마 적용.
+  const inputDisplay = focused
+    ? draft
+    : draft === ''
+      ? ''
+      : (() => {
+          const n = Number(draft);
+          return Number.isNaN(n) ? draft : fmt(n);
+        })();
+
+  const renderMax = maxLabel ?? (max >= 10000 ? `${max / 10000}억` : `${fmt(max)}${unit}`);
+  const renderMin = minLabel ?? `${fmt(min)}${unit}`;
 
   return (
     <div className={`flex flex-col gap-2 mb-3 ${className}`}>
@@ -90,14 +106,18 @@ export function HybridSliderInput({
           <input
             type="text"
             inputMode="numeric"
-            value={draft}
+            value={inputDisplay}
             onChange={handleInputChange}
-            onBlur={commitDraft}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false);
+              commitDraft();
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
-            className="w-20 bg-transparent text-right text-2xl font-black tabular-nums text-primary tracking-tight focus:outline-none placeholder-muted-foreground/60"
-            placeholder={String(min)}
+            className="w-24 bg-transparent text-right text-2xl font-black tabular-nums text-primary tracking-tight focus:outline-none placeholder-muted-foreground/60"
+            placeholder={fmt(min)}
           />
           <span className="text-xs font-bold text-muted-foreground">{unit}</span>
         </div>

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Edit3, Sliders, Store, UserCheck, X } from 'lucide-react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { SimulationInput } from '../../../types';
 
@@ -226,7 +227,10 @@ export function DashboardConditionDrawer({ open, onClose, params, brandFallback 
   // 분석 대상 동 리스트는 별도 children 처리 (섹션 1 안)
   const hasDongs = dongs.length > 0;
 
-  return (
+  // Portal 로 document.body 에 직접 mount — DashboardOutlet 의 fixed wrapper(top-20) 안에서
+  // 마운트되면 drawer 의 fixed 가 wrapper 영역에 갇혀 글로벌 header 80px 만큼 윗부분이 잘림.
+  // root 로 빠지면 viewport 전체에 펼쳐져 글로벌 header 위에서 정상 표시됨.
+  return createPortal(
     <AnimatePresence>
       {open && params && (
         <>
@@ -317,6 +321,7 @@ export function DashboardConditionDrawer({ open, onClose, params, brandFallback 
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
