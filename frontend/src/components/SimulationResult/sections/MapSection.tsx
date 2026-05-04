@@ -3,7 +3,7 @@ import type { SimulationOutput } from '../../../types';
 import { useAuth } from '../../../auth/AuthContext';
 import { useSimulationStore } from '../../../stores/simulationStore';
 import { SectionLabel } from '../shared/SectionLabel';
-import { MarketMap, type Competitor, type RankingEntry } from './MarketMap';
+import { MarketMap, haversineM, type Competitor, type RankingEntry } from './MarketMap';
 
 interface Props {
   simResult: SimulationOutput;
@@ -169,8 +169,10 @@ export function MapSection({ simResult }: Props) {
 
   const effectiveRadius = userRadius ?? 500;
   const totalCompetitors = competitors.length;
+  // within 판정 = 화면 핀 좌표(center) 기준 haversine. 백엔드 distance_m 은 source 동 centroid
+  // 기준이라 핀 위치와 정합 안 됨 → MarketMap 마커 색·legend 카운트 일치시킴.
   const withinCompetitors = competitors.filter(
-    (c) => (c.distance_m ?? Number.POSITIVE_INFINITY) <= effectiveRadius,
+    (c) => haversineM(center.lat, center.lng, c.lat, c.lng) <= effectiveRadius,
   ).length;
 
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
