@@ -18,6 +18,9 @@ class SimulationInput(BaseModel):
 
     business_type: str = Field(..., description="업종 코드 (cafe, restaurant, convenience)")
     brand_name: str = Field(..., description="브랜드명")
+    # 사용자 회원가입 사업자번호 — corp_brand_resolver 가 다업종 corp 의 적합 brand 자동 선택용.
+    # 미입력 시 회원 검증 skip + brand_name 그대로 사용 (개인사업자 / 비회원 호환).
+    biz_number: str | None = Field(default=None, description="사업자등록번호 (corp 검증 + auto-brand-resolve)")
     target_district: str = Field(..., description="출점 후보 행정동 (대표 1개)")
     target_districts: list[str] = Field(
         default_factory=list, description="사용자가 선택한 후보 행정동 목록 (복수 선택 지원)"
@@ -43,9 +46,7 @@ class SimulationInput(BaseModel):
     )
 
     # 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 계산 트리거
-    lat: float | None = Field(
-        default=None, description="출점 후보지 위도 (학교 거리 룰 트리거)"
-    )
+    lat: float | None = Field(default=None, description="출점 후보지 위도 (학교 거리 룰 트리거)")
     lon: float | None = Field(default=None, description="출점 후보지 경도")
 
     # [customer_revenue P1-C] 타겟 고객 프로필 — models/customer_revenue/predict.py 입력
