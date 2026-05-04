@@ -244,36 +244,8 @@ from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
 
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
-# 업종 → kakao 검색 키워드 매핑
-_BIZ_TO_KAKAO_KW: dict[str, str] = {
-    "치킨전문점": "치킨",
-    "커피-음료": "커피",
-    "한식음식점": "한식",
-    "중식음식점": "중식",
-    "일식음식점": "일식",
-    "양식음식점": "양식",
-    "제과점": "베이커리",
-    "패스트푸드점": "버거",
-    "분식전문점": "분식",
-    "호프-간이주점": "주점",
-    "치킨": "치킨",
-    "커피": "커피",
-    "카페": "커피",
-    "한식": "한식",
-    "중식": "중식",
-    "일식": "일식",
-    "양식": "양식",
-    "베이커리": "베이커리",
-    "버거": "버거",
-    "분식": "분식",
-    "주점": "주점",
-    "chicken": "치킨",
-    "cafe": "커피",
-    "coffee": "커피",
-    "burger": "버거",
-    "bakery": "베이커리",
-    "korean": "한식",
-}
+# 업종 → kakao 검색 키워드 매핑은 통합 dict 로 이관.
+# config/business_type_mapping.kakao_keyword_of() 사용 — 단일 source of truth.
 
 
 async def _collect_all_competitor_locations(
@@ -289,7 +261,9 @@ async def _collect_all_competitor_locations(
     → 모든 80개 샘플이 좌표 None 으로 인식 → 좌표 필터 통과 0개 → 최종 0개.
     'lng' 로 정합성 맞추고 단계별 로깅 추가하여 회귀 조기 감지.
     """
-    keyword = _BIZ_TO_KAKAO_KW.get(business_type, business_type)
+    from src.config.business_type_mapping import kakao_keyword_of
+
+    keyword = kakao_keyword_of(business_type) or business_type
     districts = list({winner} | set(top3 or []))
     print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
     results: list[dict] = []

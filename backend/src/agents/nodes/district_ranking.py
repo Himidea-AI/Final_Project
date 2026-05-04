@@ -59,24 +59,8 @@ def _init_optional_clients():
         )
 
 
-# 사용자 입력 업종명 → kakao_store.category 매핑 (vacancy spot 경쟁밀도 계산용).
-# tools.py 의 _KAKAO_CATEGORY_MAP 과 동일 정책 — import 의존 줄이려고 핵심 키만 인라인.
-_VACANCY_SPOT_KAKAO_CATEGORY: dict[str, str] = {
-    "카페": "커피-음료",
-    "커피": "커피-음료",
-    "cafe": "커피-음료",
-    "coffee": "커피-음료",
-    "한식": "한식음식점",
-    "음식점": "한식음식점",
-    "restaurant": "한식음식점",
-    "치킨": "치킨전문점",
-    "분식": "분식전문점",
-    "주점": "호프-간이주점",
-    "베이커리": "제과점",
-    "빵": "제과점",
-    "제과점": "제과점",
-    "편의점": "편의점",
-}
+# 사용자 입력 업종명 → kakao_store.category 매핑은 통합 dict 로 이관.
+# config/business_type_mapping.kakao_category_of() 사용 — 단일 source of truth.
 
 
 def _spot_haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -106,8 +90,9 @@ async def _load_spot_score_features(
     """
     target_cat: str | None = None
     if business_type:
-        bt = business_type.lower().strip()
-        target_cat = _VACANCY_SPOT_KAKAO_CATEGORY.get(bt) or _VACANCY_SPOT_KAKAO_CATEGORY.get(business_type)
+        from src.config.business_type_mapping import kakao_category_of
+
+        target_cat = kakao_category_of(business_type)
     try:
         async with db_client.get_session() as session:
             subway_stmt = select(MasterSubwayStation.lat, MasterSubwayStation.lon).where(
@@ -442,29 +427,12 @@ async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
 
 def _industry_to_cs_code(business_type: str | None) -> str | None:
     """사용자 입력 업종명 → DistrictSales.industry_code (CS 코드).
-    tools.py 의 _SALES_CODE_MAP 과 동일 정책 — import 의존 줄이려고 핵심 키만 인라인.
+
+    config/business_type_mapping 의 단일 source of truth 로 위임.
     """
-    if not business_type:
-        return None
-    bt = business_type.lower().strip()
-    table: dict[str, str] = {
-        "카페": "CS100010",
-        "커피": "CS100010",
-        "cafe": "CS100010",
-        "coffee": "CS100010",
-        "한식": "CS100001",
-        "음식점": "CS100001",
-        "restaurant": "CS100001",
-        "치킨": "CS100007",
-        "분식": "CS100008",
-        "주점": "CS100009",
-        "호프": "CS100009",
-        "베이커리": "CS100005",
-        "빵": "CS100005",
-        "제과점": "CS100005",
-        "편의점": "CS200009",
-    }
-    return table.get(bt) or table.get(business_type)
+    from src.config.business_type_mapping import cs_code_of
+
+    return cs_code_of(business_type) if business_type else None
 
 
 async def _load_dong_density_fallback(business_type: str | None) -> dict[str, int]:
@@ -475,8 +443,9 @@ async def _load_dong_density_fallback(business_type: str | None) -> dict[str, in
     """
     if not business_type:
         return {}
-    bt = business_type.lower().strip()
-    target_cat = _VACANCY_SPOT_KAKAO_CATEGORY.get(bt) or _VACANCY_SPOT_KAKAO_CATEGORY.get(business_type)
+    from src.config.business_type_mapping import kakao_category_of
+
+    target_cat = kakao_category_of(business_type)
     if not target_cat:
         return {}
     try:
