@@ -285,12 +285,21 @@ async def _collect_all_competitor_locations(
     top3: list,
     business_type: str,
 ) -> list[dict]:
-    """winner + top3 추천 동 각각의 500m 반경 경쟁업체 좌표를 수집해 통합 반환."""
+    """winner + top3 추천 동 각각의 500m 반경 경쟁업체 좌표를 수집해 통합 반환.
+
+    2026-05-04 (B1 의뢰서 #3): 좌표 키 mismatch 회귀 fix.
+    `commercial_intelligence.analyze_competition` 가 samples dict 의 'lon' 키를
+    'lng' 로 rename(line 146)해서 반환하는데, 본 함수는 'lon' 으로 조회하고 있었음.
+    → 모든 80개 샘플이 좌표 None 으로 인식 → 좌표 필터 통과 0개 → 최종 0개.
+    'lng' 로 정합성 맞추고 단계별 로깅 추가하여 회귀 조기 감지.
+    """
     keyword = _BIZ_TO_KAKAO_KW.get(business_type, business_type)
     districts = list({winner} | set(top3 or []))
     print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
     results: list[dict] = []
     seen_ids: set = set()
+    # 단계별 카운터 — raw → dedupe drop → coord drop → 최종
+    _stats = {"raw": 0, "dedupe_drop": 0, "coord_drop": 0}
 
     async def _fetch_one(dong_name: str):
         try:
@@ -301,32 +310,42 @@ async def _collect_all_competitor_locations(
             data = await asyncio.to_thread(_analyze_competition, dong_code, keyword, 500)
             samples = data.get("samples") or []
             print(f"[all_competitors] {dong_name}({dong_code}) → {len(samples)}개 샘플")
+            _stats["raw"] += len(samples)
             for s in samples:
-                cid = s.get("kakao_id") or f"{s.get('place_name')}_{s.get('lat')}_{s.get('lon')}"
+                # 'lon' 은 commercial_intelligence 가 rename 후 제거한 키 — 'lng' 로 일치.
+                lat_v = s.get("lat")
+                lng_v = s.get("lng")
+                cid = s.get("kakao_id") or f"{s.get('place_name')}_{lat_v}_{lng_v}"
                 if cid in seen_ids:
+                    _stats["dedupe_drop"] += 1
                     continue
                 seen_ids.add(cid)
-                if s.get("lat") and s.get("lon"):
+                if lat_v and lng_v:
                     results.append(
                         {
                             "id": cid,
                             "place_name": s.get("place_name", ""),
                             "brand_name": s.get("brand_name", ""),
-                            "lat": s["lat"],
-                            "lng": s["lon"],
+                            "lat": lat_v,
+                            "lng": lng_v,
                             "distance_m": s.get("distance_m"),
                             "is_franchise": s.get("is_franchise", False),
                             "category": s.get("category", ""),
                             "source_dong": dong_name,
                         }
                     )
+                else:
+                    _stats["coord_drop"] += 1
         except Exception as e:
             import traceback
 
             print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
 
     await asyncio.gather(*[_fetch_one(d) for d in districts])
-    print(f"[all_competitors] 최종 결과: {len(results)}개")
+    print(
+        f"[all_competitors] 단계별 — raw {_stats['raw']} / dedupe drop {_stats['dedupe_drop']} / "
+        f"coord drop {_stats['coord_drop']} / 최종 {len(results)}개"
+    )
     return results
 
 
