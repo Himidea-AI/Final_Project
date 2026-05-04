@@ -225,18 +225,18 @@ export default function LoginPage({ onLogoClick }: { onLogoClick?: () => void })
 
           {/* Links */}
           <div className="flex flex-col gap-3">
-            {/* 회원가입 — 평소 그레이 톤 (로그인 비활성과 시각 통일), 호버 시 Vibrant Purple 풀 fill.
-                Deep Blue(로그인) / Teal Green(초대코드) 와 색 분리해 액션별 시각 구분. */}
+            {/* 회원가입 — 평소 그레이 톤 (로그인 비활성과 시각 통일), 호버 시 Indigo (Deep Blue 의 밝은 형제) 풀 fill.
+                primary(Deep Blue, 로그인) 보다 한 톤 밝은 Indigo #4f46e5 로 액션 구분 + brand family 유지. */}
             <button
               onClick={() => nav('/joinus')}
-              className="w-full py-3 rounded-xl text-xs font-bold text-muted-foreground border border-border hover:bg-gradient-to-r hover:from-chart-4 hover:to-chart-4 hover:text-white hover:border-chart-4 hover:shadow-[0_0_20px_rgba(179,92,255,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+              className="w-full py-3 rounded-xl text-xs font-bold text-muted-foreground border border-border hover:bg-[#4f46e5] hover:text-white hover:border-[#4f46e5] hover:shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
             >
               아직 계정이 없으신가요? 회원가입
             </button>
-            {/* 초대코드 — 로그인 버튼과 동일 풀 fill 패턴. 색은 Teal Green(success) — 협업/합류 의미. */}
+            {/* 초대코드 — 로그인 버튼과 동일 풀 fill 패턴. Sky Blue #3b82f6 — Deep Blue 보다 더 밝은 형제 (협업/합류 의미). */}
             <button
               onClick={() => nav('/joinus?role=manager')}
-              className="w-full py-3 rounded-xl text-xs font-bold bg-gradient-to-r from-success to-success text-white shadow-[0_0_20px_rgba(0,186,122,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+              className="w-full py-3 rounded-xl text-xs font-bold bg-[#3b82f6] text-white shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
             >
               초대 코드로 팀원에 합류하기
             </button>
