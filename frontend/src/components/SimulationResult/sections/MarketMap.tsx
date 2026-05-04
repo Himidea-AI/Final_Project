@@ -24,6 +24,8 @@ export interface MarketMapProps {
   radius?: number;
   winnerDistrict?: string;
   height?: number | string;
+  // 추천 동 내 "가장 적합한 공실" 좌표. 제공 시 폴리곤 centroid 대신 이 좌표에 핀/반경원을 찍는다.
+  targetSpot?: { lat: number; lng: number } | null;
 }
 
 interface KakaoLatLngInstance {
@@ -178,6 +180,7 @@ export function MarketMap({
   radius = 500,
   winnerDistrict,
   height = 520,
+  targetSpot = null,
 }: MarketMapProps) {
   const { ready, error, kakao } = useKakaoMap();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -206,9 +209,10 @@ export function MarketMap({
       infoWindowRef.current = null;
     }
 
-    // Circle + amber pulse marker 의 좌표 = winner polygon 의 geometric centroid 가 정답.
-    // GeoJSON fetch 후 centroid 계산 → 그 좌표로 layer 생성. fetch 실패 또는 winner
-    // 미발견 시 center prop 으로 fallback (DONG_COORDS 하드코딩이 마지막 안전장치).
+    // 핀/반경원 좌표 우선순위:
+    //   1) targetSpot (추천 동 내 best 공실 — listing_count 최대) — 가장 정확
+    //   2) winner polygon geometric centroid (GeoJSON 기반) — 동 중심점 fallback
+    //   3) center prop (DONG_COORDS 하드코딩) — 최후 안전장치
     const fallbackCenter = new maps.LatLng(center.lat, center.lng);
     const buildCenterLayers = (latLng: unknown) => {
       const circle = new maps.Circle({
@@ -235,6 +239,10 @@ export function MarketMap({
       overlayLayersRef.current.push(targetOverlay);
     };
 
+    // targetSpot 이 있으면 centroid 계산 결과로 핀을 덮어쓰지 않도록 플래그.
+    // choropleth(폴리곤 색칠) 는 그대로 그리고, 핀/반경원만 targetSpot 으로 고정.
+    const hasTargetSpot = targetSpot != null;
+
     // Layer — (bonus) 16동 choropleth + winner centroid 계산
     fetch('/mapo-dong.geo.json')
       .then((r) => {
@@ -243,7 +251,9 @@ export function MarketMap({
       })
       .then((geo) => {
         if (!geo.features) {
-          buildCenterLayers(fallbackCenter);
+          buildCenterLayers(
+            hasTargetSpot ? new maps.LatLng(targetSpot!.lat, targetSpot!.lng) : fallbackCenter,
+          );
           return;
         }
         const rankingMap = new Map(rankings.map((r) => [r.district, r]));
@@ -293,13 +303,19 @@ export function MarketMap({
         });
 
         const wc = winnerCentroid as { lat: number; lng: number } | null;
-        const finalCenter = wc ? new maps.LatLng(wc.lat, wc.lng) : fallbackCenter;
+        const finalCenter = hasTargetSpot
+          ? new maps.LatLng(targetSpot!.lat, targetSpot!.lng)
+          : wc
+            ? new maps.LatLng(wc.lat, wc.lng)
+            : fallbackCenter;
         buildCenterLayers(finalCenter);
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : 'GeoJSON 로드 실패';
         setGeoError(msg);
-        buildCenterLayers(fallbackCenter);
+        buildCenterLayers(
+          hasTargetSpot ? new maps.LatLng(targetSpot!.lat, targetSpot!.lng) : fallbackCenter,
+        );
       });
 
     // Layer 2 — 경쟁점 마커 (빨간 삼각형, 반경 내/외 불투명도 구분 + 클릭 InfoWindow)
@@ -344,7 +360,18 @@ export function MarketMap({
         infoWindowRef.current = null;
       }
     };
-  }, [ready, kakao, center.lat, center.lng, competitors, rankings, radius, winnerDistrict]);
+  }, [
+    ready,
+    kakao,
+    center.lat,
+    center.lng,
+    competitors,
+    rankings,
+    radius,
+    winnerDistrict,
+    targetSpot?.lat,
+    targetSpot?.lng,
+  ]);
 
   if (error) {
     return (
