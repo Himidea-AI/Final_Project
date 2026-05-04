@@ -3,6 +3,7 @@
  * App.tsx Phase C Round 3 코드 스플릿으로 추출 — 기능 변경 없음.
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   User,
   Bell,
@@ -104,13 +105,24 @@ const NOTIFICATION_MOCK_ITEMS = [
 
 function GlobalLimelightNav() {
   const nav = useTransition();
+  const location = useLocation();
   const { isLoggedIn, user } = useAuth();
   const { showToast } = useToast();
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
   const [openDropdown, setOpenDropdown] = useState<'bell' | null>(null);
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // URL → activeIndex 매핑. 페이지 이동/리마운트 후에도 빔이 현재 위치를 따라가도록.
+  // navItems 순서: 0=folder(workspace/pipeline), 1=user(history), 2=settings(mypage), 3=bell.
+  const activeIndex = (() => {
+    if (!location.pathname.startsWith('/hq')) return null;
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab === 'workspace' || tab === 'pipeline') return 0;
+    if (tab === 'history') return 1;
+    if (tab === 'mypage') return 2;
+    return null;
+  })();
 
   // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
   const { pending: pendingManagers } = useManagerList();
@@ -143,14 +155,14 @@ function GlobalLimelightNav() {
     }
   }, [targetIndex]);
 
-  const handleItemClick = (index: number, type: NavItemType) => {
+  const handleItemClick = (_index: number, type: NavItemType) => {
     // 비로그인 시 로그인 페이지로
     if (!isLoggedIn) {
       nav('/login');
       return;
     }
 
-    setActiveIndex(index);
+    // activeIndex 는 URL 기반 자동 계산이므로 여기서 직접 set 하지 않음.
     const isManager = user?.role === 'manager';
 
     if (type === 'folder') {
@@ -175,7 +187,9 @@ function GlobalLimelightNav() {
         className="relative flex items-center bg-card border border-border rounded-full h-10 px-2 shadow-sm overflow-hidden"
         onMouseLeave={() => setHoverIndex(null)}
       >
-        {/* 호버 조명 효과 */}
+        {/* 호버/active 조명 효과 — 사다리꼴 빔 +상단 발광 막대.
+            bg-primary/20 알파 modifier 가 CSS variable hex 와 충돌해 transparent 폴백되던
+            회귀를 inline opacity 로 fix (LegalDistributionBar 사례 동일 원인). */}
         <div
           className="absolute top-0 z-10 pointer-events-none flex flex-col items-center transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
           style={{
@@ -186,8 +200,12 @@ function GlobalLimelightNav() {
         >
           <div className="w-6 h-[2px] bg-primary rounded-b-full shadow-[0_0_8px_var(--primary)]" />
           <div
-            className="w-12 h-10 bg-primary/20"
-            style={{ clipPath: 'polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)' }}
+            className="w-12 h-10"
+            style={{
+              backgroundColor: 'var(--primary)',
+              opacity: 0.2,
+              clipPath: 'polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)',
+            }}
           />
         </div>
 

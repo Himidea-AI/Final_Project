@@ -173,15 +173,12 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
           {/* y=0 기준선 — BEP 도달 시각화 */}
           <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="2 2" />
 
-          {/* 동별 누적이익 라인 — Deep Blue Sequential 4-tier stroke hierarchy.
-              idx 0 (winner): stroke 3px / dot r 5 / solid
-              idx 1~2 (2~3위): stroke 2.5px / dot r 4 / solid
-              idx 마지막 (Ice Blue): stroke 3px / dot r 4 / dashed `6 3` (1.3:1 contrast 보완)
+          {/* 동별 누적이익 라인 — categorical 4색(Deep Blue / Rose / Amber / Emerald) 모두 solid.
+              winner(idx 0)만 stroke 3px / dot r 5 강조, 나머지는 stroke 2.5px / dot r 4.
               호출처(PredictFinancialSimTab) 에서 sortByRanking 으로 ranking 정렬 후 전달. */}
           {trimmedSeries.map((s, idx) => {
             const isWinner = idx === 0;
-            const isIce = idx === trimmedSeries.length - 1 && trimmedSeries.length > 1;
-            const strokeWidth = isWinner ? 3 : isIce ? 3 : 2.5;
+            const strokeWidth = isWinner ? 3 : 2.5;
             const dotR = isWinner ? 5 : 4;
             return (
               <Line
@@ -191,7 +188,6 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
                 name={s.district}
                 stroke={COLORS[idx % COLORS.length]}
                 strokeWidth={strokeWidth}
-                strokeDasharray={isIce ? '6 3' : undefined}
                 dot={{ r: dotR }}
                 activeDot={{ r: 6, stroke: 'var(--card)', strokeWidth: 1 }}
                 isAnimationActive={false}
