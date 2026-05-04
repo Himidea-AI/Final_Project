@@ -505,7 +505,10 @@ export const useAbmStore = create<AbmState>()(
     }),
     {
       name: 'mapo-abm-store',
-      storage: createJSONStorage(() => sessionStorage),
+      // localStorage 사용 — 브라우저 닫아도 history + 마지막 결과 유지.
+      // 이전 sessionStorage 는 탭 닫으면 휘발. 사용자 피드백 (2026-05-04): 시뮬 결과
+      // 더 오래 보존 원함 → localStorage 로 swap. quota 5-10MB 충분 (history max 10).
+      storage: createJSONStorage(() => localStorage),
       // running 중 새로고침 시 jobId 보존 → resumePollingIfNeeded 로 재개.
       // done 상태 result 도 보존 (탭 이동/F5 후 결과 유지).
       // error 는 휘발 (재진입 시 idle 로).

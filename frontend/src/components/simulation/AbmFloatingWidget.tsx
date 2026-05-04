@@ -104,7 +104,10 @@ export function AbmFloatingWidget() {
   }, [pos]);
 
   if (status === 'idle' || status === 'done') return null;
-  if (location.pathname.startsWith('/dashboard/abm')) return null;
+  // 사용자 피드백 (2026-05-04): ABM 페이지에서도 진행 중 widget 보이게.
+  // 이전: /dashboard/abm 라우트 차단했지만 사용자가 시뮬 실행 후 시나리오 패널 보면서
+  // 진행 상태 안 보임 → widget 항상 표시 (location 차단 제거).
+  void location;
   if (mainSimStatus === 'running' || mainSimStatus === 'error') return null;
 
   // 드래그 위치 있으면 fixed top/left 로, 없으면 기본 우하단. z-[60] 으로 다른 floating 보다 위.

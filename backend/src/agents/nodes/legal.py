@@ -958,20 +958,16 @@ async def _run_legal_pipeline(state: dict) -> dict:
     )
     ftc_result = _safe_ftc(_ftc_raw)
 
-    # 룰엔진 결과 invariant 검증용 — orchestrator._RULE_ENGINE_ORDER 와 동일 13종.
+    # 룰엔진 결과 invariant 검증용 — orchestrator._RULE_ENGINE_ORDER 와 동일 8종 (location 한정).
+    # 운영(operation) 카테고리 5종 (food_hygiene/labor/vat/privacy/sewage) 제외 — LLM·시간 절감.
     _BATCH_TYPES = [
         "franchise_law",
         "commercial_lease_law",
-        "food_hygiene",
         "safety_regulation",
         "building_law",
         "fire_safety_law",
-        "labor_law",
-        "vat_law",
-        "privacy_law",
         "accessibility_law",
         "school_zone",
-        "sewage_law",
         "fair_trade_law",
     ]
 
@@ -1097,9 +1093,71 @@ async def _run_legal_pipeline(state: dict) -> dict:
     analysis = dict(state.get("analysis_results") or {})
     analysis["legal_risks"] = risks
     analysis["overall_legal_risk"] = overall_level
-    # 4 vacancy spot 카니발리제이션 사전 스캔 결과 — franchise_law 보완 정보로 함께 노출.
+    # 4 vacancy spot 카니발리제이션 사전 스캔 결과 — 각 spot rank + level + summary 부여.
+    # rank = district_ranking scouting_results 점수 순위 (1등 = 점수 최고).
+    # 임계: territory 안 ≥1 → danger, 0 → safe(territory 입력 시) / caution(territory 미입력 + 500m 안 ≥1).
     if vacancy_spot_analyses:
-        analysis["vacancy_spot_cannibalization"] = vacancy_spot_analyses
+        # 동 → rank 매핑 (district_ranking scouting_results 기반).
+        _scout = state.get("scouting_results") or []
+        _dong_rank: dict[str, int] = {}
+        if isinstance(_scout, list):
+            for _row in _scout:
+                if isinstance(_row, dict):
+                    _d = _row.get("district") or _row.get("dong_name")
+                    _r = _row.get("rank")
+                    if _d and isinstance(_r, int):
+                        _dong_rank[_d] = _r
+
+        spot_evaluations: list[dict] = []
+        for _va in vacancy_spot_analyses:
+            _terr = _va.get("territory_radius_m")
+            _within = _va.get("same_brand_within_territory")
+            _closest = _va.get("closest_m")
+            _2km = _va.get("same_brand_2000m", 0)
+            _500 = _va.get("same_brand_500m") or 0
+            if _terr and _within is not None:
+                if _within >= 1:
+                    _lvl = "danger"
+                    _msg = f"영업구역({_terr}m) 안 동일 브랜드 {_within}개 — 가맹사업법 제12조의4 명백 침해"
+                else:
+                    _lvl = "safe"
+                    _msg = f"영업구역({_terr}m) 안 동일 브랜드 0개 — 정보공개서 기준 침해 없음"
+            else:
+                if _500 >= 1:
+                    _lvl = "caution"
+                    _msg = f"500m 내 동일 브랜드 {_500}개 — 영업지역 협의 필요"
+                elif _2km >= 3:
+                    _lvl = "caution"
+                    _msg = f"2km 내 동일 브랜드 {_2km}개 — 자기잠식 위험"
+                else:
+                    _lvl = "safe"
+                    _msg = "500m 내 동일 브랜드 0개"
+            _dong = _va.get("dong_name")
+            _rank = _dong_rank.get(_dong)
+            spot_evaluations.append({
+                "rank": _rank,
+                "rank_label": f"{_rank}등" if _rank else "순위 미정",
+                "dong_name": _dong,
+                "lat": _va.get("lat"),
+                "lon": _va.get("lon"),
+                "territory_radius_m": _terr,
+                "same_brand_within_territory": _within,
+                "same_brand_500m": _500,
+                "same_brand_2000m": _2km,
+                "closest_m": _closest,
+                "level": _lvl,
+                "summary": _msg,
+            })
+
+        # rank 순 정렬 (1등 → 4등). rank None 은 뒤로.
+        spot_evaluations.sort(key=lambda x: x.get("rank") or 999)
+
+        analysis["vacancy_spot_cannibalization"] = spot_evaluations
+        # franchise_law risk 에 spot_evaluations attach — frontend 가 1등/2등/3등/4등 카드 렌더 가능.
+        for _r in risks:
+            if isinstance(_r, dict) and _r.get("type") == "franchise_law":
+                _r["spot_evaluations"] = spot_evaluations
+                break
 
     # Redis 캐시 저장 — RAG 실패 시 빈 articles가 캐시되는 것을 방지
     # articles가 있는 리스크가 3개 미만이면 캐시하지 않음 (재실행 시 정상 결과 기대)

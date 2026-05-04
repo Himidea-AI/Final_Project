@@ -177,6 +177,7 @@ sim_*.json
 
 # 법률 RAG 빌드 산출물 (build_parent_articles.py로 재생성 가능)
 backend/data/legal/processed/parent_articles.json
+backend/data/legal/processed/_embedding_cache.pkl
 
 # RAG 검색 trace JSONL (디버깅용, 대용량)
 validation/results/rag_trace/

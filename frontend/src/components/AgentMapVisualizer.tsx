@@ -63,6 +63,14 @@ export default function AgentMapVisualizer({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [targetPixels, setTargetPixels] = useState<Record<string | number, PixelCoord>>({});
   const [competitorPixels, setCompetitorPixels] = useState<Record<string | number, PixelCoord>>({});
+  // 사용자 피드백 (2026-05-04): 라벨 항상 표시는 산만. 클릭 시만 popup 표시.
+  // popup 안에 가게명 + 가장 가까운 공실 spot 까지 거리 (m) + 비교 반경 원 표시.
+  const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | number | null>(null);
+  // 비교 반경 (m) — 사용자 조절. 클릭한 경쟁업체의 가장 가까운 공실 spot 주변에 원 그림.
+  const [comparisonRadius, setComparisonRadius] = useState<number>(500);
+  // Kakao Circle 인스턴스 ref — selected 변경 시 destroy + 재생성.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const radiusCircleRef = useRef<any>(null);
 
   const KAKAO_MAP_API_KEY: string = import.meta.env?.VITE_KAKAO_MAP_API_KEY || '';
   const IS_MOCK_MODE = !KAKAO_MAP_API_KEY || KAKAO_MAP_API_KEY.includes('YOUR');
@@ -198,6 +206,66 @@ export default function AgentMapVisualizer({
     return () => cleanupFn();
   }, [IS_MOCK_MODE, KAKAO_MAP_API_KEY, locations, updateCoordinates]);
 
+  // 선택된 경쟁업체의 가장 가까운 공실 spot 주변 비교 반경 원.
+  useEffect(() => {
+    // 기존 원 제거.
+    if (radiusCircleRef.current) {
+      try {
+        radiusCircleRef.current.setMap(null);
+      } catch {
+        /* noop */
+      }
+      radiusCircleRef.current = null;
+    }
+    if (IS_MOCK_MODE) return;
+    if (selectedCompetitorId === null) return;
+    if (!mapInstanceRef.current) return;
+    const comp = competitors.find((c) => c.id === selectedCompetitorId);
+    if (!comp || !locations || locations.length === 0) return;
+
+    // 가장 가까운 spot 찾기.
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const R = 6371000;
+    let nearest: LocationData | null = null;
+    let nearestDist = Infinity;
+    for (const loc of locations) {
+      const dLat = toRad(loc.lat - comp.lat);
+      const dLng = toRad(loc.lng - comp.lng);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(comp.lat)) * Math.cos(toRad(loc.lat)) * Math.sin(dLng / 2) ** 2;
+      const d = 2 * R * Math.asin(Math.sqrt(a));
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = loc;
+      }
+    }
+    if (!nearest) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kakao = (window as any).kakao;
+    if (!kakao?.maps?.Circle || !kakao?.maps?.LatLng) return;
+    const center = new kakao.maps.LatLng(nearest.lat, nearest.lng);
+    const circle = new kakao.maps.Circle({
+      center,
+      radius: comparisonRadius,
+      strokeWeight: 2,
+      strokeColor: '#002CD1',
+      strokeOpacity: 0.6,
+      strokeStyle: 'dashed',
+      fillColor: '#002CD1',
+      fillOpacity: 0.08,
+    });
+    circle.setMap(mapInstanceRef.current);
+    radiusCircleRef.current = circle;
+    return () => {
+      try {
+        circle.setMap(null);
+      } catch {
+        /* noop */
+      }
+    };
+  }, [selectedCompetitorId, comparisonRadius, competitors, locations, IS_MOCK_MODE]);
+
   return (
     <div
       className="w-full bg-card rounded-2xl border border-border overflow-hidden relative shadow-2xl flex flex-col"
@@ -254,7 +322,7 @@ export default function AgentMapVisualizer({
                 onClick={() => onSpotClick?.(loc)}
                 disabled={!onSpotClick}
                 title={`${loc.name}${loc.listingCount ? ` — 공실 ×${loc.listingCount}` : ''} 클릭해서 ABM 시뮬`}
-                className="absolute z-30 flex items-center justify-center w-8 h-8 rounded-full bg-decor-cyan border-2 border-decor-cyan text-foreground text-xs font-black shadow-[0_0_14px_rgba(0,224,209,0.8)] transition-all duration-200 pointer-events-auto cursor-pointer hover:scale-125 hover:bg-decor-cyan disabled:cursor-default disabled:opacity-60"
+                className="absolute z-30 flex items-center justify-center w-8 h-8 rounded-full bg-decor-cyan border-2 border-decor-cyan text-foreground text-xs font-black shadow-[0_0_14px_rgba(0,224,209,0.8)] transition-transform duration-200 pointer-events-auto cursor-pointer hover:scale-125 hover:bg-decor-cyan disabled:cursor-default disabled:opacity-60"
                 style={{
                   left: pixel.x,
                   top: pixel.y,
@@ -288,55 +356,138 @@ export default function AgentMapVisualizer({
           );
         })}
 
-      {/* 경쟁업체 핀 */}
+      {/* 경쟁업체 핀 — 라벨 hidden, 클릭 시 popup. */}
       {mapLoaded &&
         competitors.map((comp) => {
           const pixel = competitorPixels[comp.id];
           if (!pixel) return null;
           const isFranchise = comp.is_franchise;
-          // 라이트 모드 시맨틱 토큰 — 동일 색을 SVG fill·stroke·background 에 모두 사용하기 위해 hex 리터럴 보존.
-          // var(--danger) #fb565b, var(--warning) #ffba00. 33/22 suffix 는 alpha (CSS hex8).
           const pinColor = isFranchise ? '#fb565b' : '#ffba00';
-          const borderClass = isFranchise
-            ? 'border-danger shadow-[0_0_8px_rgba(244,63,94,0.5)]'
-            : 'border-warning shadow-[0_0_8px_rgba(249,115,22,0.4)]';
-          const distLabel = comp.distance_m != null ? ` ${Math.round(comp.distance_m)}m` : '';
+          const isSelected = selectedCompetitorId === comp.id;
+
+          // 가장 가까운 공실 spot 까지 거리 (Haversine, m)
+          let nearestDist: number | null = null;
+          let nearestName: string | null = null;
+          if (locations && locations.length > 0) {
+            const toRad = (d: number) => (d * Math.PI) / 180;
+            const R = 6371000; // m
+            for (const loc of locations) {
+              const dLat = toRad(loc.lat - comp.lat);
+              const dLng = toRad(loc.lng - comp.lng);
+              const a =
+                Math.sin(dLat / 2) ** 2 +
+                Math.cos(toRad(comp.lat)) * Math.cos(toRad(loc.lat)) * Math.sin(dLng / 2) ** 2;
+              const d = 2 * R * Math.asin(Math.sqrt(a));
+              if (nearestDist === null || d < nearestDist) {
+                nearestDist = d;
+                nearestName = loc.name;
+              }
+            }
+          }
+
           return (
             <div
               key={`comp-${comp.id}`}
-              className="absolute z-20 flex flex-col items-center pointer-events-none transition-all duration-300"
+              className={`absolute flex flex-col items-center ${
+                isSelected ? 'z-[60]' : 'z-20'
+              }`}
               style={{
                 left: pixel.x,
                 top: pixel.y,
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div
-                className={`bg-card border text-[0.625rem] font-bold mb-0.5 px-2 py-0.5 rounded max-w-[120px] truncate ${borderClass}`}
-                style={{ color: pinColor }}
-                title={comp.name}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedCompetitorId((cur) => (cur === comp.id ? null : comp.id));
+                }}
+                className="cursor-pointer hover:scale-125 transition-transform"
+                aria-label={`${comp.name} 정보`}
               >
-                {comp.name}
-                {distLabel && (
-                  <span className="ml-1 text-[0.5rem] text-muted-foreground font-normal">
-                    {distLabel}
-                  </span>
-                )}
-              </div>
-              <svg width="18" height="18" viewBox="0 0 18 18">
-                <polygon
-                  points="9,2 16,16 2,16"
-                  fill={`${pinColor}33`}
-                  stroke={pinColor}
-                  strokeWidth="1.5"
-                />
-              </svg>
-              <span
-                className="text-[0.4375rem] font-mono mt-0.5 px-1 rounded"
-                style={{ color: pinColor, background: `${pinColor}22` }}
-              >
-                {isFranchise ? '프랜차이즈' : '개인점'}
-              </span>
+                <svg width="18" height="18" viewBox="0 0 18 18">
+                  <polygon
+                    points="9,2 16,16 2,16"
+                    fill={`${pinColor}33`}
+                    stroke={pinColor}
+                    strokeWidth="1.5"
+                  />
+                </svg>
+              </button>
+              {isSelected && (
+                <div
+                  className="absolute bottom-full mb-1 z-[60] min-w-[160px] max-w-[240px] rounded-lg border bg-card p-2.5 shadow-xl"
+                  style={{ borderColor: pinColor }}
+                >
+                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                    <span
+                      className="text-[11px] font-black truncate"
+                      style={{ color: pinColor }}
+                    >
+                      {comp.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCompetitorId(null);
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground shrink-0"
+                      aria-label="닫기"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="text-[9.5px] text-muted-foreground space-y-0.5">
+                    <div>
+                      <span className="font-mono">유형:</span>{' '}
+                      {isFranchise ? '프랜차이즈' : '개인점'}
+                    </div>
+                    {comp.category && (
+                      <div>
+                        <span className="font-mono">업종:</span> {comp.category}
+                      </div>
+                    )}
+                    {nearestDist !== null && (
+                      <div>
+                        <span className="font-mono">최근접 공실:</span>{' '}
+                        <span className="font-bold text-foreground">
+                          {Math.round(nearestDist)}m
+                        </span>
+                        {nearestName ? ` (${nearestName})` : ''}
+                      </div>
+                    )}
+                    {comp.distance_m != null && (
+                      <div>
+                        <span className="font-mono">중심거리:</span>{' '}
+                        {Math.round(comp.distance_m)}m
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 비교 반경 slider — 사용자 조절 (100~2000m). 그 spot 주변에 점선 원 그림. */}
+                  <div className="mt-2 pt-2 border-t border-border/50">
+                    <div className="flex items-center justify-between text-[9px] text-muted-foreground mb-1">
+                      <span className="font-mono uppercase tracking-wider">비교 반경</span>
+                      <span className="font-bold text-primary tabular-nums">
+                        {comparisonRadius}m
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={100}
+                      max={2000}
+                      step={50}
+                      value={comparisonRadius}
+                      onChange={(e) => setComparisonRadius(Number(e.target.value))}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full h-1.5 accent-primary cursor-pointer"
+                      aria-label="비교 반경 조절"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

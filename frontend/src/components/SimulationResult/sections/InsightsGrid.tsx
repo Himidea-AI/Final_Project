@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { LegalRisk, SimulationOutput } from '../../../types';
+import type { LegalRisk, LegalSpotEvaluation, SimulationOutput } from '../../../types';
 import { SectionLabel } from '../shared/SectionLabel';
 import { LegalDrawer } from '../shared/LegalDrawer';
 import { AgentCard } from '../shared/AgentCard';
@@ -274,24 +274,70 @@ function normalizeLevel(level: string): 'HIGH' | 'MEDIUM' | 'LOW' {
   return 'MEDIUM';
 }
 
+const SPOT_LEVEL_CLS: Record<string, { strip: string; text: string; bg: string; label: string }> = {
+  danger: { strip: 'bg-danger', text: 'text-danger', bg: 'bg-danger/5', label: '침해' },
+  caution: { strip: 'bg-warning', text: 'text-warning', bg: 'bg-warning/5', label: '주의' },
+  safe: { strip: 'bg-success', text: 'text-success', bg: 'bg-success/5', label: '안전' },
+};
+
+function SpotEvaluationGrid({ spots }: { spots: LegalSpotEvaluation[] }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h4 className="text-xs font-black uppercase tracking-tight text-foreground">
+          후보지 영업구역 침해 점검
+        </h4>
+        <span className="text-[0.625rem] font-medium text-muted-foreground">
+          가맹사업법 제12조의4 · 동일 브랜드 영업구역 기준
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {spots.map((s, i) => {
+          const cls = SPOT_LEVEL_CLS[s.level] ?? SPOT_LEVEL_CLS.caution;
+          return (
+            <div
+              key={`spot-${s.dong_name}-${i}`}
+              className={`relative rounded-md border border-border ${cls.bg} p-3`}
+            >
+              <span
+                className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r ${cls.strip}`}
+                aria-hidden="true"
+              />
+              <div className="ml-2 flex items-baseline justify-between">
+                <span className="text-[0.625rem] font-mono uppercase tracking-widest text-muted-foreground">
+                  {s.rank_label}
+                </span>
+                <span className={`text-[0.625rem] font-bold uppercase ${cls.text}`}>
+                  ● {cls.label}
+                </span>
+              </div>
+              <div className="ml-2 mt-1 text-sm font-bold text-foreground">{s.dong_name}</div>
+              <p className="ml-2 mt-1 text-[0.6875rem] leading-snug text-muted-foreground">
+                {s.summary}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function InsightsGrid({ simResult, legalOnly }: Props) {
   const [tab, setTab] = useState<Tab>('legal');
   const [selected, setSelected] = useState<LegalRisk | null>(null);
   // 안전 항목 (LOW/safe) 펼침 토글 — 본부 영업팀 빠른 판단을 위한 노이즈 정리
   const [expandedSafe, setExpandedSafe] = useState(false);
-  // 운영 그룹(operation) 접힘 토글 — 출점 결정엔 입지 그룹이 우선이므로 default 접힘
-  const [expandedOperation, setExpandedOperation] = useState(false);
 
   const legalAgent = simResult.agent_attributions?.find((a) => a.id === 'legal');
   const risks = simResult.legal_risks ?? [];
-  // 입지(location) / 운영(operation) 그룹 분리
+  // 입지(location) 그룹만 노출. 운영(operation) 카테고리는 사용자 요청에 따라 hide.
   const locationRisks = risks.filter((r) => resolveGroup(r) === 'location');
-  const operationRisks = risks.filter((r) => resolveGroup(r) === 'operation');
-  // 그룹별 위험 카운트 (헤더 메트릭)
   const locationHazard = locationRisks.filter((r) => normalizeLevel(r.risk_level) !== 'LOW').length;
-  const operationHazard = operationRisks.filter(
-    (r) => normalizeLevel(r.risk_level) !== 'LOW',
-  ).length;
+  // franchise_law risk 의 spot_evaluations — 후보지 4곳 영업구역 침해 평가 (rank/level/summary).
+  // backend legal.py 가 vacancy_spot_analyses 를 가공해 attach.
+  const franchiseRisk = risks.find((r) => r.type === 'franchise_law');
+  const spotEvaluations = franchiseRisk?.spot_evaluations ?? [];
   const compIntel = simResult.competitor_intel as Record<string, any> | null | undefined;
   const opportunities = (compIntel?.key_opportunities ?? []) as string[];
   const riskTexts = (compIntel?.key_risks ?? []) as string[];
@@ -339,6 +385,9 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
             </div>
           ) : (
             <>
+              {/* ── 후보지 영업구역 침해 카드 (franchise_law spot_evaluations) ── */}
+              {spotEvaluations.length > 0 && <SpotEvaluationGrid spots={spotEvaluations} />}
+
               {/* ── 입지(location) 섹션 — 출점 결정 critical, 항상 펼침 ── */}
               <LegalGroupSection
                 groupLabel="입지 — 출점 시 검토"
@@ -347,20 +396,6 @@ export function InsightsGrid({ simResult, legalOnly }: Props) {
                 hazardCount={locationHazard}
                 expanded
                 primary
-                onSelect={setSelected}
-                expandedSafe={expandedSafe}
-                onToggleSafe={() => setExpandedSafe((v) => !v)}
-              />
-
-              {/* ── 운영(operation) 섹션 — 일상 의무, default 접힘 ── */}
-              <LegalGroupSection
-                groupLabel="운영 — 영업 중 준수"
-                groupSubtitle="식품위생·노동·세무·개인정보 등 운영 단계 의무"
-                risks={operationRisks}
-                hazardCount={operationHazard}
-                expanded={expandedOperation}
-                primary={false}
-                onToggleGroup={() => setExpandedOperation((v) => !v)}
                 onSelect={setSelected}
                 expandedSafe={expandedSafe}
                 onToggleSafe={() => setExpandedSafe((v) => !v)}
