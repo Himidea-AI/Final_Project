@@ -62,14 +62,15 @@ export function IndustryClosureTrendCard({ trend }: Props) {
 
   const samples = trend.samples;
   const numericSamples = samples
-    .map((s) => (typeof s.closure_rate === 'number' ? s.closure_rate * 100 : null))
+    .map((s) => (typeof s.closure_rate === 'number' ? s.closure_rate : null))
     .filter((v): v is number => v != null);
 
   const cur = trend.current_closure_rate;
   const avg = trend.historical_avg;
   const tinfo = TREND_LABEL[trend.trend ?? 'unknown'] ?? TREND_LABEL.unknown;
 
-  const fmtPct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(2)}%`);
+  // store_quarterly.closure_rate 는 이미 percent 단위(4 = 4%) — 추가 *100 금지
+  const fmtPct = (v: number | null | undefined) => (v == null ? '—' : `${v.toFixed(2)}%`);
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card/40 p-4">
