@@ -82,12 +82,15 @@ def _mock_bep(industry_name: str) -> dict:
     quarterly_simulation_raw = calc.simulate_quarterly([quarterly_revenue] * simulation_quarters)
     simulation = []
     for row in quarterly_simulation_raw:
+        # 2026-05-04 _run_bep 와 동일하게 키 이름 통일 — 프론트 QuarterlySimRow 매칭.
         simulation.append(
             {
                 "quarter": row["quarter"],
                 "revenue": row["revenue"],
-                "cost": row["quarterly_total_cost"],
-                "profit": row["quarterly_profit"],
+                "quarterly_fixed_cost": row["quarterly_fixed_cost"],
+                "quarterly_variable_cost": row["quarterly_variable_cost"],
+                "quarterly_total_cost": row["quarterly_total_cost"],
+                "quarterly_profit": row["quarterly_profit"],
                 "cumulative_profit": row["cumulative_profit"],
                 "bep_reached": row["bep_reached"],
             }
@@ -226,12 +229,17 @@ def _run_bep(
     quarterly_simulation_raw = calc.simulate_quarterly(quarterly_revenues_list)
     simulation = []
     for row in quarterly_simulation_raw:
+        # 2026-05-04 키 이름 통일 — 프론트(QuarterlySimRow)가 quarterly_total_cost / quarterly_profit
+        # 으로 읽고 있어 옛 cost/profit 축약 키와 매칭 실패 → LLM fallback 으로 우회되던 회귀 차단.
+        # quarterly_fixed_cost / quarterly_variable_cost 도 노출하여 향후 운영비 분리 표시에 재사용.
         simulation.append(
             {
                 "quarter": row["quarter"],
                 "revenue": row["revenue"],
-                "cost": row["quarterly_total_cost"],
-                "profit": row["quarterly_profit"],
+                "quarterly_fixed_cost": row["quarterly_fixed_cost"],
+                "quarterly_variable_cost": row["quarterly_variable_cost"],
+                "quarterly_total_cost": row["quarterly_total_cost"],
+                "quarterly_profit": row["quarterly_profit"],
                 "cumulative_profit": row["cumulative_profit"],
                 "bep_reached": row["bep_reached"],
             }
@@ -522,8 +530,10 @@ class ModelOutput:
                 store_count=store_count,
             )
             logger.info("BEP 계산 완료")
-        except Exception as exc:
-            logger.warning("BEP 계산 실패 (mock 사용): %s", exc)
+        except Exception:
+            # 2026-05-04 BEP 산식은 사칙연산뿐이라 실패 가능성 낮지만,
+            # 만약 발생 시 silent warning 으로 묻지 말고 stack trace 까지 남긴다.
+            logger.exception("BEP 계산 실패 (mock 사용)")
             bep = _mock_bep(industry_name)
             use_mock = True
 
