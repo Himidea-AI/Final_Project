@@ -257,15 +257,17 @@ export function MarketMap({
     //   3) center prop (DONG_COORDS 하드코딩) — 최후 안전장치
     const fallbackCenter = new maps.LatLng(center.lat, center.lng);
     const buildCenterLayers = (latLng: unknown) => {
+      // fill 제거 — 4 spot 반경원 fill 이 누적되면 안쪽 경쟁점 마커가 핑크 톤에 묻힘.
+      // stroke(dashed) 만으로 반경 표시.
       const circle = new maps.Circle({
         center: latLng,
         radius,
         strokeWeight: 2.5,
-        strokeColor: '#ff0070', // hot-pink — 반경 가시성↑ (pin 과 같은 hue, dash 로 역할 구분)
+        strokeColor: '#ff0070',
         strokeOpacity: 0.9,
         strokeStyle: 'dash',
         fillColor: '#ff0070',
-        fillOpacity: 0.1,
+        fillOpacity: 0,
       });
       circle.setMap(mapInstance);
       overlayLayersRef.current.push(circle);
@@ -446,7 +448,7 @@ export function MarketMap({
     targetSpots.slice(1, 4).forEach((sp, idx) => {
       const rank = idx + 2; // 2위부터 시작
       const spotPos = new maps.LatLng(sp.lat, sp.lng);
-      // 반경 원 — 1위와 동일 디자인(핫핑크 dashed). 4 후보 비교 시각화.
+      // 반경 원 — 1위와 동일 디자인(핫핑크 dashed). fill 제거 (마커 시각성 보존).
       const spotCircle = new maps.Circle({
         center: spotPos,
         radius,
@@ -455,7 +457,7 @@ export function MarketMap({
         strokeOpacity: 0.6,
         strokeStyle: 'shortdash',
         fillColor: '#ff0070',
-        fillOpacity: 0.05,
+        fillOpacity: 0,
       });
       spotCircle.setMap(mapInstance);
       overlayLayersRef.current.push(spotCircle);
