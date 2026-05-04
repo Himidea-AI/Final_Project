@@ -74,6 +74,14 @@ export interface AbmHistoryEntry {
   result: any;
 }
 
+/** Queue 대기 entry — 사용자가 실행한 시뮬 중 active 가 점유 중일 때 대기열로. */
+export interface AbmPendingRun {
+  id: string;
+  payload: AbmRequestPayload;
+  focusSpot: AbmFocusSpot | null;
+  addedAt: number;
+}
+
 interface AbmState {
   status: AbmStatus;
   jobId: string | null;
@@ -86,15 +94,31 @@ interface AbmState {
   stage: string;
   startedAt: number | null;
   history: AbmHistoryEntry[];
+  /** 대기 중 시뮬 queue — active 가 진행 중일 때 add 된 시뮬은 여기 누적. FIFO. */
+  pendingQueue: AbmPendingRun[];
+  /** loadHistory 로 사용자가 view 만 하는 history result — active sim 영향 X.
+   *  null 이면 기본 active result 표시. UI 는 displayResult ?? result 사용. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  displayResult: any | null;
+  /** displayResult 의 focusSpot — UI 가 그 spot 컨텍스트 표시 가능. */
+  displayFocusSpot: AbmFocusSpot | null;
 
   _abortController: AbortController | null;
   _pollTimer: ReturnType<typeof setInterval> | null;
 
   startAbm: (payload: AbmRequestPayload, focusSpot?: AbmFocusSpot | null) => Promise<void>;
+  /** active 가 idle/done/error 면 즉시 startAbm, 아니면 pendingQueue 에 push. */
+  enqueueAbm: (payload: AbmRequestPayload, focusSpot?: AbmFocusSpot | null) => string;
+  /** pendingQueue 에서 단건 제거. */
+  cancelPending: (id: string) => void;
+  /** pendingQueue 통째로 비움. */
+  clearPending: () => void;
   cancelAbm: () => void;
   dismissResult: () => void;
   setFocusSpot: (spot: AbmFocusSpot | null) => void;
   loadHistory: (id: string) => void;
+  /** displayResult / displayFocusSpot 초기화 — active sim view 로 복귀. */
+  clearDisplayResult: () => void;
   clearHistory: () => void;
   /** persist 복원 후 재진입 시 polling 재개. App mount 에서 호출. */
   resumePollingIfNeeded: () => void;
@@ -103,20 +127,27 @@ interface AbmState {
   // 내부 액션 — 외부 호출 비권장 (test 용 export).
   _pollStatus: () => Promise<void>;
   _fetchResult: () => Promise<void>;
+  /** active 종료 후 pendingQueue 의 다음 항목 자동 시작. */
+  _processNextInQueue: () => void;
 }
 
 const INITIAL_STATE: Omit<
   AbmState,
   | 'startAbm'
+  | 'enqueueAbm'
+  | 'cancelPending'
+  | 'clearPending'
   | 'cancelAbm'
   | 'dismissResult'
   | 'setFocusSpot'
   | 'loadHistory'
+  | 'clearDisplayResult'
   | 'clearHistory'
   | 'resumePollingIfNeeded'
   | 'reset'
   | '_pollStatus'
   | '_fetchResult'
+  | '_processNextInQueue'
 > = {
   status: 'idle',
   jobId: null,
@@ -128,6 +159,9 @@ const INITIAL_STATE: Omit<
   stage: '',
   startedAt: null,
   history: [],
+  pendingQueue: [],
+  displayResult: null,
+  displayFocusSpot: null,
   _abortController: null,
   _pollTimer: null,
 };
@@ -230,6 +264,7 @@ export const useAbmStore = create<AbmState>()(
               : `ABM 시뮬 요청 실패: ${(err as Error).message || '네트워크 오류'}`,
             _abortController: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }
 
@@ -249,6 +284,7 @@ export const useAbmStore = create<AbmState>()(
             error: `ABM 응답 파싱 실패 (HTTP ${response.status})`,
             _abortController: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }
 
@@ -258,6 +294,7 @@ export const useAbmStore = create<AbmState>()(
             error: data?.message || `ABM 시뮬 실패 (HTTP ${response.status})`,
             _abortController: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }
 
@@ -269,6 +306,7 @@ export const useAbmStore = create<AbmState>()(
               error: 'ABM 모듈 준비 중입니다. (simulation 브랜치 머지 대기)',
               _abortController: null,
             });
+            setTimeout(() => get()._processNextInQueue(), 0);
             return;
           }
           if (data.status === 'error') {
@@ -277,6 +315,7 @@ export const useAbmStore = create<AbmState>()(
               error: data?.message || 'ABM 시뮬레이션 실행 중 오류가 발생했습니다.',
               _abortController: null,
             });
+            setTimeout(() => get()._processNextInQueue(), 0);
             return;
           }
           // 동기 결과 — 바로 done.
@@ -288,6 +327,7 @@ export const useAbmStore = create<AbmState>()(
             _abortController: null,
             _pollTimer: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }
 
@@ -340,6 +380,7 @@ export const useAbmStore = create<AbmState>()(
             _abortController: null,
             _pollTimer: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }
 
@@ -367,6 +408,7 @@ export const useAbmStore = create<AbmState>()(
             _abortController: null,
             _pollTimer: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
         }
         // 'running' — 계속 poll.
       },
@@ -404,6 +446,7 @@ export const useAbmStore = create<AbmState>()(
             _abortController: null,
             _pollTimer: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }
 
@@ -418,6 +461,7 @@ export const useAbmStore = create<AbmState>()(
             _abortController: null,
             _pollTimer: null,
           });
+          setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }
 
@@ -441,22 +485,75 @@ export const useAbmStore = create<AbmState>()(
           _abortController: null,
           _pollTimer: null,
         });
+        setTimeout(() => get()._processNextInQueue(), 0);
+      },
+
+      enqueueAbm: (payload, focusSpot = null) => {
+        const id = `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const { status, pendingQueue } = get();
+        // active 가 idle/done/error 면 즉시 startAbm. running 이면 queue 에 추가.
+        if (status === 'idle' || status === 'done' || status === 'error') {
+          // pendingQueue 가 비어있으면 바로 시작. 아니면 queue 끝에 추가 후 process 가 pop.
+          if (pendingQueue.length === 0) {
+            void get().startAbm(payload, focusSpot ?? null);
+            return id;
+          }
+          // 이론상 도달 X (active 가 비어있는데 queue 가 비지 않음 → process 가 즉시 pop).
+          // 안전망: queue 에 추가 + process 트리거.
+          set({
+            pendingQueue: [
+              ...pendingQueue,
+              { id, payload, focusSpot: focusSpot ?? null, addedAt: Date.now() },
+            ],
+          });
+          get()._processNextInQueue();
+          return id;
+        }
+        // running 중 — queue 에 누적.
+        set({
+          pendingQueue: [
+            ...pendingQueue,
+            { id, payload, focusSpot: focusSpot ?? null, addedAt: Date.now() },
+          ],
+        });
+        return id;
+      },
+
+      cancelPending: (id) => {
+        const { pendingQueue } = get();
+        set({ pendingQueue: pendingQueue.filter((p) => p.id !== id) });
+      },
+
+      clearPending: () => set({ pendingQueue: [] }),
+
+      _processNextInQueue: () => {
+        const { status, pendingQueue } = get();
+        if (status === 'running') return;
+        if (pendingQueue.length === 0) return;
+        const [next, ...rest] = pendingQueue;
+        set({ pendingQueue: rest });
+        void get().startAbm(next.payload, next.focusSpot);
       },
 
       cancelAbm: () => {
-        const { _abortController, _pollTimer, history } = get();
+        const { _abortController, _pollTimer, history, pendingQueue } = get();
         _abortController?.abort();
         if (_pollTimer) clearInterval(_pollTimer);
         set({
           ...INITIAL_STATE,
           history, // history 유지
+          pendingQueue, // queue 유지 — 다음 항목 자동 시작.
         });
+        // 마이크로태스크 후 다음 queue 시작 (state set 반영 후).
+        setTimeout(() => get()._processNextInQueue(), 0);
       },
 
       dismissResult: () => {
-        const { status, history } = get();
+        const { status, history, pendingQueue } = get();
         if (status !== 'done' && status !== 'error') return;
-        set({ ...INITIAL_STATE, history });
+        set({ ...INITIAL_STATE, history, pendingQueue });
+        // queue auto-trigger 제거 (사용자 피드백 2026-05-05): dismiss 는 user 가 결과 패널
+        // 닫는 동작 → 다음 큐 자동 시작하면 의도치 않은 spinner. 큐는 자연 완료/cancel 시만 진행.
       },
 
       setFocusSpot: (spot) => set({ focusSpot: spot }),
@@ -465,16 +562,16 @@ export const useAbmStore = create<AbmState>()(
         const { history } = get();
         const entry = history.find((e) => e.id === id);
         if (!entry) return;
+        // displayResult 만 set — active sim (status/jobId/_abortController/_pollTimer) 절대
+        // 건들지 않음. 사용자 피드백 (2026-05-05): loadHistory 가 status='done' 으로
+        // 덮어써서 진행 중 시뮬이 사라짐 → 별도 displayResult 채널로 분리.
         set({
-          status: 'done',
-          result: entry.result,
-          focusSpot: entry.focusSpot,
-          params: entry.params,
-          progress: 100,
-          stage: 'COMPLETE',
-          error: null,
+          displayResult: entry.result,
+          displayFocusSpot: entry.focusSpot,
         });
       },
+
+      clearDisplayResult: () => set({ displayResult: null, displayFocusSpot: null }),
 
       clearHistory: () => set({ history: [] }),
 
@@ -525,6 +622,7 @@ export const useAbmStore = create<AbmState>()(
             error: null,
             progress: 0,
             stage: '',
+            pendingQueue: state.pendingQueue,
           };
         }
         if (state.status === 'done') {
@@ -538,6 +636,7 @@ export const useAbmStore = create<AbmState>()(
             error: null,
             progress: 100,
             stage: 'COMPLETE',
+            pendingQueue: state.pendingQueue,
           };
         }
         return {
@@ -550,6 +649,7 @@ export const useAbmStore = create<AbmState>()(
           error: null,
           progress: 0,
           stage: '',
+          pendingQueue: state.pendingQueue,
         };
       },
     },

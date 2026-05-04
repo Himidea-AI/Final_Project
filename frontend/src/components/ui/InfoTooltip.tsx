@@ -53,10 +53,10 @@ export function InfoTooltip({ text, size = 14, className = '' }: Props) {
       {open && (
         <span
           role="tooltip"
-          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-4 py-3 rounded-md bg-foreground text-card text-[11px] leading-relaxed font-medium text-center whitespace-normal max-w-[260px] w-max shadow-lg pointer-events-none"
+          className="absolute z-50 bottom-full left-0 mb-2 px-4 py-3 rounded-md bg-foreground text-card text-[11px] leading-relaxed font-medium text-left whitespace-normal max-w-[260px] w-max shadow-lg pointer-events-none"
         >
           {text}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-foreground" />
+          <span className="absolute top-full left-2 -mt-px border-4 border-transparent border-t-foreground" />
         </span>
       )}
     </span>
