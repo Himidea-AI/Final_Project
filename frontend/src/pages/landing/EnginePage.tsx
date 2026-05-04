@@ -160,12 +160,7 @@ export default function EnginePage(_: { onBack?: () => void }) {
                 className="group rounded-2xl border border-border bg-card p-5 transition-all hover:border-primary/40 hover:shadow-lg"
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <img
-                    src={a.iconSrc}
-                    alt=""
-                    className="h-10 w-10 rounded-full object-cover ring-1 ring-border"
-                    loading="lazy"
-                  />
+                  <img src={a.iconSrc} alt="" className="h-10 w-10 object-contain" loading="lazy" />
                   <div className="text-sm font-black tracking-tight text-foreground">{a.name}</div>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed break-keep">{a.role}</p>
