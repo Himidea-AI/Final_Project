@@ -490,3 +490,28 @@ export const SEOUL_REGIONS: Record<string, string[]> = {
 };
 
 export const SEOUL_GU_LIST = Object.keys(SEOUL_REGIONS);
+
+/** 동 → 구 reverse lookup map. 한 번 빌드 후 helper 들이 재사용 — O(1) 조회. */
+const DONG_TO_GU: Map<string, string> = (() => {
+  const map = new Map<string, string>();
+  for (const [gu, dongs] of Object.entries(SEOUL_REGIONS)) {
+    for (const dong of dongs) {
+      map.set(dong, gu);
+    }
+  }
+  return map;
+})();
+
+/** 동 이름으로 속한 구 추출. 매칭 안 되면 null.
+ *  사용처: 시뮬 winner / target 동의 구 라벨 동적 표시 ({gu} 동별 랭킹 등). */
+export function getGuFromDong(dong: string | null | undefined): string | null {
+  if (!dong) return null;
+  return DONG_TO_GU.get(dong) ?? null;
+}
+
+/** 구 이름으로 행정동 개수 반환. 매칭 안 되면 0.
+ *  사용처: "{gu} {N}동 choropleth" 같은 동적 라벨. */
+export function getDongCount(gu: string | null | undefined): number {
+  if (!gu) return 0;
+  return SEOUL_REGIONS[gu]?.length ?? 0;
+}

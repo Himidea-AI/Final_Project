@@ -1,17 +1,17 @@
 /**
  * AddCandidateModal — 후보 추가 모달 (동×업종 선택).
  *
- * 강민 결정 분기 §2:
- *   - 16동 자유 비교 (target_districts 필터 X — Master-Detail 의도)
+ * 변경 (2026-05-03):
+ *   - 동 옵션 = 시뮬 입력 4동 한정 (props.availableDongs)
+ *   - 16동 자유 비교 폐기 — props 로만 동 list 받음
  *   - 업종 옵션 = BIZ_TO_INDUSTRY_CODE 의 한국어 키 (한식/중식/.../카페/편의점)
  *   - DongDropdown 패턴 재사용 (ChevronRight + listbox)
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronRight } from 'lucide-react';
-import { MAPO_DONGS } from '../../../../constants/mapoDongs';
 import { BIZ_TO_INDUSTRY_CODE } from '../../../../constants/bizToIndustry';
+import { DropdownSelect } from '../../../ui/DropdownSelect';
 
 interface AddInput {
   dong: string;
@@ -23,6 +23,8 @@ interface AddInput {
 interface Props {
   onClose: () => void;
   onAdd: (input: AddInput) => boolean;
+  /** 시뮬 입력 동 list (4동 한정). 비어있으면 모달은 disabled 안내 표시. */
+  availableDongs: { name: string; code: string }[];
 }
 
 /** 한국어 업종 옵션 — 같은 industry_code 의 첫 한국어 키만. */
@@ -41,18 +43,22 @@ const INDUSTRY_OPTIONS: { name: string; code: string }[] = (() => {
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function AddCandidateModal({ onClose, onAdd }: Props) {
-  const [dong, setDong] = useState<string>(MAPO_DONGS[0].name);
+export function AddCandidateModal({ onClose, onAdd, availableDongs }: Props) {
+  const noDongs = availableDongs.length === 0;
+  const [dong, setDong] = useState<string>(availableDongs[0]?.name ?? '');
   const [industry, setIndustry] = useState<string>(INDUSTRY_OPTIONS[0]?.name ?? '');
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  const dongCode = useMemo(() => MAPO_DONGS.find((d) => d.name === dong)?.code ?? null, [dong]);
+  const dongCode = useMemo(
+    () => availableDongs.find((d) => d.name === dong)?.code ?? null,
+    [dong, availableDongs],
+  );
   const industryCode = useMemo(
     () => INDUSTRY_OPTIONS.find((i) => i.name === industry)?.code ?? null,
     [industry],
   );
 
-  const canAdd = !!dongCode && !!industryCode;
+  const canAdd = !!dongCode && !!industryCode && !noDongs;
 
   // ESC + outside click close
   useEffect(() => {
@@ -109,7 +115,9 @@ export function AddCandidateModal({ onClose, onAdd }: Props) {
       >
         <h3 className="text-base font-black tracking-tight text-foreground">후보 추가</h3>
         <p className="mt-1 text-[0.6875rem] text-muted-foreground">
-          비교할 동과 업종을 선택하세요. 마포 16동 자유 비교.
+          {noDongs
+            ? '시뮬 입력 동이 없어 후보를 추가할 수 없습니다.'
+            : '비교할 동과 업종을 선택하세요. 시뮬 입력 동 한정.'}
         </p>
 
         <div className="mt-4 space-y-3">
@@ -117,7 +125,8 @@ export function AddCandidateModal({ onClose, onAdd }: Props) {
             label="행정동"
             value={dong}
             onChange={setDong}
-            options={MAPO_DONGS.map((d) => d.name)}
+            options={availableDongs.map((d) => d.name)}
+            disabled={noDongs}
           />
           <DropdownSelect
             label="업종"
@@ -152,82 +161,4 @@ export function AddCandidateModal({ onClose, onAdd }: Props) {
   );
 
   return createPortal(dialog, document.body);
-}
-
-function DropdownSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-  options: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, [open]);
-
-  return (
-    <div>
-      <label className="mb-1 block text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
-        {label}
-      </label>
-      <div ref={ref} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((s) => !s)}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          className="relative flex h-10 w-full items-center justify-between rounded-lg border border-border bg-card px-3 text-sm text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
-        >
-          <span className="truncate">{value}</span>
-          <ChevronRight
-            size={14}
-            className={`text-muted-foreground transition-transform duration-200 ${
-              open ? 'rotate-90' : ''
-            }`}
-          />
-        </button>
-        {open && (
-          <div
-            role="listbox"
-            className="custom-scrollbar absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-2xl"
-            style={{ overscrollBehavior: 'contain' }}
-          >
-            {options.map((opt) => {
-              const active = opt === value;
-              return (
-                <button
-                  key={opt}
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => {
-                    onChange(opt);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center px-3 py-2 text-left text-xs transition-colors ${
-                    active
-                      ? 'bg-primary/10 font-bold text-primary'
-                      : 'text-foreground hover:bg-muted'
-                  }`}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }

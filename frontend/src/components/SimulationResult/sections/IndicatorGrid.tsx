@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import {
   Radar,
   RadarChart,
@@ -7,6 +8,7 @@ import {
   Tooltip,
 } from 'recharts';
 import type { SimulationOutput } from '../../../types';
+import { SERIES_COLORS } from '../QuarterlyProjectionChart';
 import { SectionLabel } from '../shared/SectionLabel';
 
 interface Props {
@@ -61,8 +63,32 @@ function barColor(v: number): string {
 
 export function IndicatorGrid({ simResult }: Props) {
   const report = simResult.market_report;
+  const winnerDistrict = simResult.winner_district ?? null;
 
-  if (!report) {
+  // 시뮬한 동 list (winner + top_3_candidates 순서, 중복 제거).
+  // backend 가 다른 동의 market_report 를 채우지 않으므로 winner 외 동 선택 시 district_rankings 폴백.
+  const districtOrder = useMemo<string[]>(() => {
+    const top3 = simResult.top_3_candidates ?? [];
+    const arr: string[] = [];
+    if (winnerDistrict) arr.push(winnerDistrict);
+    for (const d of top3) {
+      if (d && !arr.includes(d)) arr.push(d);
+    }
+    return arr;
+  }, [winnerDistrict, simResult.top_3_candidates]);
+
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(winnerDistrict);
+  const effectiveSelected = selectedDistrict ?? winnerDistrict ?? districtOrder[0] ?? null;
+  const isWinnerSelected = effectiveSelected === winnerDistrict;
+
+  // district_rankings → 8 지표 부분 매핑 (winner 외 동용).
+  // backend 가 winner 만 market_report 풀 8 지표 채우므로, 다른 동은 district_rankings 의 5 지표만 가능.
+  const selectedRanking = useMemo(
+    () => simResult.district_rankings?.find((r) => r.district === effectiveSelected) ?? null,
+    [simResult.district_rankings, effectiveSelected],
+  );
+
+  if (!report && districtOrder.length === 0) {
     return (
       <section>
         <SectionLabel label="INDICATOR GRID" subtitle="8개 핵심 상권 지표" />
@@ -73,16 +99,36 @@ export function IndicatorGrid({ simResult }: Props) {
     );
   }
 
-  // null fallback 금지 (api-contract §3.7) — 데이터 없으면 null로 둬서 UI에서 "—"로 명시.
-  // closure_rate은 0~1 fraction이라 scale: 100 적용 후 0~100 점수화.
+  // 선택 동의 8 지표 추출 — winner 면 market_report 풀, 아니면 district_rankings 부분 매핑.
+  // null fallback 금지 (api-contract §3.7).
+  // closure_rate 은 0~1 fraction 이라 scale: 100 적용 후 0~100 점수화.
   const values = INDICATORS.map(({ key, label, shortLabel, scale }) => {
-    const rawVal = (report as Record<string, unknown>)[key];
+    let rawVal: unknown = null;
+    if (isWinnerSelected && report) {
+      rawVal = (report as Record<string, unknown>)[key];
+    } else if (selectedRanking) {
+      // district_rankings 매핑: estimated_revenue / survival_rate / closure_rate / growth_potential / accessibility 만 직접 매핑.
+      // floating_population / rent_index / competition_intensity 는 district_rankings 에 없으므로 null (—).
+      const directMap: Record<string, keyof typeof selectedRanking> = {
+        estimated_revenue: 'estimated_revenue',
+        survival_rate: 'survival_rate',
+        closure_rate: 'closure_rate',
+        growth_potential: 'growth_potential',
+        accessibility: 'accessibility',
+      };
+      const rankingKey = directMap[key];
+      if (rankingKey) {
+        rawVal = (selectedRanking as Record<string, unknown>)[rankingKey] ?? null;
+      }
+    }
     if (typeof rawVal !== 'number' || !Number.isFinite(rawVal)) {
       return { key, label, shortLabel, val: null as number | null };
     }
     const scaled = scale ? rawVal * scale : rawVal;
     return { key, label, shortLabel, val: Math.max(0, Math.min(100, scaled)) };
   });
+
+  const missingCount = values.filter((v) => v.val == null).length;
 
   // radar — null인 축은 0으로 그리지 않고 polygon에서 제외 (찌그러짐 방지).
   const radarData = values
@@ -95,7 +141,62 @@ export function IndicatorGrid({ simResult }: Props) {
 
   return (
     <section>
-      <SectionLabel label="INDICATOR GRID" subtitle="8개 핵심 상권 지표" />
+      {/* 헤더 row — SectionLabel + 동 chip selector (시뮬 1~4동, winner 첫번째). */}
+      <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <SectionLabel label="INDICATOR GRID" subtitle="8개 핵심 상권 지표" />
+        {districtOrder.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+              동 선택
+            </span>
+            {districtOrder.map((d, idx) => {
+              const isSelected = d === effectiveSelected;
+              const isWinner = d === winnerDistrict;
+              const chipColor = SERIES_COLORS[idx % SERIES_COLORS.length]!;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setSelectedDistrict(d)}
+                  className={[
+                    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.75rem] font-bold tracking-tight transition-colors',
+                    isSelected
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-foreground hover:bg-secondary',
+                  ].join(' ')}
+                >
+                  <span
+                    aria-hidden
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: chipColor }}
+                  />
+                  <span>{d}</span>
+                  {isWinner && (
+                    <span
+                      className={[
+                        'rounded-full px-1.5 py-0.5 text-[0.5rem] font-black uppercase tracking-widest',
+                        isSelected
+                          ? 'bg-background/20 text-background'
+                          : 'bg-primary/10 text-primary',
+                      ].join(' ')}
+                    >
+                      Winner
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 부족 지표 안내 — winner 외 동 선택 시 일부 지표가 district_rankings 미수신으로 — 표시 */}
+      {!isWinnerSelected && missingCount > 0 && (
+        <div className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[0.6875rem] text-warning">
+          ※ {effectiveSelected}: 일부 지표 ({missingCount}개) 는 winner 동 ({winnerDistrict ?? '—'})
+          만 분석 — backend 확장 후 전체 표시 예정
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
         {/* KPI 카드 그리드 — 라벨(truncate) / 큰 숫자(우측 끝부분 미간 회피) / progress bar.

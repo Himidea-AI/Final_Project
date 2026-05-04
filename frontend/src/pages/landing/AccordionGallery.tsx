@@ -185,7 +185,7 @@ export default function AccordionGallery({
                 isMapo ? 'cursor-pointer' : 'cursor-not-allowed'
               } ${
                 isHovered
-                  ? 'w-[320px] md:w-[480px] z-10 shadow-[0_0_30px_rgba(0,44,209,0.3)]'
+                  ? 'w-[65vh] z-10 shadow-[0_0_30px_rgba(0,44,209,0.3)]'
                   : 'w-[70px] md:w-[80px] z-0'
               }`}
               onMouseEnter={() => setHoveredIdx(i)}

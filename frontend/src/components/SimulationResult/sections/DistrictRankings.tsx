@@ -97,13 +97,8 @@ export function DistrictRankings({ simResult }: Props) {
               return (
                 <tr key={r.district} className={`border-b border-border last:border-b-0 ${rowCls}`}>
                   <td className="p-3 font-mono text-sm text-foreground">
-                    {/* 자체 1~N위 (정렬 후 인덱스). 전체 마포 16동 중 순위는 작게 보조 표시. */}
+                    {/* 자체 1~N위 (정렬 후 인덱스). */}
                     {i + 1}
-                    {selectedDongs.length > 0 && r.rank != null && r.rank !== i + 1 && (
-                      <span className="ml-1 text-[0.5625rem] font-normal text-muted-foreground">
-                        (전체 {r.rank}위)
-                      </span>
-                    )}
                   </td>
                   <td className="p-3 text-sm font-semibold text-foreground">
                     {r.district}

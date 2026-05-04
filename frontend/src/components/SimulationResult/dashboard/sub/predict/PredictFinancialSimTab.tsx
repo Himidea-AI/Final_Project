@@ -7,6 +7,7 @@
 import { Activity, History, ShieldAlert, TrendingUp } from 'lucide-react';
 import type { ClosureRate, ClosureRisk, SimulationOutput } from '../../../../../types';
 import { formatKrw, formatPct } from '../../utils/formatters';
+import { sortByRanking } from '../../utils/rankSort';
 import { BepCumulativeProfitChart } from '../../charts/BepCumulativeProfitChart';
 import { ClosureRatePanel } from '../../charts/ClosureRatePanel';
 import { ClosureRiskHeatmap } from '../../charts/ClosureRiskHeatmap';
@@ -33,7 +34,11 @@ export function PredictFinancialSimTab({ simResult }: Props) {
 
   // M6 (2026-04-29): district_predictions 기반 멀티 동 시리즈.
   // is_excluded_combo 동은 제외. 비어있으면 단일 동(quarterly_projection) fallback.
-  const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
+  // ranking 정렬 (winner→4위) 로 SERIES_COLORS[idx] = Deep Blue Sequential 4-tier 매핑 정합.
+  const dpredicts = sortByRanking(
+    (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo),
+    simResult,
+  );
 
   // 2026-05-04 분기 단위 통일 + ML 실측 우선.
   // 데이터 소스 우선순위:

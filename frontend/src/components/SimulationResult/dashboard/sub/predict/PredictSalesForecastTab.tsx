@@ -10,6 +10,7 @@ import type { DetailModalContent } from '../../shared/DetailModal';
 import { QuarterlyProjectionChart, type ChartSeries } from '../../../QuarterlyProjectionChart';
 import { QuarterlyStatStrip } from '../../../QuarterlyStatStrip';
 import { ShapInsightCard } from '../../charts/ShapInsightCard';
+import { sortByRanking } from '../../utils/rankSort';
 
 interface Props {
   simResult: SimulationOutput;
@@ -19,7 +20,11 @@ interface Props {
 export function PredictSalesForecastTab({ simResult, openModal }: Props) {
   // /predict 응답의 district_predictions 우선. 비어있거나 없으면 winner 단일 동 fallback.
   // (B4 다중 동 라인) — 4개 동 비교를 차트 한 장에서 보여주기 위해.
-  const districtPreds = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
+  // ranking 정렬 (winner→4위) 후 SERIES_COLORS[idx] 매핑이 Deep Blue Sequential 4-tier 와 정합.
+  const districtPredsRaw = (simResult.district_predictions ?? []).filter(
+    (p) => !p.is_excluded_combo,
+  );
+  const districtPreds = sortByRanking(districtPredsRaw, simResult);
   // DistrictPredictionResult.quarterly_projection 은 단건이므로 배열로 wrap.
   // 단, 일부 환경에서 backend 가 array 로 보낼 수도 있으므로 양쪽 처리 (안전 가드).
   const seriesFromPredictions: ChartSeries[] = districtPreds

@@ -69,7 +69,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
             <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
               <Activity className="text-primary" /> 유동인구 피크시간 예측
             </h3>
-            <CustomerFlowPeakHourChart dpredicts={dpredicts} />
+            <CustomerFlowPeakHourChart dpredicts={dpredicts} simResult={simResult} />
             <div className="pt-4 border-t border-border space-y-1">
               <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
                 ※ 코로나 시기(2020~2021) 가중치 0.5 보정 적용.
@@ -100,8 +100,24 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
                 {humanizeProfileSummary(winnerSegment.profile_summary)}
               </p>
             )}
-            <CustomerFlowSegmentChart dpredicts={dpredicts} mode="sales" />
-            <CustomerFlowSegmentChart dpredicts={dpredicts} mode="dimensions" />
+            {/* sub-header: 동별 매출 비교 */}
+            <div className="space-y-3">
+              <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
+                동별 매출 비교
+              </h4>
+              <CustomerFlowSegmentChart dpredicts={dpredicts} mode="sales" simResult={simResult} />
+            </div>
+            {/* sub-header: winner 타겟 프로필 */}
+            <div className="space-y-3">
+              <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
+                {winnerDistrict} 타겟 프로필
+              </h4>
+              <CustomerFlowSegmentChart
+                dpredicts={dpredicts}
+                mode="dimensions"
+                simResult={simResult}
+              />
+            </div>
             <div className="pt-4 border-t border-border/50 space-y-1">
               <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
                 ※ 4차원(연령·성별·시간대·요일) 독립 가정(곱셈)으로 산출됩니다 — 실제 분포와 차이
