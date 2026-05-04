@@ -89,13 +89,20 @@ def _spot_haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> flo
     return 2 * r * math.asin(math.sqrt(a))
 
 
-async def _load_spot_score_features(business_type: str | None) -> tuple[list[dict], list[dict]]:
-    """winner 동 spot 점수 산출용 보조 좌표 — 마포 지하철역 / 동종업종 매장.
+async def _load_spot_score_features(
+    business_type: str | None,
+    brand_name: str | None = None,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """winner 동 spot 점수 산출용 보조 좌표 — 마포 지하철역 / 동종업종 매장 / 자사 매장.
 
     동 단위 데이터(임대료/유동인구)는 같은 동 안 spot 들끼리 차별화 안 돼서 제외.
-    spot 단위 차별화 가능한 신호만 가져온다:
+    spot 단위 차별화 가능한 신호:
       - 지하철 접근성 (가까울수록 ↑)
       - 경쟁 밀도 (반경 500m 동종 매장 수, 적을수록 ↑)
+      - 자사 영업구역 안전 (territory_radius_m 안 자사 매장 0개일수록 ↑)
+
+    Args:
+        brand_name: 자사 매장 좌표 로드용 (영업구역 침해 페널티 산출). None 이면 자사 매장 [].
     """
     target_cat: str | None = None
     if business_type:
@@ -119,13 +126,30 @@ async def _load_spot_score_features(business_type: str | None) -> tuple[list[dic
                 store_stmt = store_stmt.where(KakaoStore.category == target_cat)
             store_rows = (await session.execute(store_stmt)).fetchall()
             stores = [{"lat": float(r.lat), "lon": float(r.lon)} for r in store_rows]
+        # 자사 매장 좌표 로드 — brand_mapping_resolver (BRAND_ALIASES 양방향 + DB 5,900 매핑).
+        # 마포 전체에서 검색 후 동 무관하게 좌표만 추출 (영업구역 거리 계산은 winner spot 과의 직선거리).
+        same_brand: list[dict] = []
+        if brand_name:
+            try:
+                from src.services.brand_mapping_resolver import get_all_mapo_stores_by_brand
+
+                rows = await asyncio.to_thread(get_all_mapo_stores_by_brand, brand_name)
+                same_brand = [
+                    {"lat": float(r["lat"]), "lon": float(r["lon"])}
+                    for r in rows
+                    if r.get("lat") is not None and r.get("lon") is not None
+                ]
+            except Exception as e:
+                logger.warning(f"[district_ranking] 자사 매장 좌표 로드 실패: {e}")
+                same_brand = []
         logger.info(
-            f"[district_ranking] spot 점수 보조데이터 로드 — 지하철 {len(subway)}개, 동종매장 {len(stores)}개 (cat={target_cat})"
+            f"[district_ranking] spot 점수 보조데이터 로드 — 지하철 {len(subway)}개, 동종매장 {len(stores)}개 "
+            f"(cat={target_cat}), 자사 {len(same_brand)}개 (brand={brand_name})"
         )
-        return subway, stores
+        return subway, stores, same_brand
     except Exception as e:
         logger.warning(f"[district_ranking] spot 점수 보조데이터 로드 실패: {e}")
-        return [], []
+        return [], [], []
 
 
 def _score_winner_spots(
@@ -133,13 +157,19 @@ def _score_winner_spots(
     winner_district: str,
     subway_coords: list[dict],
     competitor_coords: list[dict],
+    same_brand_coords: list[dict] | None = None,
+    territory_radius_m: int | None = None,
     radius_m: int = 500,
 ) -> None:
-    """winner 동 spot 들에 score / subway_distance_m / competitor_count_500m 를 in-place 부여.
+    """winner 동 spot 들에 점수 4분할 in-place 부여.
 
-    가중치: 경쟁밀도(역) 0.45 + 지하철 접근성(역) 0.35 + 매물 활성도 0.20.
-    동 내 min-max 정규화 — score 는 winner_district 안 spot 들끼리만 비교 가능 (cross-dong X).
-    데이터가 일부 결측이면 활성 항목 가중치를 비례 재배분.
+    가중치: 경쟁 0.35 + 지하철 0.30 + 매물 0.15 + 자사영업구역 안전 0.20.
+    영업구역 안전 = territory_radius_m 안 자사 매장 0개 → 1.0, 1개 이상 → 0.0.
+    territory_radius_m 미입력 또는 자사 매장 데이터 없으면 영업구역 항목 비활성 (3분할로 fallback).
+
+    동 내 min-max 정규화 — winner 동 spot 들끼리만 비교. 결측 항목은 가중치 비례 재배분.
+
+    추가 in-place 필드: nearest_same_brand_m, territory_violation
     """
     if not winner_district:
         return
@@ -154,6 +184,8 @@ def _score_winner_spots(
             spot["score"] = None
             spot["subway_distance_m"] = None
             spot["competitor_count_500m"] = None
+            spot["nearest_same_brand_m"] = None
+            spot["territory_violation"] = None
             continue
 
         if subway_coords:
@@ -169,6 +201,22 @@ def _score_winner_spots(
             )
         else:
             spot["competitor_count_500m"] = None
+
+        # 자사 영업구역 침해 판정 — 자사 매장 중 가장 가까운 거리.
+        # territory_radius_m 안에 1개라도 있으면 violation=True (영업구역 안전 점수 0).
+        if same_brand_coords:
+            nearest = min(
+                (_spot_haversine_m(lat, lon, s["lat"], s["lon"]) for s in same_brand_coords),
+                default=None,
+            )
+            spot["nearest_same_brand_m"] = round(nearest) if nearest is not None else None
+            if territory_radius_m and nearest is not None:
+                spot["territory_violation"] = nearest <= territory_radius_m
+            else:
+                spot["territory_violation"] = None
+        else:
+            spot["nearest_same_brand_m"] = None
+            spot["territory_violation"] = None
 
     def _minmax(values: list[float | None], reverse: bool) -> list[float | None]:
         ok = [v for v in values if v is not None]
@@ -189,15 +237,25 @@ def _score_winner_spots(
     comp_norm = _minmax([s.get("competitor_count_500m") for s in target_spots], reverse=True)
     sub_norm = _minmax([s.get("subway_distance_m") for s in target_spots], reverse=True)
     list_norm = _minmax([s.get("listing_count") for s in target_spots], reverse=False)
+    # 영업구역 안전 — 0 (침해) / 1 (안전). territory_radius_m 미입력 시 None (가중치 미적용).
+    territory_norm: list[float | None] = []
+    for s in target_spots:
+        v = s.get("territory_violation")
+        if v is None:
+            territory_norm.append(None)
+        else:
+            territory_norm.append(0.0 if v else 1.0)
 
-    for spot, c, su, li in zip(target_spots, comp_norm, sub_norm, list_norm):
+    for spot, c, su, li, tr in zip(target_spots, comp_norm, sub_norm, list_norm, territory_norm):
         parts: list[tuple[float, float]] = []
         if c is not None:
-            parts.append((c, 0.45))
+            parts.append((c, 0.35))
         if su is not None:
-            parts.append((su, 0.35))
+            parts.append((su, 0.30))
         if li is not None:
-            parts.append((li, 0.20))
+            parts.append((li, 0.15))
+        if tr is not None:
+            parts.append((tr, 0.20))
         if not parts:
             spot["score"] = None
             continue
@@ -205,19 +263,24 @@ def _score_winner_spots(
         score = sum(v * (w / w_total) for v, w in parts) * 100.0
         spot["score"] = round(score, 2)
 
-    # 검증 로그 — 가중치 재조정 판단용 (외진 zone 우선 추천 패턴 확인).
-    # top1 의 competitor_count_500m 이 0~1 이면 reverse min-max + 0.45 가중치 의심.
+    # 검증 로그 — 영업구역 침해 spot 이 후순위로 밀리는지 확인.
     sorted_spots = sorted(target_spots, key=lambda s: -(s.get("score") or 0))
-    print(f"[spot_score:{winner_district}] top5 검증 (총 {len(target_spots)}개 spot):")
+    print(
+        f"[spot_score:{winner_district}] top5 검증 "
+        f"(총 {len(target_spots)}개 spot, territory={territory_radius_m}m):"
+    )
     for i, s in enumerate(sorted_spots[:5], 1):
         lat_v = s.get("lat")
         lon_v = s.get("lon")
         coord = f"({lat_v:.4f},{lon_v:.4f})" if isinstance(lat_v, (int, float)) and isinstance(lon_v, (int, float)) else "(좌표X)"
+        viol = s.get("territory_violation")
+        viol_str = "침해" if viol is True else ("안전" if viol is False else "—")
         print(
             f"  #{i} score={s.get('score')} | "
             f"경쟁={s.get('competitor_count_500m')}개 / "
             f"지하철={s.get('subway_distance_m')}m / "
-            f"매물={s.get('listing_count')} @ {coord}"
+            f"매물={s.get('listing_count')} / "
+            f"자사최근접={s.get('nearest_same_brand_m')}m({viol_str}) @ {coord}"
         )
 
 
@@ -696,8 +759,12 @@ async def district_ranking_node(state: AgentState) -> dict:
     # v9: _fetch_naver_trend 외부 API → DB 조회 전환 (v8 trend_score=None 캐시 무효화)
     # v10: inflow_scorer 가중치(subway 10→25/bus 40/fclty 50→35) + baseline 정규화 도입 (v9 무효화)
     # v11: vacancy_spots 에 spot 단위 score/subway_distance_m/competitor_count_500m 추가 (v10 무효화)
+    # v12: spot 점수에 자사 영업구역 안전 항목 추가 (territory_radius_m 반영) — brand_name/territory 키 포함.
+    _brand_key = state.get("brand_name") or "none"
+    _territory_key = state.get("territory_radius_m") or "none"
     cache_key = (
-        f"v11:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+        f"v12:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:"
+        f"{_sorted_dists_key}:{_brand_key}:{_territory_key}"
     )
     _redis = None
     try:
@@ -844,11 +911,21 @@ async def district_ranking_node(state: AgentState) -> dict:
     dong_names = list(dict.fromkeys([winner, target_district] + top_3))
     vacancy_spots = await _load_vacancy_spots(dong_names)
 
-    # winner 동 spot 들에 spot 단위 점수 부여 — 지하철 접근성 + 경쟁밀도 + 매물활성도.
-    # 프론트 MARKET MAP 핀이 단순 listing_count 최대값이 아닌 종합 점수 1위 spot 에 찍히도록.
+    # winner 동 spot 들에 spot 단위 점수 부여.
+    # 가중치: 경쟁 0.35 + 지하철 0.30 + 매물 0.15 + 자사영업구역 안전 0.20.
+    # 사용자 입력 territory_radius_m 안 자사 매장 ≥1 spot 은 영업구역 안전=0 → 후순위.
     if winner and vacancy_spots:
-        spot_subway, spot_stores = await _load_spot_score_features(business_type)
-        _score_winner_spots(vacancy_spots, winner, spot_subway, spot_stores)
+        _brand = state.get("brand_name")
+        _territory = state.get("territory_radius_m")
+        spot_subway, spot_stores, spot_same_brand = await _load_spot_score_features(business_type, _brand)
+        _score_winner_spots(
+            vacancy_spots,
+            winner,
+            spot_subway,
+            spot_stores,
+            same_brand_coords=spot_same_brand,
+            territory_radius_m=_territory,
+        )
 
     logger.info(
         f"--- [DISTRICT RANKING] 완료 - 1위: {winner}, 후보: {top_3}, 공실반영={vacancy_applied}, 스팟={len(vacancy_spots)}개 ---"
