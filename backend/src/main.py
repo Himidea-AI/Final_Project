@@ -1169,7 +1169,6 @@ async def biz_lookup(req: BizLookupRequest):
                     ),
                     {"biz": biz_clean},
                 ).fetchone()
-            engine.dispose()
             if row:
                 d = dict(row._mapping)
                 return {
@@ -2037,8 +2036,9 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     # v4: Tier S/A LLM decisions 도입 (use_llm_decisions, 2026-04-29).
     # v5: 전 Tier OpenAI gpt-4.1-mini 통일 (Haiku/Gemini 제거, 2026-04-29).
     # v6: Tier S 50 전용 LLM 모드 (Tier A/B → policy_decide, 2026-04-29).
+    # v7: ext_commuter LLM plan 활성 + new_store_role_dist + tier_s_meta 응답 추가 (2026-05-03).
     cache_key = (
-        "abm_sim:v6:"
+        "abm_sim:v7:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -2177,12 +2177,14 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "new_store_visits": result.get("new_store_visits", 0),
         "new_store_revenue": result.get("new_store_revenue", 0.0),
         "new_store_visit_share_pct": result.get("new_store_visit_share_pct", 0.0),
+        "new_store_role_dist": result.get("new_store_role_dist", {}),
         # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채워짐
         "thoughts": result.get("thoughts", []),
         "thought_calls": result.get("thought_calls", 0),
         "thought_input_tokens": result.get("thought_input_tokens", 0),
         "thought_output_tokens": result.get("thought_output_tokens", 0),
         "thought_cached_tokens": result.get("thought_cached_tokens", 0),
+        "tier_s_meta": result.get("tier_s_meta"),
         "tier_s_calls": result.get("tier_s_calls", 0),
         "tier_a_calls": result.get("tier_a_calls", 0),
         "estimated_cost_usd": result.get("estimated_cost_usd", 0.0),

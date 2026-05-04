@@ -69,7 +69,7 @@ def resolve_dong_code(dong_name: str, db_url: str | None = None) -> str | None:
             ).fetchone()
             if row:
                 return str(row[0])
-        engine.dispose()
+        pass
     except Exception as e:
         logger.warning(f"[resolve_dong_code] DB 조회 실패 dong={dong_name}: {e}")
 
@@ -98,7 +98,7 @@ def resolve_dong_name(dong_code: str, db_url: str | None = None) -> str | None:
             ).fetchone()
             if row:
                 return str(row[0])
-        engine.dispose()
+        pass
     except Exception as e:
         logger.warning(f"[resolve_dong_name] DB 조회 실패 code={dong_code}: {e}")
 

@@ -5,11 +5,13 @@ GRU/LSTM 대비 변경점:
 - 순환 신경망(RNN) → 팽창 인과 컨볼루션(Dilated Causal Convolution)
 - cell state / hidden state 개념 없음 — 순수 컨볼루션으로 시퀀스 처리
 - Residual connection으로 기울기 소실 방지 (깊은 네트워크에서도 안정)
-- window_size=4 기준 dilation=[1,2], kernel_size=2 → receptive field=4 (정확히 커버)
 
-Receptive field 계산:
+Receptive Field 공식:
   RF = 1 + (kernel_size - 1) × sum(dilations)
-  RF = 1 + (2 - 1) × (1 + 2) = 4  ← window_size=4와 일치
+
+운영 표준 (2026-05-03 v3 채택):
+  window=4, dilations=[1,2], output=1 → RF = 1 + 1 × (1+2) = 4 (window 정확 커버)
+  자기회귀 4-step rollout으로 4분기 예측 (predict.py).
 
 참고: models/lstm_forecast/model.py, models/gru_forecast/model.py 기반으로 작성.
 GRU/LSTM과 동일한 입출력 구조를 유지하여 공정한 비교 실험이 가능하도록 설계.
@@ -201,31 +203,36 @@ class TCNForecaster(nn.Module):
     LSTM/GRU 대비 병렬 연산이 가능하여 학습 속도가 빠르며,
     팽창 컨볼루션으로 window_size만큼의 수용 영역을 정확히 커버한다.
 
-    아키텍처:
+    아키텍처 (TemporalBlock 개수 = len(dilations)):
         1. Input Projection: Linear(input_size → n_channels)
-        2. TemporalBlock(dilation=1): receptive field 2
-        3. TemporalBlock(dilation=2): receptive field 4 (누적)
-        4. TemporalBlock(dilation=4): receptive field 8 (누적)
-        5. FC Head: Linear → ReLU → Dropout → Linear(output_size)
+        2. TemporalBlock 스택 (dilation 별로 1개씩, dilations 리스트 순서대로 stack)
+        3. FC Head: Linear(n_ch → n_ch//2) → ReLU → Dropout → Linear(→ output_size)
 
-    window_size=8 기준 dilation 선택 이유:
-        RF = 1 + (kernel_size-1) × sum(dilations)
-        RF = 1 + 1 × (1+2+4) = 8  ← window_size=8과 정확히 일치
+    Receptive Field 공식: RF = 1 + (kernel_size - 1) × sum(dilations)
+
+    프로젝트 표준 설정:
+    - v3 (운영 기본, 2026-05-03 채택):
+        window=4, dilations=[1,2], output=1 → RF = 1+1×(1+2) = 4 (window 정확 커버)
+    - v2 (DMS legacy):
+        window=12, dilations=[1,2,4,8], output=4 → RF = 1+1×15 = 16 (window 초과)
+    - 클래스 기본값(`dilations=None` 시 [1,2,4])은 RF=8용 — 실제 학습/추론은 항상
+      explicit dilations 전달하므로 default는 fallback 의미만 가짐.
 
     Parameters
     ----------
     input_size : int
-        입력 피처 수 (매출, 점포 수, 인구 등 33개).
+        입력 피처 수 (v3 기본 37개).
     n_channels : int
         TCN 내부 채널 수. GRU의 hidden_size에 대응. 기본 128.
     kernel_size : int
-        컨볼루션 커널 크기 (기본 2 — receptive field 최적화).
+        컨볼루션 커널 크기 (기본 2).
     dilations : list[int] | None
-        각 TemporalBlock의 팽창 계수 목록. 기본 [1, 2, 4] — window_size=8 최적.
+        각 TemporalBlock의 팽창 계수 목록. None=fallback [1,2,4].
+        운영 학습/추론은 train.py / predict.py 에서 explicit 전달.
     dropout : float
         Dropout 비율.
     output_size : int
-        출력 차원 (기본 4 = 분기별 예측값).
+        출력 차원 (v3=1 자기회귀 / v2=4 DMS).
     """
 
     def __init__(

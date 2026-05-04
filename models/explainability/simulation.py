@@ -96,9 +96,17 @@ def build_quarterly_projection(
     results: list[dict] = []
     divisor = max(store_count, 1)
 
-    # TCN 기준으로 항상 4분기 — BEP simulation 길이에 무관하게 고정
-    for q_idx in range(1, len(quarterly_predictions) + 1):
-        tcn_row = quarterly_map.get(q_idx, {})
+    # 2026-05-04 R6 fix — 4분기 hard cap 제거. BEP simulation 길이(N)만큼 build.
+    # TCN 은 4분기까지만 예측하므로 Q5+ 는 4분기 cycle 반복 (계절성 유지).
+    # 예: TCN Q1~Q4 매출 = [A, B, C, D] → Q5=A, Q6=B, Q7=C, Q8=D, ...
+    # cumulative_profit 은 bep_map 에 N분기까지 다 있으므로 그대로 가져옴.
+    tcn_len = max(len(quarterly_predictions), 1)
+    n_quarters = max(len(bep_quarterly_simulation), tcn_len)
+
+    for q_idx in range(1, n_quarters + 1):
+        # TCN 4분기 cycle: Q5→Q1, Q6→Q2, ... (1-based 모듈로)
+        tcn_q = ((q_idx - 1) % tcn_len) + 1
+        tcn_row = quarterly_map.get(tcn_q, {})
         bep_row = bep_map.get(q_idx, {})
 
         revenue = int(tcn_row.get(revenue_key, 0) / divisor)
@@ -119,7 +127,7 @@ def build_quarterly_projection(
         )
 
     logger.info(
-        "build_quarterly_projection 완료 — confidence=%s, 분기 수=%d",
+        "build_quarterly_projection 완료 — confidence=%s, 분기 수=%d (BEP simulation 기반)",
         confidence,
         len(results),
     )

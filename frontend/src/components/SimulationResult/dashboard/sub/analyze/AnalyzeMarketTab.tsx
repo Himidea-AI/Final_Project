@@ -82,10 +82,10 @@ export function AnalyzeMarketTab({ simResult, openModal }: Props) {
         <div className="rounded-3xl border border-border bg-card p-8 space-y-5">
           <div className="flex flex-wrap items-start gap-4">
             <div>
-              <h3 className="text-2xl font-black text-foreground flex items-center gap-3 italic tracking-tight text-left leading-tight">
-                <Globe2 className="text-primary" size={22} /> 거시·트렌드 환경
+              <h3 className="text-lg font-black text-foreground flex items-center gap-3 italic text-left">
+                <Globe2 className="text-primary" size={20} /> 거시·트렌드 환경
               </h3>
-              <p className="text-[0.6875rem] font-bold text-muted-foreground mt-3">
+              <p className="text-xs text-muted-foreground mt-1 text-left">
                 업종 · 지역 · 거시 시계열 + LLM 요약
               </p>
             </div>

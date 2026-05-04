@@ -21,7 +21,7 @@
 
 | 이름            | Hex       | CSS 변수                  | 역할                                                              |
 | --------------- | --------- | ------------------------- | ----------------------------------------------------------------- |
-| Starburst Pink  | `#FF78B9` | `--color-starburst-pink`  | 장식 only (`--decor-starburst-pink`) — 작은 마커/얇은 선/텍스트 X |
+| Console Pink    | `#EB367F` | `--color-starburst-pink`  | 장식 only (`--decor-starburst-pink`) — 토큰명 historical          |
 | **Deep Blue**   | `#002CD1` | `--color-deep-blue`       | **브랜드 primary** (`--primary`, `--ring`, `--chart-1`)           |
 
 > **Deep Blue가 brand primary**. 이전 인디고(`#6366f1` / `#818cf8`)는 다크모드 잔재. 모든 indigo RGB 값(`99,102,241` / `129,140,248`)은 `0,44,209`로 치환 완료.
@@ -31,10 +31,10 @@
 
 | 이름              | Hex       | CSS 변수                | 역할                                                  |
 | ----------------- | --------- | ----------------------- | ----------------------------------------------------- |
-| Vivid Red         | `#FF3800` | `--color-vivid-red`     | `--destructive`, `--danger`, `--chart-2`              |
+| Danger Coral      | `#FB565B` | `--color-vivid-red`     | `--destructive`, `--danger`, `--chart-2` (토큰명 historical) |
 | Bright Cyan       | `#00E0D1` | `--color-bright-cyan`   | 장식 only (`--decor-cyan`) — 라이트에서 1.2:1, 얇은 선/텍스트 X |
 | Sunshine Yellow   | `#FFDE00` | `--color-sunshine-yellow` | 장식 only (`--decor-yellow`) — 1.3:1, 큰 면적만       |
-| Teal Green        | `#00BA7A` | `--color-teal-green`    | `--success`, `--chart-3`                              |
+| Success Emerald   | `#008B00` | `--color-teal-green`    | `--success`, `--chart-3` (토큰명 historical)          |
 | Hot Pink          | `#FF0070` | `--color-hot-pink`      | 장식 only (`--decor-hot-pink`) — 큰 면적/배지         |
 
 ### Shapes — 보조/장식 (3)
@@ -42,9 +42,9 @@
 
 | 이름            | Hex       | CSS 변수                | 역할                                  |
 | --------------- | --------- | ----------------------- | ------------------------------------- |
-| Soft Orange     | `#FF7940` | `--color-soft-orange`   | `--warning`                           |
+| Warning Amber   | `#FFBA00` | `--color-soft-orange`   | `--warning` (토큰명 historical)       |
 | Light Pink      | `#FFB6D0` | `--color-light-pink`    | 장식 only (`--decor-light-pink`)      |
-| Vibrant Purple  | `#B35CFF` | `--color-vibrant-purple`| `--chart-4` (4동 비교 차트)           |
+| Console Purple  | `#7928CA` | `--color-vibrant-purple`| `--chart-4` (4동 비교 차트, 토큰명 historical) |
 
 ---
 
@@ -63,16 +63,16 @@
 /* frontend/src/index.css — :root */
 --color-cream: #f8f7e8;
 --color-text-black: #000000;
---color-starburst-pink: #ff78b9;
+--color-starburst-pink: #eb367f;   /* Console Pink (2026-05-03 hex 교체) */
 --color-deep-blue: #002cd1;
---color-vivid-red: #ff3800;
+--color-vivid-red: #fb565b;        /* Danger Coral (2026-05-03 hex 교체) */
 --color-bright-cyan: #00e0d1;
 --color-sunshine-yellow: #ffde00;
---color-teal-green: #00ba7a;
+--color-teal-green: #008b00;       /* Success Emerald */
 --color-hot-pink: #ff0070;
---color-soft-orange: #ff7940;
+--color-soft-orange: #ffba00;      /* Warning Amber */
 --color-light-pink: #ffb6d0;
---color-vibrant-purple: #b35cff;
+--color-vibrant-purple: #7928ca;   /* Console Purple */
 ```
 
 ---

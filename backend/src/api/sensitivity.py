@@ -63,9 +63,14 @@ _CORRELATIONS: dict[str, float] = _load_json(_CORR_PATH, label="feature correlat
 
 
 class SensitivityResponse(BaseModel):
-    elasticity: dict[str, dict[str, float]]
+    elasticity: dict[str, dict[str, list[float]]]
     correlations: dict[str, float]
     baseline_sales: list[float]
+    # v3 + 점포당 매출 표시 전환 (2026-05-03):
+    # store_count는 (동×업종) 조합의 최근 분기 점포 수, baseline_per_store는 분기별
+    # 점포당 매출(원). 기존 캐시(이 필드들이 없는)와의 호환을 위해 Optional 유지.
+    store_count: int | None = None
+    baseline_per_store: list[float] | None = None
 
 
 def _compute_etag() -> str:
@@ -114,4 +119,6 @@ def get_sensitivity(
         elasticity=entry["elasticity"],
         correlations=_CORRELATIONS,
         baseline_sales=entry["baseline"],
+        store_count=entry.get("store_count"),
+        baseline_per_store=entry.get("baseline_per_store"),
     )

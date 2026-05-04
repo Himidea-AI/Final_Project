@@ -47,18 +47,19 @@ html {
     --color-cream: #f1f5f9; /* Cool Gray slate-100 (2026-05-01: cream #f8f7e8 → 차가운 톤 전환). 토큰 이름은 historical 유지 — 사용처 자동 적용. */
     --color-text-black: #000000; /* Text Black */
     /* Point */
-    --color-starburst-pink: #ff78b9; /* Starburst Pink */
+    --color-starburst-pink: #eb367f; /* Console Pink (2026-05-03 hex 교체, 토큰명 historical) */
     --color-deep-blue: #002cd1; /* Deep Blue (brand primary) */
-    /* Geometric */
-    --color-vivid-red: #ff3800;
+    /* Geometric — vivid-red/teal-green/soft-orange 토큰명은 historical 유지(2026-05-03 hex만 교체).
+       vivid-red → Danger Coral #fb565b / teal-green → Success Emerald #008b00 / soft-orange → Warning Amber #ffba00 */
+    --color-vivid-red: #fb565b; /* Danger Coral */
     --color-bright-cyan: #00e0d1;
     --color-sunshine-yellow: #ffde00;
-    --color-teal-green: #00ba7a;
+    --color-teal-green: #008b00; /* Success Emerald */
     --color-hot-pink: #ff0070;
     /* Shapes */
-    --color-soft-orange: #ff7940;
+    --color-soft-orange: #ffba00; /* Warning Amber */
     --color-light-pink: #ffb6d0;
-    --color-vibrant-purple: #b35cff;
+    --color-vibrant-purple: #7928ca; /* Console Purple */
 
     /* ─── Brand & semantic — 12색 alias ─── */
     --primary: var(--color-deep-blue);

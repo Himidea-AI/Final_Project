@@ -507,6 +507,11 @@ class ModelOutput:
             quarterly_per_store = round(quarterly_avg / store_count)
             revenue_forecast["store_count"] = store_count
             revenue_forecast["quarterly_per_store"] = quarterly_per_store
+            # 분기별 4개 예측 각각에도 점포당 매출/CI 필드 추가 (프론트 표시 단위 일관성)
+            for p in quarterly_preds:
+                p["predicted_sales_per_store"] = round(p["predicted_sales"] / store_count)
+                p["confidence_lower_per_store"] = round(p.get("confidence_lower", 0) / store_count)
+                p["confidence_upper_per_store"] = round(p.get("confidence_upper", 0) / store_count)
             logger.info("store_count=%d → quarterly_per_store=%s원", store_count, f"{quarterly_per_store:,}")
 
             bep = _run_bep(

@@ -76,9 +76,11 @@ import DashboardPredictPage from './pages/dashboard/DashboardPredictPage';
 import DashboardAnalyzePage from './pages/dashboard/DashboardAnalyzePage';
 import DashboardAbmPage from './pages/dashboard/DashboardAbmPage';
 import { SimulationFloatingWidget } from './components/simulation/SimulationFloatingWidget';
+import { AbmFloatingWidget } from './components/simulation/AbmFloatingWidget';
 import { BeforeUnloadGuard } from './components/simulation/BeforeUnloadGuard';
 import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
+import { useAbmCompletionToast } from './hooks/useAbmCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
 import { getLivePopulation } from './api/client';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
@@ -1043,13 +1045,12 @@ function SimulatorDashboard({
   return (
     <div
       ref={dashboardRef}
-      className="relative z-10 h-full w-full bg-card overflow-y-auto custom-scrollbar"
+      className="fixed inset-x-0 top-20 bottom-0 z-10 bg-card overflow-y-auto custom-scrollbar"
     >
       {/* Top bar — 페이지 타이틀(좌) + RUN 버튼(우).
-          mt-28 = 초기 위치는 App 헤더(80px)와 32px 갭.
-          sticky top-20 = 스크롤 시 App 헤더 바닥에 flush 로 붙음 → 갭 사이 컨텐츠 비침 차단.
-          (top-28 로 갭 유지하면 갭 사이로 스크롤되는 컨텐츠가 비치는 이슈) */}
-      <div className="sticky top-20 z-30 flex items-center justify-between px-8 py-4 mt-28 bg-card/90 backdrop-blur-xl">
+          wrapper fixed top-20 = nav 80px 아래에서 시작 (nav 영역 침범 차단).
+          mt-8 = wrapper 안에서 추가 32px 갭. sticky top-0 = wrapper 스크롤 시 wrapper 상단에 flush. */}
+      <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-4 mt-8 bg-card/90 backdrop-blur-xl">
         <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight">
           SIMULATION SETUP
         </h1>
@@ -1553,8 +1554,6 @@ function DashboardRunningPlaceholder() {
   const anaStatus = useSimulationStore((s) => s.analysis.status);
   const predProgress = useSimulationStore((s) => s.prediction.progress);
   const anaProgress = useSimulationStore((s) => s.analysis.progress);
-  const predStage = useSimulationStore((s) => s.prediction.stage);
-  const anaStage = useSimulationStore((s) => s.analysis.stage);
 
   return (
     <div className="relative flex h-full min-h-[60vh] flex-col items-center justify-center gap-6 overflow-hidden px-6">
@@ -1574,14 +1573,12 @@ function DashboardRunningPlaceholder() {
           label="ML 예측"
           sublabel="매출 / 폐업률 (TCN + LightGBM)"
           progressRatio={predProgress}
-          stage={predStage}
         />
         <SliceProgressRow
           status={anaStatus}
           label="AI 분석"
           sublabel="멀티 에이전트 종합 판단 (LLM)"
           progressRatio={anaProgress}
-          stage={anaStage}
         />
       </div>
       <p className="relative z-10 max-w-md text-center text-xs text-muted-foreground leading-relaxed">
@@ -1822,15 +1819,12 @@ function SliceProgressRow({
   label,
   sublabel,
   progressRatio,
-  stage,
 }: {
   status: 'idle' | 'running' | 'done' | 'error';
   label: string;
   sublabel: string;
   /** Real progress 0~1 — backend polling 으로 store 에 누적된 슬라이스 진행률. */
   progressRatio: number;
-  /** Backend 가 전달한 현재 진행 단계 라벨 (e.g. "서교동 분석 완료 (2/4)" 또는 LangGraph 노드명). */
-  stage: string | null;
 }) {
   // (b) 시간 보간 적용 — display 는 wave fillHeight + % 표시 둘 다 같은 값.
   const display = useInterpolatedProgress(progressRatio, status);
@@ -1867,16 +1861,11 @@ function SliceProgressRow({
         <div className="mt-1 text-xs text-muted-foreground">{sublabel}</div>
       </div>
       {isRunning && progressPct !== null ? (
-        <div className="relative flex flex-col items-center gap-1">
-          <div className="flex items-baseline gap-1 tabular-nums">
-            <span className="text-2xl font-black text-primary">{progressPct}</span>
-            <span className="text-base font-black text-primary">%</span>
-          </div>
-          {stage && (
-            <span className="max-w-[180px] truncate text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground">
-              {stage}
-            </span>
-          )}
+        // stage 라벨 표시 제거 — ML(한글) / AI(영문 노드명) 비대칭 + cluttered.
+        // % + 차오름 wave 가 충분한 진행 신호. backend 의 stage 는 store 에 진단용으로만 보존.
+        <div className="relative flex items-baseline gap-1 tabular-nums">
+          <span className="text-2xl font-black text-primary">{progressPct}</span>
+          <span className="text-base font-black text-primary">%</span>
         </div>
       ) : stateLabel ? (
         <div className={`relative text-sm font-bold ${stateLabelColor}`}>{stateLabel}</div>
@@ -1906,7 +1895,7 @@ function DashboardOutlet() {
   return (
     <div
       data-dashboard-scroll
-      className="relative h-screen overflow-y-scroll custom-scrollbar bg-background pb-16 text-foreground"
+      className="fixed inset-x-0 top-20 bottom-0 overflow-y-scroll custom-scrollbar bg-background pb-16 text-foreground"
       style={{ overscrollBehaviorY: 'contain' }}
     >
       {simResult ? (
@@ -1967,6 +1956,7 @@ export default function App() {
   // Simulation background tracking (IM3-205): store가 페이지 이동과 독립적으로
   // 시뮬레이션 상태를 보유. useCompletionToast는 running→done/error 전이 감지.
   useCompletionToast();
+  useAbmCompletionToast();
 
   // FloatingWidget 의 dismiss(X) 가 store.status='idle' 로 만들 때 reportState 도 동기화.
   // 동기화 안 하면 reportState 가 'result' 로 남아 옛 비교모드 dashboard (dead 1,800줄) 가 노출됨.
@@ -2228,6 +2218,7 @@ export default function App() {
 
               {/* IM3-205: 시뮬레이션 백그라운드 추적 — 라우팅 바깥에 마운트 */}
               <SimulationFloatingWidget />
+              <AbmFloatingWidget />
               <BeforeUnloadGuard />
               <ToastHost />
 
@@ -2490,6 +2481,7 @@ export default function App() {
             </div>
           </TransitionContext.Provider>
           <SimulationFloatingWidget />
+          <AbmFloatingWidget />
         </ToastProvider>
       </ManagerListProvider>
     </AuthProvider>

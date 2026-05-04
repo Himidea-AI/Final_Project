@@ -106,7 +106,7 @@ export function DashboardHub({
   // 있어야 UX 자연. 공통 컴포넌트: SaveSimulationActions (components/SimulationHistory/).
 
   return (
-    <div className="mx-auto max-w-[1728px] px-8 pt-32 pb-12">
+    <div className="mx-auto max-w-[1728px] px-8 pt-12 pb-12">
       {/* header height 는 우측 박스 (DOC ID + 새 시뮬 버튼) 자연 높이(~44px)에 의해 결정.
           좌측은 가로 레이아웃 (h1 + 동/업종 한 줄) 으로 자연 height ~35px → 우측보다 작아
           self-center 로 그 안에 가운데 정렬. 우측은 그대로 items-end (= header bottom). */}

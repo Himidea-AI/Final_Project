@@ -6,6 +6,70 @@ interface Props {
   segment: CustomerSegment | null | undefined;
 }
 
+/** dimension_ratios 키 → 한국어 라벨. backend customer_segment 의 4 차원 (연령/성별/시간대/요일).
+ *  키 형태가 _ratio suffix 유무 두 가지 다 와도 매칭되도록 양쪽 등록.
+ *  미정의 키는 raw 그대로 fallback (디버그 단서).
+ *
+ *  profile_summary 자연어 후처리에도 사용 — backend 가 "20대+30대 time_06_11" 같은
+ *  raw key 혼합 텍스트를 보내면 frontend 에서 정규식으로 한국어 + 연결사(·) 로 치환. */
+const DIMENSION_LABEL: Record<string, string> = {
+  // 연령
+  age_10: '10대',
+  age_20: '20대',
+  age_30: '30대',
+  age_40: '40대',
+  age_50: '50대',
+  age_60_above: '60대 이상',
+  age_10_ratio: '10대',
+  age_20_ratio: '20대',
+  age_30_ratio: '30대',
+  age_40_ratio: '40대',
+  age_50_ratio: '50대',
+  age_60_above_ratio: '60대 이상',
+  // 성별
+  male: '남성',
+  female: '여성',
+  male_ratio: '남성',
+  female_ratio: '여성',
+  gender_male: '남성',
+  gender_female: '여성',
+  gender_male_ratio: '남성',
+  gender_female_ratio: '여성',
+  // 시간대 (6 buckets)
+  time_00_06: '심야',
+  time_06_11: '오전',
+  time_11_14: '점심',
+  time_14_17: '오후',
+  time_17_21: '저녁',
+  time_21_24: '야간',
+  time_00_06_ratio: '심야',
+  time_06_11_ratio: '오전',
+  time_11_14_ratio: '점심',
+  time_14_17_ratio: '오후',
+  time_17_21_ratio: '저녁',
+  time_21_24_ratio: '야간',
+  // 요일
+  weekday: '평일',
+  weekend: '주말',
+  weekday_ratio: '평일',
+  weekend_ratio: '주말',
+};
+
+/** profile_summary 텍스트 안 raw key 를 한국어로 + "+" 기호를 가운뎃점(·) 으로 치환.
+ *  긴 키(time_06_11_ratio) 가 짧은 키(time_06_11) 보다 먼저 매칭되도록 길이 내림차순 정렬.
+ *  word boundary(\b) 로 키가 다른 단어 부분에 매칭되는 회귀 차단. */
+function humanizeProfileSummary(text: string): string {
+  let out = text;
+  const keys = Object.keys(DIMENSION_LABEL).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    const pattern = new RegExp(`\\b${key}\\b`, 'g');
+    out = out.replace(pattern, DIMENSION_LABEL[key]);
+  }
+  // "+" 양 옆에 한글/영숫자 있을 때 가운뎃점으로 (예: "20대+30대" → "20대·30대").
+  out = out.replace(/([가-힣\w)])\s*\+\s*([가-힣\w(])/g, '$1·$2');
+  return out;
+}
+
 export function CustomerSegmentCard({ segment }: Props) {
   if (!segment) {
     // Layer 2 outer card — panel(cool gray) 위에서 명확히 떠 있는 white surface.
@@ -49,8 +113,10 @@ export function CustomerSegmentCard({ segment }: Props) {
         </div>
       </div>
 
-      {/* 자연어 요약 */}
-      <p className="text-[0.8125rem] text-foreground leading-relaxed">{segment.profile_summary}</p>
+      {/* 자연어 요약 — backend raw key("time_06_11" 등) + "+" 혼합 텍스트를 한국어/가운뎃점으로 후처리. */}
+      <p className="text-[0.8125rem] text-foreground leading-relaxed">
+        {humanizeProfileSummary(segment.profile_summary)}
+      </p>
 
       {/* 매출 요약 */}
       <div className="grid grid-cols-3 gap-4">
@@ -90,7 +156,7 @@ export function CustomerSegmentCard({ segment }: Props) {
             {dimensions.map(({ key, value }) => (
               <div key={key} className="flex items-center gap-3">
                 <span className="text-[0.6875rem] font-bold text-muted-foreground w-32 truncate">
-                  {key}
+                  {DIMENSION_LABEL[key] ?? key}
                 </span>
                 <div className="flex-1 bg-card h-1.5 rounded-full overflow-hidden">
                   <div

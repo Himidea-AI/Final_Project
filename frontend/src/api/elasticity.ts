@@ -11,7 +11,7 @@
 
 import axios from 'axios';
 import apiClient from './client';
-import type { ElasticityResponse } from '../types/elasticity';
+import type { SensitivityResponse } from '../types/elasticity';
 
 export class ElasticityNotFoundError extends Error {
   constructor(message: string) {
@@ -24,9 +24,9 @@ export async function fetchElasticity(
   dongCode: string,
   industryCode: string,
   signal?: AbortSignal,
-): Promise<ElasticityResponse> {
+): Promise<SensitivityResponse> {
   try {
-    const response = await apiClient.get<ElasticityResponse>('/predict/sensitivity', {
+    const response = await apiClient.get<SensitivityResponse>('/predict/sensitivity', {
       params: { dong_code: dongCode, industry_code: industryCode },
       signal,
     });
