@@ -308,7 +308,16 @@ class GolmokRent(Base):
 
 
 class DongMapping(Base):
-    """행정동 매핑 테이블 — 동코드 ↔ 동명, 인구, 상권 코드 매핑 (마포 16동 운영 마스터)"""
+    """행정동 매핑 테이블 — 동코드 ↔ 동명, 인구, 상권 코드 매핑 (마포 16동 운영 마스터)
+
+    ⚠️ FK 가이드 (dong_code 이중 master 혼선 주의):
+    - **마포 한정** 데이터(16 row): district_sales/store_quarterly/store_info/
+      living_population/living_population_grid/mapo_resident_pop/golmok_rent/
+      seoul_adstrd_fclty 가 이 테이블 참조.
+    - **서울 전역** 데이터(431 row): seoul_dong_master 참조 (아래 클래스).
+    - 같은 `dong_code` 컬럼이 테이블마다 다른 master 가리킴 — 새 ETL 추가 시
+      범위(마포/서울)에 맞춰 FK 대상 결정.
+    """
 
     __tablename__ = "dong_mapping"
 
@@ -321,11 +330,34 @@ class DongMapping(Base):
     trdar_codes = Column(JSONB, comment="상권 코드 목록 (JSON 배열)")
 
 
+class IndustryMaster(Base):
+    """업종 마스터 — 업종 코드 ↔ 업종명 매핑 (101 row, FK 9개 hub).
+
+    DB 실재 (2026-05-04 audit). FK 9개 자식 테이블이 industry_code 참조:
+      district_sales, store_quarterly, golmok_commercial, golmok_sales, golmok_stores,
+      seoul_adstrd_stor, seoul_district_sales, seoul_district_stores,
+      seoul_signgu_selng, seoul_signgu_stor, seoul_training_dataset.
+
+    raw SQL read 사용처 없음 — FK constraint 정합용 마스터.
+    Alembic 마이그레이션 정의 없음 (직접 DDL 또는 외부 시드 스크립트로 생성됨).
+    """
+
+    __tablename__ = "industry_master"
+
+    industry_code = Column(String(20), primary_key=True, comment="업종 코드 (CS100001~CS100010, ALL 등)")
+    industry_name = Column(String(100), nullable=False, comment="업종명 (한글명, 예: 한식음식점)")
+    industry_name_alt = Column(String(100), comment="업종명 대체 표기 (별칭/영문명)")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
 class SeoulDongMaster(Base):
     """서울 행정동 마스터 — 서울 전체 ~425개 행정동 (8자리 코드, ML/분석용)
 
     alembic d1a2b3c4e5f6 (B-3.1)에서 신설. 마이그레이션이 자식 테이블 union으로 적재.
     11개 자식 테이블(seoul_*, district_sales_seoul, dong_subway_access 등)이 FK 참조.
+
+    ⚠️ DongMapping (마포 16동) 과 dong_code 동일 컬럼 — 자식 테이블별 FK 대상 다름.
+    DongMapping 클래스 docstring 참고.
     """
 
     __tablename__ = "seoul_dong_master"
@@ -371,33 +403,6 @@ class DongCentroid(Base):
     n_stores = Column(Integer, comment="평균 계산에 사용된 매장 수")
     created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
     updated_at = Column(DateTime, server_default=func.now(), comment="수정 일시")
-
-
-# ---------------------------------------------------------------------------
-# 시뮬레이션 결과 테이블
-# ---------------------------------------------------------------------------
-
-
-class SimulationResult(Base):
-    """시뮬레이션 결과 — 프랜차이즈 출점 분석 요청 및 결과 저장"""
-
-    __tablename__ = "simulation_result"
-
-    request_id = Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-        comment="요청 고유 ID (UUID v4)",
-    )
-    created_at = Column(
-        Date,
-        server_default=func.now(),
-        comment="요청 생성 일시",
-    )
-    workspace_id = Column(String(100), index=True, comment="워크스페이스 ID (멀티테넌시)")
-    input_params = Column(JSONB, comment="시뮬레이션 입력 파라미터 (JSON)")
-    output_result = Column(JSONB, comment="시뮬레이션 분석 결과 (JSON)")
-    status = Column(String(20), default="pending", comment="처리 상태 (pending/running/done/error)")
 
 
 # ---------------------------------------------------------------------------
@@ -492,6 +497,33 @@ class BizBrandMapping(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         comment="등록 일시",
+    )
+
+
+class MartBrandTerritory(Base):
+    """브랜드 영업지역 데이터 마트 — FTC 정보공개서·가맹계약서 추출 결과 (11,849 row).
+
+    영업지역(territory) 텍스트와 표준 거리(m) 를 brand+corp+yr 단위로 적재.
+    extraction_method/confidence 로 추출 품질 추적.
+    consumer 미배선 (raw SQL 사용 0건) — 향후 territory 침해 분석 로직 배선 예정.
+    Alembic 정의 없음 (외부 ETL 스크립트로 생성).
+    """
+
+    __tablename__ = "mart_brand_territory"
+    __table_args__ = (UniqueConstraint("brand_name", "corp_name", "yr", name="uq_mart_brand_territory_brand_corp_yr"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    brand_name = Column(Text, nullable=False, index=True, comment="브랜드명")
+    corp_name = Column(Text, comment="법인명")
+    yr = Column(Integer, nullable=False, comment="기준 연도")
+    territory_text = Column(Text, comment="영업지역 텍스트 설명 (가맹계약서 발췌)")
+    territory_distance_m = Column(Float, index=True, comment="영업지역 표준 반경 (m)")
+    extraction_method = Column(Text, comment="추출 방법 (not_in_ftc_list / ftc_text / contract_pdf 등)")
+    extraction_confidence = Column(Float, comment="추출 신뢰도 (0~1)")
+    extracted_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="추출 일시",
     )
 
 
@@ -630,18 +662,6 @@ class ManagerUser(Base):
 # ---------------------------------------------------------------------------
 # 외부 수집 / 보조 테이블 (CSV 시드 전용, ORM 사용 최소)
 # ---------------------------------------------------------------------------
-
-
-class BrandLogo(Base):
-    """브랜드 로고 수집 결과"""
-
-    __tablename__ = "brand_logo"
-
-    brand_name = Column(String(100), primary_key=True, comment="브랜드명")
-    domain = Column(String(100), comment="도메인")
-    logo_url = Column(Text, comment="로고 URL")
-    logo_source = Column(String(30), comment="수집 소스")
-    collected_at = Column(DateTime(timezone=True), server_default=func.now(), comment="수집 시각")
 
 
 class CpiDiningQuarterly(Base):
