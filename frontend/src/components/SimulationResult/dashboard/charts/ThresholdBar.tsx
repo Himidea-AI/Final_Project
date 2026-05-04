@@ -87,9 +87,11 @@ export function ThresholdBar({
 
   return (
     <div className="w-full">
-      {/* 막대: 색 segment 들 + 위에 마커 */}
-      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-card">
-        <div className="flex h-full w-full">
+      {/* 막대: 색 segment 들 + 위에 마커.
+          마커가 끝(0%/100%) 가까이일 때 overflow-hidden 으로 잘리지 않게,
+          색 막대만 overflow-hidden 으로 둥글게 자르고 마커는 별도 absolute 레이어. */}
+      <div className="relative h-3.5 w-full">
+        <div className="absolute left-0 right-0 top-1/2 flex h-2.5 -translate-y-1/2 overflow-hidden rounded-full bg-card">
           {segments.map((seg, i) => (
             <div
               key={`${seg.label}-${i}`}
@@ -99,7 +101,7 @@ export function ThresholdBar({
             />
           ))}
         </div>
-        {/* 현재 위치 마커 — 흰 점 + 색 테두리 */}
+        {/* 현재 위치 마커 — 흰 점 + 색 테두리. 막대 위 별도 레이어라 끝에서도 안 잘림. */}
         <div
           className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground bg-card shadow"
           style={{ left: `${markerPct}%` }}
