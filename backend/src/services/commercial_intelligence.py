@@ -269,6 +269,65 @@ def estimate_cannibalization(
     }
 
 
+def analyze_cannibalization_at(
+    lat: float,
+    lon: float,
+    brand_name: str,
+    radius_m: int = 2000,
+    store_type: str = "neighborhood",
+    industry: str = "cafe",
+) -> dict:
+    """좌표 기준 동일 브랜드 자사 잠식 분석.
+
+    공실 스팟 추천 위치 등 정확한 출점 후보지 (lat, lon) 기준으로 500m bin
+    단위 카운트. 행정동 centroid 폴백을 쓰는 :func:`analyze_cannibalization`
+    보다 정밀.
+
+    Returns:
+        ``analyze_cannibalization`` 와 동일 dict + ``ref_lat``, ``ref_lon`` 추가.
+    """
+    if lat is None or lon is None:
+        return {"error": "lat/lon required for analyze_cannibalization_at"}
+    all_same_brand = get_all_mapo_stores_by_brand(brand_name)
+
+    nearby: list[dict] = []
+    for s in all_same_brand:
+        d = haversine_m(lat, lon, s["lat"], s["lon"])
+        if d <= radius_m:
+            nearby.append({**s, "distance_m": round(d, 1)})
+    nearby.sort(key=lambda x: x["distance_m"])
+
+    bins = {"0-300m": 0, "300-500m": 0, "500-1000m": 0, "1000-2000m": 0}
+    for n in nearby:
+        d = n["distance_m"]
+        if d < 300:
+            bins["0-300m"] += 1
+        elif d < 500:
+            bins["300-500m"] += 1
+        elif d < 1000:
+            bins["500-1000m"] += 1
+        elif d < 2000:
+            bins["1000-2000m"] += 1
+
+    impact = estimate_cannibalization(bins, store_type=store_type, industry=industry)
+
+    return {
+        "brand_name": brand_name,
+        "radius_m": radius_m,
+        "ref_lat": lat,
+        "ref_lon": lon,
+        "ref_source": "spot_coord",
+        "same_brand_nearby": len(nearby),
+        "closest_distance_m": nearby[0]["distance_m"] if nearby else None,
+        "distance_bins": bins,
+        "estimated_revenue_impact_pct": impact["total_impact_pct"],
+        "impact_method": impact["method"],
+        "impact_references": impact["references"],
+        "nearby_stores": nearby[:10],
+        "note": "마포 내 매장만 포함. 인접구 매장은 Phase 2 과제.",
+    }
+
+
 def analyze_cannibalization(
     dong_code: str,
     brand_name: str,
@@ -276,8 +335,9 @@ def analyze_cannibalization(
     store_type: str = "neighborhood",
     industry: str = "cafe",
 ) -> dict:
-    """동일 브랜드 자사 잠식 분석 (마포 내 기존 매장 대상).
+    """동일 브랜드 자사 잠식 분석 (행정동 centroid 기준 폴백).
 
+    좌표가 명확한 경우 :func:`analyze_cannibalization_at` 우선 사용 권장.
     TODO: 인접 자치구(서대문/용산) 동일 브랜드 매장까지 포함 고려 (Phase 2).
     """
     centroid = get_dong_centroid(dong_code)
@@ -311,6 +371,9 @@ def analyze_cannibalization(
     return {
         "brand_name": brand_name,
         "radius_m": radius_m,
+        "ref_lat": lat0,
+        "ref_lon": lon0,
+        "ref_source": "dong_centroid",
         "same_brand_nearby": len(nearby),
         "closest_distance_m": nearby[0]["distance_m"] if nearby else None,
         "distance_bins": bins,

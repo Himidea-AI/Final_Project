@@ -65,9 +65,7 @@ def _to_risk_dict(result: Any, idx: int) -> dict:
     if isinstance(result, Exception):
         return _fallback_for_type(type_name, result)
     if not isinstance(result, dict):
-        return _fallback_for_type(
-            type_name, ValueError(f"예상치 못한 반환 타입: {type(result).__name__}")
-        )
+        return _fallback_for_type(type_name, ValueError(f"예상치 못한 반환 타입: {type(result).__name__}"))
     # type 강제 보정 (specialist LLM 이 다른 type 으로 반환할 위험)
     if result.get("type") != type_name:
         result = {**result, "type": type_name}
@@ -120,8 +118,10 @@ async def run_legal_evaluation(
             rule_results.append(_fallback_for_type(type_name, e))
 
     # specialist 4 개 — RAG + LLM (I/O bound) 병렬 실행
+    # franchise_law 영업지역 분석 = 공실 스팟 좌표 (lat/lon) 기준 500m 반경.
+    # 좌표 None 이면 specialist 가 행정동 centroid 폴백 사용.
     specialist_tasks = [
-        specialists.specialist_franchise_law(brand, business_type, district, ftc_data, territory_radius_m),
+        specialists.specialist_franchise_law(brand, business_type, district, ftc_data, lat, lon, territory_radius_m),
         specialists.specialist_fair_trade_law(brand, business_type, district),
         specialists.specialist_building_law(business_type, district),
         specialists.specialist_privacy_law(brand, business_type, ftc_data),
@@ -130,13 +130,9 @@ async def run_legal_evaluation(
     expected_total = len(rule_results) + len(specialist_tasks)
     if expected_total != len(_RULE_ENGINE_ORDER):
         raise ValueError(
-            f"rule + specialist 합계와 _RULE_ENGINE_ORDER 길이 불일치: "
-            f"{expected_total} vs {len(_RULE_ENGINE_ORDER)}"
+            f"rule + specialist 합계와 _RULE_ENGINE_ORDER 길이 불일치: {expected_total} vs {len(_RULE_ENGINE_ORDER)}"
         )
 
     specialist_results = await asyncio.gather(*specialist_tasks, return_exceptions=True)
 
-    return rule_results + [
-        _to_risk_dict(r, idx + len(rule_results))
-        for idx, r in enumerate(specialist_results)
-    ]
+    return rule_results + [_to_risk_dict(r, idx + len(rule_results)) for idx, r in enumerate(specialist_results)]

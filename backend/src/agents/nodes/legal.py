@@ -680,17 +680,113 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # store_area: 룰 엔진(rule_safety_regulation/rule_accessibility 등)에서 면적 의존.
     # AgentState 누락/None 방어 — default 15.0 평.
     store_area = state.get("store_area", 15.0) or 15.0
-    # 출점 후보지 좌표 — rule_school_zone 트리거. 주점이 아니면 미사용.
-    _raw_lat = state.get("lat")
-    _raw_lon = state.get("lon")
+    # 출점 후보지 좌표 — 우선순위:
+    # 1. district_ranking 노드의 vacancy_spots (top 4 매물). territory_radius_m 안 동일 브랜드 가장
+    #    많은 spot = 가맹사업법 제12조의4 침해 worst-case 평가에 사용.
+    # 2. user input state.lat/lon (frontend StoreLocationInput 직접 입력)
+    # 3. None — rule_school_zone 좌표 fallback (행정동 centroid 기반 caution)
+    # 1 worst-case 선정 이유: 4 spot 중 자기잠식 최대 위치를 기준으로 보수적 평가 (사용자에게
+    # 가장 위험한 시나리오를 알려야 함). 다른 spot 결과는 vacancy_spot_analyses 에 누적.
+    lat_val: float | None = None
+    lon_val: float | None = None
+    _territory_radius_user = state.get("territory_radius_m")
     try:
-        lat_val: float | None = float(_raw_lat) if _raw_lat is not None else None
+        _terr_radius_m = int(_territory_radius_user) if _territory_radius_user else None
     except (TypeError, ValueError):
-        lat_val = None
-    try:
-        lon_val: float | None = float(_raw_lon) if _raw_lon is not None else None
-    except (TypeError, ValueError):
-        lon_val = None
+        _terr_radius_m = None
+    vacancy_spot_analyses: list[dict] = []  # 디버그/요약용 — 4 spot 각각 같은 브랜드 카운트
+    _vac_spots = state.get("vacancy_spots") or []
+    if isinstance(_vac_spots, list) and _vac_spots:
+        # 1차: 4 spot 영업구역 카니발리제이션 사전 스캔 (sync, ~ms 수준)
+        try:
+            from src.services.commercial_intelligence import analyze_cannibalization_at
+
+            biz_norm_for_curve = BIZ_NORMALIZE.get((business_type or "").lower(), business_type or "")
+            _industry_for_curve = {
+                "카페": "cafe",
+                "음식점": "restaurant",
+                "주점": "default",
+                "편의점": "convenience",
+            }.get(biz_norm_for_curve, "default")
+            _radius_scan = _terr_radius_m or 500  # 영업구역 미입력 시 500m default
+            _candidate_spots = [
+                s for s in _vac_spots[:4]
+                if isinstance(s, dict) and s.get("lat") is not None and s.get("lon") is not None
+            ]
+            if brand:
+                for _s in _candidate_spots:
+                    try:
+                        _r = await asyncio.to_thread(
+                            analyze_cannibalization_at,
+                            float(_s["lat"]),
+                            float(_s["lon"]),
+                            brand,
+                            max(_radius_scan * 2, 2000),  # bin 분포까지 함께 보려고 2km 또는 2× 영업구역
+                            "neighborhood",
+                            _industry_for_curve,
+                        )
+                    except Exception as _e:
+                        logger.warning(f"[legal_node] vacancy_spot 카니발 스캔 실패 ({_e})")
+                        continue
+                    if not _r or "error" in _r:
+                        continue
+                    nearby = _r.get("nearby_stores", []) or []
+                    same_within = sum(
+                        1 for n in nearby
+                        if isinstance(n, dict) and (n.get("distance_m") or 0) <= _radius_scan
+                    )
+                    vacancy_spot_analyses.append({
+                        "dong_name": _s.get("dong_name"),
+                        "lat": _s.get("lat"),
+                        "lon": _s.get("lon"),
+                        "same_brand_within_territory": same_within,
+                        "same_brand_2000m": _r.get("same_brand_nearby", 0),
+                        "closest_m": _r.get("closest_distance_m"),
+                        "territory_radius_m": _radius_scan,
+                    })
+        except Exception as e:
+            logger.warning(f"[legal_node] vacancy_spot 사전 스캔 전체 실패 ({e})")
+
+        # 2차: worst-case spot 선정 — territory 안 동일 브랜드 가장 많은 spot, 동률이면 closest_m 작은 쪽
+        _spot: dict | None = None
+        if vacancy_spot_analyses:
+            _spot_idx = max(
+                range(len(vacancy_spot_analyses)),
+                key=lambda i: (
+                    vacancy_spot_analyses[i].get("same_brand_within_territory") or 0,
+                    -(vacancy_spot_analyses[i].get("closest_m") or 1e9),
+                ),
+            )
+            _worst = vacancy_spot_analyses[_spot_idx]
+            # 원본 spot dict 매칭
+            for _s in _vac_spots:
+                if isinstance(_s, dict) and _s.get("lat") == _worst["lat"] and _s.get("lon") == _worst["lon"]:
+                    _spot = _s
+                    break
+        # 폴백: 분석 실패 시 winner_district 매칭 spot, 없으면 첫 spot
+        if _spot is None and district:
+            _matched = [s for s in _vac_spots if isinstance(s, dict) and s.get("dong_name") == district]
+            _spot = _matched[0] if _matched else (_vac_spots[0] if _vac_spots else None)
+        if isinstance(_spot, dict):
+            try:
+                _slat = _spot.get("lat")
+                _slon = _spot.get("lon")
+                if _slat is not None and _slon is not None:
+                    lat_val = float(_slat)
+                    lon_val = float(_slon)
+            except (TypeError, ValueError):
+                pass
+    if lat_val is None or lon_val is None:
+        _raw_lat = state.get("lat")
+        _raw_lon = state.get("lon")
+        try:
+            lat_val = float(_raw_lat) if _raw_lat is not None else None
+        except (TypeError, ValueError):
+            lat_val = None
+        try:
+            lon_val = float(_raw_lon) if _raw_lon is not None else None
+        except (TypeError, ValueError):
+            lon_val = None
 
     # 캐시 키 정규화 — brand/district/business_type 모두 strip+lowercase
     # + store_area 는 소수 1자리 반올림으로 동일 키 보장.
@@ -1001,6 +1097,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
     analysis = dict(state.get("analysis_results") or {})
     analysis["legal_risks"] = risks
     analysis["overall_legal_risk"] = overall_level
+    # 4 vacancy spot 카니발리제이션 사전 스캔 결과 — franchise_law 보완 정보로 함께 노출.
+    if vacancy_spot_analyses:
+        analysis["vacancy_spot_cannibalization"] = vacancy_spot_analyses
 
     # Redis 캐시 저장 — RAG 실패 시 빈 articles가 캐시되는 것을 방지
     # articles가 있는 리스크가 3개 미만이면 캐시하지 않음 (재실행 시 정상 결과 기대)

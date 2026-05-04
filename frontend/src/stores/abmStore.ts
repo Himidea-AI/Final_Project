@@ -64,6 +64,16 @@ export interface AbmFocusSpot {
   label?: string;
 }
 
+/** 결과 history entry — 누적 시뮬 결과. AbmFloatingWidget 우선순위 표시 + history 패널용. */
+export interface AbmHistoryEntry {
+  id: string;
+  savedAt: number;
+  focusSpot: AbmFocusSpot | null;
+  params: AbmRequestPayload | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result: any;
+}
+
 interface AbmState {
   status: AbmStatus;
   jobId: string | null;
@@ -75,6 +85,7 @@ interface AbmState {
   progress: number;
   stage: string;
   startedAt: number | null;
+  history: AbmHistoryEntry[];
 
   _abortController: AbortController | null;
   _pollTimer: ReturnType<typeof setInterval> | null;
@@ -83,6 +94,8 @@ interface AbmState {
   cancelAbm: () => void;
   dismissResult: () => void;
   setFocusSpot: (spot: AbmFocusSpot | null) => void;
+  loadHistory: (id: string) => void;
+  clearHistory: () => void;
   /** persist 복원 후 재진입 시 polling 재개. App mount 에서 호출. */
   resumePollingIfNeeded: () => void;
   reset: () => void;
@@ -98,6 +111,8 @@ const INITIAL_STATE: Omit<
   | 'cancelAbm'
   | 'dismissResult'
   | 'setFocusSpot'
+  | 'loadHistory'
+  | 'clearHistory'
   | 'resumePollingIfNeeded'
   | 'reset'
   | '_pollStatus'
@@ -112,6 +127,7 @@ const INITIAL_STATE: Omit<
   progress: 0,
   stage: '',
   startedAt: null,
+  history: [],
   _abortController: null,
   _pollTimer: null,
 };
@@ -406,32 +422,61 @@ export const useAbmStore = create<AbmState>()(
         }
 
         if (_pollTimer) clearInterval(_pollTimer);
+        // history 에 push — 시뮬 결과 누적 (max 10).
+        const { history, focusSpot, params } = get();
+        const entry: AbmHistoryEntry = {
+          id: `h_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          savedAt: Date.now(),
+          focusSpot,
+          params,
+          result: data,
+        };
+        const newHistory = [entry, ...history].slice(0, 10);
         set({
           status: 'done',
           result: data,
           progress: 100,
           stage: 'COMPLETE',
+          history: newHistory,
           _abortController: null,
           _pollTimer: null,
         });
       },
 
       cancelAbm: () => {
-        const { _abortController, _pollTimer } = get();
+        const { _abortController, _pollTimer, history } = get();
         _abortController?.abort();
         if (_pollTimer) clearInterval(_pollTimer);
         set({
           ...INITIAL_STATE,
+          history, // history 유지
         });
       },
 
       dismissResult: () => {
-        const { status } = get();
+        const { status, history } = get();
         if (status !== 'done' && status !== 'error') return;
-        set({ ...INITIAL_STATE });
+        set({ ...INITIAL_STATE, history });
       },
 
       setFocusSpot: (spot) => set({ focusSpot: spot }),
+
+      loadHistory: (id) => {
+        const { history } = get();
+        const entry = history.find((e) => e.id === id);
+        if (!entry) return;
+        set({
+          status: 'done',
+          result: entry.result,
+          focusSpot: entry.focusSpot,
+          params: entry.params,
+          progress: 100,
+          stage: 'COMPLETE',
+          error: null,
+        });
+      },
+
+      clearHistory: () => set({ history: [] }),
 
       resumePollingIfNeeded: () => {
         const { status, jobId, _pollTimer, _abortController } = get();

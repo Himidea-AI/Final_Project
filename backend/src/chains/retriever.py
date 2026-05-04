@@ -1024,9 +1024,13 @@ class LegalDocumentRetriever:
             sorted_keys = sorted(combined_scores, key=lambda k: combined_scores[k], reverse=True)
             merged = [combined_docs[k] for k in sorted_keys if k in combined_docs]
 
-        # 5차: Reranker (비활성)
+        # 5차: Reranker — settings.rerank_provider="openai" (default) → gpt-4.1-mini list-wise
         if self._RERANK_ENABLED and len(merged) > 1:
-            merged = self._rerank(query, merged[:30], top_k)
+            rerank_provider = getattr(_settings, "rerank_provider", "openai")
+            if rerank_provider == "openai":
+                merged = await self._rerank_openai(query, merged[:30], top_k)
+            else:
+                merged = self._rerank(query, merged[:30], top_k)
 
         # 6차: 오답 방지 필터 (비활성 — 페널티가 정답까지 밀어내는 역효과 확인)
         # merged = self._apply_failure_filter(merged, source_filter)
@@ -1282,6 +1286,83 @@ class LegalDocumentRetriever:
                     filtered.append((d, 0.0))
 
         return [d for d, s in filtered[:top_k]]
+
+    async def _rerank_openai(self, query: str, docs: list[dict], top_k: int) -> list[dict]:
+        """OpenAI gpt-4.1-mini list-wise rerank.
+
+        한 호출로 30개 문서 ranking — 비용 효율적.
+        반환: 모델이 가장 관련 높다고 판단한 순서대로 top_k 개.
+        실패 시 원본 순서 유지.
+        """
+        if not docs:
+            return docs
+
+        from src.config.settings import settings
+
+        oai_key = settings.openai_api_key or ""
+        if not oai_key.startswith("sk-"):
+            logger.warning("[Reranker-openai] OPENAI_API_KEY 없음 - 원본 순서 유지")
+            return docs[:top_k]
+
+        # 프롬프트 — 각 문서 200자 발췌 + index
+        doc_lines: list[str] = []
+        for i, d in enumerate(docs):
+            preview = (d.get("content") or "")[:200].replace("\n", " ")
+            meta = d.get("metadata", {})
+            src = meta.get("source", "")
+            art = meta.get("article", "")
+            doc_lines.append(f"[{i}] {src} {art}: {preview}")
+        docs_block = "\n".join(doc_lines)
+
+        prompt = (
+            "한국 법률 검색 결과 reranking. 사용자 질문에 직접 관련된 조문을 가장 관련 높은 순으로 다시 정렬.\n\n"
+            f"질문: {query}\n\n"
+            f"검색 결과 ({len(docs)}개):\n{docs_block}\n\n"
+            f"가장 관련 높은 {min(top_k, len(docs))}개의 인덱스를 콤마 구분으로만 출력 (예: 3,7,1,12,5).\n"
+            "다른 텍스트 없이 인덱스 리스트만."
+        )
+
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(api_key=oai_key)
+            resp = await client.chat.completions.create(
+                model=getattr(settings, "rerank_openai_model", "gpt-4.1-mini"),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+                temperature=0,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+        except Exception as e:
+            logger.warning(f"[Reranker-openai] 호출 실패 ({e}) - 원본 순서 유지")
+            return docs[:top_k]
+
+        # 인덱스 파싱
+        import re
+
+        indices: list[int] = []
+        seen: set[int] = set()
+        for tok in re.findall(r"\d+", text):
+            try:
+                idx = int(tok)
+                if 0 <= idx < len(docs) and idx not in seen:
+                    indices.append(idx)
+                    seen.add(idx)
+            except ValueError:
+                continue
+            if len(indices) >= top_k:
+                break
+
+        if not indices:
+            logger.warning(f"[Reranker-openai] 응답 파싱 실패 ({text[:80]!r}) - 원본 순서 유지")
+            return docs[:top_k]
+
+        # 누락된 docs 보충 (top_k 미달 시)
+        for i in range(len(docs)):
+            if i not in seen and len(indices) < top_k:
+                indices.append(i)
+
+        return [docs[i] for i in indices[:top_k]]
 
     async def search_precedents(
         self,
