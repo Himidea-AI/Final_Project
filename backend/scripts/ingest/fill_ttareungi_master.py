@@ -86,11 +86,11 @@ def _build_map(api_rows: list[dict]) -> dict[str, tuple[float, float, str | None
             lon = float(row["STA_LONG"])
         except (ValueError, KeyError, TypeError):
             continue
-        sig = SIGUNGU_CODE.get((row.get("STA_LOC") or "").strip())
+        sig = SIGUNGU_CODE.get(str(row.get("STA_LOC") or "").strip())
         val = (lat, lon, sig)
-        rent_no = (row.get("RENT_NO") or "").strip()
-        rent_id = (row.get("RENT_ID") or "").strip()
-        rent_id_nm = (row.get("RENT_ID_NM") or "").strip()
+        rent_no = str(row.get("RENT_NO") or "").strip()
+        rent_id = str(row.get("RENT_ID") or "").strip()
+        rent_id_nm = str(row.get("RENT_ID_NM") or "").strip()
         for k in [rent_no, rent_no.lstrip("0"), rent_no.zfill(5), rent_id]:
             if k:
                 out[k] = val
@@ -156,8 +156,10 @@ def main() -> None:
         ).scalar()
     print("\n=== AFTER ===")
     print(f"  total {total}")
-    print(f"  lat NULL: {null_lat} ({null_lat / total * 100:.1f}%)")
-    print(f"  sigungu_code NULL: {null_sig} ({null_sig / total * 100:.1f}%)")
+    pct_lat = (null_lat / total * 100) if total else 0
+    pct_sig = (null_sig / total * 100) if total else 0
+    print(f"  lat NULL: {null_lat} ({pct_lat:.1f}%)")
+    print(f"  sigungu_code NULL: {null_sig} ({pct_sig:.1f}%)")
 
 
 if __name__ == "__main__":
