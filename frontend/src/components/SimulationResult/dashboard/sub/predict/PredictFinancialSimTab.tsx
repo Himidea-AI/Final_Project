@@ -4,6 +4,7 @@
  * BEP 누적이익 + 과거 12개월 폐업률 + LightGBM/TCN 폐업위험도 + 생존률 KPI.
  */
 
+import { useState } from 'react';
 import { Activity, History, ShieldAlert, TrendingUp } from 'lucide-react';
 import type { ClosureRate, ClosureRisk, SimulationOutput } from '../../../../../types';
 import { formatKrw, formatPct } from '../../utils/formatters';
@@ -12,6 +13,10 @@ import { ClosureRatePanel } from '../../charts/ClosureRatePanel';
 import { ClosureRiskHeatmap } from '../../charts/ClosureRiskHeatmap';
 import { ClosureRiskPanel } from '../../charts/ClosureRiskPanel';
 import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
+
+// 동 chip 활성 시 텍스트 색 — 1~3위는 어두운 배경 위 흰 글씨,
+// 4번째(sunshine-yellow) 만 밝은 배경이라 검정. QuarterlyStatStrip 과 동일 정책.
+const ACTIVE_TEXT_BY_INDEX = ['#ffffff', '#ffffff', '#ffffff', 'var(--color-text-black)'] as const;
 
 interface Props {
   simResult: SimulationOutput;
@@ -29,53 +34,51 @@ type BepDict = {
 };
 
 export function PredictFinancialSimTab({ simResult }: Props) {
-  const ps = simResult.final_report?.profit_simulation ?? null;
-
   // M6 (2026-04-29): district_predictions 기반 멀티 동 시리즈.
   // is_excluded_combo 동은 제외. 비어있으면 단일 동(quarterly_projection) fallback.
   const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
 
-  // 2026-05-04 분기 단위 통일 + ML 실측 우선.
-  // 데이터 소스 우선순위:
-  //   (1) district_predictions[winner].bep.quarterly_simulation[0]  ← ML 실측 (분기 단위)
-  //   (2) LLM final_report.profit_simulation.monthly_*  × 3         ← LLM 월값 환산 (hallucination 가능)
-  //   (3) simResult.quarterly_projection[0].revenue                  ← TCN 분기 매출만
-  const winnerPred =
-    dpredicts.find((p) => p.district === simResult.winner_district) ?? dpredicts[0];
-  const winnerDistrict = winnerPred?.district ?? simResult.winner_district ?? '단일';
-  const bepObj = (winnerPred?.bep as BepDict | null | undefined) ?? null;
-  const firstSimQ = bepObj?.quarterly_simulation?.[0];
-  const firstProj = simResult.quarterly_projection?.[0];
+  // 2026-05-04 패널 KPI 4분기 평균으로 전환 + LLM/랭킹 fallback 제거.
+  // 데이터 소스: district_predictions[selected].bep.quarterly_simulation 의 첫 4분기 평균.
+  //   - 1년 사이클 평균이라 계절성에 휘둘리지 않음
+  //   - 매출-운영비=영업이익 / 마진=영업이익/매출 등식이 같은 4개 row 에서 산출되어 자동 성립
+  //   - top-level bep_quarters 와 동일 base (quarterly_per_store ≈ 4분기 평균)
+  // ML 실측 없으면 솔직하게 '—' 표시. LLM(final_report.profit_simulation) 의존 제거 —
+  // synthesis.py 가 winner 1동 기준 종합 서술이라 chip 클릭에 반응 못 했음.
+  const defaultDistrict =
+    dpredicts.find((p) => p.district === simResult.winner_district)?.district ??
+    dpredicts[0]?.district ??
+    simResult.winner_district ??
+    '단일';
+  const [selectedDistrict, setSelectedDistrict] = useState<string>(defaultDistrict);
+  const selectedPred =
+    dpredicts.find((p) => p.district === selectedDistrict) ??
+    dpredicts.find((p) => p.district === simResult.winner_district) ??
+    dpredicts[0];
+  const currentDistrict = selectedPred?.district ?? defaultDistrict;
+  const bepObj = (selectedPred?.bep as BepDict | null | undefined) ?? null;
 
-  // 분기 매출 / 운영비 / 영업이익 — ML 실측 → LLM ×3 → TCN projection 순서
-  const quarterlyRev =
-    firstSimQ?.revenue ??
-    (ps?.monthly_revenue != null ? ps.monthly_revenue * 3 : null) ??
-    firstProj?.revenue ??
-    null;
-  const quarterlyCost =
-    firstSimQ?.quarterly_total_cost ?? (ps?.monthly_cost != null ? ps.monthly_cost * 3 : null);
-  const quarterlyProfit =
-    firstSimQ?.quarterly_profit ?? (ps?.net_profit != null ? ps.net_profit * 3 : null);
-  // 마진 — ML 실측에서 직접 산출하면 가장 정확. fallback LLM margin_rate.
+  // 첫 4분기(=1년 사이클) 평균 산출. quarterly_simulation 은 백엔드
+  // bep.simulate_quarterly 결과로 N분기(BEP 도달까지) 들어옴. 첫 4개만 슬라이스.
+  const sim4 = (bepObj?.quarterly_simulation ?? []).slice(0, 4);
+  const avg =
+    sim4.length > 0
+      ? {
+          revenue: sim4.reduce((s, r) => s + (r.revenue ?? 0), 0) / sim4.length,
+          cost: sim4.reduce((s, r) => s + (r.quarterly_total_cost ?? 0), 0) / sim4.length,
+          profit: sim4.reduce((s, r) => s + (r.quarterly_profit ?? 0), 0) / sim4.length,
+        }
+      : null;
+
+  const quarterlyRev = avg?.revenue ?? null;
+  const quarterlyCost = avg?.cost ?? null;
+  const quarterlyProfit = avg?.profit ?? null;
   const margin =
-    firstSimQ?.revenue != null && firstSimQ.revenue > 0 && firstSimQ?.quarterly_profit != null
-      ? firstSimQ.quarterly_profit / firstSimQ.revenue
-      : (ps?.margin_rate ?? null);
-
-  // 데이터 소스 라벨 — UI에 출처 명시 (사용자가 mock/LLM/ML 구분 가능)
-  const dataSource: 'ml' | 'llm' | 'none' =
-    firstSimQ != null ? 'ml' : ps?.monthly_revenue != null ? 'llm' : 'none';
-
-  // BEP 분기 — ML 실측 우선
-  const winnerRanking = simResult.district_rankings?.find(
-    (r) => r.district === simResult.winner_district,
-  );
-  const bepQuarters =
-    bepObj?.bep_quarters ??
-    winnerRanking?.bep_quarters ??
-    ps?.bep_quarters ??
-    (ps?.bep_months != null ? Math.round(ps.bep_months / 3) : null);
+    quarterlyRev != null && quarterlyRev > 0 && quarterlyProfit != null
+      ? quarterlyProfit / quarterlyRev
+      : null;
+  const dataSource: 'ml' | 'none' = avg != null ? 'ml' : 'none';
+  const bepQuarters = bepObj?.bep_quarters ?? null;
   const bepSeries =
     dpredicts.length > 0
       ? dpredicts.map((p) => ({
@@ -110,8 +113,10 @@ export function PredictFinancialSimTab({ simResult }: Props) {
             quarterlyProfit={quarterlyProfit}
             margin={margin}
             bepQuarters={bepQuarters}
-            district={winnerDistrict}
+            district={currentDistrict}
             dataSource={dataSource}
+            availableDistricts={dpredicts.map((p) => p.district)}
+            onSelectDistrict={setSelectedDistrict}
           />
         </div>
       ) : (
@@ -121,8 +126,10 @@ export function PredictFinancialSimTab({ simResult }: Props) {
           quarterlyProfit={quarterlyProfit}
           margin={margin}
           bepQuarters={bepQuarters}
-          district={winnerDistrict}
+          district={currentDistrict}
           dataSource={dataSource}
+          availableDistricts={dpredicts.map((p) => p.district)}
+          onSelectDistrict={setSelectedDistrict}
         />
       )}
 
@@ -178,7 +185,9 @@ interface ProfitPanelProps {
   margin: number | null | undefined;
   bepQuarters: number | null | undefined;
   district: string;
-  dataSource: 'ml' | 'llm' | 'none';
+  dataSource: 'ml' | 'none';
+  availableDistricts?: string[];
+  onSelectDistrict?: (d: string) => void;
 }
 
 function ProfitSimulationPanelFull({
@@ -189,18 +198,18 @@ function ProfitSimulationPanelFull({
   bepQuarters,
   district,
   dataSource,
+  availableDistricts,
+  onSelectDistrict,
 }: ProfitPanelProps) {
   const rows = [
     { label: '분기 추정 매출', val: quarterlyRev, accent: 'text-foreground' },
     { label: '분기 운영비 (총계)', val: quarterlyCost, accent: 'text-muted-foreground' },
   ];
-  // 데이터 출처 배지 — 사용자에게 ML 실측인지 LLM 추정인지 명시
+  // 데이터 출처 배지 — ML 실측 only. LLM fallback 제거(2026-05-04) 로 'llm' 케이스 없음.
   const sourceBadge =
     dataSource === 'ml'
       ? { label: 'ML 실측', cls: 'border-success/30 bg-success/10 text-success' }
-      : dataSource === 'llm'
-        ? { label: 'LLM 추정', cls: 'border-warning/30 bg-warning/10 text-warning' }
-        : { label: '데이터 없음', cls: 'border-border bg-secondary text-muted-foreground' };
+      : { label: '데이터 없음', cls: 'border-border bg-secondary text-muted-foreground' };
   return (
     <div className="rounded-3xl border border-border bg-card p-8">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
@@ -230,6 +239,38 @@ function ProfitSimulationPanelFull({
           )}
         </div>
       </div>
+
+      {/* 동 선택 chip — 4동 비교 시뮬에서 다른 동의 수익성 보고 싶을 때 클릭. 단일 동이면 미노출.
+          활성 chip 색은 BEP 누적수익 그래프/QuarterlyStatStrip 과 동일 SERIES_COLORS[idx]
+          를 inline style 로 주입. dpredicts 배열 순서를 그대로 쓰므로 그래프 라인 색과 자동 매칭. */}
+      {availableDistricts && availableDistricts.length > 1 && onSelectDistrict && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {availableDistricts.map((d, idx) => {
+            const active = d === district;
+            const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+            const textColor = ACTIVE_TEXT_BY_INDEX[idx % ACTIVE_TEXT_BY_INDEX.length];
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => onSelectDistrict(d)}
+                style={
+                  active
+                    ? { backgroundColor: color, borderColor: color, color: textColor }
+                    : undefined
+                }
+                className={`rounded-full border px-3 py-1 text-[0.6875rem] font-bold tabular-nums transition ${
+                  active
+                    ? ''
+                    : 'border-border bg-secondary text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                }`}
+              >
+                {d}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {bepQuarters != null && (
         <p className="mb-4 text-[0.625rem] text-muted-foreground leading-relaxed">
