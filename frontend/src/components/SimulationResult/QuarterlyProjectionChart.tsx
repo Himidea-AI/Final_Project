@@ -5,7 +5,7 @@
  * - 각 동별 별도 Line (indigo / cyan / amber / rose)
  * - winner 동: strokeWidth 3, dot r 5 강조 (winnerDistrict prop)
  * - 신뢰구간(Area): 첫 번째 동(series[0])의 ci_95/80 또는 confidence_lower/upper 만 음영
- * - BEP 도달 시점(ReferenceLine): 첫 번째 동(series[0])의 cumulative_profit >= 0 첫 분기
+ * - BEP 도달 시점(ReferenceLine): winner 동의 cumulative_profit > 0 첫 분기 (강조 라인과 일치)
  * - 범례: 동 이름
  *
  * Round 2 / B4 (2026-04-29): 단일 동 → 다중 동 시리즈 전환.
@@ -125,8 +125,11 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
     return row;
   });
 
-  // BEP 도달 시점: 첫 번째 동(series[0]) 기준
-  const bepQuarter = ciSourceSeries.data.find((d) => d.cumulative_profit >= 0)?.quarter ?? null;
+  // BEP 도달 시점: winner 동 기준 (강조 라인과 일치).
+  // cumulative_profit > 0 strict 비교로 backend default 0 폴백 매칭 방지.
+  const winnerSourceSeries =
+    trimmedSeries.find((s) => s.district === effectiveWinner) ?? ciSourceSeries;
+  const bepQuarter = winnerSourceSeries.data.find((d) => d.cumulative_profit > 0)?.quarter ?? null;
 
   // ─── Y축 auto-zoom 계산 ───
   // 모든 동의 매출 + CI 영역 값을 모아 min/max 산출. zoom ON 시 [min - 18%, max + 18%].
@@ -156,8 +159,10 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
     : [0, dataMax * 1.1];
 
   // ─── winner 동 4분기 평균 (reference line 용) ───
-  const winnerSeries = trimmedSeries.find((s) => s.district === effectiveWinner) ?? ciSourceSeries;
-  const winnerVals = winnerSeries.data.map((d) => d.revenue).filter((v): v is number => v != null);
+  // winnerSourceSeries 재사용 (BEP 라인과 동일 기준).
+  const winnerVals = winnerSourceSeries.data
+    .map((d) => d.revenue)
+    .filter((v): v is number => v != null);
   const winnerAvg =
     winnerVals.length > 0 ? winnerVals.reduce((a, b) => a + b, 0) / winnerVals.length : null;
 
@@ -255,6 +260,24 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
           <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning">
             <span className="h-1 w-1 rounded-full bg-warning" />
             일부 분기 mock
+          </span>
+        )}
+        {bepQuarter === null && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-muted-foreground/30 bg-muted/30 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-muted-foreground"
+            title="winner 동의 누적이익이 시뮬 기간 내 양수 도달 못 함"
+          >
+            <span className="h-1 w-1 rounded-full bg-muted-foreground" />
+            BEP 미도달
+          </span>
+        )}
+        {maxLen > QUARTER_CAP && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning"
+            title={`실제 시뮬은 ${maxLen}분기 — 첫 ${QUARTER_CAP}분기만 표시`}
+          >
+            <span className="h-1 w-1 rounded-full bg-warning" />
+            {QUARTER_CAP}+분기 표시 생략
           </span>
         )}
       </div>
@@ -447,7 +470,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
             );
           })}
 
-          {/* BEP 도달 시점 — 첫 번째 동(series[0]) 기준, null이면 미렌더링 */}
+          {/* BEP 도달 시점 — winner 동 기준 (강조 라인과 일치). null이면 미렌더링 + 우상단 배지 */}
           {bepQuarter !== null && (
             <ReferenceLine
               x={bepQuarter}
