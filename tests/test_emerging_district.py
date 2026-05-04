@@ -1,6 +1,6 @@
 """emerging_district 모델 테스트.
 
-per-quarter consecutive 메트릭 정합성 검증.
+per-quarter consecutive 메트릭 + 5 tier fallback summary 정합성 검증.
 """
 
 from __future__ import annotations
@@ -136,3 +136,85 @@ def test_consecutive_quarter_threshold_fallback():
     # threshold=0.5 fallback 으로 동일 결과 기대
     count = _count_consecutive_anomalies(df, model, meta, scaler)
     assert count == 1
+
+
+# ---------------------------------------------------------------------------
+# 5 tier fallback summary 한국어 정비 검증
+# ---------------------------------------------------------------------------
+
+
+def test_summary_change_ix_korean(monkeypatch):
+    """change_ix tier — 'LH' 코드 미노출, 한국어 신호명 사용."""
+    from models.emerging_district import predict_fallback as pf
+
+    monkeypatch.setattr(pf, "_lookup_change_ix", lambda _d: "LH")
+    result = pf.predict_emerging_4tier("11440680", "CS100002")
+    assert result["tier"] == "change_ix"
+    assert "LH" not in result["summary"]
+    assert "11440680" not in result["summary"]
+    assert "CS100002" not in result["summary"]
+    assert "서울시 상권변화지표" in result["summary"]
+    assert "신흥 상권" in result["summary"]
+
+
+def test_summary_classifier_korean(monkeypatch):
+    """classifier tier — F1 노출 제거, '신뢰도' 한국어 사용."""
+    from models.emerging_district import predict_fallback as pf
+
+    monkeypatch.setattr(pf, "_lookup_change_ix", lambda _d: None)
+    monkeypatch.setattr(pf, "_classifier_predict", lambda _d, _i: ("LH", 0.87))
+    result = pf.predict_emerging_4tier("11440680", "CS100002")
+    assert result["tier"] == "classifier"
+    assert "F1" not in result["summary"]
+    assert "stage" not in result["summary"]
+    assert "AI 모델 판정" in result["summary"]
+    assert "신뢰도 87%" in result["summary"]
+    assert "신흥 상권" in result["summary"]
+
+
+def test_summary_b1_trend_korean(monkeypatch):
+    """b1_trend tier — '20-30대 전입' 표현 정비."""
+    from models.emerging_district import predict_fallback as pf
+
+    monkeypatch.setattr(pf, "_lookup_change_ix", lambda _d: None)
+    monkeypatch.setattr(pf, "_classifier_predict", lambda _d, _i: None)
+    monkeypatch.setattr(
+        pf,
+        "_lookup_b1_trend",
+        lambda _d: {"subway_growth": 0.05, "migration_2030_rate": 0.02},
+    )
+    result = pf.predict_emerging_4tier("11440680", "CS100002")
+    assert result["tier"] == "b1_trend"
+    assert "B1" not in result["summary"]
+    assert "20·30대 유입" in result["summary"]
+    assert "지하철" in result["summary"]
+
+
+def test_summary_slope_korean(monkeypatch):
+    """slope tier — '매출 상승 / 점포수 유지' 동사화."""
+    from models.emerging_district import predict_fallback as pf
+
+    monkeypatch.setattr(pf, "_lookup_change_ix", lambda _d: None)
+    monkeypatch.setattr(pf, "_classifier_predict", lambda _d, _i: None)
+    monkeypatch.setattr(pf, "_lookup_b1_trend", lambda _d: None)
+    monkeypatch.setattr(pf, "_lookup_slope", lambda _d, _i: {"sales_slope": 1.2, "store_slope": 0.0})
+    result = pf.predict_emerging_4tier("11440680", "CS100002")
+    assert result["tier"] == "slope"
+    assert "slope" not in result["summary"]
+    assert "매출 상승" in result["summary"]
+    assert "점포수 유지" in result["summary"]
+
+
+def test_summary_none_korean(monkeypatch):
+    """none tier — '데이터 검증 중' 표현."""
+    from models.emerging_district import predict_fallback as pf
+
+    monkeypatch.setattr(pf, "_lookup_change_ix", lambda _d: None)
+    monkeypatch.setattr(pf, "_classifier_predict", lambda _d, _i: None)
+    monkeypatch.setattr(pf, "_lookup_b1_trend", lambda _d: None)
+    monkeypatch.setattr(pf, "_lookup_slope", lambda _d, _i: None)
+    result = pf.predict_emerging_4tier("11440680", "CS100002")
+    assert result["tier"] == "none"
+    assert "normal 가정" not in result["summary"]
+    assert "데이터 검증 중" in result["summary"]
+    assert "안정 상권" in result["summary"]
