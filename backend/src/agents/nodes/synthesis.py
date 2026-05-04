@@ -69,10 +69,13 @@ async def synthesis_node(state: AgentState) -> dict:
     # v9: BEP 분기 단위 통일 + TCN 키 오타 fix (quarterly_per_store/bep_quarters) — v8 무효화
     # v10: 종합 톤 — 법률 리스크 과부각 차단, 다른 에이전트 우위 반영 — v9 무효화
     # v11: '리스크 및 대응' 섹션 — caution/danger 만 LLM 노출 + 블록 외 항목 hallucination 차단 — v10 무효화
+    # v12: confidence 동적 산출 시도 → 롤백 (0.85 고정 유지). 잠시 v11 캐시에 동적 값
+    #      섞여 들어갔을 가능성 있어 안전하게 무효화. 사용자 의도: LLM 에이전트들의
+    #      낮은 confidence 가 synthesis 까지 끌고 내려가 신뢰도 위협하는 회귀 차단.
     _winner_for_cache = state.get("winner_district", target_district)
     _raw_td = state.get("target_districts") or [target_district]
     _td_key = ",".join(sorted(set(d for d in _raw_td if d)))
-    cache_key = f"v11:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    cache_key = f"v12:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
