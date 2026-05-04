@@ -392,6 +392,8 @@ async def _collect_same_brand_locations(
                 "lng": lon_v,
                 "dong_name": s.get("dong_name", ""),
                 "address": s.get("address", ""),
+                "place_url": s.get("place_url"),
+                "phone": s.get("phone"),
             }
         )
     print(f"[same_brand] 4동({','.join(districts)}) 안 자사 매장 {len(results)}개")

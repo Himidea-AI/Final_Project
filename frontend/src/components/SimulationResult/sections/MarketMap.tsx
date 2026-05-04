@@ -27,6 +27,8 @@ export interface SameBrandLocation {
   lng: number;
   dong_name?: string;
   address?: string;
+  place_url?: string | null;
+  phone?: string | null;
 }
 
 export interface MarketMapProps {
@@ -439,16 +441,28 @@ export function MarketMap({
       logo.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (infoWindowRef.current) infoWindowRef.current.close();
+        const brandName = s.brand_name || '자사매장';
+        // place_url 있으면 매장명을 카카오맵 link 로. 없으면 plain text.
+        const nameHtml = s.place_url
+          ? `<a href="${escapeHtml(s.place_url)}" target="_blank" rel="noopener noreferrer" style="font-size:13px;font-weight:600;color:#fbbf24;text-decoration:underline;">${escapeHtml(brandName)}</a>`
+          : `<span style="font-size:13px;font-weight:600;">${escapeHtml(brandName)}</span>`;
+        const placeNameHtml = s.place_url
+          ? `<a href="${escapeHtml(s.place_url)}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;">${escapeHtml(s.place_name)}</a>`
+          : escapeHtml(s.place_name);
+        const phoneHtml = s.phone
+          ? `<div>전화: <a href="tel:${escapeHtml(s.phone)}" style="color:#60a5fa;text-decoration:none;">${escapeHtml(s.phone)}</a></div>`
+          : '';
         const iw = new maps.InfoWindow({
           position: pos,
           content: `<div style="font-family:Pretendard,ui-sans-serif,system-ui;min-width:180px;padding:10px 12px;background:rgba(24,24,27,0.95);color:#e4e4e7;border:1px solid #fbbf24;border-radius:6px;backdrop-filter:blur(8px);">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
               <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:#fbbf24;"></span>
-              <span style="font-size:13px;font-weight:600;">${s.brand_name || '자사매장'}</span>
+              ${nameHtml}
             </div>
             <div style="font-size:11px;color:#a1a1aa;line-height:1.6;">
-              <div>${s.place_name}</div>
-              <div>${s.dong_name || ''} ${s.address || ''}</div>
+              <div>${placeNameHtml}</div>
+              <div>${escapeHtml(s.dong_name || '')} ${escapeHtml(s.address || '')}</div>
+              ${phoneHtml}
             </div>
           </div>`,
           removable: true,

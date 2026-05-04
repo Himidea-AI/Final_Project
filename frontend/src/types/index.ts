@@ -431,6 +431,8 @@ export interface SimulationOutput {
     lng: number;
     dong_name?: string;
     address?: string;
+    place_url?: string;
+    phone?: string;
   }>;
   // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
   customer_segment?: CustomerSegment | null;
