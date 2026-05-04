@@ -21,6 +21,14 @@
     - store_quarterly.industry_name 과 kakao_store.category 가 10종 모두 동일.
     - 마포구 표본: 한식 946 / 중식 130 / 일식 268 / 양식 240 / 제과 185 /
       패스트푸드 65 / 치킨 137 / 분식 151 / 호프 250 / 커피 1549 (kakao_store).
+    - store_quarterly: CS100001~CS100010 만 존재.
+    - ftc_brand_franchise.indutyMlsfcNm 실제 표기 (DB top 매칭):
+      한식·중식·일식·치킨·분식·주점·커피·패스트푸드는 단일 한글, 양식→"서양식",
+      제과→"제과제빵", 커피의 비커피음료→"음료 (커피 외)" 표기.
+
+비포함:
+    - 편의점 (CS200009): 시뮬레이션 입력 옵션 외. store_quarterly 미존재.
+      kakao_store(415)/ftc_brand_franchise(103) 데이터는 있으나 시뮬 흐름 미사용.
 """
 
 from __future__ import annotations
@@ -32,7 +40,7 @@ class BusinessTypeEntry(TypedDict):
     """업종 한 건의 모든 매핑 키."""
 
     cs_code: str
-    """store_quarterly.industry_code (CS100xxx)"""
+    """store_quarterly.industry_code (CS100001~CS100010)"""
 
     db_industry_name: str
     """store_quarterly.industry_name = kakao_store.category (10종 일치 검증됨)"""
@@ -96,7 +104,9 @@ BUSINESS_TYPE_MAPPING: dict[str, BusinessTypeEntry] = {
         "db_industry_name": "양식음식점",
         "kakao_category": "양식음식점",
         "kakao_keyword": "양식",
-        "ftc_keywords": ["양식", "피자", "파스타", "스테이크"],
+        # DB 실측: ftc_brand_franchise.indutyMlsfcNm 은 "서양식" 표기 (838건).
+        # "양식" 은 입력 호환용. "피자" 는 _ALIASES 와 충돌 가능 — 정책 결정 후 조정 (TODO).
+        "ftc_keywords": ["서양식", "양식", "피자", "파스타", "스테이크"],
         "naver_industry": "양식",
         "label_kr": "양식음식점",
         "label_en": "western",
@@ -106,7 +116,8 @@ BUSINESS_TYPE_MAPPING: dict[str, BusinessTypeEntry] = {
         "db_industry_name": "제과점",
         "kakao_category": "제과점",
         "kakao_keyword": "베이커리",
-        "ftc_keywords": ["제과", "베이커리", "빵", "도넛", "와플"],
+        # DB 실측: ftc_brand_franchise.indutyMlsfcNm 은 "제과제빵" 한 단어 표기 (827건).
+        "ftc_keywords": ["제과제빵", "제과", "베이커리", "빵", "도넛", "와플"],
         "naver_industry": "제과",
         "label_kr": "제과점",
         "label_en": "bakery",
@@ -156,20 +167,12 @@ BUSINESS_TYPE_MAPPING: dict[str, BusinessTypeEntry] = {
         "db_industry_name": "커피-음료",
         "kakao_category": "커피-음료",
         "kakao_keyword": "커피",  # main.py:_BIZ_TO_KAKAO_KW 기존값과 일치
-        "ftc_keywords": ["커피", "카페", "음료", "디저트"],
+        # DB 실측: "커피" 2397건 + "음료 (커피 외)" 307건 별도 표기.
+        # 부분 매칭(LIKE '%음료%') 전제이지만 정확 매칭 호출자 대비해 풀네임 포함.
+        "ftc_keywords": ["커피", "카페", "음료 (커피 외)", "음료", "디저트"],
         "naver_industry": "카페",  # tools.py:_NAVER_INDUSTRY_MAP 의 CS100010 → "카페" 와 일치
         "label_kr": "커피-음료",
         "label_en": "cafe",
-    },
-    "편의점": {
-        "cs_code": "CS200009",
-        "db_industry_name": "편의점",
-        "kakao_category": "편의점",
-        "kakao_keyword": "편의점",
-        "ftc_keywords": ["편의점", "convenience"],
-        "naver_industry": "편의점",
-        "label_kr": "편의점",
-        "label_en": "convenience",
     },
 }
 
@@ -241,9 +244,6 @@ _ALIASES: dict[str, str] = {
     "카페": "커피",
     "cafe": "커피",
     "coffee": "커피",
-    # 편의점 ───────────────────────────────
-    "convenience": "편의점",
-    "CS200009": "편의점",
 }
 
 
