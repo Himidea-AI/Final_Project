@@ -67,10 +67,11 @@ async def synthesis_node(state: AgentState) -> dict:
     # v7: SHAP 주입 + bep_months 스키마 추가 — 이전 v6 캐시 무효화
     # v8: legal DANGER prompt 톤 조정 (자기모순 출력 차단) — v7 캐시 무효화
     # v9: BEP 분기 단위 통일 + TCN 키 오타 fix (quarterly_per_store/bep_quarters) — v8 무효화
+    # v10: 종합 톤 — 법률 리스크 과부각 차단, 다른 에이전트 우위 반영 — v9 무효화
     _winner_for_cache = state.get("winner_district", target_district)
     _raw_td = state.get("target_districts") or [target_district]
     _td_key = ",".join(sorted(set(d for d in _raw_td if d)))
-    cache_key = f"v9:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    cache_key = f"v10:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -183,26 +184,41 @@ async def synthesis_node(state: AgentState) -> dict:
             f"- 요약: {(f.get('narrative') or '')[:250]}"
         )
 
-    # 법률 DANGER 시 — 추천 입지는 유지하되 '리스크 및 대응' 섹션에 주의·대응책 명시.
-    # 2026-05-03: "권장하지 않음/대안 최우선" → "주의·완화 전략 + 대안은 보조 옵션" 으로 톤 조정.
-    # 시스템이 이미 winner 로 확정한 동을 final_recommendation 이 부정하는 자기모순(예:
-    # "신수동 추천" 헤더 + "신수동 출점 권장하지 않음" 본문) 발생을 차단.
+    # 법률 리스크 톤 가이드 — 2026-05-04 v10 재조정.
+    # 변경 의도: CAUTION/DANGER 모두에서 "법률 리스크 때문에 꺼려진다"는 인상을 차단하고,
+    # 다른 에이전트(상권·인구·경쟁·트렌드·SHAP) 종합 우위가 있으면 결론은 우호적으로 내되
+    # 법률은 '주의·완화 가능한 절차적 사안'으로 다룰 것.
+    # 2026-05-03: DANGER 자기모순 출력 차단 (이전 변경).
+    # 2026-05-04: CAUTION 케이스에도 톤 가이드 적용 — "맨날 법률 때문에 주의 필요" 패턴 제거.
     if overall_legal_risk == "danger":
         _alt = ", ".join(top_3_candidates[:2]) if top_3_candidates else None
         legal_override = (
-            f"\n⚠️ 법률 리스크 DANGER 안내: {target_district}는 사전 법적 검토와 리스크 완화 전략이 필수인 권역입니다.\n"
-            f"final_recommendation 작성 시 다음을 준수:\n"
-            f"  - {target_district}를 추천 입지로 유지 — '권장하지 않음/금지/회피' 같은 자기모순 표현 금지 (시스템이 이미 추천 확정).\n"
-            f"  - '리스크 및 대응' 섹션에 구체적 위반 가능 항목 + 사전 대응 단계 명시 (영업신고·허가·용도변경 등 절차).\n"
-            f"  - 진입 전 법률 자문 권장. 톤은 '주의 필요/충분한 준비 후 진입' 수준으로 작성.\n"
+            f"\n[법률 리스크 톤 가이드 — DANGER]\n"
+            f"  - {target_district}는 시스템이 종합 분석으로 추천 확정한 입지. 법률은 14개 분석 항목 중 하나일 뿐.\n"
+            f"  - 법률 리스크는 '준비·완화 가능한 절차적 사안'으로 다룰 것 — '권장하지 않음/금지/회피' 표현 금지.\n"
+            f"  - '리스크 및 대응' 섹션에 구체적 위반 가능 항목 + 사전 대응 단계 명시 (영업신고·허가·용도변경 등).\n"
+            f"  - 톤: '법적 리스크는 존재하나 사전 대응으로 충분히 해소 가능, 다른 지표가 우수해 입지 가치 높음'.\n"
             + (
-                f"  - 비교 검토용 대안 옵션({_alt})은 보조 정보로만 한 줄 언급 — 메인 추천은 {target_district}.\n"
+                f"  - 비교 검토용 대안({_alt})은 보조 정보로만 한 줄. 메인 추천은 {target_district}.\n"
                 if _alt
                 else ""
             )
         )
+    elif overall_legal_risk == "caution":
+        legal_override = (
+            f"\n[법률 리스크 톤 가이드 — CAUTION]\n"
+            f"  - 법률 CAUTION은 '일반적인 창업 준수 사항' 수준 — 대부분의 신규 출점에서 마주하는 표준 절차.\n"
+            f"  - final_recommendation에서 법률 리스크를 결론의 부정적 근거로 부각하지 말 것.\n"
+            f"  - '리스크 및 대응' 섹션에서만 간결하게 다루고, 다른 섹션(추천 입지·핵심 근거·수익성·타이밍)은\n"
+            f"    상권·인구·경쟁·트렌드·SHAP 우위 요인 중심으로 우호적으로 작성.\n"
+            f"  - 톤: '주의 사항만 챙기면 진입 적합, 종합적으로 양호한 상권'.\n"
+        )
     else:
-        legal_override = ""
+        # safe — 법률 리스크 거의 언급 불필요
+        legal_override = (
+            f"\n[법률 리스크 톤 가이드 — SAFE]\n"
+            f"  - 법률 SAFE — 별도 우려 없음. '리스크 및 대응' 섹션은 운영 일반 리스크(경쟁·매출 변동) 중심으로 작성.\n"
+        )
 
     # [NEW] demographic_depth 결과를 LLM 프롬프트에 추가 (legal 블록 뒤에 배치, legal 블록은 그대로 보존)
     demographic = analysis_results.get("demographic_report") or {}
@@ -312,6 +328,13 @@ async def synthesis_node(state: AgentState) -> dict:
         "4. 분기별 매출 흐름(성수기·비수기)을 창업 타이밍 제안에 활용\n"
         "5. FinalStrategyResult 스키마로 응답\n"
         f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
+        "10. [중요 — 종합 톤] summary와 final_recommendation은 입지 가치 중심으로 우호적으로 작성.\n"
+        "   - 법률은 14개 분석 항목 중 하나일 뿐 — 결론을 좌우하는 핵심 근거가 아님.\n"
+        "   - 법률 리스크가 CAUTION/DANGER여도 '리스크 및 대응' 섹션 한 곳에서만 다루고,\n"
+        "     summary·핵심 근거·수익성 전망·타이밍 제언에는 법률 부정 톤을 넣지 말 것.\n"
+        "   - 상권·인구·경쟁·트렌드·SHAP·접근성 등 다른 에이전트 우위가 있으면 그것을 결론의 주된 근거로 삼을 것.\n"
+        "   - 금지 표현: '법률 리스크 때문에 주의가 필요', '꺼려진다', '권장하지 않는다', '신중한 검토 필요'.\n"
+        "   - 권장 표현: '주의 사항만 준수하면 적합', '사전 대응 가능한 절차적 사안', '종합적으로 양호한 상권'.\n"
         "8. [중요] final_recommendation 출력 형식 — 가독성을 위해 반드시 아래 마크다운 구조로 작성:\n"
         "   - 각 섹션은 '## 섹션제목' 형식의 H2 헤더로 시작 (프론트에서 큰 글씨로 렌더됨)\n"
         "   - 섹션 사이는 빈 줄(\\n\\n) 두 번 들여 문단 분리\n"
