@@ -88,11 +88,13 @@ class Settings(BaseSettings):
     # 현상 완화. 0.0 = 비활성, 0.5 = score *= 0.5. 본법 본문 chunk 가 BM25 상위로 올라옴.
     bm25_supplementary_penalty: float = float(os.getenv("BM25_SUPPLEMENTARY_PENALTY", "0.4"))
 
-    # Reranker — Cross-encoder로 top-K 재정렬 (정밀도 ↑, 검색 속도 ↓ ~500ms/쿼리)
-    # 이전 baseline (MiniLM 384D, 4배 중복 데이터) 측정 시 F1 -0.030, 비활성됨.
-    # SP3 후 (BGE-m3 + Kiwi BM25 + 정상 9484 청크) 환경에서 재측정 가치 있음.
-    # default OFF — RERANK_ENABLED=true env로 활성화 후 bench 비교 권장.
-    rerank_enabled: bool = os.getenv("RERANK_ENABLED", "false").lower() == "true"
+    # Reranker — top-K 재정렬 (정밀도 ↑, 검색 속도 ↓)
+    # provider="openai" (default, gpt-4.1-mini list-wise) 또는 "local" (BGE CrossEncoder).
+    # OpenAI rerank bench (2026-05-04, K=10): MRR 0.785 → 0.931, NDCG 0.642 → 0.776 (+19%/+21%).
+    # Local CrossEncoder 는 한국어 법률 article 판정 약함 → Hit -20p 역효과.
+    rerank_enabled: bool = os.getenv("RERANK_ENABLED", "true").lower() == "true"
+    rerank_provider: str = os.getenv("RERANK_PROVIDER", "openai").lower()
+    rerank_openai_model: str = os.getenv("RERANK_OPENAI_MODEL", "gpt-4.1-mini")
     rerank_model: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
     rerank_initial_k: int = int(os.getenv("RERANK_INITIAL_K", "30"))  # 1차 검색 K
     rerank_final_k: int = int(os.getenv("RERANK_FINAL_K", "10"))  # 재정렬 후 반환 K

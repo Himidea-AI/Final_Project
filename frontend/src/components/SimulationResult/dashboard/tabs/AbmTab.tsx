@@ -49,6 +49,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   const abmError = useAbmStore((s) => s.error);
   const focusSpot = useAbmStore((s) => s.focusSpot);
   const startAbm = useAbmStore((s) => s.startAbm);
+  const cancelAbm = useAbmStore((s) => s.cancelAbm);
   const dismissResult = useAbmStore((s) => s.dismissResult);
   const setFocusSpot = useAbmStore((s) => s.setFocusSpot);
   const resumePollingIfNeeded = useAbmStore((s) => s.resumePollingIfNeeded);
@@ -71,21 +72,33 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   const targetDistrict =
     r?.winner_district || r?.target_district || r?.target_districts?.[0] || '서교동';
 
-  // 지도 마커 데이터 — raw JSONB에서 방어적 추출
-  const vacancySpots = Array.isArray(r?.vacancy_spots) ? r.vacancy_spots : [];
+  // 지도 마커 데이터 — raw JSONB에서 방어적 추출.
+  // 우선순위:
+  //   1) recommended_vacancy_spots (신규 추천 에이전트 출력 — score/reason 포함, 보통 4개)
+  //   2) vacancy_spots (district_ranking _load_vacancy_spots — winner+target+top_3 dong 의 전체 월세 매물)
+  // 신규 에이전트 추천이 있으면 그것만 쓰고 (소수 정예), 없으면 fallback.
+  const recommendedSpots = Array.isArray(r?.recommended_vacancy_spots)
+    ? r.recommended_vacancy_spots
+    : [];
+  const fallbackSpots = Array.isArray(r?.vacancy_spots) ? r.vacancy_spots : [];
+  const vacancySpots = recommendedSpots.length > 0 ? recommendedSpots : fallbackSpots;
   const competitorSamples = Array.isArray(r?.competitor_intel?.competition_500m?.samples)
     ? r.competitor_intel.competition_500m.samples
     : [];
 
+  // recommendedSpots 가 활성이면 'recommended' 타입 + score/reason 전달.
+  const isRecommendedMode = recommendedSpots.length > 0;
   const locations = vacancySpots
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((s: any) => ({
       id: `vacancy_${s.id}`,
       name: s.dong_name ?? '공실',
       lat: s.lat,
-      lng: s.lon,
-      type: 'vacancy' as const,
+      lng: s.lon ?? s.lng,
+      type: (isRecommendedMode ? 'recommended' : 'vacancy') as 'recommended' | 'vacancy',
       listingCount: s.listing_count,
+      score: typeof s.score === 'number' ? s.score : undefined,
+      reason: typeof s.reason === 'string' ? s.reason : undefined,
     }))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((l: any) => typeof l.lat === 'number' && typeof l.lng === 'number');
@@ -134,18 +147,19 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   }
 
   // spot 클릭 — 즉시 시뮬 실행 X. abm 모드 진입 + focusSpot 만 set.
-  // AbmPersonaMap 의 시나리오 패널이 표시되고 사용자가 실행 버튼 누르면 startAbm.
+  // 사용자 피드백 (2026-05-04): 시뮬 진행 중 (abmLoading=true) 에도 spot 클릭 막지 않음.
+  // 옛 시뮬 cancel → 새 spot 으로 swap 가능 (순차적 처리).
   const handleAgentMapSpotClick = async (loc: { lat: number; lng: number; name: string }) => {
-    if (abmLoading) return;
+    if (abmLoading) cancelAbm(); // 진행 중 시뮬 abort
+    else if (abmResult) dismissResult(); // 결과만 정리
     setMode('abm');
     setFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
   };
 
   const handleAbmSpotClick = async (spot: { lat: number; lon: number; dong_name: string }) => {
-    if (abmLoading) return;
+    if (abmLoading) cancelAbm();
+    else if (abmResult) dismissResult();
     setFocusSpot({ lat: spot.lat, lon: spot.lon, label: spot.dong_name });
-    // 결과 띄워져 있으면 dismiss → 시나리오 패널 다시 보임
-    if (abmResult) dismissResult();
   };
 
   // 시나리오 패널 "시뮬 실행" 버튼 — focusSpot 좌표 + scenario 로 startAbm.
@@ -160,7 +174,9 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   };
 
   const handleClearResult = () => {
-    dismissResult();
+    // 시뮬 진행 중이면 cancel (status='running' 이면 dismissResult noop). running/done 둘 다 정리.
+    if (abmStatus === 'running') cancelAbm();
+    else dismissResult();
     setFocusSpot(null);
     setMode('map');
   };

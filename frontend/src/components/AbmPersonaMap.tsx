@@ -2929,7 +2929,7 @@ export default function AbmPersonaMap({
                           {sortedAids.length}명
                         </span>
                       </div>
-                      <div className="relative max-h-[600px] flex-1 overflow-hidden rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent">
+                      <div className="relative h-[500px] overflow-hidden rounded-xl border border-warning/15 bg-gradient-to-b from-warning/[0.04] to-transparent">
                         {/* agent list (스크롤) */}
                         <div className="absolute inset-0 overflow-y-auto">
                           {sortedAids.map((aid) => {
@@ -2981,7 +2981,7 @@ export default function AbmPersonaMap({
                               thoughtsByAgentRef.current.get(selectedAgentId)?.values() ?? [],
                             ).sort((a, b) => a.day * 24 + a.hour - (b.day * 24 + b.hour));
                             return (
-                              <div className="absolute top-0 left-0 right-0 max-h-[55%] z-20 bg-card/98 backdrop-blur-sm rounded-xl border border-primary/40 flex flex-col overflow-hidden shadow-lg">
+                              <div className="absolute inset-0 z-20 bg-card rounded-xl border border-primary/40 flex flex-col overflow-hidden shadow-lg">
                                 {/* 헤더 */}
                                 <div className="flex items-baseline justify-between gap-2 px-3 py-2 border-b border-border bg-primary/[0.04] shrink-0">
                                   <div className="flex flex-col min-w-0">
@@ -3101,7 +3101,7 @@ export default function AbmPersonaMap({
                       <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2">
                         신규 매장 방문자 구성
                       </p>
-                      <div className="flex gap-1 items-end h-12">
+                      <div className="flex gap-1 items-end h-20 mt-1 overflow-hidden">
                         {Object.entries(abmResult.new_store_role_dist as Record<string, number>)
                           .sort((a, b) => b[1] - a[1])
                           .map(([role, ratio]) => {
@@ -3148,7 +3148,7 @@ export default function AbmPersonaMap({
                                 <div
                                   className="w-full rounded transition-all"
                                   style={{
-                                    height: `${Math.max(4, pct * 0.7)}px`,
+                                    height: `${Math.max(4, Math.min(60, pct * 0.55))}px`,
                                     backgroundColor: color,
                                     opacity: 0.85,
                                     boxShadow: `0 0 8px ${color}60`,
@@ -3171,7 +3171,7 @@ export default function AbmPersonaMap({
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
                         마포 전체 방문 분포 (참고)
                       </p>
-                      <div className="flex gap-1 items-end h-12">
+                      <div className="flex gap-1 items-end h-20 mt-1 overflow-hidden">
                         {Object.entries(abmResult.customer_profile_dist as Record<string, number>)
                           .sort((a, b) => b[1] - a[1])
                           .map(([role, ratio]) => {
@@ -3218,7 +3218,7 @@ export default function AbmPersonaMap({
                                 <div
                                   className="w-full rounded transition-all"
                                   style={{
-                                    height: `${Math.max(4, pct * 0.7)}px`,
+                                    height: `${Math.max(4, Math.min(60, pct * 0.55))}px`,
                                     backgroundColor: color,
                                     opacity: 0.6,
                                     boxShadow: `0 0 8px ${color}40`,

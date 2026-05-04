@@ -167,13 +167,15 @@ async def _analyze_territory(
     brand: str,
     district: str,
     business_type: str,
+    lat: float | None = None,
+    lon: float | None = None,
     territory_radius_m: int | None = None,
 ) -> dict:
     """동일 브랜드 인접 매장 카운트 + 자기잠식률 계산.
 
-    competitor_intel 노드와 동일 데이터 소스 (commercial_intelligence.analyze_cannibalization)
-    이지만 legal_node 와 병렬 실행되므로 specialist 가 직접 재호출.
-    Redis 캐시는 commercial_intelligence 내부에서 관리.
+    기준 좌표 우선순위:
+    1. ``lat/lon`` 입력 (공실 스팟 추천 위치) → 정밀 측정.
+    2. ``district`` 행정동 centroid 폴백 → 추정 측정.
 
     업종별 거리 감쇠 곡선이 다르므로 ``business_type`` 을 industry 인자로 정확히 전달.
 
@@ -183,17 +185,17 @@ async def _analyze_territory(
 
     Returns:
         ``{"same_brand_500m", "same_brand_2000m", "same_brand_within_territory",
-            "territory_radius_m", "closest_m", "impact_pct"}`` 또는 ``{}`` (자료 없음/오류).
+            "territory_radius_m", "closest_m", "impact_pct", "ref_source"}`` 또는 ``{}`` (자료 없음/오류).
     """
     if not brand or not district:
         return {}
     try:
-        from src.services.commercial_intelligence import analyze_cannibalization
+        from src.services.commercial_intelligence import (
+            analyze_cannibalization,
+            analyze_cannibalization_at,
+        )
         from src.services.dong_resolver import resolve_dong_code
 
-        dong_code = await asyncio.to_thread(resolve_dong_code, district)
-        if not dong_code:
-            return {}
         # 업종 정규화 후 industry 라벨 매핑. 미매핑은 default — cafe 곡선 강제 회피.
         biz_normalized = BIZ_NORMALIZE.get((business_type or "").lower(), business_type or "")
         industry = _INDUSTRY_LABEL_MAP.get(biz_normalized, _INDUSTRY_DEFAULT)
@@ -201,10 +203,29 @@ async def _analyze_territory(
             logger.debug(
                 f"[_analyze_territory] 업종 '{business_type}' (정규화: '{biz_normalized}') 미매핑 — default 곡선 사용"
             )
-        # 2000m 까지 분석 — 500m bin 별 카운트는 결과의 distance_bins 에서 추출
-        result = await asyncio.to_thread(analyze_cannibalization, dong_code, brand, 2000, "neighborhood", industry)
-        if not result or "error" in result:
-            return {}
+
+        result = None
+        # 1순위: 좌표 기반 (공실 스팟 추천 위치)
+        if lat is not None and lon is not None:
+            try:
+                result = await asyncio.to_thread(
+                    analyze_cannibalization_at, lat, lon, brand, 2000, "neighborhood", industry
+                )
+            except Exception as e:
+                logger.warning(f"[_analyze_territory] 좌표 기반 실패 ({e}) — centroid 폴백")
+                result = None
+            if result and "error" in result:
+                result = None
+
+        # 2순위: 행정동 centroid 폴백
+        if not result:
+            dong_code = await asyncio.to_thread(resolve_dong_code, district)
+            if not dong_code:
+                return {}
+            result = await asyncio.to_thread(analyze_cannibalization, dong_code, brand, 2000, "neighborhood", industry)
+            if not result or "error" in result:
+                return {}
+
         bins = result.get("distance_bins", {})
         same_brand_500m = bins.get("0-300m", 0) + bins.get("300-500m", 0)
         # 사용자 영업구역 안 매장 카운트 — nearby_stores 의 distance_m 직접 사용.
@@ -222,6 +243,7 @@ async def _analyze_territory(
             "territory_radius_m": territory_radius_m,
             "closest_m": result.get("closest_distance_m"),
             "impact_pct": result.get("estimated_revenue_impact_pct", 0.0),
+            "ref_source": result.get("ref_source", "unknown"),
         }
     except Exception as e:
         logger.warning(f"[_analyze_territory] 실패 brand={brand} district={district}: {e}")
@@ -287,9 +309,15 @@ async def specialist_franchise_law(
     business_type: str,
     district: str,
     ftc_data: dict | None,
+    lat: float | None = None,
+    lon: float | None = None,
     territory_radius_m: int | None = None,
 ) -> dict:
-    """브랜드 정보공개서·영업지역·필수품목·허위과장 평가."""
+    """브랜드 정보공개서·영업지역·필수품목·허위과장 평가.
+
+    ``lat/lon`` 입력 시 공실 스팟 추천 좌표 기준 영업지역 분석. 미입력 시
+    행정동 centroid 폴백.
+    """
     type_name = "franchise_law"
     # 보안: prompt injection 방어 — user 입력 100자 제한
     brand = (brand or "")[:100]
@@ -299,7 +327,7 @@ async def specialist_franchise_law(
     query = f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 허위과장 필수품목 카니발리제이션"
     # RAG(법령) + 판례 RAG + 영업지역 정량 분석 병렬 (업종별 거리 감쇠 곡선 적용)
     # return_exceptions=True — 한쪽 실패가 나머지 task DB 커넥션을 누수시키지 않도록 격리
-    territory_task = _analyze_territory(brand, district, business_type, territory_radius_m)
+    territory_task = _analyze_territory(brand, district, business_type, lat, lon, territory_radius_m)
     precedent_query = _precedent_query_franchise(brand, business_type)
     docs_raw, precedent_raw, territory_raw = await asyncio.gather(
         retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),

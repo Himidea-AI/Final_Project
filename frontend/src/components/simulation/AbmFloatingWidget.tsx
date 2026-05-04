@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Activity, AlertCircle, GripVertical, Loader2, X } from 'lucide-react';
 import { useAbmStore } from '../../stores/abmStore';
@@ -45,6 +45,9 @@ export function AbmFloatingWidget() {
   const cancel = useAbmStore((s) => s.cancelAbm);
   const dismiss = useAbmStore((s) => s.dismissResult);
   const start = useAbmStore((s) => s.startAbm);
+  // 현재 시뮬 우선순위 (run #N) — 누적 실행 횟수 (history + 현재 진행).
+  const historyCount = useAbmStore((s) => s.history?.length ?? 0);
+  const runNumber = historyCount + 1; // 현재 진행은 history 에 아직 안 들어감
 
   const mainSimStatus = useSimulationStore((s) => s.status);
 
@@ -54,47 +57,34 @@ export function AbmFloatingWidget() {
   // 드래그 위치 — 사용자가 마우스로 옮길 수 있음. session 동안 유지.
   // null = 기본 위치 (우하단 bottom-6 right-6).
   const [pos, setPos] = useState<Pos | null>(() => loadInitialPos());
-  const dragStateRef = useRef<{
-    startMx: number;
-    startMy: number;
-    startX: number;
-    startY: number;
-  } | null>(null);
 
+  // 드래그 — window-level pointermove/up 으로 처리. setPointerCapture 안 쓰는 이유:
+  // capture 중 unmount (라우트 전환 등) 시 pointer event leak → 이후 페이지 클릭 안 먹는 버그.
   const onPointerDown = (e: React.PointerEvent) => {
-    // 핸들에서만 드래그 시작 (X 버튼·결과보기 버튼 등 클릭 방해 X)
     e.preventDefault();
-    const target = e.currentTarget as HTMLElement;
-    target.setPointerCapture(e.pointerId);
-    const startX = pos?.x ?? window.innerWidth - 320; // 기본 위치 추정
+    const startMx = e.clientX;
+    const startMy = e.clientY;
+    const startX = pos?.x ?? window.innerWidth - 320;
     const startY = pos?.y ?? window.innerHeight - 200;
-    dragStateRef.current = {
-      startMx: e.clientX,
-      startMy: e.clientY,
-      startX,
-      startY,
+
+    let lastPos: Pos = { x: startX, y: startY };
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startMx;
+      const dy = ev.clientY - startMy;
+      const nx = Math.max(0, Math.min(window.innerWidth - 100, startX + dx));
+      const ny = Math.max(0, Math.min(window.innerHeight - 60, startY + dy));
+      lastPos = { x: nx, y: ny };
+      setPos(lastPos);
     };
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const ds = dragStateRef.current;
-    if (!ds) return;
-    const dx = e.clientX - ds.startMx;
-    const dy = e.clientY - ds.startMy;
-    const nx = Math.max(0, Math.min(window.innerWidth - 100, ds.startX + dx));
-    const ny = Math.max(0, Math.min(window.innerHeight - 60, ds.startY + dy));
-    setPos({ x: nx, y: ny });
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    const target = e.currentTarget as HTMLElement;
-    try {
-      target.releasePointerCapture(e.pointerId);
-    } catch {
-      /* noop */
-    }
-    if (dragStateRef.current && pos) savePos(pos);
-    dragStateRef.current = null;
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      savePos(lastPos);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   // 화면 resize 시 위젯이 화면 밖이면 안쪽으로 보정.
@@ -123,14 +113,11 @@ export function AbmFloatingWidget() {
     : 'fixed bottom-6 right-6 z-[60] flex min-w-[280px] max-w-sm flex-col gap-2 rounded-xl bg-card p-4 shadow-2xl ring-1 backdrop-blur';
   const positionStyle = pos ? { left: `${pos.x}px`, top: `${pos.y}px` } : undefined;
 
-  // 드래그 핸들 — 위젯 상단 좌측 grip 아이콘 영역. cursor-move + onPointerDown.
+  // 드래그 핸들 — 위젯 상단 좌측 grip 아이콘 영역. window-level pointer event 로 drag.
   const dragHandle = (
     <button
       type="button"
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
       className="cursor-move text-muted-foreground hover:text-foreground touch-none"
       aria-label="드래그하여 이동"
       title="드래그하여 이동"
@@ -149,8 +136,11 @@ export function AbmFloatingWidget() {
         <div className="flex items-center gap-2">
           {dragHandle}
           <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-mono font-bold text-primary tabular-nums">
+            #{runNumber}
+          </span>
           <div className="flex-1 text-sm font-semibold text-foreground">
-            ABM SIMULATING {Math.round(progress)}%
+            ABM {Math.round(progress)}%
           </div>
           <button
             onClick={cancel}
@@ -175,11 +165,15 @@ export function AbmFloatingWidget() {
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="truncate">
-            {stage}
-            {focusSpot?.label ? ` · ${focusSpot.label}` : ''}
+            {focusSpot?.label ?? '—'} · {stage}
           </span>
           <span>ETA ~{etaSec}s</span>
         </div>
+        {historyCount > 0 && (
+          <div className="text-[10px] text-muted-foreground/80">
+            누적 시뮬: {historyCount}회 · 현재 #{runNumber} 우선
+          </div>
+        )}
         <button
           onClick={goToAbm}
           className="mt-1 self-start text-xs font-medium text-primary hover:text-primary/80"

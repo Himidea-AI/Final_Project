@@ -42,7 +42,9 @@ def _stub_result(type_name: str, level: str = "caution") -> dict:
     }
 
 
-async def _stub_franchise(brand, business_type, district, ftc_data):
+async def _stub_franchise(
+    brand, business_type, district, ftc_data, lat=None, lon=None, territory_radius_m=None
+):
     return _stub_result("franchise_law", "caution")
 
 

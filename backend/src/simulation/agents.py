@@ -508,15 +508,135 @@ class Agent:
 # ---------------------------------------------------------------
 # 에이전트 팩토리
 # ---------------------------------------------------------------
-KOREAN_SURNAMES = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임"]
-KOREAN_NAMES_M = ["민준", "서준", "도윤", "하준", "지호", "준우", "은우", "선우"]
-KOREAN_NAMES_F = ["서연", "지유", "하윤", "서윤", "지우", "수아", "하은", "지아"]
+KOREAN_SURNAMES = [
+    "김",
+    "이",
+    "박",
+    "최",
+    "정",
+    "강",
+    "조",
+    "윤",
+    "장",
+    "임",
+    "한",
+    "오",
+    "서",
+    "신",
+    "권",
+    "황",
+    "안",
+    "송",
+    "전",
+    "홍",
+    "유",
+    "고",
+    "문",
+    "양",
+    "손",
+    "배",
+    "백",
+    "허",
+    "남",
+    "심",
+]
+KOREAN_NAMES_M = [
+    "민준",
+    "서준",
+    "도윤",
+    "하준",
+    "지호",
+    "준우",
+    "은우",
+    "선우",
+    "현우",
+    "지우",
+    "유준",
+    "건우",
+    "우진",
+    "민재",
+    "지훈",
+    "예준",
+    "주원",
+    "서진",
+    "시우",
+    "준서",
+    "이준",
+    "재윤",
+    "지환",
+    "성민",
+    "도현",
+    "태윤",
+    "승호",
+    "영민",
+    "동현",
+    "재현",
+]
+KOREAN_NAMES_F = [
+    "서연",
+    "지유",
+    "하윤",
+    "서윤",
+    "지우",
+    "수아",
+    "하은",
+    "지아",
+    "지민",
+    "예린",
+    "예나",
+    "유진",
+    "다은",
+    "소율",
+    "채원",
+    "지원",
+    "수빈",
+    "민서",
+    "윤서",
+    "유나",
+    "예원",
+    "혜린",
+    "예은",
+    "은서",
+    "다인",
+    "나윤",
+    "서아",
+    "민아",
+    "현지",
+    "도연",
+]
 
 
 def _gen_name(rng: random.Random, gender: str) -> str:
+    """단순 random — 충돌 가능. 시뮬 시작 시 _gen_unique_names 사용 권장."""
     sn = rng.choice(KOREAN_SURNAMES)
     given = rng.choice(KOREAN_NAMES_M if gender == "M" else KOREAN_NAMES_F)
     return f"{sn}{given}"
+
+
+def _gen_unique_names(rng: random.Random, n: int, gender: str) -> list[str]:
+    """N 개 unique 이름 — surname × given 풀 (30×30=900) 에서 sample.
+
+    Tier S 50명 + Tier A 200명 같은 다수 agent 에 unique 이름 보장. 풀 풍부해서
+    충돌 없음. n > 900 (예: Tier B 4750) 면 풀 부족 → fallback 으로 #N suffix 추가.
+    """
+    given_pool = KOREAN_NAMES_M if gender == "M" else KOREAN_NAMES_F
+    combos = [(sn, gv) for sn in KOREAN_SURNAMES for gv in given_pool]
+    rng.shuffle(combos)
+    out: list[str] = []
+    if n <= len(combos):
+        out = [sn + gv for sn, gv in combos[:n]]
+    else:
+        # 풀 부족 — 처음 풀 다 쓰고 #N suffix 로 unique 보장
+        for sn, gv in combos:
+            out.append(sn + gv)
+        i = 1
+        while len(out) < n:
+            for sn, gv in combos:
+                out.append(f"{sn}{gv}#{i}")
+                if len(out) >= n:
+                    break
+            i += 1
+    return out
 
 
 def spawn_agents(
@@ -541,6 +661,24 @@ def spawn_agents(
     rng = random.Random(seed)
     agents: list[Agent] = []
     aid = 1
+
+    # 사용자 피드백 (2026-05-04): agent 이름 중복 다수 → unique 풀 사전 생성.
+    # 30 surnames × 30 names = 900 per gender. n>900 케이스 자동 #suffix fallback.
+    total_agents = n_residents + n_commuters + n_visitors + n_owners + n_ext_commuters + n_ext_visitors
+    name_pool_m = _gen_unique_names(rng, total_agents, "M")
+    name_pool_f = _gen_unique_names(rng, total_agents, "F")
+    m_idx = 0
+    f_idx = 0
+
+    def _next_name(gender: str) -> str:
+        nonlocal m_idx, f_idx
+        if gender == "M":
+            n = name_pool_m[m_idx % len(name_pool_m)]
+            m_idx += 1
+        else:
+            n = name_pool_f[f_idx % len(name_pool_f)]
+            f_idx += 1
+        return n
 
     role_quota = [
         (Role.RESIDENT, n_residents),
@@ -686,7 +824,8 @@ def spawn_agents(
             agent_id=aid,
             tier=tier,
             role=role,
-            name=_gen_name(rng, gender),
+            # 우선순위: nemotron profile 본문 추출 이름 → fallback unique pool.
+            name=(getattr(profile_obj, "name", None) or _next_name(gender)),
             age=age,
             gender=gender,
             home_dong=home,
