@@ -151,6 +151,24 @@ def train(config: dict | None = None) -> None:
         train_errors.std(),
     )
 
+    # per-quarter (last timestep) MSE 분포 — consecutive 메트릭 분기 단위 임계
+    qerrs: list[np.ndarray] = []
+    with torch.no_grad():
+        for i in range(0, len(X_tr_t), 128):
+            batch = X_tr_t[i : i + 128]
+            recon_b = model(batch)
+            qerr = ((recon_b[:, -1, :] - batch[:, -1, :]) ** 2).mean(dim=-1).cpu().numpy()
+            qerrs.append(qerr)
+    quarter_errors = np.concatenate(qerrs)
+    quarter_threshold = float(np.percentile(quarter_errors, cfg["threshold_percentile"]))
+    logger.info(
+        "quarter_threshold (p%d) = %.6f  (mean=%.6f, std=%.6f)",
+        cfg["threshold_percentile"],
+        quarter_threshold,
+        quarter_errors.mean(),
+        quarter_errors.std(),
+    )
+
     # 6. 저장
     model.save_weights(cfg["weights_path"])
 
@@ -160,6 +178,7 @@ def train(config: dict | None = None) -> None:
         "num_layers": cfg["num_layers"],
         "window_size": cfg["window_size"],
         "threshold": threshold,
+        "quarter_threshold": quarter_threshold,
         "threshold_percentile": cfg["threshold_percentile"],
         "feature_names": list(EMERGING_FEATURES),
         "best_val_loss": best_val_loss,
