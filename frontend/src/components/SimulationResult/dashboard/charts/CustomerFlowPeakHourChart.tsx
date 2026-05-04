@@ -17,6 +17,7 @@
  * winner: ranking 첫 번째 카드 + Heatmap 첫 row, ring-primary/30 강조.
  */
 
+import { useEffect, useRef, useState } from 'react';
 import type {
   DistrictPredictionResult,
   LivingPopForecast,
@@ -88,6 +89,30 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
   const sorted = sortByRanking(dpredicts, simResult);
   const summaries = sorted.map(summarize);
 
+  // Heatmap 박스 폭 측정 → cell 개수(SUB) 동적 결정.
+  // cell 모양(w-4=16px, gap-px=1px) 고정 + 박스 폭에 맞춰 24h 를 SUB 등분 보간.
+  // ex) 박스 1200px → 약 70 cell → SUB=2 (48 cell). 빈 공간이 cell 한 개 미만 남도록.
+  const heatmapRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  useEffect(() => {
+    if (!heatmapRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(heatmapRef.current);
+    return () => ro.disconnect();
+  }, []);
+  const CELL_W = 16; // w-4
+  const CELL_GAP = 1; // gap-px
+  const LABEL_W = 80; // w-20
+  const LABEL_GAP = 12; // gap-3
+  const cellsArea = Math.max(0, containerWidth - LABEL_W - LABEL_GAP);
+  const cellsCapacity =
+    cellsArea > 0 ? Math.max(24, Math.floor((cellsArea + CELL_GAP) / (CELL_W + CELL_GAP))) : 24;
+  const SUB = Math.max(1, Math.floor(cellsCapacity / 24));
+  const TOTAL_CELLS = 24 * SUB;
+
   // 모든 동에서 living_pop_forecast 가 null 이면 placeholder
   const anyHasData = summaries.some((s) => s.hours.length > 0);
   if (!anyHasData) {
@@ -152,21 +177,25 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
                 )}
               </div>
               {hasData ? (
-                <>
-                  <div className="mt-3 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
-                    Peak · {bucketLabel(s.peakTz!)}
+                <div className="mt-3 flex items-end justify-between gap-3">
+                  {/* 좌측 — 라벨 + 시간대 */}
+                  <div className="min-w-0">
+                    <div className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+                      Peak · {bucketLabel(s.peakTz!)}
+                    </div>
+                    <div className="mt-1 text-base font-black tabular-nums tracking-tight text-foreground">
+                      {formatTimeZone(s.peakTz!)}
+                    </div>
                   </div>
-                  <div className="mt-1 text-base font-black tabular-nums tracking-tight text-foreground">
-                    {formatTimeZone(s.peakTz!)}
-                  </div>
+                  {/* 우측 — 값 (인구수) */}
                   <div
-                    className="mt-2 text-2xl font-black tabular-nums tracking-tighter"
+                    className="shrink-0 text-2xl font-black tabular-nums tracking-tighter leading-none"
                     style={{ color: seriesColor }}
                   >
                     {formatPop(s.peakPop!)}
                     <span className="ml-1 text-xs font-bold text-muted-foreground">명</span>
                   </div>
-                </>
+                </div>
               ) : (
                 <div className="mt-3 text-xs text-muted-foreground">데이터 없음</div>
               )}
@@ -175,92 +204,103 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
         })}
       </div>
 
-      {/* ── Heatmap 4 row × 24 col ── */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[640px]">
-          {/* row 컨테이너 */}
-          <div className="flex flex-col gap-1">
-            {summaries.map((s, idx) => {
-              const seriesColor = SERIES_COLORS[idx % SERIES_COLORS.length]!;
+      {/* ── Heatmap 4 row × (24×SUB) col ──
+          cell 모양(w-4 h-8) 고정 + 박스 폭에 맞춰 SUB 만큼 cell 개수만 늘려 꽉 채움.
+          인접 시간대 사이 linear interpolation 으로 자연스러운 그라데이션. */}
+      <div ref={heatmapRef} className="w-full">
+        {/* row 컨테이너 */}
+        <div className="flex flex-col gap-1">
+          {summaries.map((s, idx) => {
+            const seriesColor = SERIES_COLORS[idx % SERIES_COLORS.length]!;
+            return (
+              <div key={s.district} className="flex items-center gap-3">
+                {/* 동 라벨 — 좌측 동별 색 dot + 동 이름 */}
+                <div className="flex w-20 shrink-0 items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: seriesColor }}
+                  />
+                  <span className="text-sm font-bold tabular-nums text-foreground truncate">
+                    {s.district}
+                  </span>
+                </div>
+                {/* (24×SUB) cell row — 인접 시간대 linear interpolation. cell 폭 w-4 고정. */}
+                <div className="flex gap-px">
+                  {Array.from({ length: TOTAL_CELLS }, (_, i) => {
+                    const h0 = Math.floor(i / SUB);
+                    const h1 = (h0 + 1) % 24;
+                    const t = (i % SUB) / SUB; // 0 ~ <1 보간 가중치
+                    const popA = popByDistrictHour.get(`${s.district}::${h0}`) ?? null;
+                    const popB = popByDistrictHour.get(`${s.district}::${h1}`) ?? null;
+                    const pop =
+                      popA != null && popB != null
+                        ? popA + (popB - popA) * t
+                        : (popA ?? popB ?? null);
+                    const ratio = pop != null ? pop / globalMax : 0;
+                    const opacity = pop == null ? 1 : Math.max(0.05, Math.min(1, ratio));
+                    const tooltip =
+                      pop != null
+                        ? `${s.district} · ${formatTimeZone(h0)} · ${formatPop(pop)}명`
+                        : `${s.district} · ${formatTimeZone(h0)} · 데이터 없음`;
+                    return (
+                      <div
+                        key={i}
+                        title={tooltip}
+                        className="w-4 h-8 rounded-sm transition-opacity"
+                        style={{
+                          backgroundColor: pop == null ? 'var(--secondary)' : seriesColor,
+                          opacity,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* X축 시간 라벨 — sub-cell 시작 위치 (i % SUB === 0) 의 3시간 배수만 표시. */}
+        <div className="mt-2 flex items-center gap-3">
+          <div className="w-20 shrink-0" />
+          <div className="flex gap-px">
+            {Array.from({ length: TOTAL_CELLS }, (_, i) => {
+              const h = Math.floor(i / SUB);
+              const isHourStart = i % SUB === 0;
               return (
-                <div key={s.district} className="flex items-center gap-3">
-                  {/* 동 라벨 — 좌측 동별 색 dot + 동 이름 */}
-                  <div className="flex w-20 shrink-0 items-center gap-1.5">
-                    <span
-                      aria-hidden
-                      className="size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: seriesColor }}
-                    />
-                    <span className="text-sm font-bold tabular-nums text-foreground truncate">
-                      {s.district}
-                    </span>
-                  </div>
-                  {/* 24 cell row */}
-                  <div className="flex gap-px">
-                    {Array.from({ length: 24 }, (_, h) => {
-                      const pop = popByDistrictHour.get(`${s.district}::${h}`) ?? null;
-                      const ratio = pop != null ? pop / globalMax : 0;
-                      // floor 0.1 보장 (데이터 있으면 보임)
-                      const opacity = pop == null ? 1 : Math.max(0.1, Math.min(1, ratio));
-                      const tooltip =
-                        pop != null
-                          ? `${s.district} · ${formatTimeZone(h)} · ${formatPop(pop)}명`
-                          : `${s.district} · ${formatTimeZone(h)} · 데이터 없음`;
-                      return (
-                        <div
-                          key={h}
-                          title={tooltip}
-                          className="w-4 h-8 rounded-sm transition-opacity"
-                          style={{
-                            backgroundColor: pop == null ? 'var(--secondary)' : seriesColor,
-                            opacity,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
+                <div
+                  key={i}
+                  className="w-4 text-center text-[0.5625rem] tabular-nums text-muted-foreground"
+                >
+                  {isHourStart && h % 3 === 0 ? h : ''}
                 </div>
               );
             })}
           </div>
+        </div>
 
-          {/* X축 시간 라벨 (3의 배수만) */}
-          <div className="mt-2 flex items-center gap-3">
-            <div className="w-20 shrink-0" />
-            <div className="flex gap-px">
-              {Array.from({ length: 24 }, (_, h) => (
-                <div
-                  key={h}
-                  className="w-4 text-center text-[0.5625rem] tabular-nums text-muted-foreground"
-                >
-                  {h % 3 === 0 ? h : ''}
-                </div>
-              ))}
-            </div>
+        {/* 범례 — 동별 색 + opacity 강도. cell 색 = 동별, 진하기 = 인구 강도. */}
+        <div className="mt-4 flex items-center gap-3">
+          <div className="w-20 shrink-0 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+            인구 강도
           </div>
-
-          {/* 범례 — 동별 색 + opacity 강도. cell 색 = 동별, 진하기 = 인구 강도. */}
-          <div className="mt-4 flex items-center gap-3">
-            <div className="w-20 shrink-0 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
-              인구 강도
-            </div>
-            <span className="text-[0.625rem] tabular-nums text-muted-foreground">낮음</span>
-            <div className="flex items-center gap-px">
-              {[0.1, 0.3, 0.55, 0.8, 1].map((op) => (
-                <div
-                  key={op}
-                  className="h-2 w-6 rounded-sm"
-                  style={{ backgroundColor: 'var(--rank-1)', opacity: op }}
-                />
-              ))}
-            </div>
-            <span className="text-[0.625rem] tabular-nums text-muted-foreground">
-              {formatPop(globalMax)}명
-            </span>
-            <span className="ml-3 text-[0.625rem] text-muted-foreground">
-              · 색 = 동, 진하기 = 인구
-            </span>
+          <span className="text-[0.625rem] tabular-nums text-muted-foreground">낮음</span>
+          <div className="flex items-center gap-px">
+            {[0.1, 0.3, 0.55, 0.8, 1].map((op) => (
+              <div
+                key={op}
+                className="h-2 w-6 rounded-sm"
+                style={{ backgroundColor: 'var(--rank-1)', opacity: op }}
+              />
+            ))}
           </div>
+          <span className="text-[0.625rem] tabular-nums text-muted-foreground">
+            {formatPop(globalMax)}명
+          </span>
+          <span className="ml-3 text-[0.625rem] text-muted-foreground">
+            · 색 = 동, 진하기 = 인구
+          </span>
         </div>
       </div>
     </div>

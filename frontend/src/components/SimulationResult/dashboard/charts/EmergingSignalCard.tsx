@@ -17,52 +17,11 @@
 
 import { Sparkles, TrendingDown, ShieldCheck, AlertCircle } from 'lucide-react';
 import type { EmergingSignal } from '../../../../types';
-import { MAPO_DONGS } from '../../../../constants/mapoDongs';
-import { BIZ_TO_INDUSTRY_CODE } from '../../../../constants/bizToIndustry';
-
-/** summary 텍스트 안 raw code(11440660 / CS100010) 를 한국어 동/업종 이름으로 치환. */
-const INDUSTRY_TO_BIZ_KO: Record<string, string> = (() => {
-  const map: Record<string, string> = {};
-  for (const [koName, code] of Object.entries(BIZ_TO_INDUSTRY_CODE)) {
-    if (!/[가-힣]/.test(koName)) continue;
-    if (!map[code]) map[code] = koName;
-  }
-  return map;
-})();
-
-/** summary 텍스트 안 raw code/jargon 을 사용자 친화 한국어로 치환:
- *  - 동 code(11440660) → 동 이름(서교동)
- *  - 업종 code(CS100010) → 한국어(커피)
- *  - signal 영문(emerging/declining/normal) → 한국어(신흥/쇠퇴/정상)
- *  - stage=LL/LH/HL/HH (4-tier classifier 내부 등급) — 사용자에게 의미 없으니 제거
- *  - "ML classifier 예측", "(신뢰 N%, F1=0.87)" 같은 metric jargon 정리
- *  - 다중 공백 단일화 + trim
- *  Backend predict_fallback.py 가 raw 형식 그대로 출력하는 거 frontend 단에서 후처리. */
-function humanizeSignalText(text: string): string {
-  let out = text;
-  // 1. raw code → 한국어
-  for (const { name, code } of MAPO_DONGS) {
-    out = out.replace(new RegExp(`\\b${code}\\b`, 'g'), name);
-  }
-  for (const [code, koName] of Object.entries(INDUSTRY_TO_BIZ_KO)) {
-    out = out.replace(new RegExp(`\\b${code}\\b`, 'g'), koName);
-  }
-  // 2. signal 결과(emerging/declining/normal) 통째 제거 — 신호등 박스에 이미 큰 시각으로 표시 중. 중복 회피.
-  out = out.replace(/\s*→\s*(emerging|declining|normal)\b/g, '');
-  // 3. stage=LL/LH/HL/HH (4-tier 내부 분류, 사용자 의미 0) 제거
-  out = out.replace(/\s*stage=[A-Z]{2}\s*/g, ' ');
-  // 4. ML/F1 jargon 정리
-  out = out.replace(/ML\s+classifier\s+예측\s*/g, '');
-  out = out.replace(/\(\s*신뢰\s+\d+%[^)]*\)\s*/g, '');
-  // 5. trailing 화살표/대시/콜론 + 다중 공백 정리
-  out = out.replace(/[\s—:>→-]+$/g, '');
-  out = out.replace(/\s+→\s+/g, ' — ');
-  out = out.replace(/\s{2,}/g, ' ').trim();
-  return out;
-}
 
 interface Props {
   signal: EmergingSignal | null | undefined;
+  /** 헤더 우측에 표시할 동 라벨 (없으면 미표시). */
+  district?: string;
 }
 
 interface SignalStyle {
@@ -98,7 +57,7 @@ const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
   },
 };
 
-export function EmergingSignalCard({ signal }: Props) {
+export function EmergingSignalCard({ signal, district }: Props) {
   if (!signal) {
     return (
       <div className="text-center">
@@ -114,15 +73,14 @@ export function EmergingSignalCard({ signal }: Props) {
   const style = SIGNAL_STYLES[signal.signal] ?? SIGNAL_STYLES.normal;
   const { Icon } = style;
   const scorePct = Math.round(Math.min(1, Math.max(0, signal.anomaly_score)) * 100);
-  const consecutive = signal.consecutive_anomaly_quarters;
 
   return (
     <div className="space-y-6">
-      {/* 헤더 */}
+      {/* 헤더 — 동 이름이 카드 제목 역할 (큰 폰트). 우측엔 mock 배지만. */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">
-          <Sparkles size={16} className="text-primary" /> 상권 조기 감지
-        </h4>
+        <h3 className="text-xl font-black italic leading-none tracking-tight text-foreground">
+          {district ?? '—'}
+        </h3>
         {signal.is_mock && (
           <div className="px-3 py-1 bg-warning/10 border border-warning/20 rounded-full text-[0.625rem] font-black text-warning flex items-center gap-1.5">
             <AlertCircle size={10} /> 데이터 신뢰도 검증 중
@@ -130,10 +88,10 @@ export function EmergingSignalCard({ signal }: Props) {
         )}
       </div>
 
-      {/* 신호등 + 연속 분기 — 세 박스 모두 동일 쿨그레이(bg-secondary border) 통일.
+      {/* 신호등 + 이상도 점수 — 두 박스 동일 쿨그레이(bg-secondary border) 통일.
           아이콘/라벨 색만 신호별 차별화 (정상=Teal Green / 신흥=Deep Blue / 쇠퇴=Vivid Red). */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-1 bg-secondary border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-2">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-secondary border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-2">
           <Icon className={style.text} size={28} />
           <div className={`text-base font-black ${style.text} tracking-tight`}>{style.label}</div>
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
@@ -141,7 +99,7 @@ export function EmergingSignalCard({ signal }: Props) {
           </div>
         </div>
 
-        <div className="col-span-1 bg-secondary border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
+        <div className="bg-secondary border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
           <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
             {scorePct}
           </div>
@@ -150,16 +108,6 @@ export function EmergingSignalCard({ signal }: Props) {
           </div>
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mt-1">
             이상도 점수
-          </div>
-        </div>
-
-        <div className="col-span-1 bg-secondary border border-border rounded-2xl p-5 flex flex-col items-center justify-center gap-1">
-          <div className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
-            {consecutive}
-          </div>
-          <div className="text-[0.6875rem] font-bold text-muted-foreground tracking-wide">분기</div>
-          <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mt-1">
-            연속 이상 감지
           </div>
         </div>
       </div>
@@ -182,24 +130,6 @@ export function EmergingSignalCard({ signal }: Props) {
           <span>0.5</span>
           <span>1</span>
         </div>
-      </div>
-
-      {/* 자연어 요약 — backend raw code(11440660 / CS100010) 를 한국어 동/업종 이름으로 휴머나이즈. */}
-      <div className="p-4 bg-secondary border border-border rounded-2xl">
-        <p className="text-[0.8125rem] text-foreground leading-relaxed">
-          {humanizeSignalText(signal.summary)}
-        </p>
-      </div>
-
-      {/* Disclaimer — 사용자 친화 톤. 모델명/threshold 같은 jargon 제거. */}
-      <div className="pt-4 border-t border-border space-y-1">
-        <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
-          ※ 분기별 상권 데이터 비교를 통한 상권 변화 조기 감지. 0.5 이상이면 평소와 다른 변화 신호.
-        </p>
-        <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
-          ※ 마포구 16동 × 10업종 학습. 코로나 영향으로 쇠퇴 감지가 다수, 신흥 신호는 상대적으로
-          희소합니다.
-        </p>
       </div>
     </div>
   );
