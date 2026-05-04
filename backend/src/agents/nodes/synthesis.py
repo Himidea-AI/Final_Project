@@ -68,10 +68,11 @@ async def synthesis_node(state: AgentState) -> dict:
     # v8: legal DANGER prompt 톤 조정 (자기모순 출력 차단) — v7 캐시 무효화
     # v9: BEP 분기 단위 통일 + TCN 키 오타 fix (quarterly_per_store/bep_quarters) — v8 무효화
     # v10: 종합 톤 — 법률 리스크 과부각 차단, 다른 에이전트 우위 반영 — v9 무효화
+    # v11: '리스크 및 대응' 섹션 — caution/danger 만 LLM 노출 + 블록 외 항목 hallucination 차단 — v10 무효화
     _winner_for_cache = state.get("winner_district", target_district)
     _raw_td = state.get("target_districts") or [target_district]
     _td_key = ",".join(sorted(set(d for d in _raw_td if d)))
-    cache_key = f"v10:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    cache_key = f"v11:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -166,10 +167,17 @@ async def synthesis_node(state: AgentState) -> dict:
 
     # 2. LLM 합성용 컨텍스트 구성
     # [토큰 절감] 중간 에이전트 리포트 전문 대신 핵심 수치만 전달
-    # legal: summary 60자 이내로 축약 (level이 핵심)
-    legal_summary_for_llm = "\n".join(
-        [f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}" for r in legal_risks]
-    )
+    # legal: '리스크 및 대응' 섹션 hallucination 방지를 위해 caution/danger 만 LLM 에 노출.
+    # safe 항목까지 넣으면 LLM 이 "식품위생/소방/근로계약" 같은 보편 카테고리를 safe 여도
+    # 끌어다 써서 legal_node 실제 판정과 어긋남.
+    _active_legal_risks = [r for r in legal_risks if isinstance(r, dict) and r.get("level") in ("caution", "danger")]
+    if _active_legal_risks:
+        legal_summary_for_llm = "\n".join(
+            f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}"
+            for r in _active_legal_risks
+        )
+    else:
+        legal_summary_for_llm = "- (해당 입지·업종 조건에서 caution/danger 등급 법률 항목 없음)"
 
     # trend_forecaster 결과 요약 (legal 뒤에 독립 배치, legal 블록 미접촉)
     trend_forecast_data = analysis_results.get("trend_forecast", {})
@@ -198,26 +206,22 @@ async def synthesis_node(state: AgentState) -> dict:
             f"  - 법률 리스크는 '준비·완화 가능한 절차적 사안'으로 다룰 것 — '권장하지 않음/금지/회피' 표현 금지.\n"
             f"  - '리스크 및 대응' 섹션에 구체적 위반 가능 항목 + 사전 대응 단계 명시 (영업신고·허가·용도변경 등).\n"
             f"  - 톤: '법적 리스크는 존재하나 사전 대응으로 충분히 해소 가능, 다른 지표가 우수해 입지 가치 높음'.\n"
-            + (
-                f"  - 비교 검토용 대안({_alt})은 보조 정보로만 한 줄. 메인 추천은 {target_district}.\n"
-                if _alt
-                else ""
-            )
+            + (f"  - 비교 검토용 대안({_alt})은 보조 정보로만 한 줄. 메인 추천은 {target_district}.\n" if _alt else "")
         )
     elif overall_legal_risk == "caution":
         legal_override = (
-            f"\n[법률 리스크 톤 가이드 — CAUTION]\n"
-            f"  - 법률 CAUTION은 '일반적인 창업 준수 사항' 수준 — 대부분의 신규 출점에서 마주하는 표준 절차.\n"
-            f"  - final_recommendation에서 법률 리스크를 결론의 부정적 근거로 부각하지 말 것.\n"
-            f"  - '리스크 및 대응' 섹션에서만 간결하게 다루고, 다른 섹션(추천 입지·핵심 근거·수익성·타이밍)은\n"
-            f"    상권·인구·경쟁·트렌드·SHAP 우위 요인 중심으로 우호적으로 작성.\n"
-            f"  - 톤: '주의 사항만 챙기면 진입 적합, 종합적으로 양호한 상권'.\n"
+            "\n[법률 리스크 톤 가이드 — CAUTION]\n"
+            "  - 법률 CAUTION은 '일반적인 창업 준수 사항' 수준 — 대부분의 신규 출점에서 마주하는 표준 절차.\n"
+            "  - final_recommendation에서 법률 리스크를 결론의 부정적 근거로 부각하지 말 것.\n"
+            "  - '리스크 및 대응' 섹션에서만 간결하게 다루고, 다른 섹션(추천 입지·핵심 근거·수익성·타이밍)은\n"
+            "    상권·인구·경쟁·트렌드·SHAP 우위 요인 중심으로 우호적으로 작성.\n"
+            "  - 톤: '주의 사항만 챙기면 진입 적합, 종합적으로 양호한 상권'.\n"
         )
     else:
         # safe — 법률 리스크 거의 언급 불필요
         legal_override = (
-            f"\n[법률 리스크 톤 가이드 — SAFE]\n"
-            f"  - 법률 SAFE — 별도 우려 없음. '리스크 및 대응' 섹션은 운영 일반 리스크(경쟁·매출 변동) 중심으로 작성.\n"
+            "\n[법률 리스크 톤 가이드 — SAFE]\n"
+            "  - 법률 SAFE — 별도 우려 없음. '리스크 및 대응' 섹션은 운영 일반 리스크(경쟁·매출 변동) 중심으로 작성.\n"
         )
 
     # [NEW] demographic_depth 결과를 LLM 프롬프트에 추가 (legal 블록 뒤에 배치, legal 블록은 그대로 보존)
@@ -251,11 +255,7 @@ async def synthesis_node(state: AgentState) -> dict:
     if _tcn_rev_quarter or _tcn_bep_q or _tcn_closure or _tcn_risk:
         tcn_block = (
             "\n[ML 모델 실측 수치 — 추측 금지, 아래 수치를 profit_simulation에 그대로 사용]\n"
-            + (
-                f"- 분기 예상 매출(quarterly_revenue, 점포당): {_tcn_rev_quarter:,.0f}원\n"
-                if _tcn_rev_quarter
-                else ""
-            )
+            + (f"- 분기 예상 매출(quarterly_revenue, 점포당): {_tcn_rev_quarter:,.0f}원\n" if _tcn_rev_quarter else "")
             + (f"- 손익분기점(bep_quarters): {_tcn_bep_q}분기\n" if _tcn_bep_q else "")
             + (f"- 3년 폐업률: {_tcn_closure * 100:.1f}%\n" if _tcn_closure is not None else "")
             + (f"- 폐업 위험도: {_tcn_risk * 100:.1f}%\n" if _tcn_risk is not None else "")
@@ -316,7 +316,7 @@ async def synthesis_node(state: AgentState) -> dict:
         + (f"{quarterly_block}\n" if quarterly_block else "")
         + (f"{shap_block}\n" if shap_block else "")
         + (f"{competitor_block}\n" if competitor_block else "")
-        + f"법률(14개):\n{legal_summary_for_llm}\n"
+        + f"법률(caution/danger {len(_active_legal_risks)}건):\n{legal_summary_for_llm}\n"
         f"{legal_override}"
         f"{demographic_context}\n"
         f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
@@ -329,12 +329,17 @@ async def synthesis_node(state: AgentState) -> dict:
         "5. FinalStrategyResult 스키마로 응답\n"
         f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
         "10. [중요 — 종합 톤] summary와 final_recommendation은 입지 가치 중심으로 우호적으로 작성.\n"
-        "   - 법률은 14개 분석 항목 중 하나일 뿐 — 결론을 좌우하는 핵심 근거가 아님.\n"
+        "   - 법률은 분석 항목 중 하나일 뿐 — 결론을 좌우하는 핵심 근거가 아님.\n"
         "   - 법률 리스크가 CAUTION/DANGER여도 '리스크 및 대응' 섹션 한 곳에서만 다루고,\n"
         "     summary·핵심 근거·수익성 전망·타이밍 제언에는 법률 부정 톤을 넣지 말 것.\n"
         "   - 상권·인구·경쟁·트렌드·SHAP·접근성 등 다른 에이전트 우위가 있으면 그것을 결론의 주된 근거로 삼을 것.\n"
         "   - 금지 표현: '법률 리스크 때문에 주의가 필요', '꺼려진다', '권장하지 않는다', '신중한 검토 필요'.\n"
         "   - 권장 표현: '주의 사항만 준수하면 적합', '사전 대응 가능한 절차적 사안', '종합적으로 양호한 상권'.\n"
+        "11. [필수 — '리스크 및 대응' 섹션 작성 규칙]\n"
+        "   - 법률 리스크는 위 [법률(caution/danger N건)] 블록에 명시된 type 만 사용한다.\n"
+        "   - 블록에 없는 항목(예: 식품위생법, 위생교육, 소방시설 의무, 근로계약서 등)을 임의로 추가·생성·언급하지 말 것.\n"
+        "   - 법률(caution/danger 0건) 인 경우 법률 항목 없이 운영 일반 리스크(경쟁·매출 변동·계절성 등)만 다룬다.\n"
+        "   - 각 항목은 위 블록 summary 를 근거로 1-2문장 + 사전 대응 단계.\n"
         "8. [중요] final_recommendation 출력 형식 — 가독성을 위해 반드시 아래 마크다운 구조로 작성:\n"
         "   - 각 섹션은 '## 섹션제목' 형식의 H2 헤더로 시작 (프론트에서 큰 글씨로 렌더됨)\n"
         "   - 섹션 사이는 빈 줄(\\n\\n) 두 번 들여 문단 분리\n"

@@ -125,7 +125,7 @@ function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
   const winner = (sim.winner_district ?? sim.target_district) as string | undefined;
   if (!winner) return [];
   const spots = (sim.vacancy_spots as VacancySpotRaw[] | undefined) ?? [];
-  return spots
+  const sorted = spots
     .filter((s) => s.dong_name === winner)
     .filter(
       (s) =>
@@ -149,8 +149,20 @@ function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
       const sb = b.score ?? Number.NEGATIVE_INFINITY;
       if (sa !== sb) return sb - sa;
       return b.listingCount - a.listingCount;
-    })
-    .slice(0, 4);
+    });
+  // 근접 중복 제거 — 같은 매물군이 다른 row 로 들어와 1·2·3위가 동일 좌표인 케이스 방어.
+  // 50m 이내는 동일 spot 으로 보고 상위 score 만 유지 → 화면에서 #1 펄싱핀에 #2·#3 핀이
+  // 가려지는 회귀 차단 (사용자 보고: "공실 #1 과 #4만 보인다").
+  const DEDUP_RADIUS_M = 50;
+  const deduped: BestVacancy[] = [];
+  for (const cand of sorted) {
+    const tooClose = deduped.some(
+      (kept) => haversineM(kept.lat, kept.lng, cand.lat, cand.lng) <= DEDUP_RADIUS_M,
+    );
+    if (!tooClose) deduped.push(cand);
+    if (deduped.length >= 4) break;
+  }
+  return deduped;
 }
 
 export function MapSection({ simResult }: Props) {
@@ -236,6 +248,7 @@ export function MapSection({ simResult }: Props) {
           targetSpots={bestVacancies.map((v) => ({ lat: v.lat, lng: v.lng }))}
           sameBrandLocations={sameBrandLocations}
           territoryRadiusM={territoryRadiusM ?? null}
+          userBrand={brand}
         />
 
         {/* Layer 6 — 좌하단 범례 패널 */}
