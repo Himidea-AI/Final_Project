@@ -24,6 +24,55 @@ _AGENT_KEYS_ORDERED: list[tuple[str, str]] = [
 ]
 
 
+def _compute_synthesis_confidence(
+    agent_attributions: list[dict],
+    overall_legal_risk: str,
+    scouting_results: list[dict] | None = None,
+    legal_risks: list[dict] | None = None,
+) -> float:
+    """synthesis 노드 confidence 동적 산출 (이전 0.85 하드코딩 회귀 차단).
+
+    - base : 다른 에이전트 attribution 의 confidence 평균. 데이터/모델 fallback 으로
+             떨어진 에이전트가 있으면 자연스럽게 낮아짐.
+    - legal_adj : danger -0.08, caution -0.03, safe 0. 추천 입지 결정의 절차적 리스크 반영.
+    - spread_adj : scouting 1·2위 점수 격차 ≥ 10 점이면 winner 확정도 ↑(+0.03), ≤ 3 점이면
+                   모호 ↓(-0.03). 그 사이는 0.
+    - fallback_adj : legal_risks 중 is_fallback 비율 만큼 페널티(최대 -0.05).
+    clamp [0.5, 0.95].
+    """
+    confs = [
+        a.get("confidence")
+        for a in agent_attributions or []
+        if isinstance(a, dict) and isinstance(a.get("confidence"), (int, float))
+    ]
+    base = sum(confs) / len(confs) if confs else 0.85
+
+    legal_adj = {"danger": -0.08, "caution": -0.03}.get(str(overall_legal_risk or "").lower(), 0.0)
+
+    spread_adj = 0.0
+    if scouting_results and len(scouting_results) >= 2:
+        try:
+            s1 = float(scouting_results[0].get("score", 0) or 0)
+            s2 = float(scouting_results[1].get("score", 0) or 0)
+            gap = abs(s1 - s2)
+            if gap >= 10:
+                spread_adj = 0.03
+            elif gap <= 3:
+                spread_adj = -0.03
+        except (TypeError, ValueError):
+            spread_adj = 0.0
+
+    fallback_adj = 0.0
+    if legal_risks:
+        n = len(legal_risks)
+        fb = sum(1 for r in legal_risks if isinstance(r, dict) and r.get("is_fallback"))
+        if n > 0:
+            fallback_adj = -0.05 * (fb / n)
+
+    score = base + legal_adj + spread_adj + fallback_adj
+    return round(max(0.5, min(0.95, score)), 3)
+
+
 def _collect_upstream_attributions(state: dict, analysis_results: dict) -> list[dict]:
     """다른 에이전트 결과에서 agent_attribution 수집.
 
@@ -115,7 +164,12 @@ async def synthesis_node(state: AgentState) -> dict:
                 sources=[f"{len(cached_attributions)}개 에이전트 결과"],
                 verdict=f"종합 판단 · 법률 {cached_overall}",
                 reasoning=str(cached_summary_text) if cached_summary_text else "전략 종합 (캐시)",
-                confidence=0.85,
+                confidence=_compute_synthesis_confidence(
+                    cached_attributions,
+                    cached_overall,
+                    scouting_results=state.get("scouting_results") or analysis.get("district_rankings"),
+                    legal_risks=analysis.get("legal_risks"),
+                ),
             )
             cached_attributions.append(cached_synth_attr)
             analysis["agent_attributions"] = cached_attributions
@@ -464,7 +518,12 @@ async def synthesis_node(state: AgentState) -> dict:
         sources=[f"{len(agent_attributions)}개 에이전트 결과"],
         verdict=f"종합 판단 · 법률 {overall_legal_risk}",
         reasoning=str(final_strategy.summary if final_strategy else ""),
-        confidence=0.85,
+        confidence=_compute_synthesis_confidence(
+            agent_attributions,
+            overall_legal_risk,
+            scouting_results=scouting_results,
+            legal_risks=legal_risks,
+        ),
     )
     agent_attributions.append(synthesis_attr)
     new_analysis_results["agent_attributions"] = agent_attributions
