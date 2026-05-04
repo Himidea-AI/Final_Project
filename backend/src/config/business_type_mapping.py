@@ -25,10 +25,16 @@
     - ftc_brand_franchise.indutyMlsfcNm 실제 표기 (DB top 매칭):
       한식·중식·일식·치킨·분식·주점·커피·패스트푸드는 단일 한글, 양식→"서양식",
       제과→"제과제빵", 커피의 비커피음료→"음료 (커피 외)" 표기.
+    - FTC "피자" 별 카테고리 (303 brand): 정책상 패스트푸드로 흡수 (잠정).
+      _ALIASES["피자"]=패스트푸드 와 정합. 추후 11번째 카테고리 분리 검토 가능.
 
 비포함:
     - 편의점 (CS200009): 시뮬레이션 입력 옵션 외. store_quarterly 미존재.
       kakao_store(415)/ftc_brand_franchise(103) 데이터는 있으나 시뮬 흐름 미사용.
+    - "기타 외식" (ftc_brand_franchise 3725건, unique brand 1730): 10종 표준 카테고리에
+      안 맞는 외식 잡종. 키워드 패턴 매칭 ≈35% (한식 17.6% / 일식·치킨 ~3% / ...),
+      65%는 퓨전·영문명·신조어. 한식 흡수 시 82% 오분류라 흡수 부적절.
+      TODO: 11번째 카테고리 "기타외식" 신설 검토 (시뮬 미지원, 운영/분석 한정).
 """
 
 from __future__ import annotations
@@ -105,8 +111,8 @@ BUSINESS_TYPE_MAPPING: dict[str, BusinessTypeEntry] = {
         "kakao_category": "양식음식점",
         "kakao_keyword": "양식",
         # DB 실측: ftc_brand_franchise.indutyMlsfcNm 은 "서양식" 표기 (838건).
-        # "양식" 은 입력 호환용. "피자" 는 _ALIASES 와 충돌 가능 — 정책 결정 후 조정 (TODO).
-        "ftc_keywords": ["서양식", "양식", "피자", "파스타", "스테이크"],
+        # "양식" 은 입력 호환용. "피자"(303 brand)는 _ALIASES 정합 위해 패스트푸드 카테고리로 분류.
+        "ftc_keywords": ["서양식", "양식", "파스타", "스테이크"],
         "naver_industry": "양식",
         "label_kr": "양식음식점",
         "label_en": "western",
@@ -127,7 +133,9 @@ BUSINESS_TYPE_MAPPING: dict[str, BusinessTypeEntry] = {
         "db_industry_name": "패스트푸드점",
         "kakao_category": "패스트푸드점",
         "kakao_keyword": "버거",
-        "ftc_keywords": ["패스트푸드", "햄버거", "버거", "샌드위치"],
+        # DB 실측: "피자"(303 brand)는 FTC 가 별 카테고리로 분리. 정책상 패스트푸드 흡수 (잠정).
+        # _ALIASES["피자"]=패스트푸드 와 정합. 도미노피자·피자헛 등 영업지역 분석은 패스트푸드 풀에서.
+        "ftc_keywords": ["패스트푸드", "햄버거", "버거", "샌드위치", "피자"],
         "naver_industry": "패스트푸드",
         "label_kr": "패스트푸드점",
         "label_en": "fastfood",
