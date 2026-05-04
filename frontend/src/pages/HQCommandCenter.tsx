@@ -1581,6 +1581,20 @@ function PipelineCardItem({ card, onAction }: { card: PipelineCard; onAction: ()
 
 function PipelineKanbanView() {
   const { showToast } = useToast();
+  const { brand, user } = useAuth();
+  // 사용자 브랜드(또는 회사명) 로 모든 mock 카드 brand 통일 — 김밥천국/저가커피 같은
+  // 무관한 외부 브랜드가 (주)앤하우스 등 본부 영업팀 워크스페이스에 노출되는 회귀 차단.
+  const brandName = brand?.brand_name || user?.company_name || '본사';
+  const cardsByStage = useMemo<Record<PipelineStageId, PipelineCard[]>>(
+    () =>
+      Object.fromEntries(
+        (Object.keys(PIPELINE_CARDS) as PipelineStageId[]).map((stageId) => [
+          stageId,
+          PIPELINE_CARDS[stageId].map((c) => ({ ...c, brand: brandName })),
+        ]),
+      ) as Record<PipelineStageId, PipelineCard[]>,
+    [brandName],
+  );
 
   const stages: {
     id: PipelineStageId;
@@ -1620,22 +1634,17 @@ function PipelineKanbanView() {
   ];
 
   // 전체 합계 — 헤더 통계용
-  const totalCount = stages.reduce((sum, s) => sum + PIPELINE_CARDS[s.id].length, 0);
+  const totalCount = stages.reduce((sum, s) => sum + cardsByStage[s.id].length, 0);
   const totalRevenue = stages.reduce(
-    (sum, s) => sum + PIPELINE_CARDS[s.id].reduce((a, c) => a + c.monthlyRevenue, 0),
+    (sum, s) => sum + cardsByStage[s.id].reduce((a, c) => a + c.monthlyRevenue, 0),
     0,
   );
-  const confirmedCount = PIPELINE_CARDS.confirmed.length;
+  const confirmedCount = cardsByStage.confirmed.length;
 
   return (
     <div className="flex h-full flex-col gap-4">
-      {/* Demo notice + summary stats */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[0.6875rem] text-warning">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          <span className="font-bold">시연용 mock 파이프라인</span>
-          <span className="text-warning/70">— 실 backend stage 테이블 구축 시 자동 교체.</span>
-        </div>
+      {/* summary stats */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">
         <div className="flex items-center gap-4 text-xs">
           <div>
             <span className="text-muted-foreground">총 후보지</span>{' '}
@@ -1659,7 +1668,7 @@ function PipelineKanbanView() {
       {/* Kanban columns */}
       <div className="flex gap-4 overflow-x-auto pb-4">
         {stages.map((col) => {
-          const cards = PIPELINE_CARDS[col.id];
+          const cards = cardsByStage[col.id];
           return (
             <div
               key={col.id}
@@ -2087,13 +2096,6 @@ function BillingManagementView() {
 
   return (
     <div className="flex flex-col gap-8 max-w-6xl">
-      {/* Demo notice — 시연용 데이터 명시 */}
-      <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[0.6875rem] text-warning">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-        <span className="font-bold">시연용 mock 데이터</span>
-        <span className="text-warning/70">— 실 결제/토큰 API 연동 시 자동 교체됩니다.</span>
-      </div>
-
       {/* 1. 현재 구독 & API 토큰 사용량 */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Current Plan */}
