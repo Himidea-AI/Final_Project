@@ -2,21 +2,19 @@
  * QuarterlyProjectionChart — 분기별 매출 예측 차트 (다중 동)
  *
  * TCN 모델 출력(quarterly_projection)을 동별로 시각화:
- * - 각 동별 별도 Line (indigo / cyan / amber / rose)
+ * - 각 동별 별도 Line (Deep Blue Sequential 4-tier — winner 진하게 → 4위 옅게)
  * - winner 동: strokeWidth 3, dot r 5 강조 (winnerDistrict prop)
- * - 신뢰구간(Area): 첫 번째 동(series[0])의 ci_95/80 또는 confidence_lower/upper 만 음영
  * - BEP 도달 시점(ReferenceLine): winner 동의 cumulative_profit > 0 첫 분기 (강조 라인과 일치)
  * - 범례: 동 이름
  *
  * Round 2 / B4 (2026-04-29): 단일 동 → 다중 동 시리즈 전환.
- * M5 (2026-04-29): CI 음영/BEP 기준을 winnerDistrict → series[0] 으로 변경 (명세 충실).
+ * 2026-05-04 (강민): CI 음영(Area) + "낙관/비관 범위" 범례 제거 — 차트 정돈.
  * 호출처에서 series 가 비어있거나 길이 0 이면 "데이터 없음" 표시.
  */
 
 import { useState } from 'react';
 import {
   ComposedChart,
-  Area,
   Line,
   Legend,
   LabelList,
@@ -37,27 +35,22 @@ export interface ChartSeries {
 
 interface Props {
   series: ChartSeries[];
-  /** 강조 + CI 음영 + BEP 라인 대상 동 (없으면 series[0] 사용) */
+  /** 강조 + BEP 라인 대상 동 (없으면 series[0] 사용) */
   winnerDistrict?: string;
 }
 
-// 4동 차트 팔레트 — 1위 동 = chart-1 (Deep Blue, brand primary).
-// 2~4위는 vivid-red / teal-green / sunshine-yellow 로 hue 분리 (이 차트 한정).
-// NOTE: sunshine-yellow 는 12색 팔레트 정책상 §Decoration (큰 면적 장식) 권장이지만,
-//   light-pink CI 음영 위에서 hot-pink/purple 이 묻혀 가독성 약해 강민 판단으로 yellow 채택.
-// QuarterlyStatStrip 의 동 선택 chip 색 매핑이 동일 순서를 사용 — drift 방지 위해 export.
+// 2026-05-04: 4동 ranking 비교 categorical 4 색 (Sequential Blue 가독성 부족으로 회귀).
+// hue distinct: Deep Blue / Console Purple / Console Pink / Starbucks Green (60° 균등 분포).
+// 사용처: dpredicts 를 ranking 순(winner_district + top_3_candidates) 으로 정렬 후 idx 매핑.
+// idx 0 = winner / 1=2위 / 2=3위 / 3=4위. winner 만 stroke 3px / 나머지 2.5px solid 로 ordinal 강조.
+// QuarterlyStatStrip 의 동 chip 색도 동일 순서 — drift 방지 위해 export.
 export const SERIES_COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--color-sunshine-yellow)',
+  'var(--rank-1)',
+  'var(--rank-2)',
+  'var(--rank-3)',
+  'var(--rank-4)',
 ] as const;
 const COLORS = SERIES_COLORS;
-
-// 신뢰구간 음영 fill — 1위 동 매출선(chart-1 = Deep Blue)과 시각 분리.
-// 12색 팔레트의 §Decoration 색 (큰 면적 장식 적격, 라인/마커엔 부적격).
-// light-pink 는 데이터 라인 색들과 hue 가 멀어 매출선이 또렷이 보이는 배경음영 역할.
-const CI_FILL = 'var(--decor-light-pink)';
 
 // 값 크기에 따라 억원/만원 단위 자동 스위칭 — 0.1억원 같은 라벨 중복·정보 손실 방지
 const formatKRW = (value: number): string => {
@@ -99,12 +92,7 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
     data: s.projection.slice(0, visibleLen).map((d, i) => ({ ...d, quarter: i + 1 })),
   }));
 
-  // CI 음영 / BEP 라인 기준 시리즈 — 명세상 첫 번째 동(series[0])
-  const ciSourceSeries = trimmedSeries[0]!;
-
-  // wide format 변환: row = { quarter, [동]_revenue, ci_high?, ci_low?, ... }
-  const has95Ci = ciSourceSeries.data.some((d) => d.ci_95_upper != null && d.ci_95_lower != null);
-  const has80Ci = ciSourceSeries.data.some((d) => d.ci_80_upper != null && d.ci_80_lower != null);
+  // wide format 변환: row = { quarter, [동]_revenue, ... }
   const quarterAxis = Array.from({ length: visibleLen }, (_, i) => i + 1);
   const chartData = quarterAxis.map((q) => {
     const row: Record<string, number | null | undefined> = { quarter: q };
@@ -112,43 +100,21 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
       const point = s.data.find((p) => p.quarter === q);
       row[`${s.district}_revenue`] = point?.revenue ?? null;
     }
-    // 첫 번째 동(series[0])의 CI 만 음영용으로 노출
-    const ciPoint = ciSourceSeries.data.find((p) => p.quarter === q);
-    if (ciPoint) {
-      row.ci_95_lower = ciPoint.ci_95_lower ?? null;
-      row.ci_95_upper = ciPoint.ci_95_upper ?? null;
-      row.ci_80_lower = ciPoint.ci_80_lower ?? null;
-      row.ci_80_upper = ciPoint.ci_80_upper ?? null;
-      row.confidence_lower = ciPoint.confidence_lower ?? null;
-      row.confidence_upper = ciPoint.confidence_upper ?? null;
-    }
     return row;
   });
 
   // BEP 도달 시점: winner 동 기준 (강조 라인과 일치).
   // cumulative_profit > 0 strict 비교로 backend default 0 폴백 매칭 방지.
   const winnerSourceSeries =
-    trimmedSeries.find((s) => s.district === effectiveWinner) ?? ciSourceSeries;
+    trimmedSeries.find((s) => s.district === effectiveWinner) ?? trimmedSeries[0]!;
   const bepQuarter = winnerSourceSeries.data.find((d) => d.cumulative_profit > 0)?.quarter ?? null;
 
   // ─── Y축 auto-zoom 계산 ───
-  // 모든 동의 매출 + CI 영역 값을 모아 min/max 산출. zoom ON 시 [min - 18%, max + 18%].
+  // 모든 동의 매출 값을 모아 min/max 산출. zoom ON 시 [min - 18%, max + 18%].
   // OFF 시 [0, max + 18%] (zero-baseline 보호).
   const allValues: number[] = [];
   for (const s of trimmedSeries) {
     for (const d of s.data) if (d.revenue != null) allValues.push(d.revenue);
-  }
-  for (const d of ciSourceSeries.data) {
-    for (const v of [
-      d.confidence_lower,
-      d.confidence_upper,
-      d.ci_95_lower,
-      d.ci_95_upper,
-      d.ci_80_lower,
-      d.ci_80_upper,
-    ]) {
-      if (v != null) allValues.push(v);
-    }
   }
   const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
   const dataMax = allValues.length > 0 ? Math.max(...allValues) : 1;
@@ -198,38 +164,13 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
     );
   };
 
-  // CI 음영이 한 번이라도 그려지는지 — 통합 범례 항목 표시 여부 결정
-  const hasAnyCi =
-    has95Ci ||
-    has80Ci ||
-    ciSourceSeries.data.some((d) => d.confidence_lower != null && d.confidence_upper != null);
-
-  // Legend payload 를 명시적으로 구성 — recharts 의 legendType="none" 이 Area 의
-  // name prop 가 있을 때 항목을 완전히 숨기지 못하는 동작을 우회.
-  // 동별 매출 라인 (circle) + CI 음영 단일 통합 항목 (rect band).
-  const legendPayload: Array<{
-    value: string;
-    type: 'circle' | 'rect';
-    color: string;
-    id: string;
-  }> = [
-    ...trimmedSeries.map((s, idx) => ({
-      value: s.district,
-      type: 'circle' as const,
-      color: COLORS[idx % COLORS.length]!,
-      id: `series-${s.district}`,
-    })),
-    ...(hasAnyCi
-      ? [
-          {
-            value: '낙관 / 비관 범위',
-            type: 'rect' as const,
-            color: CI_FILL,
-            id: 'ci-band',
-          },
-        ]
-      : []),
-  ];
+  // Legend payload — 동별 매출 라인 circle 만.
+  const legendPayload = trimmedSeries.map((s, idx) => ({
+    value: s.district,
+    type: 'circle' as const,
+    color: COLORS[idx % COLORS.length]!,
+    id: `series-${s.district}`,
+  }));
 
   // mock 배지 — 임의 동에 mock 분기가 하나라도 있으면 표시
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
@@ -305,18 +246,6 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
           {/* Tooltip */}
           <Tooltip
             formatter={(value: number, name: string) => {
-              // ci_* / confidence_* 키는 라벨 보강
-              const ciLabels: Record<string, string> = {
-                ci_95_lower: '비관 시나리오',
-                ci_95_upper: '낙관 시나리오',
-                ci_80_lower: '비관 (80%)',
-                ci_80_upper: '낙관 (80%)',
-                confidence_lower: '비관 시나리오',
-                confidence_upper: '낙관 시나리오',
-              };
-              if (name in ciLabels) {
-                return [formatKRW(value), ciLabels[name]];
-              }
               // {동}_revenue → "{동} 매출"
               if (name.endsWith('_revenue')) {
                 const district = name.replace(/_revenue$/, '');
@@ -334,101 +263,13 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
             itemStyle={{ color: 'var(--muted-foreground)' }}
           />
 
-          {/* 범례 — 그래프 아래(standard 위치). payload 명시 구성:
-              동별 매출 (circle) + CI 음영 통합 항목 "예상 매출 범위" (rect).
-              상한/하한 분리 노출 제거 — 같은 음영 band 의 두 경계라 의미상 중복. */}
+          {/* 범례 — 그래프 아래. 동별 매출 라인만 (CI 음영 제거). */}
           <Legend
             verticalAlign="bottom"
             height={28}
             wrapperStyle={{ paddingTop: 8, fontSize: 11 }}
             payload={legendPayload}
           />
-
-          {/* 신뢰구간 — 첫 번째 동(series[0]) 만 음영. 95/80 이중 또는 단일 confidence.
-              fill 색상은 COLORS[0] (chart-1) 로 series[0] 라인 색과 일치 */}
-          {has95Ci ? (
-            <>
-              <Area
-                type="monotone"
-                dataKey="ci_95_lower"
-                stroke="none"
-                fill={CI_FILL}
-                fillOpacity={0}
-                legendType="none"
-                isAnimationActive={false}
-                dot={false}
-                activeDot={false}
-                name="95% 하한"
-              />
-              <Area
-                type="monotone"
-                dataKey="ci_95_upper"
-                stroke="none"
-                fill={CI_FILL}
-                fillOpacity={0.08}
-                legendType="none"
-                isAnimationActive={false}
-                dot={false}
-                activeDot={false}
-                name="95% 상한"
-              />
-              {has80Ci && (
-                <>
-                  <Area
-                    type="monotone"
-                    dataKey="ci_80_lower"
-                    stroke="none"
-                    fill="var(--chart-1)"
-                    fillOpacity={0}
-                    legendType="none"
-                    isAnimationActive={false}
-                    dot={false}
-                    activeDot={false}
-                    name="80% 하한"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="ci_80_upper"
-                    stroke="none"
-                    fill="var(--chart-1)"
-                    fillOpacity={0.22}
-                    legendType="none"
-                    isAnimationActive={false}
-                    dot={false}
-                    activeDot={false}
-                    name="80% 상한"
-                  />
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              <Area
-                type="monotone"
-                dataKey="confidence_lower"
-                stroke="none"
-                fill={CI_FILL}
-                fillOpacity={0}
-                legendType="none"
-                isAnimationActive={false}
-                dot={false}
-                activeDot={false}
-                name="예상 매출 범위 하한"
-              />
-              <Area
-                type="monotone"
-                dataKey="confidence_upper"
-                stroke="none"
-                fill={CI_FILL}
-                fillOpacity={0.1}
-                legendType="none"
-                isAnimationActive={false}
-                dot={false}
-                activeDot={false}
-                name="예상 매출 범위 상한"
-              />
-            </>
-          )}
 
           {/* winner 동 4분기 평균선 — 미세 변동을 평균 대비 시각 강조용 reference. */}
           {winnerAvg !== null && (
@@ -446,10 +287,18 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
             />
           )}
 
-          {/* 동별 매출 라인 — winner 강조 (stroke 3, dot r 5) + winner 만 Δ% 라벨 */}
+          {/* 동별 매출 라인 — Deep Blue Sequential 4-tier stroke hierarchy.
+              winner (idx 0): stroke 3px / dot r 5 / solid (강조)
+              2~3위 (idx 1~2): stroke 2.5px / dot r 4 / solid
+              4위 (마지막 idx, Ice Blue): stroke 3px / dot r 4 / dashed `6 3` — 1.3:1 contrast 형태 채널 보완
+              winner 만 Δ% 라벨 (4동 동시 표시 시 라벨 겹침 방지). */}
           {trimmedSeries.map((s, idx) => {
             const color = COLORS[idx % COLORS.length]!;
             const isWinner = s.district === effectiveWinner;
+            // categorical 4 색 — 모두 AAA/AA contrast 통과라 dashed 형태 보완 불요.
+            // winner=3px solid r=5 / 나머지=2.5px solid r=4 — ordinal 강조만 stroke 로 표현.
+            const strokeWidth = isWinner ? 3 : 2.5;
+            const dotR = isWinner ? 5 : 4;
             return (
               <Line
                 key={s.district}
@@ -457,8 +306,8 @@ export function QuarterlyProjectionChart({ series, winnerDistrict }: Props) {
                 dataKey={`${s.district}_revenue`}
                 name={s.district}
                 stroke={color}
-                strokeWidth={isWinner ? 3 : 2}
-                dot={{ r: isWinner ? 5 : 3, fill: color }}
+                strokeWidth={strokeWidth}
+                dot={{ r: dotR, fill: color }}
                 activeDot={{ r: 6, stroke: 'var(--card)', strokeWidth: 2 }}
                 isAnimationActive={false}
                 connectNulls

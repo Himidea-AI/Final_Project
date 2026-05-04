@@ -38,12 +38,13 @@ const DELTA_COLOR: Record<string, string> = {
   '+20': '#008B0099', // 60%
   '+30': '#008B00', // 100%
 };
-// palette-catalog SoT — chart-1~4 그대로 매핑
+// palette-catalog SoT — Deep Blue Sequential 4-tier (Q1~Q4 ordinal 시간 비교).
+// Q1~Q4 = 시간 ordinal 의미라 categorical (chart-1~4) 보다 sequential 정합.
 const QUARTER_COLOR: Record<QuarterKey, string> = {
-  Q1: '#002CD1', // Deep Blue (chart-1)
-  Q2: '#FB565B', // Danger Coral (chart-2)
-  Q3: '#008B00', // Success Emerald (chart-3)
-  Q4: '#7928CA', // Console Purple (chart-4)
+  Q1: 'var(--rank-1)', // Deep Blue
+  Q2: 'var(--rank-2)', // Electric Blue
+  Q3: 'var(--rank-3)', // Sky Blue
+  Q4: 'var(--rank-4)', // Ice Blue
 };
 
 const X_LABELS = ['1분기 후', '2분기 후', '3분기 후', '4분기 후'];

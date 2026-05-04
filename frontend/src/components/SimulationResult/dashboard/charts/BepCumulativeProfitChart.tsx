@@ -32,7 +32,8 @@ interface Props {
   height?: number;
 }
 
-// 4동 차트 팔레트 — QuarterlyProjectionChart 와 form 통일 (deep blue / vivid red / teal / sunshine-yellow).
+// 4동 차트 팔레트 — QuarterlyProjectionChart 와 동일 (Deep Blue Sequential 4-tier).
+// idx 0 = winner (rank-1 Deep Blue) … idx 3 = 4위 (rank-4 Ice Blue, dashed).
 const COLORS = SERIES_COLORS;
 
 const formatKRW = (value: number): string => {
@@ -148,21 +149,32 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
           {/* y=0 기준선 — BEP 도달 시각화 */}
           <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="2 2" />
 
-          {/* 동별 누적이익 라인 — 4 색상 순환 */}
-          {trimmedSeries.map((s, idx) => (
-            <Line
-              key={s.district}
-              type="monotone"
-              dataKey={`${s.district}_cumulative`}
-              name={s.district}
-              stroke={COLORS[idx % COLORS.length]}
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5, stroke: 'var(--card)', strokeWidth: 1 }}
-              isAnimationActive={false}
-              connectNulls
-            />
-          ))}
+          {/* 동별 누적이익 라인 — Deep Blue Sequential 4-tier stroke hierarchy.
+              idx 0 (winner): stroke 3px / dot r 5 / solid
+              idx 1~2 (2~3위): stroke 2.5px / dot r 4 / solid
+              idx 마지막 (Ice Blue): stroke 3px / dot r 4 / dashed `6 3` (1.3:1 contrast 보완)
+              호출처(PredictFinancialSimTab) 에서 sortByRanking 으로 ranking 정렬 후 전달. */}
+          {trimmedSeries.map((s, idx) => {
+            const isWinner = idx === 0;
+            const isIce = idx === trimmedSeries.length - 1 && trimmedSeries.length > 1;
+            const strokeWidth = isWinner ? 3 : isIce ? 3 : 2.5;
+            const dotR = isWinner ? 5 : 4;
+            return (
+              <Line
+                key={s.district}
+                type="monotone"
+                dataKey={`${s.district}_cumulative`}
+                name={s.district}
+                stroke={COLORS[idx % COLORS.length]}
+                strokeWidth={strokeWidth}
+                strokeDasharray={isIce ? '6 3' : undefined}
+                dot={{ r: dotR }}
+                activeDot={{ r: 6, stroke: 'var(--card)', strokeWidth: 1 }}
+                isAnimationActive={false}
+                connectNulls
+              />
+            );
+          })}
 
           {/* BEP ReferenceLine — series[0] 기준 */}
           {bepQuarter !== null && (

@@ -16,15 +16,29 @@
 | Background Cream | `#F8F7E8` | `--color-cream`      | **페이지 바닥** (`--background`), `--accent`/`--decor-cream` 별칭 유지 |
 | Text Black       | `#000000` | `--color-text-black` | 본문 텍스트 (alias: `--foreground`)                                  |
 
-### Point — 브랜드/포인트 (2)
-주된 액션·강조. 사용 빈도 가장 높음.
+### Point — 브랜드/포인트 (5)
+주된 액션·강조 + Deep Blue Sequential 4-tier (4동 ranking 비교 / quarter ordinal / 시간 시퀀스).
 
-| 이름            | Hex       | CSS 변수                  | 역할                                                              |
-| --------------- | --------- | ------------------------- | ----------------------------------------------------------------- |
-| Console Pink    | `#EB367F` | `--color-starburst-pink`  | 장식 only (`--decor-starburst-pink`) — 토큰명 historical          |
-| **Deep Blue**   | `#002CD1` | `--color-deep-blue`       | **브랜드 primary** (`--primary`, `--ring`, `--chart-1`)           |
+| 이름                  | Hex       | CSS 변수                  | 역할                                                                       |
+| --------------------- | --------- | ------------------------- | -------------------------------------------------------------------------- |
+| Console Pink          | `#EB367F` | `--color-starburst-pink`  | 장식 only (`--decor-starburst-pink`) — 토큰명 historical                   |
+| **Deep Blue (Main)**  | `#002CD1` | `--color-deep-blue`       | **브랜드 primary** (`--primary`, `--ring`, `--chart-1`, `--rank-1`) — 1위  |
+| Electric Blue (Sub 1) | `#3D62FF` | `--color-electric-blue`   | Sequential 2단계 (`--rank-2`) — 4동 비교 2위                               |
+| Sky Blue (Sub 2)      | `#87A5FF` | `--color-sky-blue`        | Sequential 3단계 (`--rank-3`) — 4동 비교 3위                               |
+| Ice Blue (Sub 3)      | `#C2D1FF` | `--color-ice-blue`        | Sequential 4단계 (`--rank-4`) — 4동 비교 4위 (outlier, dashed 라인 권장)   |
 
 > **Deep Blue가 brand primary**. 이전 인디고(`#6366f1` / `#818cf8`)는 다크모드 잔재. 모든 indigo RGB 값(`99,102,241` / `129,140,248`)은 `0,44,209`로 치환 완료.
+
+#### Deep Blue Sequential 4-tier (`--rank-1` ~ `--rank-4`)
+
+- **용도**: 4동 ranking 비교 / quarter ordinal (Q1~Q4) / 시간 시퀀스 — categorical 다른 hue로 분리한 chart-2~4 와 의미 구분.
+- **이유**: 4동 ranking 은 ordinal (winner→4위) 의미라 monochromatic gradient 가 정합. categorical(chart-1~4) 은 의미 분리, sequential(rank-1~4) 은 순위 강도.
+- **Stroke hierarchy (LineChart)**:
+  - 1위 (Winner) : stroke 3px / dot r=5 / solid
+  - 2~3위        : stroke 2.5px / dot r=4 / solid
+  - 4위 (Ice)    : stroke 3px / dot r=4 / **dashed `6 3`** — Ice Blue 1.3:1 contrast 를 형태 채널로 보완
+- **BarChart**: fill 만 적용 (dash 의미 없음). Bar 면적이 크니까 Ice Blue 도 가독성 확보. 통일감 우선.
+- **Ice Blue (1.3:1)** 는 WCAG fail — LineChart 에선 stroke 3px + dashed 또는 큰 면적 fill only. 작은 마커 / 얇은 선 / 텍스트 사용 금지.
 
 ### Geometric — 데이터/상태 (5)
 차트·상태·KPI. 라이트 배경에서 충분한 컨트라스트(≥ 4.5:1) 확보된 색만 들어감.
@@ -64,7 +78,10 @@
 --color-cream: #f8f7e8;
 --color-text-black: #000000;
 --color-starburst-pink: #eb367f;   /* Console Pink (2026-05-03 hex 교체) */
---color-deep-blue: #002cd1;
+--color-deep-blue: #002cd1;        /* Main — 1위 / primary */
+--color-electric-blue: #3d62ff;    /* Sub 1 — 2위 (Sequential 4-tier) */
+--color-sky-blue: #87a5ff;         /* Sub 2 — 3위 */
+--color-ice-blue: #c2d1ff;         /* Sub 3 — 4위 outlier */
 --color-vivid-red: #fb565b;        /* Danger Coral (2026-05-03 hex 교체) */
 --color-bright-cyan: #00e0d1;
 --color-sunshine-yellow: #ffde00;
@@ -73,6 +90,12 @@
 --color-soft-orange: #ffba00;      /* Warning Amber */
 --color-light-pink: #ffb6d0;
 --color-vibrant-purple: #7928ca;   /* Console Purple */
+
+/* ranking alias — 4동 비교 차트 ordinal 매핑 */
+--rank-1: var(--color-deep-blue);
+--rank-2: var(--color-electric-blue);
+--rank-3: var(--color-sky-blue);
+--rank-4: var(--color-ice-blue);
 ```
 
 ---

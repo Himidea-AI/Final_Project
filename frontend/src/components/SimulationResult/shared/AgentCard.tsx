@@ -1,28 +1,34 @@
-import {
-  TrendingUp,
-  Users,
-  ShieldAlert,
-  Target,
-  Brain,
-  UserSearch,
-  LineChart as LineChartIcon,
-  Crosshair,
-  Route,
-  type LucideIcon,
-} from 'lucide-react';
+/**
+ * AgentCard — LangGraph 9 에이전트 attribution 카드.
+ *
+ * 2026-05-04 (강민): lucide-react 아이콘 → 자체 페르소나 PNG 9개로 교체.
+ *  - 백엔드 agent_id 9개 ↔ frontend/src/assets/agents/*.png 1:1 매핑
+ *  - AGENT_COLORS (text-primary 등) 는 badge/strong text 강조용으로 그대로 유지
+ *  - compact (9×9) / full (14×14) 두 size 모두 png 적용
+ */
+import competitorIcon from '../../../assets/agents/competitor.png';
+import demographicIcon from '../../../assets/agents/demographic.png';
+import inflowIcon from '../../../assets/agents/inflow.png';
+import legalIcon from '../../../assets/agents/legal.png';
+import marketIcon from '../../../assets/agents/market.png';
+import populationIcon from '../../../assets/agents/population.png';
+import rankingIcon from '../../../assets/agents/ranking.png';
+import synthesisIcon from '../../../assets/agents/synthesis.png';
+import trendIcon from '../../../assets/agents/trend.png';
 import type { AgentAttribution, AgentId, AgentKind } from '../../../types';
 import { humanizeGrade } from '../dashboard/utils/formatters';
 
-const AGENT_ICONS: Record<AgentId, LucideIcon> = {
-  market_analyst: TrendingUp,
-  population_analyst: Users,
-  legal: ShieldAlert,
-  district_ranking: Target,
-  inflow: Route,
-  synthesis: Brain,
-  demographic_depth: UserSearch,
-  trend_forecaster: LineChartIcon,
-  competitor_intel: Crosshair,
+/** 9 에이전트 페르소나 PNG (URL 문자열). 백엔드 agent_id 와 1:1. */
+const AGENT_ICONS: Record<AgentId, string> = {
+  market_analyst: marketIcon,
+  population_analyst: populationIcon,
+  legal: legalIcon,
+  district_ranking: rankingIcon,
+  inflow: inflowIcon,
+  synthesis: synthesisIcon,
+  demographic_depth: demographicIcon,
+  trend_forecaster: trendIcon,
+  competitor_intel: competitorIcon,
 };
 
 const AGENT_COLORS: Record<AgentId, string> = {
@@ -51,8 +57,8 @@ interface AgentCardProps {
 }
 
 export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
-  const Icon = AGENT_ICONS[attribution.id];
-  const color = AGENT_COLORS[attribution.id];
+  const iconSrc = AGENT_ICONS[attribution.id];
+  const accentColor = AGENT_COLORS[attribution.id];
   const kindCls = KIND_BADGE[attribution.kind];
 
   if (size === 'compact') {
@@ -62,12 +68,19 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
         onClick={onExpand}
         className="flex w-full items-center gap-2 rounded-md border border-border bg-card p-2 text-left hover:bg-muted transition-colors"
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-card border border-border">
-          <Icon className={`h-4 w-4 ${color}`} strokeWidth={2} />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-card">
+          {iconSrc ? (
+            <img
+              src={iconSrc}
+              alt={attribution.display_name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : null}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-foreground truncate">
+            <span className={`text-xs font-semibold truncate ${accentColor}`}>
               {attribution.display_name}
             </span>
             <span className={`shrink-0 rounded px-1.5 py-0.5 text-[0.625rem] font-mono ${kindCls}`}>
@@ -85,12 +98,19 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-muted border border-border">
-          <Icon className={`h-7 w-7 ${color}`} strokeWidth={2} />
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted">
+          {iconSrc ? (
+            <img
+              src={iconSrc}
+              alt={attribution.display_name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : null}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-foreground">{attribution.display_name}</h3>
+            <h3 className={`text-sm font-semibold ${accentColor}`}>{attribution.display_name}</h3>
             <span className={`rounded px-1.5 py-0.5 text-[0.625rem] font-mono ${kindCls}`}>
               {attribution.kind}
             </span>
