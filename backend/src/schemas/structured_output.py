@@ -28,7 +28,11 @@ class ProfitSimulation(BaseModel):
     monthly_cost: Optional[int] = Field(default=None, description="월 예상 운영비. 미산정 시 None.")
     net_profit: int = Field(..., description="월 예상 순이익")
     margin_rate: float = Field(..., description="수익률 (%)")
-    bep_months: Optional[float] = Field(default=None, description="손익분기점 도달 개월 수 (TCN 예측값)")
+    # 2026-05-04 B2 핸드오프 — BEP 단위 분기로 통일.
+    # 신규 권장 필드. 프론트는 bep_quarters 우선, bep_months fallback 으로 처리 중.
+    bep_quarters: Optional[int] = Field(default=None, description="손익분기점 도달 분기 수 (TCN 예측값)")
+    # DEPRECATED (2026-05-04): bep_quarters 사용 권장. 1-cycle 호환 유지용.
+    bep_months: Optional[float] = Field(default=None, description="[DEPRECATED] bep_quarters 사용. 호환성 유지용")
     includes_labor_cost: Optional[bool] = Field(default=None, description="인건비 포함 여부. 미산정 시 None.")
 
 
