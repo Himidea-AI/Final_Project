@@ -94,6 +94,7 @@ const IntroScene = lazy(() => import('./pages/landing/IntroScene'));
 const AccordionGallery = lazy(() => import('./pages/landing/AccordionGallery'));
 const AboutPage = lazy(() => import('./pages/landing/AboutPage'));
 const ContactPage = lazy(() => import('./pages/landing/ContactPage'));
+const EnginePage = lazy(() => import('./pages/landing/EnginePage'));
 
 // Phase C Round 3 — 보조 컴포넌트 5종 추출 (GlobalNav 정적 / 나머지 3종 lazy)
 import GlobalLimelightNav, { LogoutButton, WelcomeWidget } from './components/GlobalNav';
@@ -1527,13 +1528,23 @@ function SimulatorDashboard({
 /** 현재 경로 → scene 이름 매핑 */
 function pathToScene(
   pathname: string,
-): 'intro' | 'about' | 'joinus' | 'accordion' | 'simulator' | 'contact' | 'hq' | 'login' {
+):
+  | 'intro'
+  | 'about'
+  | 'joinus'
+  | 'accordion'
+  | 'simulator'
+  | 'contact'
+  | 'engine'
+  | 'hq'
+  | 'login' {
   if (pathname === '/about') return 'about';
   if (pathname === '/joinus') return 'joinus';
   if (pathname === '/explore') return 'accordion';
   if (pathname === '/simulator') return 'simulator';
   if (pathname.startsWith('/dashboard')) return 'simulator';
   if (pathname === '/contact') return 'contact';
+  if (pathname === '/engine') return 'engine';
   if (pathname === '/hq') return 'hq';
   if (pathname === '/login') return 'login';
   return 'intro';
@@ -2038,7 +2049,17 @@ export default function App() {
 
   /** 암전 트랜지션 + 라우팅 */
   const transitionTo = useCallback(
-    (next: 'intro' | 'about' | 'joinus' | 'accordion' | 'simulator' | 'contact' | 'login') => {
+    (
+      next:
+        | 'intro'
+        | 'about'
+        | 'joinus'
+        | 'accordion'
+        | 'simulator'
+        | 'contact'
+        | 'engine'
+        | 'login',
+    ) => {
       setIsTransitioning(true);
       setTimeout(() => {
         const pathMap: Record<string, string> = {
@@ -2050,6 +2071,7 @@ export default function App() {
           accordion: '/explore',
           simulator: '/simulator',
           contact: '/contact',
+          engine: '/engine',
         };
         const path = pathMap[next] || '/';
         // simulator 진입 = 새 시뮬 시작 의도. store 비우고 mount-restore (App.tsx:1297)
@@ -2110,6 +2132,7 @@ export default function App() {
                     element={
                       <IntroScene
                         onAboutClick={() => transitionTo('about')}
+                        onEngineClick={() => transitionTo('engine')}
                         onLoginClick={() => transitionTo('login')}
                         onSimulatorClick={() => transitionTo('accordion')}
                         onContactClick={() => transitionTo('contact')}
@@ -2133,6 +2156,10 @@ export default function App() {
                         onMapoClick={() => transitionTo('simulator')}
                       />
                     }
+                  />
+                  <Route
+                    path="/engine"
+                    element={<EnginePage onBack={() => transitionTo('intro')} />}
                   />
                   <Route
                     path="/contact"

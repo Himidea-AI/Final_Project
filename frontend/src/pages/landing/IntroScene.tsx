@@ -12,6 +12,7 @@ import WaveBackground from './WaveBackground';
 
 interface IntroSceneProps {
   onAboutClick: () => void;
+  onEngineClick: () => void;
   onLoginClick: () => void;
   onSimulatorClick: () => void;
   onContactClick: () => void;
@@ -19,16 +20,24 @@ interface IntroSceneProps {
 
 export default function IntroScene({
   onAboutClick,
+  onEngineClick,
   onLoginClick,
   onSimulatorClick,
   onContactClick,
 }: IntroSceneProps) {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, logout } = useAuth();
 
   // SIMULATOR — 비로그인이면 /login, 로그인이면 onSimulatorClick (transitionTo('accordion') = /explore)
   const handleSimulatorClick = () => {
     if (!isLoggedIn) onLoginClick();
     else onSimulatorClick();
+  };
+
+  // LOGIN/LOGOUT 메뉴 — 로그인 상태 따라 라벨 + 동작 토글.
+  // 로그아웃 시 main 페이지 그대로 유지 (redirect 안 함).
+  const handleAuthMenuClick = () => {
+    if (isLoggedIn) logout();
+    else onLoginClick();
   };
 
   const menuCls =
@@ -52,13 +61,16 @@ export default function IntroScene({
           <span className="font-extrabold text-xl tracking-wide text-foreground">SPOTTER</span>
         </div>
 
-        {/* Center — 3 메뉴 (ABOUT / LOGIN / CONTACT) */}
+        {/* Center — 4 메뉴 (ABOUT / ENGINE / LOGIN/LOGOUT / CONTACT) */}
         <nav className="hidden md:flex items-center gap-10">
           <button onClick={onAboutClick} className={menuCls}>
             ABOUT
           </button>
-          <button onClick={onLoginClick} className={menuCls}>
-            LOGIN
+          <button onClick={onEngineClick} className={menuCls}>
+            ENGINE
+          </button>
+          <button onClick={handleAuthMenuClick} className={menuCls}>
+            {isLoggedIn ? 'LOGOUT' : 'LOGIN'}
           </button>
           <button onClick={onContactClick} className={menuCls}>
             CONTACT
