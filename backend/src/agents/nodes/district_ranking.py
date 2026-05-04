@@ -234,7 +234,31 @@ def _score_winner_spots(
             out.append(1.0 - n if reverse else n)
         return out
 
-    comp_norm = _minmax([s.get("competitor_count_500m") for s in target_spots], reverse=True)
+    def _competition_score(count: int | None) -> float | None:
+        """경쟁점 수 → 0~1 점수 (U자형). retail 적정 경쟁 = 검증된 상권.
+        - 0개: 0.4 (수요 의심 — 카페 1개도 없는 외진 zone 자동 후순위)
+        - 1~2개: 0.7
+        - 3~6개: 1.0 (최적 — 검증된 상권)
+        - 7~10개: 0.7
+        - 11~15개: 0.45
+        - 16개+: 0.2 (과포화)
+        reverse min-max 시 경쟁=0 spot 이 만점 받는 외진 zone 우선 패턴 차단.
+        """
+        if count is None:
+            return None
+        if count == 0:
+            return 0.4
+        if count <= 2:
+            return 0.7
+        if count <= 6:
+            return 1.0
+        if count <= 10:
+            return 0.7
+        if count <= 15:
+            return 0.45
+        return 0.2
+
+    comp_norm = [_competition_score(s.get("competitor_count_500m")) for s in target_spots]
     sub_norm = _minmax([s.get("subway_distance_m") for s in target_spots], reverse=True)
     list_norm = _minmax([s.get("listing_count") for s in target_spots], reverse=False)
     # 영업구역 안전 — 0 (침해) / 1 (안전). territory_radius_m 미입력 시 None (가중치 미적용).
@@ -760,10 +784,11 @@ async def district_ranking_node(state: AgentState) -> dict:
     # v10: inflow_scorer 가중치(subway 10→25/bus 40/fclty 50→35) + baseline 정규화 도입 (v9 무효화)
     # v11: vacancy_spots 에 spot 단위 score/subway_distance_m/competitor_count_500m 추가 (v10 무효화)
     # v12: spot 점수에 자사 영업구역 안전 항목 추가 (territory_radius_m 반영) — brand_name/territory 키 포함.
+    # v13: 경쟁 점수 reverse min-max → U자형 piecewise (외진 zone 우선 패턴 차단). v12 무효화.
     _brand_key = state.get("brand_name") or "none"
     _territory_key = state.get("territory_radius_m") or "none"
     cache_key = (
-        f"v12:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:"
+        f"v13:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:"
         f"{_sorted_dists_key}:{_brand_key}:{_territory_key}"
     )
     _redis = None

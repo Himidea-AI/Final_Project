@@ -367,22 +367,6 @@ export function MarketMap({
     // 백엔드 c.distance_m 은 source 동 centroid 기준이라 핀과 정합 안 됨 → 무시하고 haversineM 으로 재계산.
     const withinCenterLat = targetSpot?.lat ?? center.lat;
     const withinCenterLng = targetSpot?.lng ?? center.lng;
-    // 진단 로그 — within=0 회귀 원인 잡기 위해 임시 추가.
-    // center 좌표·marker 첫 3개 좌표·거리 분포·radius 출력.
-    const _distances = competitors
-      .filter((c) => typeof c.lat === 'number' && typeof c.lng === 'number')
-      .map((c) => haversineM(withinCenterLat, withinCenterLng, c.lat, c.lng));
-    const _withinCount = _distances.filter((d) => d <= radius).length;
-    // eslint-disable-next-line no-console
-    console.log('[MarketMap-diag]', {
-      center: { lat: withinCenterLat, lng: withinCenterLng },
-      radius,
-      competitors_count: competitors.length,
-      first3_marker_coords: competitors.slice(0, 3).map((c) => ({ lat: c.lat, lng: c.lng })),
-      distances_min: _distances.length ? Math.min(..._distances) : null,
-      distances_max: _distances.length ? Math.max(..._distances) : null,
-      within_count: _withinCount,
-    });
     competitors.forEach((c) => {
       if (typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
       const distFromCenter = haversineM(withinCenterLat, withinCenterLng, c.lat, c.lng);
