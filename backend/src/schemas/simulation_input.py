@@ -32,6 +32,11 @@ class SimulationInput(BaseModel):
     operating_hours: list[str] = Field(default_factory=lambda: ["점심", "저녁"], description="주 타겟 영업 시간대")
     initial_capital: int = Field(default=50_000_000, description="초기 자본금 (원)")
     commercial_radius: int = Field(default=500, description="상권 분석 반경 (m)")
+    # 자사 영업구역 거리. 가맹사업법 제12조의4 인접 출점 정량 룰에 사용.
+    # 미입력 시 specialists.py 의 기본 500m 임계값 적용.
+    territory_radius_m: int | None = Field(
+        default=None, description="자사 영업구역 거리(m) — 사용자 입력 (메가 250m / 빽다방 350m / 이디야 500m 등)"
+    )
     population_weight: bool = Field(default=True, description="인구 가중치 반영 여부")
     industry_filter: str | None = Field(
         default=None, description="CS 업종 코드 필터 (예: CS100010). 미지정 시 전체 업종."

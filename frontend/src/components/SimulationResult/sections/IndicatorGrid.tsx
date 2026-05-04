@@ -7,7 +7,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts';
-import type { SimulationOutput } from '../../../types';
+import type { SimulationOutput, DistrictRanking } from '../../../types';
 import { SERIES_COLORS } from '../QuarterlyProjectionChart';
 import { SectionLabel } from '../shared/SectionLabel';
 
@@ -99,32 +99,45 @@ export function IndicatorGrid({ simResult }: Props) {
     );
   }
 
-  // 선택 동의 8 지표 추출 — winner 면 market_report 풀, 아니면 district_rankings 부분 매핑.
-  // null fallback 금지 (api-contract §3.7).
+  // 선택 동의 8 지표 추출 — winner 면 market_report 풀, 아니면 district_rankings 의
+  // 동별 점수 필드(0~100 정규화, 16동 비교 가능) 로 매핑. 모든 동 8지표 표시 가능.
+  // 주의: winner 의 market_report 8지표와 다른 동의 ranking 점수는 산식이 다르므로
+  //   직접 비교는 신중. 화면엔 안내 문구로 명시.
   // closure_rate 은 0~1 fraction 이라 scale: 100 적용 후 0~100 점수화.
+  // survival_rate 는 winner 외 동에선 100 - closure_rate*100 으로 역산.
   const values = INDICATORS.map(({ key, label, shortLabel, scale }) => {
     let rawVal: unknown = null;
+    let appliedScale: number | undefined = scale;
     if (isWinnerSelected && report) {
       rawVal = (report as Record<string, unknown>)[key];
     } else if (selectedRanking) {
-      // district_rankings 매핑: estimated_revenue / survival_rate / closure_rate / growth_potential / accessibility 만 직접 매핑.
-      // floating_population / rent_index / competition_intensity 는 district_rankings 에 없으므로 null (—).
-      const directMap: Record<string, keyof typeof selectedRanking> = {
-        estimated_revenue: 'estimated_revenue',
-        survival_rate: 'survival_rate',
+      // 동별 점수 매핑 — DistrictRanking (backend district_ranking_node) 의 0~100 점수 필드.
+      // keyof DistrictRanking 가 인덱스 시그니처로 string|number|symbol 이 되어 string 으로 좁힘.
+      const rankingMap: Record<string, Extract<keyof DistrictRanking, string>> = {
+        floating_population: 'pop_score',
+        rent_index: 'rent_score',
+        competition_intensity: 'density_score',
+        estimated_revenue: 'sales_score',
+        growth_potential: 'trend_score',
+        accessibility: 'inflow_score',
         closure_rate: 'closure_rate',
-        growth_potential: 'growth_potential',
-        accessibility: 'accessibility',
       };
-      const rankingKey = directMap[key];
+      const rankingKey = rankingMap[key];
       if (rankingKey) {
         rawVal = (selectedRanking as Record<string, unknown>)[rankingKey] ?? null;
+      } else if (key === 'survival_rate') {
+        // ranking 응답엔 survival_rate 가 없어 closure_rate (0~1 fraction) 으로 역산.
+        const cr = selectedRanking.closure_rate;
+        if (typeof cr === 'number' && Number.isFinite(cr)) {
+          rawVal = 100 - cr * 100;
+          appliedScale = undefined; // 이미 0~100 으로 변환됨
+        }
       }
     }
     if (typeof rawVal !== 'number' || !Number.isFinite(rawVal)) {
       return { key, label, shortLabel, val: null as number | null };
     }
-    const scaled = scale ? rawVal * scale : rawVal;
+    const scaled = appliedScale ? rawVal * appliedScale : rawVal;
     return { key, label, shortLabel, val: Math.max(0, Math.min(100, scaled)) };
   });
 
@@ -190,11 +203,12 @@ export function IndicatorGrid({ simResult }: Props) {
         )}
       </div>
 
-      {/* 부족 지표 안내 — winner 외 동 선택 시 일부 지표가 district_rankings 미수신으로 — 표시 */}
-      {!isWinnerSelected && missingCount > 0 && (
+      {/* winner 외 동 안내 — 점수 산식이 winner 와 다름을 명시. */}
+      {!isWinnerSelected && (
         <div className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[0.6875rem] text-warning">
-          ※ {effectiveSelected}: 일부 지표 ({missingCount}개) 는 winner 동 ({winnerDistrict ?? '—'})
-          만 분석 — backend 확장 후 전체 표시 예정
+          ※ {effectiveSelected}: 16동 정규화 점수 (district_ranking) 기반.
+          {winnerDistrict ?? '—'} 의 실측 시뮬 결과와는 산식이 달라 직접 비교는 참고용.
+          {missingCount > 0 && ` (결측 ${missingCount}개)`}
         </div>
       )}
 

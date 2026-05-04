@@ -164,6 +164,9 @@ class SimulationOutput(BaseModel):
     demographic_report: dict | None = None
     agent_attributions: list[dict] = Field(default_factory=list)
     all_competitor_locations: list[dict] = Field(default_factory=list)
+    # winner+top3 4동 안 자사 브랜드 매장 좌표 — 지도 자사 매장 마커(로고 아이콘) + 영업구역 반경 원 표시용.
+    # 항목 키: id, place_name, brand_name, lat, lng, dong_name, address
+    same_brand_locations: list[dict] = Field(default_factory=list)
     # [customer_revenue P1-C] 타겟 고객 매출 분석 — dict | None (predict.py 반환값 그대로)
     # 키: segment_ratio, segment_sales, identified_sales, total_sales_ref, profile_summary, dimension_ratios
     customer_segment: dict | None = None
@@ -250,6 +253,7 @@ class AnalysisOutput(BaseModel):
     demographic_report: dict | None = None
     agent_attributions: list[dict] = Field(default_factory=list)
     all_competitor_locations: list[dict] = Field(default_factory=list)
+    same_brand_locations: list[dict] = Field(default_factory=list)
     analysis_report: str = ""
     ai_recommendation: str = ""
     final_report: dict | None = None

@@ -22,6 +22,9 @@ export interface SimulationInput {
   initial_capital?: number;
   population_weight?: boolean;
   commercial_radius?: number;
+  // 자사 영업구역 거리(m) — 가맹사업법 제12조의4 인접 출점 평가용.
+  // 사용자 입력 (예: 메가 250m, 빽다방 350m). 미입력 시 backend 기본 500m.
+  territory_radius_m?: number;
   // 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 룰 트리거.
   // null/미입력 시 backend 가 보수적 caution 처리.
   lat?: number | null;
@@ -219,6 +222,8 @@ export interface CompetitorIntel {
     count?: number;
     /** 백엔드 v2: count의 별칭(레거시). main.py에서 둘 다 채울 수 있음. */
     total_competitors?: number;
+    /** 분석에 사용된 반경 (m). saturation 임계값 면적 보정에 사용. 기본 500. */
+    radius_m?: number;
     franchise_count?: number;
     independent_count?: number;
     saturation_level?: 'low' | 'medium' | 'high' | string;
@@ -389,6 +394,16 @@ export interface SimulationOutput {
     is_franchise?: boolean;
     source_dong?: string;
   }>;
+  // winner + top3 4동 안 자사 브랜드 매장 좌표 (로고 아이콘 마커 + 영업구역 반경 원 표시용)
+  same_brand_locations?: Array<{
+    id: string;
+    place_name: string;
+    brand_name?: string;
+    lat: number;
+    lng: number;
+    dong_name?: string;
+    address?: string;
+  }>;
   // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
   customer_segment?: CustomerSegment | null;
   // [D — living_pop_forecast] 유동인구 피크 시간 예측 (TCN)
@@ -471,6 +486,12 @@ export interface DistrictRanking {
   pop_score: number;
   avg_rent: number;
   rent_score: number;
+  /** 2026-05-02 backend 추가: 동 검색량 트렌드 점수 (0~100) */
+  trend_score?: number | null;
+  /** 경쟁 밀도 점수 (0~100, 마포 16동 정규화). IndicatorGrid '경쟁강도' 폴백 매핑. */
+  density_score?: number | null;
+  /** Hansen+E2SFCA 기반 교통/집객 접근성 점수 (0~100). IndicatorGrid '접근성' 폴백 매핑. */
+  inflow_score?: number | null;
   vacancy_rate: number;
   zoning_risk: 'safe' | 'caution' | 'danger';
   /** 2026-04-27 변경: bep_months → bep_quarters (분기 단위) */

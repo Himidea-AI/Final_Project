@@ -722,6 +722,8 @@ function SimulatorDashboard({
   const [initParams] = useState(() => useSimulationStore.getState().params);
 
   const [radius, setRadius] = useState(initParams?.commercial_radius ?? 500);
+  // 자사 영업구역 거리(m) — 가맹사업법 제12조의4 정량 룰. 미입력 시 backend 기본 임계값.
+  const [territoryRadius, setTerritoryRadius] = useState(initParams?.territory_radius_m ?? 250);
   const [budget, setBudget] = useState(
     initParams?.monthly_rent != null ? Math.round(initParams.monthly_rent / 10000) : 200,
   );
@@ -994,6 +996,7 @@ function SimulatorDashboard({
       operating_hours: operatingHours,
       initial_capital: initialCapital * 10000,
       commercial_radius: radius,
+      territory_radius_m: territoryRadius,
       population_weight: weighted,
       industry_filter: BUSINESS_TYPE_CS_CODE[businessType] ?? null,
       // 출점 후보지 좌표 — pub 업종 학교환경위생정화구역 거리 룰. 미입력 시 backend caution.
@@ -1242,6 +1245,19 @@ function SimulatorDashboard({
               step={50}
               unit="m"
               infoText="분석 대상 반경. 카페는 300~500m, 음식점은 500~1000m 권장"
+              className="mb-0"
+            />
+
+            {/* 1-2. 자사 영업구역 거리 — 가맹사업법 제12조의4 정량 룰 */}
+            <HybridSliderInput
+              label="자사 영업구역"
+              value={territoryRadius}
+              onChange={setTerritoryRadius}
+              min={100}
+              max={1000}
+              step={50}
+              unit="m"
+              infoText="자사 브랜드 인접 출점 표준 거리 (정보공개서·가맹계약서 기준). 메가커피 250m / 빽다방 350m / 이디야 500m 등"
               className="mb-0"
             />
 

@@ -702,9 +702,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # Redis 캐시 조회 — 동일 조합 재요청 시 즉시 반환
     _CACHE_TTL = 86400  # 24시간
     # v7: school_zone 룰 추가(13 룰 + zoning + ftc = 15 risks) + lat/lon 좌표 키 포함.
-    # 좌표 누락 시 "none" 으로 정규화 — 좌표 입력 시 자동 invalidation.
+    # v8: territory_radius_m 사용자 입력 추가 (가맹사업법 제12조의4 정량 룰).
+    # 좌표 누락 시 "none" 으로 정규화 — 좌표·영업구역 입력 시 자동 invalidation.
     _coord_key = f"{lat_val:.5f},{lon_val:.5f}" if lat_val is not None and lon_val is not None else "none"
-    cache_key = f"v7:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}"
+    _territory_key = state.get("territory_radius_m") or "none"
+    cache_key = f"v8:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}:{_territory_key}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -898,6 +900,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
             ftc_data=ftc_result if isinstance(ftc_result, dict) else None,
             lat=lat_val,
             lon=lon_val,
+            territory_radius_m=state.get("territory_radius_m"),
         )
         _rule_seen: set[str] = set()
         for r in engine_results:

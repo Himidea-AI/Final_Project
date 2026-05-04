@@ -82,6 +82,7 @@ async def run_legal_evaluation(
     ftc_data: dict | None,
     lat: float | None = None,
     lon: float | None = None,
+    territory_radius_m: int | None = None,
 ) -> list[dict]:
     """9 룰 + 4 specialist 병렬 평가 → 13 dict 반환.
 
@@ -120,7 +121,7 @@ async def run_legal_evaluation(
 
     # specialist 4 개 — RAG + LLM (I/O bound) 병렬 실행
     specialist_tasks = [
-        specialists.specialist_franchise_law(brand, business_type, district, ftc_data),
+        specialists.specialist_franchise_law(brand, business_type, district, ftc_data, territory_radius_m),
         specialists.specialist_fair_trade_law(brand, business_type, district),
         specialists.specialist_building_law(business_type, district),
         specialists.specialist_privacy_law(brand, business_type, ftc_data),

@@ -30,6 +30,8 @@ class AgentState(TypedDict):
     target_district: str  # 분석 대상 행정동 (초기 입력 혹은 최종 승자)
     target_districts: list[str]  # 사용자가 선택한 후보 행정동 전체 목록
     commercial_radius: int  # 상권 분석 반경 (m)
+    # 자사 영업구역 거리(m) — 가맹사업법 제12조의4 인접 출점 룰. None=specialists 기본 500m.
+    territory_radius_m: int | None
     monthly_rent_budget: int  # 월 임대료 예산 (원)
     store_area: float  # 점포 면적 (평)
     population_weight: bool  # 인구 가중치 반영 여부

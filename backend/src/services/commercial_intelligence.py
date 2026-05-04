@@ -82,6 +82,7 @@ def analyze_competition(
     dong_code: str,
     industry_keyword: str,
     radius_m: int = 500,
+    sample_limit: int = 20,
 ) -> dict:
     """후보지(동 centroid) 반경 내 같은 업종 경쟁 지형.
 
@@ -173,7 +174,7 @@ def analyze_competition(
         "independent_count": independent_cnt,
         "saturation_level": level,
         "saturation_score": score,
-        "samples": within[:20],
+        "samples": within[:sample_limit],
     }
 
 
