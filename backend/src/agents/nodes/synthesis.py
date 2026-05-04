@@ -65,10 +65,12 @@ async def synthesis_node(state: AgentState) -> dict:
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
     # v7: SHAP 주입 + bep_months 스키마 추가 — 이전 v6 캐시 무효화
+    # v8: legal DANGER prompt 톤 조정 (자기모순 출력 차단) — v7 캐시 무효화
+    # v9: BEP 분기 단위 통일 + TCN 키 오타 fix (quarterly_per_store/bep_quarters) — v8 무효화
     _winner_for_cache = state.get("winner_district", target_district)
     _raw_td = state.get("target_districts") or [target_district]
     _td_key = ",".join(sorted(set(d for d in _raw_td if d)))
-    cache_key = f"v7:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    cache_key = f"v9:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -181,11 +183,23 @@ async def synthesis_node(state: AgentState) -> dict:
             f"- 요약: {(f.get('narrative') or '')[:250]}"
         )
 
-    # 법률 DANGER 시 대안 지역 강조
+    # 법률 DANGER 시 — 추천 입지는 유지하되 '리스크 및 대응' 섹션에 주의·대응책 명시.
+    # 2026-05-03: "권장하지 않음/대안 최우선" → "주의·완화 전략 + 대안은 보조 옵션" 으로 톤 조정.
+    # 시스템이 이미 winner 로 확정한 동을 final_recommendation 이 부정하는 자기모순(예:
+    # "신수동 추천" 헤더 + "신수동 출점 권장하지 않음" 본문) 발생을 차단.
     if overall_legal_risk == "danger":
+        _alt = ", ".join(top_3_candidates[:2]) if top_3_candidates else None
         legal_override = (
-            f"\n⚠️ 경고: 법률 리스크 DANGER. {target_district} 출점은 법률 위반 가능성이 높습니다. "
-            f"final_recommendation에 대안 지역({', '.join(top_3_candidates[:2]) if top_3_candidates else '다른 지역'})을 최우선 제시하세요."
+            f"\n⚠️ 법률 리스크 DANGER 안내: {target_district}는 사전 법적 검토와 리스크 완화 전략이 필수인 권역입니다.\n"
+            f"final_recommendation 작성 시 다음을 준수:\n"
+            f"  - {target_district}를 추천 입지로 유지 — '권장하지 않음/금지/회피' 같은 자기모순 표현 금지 (시스템이 이미 추천 확정).\n"
+            f"  - '리스크 및 대응' 섹션에 구체적 위반 가능 항목 + 사전 대응 단계 명시 (영업신고·허가·용도변경 등 절차).\n"
+            f"  - 진입 전 법률 자문 권장. 톤은 '주의 필요/충분한 준비 후 진입' 수준으로 작성.\n"
+            + (
+                f"  - 비교 검토용 대안 옵션({_alt})은 보조 정보로만 한 줄 언급 — 메인 추천은 {target_district}.\n"
+                if _alt
+                else ""
+            )
         )
     else:
         legal_override = ""
@@ -208,16 +222,25 @@ async def synthesis_node(state: AgentState) -> dict:
             demographic_context += f"  → {dc.get('match_rationale', '')}\n"
 
     # TCN ML 실측 수치 (Phase 2.5에서 계산된 값 — 없으면 빈 블록)
+    # 2026-05-04: B2 핸드오프 — 키 오타 fix (monthly_per_store → quarterly_per_store,
+    # bep_months → bep_quarters). 기존 키는 None 반환되어 LLM hallucination 유발.
+    # models/interface.py:241, 509 의 실제 반환 키와 정합성 맞춤.
     _tcn = state.get("tcn_sim_result") or {}
-    _tcn_rev = _tcn.get("revenue_forecast", {}).get("monthly_per_store")
-    _tcn_bep = _tcn.get("bep", {}).get("bep_months")
+    _tcn_rev_quarter = _tcn.get("revenue_forecast", {}).get("quarterly_per_store")
+    _tcn_bep_q = _tcn.get("bep", {}).get("bep_quarters")
     _tcn_closure = _tcn.get("closure_rate", {}).get("closure_rate")
     _tcn_risk = (_tcn.get("closure_risk") or {}).get("risk_score")
-    if _tcn_rev or _tcn_bep or _tcn_closure or _tcn_risk:
+    # LLM 의 monthly_revenue 필드 입력용 (분기 → 월 환산)
+    _tcn_rev_month = (_tcn_rev_quarter / 3) if _tcn_rev_quarter else None
+    if _tcn_rev_quarter or _tcn_bep_q or _tcn_closure or _tcn_risk:
         tcn_block = (
             "\n[ML 모델 실측 수치 — 추측 금지, 아래 수치를 profit_simulation에 그대로 사용]\n"
-            + (f"- 월 예상 매출(monthly_revenue): {_tcn_rev:,.0f}원\n" if _tcn_rev else "")
-            + (f"- 손익분기점(bep_months): {_tcn_bep}개월\n" if _tcn_bep else "")
+            + (
+                f"- 분기 예상 매출(quarterly_revenue, 점포당): {_tcn_rev_quarter:,.0f}원\n"
+                if _tcn_rev_quarter
+                else ""
+            )
+            + (f"- 손익분기점(bep_quarters): {_tcn_bep_q}분기\n" if _tcn_bep_q else "")
             + (f"- 3년 폐업률: {_tcn_closure * 100:.1f}%\n" if _tcn_closure is not None else "")
             + (f"- 폐업 위험도: {_tcn_risk * 100:.1f}%\n" if _tcn_risk is not None else "")
         )
@@ -306,11 +329,18 @@ async def synthesis_node(state: AgentState) -> dict:
         "물결표는 마크다운 취소선(~~text~~)과 충돌해 텍스트가 잘려 보일 수 있음.\n"
         "9. summary 는 한 줄(80자 내) 짧은 헤드라인으로 작성 — final_recommendation 과 중복 금지\n"
         + (
+            # 2026-05-04: B2 핸드오프 — 분기 단위 통일.
+            # bep_months 언급 제거, bep_quarters 강제. monthly_revenue 는 분기 매출/3 환산값.
             "7. profit_simulation에 ML 실측 수치를 반드시 사용:\n"
-            + (f"   - monthly_revenue = {_tcn_rev:,.0f}원 (TCN 점포평균 월매출, 변경 금지)\n" if _tcn_rev else "")
             + (
-                f"   - bep_months = {_tcn_bep} (TCN 예측값, profit_simulation.bep_months 필드에 정수로 입력)\n"
-                if _tcn_bep
+                f"   - quarterly_revenue (점포당 분기 매출) = {_tcn_rev_quarter:,.0f}원 (TCN 실측값, 변경 금지)\n"
+                f"   - monthly_revenue = {_tcn_rev_month:,.0f}원 (분기 매출 ÷ 3 환산, profit_simulation.monthly_revenue 필드에 정수로 입력)\n"
+                if _tcn_rev_quarter
+                else ""
+            )
+            + (
+                f"   - bep_quarters = {_tcn_bep_q} (TCN 예측값, profit_simulation.bep_quarters 필드에 정수로 입력)\n"
+                if _tcn_bep_q
                 else ""
             )
             + "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
@@ -322,9 +352,10 @@ async def synthesis_node(state: AgentState) -> dict:
             "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
             "   - net_profit = monthly_revenue - monthly_cost\n"
             "   - margin_rate = net_profit / monthly_revenue (소수점 2자리)\n"
-            "   - bep_months = 초기자본금 / max(net_profit, 1) (정수 반올림)\n"
+            "   - bep_quarters = (초기자본금 / max(net_profit, 1)) ÷ 3 (정수 반올림, 분기 단위)\n"
         )
         + "   ※ 추측값 사용 금지 — 제공된 실데이터 수치만 사용\n"
+        + "   ※ bep_months 필드는 deprecated — bep_quarters 만 사용\n"
     )
 
     try:

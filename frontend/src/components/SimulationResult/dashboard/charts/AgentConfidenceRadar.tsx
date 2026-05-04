@@ -16,6 +16,7 @@ const AGENT_ORDER: { id: AgentId; label: string }[] = [
   { id: 'legal', label: '법률' },
   { id: 'trend_forecaster', label: '트렌드' },
   { id: 'district_ranking', label: '랭킹' },
+  { id: 'inflow', label: '접근성' },
   { id: 'synthesis', label: '종합' },
 ];
 

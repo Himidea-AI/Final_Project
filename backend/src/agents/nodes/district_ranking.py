@@ -336,12 +336,12 @@ def _normalize_and_rank(
     # 데이터 결측 시 활성 지표만 모아 합 1.0 강제 정규화 (결측 가중치를 활성에 비례 분배).
     if population_weight:
         weights = {
-            "sales": 0.35,    # 결과 변수 — 가장 강한 신호
-            "pop": 0.20,      # 매출 선행 지표 (유동인구 성장률)
-            "rent": 0.15,     # 비용 부담 (낮을수록 점수 ↑)
-            "access": 0.10,   # 인구 유입 메커니즘 (Hansen + E2SFCA)
+            "sales": 0.35,  # 결과 변수 — 가장 강한 신호
+            "pop": 0.20,  # 매출 선행 지표 (유동인구 성장률)
+            "rent": 0.15,  # 비용 부담 (낮을수록 점수 ↑)
+            "access": 0.10,  # 인구 유입 메커니즘 (Hansen + E2SFCA)
             "density": 0.10,  # 경쟁 포화도 (낮을수록 점수 ↑)
-            "trend": 0.10,    # 미래 시장 성장 (NAVER 트렌드)
+            "trend": 0.10,  # 미래 시장 성장 (NAVER 트렌드)
         }
     else:
         weights = {
@@ -399,9 +399,7 @@ def _normalize_and_rank(
     trend_norm = _minmax(trend_vals) if has_trend else None
 
     # inflow — 교통·집객 접근성 (Hansen 1959 + E2SFCA 2009, 0~100 사전 정규화)
-    operfit_vals = [
-        operfit_map.get(r["district"], {}).get("inflow_score") if operfit_map else None for r in raw
-    ]
+    operfit_vals = [operfit_map.get(r["district"], {}).get("inflow_score") if operfit_map else None for r in raw]
     has_operfit = any(v is not None for v in operfit_vals)
     operfit_norm = _minmax(operfit_vals, floor=10.0) if has_operfit else None
 
@@ -531,8 +529,9 @@ async def district_ranking_node(state: AgentState) -> dict:
     # v7: inflow(교통·집객 접근성) 점수 추가 — Hansen/E2SFCA (v6 무효화)
     # v8: A안 가중치 + 정규화 강제 (매출 5%→35%, 인구 45%→20%, 합 1.0 보장 — v7 무효화)
     # v9: _fetch_naver_trend 외부 API → DB 조회 전환 (v8 trend_score=None 캐시 무효화)
+    # v10: inflow_scorer 가중치(subway 10→25/bus 40/fclty 50→35) + baseline 정규화 도입 (v9 무효화)
     cache_key = (
-        f"v9:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
+        f"v10:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:{_sorted_dists_key}"
     )
     _redis = None
     try:
@@ -568,7 +567,13 @@ async def district_ranking_node(state: AgentState) -> dict:
                 agent_id="district_ranking",
                 display_name="행정동 랭킹",
                 kind="Python",
-                sources=["district_sales", "golmok_rent", "seoul_adstrd_flpop"],
+                sources=[
+                    "district_sales",
+                    "golmok_rent",
+                    "seoul_adstrd_flpop",
+                    "naver_trend_quarterly",
+                    "store_quarterly",
+                ],
                 verdict=f"1위 {_cached_winner} ({_cached_winner_score}점)",
                 reasoning="마포 16동 정량 스코어링 — 매출/인구/임대료 가중합 (캐시)",
                 confidence=0.9,
@@ -710,7 +715,13 @@ async def district_ranking_node(state: AgentState) -> dict:
     _winner_score = 0
     if winner_row:
         _winner_score = winner_row.get("score") or 0
-    _sources = ["district_sales", "golmok_rent", "seoul_adstrd_flpop"]
+    _sources = [
+        "district_sales",
+        "golmok_rent",
+        "seoul_adstrd_flpop",
+        "naver_trend_quarterly",
+        "store_quarterly",
+    ]
     if operfit_map:
         _sources.extend(["dong_subway_access", "bus_boarding_daily", "seoul_adstrd_fclty"])
     ranking_attr = build_attribution(
