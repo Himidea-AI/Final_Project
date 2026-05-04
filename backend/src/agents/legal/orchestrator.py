@@ -21,21 +21,18 @@ from src.agents.legal import rules, specialists
 logger = logging.getLogger(__name__)
 
 
-# tasks 리스트와 1:1 대응 — 예외 처리 시 type 식별에 사용
+# tasks 리스트와 1:1 대응 — 예외 처리 시 type 식별에 사용.
+# 운영(operation) 카테고리(food_hygiene/labor_law/vat_law/privacy_law/sewage_law) 제외 —
+# 사용자 요청에 따라 frontend 미표시 + LLM 호출 절감 (privacy_law specialist skip).
 _RULE_ENGINE_ORDER: list[str] = [
-    "food_hygiene",
     "safety_regulation",
     "fire_safety_law",
     "accessibility_law",
     "school_zone",
     "commercial_lease_law",
-    "labor_law",
-    "vat_law",
-    "sewage_law",
     "franchise_law",
     "fair_trade_law",
     "building_law",
-    "privacy_law",
 ]
 
 
@@ -100,16 +97,14 @@ async def run_legal_evaluation(
     # 룰 9 개 — 동기 pure-Python (~ms). asyncio.to_thread executor 점유 회피 위해
     # 직접 호출 후 dict 로 수집 — 이벤트루프 블로킹 위험 없음.
     rule_results: list[dict] = []
+    # 운영(operation) 카테고리 룰 4개 (food_hygiene/labor/vat/sewage) 제외 —
+    # frontend 미표시 + 비용 절감. _RULE_ENGINE_ORDER 와 1:1 대응.
     for fn, args in (
-        (rules.rule_food_hygiene, (business_type,)),
         (rules.rule_safety_regulation, (business_type, store_area_pyeong)),
         (rules.rule_fire_safety, (business_type, store_area_pyeong)),
         (rules.rule_accessibility, (business_type, store_area_pyeong)),
         (rules.rule_school_zone, (business_type, lat, lon)),
         (rules.rule_commercial_lease, ()),
-        (rules.rule_labor, ()),
-        (rules.rule_vat, ()),
-        (rules.rule_sewage, (business_type,)),
     ):
         try:
             rule_results.append(fn(*args))
@@ -117,14 +112,14 @@ async def run_legal_evaluation(
             type_name = _RULE_ENGINE_ORDER[len(rule_results)]
             rule_results.append(_fallback_for_type(type_name, e))
 
-    # specialist 4 개 — RAG + LLM (I/O bound) 병렬 실행
+    # specialist 3 개 — RAG + LLM (I/O bound) 병렬 실행.
+    # privacy_law specialist (운영 카테고리) 제외 — LLM 호출 절감 + frontend 미표시.
     # franchise_law 영업지역 분석 = 공실 스팟 좌표 (lat/lon) 기준 500m 반경.
     # 좌표 None 이면 specialist 가 행정동 centroid 폴백 사용.
     specialist_tasks = [
         specialists.specialist_franchise_law(brand, business_type, district, ftc_data, lat, lon, territory_radius_m),
         specialists.specialist_fair_trade_law(brand, business_type, district),
         specialists.specialist_building_law(business_type, district),
-        specialists.specialist_privacy_law(brand, business_type, ftc_data),
     ]
 
     expected_total = len(rule_results) + len(specialist_tasks)

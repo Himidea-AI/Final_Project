@@ -236,7 +236,8 @@ def _save_to_redis(*, cache_key: str, redis_url: str, response: dict[str, Any]) 
         # daemon thread 안이라 sync redis 가 안전 (asyncio loop 부재)
         client = _redis_sync.from_url(redis_url, decode_responses=True)
         try:
-            client.setex(cache_key, 3600, _json.dumps(cache_body, ensure_ascii=False))
+            # TTL 1h → 24h (2026-05-04 사용자 피드백) — main.py 와 동기.
+            client.setex(cache_key, 86400, _json.dumps(cache_body, ensure_ascii=False))
             logger.info(f"[ABM async] redis SET key={cache_key[:16]}... ttl=3600s")
         finally:
             client.close()

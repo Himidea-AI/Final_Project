@@ -124,6 +124,26 @@ export interface LegalRiskArticle {
   explanation?: string;
 }
 
+/**
+ * 입지 후보 spot 영업구역 침해 평가 (가맹사업법 제12조의4) —
+ * backend legal node 가 vacancy_spot_analyses 를 rank/level/summary 로 가공한 결과.
+ * franchise_law 리스크에 attach 되어 1등~4등 후보 동의 영업구역 침해 여부를 한눈에 표시.
+ */
+export interface LegalSpotEvaluation {
+  rank: number | null;
+  rank_label: string;
+  dong_name: string;
+  lat: number;
+  lon: number;
+  territory_radius_m: number | null;
+  same_brand_within_territory: number | null;
+  same_brand_500m: number;
+  same_brand_2000m: number;
+  closest_m: number | null;
+  level: 'safe' | 'caution' | 'danger';
+  summary: string;
+}
+
 /** 법률 리스크 */
 export interface LegalRisk {
   type: string;
@@ -140,6 +160,8 @@ export interface LegalRisk {
   articles?: LegalRiskArticle[];
   checklist?: LegalChecklistItem[];
   is_fallback?: boolean;
+  /** franchise_law 전용 — 후보지 4곳 영업구역 침해 평가 (legal node attach). */
+  spot_evaluations?: LegalSpotEvaluation[];
 }
 
 /** 폐업 위험도 기여 피처 (LightGBM·TCN 공통 구조) */
@@ -396,6 +418,9 @@ export interface SimulationOutput {
     distance_m?: number;
     is_franchise?: boolean;
     source_dong?: string;
+    place_url?: string;
+    phone?: string;
+    category?: string;
   }>;
   // winner + top3 4동 안 자사 브랜드 매장 좌표 (로고 아이콘 마커 + 영업구역 반경 원 표시용)
   same_brand_locations?: Array<{
@@ -406,6 +431,8 @@ export interface SimulationOutput {
     lng: number;
     dong_name?: string;
     address?: string;
+    place_url?: string;
+    phone?: string;
   }>;
   // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
   customer_segment?: CustomerSegment | null;

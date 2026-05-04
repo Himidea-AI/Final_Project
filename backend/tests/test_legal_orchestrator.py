@@ -83,7 +83,7 @@ async def test_returns_13_items(patch_specialists):
         store_area_pyeong=20.0,
         ftc_data=None,
     )
-    assert len(risks) == 13
+    assert len(risks) == 8
     types = [r["type"] for r in risks]
     # 순서 확인
     assert types == _RULE_ENGINE_ORDER
@@ -100,8 +100,11 @@ async def test_types_unique_and_complete(patch_specialists):
     )
     types = {r["type"] for r in risks}
     assert types == set(_RULE_ENGINE_ORDER)
-    assert len(types) == 13
+    assert len(types) == 8
     assert "school_zone" in types
+    # 운영 카테고리 5종 제외 검증
+    for excluded in ("food_hygiene", "labor_law", "vat_law", "privacy_law", "sewage_law"):
+        assert excluded not in types
 
 
 @pytest.mark.asyncio
@@ -144,15 +147,15 @@ async def test_specialist_failure_isolated(monkeypatch):
         store_area_pyeong=20.0,
         ftc_data=None,
     )
-    assert len(risks) == 13
+    assert len(risks) == 8
     franchise = next(r for r in risks if r["type"] == "franchise_law")
     assert franchise["level"] == "caution"
     assert franchise.get("is_fallback") is True
     # 나머지 12 항목 중 룰 9 개는 정상 (fallback 아님)
     others = [r for r in risks if r["type"] != "franchise_law"]
     rules_only = [r for r in others if r["type"] in {
-        "food_hygiene", "safety_regulation", "fire_safety_law", "accessibility_law",
-        "school_zone", "commercial_lease_law", "labor_law", "vat_law", "sewage_law",
+        "safety_regulation", "fire_safety_law", "accessibility_law",
+        "school_zone", "commercial_lease_law",
     }]
     for r in rules_only:
         assert not r.get("is_fallback"), f"{r['type']} 이 예기치 않게 fallback 처리됨"
@@ -173,7 +176,7 @@ async def test_multiple_specialist_failures(monkeypatch):
         store_area_pyeong=10.0,
         ftc_data=None,
     )
-    assert len(risks) == 13
+    assert len(risks) == 8
     types = {r["type"] for r in risks}
     assert "franchise_law" in types
     assert "fair_trade_law" in types

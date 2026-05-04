@@ -114,7 +114,8 @@ def analyze_competition(
     sql = text(
         """
         SELECT kakao_id, place_name, brand_name, category,
-               lat, lon, is_franchise
+               lat, lon, is_franchise,
+               place_url, phone
           FROM kakao_store
          WHERE lat BETWEEN :lat_min AND :lat_max
            AND lon BETWEEN :lon_min AND :lon_max

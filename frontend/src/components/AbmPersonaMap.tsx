@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Play, Cloud, Calendar, DollarSign, Sliders } from 'lucide-react';
+import { Play, Cloud, Calendar, DollarSign, Sliders, Loader2 } from 'lucide-react';
 import VacancySpotMarker from './VacancySpotMarker';
 import VacancyStatsPanel from './VacancyStatsPanel';
 import PersonaCard, { type PersonaCardData } from './PersonaCard';
@@ -399,8 +399,9 @@ export default function AbmPersonaMap({
   abmError,
   onRunSimulation,
   targetDistrict = '서교동',
-  vacancySpots,
-  onSpotClick,
+  // vacancySpots / onSpotClick — 공실 패널 제거 (사용자 피드백 2026-05-04) 후 미사용. props 보존 (interface 호환).
+  vacancySpots: _vacancySpots,
+  onSpotClick: _onSpotClick,
   onClearResult,
   focusSpot,
   mode = 'general',
@@ -537,7 +538,8 @@ export default function AbmPersonaMap({
   }, []);
 
   // 시뮬에서 받은 실제 에이전트 수로 점박이 개수 맞춤 (기본 100)
-  const N_PERSONAS = abmResult?.n_personas ?? abmResult?.n_agents ?? 100;
+  // 사용자 피드백 (2026-05-04): 시뮬 전 지도 너무 비어보임 → preview 페르소나 100→300 으로 확대.
+  const N_PERSONAS = abmResult?.n_personas ?? abmResult?.n_agents ?? 300;
 
   // targetDistrict에 맞는 노드 세트.
   // 우선순위:
@@ -903,8 +905,13 @@ export default function AbmPersonaMap({
     // 현재: 픽셀 격자를 그대로 유지, 4 모서리 lat/lng 만 사용해 pointInPolygon.
     //       줌·팬 모두에서 일관된 hex 타일링 보장.
     const dg = densityGridRef.current;
-    if (dg && dg.cols > 0 && dg.rows > 0) {
-      const [minLat, minLon, maxLat, maxLon] = dg.bbox;
+    // 시뮬 전 dg 없을 때도 hex skeleton 그릴 수 있도록 mapo bbox fallback.
+    const useFallbackBbox = !dg || dg.cols <= 0 || dg.rows <= 0;
+    if (useFallbackBbox || (dg && dg.cols > 0 && dg.rows > 0)) {
+      const minLat = useFallbackBbox ? 37.524 : dg!.bbox[0];
+      const minLon = useFallbackBbox ? 126.858 : dg!.bbox[1];
+      const maxLat = useFallbackBbox ? 37.59 : dg!.bbox[2];
+      const maxLon = useFallbackBbox ? 126.967 : dg!.bbox[3];
       const topLeft = proj.containerPointFromCoords(new kakao.maps.LatLng(maxLat, minLon));
       const bottomRight = proj.containerPointFromCoords(new kakao.maps.LatLng(minLat, maxLon));
       const HEX_SIZE = 8;
@@ -944,9 +951,13 @@ export default function AbmPersonaMap({
           const lonRatio = (px - topLeft.x) / (dLonPx || 1);
           const hexLat = maxLat - latRatio * (maxLat - minLat);
           const hexLon = minLon + lonRatio * (maxLon - minLon);
-          const dr = Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dg.rows);
-          const dc = Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dg.cols);
-          if (dr < 0 || dr >= dg.rows || dc < 0 || dc >= dg.cols) continue;
+          // dg 없으면 cells 매칭 불필요 → dr/dc 0 placeholder. skeleton-only 분기에서 사용 안 함.
+          const dgRows = dg?.rows ?? 0;
+          const dgCols = dg?.cols ?? 0;
+          const dr = dgRows > 0 ? Math.floor(((maxLat - hexLat) / (maxLat - minLat)) * dgRows) : 0;
+          const dc = dgCols > 0 ? Math.floor(((hexLon - minLon) / (maxLon - minLon)) * dgCols) : 0;
+          if (dgRows > 0 && dgCols > 0 && (dr < 0 || dr >= dgRows || dc < 0 || dc >= dgCols))
+            continue;
           if (!inMapo(hexLat, hexLon)) continue;
           built.push({ x: px, y: py, dr, dc });
         }
@@ -1105,6 +1116,53 @@ export default function AbmPersonaMap({
       .map((n, idx) => ({ idx, id: n.id, tier: n.tier }))
       .filter(({ id, tier }) => id.startsWith('subway-') || tier === 'S')
       .map(({ idx }) => idx);
+    // 사용자 피드백 (2026-05-04): 시뮬 전 인구 이동 느낌 — 마포 전역 분산.
+    // 각 persona 의 spawn 위치를 마포 polygon 안 random pixel 로 추출. nodes 주변 cluster 회피.
+    // 마포 polygon 픽셀 캐시 (mapoPolyPixelsRef) 의 bbox 안 random + polygon 내부 검사.
+    const mapoPolyPx = mapoPolyPixelsRef.current;
+    const polyBbox = (() => {
+      let minX = Infinity,
+        maxX = -Infinity,
+        minY = Infinity,
+        maxY = -Infinity;
+      for (const ring of mapoPolyPx) {
+        for (const p of ring) {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+      }
+      return { minX, maxX, minY, maxY };
+    })();
+    const inMapoPx = (x: number, y: number): boolean => {
+      if (mapoPolyPx.length === 0) return true;
+      for (const ring of mapoPolyPx) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = ring[i].x;
+          const yi = ring[i].y;
+          const xj = ring[j].x;
+          const yj = ring[j].y;
+          const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+          if (intersect) inside = !inside;
+        }
+        if (inside) return true;
+      }
+      return false;
+    };
+    const randomMapoPixel = (): { x: number; y: number } => {
+      // bbox 내 random + polygon 안 검사. 50회 시도, 실패 시 마지막 반환.
+      let last = { x: (polyBbox.minX + polyBbox.maxX) / 2, y: (polyBbox.minY + polyBbox.maxY) / 2 };
+      for (let i = 0; i < 50; i++) {
+        const x = randomBetween(polyBbox.minX, polyBbox.maxX);
+        const y = randomBetween(polyBbox.minY, polyBbox.maxY);
+        if (inMapoPx(x, y)) return { x, y };
+        last = { x, y };
+      }
+      return last;
+    };
+
     personasRef.current = Array.from({ length: N_PERSONAS }, (_, i) => {
       const type = pickType(dist);
       const traits = roleTraits(type);
@@ -1113,10 +1171,17 @@ export default function AbmPersonaMap({
 
       let nodeIdx: number;
       let sourceIdx: number;
-      // 시작 위치 — External은 지하철역/교통 허브, 일반은 스팟 근처
       let sx: number;
       let sy: number;
-      if (isExternal) {
+      // 시뮬 전 (abmResult null): 마포 전역 random pixel spawn.
+      // 시뮬 후: 기존 로직 (nodes 주변 spawn).
+      if (!abmResult && mapoPolyPx.length > 0) {
+        const px = randomMapoPixel();
+        sx = px.x;
+        sy = px.y;
+        nodeIdx = preferred[0] ?? 0;
+        sourceIdx = nodeIdx;
+      } else if (isExternal) {
         const hubIdx =
           transitHubIdxs.length > 0
             ? transitHubIdxs[Math.floor(Math.random() * transitHubIdxs.length)]
@@ -1455,16 +1520,9 @@ export default function AbmPersonaMap({
       // tierSPixelsRef 를 18px 이내 검색. 일치 agent 있으면 PersonaCard 모달 오픈.
       // (canvas 가 pointer-events:none 이라 직접 onClick 못 씀 → map 이벤트 사용)
       kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
-        // 디버그 — click 이 도달하는지 확인 (사용자 보고: "안 눌려").
         // 빠른 dot 클릭 가능하게 hit 반경 8 → 18px 로 확대.
         const tsCount = tierSPixelsRef.current.size;
-        const tCount = thoughtsByAgentRef.current.size;
 
-        console.log(
-          `[ABM click] tierSPixels=${tsCount} thoughts=${tCount} latLng=`,
-          mouseEvent?.latLng?.getLat?.()?.toFixed?.(5),
-          mouseEvent?.latLng?.getLng?.()?.toFixed?.(5),
-        );
         if (tsCount === 0) {
           console.warn(
             '[ABM click] Tier S dot 없음 — backend 가 thoughts 응답을 안 줬거나, ' +
@@ -1489,21 +1547,10 @@ export default function AbmPersonaMap({
           }
         });
         if (bestAid === null) {
-          // 가장 가까운 dot 거리도 함께 표시 (debug)
-          let nearestD = Infinity;
-          tierSPixelsRef.current.forEach((pix) => {
-            const d = Math.hypot(pix.x - clickPx.x, pix.y - clickPx.y);
-            if (d < nearestD) nearestD = d;
-          });
-
-          console.log(
-            `[ABM click] miss — 가장 가까운 Tier S dot ${nearestD.toFixed(1)}px (hit 임계 18px)`,
-          );
           return;
         }
         const aid: number = bestAid;
 
-        console.log(`[ABM click] HIT agent#${aid}, distance=${Math.sqrt(bestD2).toFixed(1)}px`);
         const thoughts = Array.from(thoughtsByAgentRef.current.get(aid)?.values() ?? []);
         // 부모 콜백 우선 (있으면 부모가 모달 표시), 없으면 내부 PersonaCard 사용.
         if (onPersonaClick) {
@@ -1723,6 +1770,39 @@ export default function AbmPersonaMap({
           // intensity > 0.55 hex 는 네온 글로우 + 카운트 텍스트.
           const dg = densityGridRef.current;
           const hexes = hexGridRef.current;
+
+          // 시뮬 전 — hex skeleton 만 (faint deep blue stroke). 결과 화면과 동일한 격자 느낌.
+          // dg 없을 때만 실행. dg 있으면 아래 풀 fill 패스에서 그림.
+          if (!dg && hexes.length > 0) {
+            const HEX_SIZE = 8;
+            const skeletonPath = new Path2D();
+            for (let i = 0; i < 6; i++) {
+              const ang = (Math.PI / 3) * i + Math.PI / 6;
+              const px = HEX_SIZE * Math.cos(ang);
+              const py = HEX_SIZE * Math.sin(ang);
+              if (i === 0) skeletonPath.moveTo(px, py);
+              else skeletonPath.lineTo(px, py);
+            }
+            skeletonPath.closePath();
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 44, 209, 0.15)';
+            ctx.lineWidth = 0.5;
+            for (let h = 0; h < hexes.length; h++) {
+              const hex = hexes[h];
+              if (
+                hex.x < -HEX_SIZE ||
+                hex.x > W + HEX_SIZE ||
+                hex.y < -HEX_SIZE ||
+                hex.y > H + HEX_SIZE
+              )
+                continue;
+              ctx.translate(hex.x, hex.y);
+              ctx.stroke(skeletonPath);
+              ctx.translate(-hex.x, -hex.y);
+            }
+            ctx.restore();
+          }
+
           if (dg && hexes.length > 0) {
             // 실 인구 데이터(KOSTAT 24h)는 키가 "0"~"23". sim 데이터는 absHour
             // ("30","31"...) 키일 수 있음. 둘 다 호환되도록 우선 displayHour 직접 →
@@ -1835,7 +1915,9 @@ export default function AbmPersonaMap({
           // 자유 드리프트 진폭 — 서울 위도에서 1e-5 ≈ 0.85m. 1.8e-4 ≈ ~16m wandering 반경.
           // 사용자 피드백: "앞뒤로" 보이지 말고 "이리저리" wandering 으로.
           // 1축 perpendicular wobble (직선 양옆 진동) → lat/lon 독립 2축 Lissajous 드리프트.
-          const DRIFT_LATLON = 1.8e-4;
+          // 사용자 피드백 (2026-05-04): wandering 너무 한정적 → 5x 확대 (~80m).
+          // visit/rest/work 는 driftScale 로 작게 유지, move 만 풀 80m.
+          const DRIFT_LATLON = 9e-4;
 
           // 마포 polygon hit-test (사용자 피드백: agent 가 hex 안에서만 움직이도록).
           // mapoPolygonsRef 가 비어있으면 마스킹 skip (geo 미로드 시 fallback).
@@ -1896,8 +1978,9 @@ export default function AbmPersonaMap({
             // - move: 풀 wandering drift + role 색 → "이동"
             const action = prev.action || 'move';
             // 드리프트 스케일 — rest/work 는 거의 정지, visit 은 작게 떨림, move 는 풀 wander.
+            // 사용자 피드백: 더 넓은 wandering. visit 도 살짝 키워 (0.25→0.4) 결제 펄스 느낌 ↑.
             const driftScale =
-              action === 'rest' ? 0.05 : action === 'work' ? 0.08 : action === 'visit' ? 0.25 : 1.0;
+              action === 'rest' ? 0.08 : action === 'work' ? 0.12 : action === 'visit' ? 0.4 : 1.0;
             // lat 축 — 주기 ~1.4 hour (실시간 ~5.6초). 너무 빠르지 않게 느리게.
             const driftLat = Math.sin(virtualHour * 0.7 + seed * tau) * DRIFT_LATLON * driftScale;
             // lon 축 — 주기 ~2.2 hour. lat 과 frequency 비 무리수 → 반복 X.
@@ -1932,17 +2015,46 @@ export default function AbmPersonaMap({
 
             if (isTierS) {
               tierSPixelsRef.current.set(agentId, { x: pix.x, y: pix.y });
+              // action 별 시각 — visit 펄스 빨강, work 글로우, move trail, rest dim.
+              ctx.save();
               ctx.globalAlpha = Math.max(alpha, 0.95);
+
+              // 1) action 별 글로우 ring — 결과적 분위기 강화.
+              if (action === 'visit') {
+                // visit = 빨간 펄스 ring
+                const pulse = 0.7 + 0.3 * Math.sin(tickRef.current * 0.18);
+                ctx.shadowColor = 'rgba(255,56,0,0.85)';
+                ctx.shadowBlur = 10 * pulse;
+                ctx.strokeStyle = `rgba(255,56,0,${0.6 * pulse})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pix.x, pix.y, 9 + 2 * pulse, 0, Math.PI * 2);
+                ctx.stroke();
+              } else if (action === 'work') {
+                // work = 초록 steady glow
+                ctx.shadowColor = 'rgba(0,186,122,0.6)';
+                ctx.shadowBlur = 6;
+              } else if (action === 'move') {
+                // move = wandering halo
+                ctx.shadowColor = `${fill}aa`;
+                ctx.shadowBlur = 5;
+              }
+
+              // 2) center fill dot — role 색
               ctx.fillStyle = fill;
               ctx.beginPath();
               ctx.arc(pix.x, pix.y, 4.5, 0, Math.PI * 2);
               ctx.fill();
+
+              // 3) Tier S 표식 — 노란 ring
+              ctx.shadowBlur = 0;
               ctx.strokeStyle = '#FF7940';
               ctx.lineWidth = 2;
               ctx.beginPath();
               ctx.arc(pix.x, pix.y, 6, 0, Math.PI * 2);
               ctx.stroke();
-              ctx.globalAlpha = 1;
+
+              ctx.restore();
               tierSDrawn++;
             }
             // non-Tier-S ambient dot 제거 (사용자 피드백 2026-05-04) —
@@ -2525,6 +2637,53 @@ export default function AbmPersonaMap({
               style={{ zIndex: 10, pointerEvents: 'none' }}
             />
 
+            {/* 시뮬 전 ready banner — 사용자가 시뮬 시작하기 전 지도 상태 명시.
+                abmResult 없고 abmLoading 도 없으면 표시 (시나리오 패널 단계). */}
+            {!abmResult && !abmLoading && mapLoaded && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                <div className="bg-card/95 backdrop-blur-sm border border-primary/30 rounded-full px-4 py-1.5 shadow-lg flex items-center gap-2.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                    READY
+                  </span>
+                  <span className="h-3 w-px bg-border" />
+                  <span className="text-[10.5px] text-muted-foreground">
+                    공실{' '}
+                    <span className="font-bold text-foreground">
+                      {(_vacancySpots ?? []).length}
+                    </span>
+                    {' · '}
+                    경쟁/자사{' '}
+                    <span className="font-bold text-foreground">{(competitors ?? []).length}</span>
+                    {' · '}
+                    페르소나 <span className="font-bold text-foreground">{N_PERSONAS}</span>
+                  </span>
+                  <span className="h-3 w-px bg-border" />
+                  <span className="text-[10.5px] text-muted-foreground italic">시뮬 시작 대기</span>
+                </div>
+              </div>
+            )}
+
+            {/* 시뮬 진행 중 banner — abmLoading 시 지도 위에도 progress 표시. */}
+            {abmLoading && mapLoaded && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                <div className="bg-card/95 backdrop-blur-sm border border-warning/40 rounded-full px-4 py-1.5 shadow-lg flex items-center gap-2.5">
+                  <Loader2 className="h-3 w-3 animate-spin text-warning" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-warning">
+                    SIMULATING
+                  </span>
+                  <span className="h-3 w-px bg-border" />
+                  <span className="text-[10.5px] text-foreground font-bold tabular-nums">
+                    {focusSpot?.label ?? '—'}
+                  </span>
+                  <span className="text-[10.5px] text-muted-foreground">· 진행 중...</span>
+                </div>
+              </div>
+            )}
+
             {/* dong hover tooltip — 마우스 올린 polygon 의 이름 (커서 우상단). */}
             {hoveredDong && (
               <div
@@ -2599,51 +2758,8 @@ export default function AbmPersonaMap({
               </div>
             )}
 
-            {/* 공실 스팟 선택 패널 — vacancySpots 받았을 때만 표시 + 결과 없을 때만 */}
-            {Array.isArray(vacancySpots) &&
-              vacancySpots.length > 0 &&
-              !abmResult?.new_store_visit_share_pct && (
-                <div className="absolute top-3 right-3 max-w-[260px] bg-background/95 backdrop-blur-sm border border-success/40 rounded-lg p-3 z-20 shadow-[0_0_20px_rgba(52,211,153,0.15)]">
-                  <p className="text-[10px] font-mono text-success mb-2 uppercase tracking-wider">
-                    공실 스팟 ({vacancySpots.length})
-                  </p>
-                  <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
-                    스팟 클릭 → 그 위치에서 ABM 시뮬 실행
-                  </p>
-                  <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto">
-                    {[...vacancySpots]
-                      .sort((a, b) => (b.listing_count ?? 0) - (a.listing_count ?? 0))
-                      .slice(0, 8)
-                      .map((spot, idx) => {
-                        const isTarget = spot.dong_name === targetDistrict;
-                        return (
-                          <button
-                            key={`spot-${spot.id}`}
-                            onClick={() => onSpotClick?.(spot)}
-                            disabled={abmLoading || !onSpotClick}
-                            className={`text-left px-2 py-1.5 rounded text-[11px] border transition-all ${
-                              isTarget
-                                ? 'bg-success/10 border-success/40 text-success hover:bg-success/20'
-                                : 'bg-card/60 border-border text-muted-foreground hover:border-border'
-                            } ${abmLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold">
-                                {idx + 1}. {spot.dong_name}
-                              </span>
-                              <span className="text-[9px] font-mono text-muted-foreground">
-                                {spot.listing_count ?? 0}건
-                              </span>
-                            </div>
-                            <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
-                              {spot.lat.toFixed(4)}, {spot.lon.toFixed(4)}
-                            </div>
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
+            {/* 공실 스팟 선택 패널 — 사용자 피드백 (2026-05-04): 산만해서 제거.
+                지도 위 spot dot 클릭으로 직접 시뮬 실행. */}
 
             {/* 시뮬 결과 오버레이 — new_store_visit_share_pct 가 있을 때 (스팟 클릭 시뮬 후).
                 shadow + backdrop-blur 제거 — 검은 blob 의심 (사용자 피드백 2026-05-04). */}
@@ -3467,15 +3583,7 @@ export default function AbmPersonaMap({
                   className="mt-2 flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-black tracking-tight transition-all duration-300 shadow-[0_4px_20px_rgba(0,44,209,0.25)] hover:shadow-[0_6px_28px_rgba(0,44,209,0.35)]"
                 >
                   <Play className="w-4 h-4" />
-                  {targetDistrict} · {scenario.weather_override ?? '현재날씨'} ·{' '}
-                  {scenario.date_override === '2026-05-05'
-                    ? '공휴일'
-                    : scenario.weekend_force
-                      ? '주말'
-                      : scenario.date_override
-                        ? '평일'
-                        : '오늘'}{' '}
-                  · 임대료 +{Math.round(scenario.rent_shock_pct * 100)}% 시뮬 실행
+                  시뮬레이션 실행
                 </button>
               </div>
             )}

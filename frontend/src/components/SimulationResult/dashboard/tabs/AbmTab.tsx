@@ -72,18 +72,43 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   const targetDistrict =
     r?.winner_district || r?.target_district || r?.target_districts?.[0] || '서교동';
 
-  // 지도 마커 데이터 — raw JSONB에서 방어적 추출.
-  // 우선순위:
-  //   1) recommended_vacancy_spots (신규 추천 에이전트 출력 — score/reason 포함, 보통 4개)
-  //   2) vacancy_spots (district_ranking _load_vacancy_spots — winner+target+top_3 dong 의 전체 월세 매물)
-  // 신규 에이전트 추천이 있으면 그것만 쓰고 (소수 정예), 없으면 fallback.
+  // 지도 마커 데이터 — 상권분석 페이지 (MapSection.buildBestVacancies) 와 동일 로직:
+  // winner_district 의 vacancy_spots 중 score 내림차순 top 4. 별도 추천 에이전트 출력 없음.
+  // recommended_vacancy_spots 가 있으면 그것 우선 (신규 에이전트 도입 시 자동 활용).
+  const winner: string | undefined = r?.winner_district || r?.target_district;
   const recommendedSpots = Array.isArray(r?.recommended_vacancy_spots)
-    ? r.recommended_vacancy_spots
+    ? r.recommended_vacancy_spots.slice(0, 4)
     : [];
-  const fallbackSpots = Array.isArray(r?.vacancy_spots) ? r.vacancy_spots : [];
-  const vacancySpots = recommendedSpots.length > 0 ? recommendedSpots : fallbackSpots;
-  const competitorSamples = Array.isArray(r?.competitor_intel?.competition_500m?.samples)
-    ? r.competitor_intel.competition_500m.samples
+  const allVacancySpots = Array.isArray(r?.vacancy_spots) ? r.vacancy_spots : [];
+  // 상권분석과 동일 — winner dong 만 + score 내림차순 → top 4.
+  const winnerVacancySpots = allVacancySpots
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((s: any) => s.dong_name === winner && typeof s.lat === 'number' && typeof s.lon === 'number')
+    .slice()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .sort((a: any, b: any) => {
+      const sa = typeof a.score === 'number' ? a.score : Number.NEGATIVE_INFINITY;
+      const sb = typeof b.score === 'number' ? b.score : Number.NEGATIVE_INFINITY;
+      if (sa !== sb) return sb - sa;
+      return (b.listing_count ?? 0) - (a.listing_count ?? 0);
+    })
+    .slice(0, 4);
+  const vacancySpots = recommendedSpots.length > 0 ? recommendedSpots : winnerVacancySpots;
+  // 경쟁업체 — 상권분석 페이지 buildCompetitors 와 동일. all_competitor_locations 우선 (max 200),
+  // fallback: competitor_intel.competition_500m.samples (max 100).
+  const allCompetitorLocations = Array.isArray(r?.all_competitor_locations)
+    ? r.all_competitor_locations.slice(0, 200)
+    : [];
+  const competitorSamples =
+    allCompetitorLocations.length > 0
+      ? allCompetitorLocations
+      : Array.isArray(r?.competitor_intel?.competition_500m?.samples)
+        ? r.competitor_intel.competition_500m.samples.slice(0, 100)
+        : [];
+
+  // 동일 브랜드 자사 매장 — winner+top3 4동 안. competitors 와 별도 marker 로 표시.
+  const sameBrandLocations = Array.isArray(r?.same_brand_locations)
+    ? r.same_brand_locations
     : [];
 
   // recommendedSpots 가 활성이면 'recommended' 타입 + score/reason 전달.
@@ -103,19 +128,36 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((l: any) => typeof l.lat === 'number' && typeof l.lng === 'number');
 
-  const competitors = competitorSamples
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((s: any) => s.lat && (s.lng ?? s.lon))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((s: any) => ({
-      id: s.id ?? `comp_${s.place_name}_${s.lat}`,
-      name: s.place_name || s.brand_name || '경쟁업체',
-      lat: s.lat,
-      lng: s.lng ?? s.lon,
-      distance_m: s.distance_m,
-      is_franchise: s.is_franchise ?? false,
-      category: s.category,
-    }));
+  const competitors = [
+    ...competitorSamples
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((s: any) => s.lat && (s.lng ?? s.lon))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((s: any) => ({
+        id: s.id ?? `comp_${s.place_name}_${s.lat}`,
+        name: s.place_name || s.brand_name || '경쟁업체',
+        lat: s.lat,
+        lng: s.lng ?? s.lon,
+        distance_m: s.distance_m,
+        is_franchise: s.is_franchise ?? false,
+        category: s.category,
+      })),
+    // 동일 브랜드 자사 매장 — competitors 컴포넌트 슬롯에 합쳐 marker 표시.
+    // is_franchise=true 로 marker 색 분기 가능 (자사 = 다른 색 권장).
+    ...sameBrandLocations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((s: any) => s.lat && (s.lng ?? s.lon))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((s: any) => ({
+        id: s.id ? `own_${s.id}` : `own_${s.place_name}_${s.lat}`,
+        name: s.place_name || s.brand_name || '자사 매장',
+        lat: s.lat,
+        lng: s.lng ?? s.lon,
+        distance_m: undefined,
+        is_franchise: true, // 자사 = 동일 브랜드 표식
+        category: s.category ?? 'own_brand',
+      })),
+  ];
 
   /** store action wrapper — payload 빌드 + startAbm 호출. */
   function runAbm(params: {
