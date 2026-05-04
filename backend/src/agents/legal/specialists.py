@@ -163,7 +163,12 @@ _INDUSTRY_LABEL_MAP = {
 }
 
 
-async def _analyze_territory(brand: str, district: str, business_type: str) -> dict:
+async def _analyze_territory(
+    brand: str,
+    district: str,
+    business_type: str,
+    territory_radius_m: int | None = None,
+) -> dict:
     """동일 브랜드 인접 매장 카운트 + 자기잠식률 계산.
 
     competitor_intel 노드와 동일 데이터 소스 (commercial_intelligence.analyze_cannibalization)
@@ -172,9 +177,13 @@ async def _analyze_territory(brand: str, district: str, business_type: str) -> d
 
     업종별 거리 감쇠 곡선이 다르므로 ``business_type`` 을 industry 인자로 정확히 전달.
 
+    Args:
+        territory_radius_m: 사용자 입력 자사 영업구역 거리(m). 정보공개서·가맹계약서 표준치.
+            지정 시 nearby_stores 의 distance_m 을 직접 카운트해 territory 안 매장 수 산출.
+
     Returns:
-        ``{"same_brand_500m", "same_brand_2000m", "closest_m", "impact_pct"}``
-        또는 ``{}`` (자료 없음/오류).
+        ``{"same_brand_500m", "same_brand_2000m", "same_brand_within_territory",
+            "territory_radius_m", "closest_m", "impact_pct"}`` 또는 ``{}`` (자료 없음/오류).
     """
     if not brand or not district:
         return {}
@@ -198,9 +207,19 @@ async def _analyze_territory(brand: str, district: str, business_type: str) -> d
             return {}
         bins = result.get("distance_bins", {})
         same_brand_500m = bins.get("0-300m", 0) + bins.get("300-500m", 0)
+        # 사용자 영업구역 안 매장 카운트 — nearby_stores 의 distance_m 직접 사용.
+        # nearby_stores 는 [:10] cap 이지만 보통 영업구역(250~500m) 안 매장은 그 안에 포함됨.
+        same_brand_within_territory: int | None = None
+        if territory_radius_m:
+            nearby = result.get("nearby_stores", []) or []
+            same_brand_within_territory = sum(
+                1 for s in nearby if isinstance(s, dict) and (s.get("distance_m") or 0) <= territory_radius_m
+            )
         return {
             "same_brand_500m": same_brand_500m,
             "same_brand_2000m": result.get("same_brand_nearby", 0),
+            "same_brand_within_territory": same_brand_within_territory,
+            "territory_radius_m": territory_radius_m,
             "closest_m": result.get("closest_distance_m"),
             "impact_pct": result.get("estimated_revenue_impact_pct", 0.0),
         }
@@ -214,7 +233,8 @@ def _territory_to_level(t: dict) -> tuple[str | None, str]:
 
     가맹사업법 제12조의4: 가맹본부의 동일 업종 직영점/가맹점 인접 출점 금지.
 
-    임계값:
+    임계값 (사용자 영업구역 우선 → 일반 임계값 fallback):
+    - territory_radius_m 안 동일 브랜드 ≥1 → danger (정보공개서 표준 거리 기준 명백 침해)
     - 500m 내 동일 브랜드 ≥1 + 자기잠식률 ≤ -5% → danger
     - 500m 내 동일 브랜드 ≥1                    → caution
     - 2000m 내 동일 브랜드 ≥3                    → caution
@@ -224,16 +244,28 @@ def _territory_to_level(t: dict) -> tuple[str | None, str]:
         return None, ""
     s500 = t.get("same_brand_500m", 0)
     s2000 = t.get("same_brand_2000m", 0)
+    s_terr = t.get("same_brand_within_territory")
+    terr_radius = t.get("territory_radius_m")
     closest = t.get("closest_m")
     impact = t.get("impact_pct", 0.0)
 
     closest_str = f"{closest:.0f}m" if closest is not None else "N/A"
+    territory_str = ""
+    if terr_radius and s_terr is not None:
+        territory_str = f"자사 영업구역({terr_radius}m) 안: {s_terr}개 / "
     hint = (
+        f"{territory_str}"
         f"500m 내 동일 브랜드 매장: {s500}개 / "
         f"2km 내: {s2000}개 / 최근접: {closest_str} / "
         f"자기잠식률: {impact * 100:.1f}%"
     )
 
+    # 1순위: 사용자 입력 영업구역 침해 — 정보공개서 표준 거리 기준이라 가장 강력한 근거
+    if terr_radius and s_terr is not None and s_terr >= 1:
+        return (
+            "danger",
+            hint + f" — 자사 영업구역({terr_radius}m) 안 동일 브랜드 {s_terr}개, 가맹사업법 제12조의4 명백 침해",
+        )
     if s500 >= 1 and impact <= -0.05:
         return "danger", hint + " — 가맹사업법 제12조의4 인접 출점 강력 의심"
     if s500 >= 1:
@@ -255,6 +287,7 @@ async def specialist_franchise_law(
     business_type: str,
     district: str,
     ftc_data: dict | None,
+    territory_radius_m: int | None = None,
 ) -> dict:
     """브랜드 정보공개서·영업지역·필수품목·허위과장 평가."""
     type_name = "franchise_law"
@@ -266,7 +299,7 @@ async def specialist_franchise_law(
     query = f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 허위과장 필수품목 카니발리제이션"
     # RAG(법령) + 판례 RAG + 영업지역 정량 분석 병렬 (업종별 거리 감쇠 곡선 적용)
     # return_exceptions=True — 한쪽 실패가 나머지 task DB 커넥션을 누수시키지 않도록 격리
-    territory_task = _analyze_territory(brand, district, business_type)
+    territory_task = _analyze_territory(brand, district, business_type, territory_radius_m)
     precedent_query = _precedent_query_franchise(brand, business_type)
     docs_raw, precedent_raw, territory_raw = await asyncio.gather(
         retriever.search(query, top_k=5, source_filter=LegalDocumentRetriever.FRANCHISE_LAW_SOURCES),

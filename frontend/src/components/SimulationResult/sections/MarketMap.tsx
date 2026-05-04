@@ -17,6 +17,16 @@ export interface RankingEntry {
   closure_rate?: number | null;
 }
 
+export interface SameBrandLocation {
+  id: string;
+  place_name: string;
+  brand_name?: string;
+  lat: number;
+  lng: number;
+  dong_name?: string;
+  address?: string;
+}
+
 export interface MarketMapProps {
   center: { lat: number; lng: number };
   competitors?: Competitor[];
@@ -26,6 +36,12 @@ export interface MarketMapProps {
   height?: number | string;
   // 추천 동 내 "가장 적합한 공실" 좌표. 제공 시 폴리곤 centroid 대신 이 좌표에 핀/반경원을 찍는다.
   targetSpot?: { lat: number; lng: number } | null;
+  // 추천 spot top1~4 — 1위는 펄싱 핀, 2~4위는 번호 라벨 핀으로 비교 표시.
+  targetSpots?: { lat: number; lng: number }[];
+  // winner+top3 4동 안 자사 매장 좌표 — 로고 아이콘 마커 표시.
+  sameBrandLocations?: SameBrandLocation[];
+  // 자사 영업구역 거리(m) — 자사 매장 각각에 점선 원으로 표시. null/미입력 시 원 안 그림.
+  territoryRadiusM?: number | null;
 }
 
 interface KakaoLatLngInstance {
@@ -202,6 +218,9 @@ export function MarketMap({
   winnerDistrict,
   height = 520,
   targetSpot = null,
+  targetSpots = [],
+  sameBrandLocations = [],
+  territoryRadiusM = null,
 }: MarketMapProps) {
   const { ready, error, kakao } = useKakaoMap();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -379,6 +398,82 @@ export function MarketMap({
       overlayLayersRef.current.push(overlay);
     });
 
+    // Layer 3 — 자사 매장 마커 (로고 아이콘) + 영업구역 반경 원 (점선)
+    sameBrandLocations.forEach((s) => {
+      if (typeof s.lat !== 'number' || typeof s.lng !== 'number') return;
+      const pos = new maps.LatLng(s.lat, s.lng);
+      // 영업구역 반경 원 — territoryRadiusM 입력 시 자사 매장 각각에 점선 원 그리기.
+      if (territoryRadiusM && territoryRadiusM > 0) {
+        const territoryCircle = new maps.Circle({
+          center: pos,
+          radius: territoryRadiusM,
+          strokeWeight: 1.5,
+          strokeColor: '#fbbf24',
+          strokeOpacity: 0.7,
+          strokeStyle: 'shortdash',
+          fillColor: '#fbbf24',
+          fillOpacity: 0.06,
+        });
+        territoryCircle.setMap(mapInstance);
+        overlayLayersRef.current.push(territoryCircle);
+      }
+      // 로고 아이콘 마커 — 금색 동그라미 + 작은 펄스 (자사 매장 표시).
+      const logo = document.createElement('div');
+      logo.style.cssText =
+        'position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(251,191,36,0.6);font-size:12px;font-weight:900;color:#1c1917;cursor:pointer;';
+      logo.innerHTML = '★';
+      logo.title = `${s.brand_name || '자사매장'} · ${s.place_name}`;
+      logo.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (infoWindowRef.current) infoWindowRef.current.close();
+        const iw = new maps.InfoWindow({
+          position: pos,
+          content: `<div style="font-family:Pretendard,ui-sans-serif,system-ui;min-width:180px;padding:10px 12px;background:rgba(24,24,27,0.95);color:#e4e4e7;border:1px solid #fbbf24;border-radius:6px;backdrop-filter:blur(8px);">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:#fbbf24;"></span>
+              <span style="font-size:13px;font-weight:600;">${s.brand_name || '자사매장'}</span>
+            </div>
+            <div style="font-size:11px;color:#a1a1aa;line-height:1.6;">
+              <div>${s.place_name}</div>
+              <div>${s.dong_name || ''} ${s.address || ''}</div>
+            </div>
+          </div>`,
+          removable: true,
+        });
+        iw.open(mapInstance);
+        infoWindowRef.current = iw;
+      });
+      const sameBrandOverlay = new maps.CustomOverlay({
+        position: pos,
+        content: logo,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 4,
+      });
+      sameBrandOverlay.setMap(mapInstance);
+      overlayLayersRef.current.push(sameBrandOverlay);
+    });
+
+    // Layer 4 — 추천 spot 2~4위 번호 라벨 핀 (1위는 buildCenterLayers 가 펄싱 핀으로 그림).
+    // 동일 디자인의 작은 원 + 번호. 사용자가 1·2·3·4 비교해서 볼 수 있게.
+    targetSpots.slice(1, 4).forEach((sp, idx) => {
+      const rank = idx + 2; // 2위부터 시작
+      const pin = document.createElement('div');
+      pin.style.cssText =
+        'position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#ff0070;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 6px rgba(255,0,112,0.6);font-size:11px;font-weight:900;color:#ffffff;cursor:default;';
+      pin.innerHTML = String(rank);
+      pin.title = `추천 spot ${rank}순위`;
+      const pinOverlay = new maps.CustomOverlay({
+        position: new maps.LatLng(sp.lat, sp.lng),
+        content: pin,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+        zIndex: 5,
+      });
+      pinOverlay.setMap(mapInstance);
+      overlayLayersRef.current.push(pinOverlay);
+    });
+
     return () => {
       overlayLayersRef.current.forEach((layer) => layer.setMap(null));
       overlayLayersRef.current = [];
@@ -398,6 +493,9 @@ export function MarketMap({
     winnerDistrict,
     targetSpot?.lat,
     targetSpot?.lng,
+    targetSpots,
+    sameBrandLocations,
+    territoryRadiusM,
   ]);
 
   if (error) {

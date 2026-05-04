@@ -345,6 +345,55 @@ async def _collect_all_competitor_locations(
     return results
 
 
+async def _collect_same_brand_locations(
+    winner: str,
+    top3: list,
+    brand_name: str,
+) -> list[dict]:
+    """winner + top3 4동 안에 위치한 자사 브랜드 매장 좌표 수집.
+
+    상권분석탭 지도에 자사 매장 마커 (로고 아이콘) 표시 + 영업구역 반경 원 그리기용.
+    데이터 소스: brand_mapping_resolver.get_all_mapo_stores_by_brand (BRAND_ALIASES 양방향 매핑).
+    """
+    if not brand_name:
+        return []
+    districts = list({winner} | set(top3 or []))
+    print(f"[same_brand] 수집 시작 — brand={brand_name} districts={districts}")
+    try:
+        from src.services.brand_mapping_resolver import get_all_mapo_stores_by_brand
+
+        all_stores = await asyncio.to_thread(get_all_mapo_stores_by_brand, brand_name)
+    except Exception as e:
+        import traceback
+
+        print(f"[same_brand] 조회 실패: {e}\n{traceback.format_exc()}")
+        return []
+
+    # 4동 안 매장만 필터 (dong_name 일치). dong_name NULL 인 매장은 get_all_mapo_stores_by_brand 가 이미 제외.
+    target_set = set(districts)
+    results: list[dict] = []
+    for s in all_stores:
+        if s.get("dong_name") not in target_set:
+            continue
+        lat_v = s.get("lat")
+        lon_v = s.get("lon")
+        if not lat_v or not lon_v:
+            continue
+        results.append(
+            {
+                "id": s.get("kakao_id") or f"{s.get('place_name')}_{lat_v}_{lon_v}",
+                "place_name": s.get("place_name", ""),
+                "brand_name": s.get("brand_name", ""),
+                "lat": lat_v,
+                "lng": lon_v,
+                "dong_name": s.get("dong_name", ""),
+                "address": s.get("address", ""),
+            }
+        )
+    print(f"[same_brand] 4동({','.join(districts)}) 안 자사 매장 {len(results)}개")
+    return results
+
+
 def _build_initial_state(input_data: Any) -> dict[str, Any]:
     """SimulationInput에서 LangGraph initial state dict 생성.
 
@@ -361,6 +410,7 @@ def _build_initial_state(input_data: Any) -> dict[str, Any]:
         "target_districts": getattr(input_data, "target_districts", None) or [input_data.target_district],
         "industry_filter": getattr(input_data, "industry_filter", None),
         "commercial_radius": getattr(input_data, "commercial_radius", 500),
+        "territory_radius_m": getattr(input_data, "territory_radius_m", None),
         "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
         "store_area": getattr(input_data, "store_area", 15.0),
         "population_weight": getattr(input_data, "population_weight", True),
@@ -912,6 +962,9 @@ async def analyze_location(input_data: SimulationInput, response: Response):
         result["all_competitor_locations"] = await _collect_all_competitor_locations(
             winner, top3, input_data.business_type
         )
+        result["same_brand_locations"] = await _collect_same_brand_locations(
+            winner, top3, input_data.brand_name
+        )
         return {"status": "success", "data": result}
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
@@ -975,6 +1028,13 @@ async def analyze_llm(input_data: SimulationInput):
     except Exception as e:
         print(f"[ANALYZE/LLM] all_competitor_locations 수집 실패 (무시): {e}")
         full["all_competitor_locations"] = []
+    try:
+        full["same_brand_locations"] = await _collect_same_brand_locations(
+            winner, top3, input_data.brand_name
+        )
+    except Exception as e:
+        print(f"[ANALYZE/LLM] same_brand_locations 수집 실패 (무시): {e}")
+        full["same_brand_locations"] = []
 
     # AnalysisOutput에 정의된 필드만 추출하여 응답 (PR 후 추가/제거 시 schema가 source of truth)
     analysis_keys = set(AnalysisOutput.model_fields.keys())
@@ -1063,6 +1123,13 @@ async def analyze_llm_async(input_data: SimulationInput) -> dict[str, Any]:
             except Exception as ce:
                 logger.warning(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
                 full["all_competitor_locations"] = []
+            try:
+                full["same_brand_locations"] = await _collect_same_brand_locations(
+                    winner, top3, input_data.brand_name
+                )
+            except Exception as ce:
+                logger.warning(f"[/analyze/llm/async] same_brand_locations 실패 (무시): {ce}")
+                full["same_brand_locations"] = []
 
             analysis_keys = set(AnalysisOutput.model_fields.keys())
             payload = {k: v for k, v in full.items() if k in analysis_keys}
@@ -1798,6 +1865,13 @@ async def run_simulation(input_data: SimulationInput, response: Response):
         # (이전: /simulate 만 누락돼 frontend `allCompetitorLocations: undefined`)
         winner = result.get("winner_district") or input_data.target_district
         top3 = result.get("top_3_candidates") or []
+        try:
+            result["same_brand_locations"] = await _collect_same_brand_locations(
+                winner, top3, input_data.brand_name
+            )
+        except Exception as ce:
+            logger.warning(f"[/simulate] same_brand_locations 실패 (무시): {ce}")
+            result["same_brand_locations"] = []
         try:
             result["all_competitor_locations"] = await _collect_all_competitor_locations(
                 winner, top3, input_data.business_type

@@ -115,16 +115,16 @@ interface BestVacancy {
   competitorCount500m: number | null;
 }
 
-// 추천 동(winner_district) 내 공실 중 "가장 출점 적합한 spot" 선정.
-// 기준: backend 가 spot 단위 score 를 부여한 경우(0~100, winner 동 내 상대 점수,
-// 경쟁밀도 0.45 + 지하철 접근성 0.35 + 매물 활성도 0.20 가중합) → score 최대.
+// 추천 동(winner_district) 내 공실 중 score 상위 4개 spot 반환.
+// 기준: backend 가 spot 단위 score 를 부여한 경우(0~100, 경쟁밀도 0.45 + 지하철 접근성 0.35 + 매물 활성도 0.20 가중합).
 // score 가 없으면 listing_count 최대 fallback (구버전 응답 호환).
-function buildBestVacancy(simResult: SimulationOutput): BestVacancy | null {
+// 1순위가 펄싱 핀 + 반경원 중심. 2~4순위는 번호 라벨 핀으로 비교 표시.
+function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
   const sim = simResult as SimulationOutput & Record<string, unknown>;
   const winner = (sim.winner_district ?? sim.target_district) as string | undefined;
-  if (!winner) return null;
+  if (!winner) return [];
   const spots = (sim.vacancy_spots as VacancySpotRaw[] | undefined) ?? [];
-  const candidates = spots
+  return spots
     .filter((s) => s.dong_name === winner)
     .filter((s) => typeof s.lat === 'number' && typeof s.lon === 'number')
     .map((s) => ({
@@ -142,8 +142,8 @@ function buildBestVacancy(simResult: SimulationOutput): BestVacancy | null {
       const sb = b.score ?? Number.NEGATIVE_INFINITY;
       if (sa !== sb) return sb - sa;
       return b.listingCount - a.listingCount;
-    });
-  return candidates[0] ?? null;
+    })
+    .slice(0, 4);
 }
 
 export function MapSection({ simResult }: Props) {
@@ -152,9 +152,14 @@ export function MapSection({ simResult }: Props) {
   const competitors = useMemo(() => buildCompetitors(simResult), [simResult]);
   const rankings = useMemo(() => buildRankings(simResult), [simResult]);
   const fallbackCenter = useMemo(() => buildCenter(simResult), [simResult]);
-  const bestVacancy = useMemo(() => buildBestVacancy(simResult), [simResult]);
-  // 핀/반경/TARGET 좌표 = 추천 동 내 best 공실 (있으면) → 없으면 동 대표좌표 fallback
+  const bestVacancies = useMemo(() => buildBestVacancies(simResult), [simResult]);
+  const bestVacancy = bestVacancies[0] ?? null;
+  // 핀/반경/TARGET 좌표 = 추천 동 내 best 공실 1순위 (있으면) → 없으면 동 대표좌표 fallback
   const center = bestVacancy ? { lat: bestVacancy.lat, lng: bestVacancy.lng } : fallbackCenter;
+  // 자사 매장 좌표 (winner+top3 4동 안) — 로고 마커 + 영업구역 반경 원 표시용.
+  const sameBrandLocations = useMemo(() => simResult.same_brand_locations ?? [], [simResult]);
+  // 사용자 입력 영업구역 거리 — store.params 에서 직접 (응답에 echo 안 됨).
+  const territoryRadiusM = useSimulationStore((s) => s.params?.territory_radius_m);
 
   const { brand: authBrand, user } = useAuth();
   // 사용자 입력 commercial_radius — backend 응답에 echo 안 되므로 store.params 에서 직접.
@@ -192,6 +197,9 @@ export function MapSection({ simResult }: Props) {
           winnerDistrict={simResult.winner_district}
           height={520}
           targetSpot={bestVacancy ? { lat: bestVacancy.lat, lng: bestVacancy.lng } : null}
+          targetSpots={bestVacancies.map((v) => ({ lat: v.lat, lng: v.lng }))}
+          sameBrandLocations={sameBrandLocations}
+          territoryRadiusM={territoryRadiusM ?? null}
         />
 
         {/* Layer 5 — 좌상단 타겟 요약 패널 */}
