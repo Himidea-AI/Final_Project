@@ -118,6 +118,11 @@ export interface UseScenarioCandidatesResult {
     value: number | QuarterKey,
   ) => void;
   resetCandidateSliders: (id: string) => void;
+  /**
+   * 후보의 동 (이름 + 코드) 변경. 슬라이더 상태 유지.
+   * dup (동+업종 중복) 시 변경하지 않고 false 반환.
+   */
+  updateCandidateDong: (id: string, dong: string, dongCode: string) => boolean;
   isFull: boolean;
 }
 
@@ -199,6 +204,33 @@ export function useScenarioCandidates(): UseScenarioCandidatesResult {
     );
   }, []);
 
+  const updateCandidateDong = useCallback<UseScenarioCandidatesResult['updateCandidateDong']>(
+    (id, dong, dongCode) => {
+      let changed = false;
+      setCandidates((prev) => {
+        const target = prev.find((c) => c.id === id);
+        if (!target) return prev;
+        // 동/코드 동일 → no-op (성공 처리)
+        if (target.dong === dong && target.dongCode === dongCode) {
+          changed = true;
+          return prev;
+        }
+        // dup 체크 — 같은 (동+업종) 페어가 다른 후보에 이미 존재하면 변경 거부
+        const dup = prev.find(
+          (c) => c.id !== id && c.dongCode === dongCode && c.industryCode === target.industryCode,
+        );
+        if (dup) {
+          changed = false;
+          return prev;
+        }
+        changed = true;
+        return prev.map((c) => (c.id === id ? { ...c, dong, dongCode } : c));
+      });
+      return changed;
+    },
+    [],
+  );
+
   const activeCandidate = candidates.find((c) => c.id === activeId) ?? null;
   const isFull = candidates.length >= MAX_CANDIDATES;
 
@@ -211,6 +243,7 @@ export function useScenarioCandidates(): UseScenarioCandidatesResult {
     setActiveCandidate,
     updateSliderValue,
     resetCandidateSliders,
+    updateCandidateDong,
     isFull,
   };
 }

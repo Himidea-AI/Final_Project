@@ -12,7 +12,7 @@ interface Props {
  *
  *  profile_summary 자연어 후처리에도 사용 — backend 가 "20대+30대 time_06_11" 같은
  *  raw key 혼합 텍스트를 보내면 frontend 에서 정규식으로 한국어 + 연결사(·) 로 치환. */
-const DIMENSION_LABEL: Record<string, string> = {
+export const DIMENSION_LABEL: Record<string, string> = {
   // 연령
   age_10: '10대',
   age_20: '20대',
@@ -58,7 +58,7 @@ const DIMENSION_LABEL: Record<string, string> = {
 /** profile_summary 텍스트 안 raw key 를 한국어로 + "+" 기호를 가운뎃점(·) 으로 치환.
  *  긴 키(time_06_11_ratio) 가 짧은 키(time_06_11) 보다 먼저 매칭되도록 길이 내림차순 정렬.
  *  word boundary(\b) 로 키가 다른 단어 부분에 매칭되는 회귀 차단. */
-function humanizeProfileSummary(text: string): string {
+export function humanizeProfileSummary(text: string): string {
   let out = text;
   const keys = Object.keys(DIMENSION_LABEL).sort((a, b) => b.length - a.length);
   for (const key of keys) {

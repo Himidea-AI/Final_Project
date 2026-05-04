@@ -56,7 +56,6 @@ export function InsightTab({ simResult, openModal }: Props) {
 
       <div className="grid grid-cols-3 gap-4">
         {AGENTS_LIST.map((agent) => {
-          const AgentIcon = agent.icon;
           const attr = getAttribution(agent.id);
           const sources = attr?.sources ?? [];
           const verdict = attr?.verdict;
@@ -74,11 +73,16 @@ export function InsightTab({ simResult, openModal }: Props) {
             >
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`p-2 rounded-xl border shadow-inner group-hover:scale-110 transition-transform ${
+                  className={`overflow-hidden rounded-xl border shadow-inner group-hover:scale-110 transition-transform ${
                     hasData ? agent.iconBgCls : 'bg-card border-border/50'
                   }`}
                 >
-                  <AgentIcon size={18} className={agent.color} />
+                  <img
+                    src={agent.iconSrc}
+                    alt={agent.name}
+                    className="h-12 w-12 object-cover"
+                    loading="lazy"
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-bold text-foreground leading-tight truncate">

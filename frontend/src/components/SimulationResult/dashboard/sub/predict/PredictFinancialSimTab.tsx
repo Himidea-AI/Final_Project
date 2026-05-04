@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Activity, History, ShieldAlert, TrendingUp } from 'lucide-react';
 import type { ClosureRate, ClosureRisk, SimulationOutput } from '../../../../../types';
 import { formatKrw, formatPct } from '../../utils/formatters';
+import { sortByRanking } from '../../utils/rankSort';
 import { BepCumulativeProfitChart } from '../../charts/BepCumulativeProfitChart';
 import { ClosureRatePanel } from '../../charts/ClosureRatePanel';
 import { ClosureRiskHeatmap } from '../../charts/ClosureRiskHeatmap';
@@ -36,7 +37,11 @@ type BepDict = {
 export function PredictFinancialSimTab({ simResult }: Props) {
   // M6 (2026-04-29): district_predictions 기반 멀티 동 시리즈.
   // is_excluded_combo 동은 제외. 비어있으면 단일 동(quarterly_projection) fallback.
-  const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
+  // ranking 정렬 (winner→4위) 로 SERIES_COLORS[idx] = Deep Blue Sequential 4-tier 매핑 정합.
+  const dpredicts = sortByRanking(
+    (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo),
+    simResult,
+  );
 
   // 2026-05-04 패널 KPI 4분기 평균으로 전환 + LLM/랭킹 fallback 제거.
   // 데이터 소스: district_predictions[selected].bep.quarterly_simulation 의 첫 4분기 평균.

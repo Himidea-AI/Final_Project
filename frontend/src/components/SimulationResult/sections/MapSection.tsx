@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { SimulationOutput } from '../../../types';
 import { useAuth } from '../../../auth/AuthContext';
+import { getDongCount, getGuFromDong } from '../../../data/seoulRegions';
 import { useSimulationStore } from '../../../stores/simulationStore';
 import { SectionLabel } from '../shared/SectionLabel';
 import { MarketMap, haversineM, type Competitor, type RankingEntry } from './MarketMap';
@@ -185,9 +186,38 @@ export function MapSection({ simResult }: Props) {
     (compIntel?.['competition_500m'] as { saturation_level?: string } | undefined)
       ?.saturation_level ?? null;
 
+  // 시뮬 대상 구/동 개수 동적 — winner 또는 target 동에서 구 추출 (확장성: 25구 도입 시 자동 반영).
+  const currentGu = getGuFromDong(sim.winner_district ?? sim.target_district);
+  const currentDongCount = getDongCount(currentGu);
+
   return (
     <section>
-      <SectionLabel label="MARKET MAP" subtitle="마포 16동 choropleth · 경쟁점 분포" />
+      {/* 헤더 row — SectionLabel + Target 요약 박스 가로 배치 (lg+), 모바일은 stack. */}
+      <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <SectionLabel
+          label="MARKET MAP"
+          subtitle={`${currentGu ?? '서울'} ${currentDongCount}동 choropleth · 경쟁점 분포`}
+        />
+        {/* Target 요약 박스 — 지도 밖 일반 박스 (이전 좌상단 overlay 에서 이동). */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-card px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+              Target
+            </span>
+            <span className="text-sm font-semibold text-foreground">{brand}</span>
+            <span className="text-xs text-muted-foreground">· {businessType}</span>
+          </div>
+          <div className="flex items-center gap-2 border-l border-border pl-4">
+            <span className="text-xs font-bold text-primary">{district}</span>
+            {address !== '—' && (
+              <span className="text-[0.6875rem] text-muted-foreground">· {address}</span>
+            )}
+            <span className="font-mono text-[0.625rem] text-muted-foreground">
+              · {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
+            </span>
+          </div>
+        </div>
+      </div>
       <div className="relative overflow-hidden rounded-lg border border-border">
         <MarketMap
           center={center}
@@ -201,52 +231,6 @@ export function MapSection({ simResult }: Props) {
           sameBrandLocations={sameBrandLocations}
           territoryRadiusM={territoryRadiusM ?? null}
         />
-
-        {/* Layer 5 — 좌상단 타겟 요약 패널 */}
-        <div className="absolute left-4 top-4 z-10 max-w-xs rounded-lg border border-border bg-card/75 p-4 backdrop-blur-xl">
-          <div className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
-            Target
-          </div>
-          <div className="mt-1 text-sm font-semibold text-foreground">{brand}</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">{businessType}</div>
-          <div className="mt-2 border-t border-border pt-2">
-            <div className="text-xs text-primary">{district}</div>
-            {address !== '—' && (
-              <div className="mt-0.5 text-[0.6875rem] text-muted-foreground">{address}</div>
-            )}
-            <div className="mt-1 font-mono text-[0.625rem] text-muted-foreground">
-              {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
-            </div>
-            {bestVacancy && (
-              <div className="mt-1 space-y-0.5 text-[0.625rem] text-primary">
-                <div>
-                  추천 공실
-                  {bestVacancy.score != null && (
-                    <>
-                      {' · 적합도 '}
-                      <span className="font-mono">{bestVacancy.score.toFixed(1)}</span>
-                    </>
-                  )}
-                </div>
-                <div className="text-muted-foreground">
-                  매물 <span className="font-mono">{bestVacancy.listingCount}</span>건
-                  {bestVacancy.subwayDistanceM != null && (
-                    <>
-                      {' · 지하철 '}
-                      <span className="font-mono">{bestVacancy.subwayDistanceM}m</span>
-                    </>
-                  )}
-                  {bestVacancy.competitorCount500m != null && (
-                    <>
-                      {' · 경쟁 '}
-                      <span className="font-mono">{bestVacancy.competitorCount500m}</span>개
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* Layer 6 — 좌하단 범례 패널 */}
         <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-border bg-card/75 p-3 backdrop-blur-xl">

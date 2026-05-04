@@ -26,9 +26,12 @@ interface Props {
   activeId: string | null;
   records: Map<string, ComparisonRecord>;
   isFull: boolean;
+  /** 시뮬 입력 동 list (4동 한정). 카드 dropdown / AddCandidateModal 옵션 source. */
+  availableDongs: { name: string; code: string }[];
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onAdd: UseScenarioCandidatesResult['addCandidate'];
+  onChangeDong: UseScenarioCandidatesResult['updateCandidateDong'];
   onLimitReached: () => void;
 }
 
@@ -37,18 +40,23 @@ export function ScenarioCandidateList({
   activeId,
   records,
   isFull,
+  availableDongs,
   onSelect,
   onRemove,
   onAdd,
+  onChangeDong,
   onLimitReached,
 }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
+  const noDongs = availableDongs.length === 0;
+  const addDisabled = isFull || noDongs;
 
   const handleAddClick = () => {
     if (isFull) {
       onLimitReached();
       return;
     }
+    if (noDongs) return;
     setModalOpen(true);
   };
 
@@ -66,8 +74,9 @@ export function ScenarioCandidateList({
             type="button"
             onClick={handleAddClick}
             aria-label="후보 추가"
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[0.625rem] font-black text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:opacity-50"
-            disabled={isFull}
+            title={noDongs ? '시뮬 입력 동이 없어 추가할 수 없습니다' : undefined}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[0.625rem] font-black text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={addDisabled}
           >
             <Plus size={12} /> 추가
           </button>
@@ -76,7 +85,7 @@ export function ScenarioCandidateList({
         {candidates.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-secondary/40 p-4 text-center">
             <p className="text-[0.625rem] font-bold text-muted-foreground">
-              [+] 후보를 추가해 시작
+              {noDongs ? '시뮬 입력이 필요합니다' : '[+] 후보를 추가해 시작'}
             </p>
           </div>
         ) : (
@@ -99,6 +108,9 @@ export function ScenarioCandidateList({
                     candidate={c}
                     active={c.id === activeId}
                     baseline={rec?.data ? selectPerStoreBaseline(rec.data) : null}
+                    availableDongs={availableDongs}
+                    onChangeDong={onChangeDong}
+                    removeDisabled={candidates.length <= 1}
                     loading={rec?.loading ?? false}
                     error={rec?.error ?? null}
                     onClick={() => onSelect(c.id)}
@@ -114,6 +126,7 @@ export function ScenarioCandidateList({
       {modalOpen && (
         <AddCandidateModal
           onClose={() => setModalOpen(false)}
+          availableDongs={availableDongs}
           onAdd={(input) => {
             const ok = onAdd(input);
             setModalOpen(false);

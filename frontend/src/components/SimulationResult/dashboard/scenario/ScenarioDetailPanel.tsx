@@ -1,15 +1,18 @@
 /**
- * ScenarioDetailPanel — Master-Detail 우측 드릴다운.
+ * ScenarioDetailPanel — 시나리오 시뮬 단일 패널 (2026-05-03 v2 재구조).
  *
- * 구성 (위→아래):
- *   1. 후보 헤더 (동 × 업종 + 액티브 슬라이더 토글)
+ * 헤더: 동 드롭다운 (4동 한정) + × + 업종 텍스트 + 우측 슬라이더 초기화 버튼
+ *
+ * 본문 구성 (위→아래):
+ *   1. 헤더 (동 드롭다운 + 업종 + 리셋 버튼)
  *   2. KpiHero (총 변화율 / 분기 평균 매출 / 기준선 대비 차이)
  *   3. 합산 안내 문구 (명세서 §4.3)
- *   4. ScenarioForecastChart (delta 모드 = 액티브 슬라이더 7-tier + combined / quarter 모드 = Q1~Q4)
- *   5. 보조 문구 "*업종 평균 점포 1개 기준"
- *   6. PctElasticitySlider × 4 (vacancy_rate / trend_score / cpi_index / opr_sale_mt_avg)
- *   7. QuarterTab (4-탭 Q1/Q2/Q3/Q4)
- *   8. CorrelationInsightCard
+ *   4. 좌(슬라이더) / 우(차트) split — lg:grid-cols-[280px_1fr]
+ *      - 좌측: what-if 변수 chip × 4 + PctElasticitySlider × 4 + QuarterTab
+ *      - 우측: ScenarioForecastChart (delta / quarter 토글)
+ *   5. CorrelationInsightCard
+ *
+ * 모바일 (lg-): stack — 슬라이더 위, 차트 아래.
  */
 
 import { useMemo, useState } from 'react';
@@ -28,8 +31,8 @@ import type {
 } from '../../../../hooks/useScenarioCandidates';
 import { ScenarioForecastChart } from './ScenarioForecastChart';
 import { PctElasticitySlider } from './PctElasticitySlider';
-import { CorrelationInsightCard } from './CorrelationInsightCard';
 import { selectPerStoreBaseline } from './baseline';
+import { DropdownSelect } from '../../../ui/DropdownSelect';
 
 const elasticityKey = (v: number): string => (v > 0 ? `+${v}` : String(v));
 
@@ -40,8 +43,6 @@ const formatKrw = (value: number): string => {
   return `${Math.round(value).toLocaleString('ko-KR')}`;
 };
 
-const QUARTERS: QuarterKey[] = ['Q1', 'Q2', 'Q3', 'Q4'];
-
 interface Props {
   candidate: ScenarioCandidate;
   data: SensitivityResponse | null;
@@ -49,6 +50,10 @@ interface Props {
   error: Error | null;
   onSliderChange: (key: keyof CandidateSliderState, value: number | QuarterKey) => void;
   onReset: () => void;
+  /** 4동 한정 드롭다운 옵션. */
+  availableDongs: { name: string; code: string }[];
+  /** 헤더 동 드롭다운 변경 핸들러. */
+  onChangeDong: (newDong: string) => void;
 }
 
 export function ScenarioDetailPanel({
@@ -58,6 +63,8 @@ export function ScenarioDetailPanel({
   error,
   onSliderChange,
   onReset,
+  availableDongs,
+  onChangeDong,
 }: Props) {
   const [activeSlider, setActiveSlider] = useState<PctSliderKey>('vacancy_rate');
   const [chartMode, setChartMode] = useState<'delta' | 'quarter'>('delta');
@@ -94,20 +101,39 @@ export function ScenarioDetailPanel({
     };
   }, [data, candidate.sliders]);
 
-  if (loading) {
-    return <DetailSkeleton />;
-  }
+  // sessionStorage 잔존 동이 4동 옵션에 없을 때 controlled select 경고 방지용 강제 옵션
+  const dongInOptions = availableDongs.some((d) => d.name === candidate.dong);
 
-  if (error || !data) {
-    return (
-      <section className="flex-1 rounded-3xl border border-dashed border-border bg-secondary/40 p-8 text-center">
-        <p className="text-sm font-bold text-foreground">데이터 로드 실패</p>
-        <p className="mt-2 text-[0.6875rem] text-muted-foreground">
-          {error?.message ?? '잠시 후 다시 시도하세요.'}
-        </p>
-      </section>
-    );
-  }
+  // 동 드롭다운 옵션 — 4동 + sessionStorage 잔존 동 fallback 포함
+  const dongOptions = dongInOptions
+    ? availableDongs.map((d) => d.name)
+    : [...availableDongs.map((d) => d.name), candidate.dong];
+
+  // 통합 헤더+KPI 박스 inner — 헤더 row + (result 있을 때) KPI row.
+  // 우측 컬럼 상단에 위치, loading/error 시에도 헤더는 항상 표시.
+  // 헤더는 inner content 만 (외부 chrome 은 통합 박스가 가짐).
+  const headerInner = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <DropdownSelect
+          value={candidate.dong}
+          onChange={onChangeDong}
+          options={dongOptions}
+          ariaLabel="동 선택"
+          compact
+        />
+        <span className="text-sm text-muted-foreground">×</span>
+        <span className="text-sm font-bold text-foreground">{candidate.industry}</span>
+      </div>
+      <button
+        type="button"
+        onClick={onReset}
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+      >
+        <RotateCcw size={12} /> 슬라이더 초기화
+      </button>
+    </div>
+  );
 
   const deltaTone =
     (result?.totalDeltaPct ?? 0) > 0
@@ -122,31 +148,14 @@ export function ScenarioDetailPanel({
         ? 'text-danger'
         : 'text-muted-foreground';
 
-  return (
-    <section className="flex-1 space-y-4">
-      {/* 1. 헤더 */}
-      <header className="flex items-start justify-between gap-3 rounded-3xl border border-border bg-card p-5">
-        <div>
-          <h3 className="text-lg font-black tracking-tight text-foreground">
-            {candidate.dong} <span className="text-muted-foreground">×</span> {candidate.industry}
-          </h3>
-          <p className="mt-1 text-[0.6875rem] text-muted-foreground">
-            점포당 분기 매출 (원) · *업종 평균 점포 1개 기준
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onReset}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-bold text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
-        >
-          <RotateCcw size={12} /> 리셋
-        </button>
-      </header>
-
-      {/* 2. KpiHero */}
+  // 우측 컬럼 통합 헤더+KPI 박스 — 한 chrome 안 두 영역 (헤더 + KPI), divider 로 분리.
+  // 사용자 요청 (2026-05-04): 동×업종+리셋 박스와 KPI 박스를 우측 상단에 통합 + 좌측 슬라이더는 위로 올림.
+  const headerKpiBox = (
+    <div className="rounded-3xl border border-border bg-card p-5 space-y-4">
+      {headerInner}
       {result && (
-        <div className="rounded-3xl border border-border bg-card p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <>
+          <div className="grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-3">
             <KpiCell
               label="총 변화율"
               value={`${result.totalDeltaPct >= 0 ? '+' : ''}${result.totalDeltaPct.toFixed(1)}%`}
@@ -162,133 +171,151 @@ export function ScenarioDetailPanel({
               tone={diffTone}
             />
           </div>
-          <p className="mt-3 text-[0.625rem] text-muted-foreground">
+          <p className="text-[0.625rem] text-muted-foreground">
             합계 표시 = 점포당 연 매출 (4분기 합) · 분기 값 ÷ 3 = 월 환산
           </p>
-        </div>
+        </>
       )}
+    </div>
+  );
 
-      {/* 3. 차트 (with 합산 안내 문구) */}
-      <div className="rounded-3xl border border-border bg-card p-6">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
-              점포당 분기 매출 (원)
+  // loading 상태 — 좌측 슬라이더는 그대로 (조작 가능), 우측은 헤더 박스 + skeleton 차트
+  if (loading) {
+    return (
+      <section className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+          <aside className="space-y-4">
+            <h4 className="flex items-center gap-2 px-1 text-base font-black tracking-tight text-foreground">
+              What-if 변수 조정
             </h4>
-            <p className="mt-1 text-[0.625rem] text-muted-foreground">
-              ※ 여러 슬라이더의 영향은 단순 합산입니다. 실제 시장에서는 변수 간 상호작용이 있을 수
-              있습니다.
-            </p>
-          </div>
-          <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-            <ModeButton
-              active={chartMode === 'delta'}
-              onClick={() => setChartMode('delta')}
-              label="섭동 7-tier"
-            />
-            <ModeButton
-              active={chartMode === 'quarter'}
-              onClick={() => setChartMode('quarter')}
-              label="분기(Q1~Q4)"
-            />
+            <p className="text-[0.6875rem] text-muted-foreground">로드 중…</p>
+          </aside>
+          <div className="space-y-4">
+            {headerKpiBox}
+            <DetailSkeletonBody />
           </div>
         </div>
+      </section>
+    );
+  }
 
-        {chartMode === 'delta' && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
+  // error 상태 — 우측 통합 박스 + error 안내. 좌측 hide.
+  if (error || !data) {
+    return (
+      <section className="space-y-4">
+        {headerKpiBox}
+        <div className="rounded-3xl border border-dashed border-border bg-secondary/40 p-8 text-center">
+          <p className="text-sm font-bold text-foreground">데이터 로드 실패</p>
+          <p className="mt-2 text-[0.6875rem] text-muted-foreground">
+            {error?.message ?? '잠시 후 다시 시도하세요.'}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-4">
+      {/* 좌(슬라이더) / 우(통합 헤더+KPI + 합산안내 + 차트) split.
+          좌측 슬라이더가 위에서부터 시작 (사용자 요청 — 상단 빈 공간 채움).
+          퐁당퐁당 룰: 좌측 aside chrome 없음, 내부 슬라이더 4 + QuarterTab 각자 카드. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+        {/* 좌측 — what-if 변수 조정 (bare, 위에서 시작) */}
+        <aside className="space-y-3">
+          <h4 className="px-1 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
+            What-if 변수 조정
+          </h4>
+
+          {/* 액티브 슬라이더 chip × 4 (delta 모드 차트의 7-tier 표시 대상 선택) */}
+          <div className="flex flex-wrap gap-1">
             {PCT_SLIDER_KEYS.map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setActiveSlider(k)}
+                title={SLIDER_TOOLTIPS[k]}
                 className={`rounded-full border px-2.5 py-1 text-[0.625rem] font-bold transition-colors ${
                   activeSlider === k
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border bg-card text-muted-foreground hover:border-primary/40'
                 }`}
-                title={SLIDER_TOOLTIPS[k]}
               >
                 {SLIDER_LABELS[k]}
               </button>
             ))}
           </div>
-        )}
 
-        <ScenarioForecastChart
-          data={data}
-          mode={chartMode}
-          activeSlider={chartMode === 'delta' ? activeSlider : null}
-          combined={result ? { values: result.adjusted, label: '현재 슬라이더 합산' } : null}
-          height={320}
-        />
-
-        <p className="mt-2 text-right text-[0.5625rem] text-muted-foreground">
-          *업종 평균 점포 1개 기준
-        </p>
-      </div>
-
-      {/* 4. 슬라이더 4 + Quarter Tab */}
-      <div className="rounded-3xl border border-border bg-card p-6 space-y-3">
-        <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
-          What-if 변수 조정
-        </h4>
-        {PCT_SLIDER_KEYS.map((k) => {
-          const level = candidate.sliders[k];
-          const arr = data.elasticity[k]?.[elasticityKey(level)] ??
-            data.elasticity[k]?.[String(level)] ?? [0, 0, 0, 0];
-          return (
-            <PctElasticitySlider
-              key={k}
-              sliderKey={k}
-              label={SLIDER_LABELS[k]}
-              value={level}
-              onChange={(next) => onSliderChange(k, next)}
-              quarterDeltas={arr}
-            />
-          );
-        })}
-
-        {/* Quarter 4-tab */}
-        <div className="rounded-2xl border border-border bg-secondary/40 p-4">
-          <div className="flex items-center justify-between">
-            <span
-              className="text-xs font-black tracking-tight text-foreground"
-              title={SLIDER_TOOLTIPS.quarter_num}
-            >
-              {SLIDER_LABELS.quarter_num}
-            </span>
-            <span className="text-[0.5625rem] font-bold text-muted-foreground">
-              관측 시작 분기 (categorical, 합산 제외)
-            </span>
-          </div>
-          <div className="mt-2 grid grid-cols-4 gap-1">
-            {QUARTERS.map((q) => {
-              const active = candidate.sliders.quarter_num === q;
+          {/* 슬라이더 4개 */}
+          <div className="space-y-3">
+            {PCT_SLIDER_KEYS.map((k) => {
+              const level = candidate.sliders[k];
+              const arr = data.elasticity[k]?.[elasticityKey(level)] ??
+                data.elasticity[k]?.[String(level)] ?? [0, 0, 0, 0];
               return (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() => onSliderChange('quarter_num', q)}
-                  aria-pressed={active}
-                  className={`rounded-lg border px-2 py-2 text-xs font-black transition-colors ${
-                    active
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border bg-card text-foreground hover:border-primary/40'
-                  }`}
-                >
-                  {q}
-                </button>
+                <PctElasticitySlider
+                  key={k}
+                  sliderKey={k}
+                  label={SLIDER_LABELS[k]}
+                  value={level}
+                  onChange={(next) => onSliderChange(k, next)}
+                  quarterDeltas={arr}
+                />
               );
             })}
           </div>
-          <p className="mt-2 text-[0.5625rem] leading-relaxed text-muted-foreground">
-            {SLIDER_TOOLTIPS.quarter_num}
+        </aside>
+
+        {/* 우측 — 통합 헤더+KPI + 합산 안내 + 차트 (flex-col + 차트 flex-1 으로 좌측 height 자동 정합) */}
+        <div className="flex flex-col gap-4">
+          {headerKpiBox}
+
+          {/* 합산 안내 문구 */}
+          <p className="px-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+            ※ 여러 슬라이더의 영향은 단순 합산입니다. 실제 시장에서는 변수 간 상호작용이 있을 수
+            있습니다.
           </p>
+
+          {/* 차트 — flex-1 로 grid row 의 남은 height 채움 (좌측 슬라이더 컬럼과 자동 정합) */}
+          <div className="flex flex-1 flex-col rounded-3xl border border-border bg-card p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
+                  점포당 분기 매출 (원)
+                </h4>
+                <p className="mt-1 text-[0.625rem] text-muted-foreground">
+                  좌측 슬라이더 조정 → 4분기 매출 변화 시뮬
+                </p>
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+                <ModeButton
+                  active={chartMode === 'delta'}
+                  onClick={() => setChartMode('delta')}
+                  label="섭동 7-tier"
+                />
+                <ModeButton
+                  active={chartMode === 'quarter'}
+                  onClick={() => setChartMode('quarter')}
+                  label="분기(Q1~Q4)"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1">
+              <ScenarioForecastChart
+                data={data}
+                mode={chartMode}
+                activeSlider={chartMode === 'delta' ? activeSlider : null}
+                combined={result ? { values: result.adjusted, label: '현재 슬라이더 합산' } : null}
+                height="100%"
+              />
+            </div>
+
+            <p className="mt-2 text-right text-[0.5625rem] text-muted-foreground">
+              *업종 평균 점포 1개 기준
+            </p>
+          </div>
         </div>
       </div>
-
-      {/* 5. Correlation */}
-      <CorrelationInsightCard correlations={data.correlations} />
     </section>
   );
 }
@@ -338,13 +365,15 @@ function KpiCell({
   );
 }
 
-function DetailSkeleton() {
+function DetailSkeletonBody() {
   return (
-    <section className="flex-1 space-y-4">
-      <div className="h-20 rounded-3xl bg-secondary/60 animate-pulse" aria-hidden="true" />
+    <>
       <div className="h-28 rounded-3xl bg-secondary/60 animate-pulse" aria-hidden="true" />
-      <div className="h-72 rounded-3xl bg-secondary/60 animate-pulse" aria-hidden="true" />
-      <div className="h-48 rounded-3xl bg-secondary/60 animate-pulse" aria-hidden="true" />
-    </section>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+        <div className="h-96 rounded-3xl bg-secondary/60 animate-pulse" aria-hidden="true" />
+        <div className="h-96 rounded-3xl bg-secondary/60 animate-pulse" aria-hidden="true" />
+      </div>
+      <div className="h-32 rounded-3xl bg-secondary/60 animate-pulse" aria-hidden="true" />
+    </>
   );
 }

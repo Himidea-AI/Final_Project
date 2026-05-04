@@ -39,21 +39,21 @@ export function LegalDistributionBar({ risks }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex h-6 w-full overflow-hidden rounded-lg border border-border">
         <div
-          className="flex items-center justify-center bg-danger/80 text-[0.5625rem] font-black text-white"
+          className="flex items-center justify-center bg-danger text-[0.5625rem] font-black text-white"
           style={{ width: `${pct(counts.high)}%` }}
           title={`필수이행 ${counts.high}`}
         >
           {counts.high >= 1 && pct(counts.high) > 10 ? counts.high : ''}
         </div>
         <div
-          className="flex items-center justify-center bg-warning/80 text-[0.5625rem] font-black text-muted-foreground"
+          className="flex items-center justify-center bg-warning text-[0.5625rem] font-black text-white"
           style={{ width: `${pct(counts.medium)}%` }}
           title={`확인필요 ${counts.medium}`}
         >
           {counts.medium >= 1 && pct(counts.medium) > 10 ? counts.medium : ''}
         </div>
         <div
-          className="flex items-center justify-center bg-success/80 text-[0.5625rem] font-black text-muted-foreground"
+          className="flex items-center justify-center bg-success text-[0.5625rem] font-black text-white"
           style={{ width: `${pct(counts.low)}%` }}
           title={`참고사항 ${counts.low}`}
         >

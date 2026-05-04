@@ -82,7 +82,7 @@ export function PctElasticitySlider({ sliderKey, label, value, onChange, quarter
   const ariaLabel = `${label} 슬라이더, 현재 ${valueLabel}, 분기 평균 매출 변화 ${formatPct(avgDelta)}`;
 
   return (
-    <div className="space-y-2 rounded-2xl border border-border bg-secondary/40 p-4">
+    <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-black tracking-tight text-foreground" title={tip}>

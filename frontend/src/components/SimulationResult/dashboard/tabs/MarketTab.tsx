@@ -8,6 +8,7 @@
 import { AlertTriangle, Layers, MapPin, BarChart3, ShieldAlert, Brain } from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
+import { getGuFromDong } from '../../../../data/seoulRegions';
 import { MapSection } from '../../sections/MapSection';
 import { IndicatorGrid } from '../../sections/IndicatorGrid';
 import { DistrictRankings } from '../../sections/DistrictRankings';
@@ -134,7 +135,9 @@ export function MarketTab({ simResult }: Props) {
         </div>
         <div className="bg-card border border-border p-8 rounded-3xl flex flex-col">
           <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
-            <Layers size={16} className="text-primary" /> 마포구 동별 랭킹
+            <Layers size={16} className="text-primary" />{' '}
+            {getGuFromDong(simResult.winner_district ?? simResult.target_district) ?? '서울'} 동별
+            랭킹
             {winnerDistrict && (
               <span className="ml-auto text-[0.625rem] font-bold text-primary normal-case tracking-normal">
                 {winnerDistrict} 추천
@@ -458,7 +461,7 @@ function MarketAnalysisSidebar({
 /** A + B 묶음 — winner 동의 기본 통계 3 metric + 분기별 매출 sparkline.
  *  데이터 출처:
  *  - 핵심 고객층 = demographic_report.core_demographic (age + gender)
- *  - 공실률 = district_rankings[winner].vacancy_rate (0~1 → %)
+ *  - 공실률 = district_rankings[winner].vacancy_rate (이미 percent 단위, 추가 *100 금지 — 회귀 방지)
  *  - 분기 평균 매출 / 4분기 sparkline = quarterly_projection (winner 동 4 점)
  *  데이터 모두 비어있으면 섹션 자체 hide. */
 function WinnerDistrictSummary({ simResult }: { simResult: SimulationOutput }) {
@@ -505,7 +508,7 @@ function WinnerDistrictSummary({ simResult }: { simResult: SimulationOutput }) {
               공실률
             </span>
             <span className="text-sm font-black text-foreground tabular-nums tracking-tight shrink-0">
-              {(vacancyRate * 100).toFixed(1)}%
+              {vacancyRate.toFixed(1)}%
             </span>
           </li>
         )}

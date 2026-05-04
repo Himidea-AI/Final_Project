@@ -24,6 +24,7 @@ import { Trophy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import synthesisIcon from '../../../../../assets/agents/synthesis.png';
 import type { SimulationOutput } from '../../../../../types';
 import { SynthesisSections } from '../../shared/SynthesisSections';
 
@@ -145,7 +146,15 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
       {/* ═══ synthesis 종합 분석 (최상단, 섹션별 블록 구조) ═══ */}
       {summary && (
         <div className="rounded-3xl border border-border bg-card p-8">
-          <h3 className="mb-6 text-base font-black uppercase tracking-widest text-foreground">
+          <h3 className="mb-6 flex items-center gap-3 text-base font-black uppercase tracking-widest text-foreground">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted">
+              <img
+                src={synthesisIcon}
+                alt="synthesis"
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </span>
             synthesis 종합 분석
           </h3>
           <SynthesisSections text={summary} />
