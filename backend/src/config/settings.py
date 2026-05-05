@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     sgis_secret_key: str = os.getenv("SGIS_SECRET_KEY", "")
     molit_api_key: str = os.getenv("MOLIT_API_KEY", "")
     ftc_api_key: str = os.getenv("FTC_API_KEY", "")
+    kakao_api_key: str = os.getenv("KAKAO_API_KEY", "")
+    ecos_api_key: str = os.getenv("ECOS_API_KEY", "")
     law_oc: str = os.getenv("LAW_OC", "")
 
     # Naver DataLab API
