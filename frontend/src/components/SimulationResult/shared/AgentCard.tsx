@@ -68,16 +68,14 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
         onClick={onExpand}
         className="flex w-full items-center gap-2 rounded-md border border-border bg-card p-2 text-left hover:bg-muted transition-colors"
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-card">
-          {iconSrc ? (
-            <img
-              src={iconSrc}
-              alt={attribution.display_name}
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          ) : null}
-        </div>
+        {iconSrc ? (
+          <img
+            src={iconSrc}
+            alt={attribution.display_name}
+            className="h-9 w-9 shrink-0 object-contain"
+            loading="lazy"
+          />
+        ) : null}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={`text-xs font-semibold truncate ${accentColor}`}>
@@ -98,16 +96,14 @@ export function AgentCard({ attribution, size, onExpand }: AgentCardProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted">
-          {iconSrc ? (
-            <img
-              src={iconSrc}
-              alt={attribution.display_name}
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          ) : null}
-        </div>
+        {iconSrc ? (
+          <img
+            src={iconSrc}
+            alt={attribution.display_name}
+            className="h-14 w-14 shrink-0 object-contain"
+            loading="lazy"
+          />
+        ) : null}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className={`text-sm font-semibold ${accentColor}`}>{attribution.display_name}</h3>

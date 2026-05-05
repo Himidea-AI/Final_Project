@@ -72,18 +72,12 @@ export function InsightTab({ simResult, openModal }: Props) {
               }`}
             >
               <div className="flex items-center gap-3 mb-4">
-                <div
-                  className={`overflow-hidden rounded-xl border shadow-inner group-hover:scale-110 transition-transform ${
-                    hasData ? agent.iconBgCls : 'bg-card border-border/50'
-                  }`}
-                >
-                  <img
-                    src={agent.iconSrc}
-                    alt={agent.name}
-                    className="h-12 w-12 object-cover"
-                    loading="lazy"
-                  />
-                </div>
+                <img
+                  src={agent.iconSrc}
+                  alt={agent.name}
+                  className={`h-12 w-12 object-contain group-hover:scale-110 transition-transform ${hasData ? '' : 'opacity-40 grayscale'}`}
+                  loading="lazy"
+                />
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-bold text-foreground leading-tight truncate">
                     {agent.name}

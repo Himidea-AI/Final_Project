@@ -139,7 +139,7 @@ def get_all_mapo_stores_by_brand(brand_name: str) -> list[dict]:
     sql = text(
         f"""
         SELECT kakao_id, place_name, brand_name, lat, lon, dong_name, address,
-               place_url, phone
+               place_url, phone, category
           FROM kakao_store
          WHERE dong_name IS NOT NULL
            AND ({conditions})

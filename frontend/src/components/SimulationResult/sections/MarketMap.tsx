@@ -46,6 +46,21 @@ export interface MarketMapProps {
   sameBrandLocations?: SameBrandLocation[];
   // 자사 영업구역 거리(m) — 자사 매장 각각에 점선 원으로 표시. null/미입력 시 원 안 그림.
   territoryRadiusM?: number | null;
+  // 사용자 브랜드명 — competitors 중 brand_name 이 매칭되는 항목은 별표(자사) 마커로 분기 렌더.
+  // sameBrandLocations 는 winner+top3 4동 안만 수집하므로, 그 외 동의 자사 매장이 competitors 로
+  // 들어오는 경우를 커버한다. 정규화 비교(소문자/공백·괄호 제거)로 alias 차이 흡수.
+  userBrand?: string | null;
+}
+
+// 브랜드명 정규화 — "메가엠지씨커피(MEGA MGC COFFEE)" vs "메가엠지씨커피" 같은 변형을 동일 취급.
+// 영문 괄호 / 공백 / 흔한 비교용 노이즈 제거. 비교 양쪽에 동일하게 적용.
+function normalizeBrand(s: string | null | undefined): string {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[\s\-_·.]/g, '')
+    .trim();
 }
 
 interface KakaoLatLngInstance {
@@ -250,6 +265,7 @@ export function MarketMap({
   targetSpots = [],
   sameBrandLocations = [],
   territoryRadiusM = null,
+  userBrand = null,
 }: MarketMapProps) {
   const { ready, error, kakao } = useKakaoMap();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -394,17 +410,38 @@ export function MarketMap({
     // 백엔드 c.distance_m 은 source 동 centroid 기준이라 핀과 정합 안 됨 → 무시하고 haversineM 으로 재계산.
     const withinCenterLat = targetSpot?.lat ?? center.lat;
     const withinCenterLng = targetSpot?.lng ?? center.lng;
+    const normalizedUserBrand = normalizeBrand(userBrand);
+    // sameBrandLocations 와 중복으로 그려지는 자사 매장 좌표 제거용 set (key=lat,lng 4자리).
+    const sameBrandPosKeys = new Set(
+      sameBrandLocations.map((s) => `${s.lat.toFixed(5)},${s.lng.toFixed(5)}`),
+    );
     competitors.forEach((c) => {
       if (typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
+      // 자사 브랜드 매칭 — competitors 안에 자사 매장이 들어와 있으면 별표 마커로 분기.
+      // sameBrandLocations 와 좌표 중복 시 skip (이미 Layer 3 에서 그려짐).
+      const isSelfBrand =
+        normalizedUserBrand.length > 0 && normalizeBrand(c.brand_name) === normalizedUserBrand;
+      const posKey = `${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
+      if (isSelfBrand && sameBrandPosKeys.has(posKey)) return;
+
       const distFromCenter = haversineM(withinCenterLat, withinCenterLng, c.lat, c.lng);
       const within = distFromCenter <= radius;
-      const dot = document.createElement('div');
-      dot.style.cssText = within
-        ? 'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #ef4444;filter:drop-shadow(0 0 3px rgba(239,68,68,0.7));cursor:pointer;'
-        : 'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #ef4444;opacity:0.45;cursor:pointer;';
-      dot.title = c.place_name;
-
       const pos = new maps.LatLng(c.lat, c.lng);
+
+      const dot = document.createElement('div');
+      if (isSelfBrand) {
+        // 자사 매장 별표 — Layer 3 sameBrand 마커와 동일 디자인.
+        dot.style.cssText =
+          'position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(251,191,36,0.6);font-size:12px;font-weight:900;color:#1c1917;cursor:pointer;';
+        dot.innerHTML = '★';
+        dot.title = `${c.brand_name || '자사매장'} · ${c.place_name}`;
+      } else {
+        dot.style.cssText = within
+          ? 'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #ef4444;filter:drop-shadow(0 0 3px rgba(239,68,68,0.7));cursor:pointer;'
+          : 'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #ef4444;opacity:0.45;cursor:pointer;';
+        dot.title = c.place_name;
+      }
+
       dot.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (infoWindowRef.current) infoWindowRef.current.close();
@@ -422,7 +459,7 @@ export function MarketMap({
         content: dot,
         xAnchor: 0.5,
         yAnchor: 0.5,
-        zIndex: 2,
+        zIndex: isSelfBrand ? 4 : 2,
       });
       overlay.setMap(mapInstance);
       overlayLayersRef.current.push(overlay);
@@ -540,6 +577,7 @@ export function MarketMap({
     targetSpots,
     sameBrandLocations,
     territoryRadiusM,
+    userBrand,
   ]);
 
   if (error) {
