@@ -37,6 +37,53 @@ describe('EmergingSignalCard — 라벨 단어 사전', () => {
     expect(screen.getByText('낮음')).toBeInTheDocument();
     expect(screen.getByText('높음')).toBeInTheDocument();
   });
+
+  it('게이지 우측 값이 정수 0~100 스케일 (KPI와 동일)', () => {
+    render(<EmergingSignalCard signal={mkSignal({ anomaly_score: 0.77 })} district="합정동" />);
+    // KPI 박스의 "77" + 게이지 우측 라벨 "77" 두 위치 모두 정수 노출
+    expect(screen.getAllByText('77').length).toBeGreaterThanOrEqual(2);
+    // 소수점 표기 미노출
+    expect(screen.queryByText('0.77')).toBeNull();
+  });
+});
+
+describe('EmergingSignalCard — consecutive_anomaly_quarters chip', () => {
+  it('consecutive=2 → "최근 2분기 연속" 노출', () => {
+    render(
+      <EmergingSignalCard
+        signal={mkSignal({ consecutive_anomaly_quarters: 2 })}
+        district="합정동"
+      />,
+    );
+    expect(screen.getByText(/최근 2분기 연속/)).toBeInTheDocument();
+  });
+
+  it('consecutive=0 → 분기 연속 라벨 미노출', () => {
+    render(
+      <EmergingSignalCard
+        signal={mkSignal({ consecutive_anomaly_quarters: 0 })}
+        district="합정동"
+      />,
+    );
+    expect(screen.queryByText(/분기 연속/)).toBeNull();
+  });
+});
+
+describe('EmergingSignalCard — isTopChange 배지', () => {
+  it('isTopChange=true → "변화 1위" 배지 노출', () => {
+    render(<EmergingSignalCard signal={mkSignal()} district="합정동" isTopChange />);
+    expect(screen.getByText('변화 1위')).toBeInTheDocument();
+  });
+
+  it('isTopChange 미지정 → "변화 1위" 배지 미노출', () => {
+    render(<EmergingSignalCard signal={mkSignal()} district="합정동" />);
+    expect(screen.queryByText('변화 1위')).toBeNull();
+  });
+
+  it('isTopChange=false → "변화 1위" 배지 미노출', () => {
+    render(<EmergingSignalCard signal={mkSignal()} district="합정동" isTopChange={false} />);
+    expect(screen.queryByText('변화 1위')).toBeNull();
+  });
 });
 
 describe('EmergingSignalCard — tier 헤더 배지', () => {
