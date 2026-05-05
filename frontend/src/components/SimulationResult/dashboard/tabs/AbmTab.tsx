@@ -300,7 +300,9 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
                   ▲ 경쟁업체
                 </span>
                 {' · '}
-                <span className="font-bold text-success">● 공실 매물</span>
+                <span className="font-bold" style={{ color: 'var(--decor-cyan)' }}>
+                  ● 공실 매물
+                </span>
               </p>
             </div>
           </div>

@@ -508,7 +508,7 @@ export default function AgentMapVisualizer({
           <span className="text-[0.5625rem] text-muted-foreground">출점 후보지</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <MapPin className="w-3 h-3" style={{ color: 'var(--success)' }} />
+          <MapPin className="w-3 h-3" style={{ color: 'var(--decor-cyan)' }} />
           <span className="text-[0.5625rem] text-muted-foreground">공실 매물</span>
         </div>
         {competitors.length > 0 && (
