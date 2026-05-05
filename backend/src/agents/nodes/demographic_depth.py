@@ -25,42 +25,21 @@ from src.schemas.demographic import (
 )
 from src.schemas.state import AgentState
 
+# 동명 → 코드 매핑은 services.dong_resolver 가 SoT (2026-05-04 통합 완료).
+# 기존 _MAPO_DONG_CODE_FALLBACK 은 dong_resolver.MAPO_DONG_MAP + _DONG_ALIASES 로 일원화.
+from src.services.dong_resolver import resolve_dong_code_or_default
+
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 86400  # 24h
 
-# 동명 → 코드 폴백 매핑 (dong_mapping 테이블 기준, 2026-04-22 AWS RDS 실측 검증)
-# TODO: 장기적으로 services/population_api.MAPO_DONG_CODES 또는 services/dong_resolver 로 통합해
-#       Single Source of Truth 유지 (현재는 방어적 fallback 용도)
-_MAPO_DONG_CODE_FALLBACK: dict[str, str] = {
-    # ── 행정동 (16개) ──────────────────────────────────────────
-    "아현동": "11440555",
-    "공덕동": "11440565",
-    "도화동": "11440585",
-    "용강동": "11440590",
-    "대흥동": "11440600",
-    "염리동": "11440610",
-    "신수동": "11440630",
-    "서강동": "11440655",
-    "서교동": "11440660",
-    "합정동": "11440680",
-    "망원1동": "11440690",
-    "망원2동": "11440700",
-    "연남동": "11440710",
-    "성산1동": "11440720",
-    "성산2동": "11440730",
-    "상암동": "11440740",
-    # ── 법정동 별칭 ────────────────────────────────────────────
-    "망원동": "11440690",
-    "성산동": "11440720",
-}
-
 
 def _resolve_dong_code(district: str) -> str:
-    """target_district가 이미 코드면 그대로, 동명이면 매핑. 매칭 실패 시 서교동 기본값."""
-    if district and district.isdigit() and len(district) == 8:
-        return district
-    return _MAPO_DONG_CODE_FALLBACK.get(district, "11440660")
+    """target_district가 이미 코드면 그대로, 동명이면 매핑. 매칭 실패 시 서교동 기본값.
+
+    NOTE: 시그니처/반환값 동일 — 기존 호출자(demographic_depth_node, 테스트) 영향 없음.
+    """
+    return resolve_dong_code_or_default(district)
 
 
 def _age_to_range(age_key: str) -> str:

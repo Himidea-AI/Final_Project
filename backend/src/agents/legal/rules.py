@@ -139,8 +139,7 @@ def rule_food_hygiene(business_type: str) -> dict:
             {
                 "article_ref": "식품위생법 시행령 제21조",
                 "content": (
-                    "식품접객업의 종류: 휴게음식점·일반음식점·단란주점·유흥주점·"
-                    "위탁급식·제과점 영업으로 구분한다."
+                    "식품접객업의 종류: 휴게음식점·일반음식점·단란주점·유흥주점·위탁급식·제과점 영업으로 구분한다."
                 ),
             },
         ]
@@ -339,8 +338,7 @@ def rule_fire_safety(business_type: str, store_area_pyeong: float) -> dict:
         {
             "article_ref": "소방시설법 제12조",
             "content": (
-                "특정소방대상물의 관계인은 대통령령으로 정하는 소방시설을 화재안전기준에 따라 "
-                "설치·관리하여야 한다."
+                "특정소방대상물의 관계인은 대통령령으로 정하는 소방시설을 화재안전기준에 따라 설치·관리하여야 한다."
             ),
         }
     ]
@@ -642,7 +640,7 @@ def rule_sewage(business_type: str) -> dict:
 # ---------------------------------------------------------------------------
 
 # 학교보건법 제6조 정화구역 거리
-SCHOOL_ABSOLUTE_ZONE_M: float = 50.0   # 절대정화구역 (모든 술집/노래방 영업금지)
+SCHOOL_ABSOLUTE_ZONE_M: float = 50.0  # 절대정화구역 (모든 술집/노래방 영업금지)
 SCHOOL_RELATIVE_ZONE_M: float = 200.0  # 상대정화구역 (정화위원회 심의 대상)
 
 
@@ -691,10 +689,7 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6_371_000.0
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
-    a = (
-        sin(dlat / 2) ** 2
-        + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
-    )
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
     return 2 * R * asin(sqrt(a))
 
 
@@ -758,7 +753,13 @@ def rule_school_zone(
     - 상대정화구역 200m: 학교환경위생정화위원회 심의 (대부분 거부) → 주점 danger
     - 카페/음식점은 적용 X (safe)
 
-    schools=None 이면 DB 조회. lat/lon 없으면 caution fallback.
+    schools=None 이면 DB 조회. lat/lon 없으면 caution fallback (시뮬 시작 시점 정상 케이스).
+
+    ⚠️ D3 알림 (mock 데이터 위험):
+    mapo_schools 테이블이 비어있거나 POSTGRES_URL 미설정이면 ``_fetch_mapo_schools`` 가
+    ``_MOCK_MAPO_SCHOOLS`` (5개 학교 좌표) fallback 으로 전환된다. mock 결과는
+    실제 마포구 학교 분포의 일부에 불과하므로 danger/safe 판정을 그대로 신뢰하면 안 된다.
+    프로덕션 환경에서는 mapo_schools 적재 후에만 정확한 거리 계산을 보장한다.
     """
     biz = _normalize_biz(business_type)
 
@@ -767,9 +768,7 @@ def rule_school_zone(
         return {
             "type": "school_zone",
             "level": "safe",
-            "summary": (
-                f"{biz or '해당 업종'}은 학교환경위생정화구역 영업 제한 대상이 아닙니다."
-            ),
+            "summary": (f"{biz or '해당 업종'}은 학교환경위생정화구역 영업 제한 대상이 아닙니다."),
             "recommendation": (
                 "[근거: 학교보건법 제6조] 정화구역 영업제한은 술집·노래방 등에 "
                 "한정 적용 — 카페·음식점은 별도 거리 제한 없음."
@@ -791,9 +790,7 @@ def rule_school_zone(
         return {
             "type": "school_zone",
             "level": "caution",
-            "summary": (
-                "주점 영업장 좌표 미입력 — 학교환경위생정화구역 거리 확인이 필요합니다."
-            ),
+            "summary": ("주점 영업장 좌표 미입력 — 학교환경위생정화구역 거리 확인이 필요합니다."),
             "recommendation": _format_recommendation(
                 ["학교보건법 제6조"],
                 [
@@ -896,8 +893,7 @@ def rule_school_zone(
         "type": "school_zone",
         "level": "safe",
         "summary": (
-            "주점 영업 후보지 반경 200m 이내에 학교가 없어 학교환경위생정화구역 "
-            "영업 제한 대상에서 제외됩니다."
+            "주점 영업 후보지 반경 200m 이내에 학교가 없어 학교환경위생정화구역 영업 제한 대상에서 제외됩니다."
         ),
         "recommendation": _format_recommendation(
             ["학교보건법 제6조"],

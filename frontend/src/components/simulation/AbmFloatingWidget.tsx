@@ -168,7 +168,7 @@ export function AbmFloatingWidget() {
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="truncate">
-            {focusSpot?.label ?? '—'} · {stage}
+            {focusSpot?.label || '마포구'} · {stage}
           </span>
           <span>ETA ~{etaSec}s</span>
         </div>

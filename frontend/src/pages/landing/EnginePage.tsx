@@ -484,25 +484,9 @@ export default function EnginePage(_: { onBack?: () => void }) {
           </div>
         </section>
 
-        {/* ── § Multi-Agent Layer ── */}
-        <section className="py-16 animate-[fadeSlideIn_1.2s_ease-out]">
-          <SectionLabel label="01 · Multi-Agent Layer" meta="LangGraph · 9 nodes" />
-          <h2 className="text-3xl md:text-4xl font-black tracking-tighter mb-3">
-            의사결정을 분담하는 9 에이전트
-          </h2>
-          <p className="text-sm text-muted-foreground mb-6 max-w-2xl break-keep leading-relaxed">
-            LangGraph 기반 병렬 실행. 각 에이전트는 단일 책임 범위 안에서 자기 도메인 데이터를
-            해석하고, Synthesis 가 8 출력을 통합해 종합 판단을 산출합니다.
-          </p>
-          <p className="text-xs font-mono uppercase tracking-widest text-primary mb-2">
-            {'>'} Hover an agent to view live simulation log
-          </p>
-          <AgentRoster />
-        </section>
-
         {/* ── § ML Models ── */}
-        <section className="py-16 animate-[fadeSlideIn_1.4s_ease-out]">
-          <SectionLabel label="02 · ML Models" meta="Forecast · Risk · Explain" />
+        <section className="py-16 animate-[fadeSlideIn_1.2s_ease-out]">
+          <SectionLabel label="01 · ML Models" meta="Forecast · Risk · Explain" />
           <h2 className="text-3xl md:text-4xl font-black tracking-tighter mb-3">
             정량 예측 레이어
           </h2>
@@ -553,6 +537,22 @@ export default function EnginePage(_: { onBack?: () => void }) {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* ── § Multi-Agent Layer ── */}
+        <section className="py-16 animate-[fadeSlideIn_1.4s_ease-out]">
+          <SectionLabel label="02 · Multi-Agent Layer" meta="LangGraph · 9 nodes" />
+          <h2 className="text-3xl md:text-4xl font-black tracking-tighter mb-3">
+            의사결정을 분담하는 9 에이전트
+          </h2>
+          <p className="text-sm text-muted-foreground mb-6 max-w-2xl break-keep leading-relaxed">
+            LangGraph 기반 병렬 실행. 각 에이전트는 단일 책임 범위 안에서 자기 도메인 데이터를
+            해석하고, Synthesis 가 8 출력을 통합해 종합 판단을 산출합니다.
+          </p>
+          <p className="text-xs font-mono uppercase tracking-widest text-primary mb-2">
+            {'>'} Hover an agent to view live simulation log
+          </p>
+          <AgentRoster />
         </section>
 
         {/* ── § Data Sources — 카테고리 grouping ── */}

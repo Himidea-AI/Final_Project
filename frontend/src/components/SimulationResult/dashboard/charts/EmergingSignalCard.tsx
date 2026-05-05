@@ -12,13 +12,15 @@
  * 로 감싸므로 자체 outer chrome 없이 bare 컨텐츠만 렌더 — 퐁당퐁당 (card→card 중첩 방지).
  */
 
-import { Sparkles, TrendingDown, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Sparkles, TrendingDown, ShieldCheck, AlertCircle, Star } from 'lucide-react';
 import type { EmergingSignal } from '../../../../types';
 
 interface Props {
   signal: EmergingSignal | null | undefined;
   /** 헤더 우측에 표시할 동 라벨 (없으면 미표시). */
   district?: string;
+  /** 현재 grid 4동 비교에서 anomaly_score 가 최댓값(=상대적으로 평소와 가장 다른 동)인지 여부. true 이면 헤더에 "변화 1위" 배지 노출. */
+  isTopChange?: boolean;
 }
 
 interface SignalStyle {
@@ -151,7 +153,7 @@ function RawChip({ signal }: { signal: EmergingSignal }) {
   return null;
 }
 
-export function EmergingSignalCard({ signal, district }: Props) {
+export function EmergingSignalCard({ signal, district, isTopChange = false }: Props) {
   if (!signal) {
     return (
       <div className="text-center">
@@ -173,10 +175,19 @@ export function EmergingSignalCard({ signal, district }: Props) {
   return (
     <div className="space-y-6">
       {/* 헤더 — 동 이름이 카드 제목, 우측 tier 배지 (mock 배지 흡수). */}
+      {/* isTopChange=true 시 동 이름 옆에 "변화 1위" 배지 — 4동 비교 grid 에서 anomaly_score 최댓값인 동 강조. */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h3 className="text-xl font-black italic leading-none tracking-tight text-foreground">
-          {district ?? '—'}
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-xl font-black italic leading-none tracking-tight text-foreground">
+            {district ?? '—'}
+          </h3>
+          {isTopChange && (
+            <span className="px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[0.5625rem] font-black flex items-center gap-1">
+              <Star size={10} />
+              변화 1위
+            </span>
+          )}
+        </div>
         <div
           className={`px-3 py-1 ${tierBadge.cls} border rounded-full text-[0.625rem] font-black flex items-center gap-1.5`}
         >
@@ -206,6 +217,12 @@ export function EmergingSignalCard({ signal, district }: Props) {
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mt-1">
             평소 대비 변화
           </div>
+          {/* per-quarter consecutive 메트릭 노출 — 0 이면 의미 없으므로 숨김. */}
+          {signal.consecutive_anomaly_quarters > 0 && (
+            <div className="text-[0.5625rem] font-bold text-muted-foreground tabular-nums">
+              최근 {signal.consecutive_anomaly_quarters}분기 연속
+            </div>
+          )}
         </div>
       </div>
 
@@ -216,7 +233,7 @@ export function EmergingSignalCard({ signal, district }: Props) {
             평소와 다른 정도
           </span>
           <span className="text-[0.6875rem] font-black text-muted-foreground tabular-nums">
-            {signal.anomaly_score.toFixed(2)}
+            {scorePct}
           </span>
         </div>
         <div className="w-full bg-card h-2 rounded-full overflow-hidden">

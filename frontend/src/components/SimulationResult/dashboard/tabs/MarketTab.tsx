@@ -5,7 +5,16 @@
  * 3) 하단 풀와이드: 법률 리스크 (InsightsGrid legalOnly)
  */
 
-import { AlertTriangle, Layers, MapPin, BarChart3, ShieldAlert, Brain } from 'lucide-react';
+import {
+  AlertTriangle,
+  Layers,
+  MapPin,
+  BarChart3,
+  ShieldAlert,
+  Brain,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { getGuFromDong } from '../../../../data/seoulRegions';
@@ -123,27 +132,43 @@ export function MarketTab({ simResult }: Props) {
         />
       </div>
 
-      {/* ═══ 중단 Bento 2 col: Indicator + Ranking ═══ */}
+      {/* ═══ 중단 Bento 2 col: Indicator + Ranking — '상권 지리 정보' 와 동일 form ═══ */}
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-card border border-border p-8 rounded-3xl flex flex-col">
-          <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
-            <BarChart3 size={16} className="text-primary" /> 8대 핵심 상권 지표
-          </h4>
+        <div className="bg-card border border-border rounded-[40px] p-6 flex flex-col">
+          <div className="flex justify-between items-start mb-4">
+            <div className="min-w-0">
+              <h3 className="text-lg font-black text-foreground flex items-center gap-3 italic text-left">
+                <BarChart3 className="text-primary" size={20} /> 8대 핵심 상권 지표
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1 text-left">
+                정량 8지표 동별 비교 + 레이더
+              </p>
+            </div>
+          </div>
           <div className="flex-grow">
             <IndicatorGrid simResult={simResult} />
           </div>
         </div>
-        <div className="bg-card border border-border p-8 rounded-3xl flex flex-col">
-          <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
-            <Layers size={16} className="text-primary" />{' '}
-            {getGuFromDong(simResult.winner_district ?? simResult.target_district) ?? '서울'} 동별
-            랭킹
+        <div className="bg-card border border-border rounded-[40px] p-6 flex flex-col">
+          <div className="flex justify-between items-start mb-4">
+            <div className="min-w-0">
+              <h3 className="text-lg font-black text-foreground flex items-center gap-3 italic text-left">
+                <Layers className="text-primary" size={20} />{' '}
+                {getGuFromDong(simResult.winner_district ?? simResult.target_district) ?? '서울'}{' '}
+                동별 랭킹
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1 text-left">
+                16동 5지표 정량 비교 / winner 선정
+              </p>
+            </div>
             {winnerDistrict && (
-              <span className="ml-auto text-[0.625rem] font-bold text-primary normal-case tracking-normal">
-                {winnerDistrict} 추천
-              </span>
+              <div className="flex gap-2 shrink-0">
+                <div className="px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-[0.5625rem] font-black text-primary flex items-center gap-1.5 uppercase">
+                  {winnerDistrict} 추천
+                </div>
+              </div>
             )}
-          </h4>
+          </div>
           <div className="flex-grow">
             <DistrictRankings simResult={simResult} />
           </div>
@@ -151,7 +176,8 @@ export function MarketTab({ simResult }: Props) {
       </div>
 
       {/* ═══ 에이전트 분석 요약 — 시장/인구/랭킹 (full-width 3-col) ═══
-          IndicatorGrid 내부 좁은 컬럼에서 size="full" 카드 깨지던 것을 분리해 가로 정렬로 해소. */}
+          IndicatorGrid 내부 좁은 컬럼에서 size="full" 카드 깨지던 것을 분리해 가로 정렬로 해소.
+          '상권 지리 정보' 와 동일 form. */}
       {(() => {
         const attrs = simResult.agent_attributions ?? [];
         const market = attrs.find((a) => a.id === 'market_analyst');
@@ -159,10 +185,17 @@ export function MarketTab({ simResult }: Props) {
         const ranking = attrs.find((a) => a.id === 'district_ranking');
         if (!market && !population && !ranking) return null;
         return (
-          <div className="bg-card border border-border rounded-3xl p-8">
-            <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
-              <Brain size={16} className="text-primary" /> 에이전트 분석 요약
-            </h4>
+          <div className="bg-card border border-border rounded-[40px] p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div className="min-w-0">
+                <h3 className="text-lg font-black text-foreground flex items-center gap-3 italic text-left">
+                  <Brain className="text-primary" size={20} /> 에이전트 분석 요약
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1 text-left">
+                  market · population · ranking 3 에이전트 종합 판단
+                </p>
+              </div>
+            </div>
             {/* 3 카드 세로 stack — 한 줄에 한 에이전트씩 풀폭 사용해 verdict/reasoning 가독성 확보 */}
             <div className="flex flex-col gap-3">
               {market && <AgentCard attribution={market} size="full" />}
@@ -173,23 +206,48 @@ export function MarketTab({ simResult }: Props) {
         );
       })()}
 
-      {/* ═══ Scatter: 유동인구 × 매출 상관 (가이드 #8) ═══ */}
-      <div className="bg-card border border-border rounded-3xl p-8">
-        <h4 className="text-sm font-black text-foreground mb-6 flex items-center gap-2 uppercase tracking-tight">
-          유동인구 × 매출 상관 (16 동)
-        </h4>
+      {/* ═══ Scatter: 유동인구 × 매출 상관 — '상권 지리 정보' 와 동일 form ═══ */}
+      <div className="bg-card border border-border rounded-[40px] p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div className="min-w-0">
+            <h3 className="text-lg font-black text-foreground flex items-center gap-3 italic text-left">
+              <TrendingUp className="text-primary" size={20} /> 유동인구 × 매출 상관
+              <span className="text-[0.6875rem] font-black text-muted-foreground tracking-widest not-italic truncate">
+                16 동
+              </span>
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1 text-left">
+              동별 유동인구 ↔ 매출 회귀 산점도 / winner 강조
+            </p>
+          </div>
+        </div>
         <FlowVsRevenueScatter
           rankings={simResult.district_rankings ?? []}
           winnerDistrict={simResult.winner_district}
         />
       </div>
 
-      {/* ═══ Competitor Intel: 차별화 포지션 + 카니발 거리 분포 + 동 업종 폐업률 추세 ═══ */}
-      <DifferentiationCard
-        differentiation={ci?.differentiation_position ?? null}
-        opportunities={ci?.key_opportunities}
-        risks={ci?.key_risks}
-      />
+      {/* ═══ Competitor Intel: 차별화 포지션 — '상권 지리 정보' 와 동일 form ═══ */}
+      <div className="bg-card border border-border rounded-[40px] p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div className="min-w-0">
+            <h3 className="text-lg font-black text-foreground flex items-center gap-3 italic text-left">
+              <Target className="text-primary" size={20} /> 차별화 포지셔닝
+              <span className="text-[0.6875rem] font-black text-muted-foreground tracking-widest not-italic truncate">
+                competitor_intel
+              </span>
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1 text-left">
+              차별화 포지션 + 핵심 기회 / 핵심 리스크 양분
+            </p>
+          </div>
+        </div>
+        <DifferentiationCard
+          differentiation={ci?.differentiation_position ?? null}
+          opportunities={ci?.key_opportunities}
+          risks={ci?.key_risks}
+        />
+      </div>
 
       {(ci?.cannibalization || ci?.industry_closure_trend) && (
         <div className="grid grid-cols-2 gap-6">

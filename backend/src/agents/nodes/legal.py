@@ -458,18 +458,25 @@ async def _search_ftc_from_db(brand_name: str) -> dict | None:
             if not row:
                 return None
 
-            store_count = int(row.frcsCnt or 0)
+            # D2 fix: frcsCnt NULL/0 시 churn_rate 계산 의미 손상 (max(0,1)=1 → 1500% 가짜 위험).
+            # 명시적 None 으로 표기 + summary 에서 "데이터 부족" 으로 표현.
+            raw_store_count = row.frcsCnt
+            store_count = int(raw_store_count) if raw_store_count is not None else 0
             end_count = int(row.ctrtEndCnt or 0)
             cancel_count = int(row.ctrtCncltnCnt or 0)
             avg_sales = int(row.avrgSlsAmt or 0) * 10000  # 만원 단위 → 원 단위
 
-            churn_rate = (end_count + cancel_count) / max(store_count, 1)
+            if raw_store_count is None or store_count <= 0:
+                # frcsCnt 없으면 churn_rate 계산 안 함 — None 으로 다운스트림에 명시
+                churn_rate: float | None = None
+            else:
+                churn_rate = round((end_count + cancel_count) / store_count, 4)
 
             return {
                 "brand_name": row.brandNm,
                 "corp_name": row.corpNm,
                 "store_count_total": store_count,
-                "churn_rate": round(churn_rate, 4),
+                "churn_rate": churn_rate,
                 "avg_sales_amount": avg_sales,
                 "franchise_fee": None,  # DB에 가맹금 컬럼 없음 — 0은 무료와 혼동
             }
@@ -534,31 +541,39 @@ async def check_ftc_franchise(state: AgentState) -> dict:
         }
 
     try:
-        churn_rate = detail.get("churn_rate", 0.0)
+        # D2 fix: churn_rate 가 None 이면 "데이터 부족" — 가짜 위험 판정 차단.
+        churn_rate = detail.get("churn_rate")  # None 가능
         avg_sales = detail.get("avg_sales_amount", 0)
         franchise_fee = detail.get("franchise_fee")  # None이면 "정보 없음" 표시
         store_count = detail.get("store_count_total", 0)
 
-        # 리스크 레벨 판정
-        if churn_rate > 0.10:
+        # 리스크 레벨 판정 — churn_rate None 이면 매출 기준만 사용 (또는 caution)
+        if churn_rate is None:
+            level = "caution"  # 폐점률 미산출 — 보수적 caution
+        elif churn_rate > 0.10:
             level = "danger"
         elif churn_rate > 0.05 or avg_sales < 100_000_000:
             level = "caution"
         else:
             level = "safe"
 
+        # churn_rate None 표기 — 가짜 1500% 차단
+        churn_str = f"{churn_rate:.1%}" if churn_rate is not None else "데이터 부족"
         summary = (
             f"'{detail.get('brand_name', brand)}' ({detail.get('corp_name', '')}) "
             f"정보공개서 기준 — "
             f"전체 가맹점 수: {store_count}개, "
-            f"폐점률: {churn_rate:.1%}, "
+            f"폐점률: {churn_str}, "
             f"평균 매출액: {avg_sales:,}원, "
             f"가입비: {f'{franchise_fee:,}원' if franchise_fee is not None else '정보 없음'}. "
         )
         if level == "danger":
             summary += "폐점률이 10%를 초과하여 사업 안정성 리스크가 높습니다."
         elif level == "caution":
-            summary += "폐점률 또는 매출 수준에서 주의가 필요합니다."
+            if churn_rate is None:
+                summary += "정보공개서에 가맹점 수 데이터가 없어 폐점률을 산출하지 못해 수동 검토가 필요합니다."
+            else:
+                summary += "폐점률 또는 매출 수준에서 주의가 필요합니다."
         else:
             summary += "공정위 지표 기준 안정적인 브랜드로 판단됩니다."
 
@@ -575,7 +590,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
                 "content": (
                     f"브랜드: {detail.get('brand_name', brand)} ({detail.get('corp_name', '')})\n"
                     f"전체 가맹점 수: {store_count}개\n"
-                    f"폐점률: {churn_rate:.1%}\n"
+                    f"폐점률: {churn_str}\n"
                     f"평균 매출액: {avg_sales:,}원\n"
                     f"가입비: {f'{franchise_fee:,}원' if franchise_fee is not None else '정보 없음'}"
                 ),
@@ -710,7 +725,8 @@ async def _run_legal_pipeline(state: dict) -> dict:
             }.get(biz_norm_for_curve, "default")
             _radius_scan = _terr_radius_m or 500  # 영업구역 미입력 시 500m default
             _candidate_spots = [
-                s for s in _vac_spots[:4]
+                s
+                for s in _vac_spots[:4]
                 if isinstance(s, dict) and s.get("lat") is not None and s.get("lon") is not None
             ]
             if brand:
@@ -732,18 +748,19 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         continue
                     nearby = _r.get("nearby_stores", []) or []
                     same_within = sum(
-                        1 for n in nearby
-                        if isinstance(n, dict) and (n.get("distance_m") or 0) <= _radius_scan
+                        1 for n in nearby if isinstance(n, dict) and (n.get("distance_m") or 0) <= _radius_scan
                     )
-                    vacancy_spot_analyses.append({
-                        "dong_name": _s.get("dong_name"),
-                        "lat": _s.get("lat"),
-                        "lon": _s.get("lon"),
-                        "same_brand_within_territory": same_within,
-                        "same_brand_2000m": _r.get("same_brand_nearby", 0),
-                        "closest_m": _r.get("closest_distance_m"),
-                        "territory_radius_m": _radius_scan,
-                    })
+                    vacancy_spot_analyses.append(
+                        {
+                            "dong_name": _s.get("dong_name"),
+                            "lat": _s.get("lat"),
+                            "lon": _s.get("lon"),
+                            "same_brand_within_territory": same_within,
+                            "same_brand_2000m": _r.get("same_brand_nearby", 0),
+                            "closest_m": _r.get("closest_distance_m"),
+                            "territory_radius_m": _radius_scan,
+                        }
+                    )
         except Exception as e:
             logger.warning(f"[legal_node] vacancy_spot 사전 스캔 전체 실패 ({e})")
 
@@ -790,10 +807,11 @@ async def _run_legal_pipeline(state: dict) -> dict:
 
     # 캐시 키 정규화 — brand/district/business_type 모두 strip+lowercase
     # + store_area 는 소수 1자리 반올림으로 동일 키 보장.
-    _norm_brand = (brand or "").strip().lower()[:100]
+    # D5 fix: brand 내부 공백도 collapse — "Star bucks" / " Starbucks" / "STARBUCKS" 동일 키.
+    _norm_brand = re.sub(r"\s+", " ", (brand or "").strip().lower())[:100]
     _norm_district = (district or "").strip()
     _normalized_biz = BIZ_NORMALIZE.get(business_type.lower(), business_type)
-    _norm_biz = _normalized_biz.strip()
+    _norm_biz = _normalized_biz.strip().lower()
 
     # Redis 캐시 조회 — 동일 조합 재요청 시 즉시 반환
     _CACHE_TTL = 86400  # 24시간
@@ -802,7 +820,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # 좌표 누락 시 "none" 으로 정규화 — 좌표·영업구역 입력 시 자동 invalidation.
     _coord_key = f"{lat_val:.5f},{lon_val:.5f}" if lat_val is not None and lon_val is not None else "none"
     _territory_key = state.get("territory_radius_m") or "none"
-    cache_key = f"v8:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}:{_territory_key}"
+    # v9 → v10: brand 내부 공백 collapse + biz lower (D5 정규화 강화). 옛 v9 캐시 자동 무효화.
+    cache_key = (
+        f"v10:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}:{_territory_key}"
+    )
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -1026,8 +1047,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # batch_results를 타입별로 인덱싱
     _batch_map = {r["type"]: r for r in batch_results}
 
-    # SP4: 15 risks 구성 — _batch_map(13 룰 항목) + zoning_result + ftc_result
-    # 순서는 다운스트림(인덱스 기반) 호환을 위해 유지
+    # 입지(location) 10 risks 구성 — _batch_map(8 입지 룰) + zoning_result + ftc_result.
+    # 운영(operation) 5종 (food_hygiene/labor/vat/privacy/sewage) 제외 — fallback caution 부풀림 방지.
+    # frontend 카운트와 동기화 위해 risks 리스트 자체에서 운영 카테고리 미포함.
     def _r(type_name: str) -> dict:
         return _batch_map.get(type_name, _make_fallback_risk(type_name))
 
@@ -1035,17 +1057,12 @@ async def _run_legal_pipeline(state: dict) -> dict:
         _r("franchise_law"),
         _r("commercial_lease_law"),
         zoning_result,
-        _r("food_hygiene"),
         _r("safety_regulation"),
         ftc_result,
         _r("building_law"),
         _r("fire_safety_law"),
-        _r("labor_law"),
-        _r("vat_law"),
-        _r("privacy_law"),
         _r("accessibility_law"),
         _r("school_zone"),
-        _r("sewage_law"),
         _r("fair_trade_law"),
     ]
 
@@ -1063,14 +1080,10 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # 벌칙 조문 본문을 recommendation에 자동 추가
     _enrich_penalty_info(risks)
 
-    # SP4: overall_level 결정 — 핵심 카테고리 + 임계값 룰
-    # 핵심 = 미이행 시 영업정지/형사처벌이 직접적인 영역
-    # (식품위생/소방/건축 + 학교환경위생정화구역)
-    # 핵심 1개라도 danger → overall=danger
-    # 비핵심 danger 2개 이상 → overall=danger (다중 위험)
-    # 그 외 danger 1개 또는 caution 존재 → caution
-    # 전부 safe → safe
-    _CRITICAL_TYPES = {"food_hygiene", "fire_safety_law", "building_law", "school_zone"}
+    # SP4: overall_level 결정 — 핵심 카테고리 + 임계값 룰 (입지 한정).
+    # 운영 카테고리(food_hygiene 등) 평가 제외 — 핵심 set 에서도 제거.
+    # 핵심 = 출점 자체 불가 또는 영업정지 직결 (소방/건축 + 학교환경위생정화구역).
+    _CRITICAL_TYPES = {"fire_safety_law", "building_law", "school_zone"}
 
     danger_types = [r.get("type", "") for r in risks if isinstance(r, dict) and r.get("level") == "danger"]
     has_critical_danger = any(t in _CRITICAL_TYPES for t in danger_types)
@@ -1134,20 +1147,22 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     _msg = "500m 내 동일 브랜드 0개"
             _dong = _va.get("dong_name")
             _rank = _dong_rank.get(_dong)
-            spot_evaluations.append({
-                "rank": _rank,
-                "rank_label": f"{_rank}등" if _rank else "순위 미정",
-                "dong_name": _dong,
-                "lat": _va.get("lat"),
-                "lon": _va.get("lon"),
-                "territory_radius_m": _terr,
-                "same_brand_within_territory": _within,
-                "same_brand_500m": _500,
-                "same_brand_2000m": _2km,
-                "closest_m": _closest,
-                "level": _lvl,
-                "summary": _msg,
-            })
+            spot_evaluations.append(
+                {
+                    "rank": _rank,
+                    "rank_label": f"{_rank}등" if _rank else "순위 미정",
+                    "dong_name": _dong,
+                    "lat": _va.get("lat"),
+                    "lon": _va.get("lon"),
+                    "territory_radius_m": _terr,
+                    "same_brand_within_territory": _within,
+                    "same_brand_500m": _500,
+                    "same_brand_2000m": _2km,
+                    "closest_m": _closest,
+                    "level": _lvl,
+                    "summary": _msg,
+                }
+            )
 
         # rank 순 정렬 (1등 → 4등). rank None 은 뒤로.
         spot_evaluations.sort(key=lambda x: x.get("rank") or 999)

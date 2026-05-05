@@ -10,27 +10,20 @@ from datetime import datetime, timedelta
 
 import httpx
 
-# 마포구 행정동 코드 매핑
-MAPO_DONG_CODES = {
-    "아현동": "11440555",
-    "공덕동": "11440565",
-    "도화동": "11440585",
-    "용강동": "11440590",
-    "대흥동": "11440600",
-    "염리동": "11440610",
-    "신수동": "11440630",
-    "서강동": "11440655",
-    "서교동": "11440660",
-    "합정동": "11440680",
-    "망원1동": "11440690",
-    "망원2동": "11440700",
-    "연남동": "11440710",
-    "성산1동": "11440720",
-    "성산2동": "11440730",
-    "상암동": "11440740",
-}
+# 마포구 행정동 코드 매핑은 dong_resolver 가 SoT.
+# 외부 호출자(tools.py, district_ranking.py, inflow_scorer.py 등)가 기존에
+# `from src.services.population_api import MAPO_DONG_CODES` 로 import 하므로
+# backward-compat 위해 동일 이름으로 재export.
+from src.services.dong_resolver import (
+    DONG_CODE_TO_NAME,
+    MAPO_DONG_CODES,
+)
 
-DONG_CODE_TO_NAME = {v: k for k, v in MAPO_DONG_CODES.items()}
+__all__ = [
+    "MAPO_DONG_CODES",
+    "DONG_CODE_TO_NAME",
+    "get_population_by_dongs",
+]
 
 API_KEY = os.environ.get("SEOUL_OPENDATA_KEY", "")
 BASE_URL = "http://openapi.seoul.go.kr:8088"

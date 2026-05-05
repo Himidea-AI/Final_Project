@@ -45,6 +45,8 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
         is_franchise: s.is_franchise ?? false,
         brand_name: s.brand_name ?? null,
         daily_revenue: null,
+        place_url: s.place_url ?? null,
+        phone: s.phone ?? null,
       }));
   }
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
@@ -70,6 +72,8 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
           : typeof s.est_daily_revenue === 'number'
             ? s.est_daily_revenue
             : null,
+      place_url: typeof s.place_url === 'string' ? s.place_url : null,
+      phone: typeof s.phone === 'string' ? s.phone : null,
     }));
 }
 

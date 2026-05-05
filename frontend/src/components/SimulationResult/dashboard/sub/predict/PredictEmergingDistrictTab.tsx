@@ -38,6 +38,15 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
     );
   }
 
+  // 4동 비교 — anomaly_score 최댓값 동 1개에만 "변화 1위" 배지. 0 이하는 의미 없어 강조 안 함.
+  const topDistrict =
+    dpredicts.reduce<{ district: string; score: number } | null>((acc, p) => {
+      const s = p.emerging_signal?.anomaly_score ?? -1;
+      if (s <= 0) return acc;
+      if (!acc || s > acc.score) return { district: p.district, score: s };
+      return acc;
+    }, null)?.district ?? null;
+
   return (
     <div className="space-y-6">
       <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
@@ -50,7 +59,11 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
           return (
             <div key={p.district} className="bg-card border border-border rounded-3xl p-5">
               {p.emerging_signal ? (
-                <EmergingSignalCard signal={p.emerging_signal} district={districtLabel} />
+                <EmergingSignalCard
+                  signal={p.emerging_signal}
+                  district={districtLabel}
+                  isTopChange={topDistrict === p.district}
+                />
               ) : (
                 <div className="space-y-3">
                   <div className="text-sm font-black text-foreground tracking-tight">

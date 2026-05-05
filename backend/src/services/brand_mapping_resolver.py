@@ -125,7 +125,8 @@ def get_all_mapo_stores_by_brand(brand_name: str) -> list[dict]:
     dong_name NULL 인 매장은 제외.
 
     Returns:
-        [{kakao_id, place_name, brand_name, lat, lon, dong_name, address}, ...]
+        [{kakao_id, place_name, brand_name, lat, lon, dong_name, address,
+          place_url, phone}, ...]
     """
     # 0차: DB 기반 canonical resolve (biz_brand_mapping 5,900개 활용)
     resolved = resolve_brand_name(brand_name) or brand_name
@@ -137,7 +138,8 @@ def get_all_mapo_stores_by_brand(brand_name: str) -> list[dict]:
     conditions = " OR ".join(f"brand_name ILIKE :a{i}" for i in range(len(aliases)))
     sql = text(
         f"""
-        SELECT kakao_id, place_name, brand_name, lat, lon, dong_name, address
+        SELECT kakao_id, place_name, brand_name, lat, lon, dong_name, address,
+               place_url, phone
           FROM kakao_store
          WHERE dong_name IS NOT NULL
            AND ({conditions})
