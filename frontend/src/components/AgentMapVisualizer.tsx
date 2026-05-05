@@ -362,7 +362,10 @@ export default function AgentMapVisualizer({
           const pixel = competitorPixels[comp.id];
           if (!pixel) return null;
           const isFranchise = comp.is_franchise;
-          const pinColor = isFranchise ? '#fb565b' : '#ffba00';
+          // 사용자 피드백 (2026-05-05): 자사 브랜드만 red, 경쟁업체 (프랜차이즈/개인점) 모두 yellow.
+          // own_brand category 는 AbmTab 의 sameBrandLocations 에서 부여.
+          const isOwnBrand = comp.category === 'own_brand';
+          const pinColor = isOwnBrand ? '#fb565b' : '#ffba00';
           const isSelected = selectedCompetitorId === comp.id;
 
           // 가장 가까운 공실 spot 까지 거리 (Haversine, m)
@@ -388,9 +391,7 @@ export default function AgentMapVisualizer({
           return (
             <div
               key={`comp-${comp.id}`}
-              className={`absolute flex flex-col items-center ${
-                isSelected ? 'z-[60]' : 'z-20'
-              }`}
+              className={`absolute flex flex-col items-center ${isSelected ? 'z-[60]' : 'z-20'}`}
               style={{
                 left: pixel.x,
                 top: pixel.y,
@@ -421,10 +422,7 @@ export default function AgentMapVisualizer({
                   style={{ borderColor: pinColor }}
                 >
                   <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                    <span
-                      className="text-[11px] font-black truncate"
-                      style={{ color: pinColor }}
-                    >
+                    <span className="text-[11px] font-black truncate" style={{ color: pinColor }}>
                       {comp.name}
                     </span>
                     <button
@@ -460,8 +458,7 @@ export default function AgentMapVisualizer({
                     )}
                     {comp.distance_m != null && (
                       <div>
-                        <span className="font-mono">중심거리:</span>{' '}
-                        {Math.round(comp.distance_m)}m
+                        <span className="font-mono">중심거리:</span> {Math.round(comp.distance_m)}m
                       </div>
                     )}
                   </div>
@@ -525,7 +522,7 @@ export default function AgentMapVisualizer({
                   strokeWidth="2"
                 />
               </svg>
-              <span className="text-[0.5625rem] text-muted-foreground">경쟁 프랜차이즈</span>
+              <span className="text-[0.5625rem] text-muted-foreground">자사 매장</span>
             </div>
             <div className="flex items-center gap-1.5">
               <svg width="10" height="10" viewBox="0 0 18 18">
@@ -536,7 +533,7 @@ export default function AgentMapVisualizer({
                   strokeWidth="2"
                 />
               </svg>
-              <span className="text-[0.5625rem] text-muted-foreground">경쟁 개인점</span>
+              <span className="text-[0.5625rem] text-muted-foreground">경쟁업체</span>
             </div>
             <div className="mt-0.5 pt-1 border-t border-border">
               <span className="text-[0.5rem] font-mono text-muted-foreground">

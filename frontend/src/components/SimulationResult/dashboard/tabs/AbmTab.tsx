@@ -274,8 +274,37 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       {/* 지도 / ABM 뷰 — 퐁당퐁당: AbmGroup(card white) → 여기 panel(secondary gray)
           → 안 inner cards(card white). 사용자 피드백 (2026-05-05): 제일 밖 white. */}
       {mode === 'map' ? (
-        <div className="bg-secondary border border-border rounded-3xl p-4">
-          <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-t-2xl flex justify-between items-center px-6 shrink-0 mb-0">
+        <div className="bg-secondary border border-border rounded-3xl p-4 flex flex-col gap-3">
+          {/* 시뮬레이션 안내 — 첫 진입 시 컨텍스트. 사용자 피드백 (2026-05-05). */}
+          <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3 flex items-start gap-3">
+            <div className="shrink-0 w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
+              <Radar size={14} className="text-primary" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-0">
+              <p className="text-[12px] font-black text-foreground tracking-tight leading-tight">
+                ABM 시뮬레이터 — 마포 5,000 페르소나 행동 시뮬
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-snug tracking-tight">
+                지도에서 <span className="font-bold text-foreground">공실 spot (초록)</span> 클릭 →
+                <span className="font-bold text-foreground"> 시나리오 (날씨/요일/임대료)</span> 설정
+                → 시뮬 실행. 5,000 가상 에이전트가 마포 전역에서 이동·소비 패턴 시뮬 → 선택 spot 의
+                일 방문/매출/잠식 추정. 여러 spot 큐 누적 → 순차 실행 (우하단 패널).
+              </p>
+              <p className="text-[10px] text-muted-foreground/80 leading-snug">
+                범례:{' '}
+                <span className="font-bold" style={{ color: '#fb565b' }}>
+                  ▲ 자사 매장
+                </span>
+                {' · '}
+                <span className="font-bold" style={{ color: '#ffba00' }}>
+                  ▲ 경쟁업체
+                </span>
+                {' · '}
+                <span className="font-bold text-success">● 공실 매물</span>
+              </p>
+            </div>
+          </div>
+          <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-2xl flex justify-between items-center px-6 shrink-0">
             <h4 className="text-xs font-black text-foreground flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(0,44,209,0.8)]" />
               Multi-Agent Geospatial Recommendations
@@ -284,9 +313,9 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
               AI AGENT TARGETING · {locations.length} VACANCY · {competitors.length} COMP
             </p>
           </div>
-          <div className="relative bg-secondary rounded-b-2xl overflow-hidden">
+          <div className="relative bg-secondary rounded-2xl overflow-hidden">
             <AgentMapVisualizer
-              height="440px"
+              height="640px"
               locations={locations.length > 0 ? locations : undefined}
               competitors={competitors}
               onSpotClick={handleAgentMapSpotClick}
