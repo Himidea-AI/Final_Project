@@ -48,7 +48,17 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def get_dong_centroid(dong_code: str) -> tuple[float, float] | None:
     """dong_code 의 중심 좌표 — store_info 평균 lat/lon.
 
-    dong_mapping 에 좌표가 없어 대체 사용. 매장 분포 편향으로 ±100m 편차 가능.
+    **범위: 마포구 한정** (`dong_code` prefix `11440*`).
+    - 마포 16개 행정동: store_info 매장 평균 lat/lon 반환 (±100m 편차 가능).
+    - 마포 외 동코드: store_info 에 매장 데이터 없어 None 반환 →
+      호출자(`analyze_competition`, `analyze_cannibalization`)는 graceful 하게
+      `{"error": "centroid not found for ..."}` dict 로 대체 응답하도록 설계됨.
+
+    dong_mapping 에 정식 centroid 컬럼이 없어 대체 사용. 매장 분포 편향으로
+    실제 행정동 기하학적 중심과 차이 있음.
+
+    TODO(E4-extension): 서울 전체 확장 시 dong_centroid 테이블 신설 필요
+    (별 마이그레이션 PR 권장 — 25개 자치구 약 425동 좌표 일괄 적재).
     """
     sql = text(
         """
