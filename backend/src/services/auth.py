@@ -184,7 +184,8 @@ class AuthService:
                 row = conn.execute(
                     text(
                         "SELECT id, company_name, biz_number, contact_name, position, "
-                        "email, phone, store_count, password_hash, plan, is_active "
+                        "email, phone, store_count, password_hash, plan, is_active, "
+                        "is_superadmin "
                         "FROM users WHERE email = :email"
                     ),
                     {"email": email},
@@ -229,10 +230,12 @@ class AuthService:
                     else:
                         brand_data = None
 
+                role = "superadmin" if user.get("is_superadmin") else "master"
                 return {
                     "status": "success",
                     "user": {
                         "id": str(user["id"]),
+                        "role": role,
                         "company_name": user["company_name"],
                         "contact_name": user["contact_name"],
                         "email": user["email"],
@@ -706,7 +709,7 @@ class AuthService:
                 row = conn.execute(
                     text(
                         "SELECT id, company_name, biz_number, contact_name, position, "
-                        "email, phone, store_count, plan, created_at "
+                        "email, phone, store_count, plan, created_at, is_superadmin "
                         "FROM users WHERE id = :id"
                     ),
                     {"id": user_id},
@@ -746,11 +749,12 @@ class AuthService:
                     {"id": user_id},
                 ).scalar()
 
+                role = "superadmin" if user.get("is_superadmin") else "master"
                 return {
                     "status": "success",
                     "user": {
                         "id": str(user["id"]),
-                        "role": "master",
+                        "role": role,
                         "company_name": user["company_name"],
                         "biz_number": user["biz_number"],
                         "contact_name": user["contact_name"],

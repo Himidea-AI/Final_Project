@@ -103,8 +103,10 @@ def list_ai(
     size: int = 20,
     sort: str = "created_at_desc",
 ) -> dict[str, Any]:
-    """목록 조회. master: 본인+소속 매니저. manager: 본인만."""
-    if role == "master":
+    """목록 조회. superadmin: 전체. master: 본인+소속 매니저. manager: 본인만."""
+    if role == "superadmin":
+        where = ["TRUE"]
+    elif role == "master":
         where = [
             "(sa.manager_id = :manager_id OR sa.manager_id IN "
             "(SELECT id FROM manager_users WHERE owner_id = :manager_id))"
@@ -163,8 +165,10 @@ def list_ai(
 
 
 def get_ai_detail(*, history_id: int, manager_id: UUID, role: str = "manager") -> Optional[dict[str, Any]]:
-    """상세 조회."""
-    if role == "master":
+    """상세 조회. superadmin: 전체. master: 본인+소속 매니저. manager: 본인만."""
+    if role == "superadmin":
+        access_filter = "TRUE"
+    elif role == "master":
         access_filter = (
             "(sa.manager_id = :manager_id OR sa.manager_id IN "
             "(SELECT id FROM manager_users WHERE owner_id = :manager_id))"
@@ -189,8 +193,10 @@ def get_ai_detail(*, history_id: int, manager_id: UUID, role: str = "manager") -
 
 
 def delete_ai(*, history_id: int, manager_id: UUID, role: str = "manager") -> bool:
-    """삭제."""
-    if role == "master":
+    """삭제. superadmin: 전체. master: 본인+소속 매니저. manager: 본인만."""
+    if role == "superadmin":
+        access_filter = "TRUE"
+    elif role == "master":
         access_filter = (
             "(manager_id = :manager_id OR manager_id IN (SELECT id FROM manager_users WHERE owner_id = :manager_id))"
         )
