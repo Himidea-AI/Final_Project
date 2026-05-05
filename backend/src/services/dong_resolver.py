@@ -123,6 +123,46 @@ def resolve_dong_code_or_default(
     return resolve_dong_code(dong_name, db_url=db_url, default=fallback) or fallback
 
 
+def validate_dong_code(code: str | None, *, strict: bool = True) -> str | None:
+    """행정동 dong_code 8자리 숫자 형식 검증.
+
+    Args:
+        code: 검증 대상 코드. None / "" 은 None 반환.
+        strict: True 면 형식 위반 시 ValueError raise. False 면 None 반환 (silent skip).
+
+    Returns:
+        검증 통과 시 trim 된 8자리 코드. 실패 시 None (strict=False) 또는 ValueError.
+
+    Raises:
+        ValueError (strict=True): 8자리 숫자 아니면 raise.
+
+    예외:
+    - 마포 행정동 코드: '11440***' (8자, 숫자) — 통과
+    - 법정동 코드 (10자): 거부 (잘못된 컬럼 적재 차단)
+    - 빈 값 / None: None 반환
+
+    사용처:
+    - 새 ETL/사용자 입력 검증 — varchar(10/15/text) 컬럼이라 길이 통과해도
+      행정동 컬럼 적재 시 SoT 가정 위반.
+    - SimulationInput Pydantic validator
+    - ORM 적재 직전 sanity check
+    """
+    if code is None:
+        return None
+    s = str(code).strip()
+    if not s:
+        return None
+    if len(s) == 8 and s.isdigit():
+        return s
+    if strict:
+        raise ValueError(
+            f"invalid dong_code format: {code!r} (행정동 8자리 숫자 기대, "
+            "법정동 10자리 또는 잘못된 형식이면 별 컬럼/테이블 사용)"
+        )
+    logger.warning(f"[validate_dong_code] 잘못된 dong_code 형식: {code!r} — None 반환 (silent)")
+    return None
+
+
 def resolve_dong_name(dong_code: str, db_url: str | None = None) -> str | None:
     """동코드 → 동이름 변환.
 

@@ -141,3 +141,36 @@ class SimulationInput(BaseModel):
                 sorted(_BUSINESS_TYPE_ALLOWED),
             )
         return v
+
+    @field_validator("target_district", "target_districts", mode="before")
+    @classmethod
+    def _validate_dong_code_format(cls, v):
+        """target_district / target_districts 입력 검증.
+
+        사용자가 dong_code 형식 (8자리 숫자) 으로 입력 시 행정동 형식 강제 검증.
+        한글 동명 (예: '서교동') 입력은 통과 — dong_resolver 가 후속 매핑.
+        법정동 10자리 코드 입력 시 reject (잘못된 컬럼 적재 차단).
+        """
+        if v is None or v == "":
+            return v
+        # list 입력 처리
+        if isinstance(v, list):
+            return [cls._check_single(d) for d in v]
+        return cls._check_single(v)
+
+    @staticmethod
+    def _check_single(value: str) -> str:
+        """단일 동 입력값 검증 — 숫자 형식이면 8자리 강제, 한글이면 통과."""
+        if not value or not isinstance(value, str):
+            return value
+        s = value.strip()
+        # 숫자 입력 (dong_code 직접 입력 케이스) — 8자리 강제
+        if s.isdigit():
+            if len(s) != 8:
+                raise ValueError(
+                    f"dong_code 형식 오류: {value!r} (행정동 8자리 숫자 기대, "
+                    "10자리 법정동 또는 잘못된 형식이면 한글 동명 또는 8자리 행정동 코드 사용)"
+                )
+            return s
+        # 한글 동명 — dong_resolver 가 후속 매핑 (validator 통과)
+        return s
