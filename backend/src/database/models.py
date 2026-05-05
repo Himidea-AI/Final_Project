@@ -134,7 +134,12 @@ class GolmokCommercial(Base):
     quarter = Column(Integer, index=True, comment="기준 분기 (YYYYQ)")
     trdar_code = Column(String(10), comment="상권 코드")
     data_type = Column(String(20), index=True, comment="데이터 유형 (sales/store/population 등)")
-    industry_code = Column(String(20), default="ALL", comment="업종 코드 (기본값: ALL)")
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        default="ALL",
+        comment="업종 코드 (기본값: ALL)",
+    )
     metrics = Column(JSONB, comment="지표 데이터 (JSON)")
 
 
@@ -146,7 +151,12 @@ class DistrictSales(Base):
     # 복합 PK
     quarter = Column(Integer, primary_key=True, comment="기준 분기 (YYYYQ)")
     dong_code = Column(String(10), primary_key=True, index=True, comment="행정동 코드")
-    industry_code = Column(String(20), primary_key=True, comment="업종 코드")
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+        comment="업종 코드",
+    )
 
     dong_name = Column(String(20), comment="행정동명")
     industry_name = Column(String(50), comment="업종명")
@@ -251,7 +261,12 @@ class StoreQuarterly(Base):
     # 복합 PK
     quarter = Column(Integer, primary_key=True, comment="기준 분기 (YYYYQ)")
     dong_code = Column(String(10), primary_key=True, index=True, comment="행정동 코드")
-    industry_code = Column(String(20), primary_key=True, comment="업종 코드")
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+        comment="업종 코드",
+    )
 
     dong_name = Column(String(20), comment="행정동명")
     industry_name = Column(String(50), comment="업종명")
@@ -333,13 +348,19 @@ class DongMapping(Base):
 class IndustryMaster(Base):
     """업종 마스터 — 업종 코드 ↔ 업종명 매핑 (101 row).
 
-    DB 측 FK constraint 9개 (district_sales, store_quarterly, golmok_*, seoul_*) 가
-    industry_code 참조. **ORM ForeignKey 미배선** (자식 클래스의 industry_code 컬럼이
-    `Column(String, ...)` 만 정의, `ForeignKey("industry_master.industry_code")` 없음).
-    DB 무결성은 보장되지만 ORM 양방향 lazy load 불가 — 별 PR 에서 ORM FK 추가 권장.
+    Alembic 마이그레이션 정의 없음 (직접 DDL 또는 외부 시드 스크립트로 생성).
+    DB 측 FK constraint **미존재** (alembic versions 검색 0건 — 2026-05-05 검증).
 
-    raw SQL read 사용처 없음 — FK constraint 정합용 마스터.
-    Alembic 마이그레이션 정의 없음 (직접 DDL 또는 외부 시드 스크립트로 생성됨).
+    자식 industry_code 컬럼 type:
+      - String(20): district_sales, store_quarterly, district_sales_seoul,
+        seoul_adstrd_stor, seoul_signgu_selng, seoul_signgu_stor, golmok_commercial
+      - Text: golmok_sales, golmok_stores, seoul_district_sales,
+        seoul_district_stores, seoul_training_dataset
+      → PostgreSQL string family 호환 (Text/VARCHAR 모두 String(20) PK 참조 가능)
+
+    ORM ForeignKey 동기화 (2026-05-05): 자식 13개에 ForeignKey 추가하여 양방향
+    lazy load + relationship() navigation 가능. DB 레벨 enforcement 부재 →
+    별도 alembic 마이그레이션으로 NOT VALID + VALIDATE 추가 권장.
     """
 
     __tablename__ = "industry_master"
@@ -598,9 +619,9 @@ class InviteCode(Base):
         nullable=False,
         comment="발급한 팀장 ID",
     )
-    max_uses = Column(Integer, default=10, comment="최대 사용 가능 횟수")
-    used_count = Column(Integer, default=0, comment="현재 사용된 횟수")
-    is_active = Column(Boolean, default=True, comment="활성 여부")
+    max_uses = Column(Integer, nullable=False, default=10, comment="최대 사용 가능 횟수")
+    used_count = Column(Integer, nullable=False, default=0, comment="현재 사용된 횟수")
+    is_active = Column(Boolean, nullable=False, default=True, comment="활성 여부")
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -685,7 +706,11 @@ class GolmokSales(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True, comment="분기 (YYYYQ)")
     trdar_code = Column(Text, index=True, comment="상권 코드")
-    industry_code = Column(Text, comment="업종 코드")
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        comment="업종 코드",
+    )
     monthly_sales = Column(BigInteger, comment="월평균 매출")
     monthly_count = Column(BigInteger, comment="월평균 건수")
     weekday_sales = Column(BigInteger)
@@ -744,7 +769,11 @@ class GolmokStores(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True, comment="분기 (YYYYQ)")
     trdar_code = Column(Text, index=True, comment="상권 코드")
-    industry_code = Column(Text, comment="업종 코드")
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        comment="업종 코드",
+    )
     store_count = Column(BigInteger, comment="점포 수")
     similar_store_count = Column(BigInteger, comment="유사 점포 수")
     open_rate = Column(BigInteger, comment="개업률")
@@ -782,7 +811,10 @@ class SeoulDistrictSales(Base):
         index=True,
     )
     dong_name = Column(Text)
-    industry_code = Column(Text)
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(BigInteger)
@@ -850,7 +882,10 @@ class SeoulDistrictStores(Base):
         index=True,
     )
     dong_name = Column(Text)
-    industry_code = Column(Text)
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+    )
     industry_name = Column(Text)
     store_count = Column(BigInteger)
     similar_store_count = Column(BigInteger)
@@ -918,7 +953,10 @@ class SeoulTrainingDataset(Base):
         index=True,
     )
     dong_name = Column(Text)
-    industry_code = Column(Text)
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(BigInteger)
@@ -1043,7 +1081,11 @@ class DistrictSalesSeoul(Base):
         index=True,
     )
     dong_name = Column(Text)
-    industry_code = Column(String(20), nullable=False)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        nullable=False,
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(Integer)
@@ -1465,7 +1507,11 @@ class SeoulAdstrdStor(Base):
         primary_key=True,
     )
     dong_name = Column(Text)
-    industry_code = Column(String(20), primary_key=True)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     industry_name = Column(Text)
     store_count = Column(Integer)
     similar_store_count = Column(Integer)
@@ -1562,7 +1608,11 @@ class SeoulSignguSelng(Base):
     quarter = Column(Integer, primary_key=True)
     signgu_code = Column(String(10), primary_key=True)
     signgu_name = Column(Text)
-    industry_code = Column(String(20), primary_key=True)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(BigInteger)
@@ -1585,7 +1635,11 @@ class SeoulSignguStor(Base):
     quarter = Column(Integer, primary_key=True)
     signgu_code = Column(String(10), primary_key=True)
     signgu_name = Column(Text)
-    industry_code = Column(String(20), primary_key=True)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     industry_name = Column(Text)
     store_count = Column(Integer)
     similar_store_count = Column(Integer)
