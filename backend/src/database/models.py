@@ -429,8 +429,8 @@ class User(Base):
     phone = Column(String(20), nullable=False, comment="연락처 (010-0000-0000)")
     store_count = Column(Integer, comment="현재 가맹점 수")
     password_hash = Column(String(255), nullable=False, comment="비밀번호 해시")
-    plan = Column(String(20), default="starter", comment="요금제 (starter/growth)")
-    agree_terms = Column(Boolean, default=False, comment="이용약관 동의 여부")
+    plan = Column(String(20), nullable=False, default="starter", comment="요금제 (starter/growth)")
+    agree_terms = Column(Boolean, nullable=False, default=False, comment="이용약관 동의 여부")
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -447,12 +447,14 @@ class User(Base):
     )
     is_active = Column(
         Boolean,
+        nullable=False,
         server_default=text("true"),
         default=True,
         comment="계정 활성 여부 (소프트 삭제: false=탈퇴)",
     )
     email_verified = Column(
         Boolean,
+        nullable=False,
         server_default=text("false"),
         default=False,
         comment="이메일 인증 완료 여부",
@@ -635,10 +637,11 @@ class ManagerUser(Base):
     email = Column(String(100), unique=True, nullable=False, index=True, comment="이메일")
     phone = Column(String(20), nullable=False, comment="연락처")
     password_hash = Column(String(255), nullable=False, comment="비밀번호 해시")
-    is_active = Column(Boolean, default=True, comment="활성 여부")
-    is_approved = Column(Boolean, default=False, comment="팀장 승인 여부")
+    is_active = Column(Boolean, nullable=False, default=True, comment="활성 여부")
+    is_approved = Column(Boolean, nullable=False, default=False, comment="팀장 승인 여부")
     email_verified = Column(
         Boolean,
+        nullable=False,
         server_default=text("false"),
         default=False,
         comment="이메일 인증 완료 여부",
@@ -764,13 +767,20 @@ class MapoResidentPop(Base):
 
 
 class SeoulDistrictSales(Base):
-    """서울 전체 행정동 분기 매출 — 사전학습용"""
+    """서울 전체 행정동 분기 매출 — 사전학습용
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료 (NOT VALID + VALIDATE).
+    """
 
     __tablename__ = "seoul_district_sales"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
     industry_code = Column(Text)
     industry_name = Column(Text)
@@ -825,13 +835,20 @@ class SeoulDistrictSales(Base):
 
 
 class SeoulDistrictStores(Base):
-    """서울 전체 행정동 분기 점포 — 사전학습용"""
+    """서울 전체 행정동 분기 점포 — 사전학습용
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_district_stores"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
     industry_code = Column(Text)
     industry_name = Column(Text)
@@ -844,14 +861,21 @@ class SeoulDistrictStores(Base):
 
 
 class SeoulGolmokRent(Base):
-    """서울 전체 골목상권 환산임대료 — 사전학습용"""
+    """서울 전체 골목상권 환산임대료 — 사전학습용
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_golmok_rent"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     year = Column(BigInteger, index=True)
     quarter = Column(BigInteger)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
     gubun = Column(Text)
     rent_1f = Column(Float)
@@ -861,24 +885,38 @@ class SeoulGolmokRent(Base):
 
 
 class SeoulPopulationQuarterly(Base):
-    """서울 행정동별 분기 인구"""
+    """서울 행정동별 분기 인구
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_population_quarterly"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     total_pop = Column(Float)
 
 
 class SeoulTrainingDataset(Base):
-    """서울 LSTM 사전학습용 통합 데이터셋"""
+    """서울 LSTM 사전학습용 통합 데이터셋
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_training_dataset"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
     industry_code = Column(Text)
     industry_name = Column(Text)
@@ -989,13 +1027,21 @@ class BusBoardingDaily(Base):
 
 
 class DistrictSalesSeoul(Base):
-    """district_sales_seoul — reflected from DB (2026-04-20)."""
+    """district_sales_seoul — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "district_sales_seoul"
 
     id = Column(BigInteger, primary_key=True)
     quarter = Column(Integer, nullable=False)
-    dong_code = Column(String(15), nullable=False)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     dong_name = Column(Text)
     industry_code = Column(String(20), nullable=False)
     industry_name = Column(Text)
@@ -1066,7 +1112,11 @@ class HolidayCalendar(Base):
 
 
 class JeonseMonthlyRent(Base):
-    """jeonse_monthly_rent — reflected from DB (2026-04-20)."""
+    """jeonse_monthly_rent — 국토부 전월세 신고 원본 (법정동 10자리).
+
+    alembic f3c4d5e6a7b8 에서 jeonse_dong_master FK 추가 완료 (NOT VALID + VALIDATE).
+    ORM 은 reflected 시 String(15) 였으나, 실제 데이터는 모두 10자리 → DB 마이그레이션 설계와 동기화.
+    """
 
     __tablename__ = "jeonse_monthly_rent"
 
@@ -1074,7 +1124,11 @@ class JeonseMonthlyRent(Base):
     rcpt_year = Column(Integer)
     gu_code = Column(String(10))
     gu_name = Column(Text)
-    dong_code = Column(String(15))
+    dong_code = Column(
+        String(10),
+        ForeignKey("jeonse_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
     jibun_type = Column(Integer)
     jibun_type_name = Column(Text)
@@ -1305,12 +1359,19 @@ class ResidentPopMonthly(Base):
 
 
 class SeoulAdstrdChangeIx(Base):
-    """seoul_adstrd_change_ix — reflected from DB (2026-04-20)."""
+    """seoul_adstrd_change_ix — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_adstrd_change_ix"
 
     quarter = Column(Integer, primary_key=True)
-    dong_code = Column(String(15), primary_key=True)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     dong_name = Column(Text)
     change_ix = Column(String(10))
     change_ix_name = Column(String(50))
@@ -1351,12 +1412,19 @@ class SeoulAdstrdFclty(Base):
 
 
 class SeoulAdstrdFlpop(Base):
-    """seoul_adstrd_flpop — reflected from DB (2026-04-20)."""
+    """seoul_adstrd_flpop — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_adstrd_flpop"
 
     quarter = Column(Integer, primary_key=True)
-    dong_code = Column(String(15), primary_key=True)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     dong_name = Column(Text)
     total_flpop = Column(Integer)
     male_flpop = Column(Integer)
@@ -1383,12 +1451,19 @@ class SeoulAdstrdFlpop(Base):
 
 
 class SeoulAdstrdStor(Base):
-    """seoul_adstrd_stor — reflected from DB (2026-04-20)."""
+    """seoul_adstrd_stor — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료 (849k row VALIDATE).
+    """
 
     __tablename__ = "seoul_adstrd_stor"
 
     quarter = Column(Integer, primary_key=True)
-    dong_code = Column(String(15), primary_key=True)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     dong_name = Column(Text)
     industry_code = Column(String(20), primary_key=True)
     industry_name = Column(Text)

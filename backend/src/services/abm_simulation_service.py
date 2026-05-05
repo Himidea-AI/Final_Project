@@ -238,7 +238,7 @@ def _save_to_redis(*, cache_key: str, redis_url: str, response: dict[str, Any]) 
         try:
             # TTL 1h → 24h (2026-05-04 사용자 피드백) — main.py 와 동기.
             client.setex(cache_key, 86400, _json.dumps(cache_body, ensure_ascii=False))
-            logger.info(f"[ABM async] redis SET key={cache_key[:16]}... ttl=3600s")
+            logger.info(f"[ABM async] redis SET key={cache_key[:16]}... ttl=86400s")
         finally:
             client.close()
     except Exception as e:
