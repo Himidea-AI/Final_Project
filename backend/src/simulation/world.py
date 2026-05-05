@@ -32,6 +32,9 @@ class Store:
     menu_items: list[dict] = field(default_factory=list)  # [{name, price}]
     # district_sales_seoul / mapo_sns_sentiment 기반 매장 인기 가중치
     popularity_boost: float = 1.0
+    # 브랜드명 (kakao_store.brand_name) — None 이면 무브랜드(개인 사장님 등).
+    # cannibalization 분석에서 명시 skip 용 (NULL 72.8% 라 silent 0 매칭 회피).
+    brand_name: str | None = None
 
     @property
     def occupancy(self) -> float:

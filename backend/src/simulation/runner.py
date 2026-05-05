@@ -247,6 +247,8 @@ def _swap_dong_hour_boost_for_day(
 
     Args:
         living_pop_daily_boost: {(dong, hour, day_idx): ratio} (옵션 B).
+            hour 는 24h 해상도 (0~23). _load_living_population_daily 가
+            time_zone 6구간 → 24h expansion 후 반환 (2026-05-04 fix).
         fallback_boost: 기존 분기 평균 boost {(dong, hour, weekday): ratio}.
         day_idx: 현재 시뮬 day index (0 ~ days-1).
         weekday: 0(월) ~ 6(일).
@@ -261,7 +263,9 @@ def _swap_dong_hour_boost_for_day(
     out = dict(fallback_boost)  # fallback 복사
     for (dong, hour, didx), ratio in living_pop_daily_boost.items():
         if didx == day_idx:
-            out[(dong, hour, weekday)] = ratio
+            # hour 안전 가드 — producer 보장 0~23 이지만 외부 source 변경 대비.
+            h = int(hour) % 24
+            out[(dong, h, weekday)] = ratio
     return out
 
 
@@ -1359,6 +1363,9 @@ def run_simulation(
             affected_count = 0
             affected_visits_raw = 0
             weighted_nearby = 0.0
+            # brand_name NULL 매장은 cannibalization 분석에서 명시 skip
+            # (kakao_store.brand_name 72.8% NULL — audit 2026-05-04). silent 0-impact 회피.
+            skipped_no_brand = 0
 
             def _huff_weight(dist_m: float, primary: float, secondary: float) -> float:
                 """Huff β=2 거리 가중 + tiered. 50m 기준 정규화 (max 1.0)."""
@@ -1383,11 +1390,19 @@ def run_simulation(
                         continue
                     if not (s.lat and s.lon):
                         continue
+                    # 거리 계산은 brand 무관 — 시장 자기잠식(market cannibalization)은
+                    # 카테고리 단위 경합. 다만 brand_name NULL 매장은 reporting 시
+                    # impact 추정 신뢰도 낮음 → 카운터에 표기하되 모델 제외 옵션 보존.
                     dlat_m = (float(s.lat) - ns_lat) * 111000.0
                     dlon_m = (float(s.lon) - ns_lon) * 89000.0
                     d_m = (dlat_m * dlat_m + dlon_m * dlon_m) ** 0.5
                     w = _huff_weight(d_m, primary_r, secondary_r)
                     if w <= 0:
+                        continue
+                    if getattr(s, "brand_name", None) is None:
+                        skipped_no_brand += 1
+                        # brand 정보 부재 → cannibalization 가중치에서 명시 제외.
+                        # silent 0 매칭이 아니라 카운터로 노출하여 데이터 품질 가시화.
                         continue
                     affected_count += 1
                     affected_visits_raw += int(s.visits_today)
@@ -1410,11 +1425,13 @@ def run_simulation(
                 # 좌표 없으면 fallback: dong 전체 같은 카테고리 매장
                 # stores_by_dong 은 store_id(int) 리스트 → world.stores 로 객체 lookup.
                 target_cat = scenario.new_store.get("category") or "음식점"
-                same_cat_in_dong = [
+                same_cat_all = [
                     world.stores[sid]
                     for sid in world.stores_by_dong.get(target_dong, [])
                     if sid in world.stores and world.stores[sid].category == target_cat
                 ]
+                same_cat_in_dong = [s for s in same_cat_all if getattr(s, "brand_name", None) is not None]
+                skipped_no_brand = len(same_cat_all) - len(same_cat_in_dong)
                 affected_count = len(same_cat_in_dong)
                 affected_visits_raw = sum(int(s.visits_today) for s in same_cat_in_dong)
                 impact_pct = 5.0  # legacy fallback
@@ -1425,6 +1442,7 @@ def run_simulation(
                 "estimated_impact_pct": impact_pct,
                 "affected_stores": affected_count,
                 "affected_visits": affected_visits_raw,
+                "skipped_no_brand": skipped_no_brand,  # brand_name NULL 로 제외된 매장 수
                 "model": "huff_b2_tiered_v1",
                 # rate_pct: 한국 실증 (서경원·고사랑 2023 KCI) 19% 기준. impact 계산식
                 # `(ns/total) * 20` 과 일관. 이전 40.0 잔류 → 19% 로 정정 (review M-1 fix).

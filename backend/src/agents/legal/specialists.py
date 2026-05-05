@@ -328,6 +328,23 @@ async def specialist_franchise_law(
     brand = (brand or "")[:100]
     business_type = (business_type or "")[:100]
     district = (district or "")[:100]
+    # D4 fix: territory_radius_m 합리 범위 검증 (50~1500m).
+    # 정보공개서·가맹계약서 표준치 기반. 범위 밖이면 None 처리해 일반 임계값(500m) fallback.
+    if territory_radius_m is not None:
+        try:
+            _terr_int = int(territory_radius_m)
+            if _terr_int < 50 or _terr_int > 1500:
+                logger.warning(
+                    f"[specialist_franchise_law] territory_radius_m={_terr_int} 범위 외 (50~1500m) — None fallback"
+                )
+                territory_radius_m = None
+            else:
+                territory_radius_m = _terr_int
+        except (TypeError, ValueError):
+            logger.warning(
+                f"[specialist_franchise_law] territory_radius_m={territory_radius_m!r} 파싱 실패 — None fallback"
+            )
+            territory_radius_m = None
     retriever = LegalDocumentRetriever()
     query = f"{brand} {business_type} {district} 영업지역 가맹사업법 정보공개서 폐점률 허위과장 필수품목 카니발리제이션"
     # RAG(법령) + 판례 RAG + 영업지역 정량 분석 병렬 (업종별 거리 감쇠 곡선 적용)
@@ -356,6 +373,8 @@ async def specialist_franchise_law(
     else:
         territory = territory_raw or {}
 
+    # D1 fix: RAG docs 0건 시 caution floor (LLM "자료 없음" → safe 오판 차단).
+    rag_empty = not docs
     ftc_hint = _format_ftc_hint(ftc_data)
     rag_text = _format_docs(docs)
     precedent_text = _format_precedents(precedents)
@@ -377,6 +396,10 @@ async def specialist_franchise_law(
             "- 2km 내 동일 브랜드 3개 이상 → caution (자기잠식 위험)\n"
         )
 
+    # D1 fix: RAG 비었을 때 LLM 에 명시적으로 caution 이상 강제 안내
+    _rag_empty_directive = (
+        "- ⚠️ RAG_CONTEXT 가 비어있음(자료 없음) → safe 절대 금지, **caution 이상** 반환 필수\n" if rag_empty else ""
+    )
     user_content = (
         f"브랜드: {brand}\n"
         f"업종: {business_type}\n"
@@ -388,7 +411,9 @@ async def specialist_franchise_law(
         "- 폐점률 ≥10% → caution\n"
         f"{_territory_criteria}"
         "- 영업지역 침해(제12조의4)/허위과장(제9조)/필수품목 구입강제(제12조) → danger 후보\n"
-        "- 신규 브랜드/직영 → safe~caution\n\n"
+        "- 신규 브랜드/직영 → safe~caution\n"
+        f"{_rag_empty_directive}"
+        "\n"
         "<<<RAG_CONTEXT>>>\n"
         f"{rag_text}\n"
         "<<<END_RAG_CONTEXT>>>\n\n"
@@ -418,6 +443,10 @@ async def specialist_franchise_law(
         if brand and brand.strip() and result.level == "safe":
             result.level = "caution"
             result.summary = "[브랜드 입력됨 — 가맹사업법 적용 검토 필요] " + (result.summary or "")
+        # D1 fix: RAG 0건이면 LLM 결과와 무관하게 caution floor 강제
+        if rag_empty and result.level == "safe":
+            result.level = "caution"
+            result.summary = "[RAG 법조문 자료 부재 — 수동 검토 필요] " + (result.summary or "")
         # 영업지역 정량 룰 floor — LLM 이 정량 데이터를 무시하고 낮은 level 로 평가하는
         # 케이스 차단. 룰이 산출한 floor 보다 LLM 이 더 높은 level 을 주면 LLM 그대로.
         # floor 강제 상향 시 summary/recommendation 에도 정량 근거 명시 (level↔텍스트 불일치 방지).
@@ -510,6 +539,8 @@ async def specialist_fair_trade_law(
     else:
         precedents = precedent_raw or []
 
+    # D1 fix: RAG docs 0건 시 caution floor (LLM "자료 없음" → safe 오판 차단).
+    rag_empty = not docs
     rag_text = _format_docs(docs)
     precedent_text = _format_precedents(precedents)
     mapo_hint = ""
@@ -522,6 +553,10 @@ async def specialist_fair_trade_law(
             "마포구는 caution 이상 권장."
         )
 
+    # D1 fix: RAG 비었을 때 LLM 에 명시적으로 caution 이상 강제 안내
+    _rag_empty_directive = (
+        "- ⚠️ RAG_CONTEXT 가 비어있음(자료 없음) → safe 절대 금지, **caution 이상** 반환 필수\n" if rag_empty else ""
+    )
     user_content = (
         f"브랜드: {brand}\n"
         f"업종: {business_type}\n"
@@ -530,7 +565,9 @@ async def specialist_fair_trade_law(
         "[평가 기준]\n"
         "- 가맹본부 거래강제·필수품목 부당 공급 → danger 후보 (공정거래법 제45조)\n"
         "- 마포구 행정동 → 지역상권 상생협력 조례 명시 + caution 이상\n"
-        "- 부당한 표시광고/허위광고 → caution\n\n"
+        "- 부당한 표시광고/허위광고 → caution\n"
+        f"{_rag_empty_directive}"
+        "\n"
         "<<<RAG_CONTEXT>>>\n"
         f"{rag_text}\n"
         "<<<END_RAG_CONTEXT>>>\n\n"
@@ -564,6 +601,10 @@ async def specialist_fair_trade_law(
                 "• 마포구청 상생협력상가위원회 사전 협의\n"
                 "• 골목상권 보호 영역 여부 확인\n" + (result.recommendation or "")
             )
+        # D1 fix: RAG 0건이면 LLM 결과와 무관하게 caution floor 강제
+        if rag_empty and result.level == "safe":
+            result.level = "caution"
+            result.summary = "[RAG 법조문 자료 부재 — 수동 검토 필요] " + (result.summary or "")
         articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
         # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
         articles = await _explain_articles_batch(articles, brand, business_type, district, "공정거래법/지역조례")
@@ -628,6 +669,8 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
     else:
         precedents = precedent_raw or []
 
+    # D1 fix: RAG docs 0건 시 caution floor (LLM "자료 없음" → safe 오판 차단).
+    rag_empty = not docs
     rag_text = _format_docs(docs)
     precedent_text = _format_precedents(precedents)
 
@@ -639,6 +682,10 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
         f"{'제한' if is_restricted else ('허용' if is_allowed else '추가 확인 필요')}"
     )
 
+    # D1 fix: RAG 비었을 때 LLM 에 명시적으로 caution 이상 강제 안내
+    _rag_empty_directive = (
+        "- ⚠️ RAG_CONTEXT 가 비어있음(자료 없음) → safe 절대 금지, **caution 이상** 반환 필수\n" if rag_empty else ""
+    )
     user_content = (
         f"업종: {business_type} ({biz_label})\n"
         f"지역: {district}\n"
@@ -647,7 +694,9 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
         "- 제한 업종 → danger (영업 자체 불가/용도변경 필요)\n"
         "- 허용 + 근린생활시설 외 건물 → caution (용도변경 신고 필요)\n"
         "- 허용 + 근린생활시설 → safe~caution\n"
-        "- 위반건축물 등재 시 이행강제금 리스크 별도 caution\n\n"
+        "- 위반건축물 등재 시 이행강제금 리스크 별도 caution\n"
+        f"{_rag_empty_directive}"
+        "\n"
         "<<<RAG_CONTEXT>>>\n"
         f"{rag_text}\n"
         "<<<END_RAG_CONTEXT>>>\n\n"
@@ -681,6 +730,10 @@ async def specialist_building_law(business_type: str, district: str) -> dict:
                 f"• 입지 변경 또는 용도변경 신고 (관할 구청 건축과)\n"
                 f"• 영업신고 전 건물 용도 확인 (건축물대장 발급)\n" + (result.recommendation or "")
             )
+        # D1 fix: RAG 0건이면 LLM 결과와 무관하게 caution floor 강제
+        if rag_empty and result.level == "safe":
+            result.level = "caution"
+            result.summary = "[RAG 법조문 자료 부재 — 수동 검토 필요] " + (result.summary or "")
         articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
         # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
         articles = await _explain_articles_batch(articles, "", business_type, district, f"건축법/{zone}")
@@ -763,6 +816,9 @@ async def specialist_privacy_law(
     else:
         precedents = precedent_raw or []
 
+    # D1 fix: RAG docs 0건 시 caution floor (LLM "자료 없음" → safe 오판 차단).
+    # privacy 는 default 가 이미 caution (safe 금지 prompt) 라 보강 차원.
+    rag_empty = not docs
     rag_text = _format_docs(docs)
     precedent_text = _format_precedents(precedents)
     membership_hint = ""
@@ -809,6 +865,10 @@ async def specialist_privacy_law(
         # 멤버십 키워드면 safe 차단
         if has_membership_keyword and result.level == "safe":
             result.level = "caution"
+        # D1 fix: RAG 0건이면 LLM 결과와 무관하게 caution floor 강제
+        if rag_empty and result.level == "safe":
+            result.level = "caution"
+            result.summary = "[RAG 법조문 자료 부재 — 수동 검토 필요] " + (result.summary or "")
         articles = _articles_from_law_docs(docs, max_n=2) + _articles_from_precedent_docs(precedents, max_n=2)
         # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
         articles = await _explain_articles_batch(articles, brand, business_type, "", "개인정보보호법")
