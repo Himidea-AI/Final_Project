@@ -21,6 +21,9 @@ interface Props {
   district?: string;
   /** 현재 grid 4동 비교에서 anomaly_score 가 최댓값(=상대적으로 평소와 가장 다른 동)인지 여부. true 이면 헤더에 "변화 1위" 배지 노출. */
   isTopChange?: boolean;
+  /** 4동 비교 grid 에서 동별 색 (SERIES_COLORS[idx]). 게이지 막대 색에 적용 — signal 시멘틱 색 대신.
+   *  미지정 시 SIGNAL_STYLES[signal.signal].bar 폴백. */
+  seriesColor?: string;
 }
 
 interface SignalStyle {
@@ -153,7 +156,7 @@ function RawChip({ signal }: { signal: EmergingSignal }) {
   return null;
 }
 
-export function EmergingSignalCard({ signal, district, isTopChange = false }: Props) {
+export function EmergingSignalCard({ signal, district, isTopChange = false, seriesColor }: Props) {
   if (!signal) {
     return (
       <div className="text-center">
@@ -237,7 +240,17 @@ export function EmergingSignalCard({ signal, district, isTopChange = false }: Pr
           </span>
         </div>
         <div className="w-full bg-card h-2 rounded-full overflow-hidden">
-          <div className={`h-full ${style.bar} transition-all`} style={{ width: `${scorePct}%` }} />
+          {seriesColor ? (
+            <div
+              className="h-full transition-all"
+              style={{ width: `${scorePct}%`, backgroundColor: seriesColor }}
+            />
+          ) : (
+            <div
+              className={`h-full ${style.bar} transition-all`}
+              style={{ width: `${scorePct}%` }}
+            />
+          )}
         </div>
         <div className="flex justify-between text-[0.5625rem] font-bold text-muted-foreground tabular-nums mt-1">
           <span>낮음</span>

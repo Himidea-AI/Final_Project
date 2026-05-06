@@ -167,12 +167,13 @@ export function PredictFinancialSimTab({ simResult }: Props) {
                       : ''
               }`}
             >
-              {dpredicts.map((p) => (
+              {dpredicts.map((p, idx) => (
                 <ClosureRiskPanel
                   key={p.district}
                   closure={p.closure_risk as ClosureRisk | null}
                   district={p.district}
                   onOpenDetail={() => setDetailDistrict(p.district)}
+                  seriesColor={SERIES_COLORS[idx % SERIES_COLORS.length]}
                 />
               ))}
             </div>

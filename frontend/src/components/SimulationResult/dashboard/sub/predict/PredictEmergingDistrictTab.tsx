@@ -13,13 +13,19 @@ import type { SimulationOutput } from '../../../../../types';
 import { EmergingSignalCard } from '../../charts/EmergingSignalCard';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
 import { resolveDongName } from '../../../../../constants/mapoDongs';
+import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
+import { sortByRanking } from '../../utils/rankSort';
 
 interface Props {
   simResult: SimulationOutput;
 }
 
 export function PredictEmergingDistrictTab({ simResult }: Props) {
-  const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
+  // sortByRanking 으로 winner→4위 순 정렬 → SERIES_COLORS[idx] 가 다른 탭들과 동일 색 매핑.
+  const dpredicts = sortByRanking(
+    (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo),
+    simResult,
+  );
 
   if (dpredicts.length === 0) {
     return (
@@ -53,9 +59,10 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
         <Sparkles className="text-primary" /> 동별 상권 조기감지 신호
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {dpredicts.map((p) => {
+        {dpredicts.map((p, idx) => {
           // p.district 가 raw code(11440660)로 올 가능성 대비 한국어 이름으로 휴머나이즈.
           const districtLabel = resolveDongName(p.district) ?? p.district;
+          const seriesColor = SERIES_COLORS[idx % SERIES_COLORS.length];
           return (
             <div key={p.district} className="bg-card border border-border rounded-3xl p-5">
               {p.emerging_signal ? (
@@ -63,6 +70,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
                   signal={p.emerging_signal}
                   district={districtLabel}
                   isTopChange={topDistrict === p.district}
+                  seriesColor={seriesColor}
                 />
               ) : (
                 <div className="space-y-3">

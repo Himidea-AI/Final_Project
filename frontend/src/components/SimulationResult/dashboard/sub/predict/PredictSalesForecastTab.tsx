@@ -7,7 +7,11 @@
 import { TrendingUp, Zap, Maximize2 } from 'lucide-react';
 import type { QuarterlyProjection, SimulationOutput } from '../../../../../types';
 import type { DetailModalContent } from '../../shared/DetailModal';
-import { QuarterlyProjectionChart, type ChartSeries } from '../../../QuarterlyProjectionChart';
+import {
+  QuarterlyProjectionChart,
+  type ChartSeries,
+  SERIES_COLORS,
+} from '../../../QuarterlyProjectionChart';
 import { QuarterlyStatStrip } from '../../../QuarterlyStatStrip';
 import { ShapInsightCard } from '../../charts/ShapInsightCard';
 import { sortByRanking } from '../../utils/rankSort';
@@ -122,8 +126,13 @@ export function PredictSalesForecastTab({ simResult, openModal }: Props) {
         </div>
         {districtPreds.length > 0 && districtPreds.some((p) => p.shap_result !== null) ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {districtPreds.map((p) => (
-              <ShapInsightCard key={p.district} district={p.district} shap={p.shap_result} />
+            {districtPreds.map((p, idx) => (
+              <ShapInsightCard
+                key={p.district}
+                district={p.district}
+                shap={p.shap_result}
+                seriesColor={SERIES_COLORS[idx % SERIES_COLORS.length]}
+              />
             ))}
           </div>
         ) : (

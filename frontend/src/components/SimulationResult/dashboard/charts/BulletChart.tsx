@@ -27,6 +27,9 @@ interface Props {
   polarity?: Polarity;
   /** 단위 표기 (예: "점", "%", "₩"). 값 옆에 작은 muted suffix 로 렌더. */
   unit?: string;
+  /** 4동 비교 grid 에서 동별 색 (SERIES_COLORS[idx]). 미지정 시 zone 시멘틱 색 폴백.
+   *  zone 배경(safe/warning/danger tint) 은 그대로 두고 막대 색만 동별로 override. */
+  barColor?: string;
 }
 
 function bandFor(value: number, thresholds: [number, number], polarity: Polarity): BulletBand {
@@ -61,6 +64,7 @@ export function BulletChart({
   thresholds = [40, 70],
   polarity = 'higher-better',
   unit = '',
+  barColor,
 }: Props) {
   const hasValue = actual != null;
   const pct = hasValue ? Math.min(100, Math.max(0, (actual / max) * 100)) : 0;
@@ -107,8 +111,11 @@ export function BulletChart({
         />
         {hasValue && actualBand && (
           <div
-            className={`absolute top-0.5 h-1 rounded-full ${BAR_FILL[actualBand]}`}
-            style={{ width: `${pct}%` }}
+            className={`absolute top-0.5 h-1 rounded-full ${barColor ? '' : BAR_FILL[actualBand]}`}
+            style={{
+              width: `${pct}%`,
+              ...(barColor ? { backgroundColor: barColor } : {}),
+            }}
           />
         )}
         {targetPct != null && (
