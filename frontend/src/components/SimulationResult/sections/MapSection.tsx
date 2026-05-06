@@ -32,11 +32,18 @@ const DONG_COORDS: Record<string, { lat: number; lng: number }> = {
 };
 
 function buildCompetitors(simResult: SimulationOutput): Competitor[] {
-  // all_competitor_locations (winner+top3 멀티동) 우선, fallback은 winner 단일 동
+  // all_competitor_locations (winner+top3 4동, 1.5km 검색) + competitor_intel.samples (분석 동 500m)
+  // 두 소스 통합 → place_name + 좌표 기준 dedup → 최대 200개.
+  // 사용자 보고 "컴포즈커피 망원시장점이 카드엔 있는데 지도엔 없다" → samples 만 가진 매장 누락 차단.
+  const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
+  const competition = compIntel?.['competition_500m'] as
+    | { samples?: Array<Record<string, unknown>> }
+    | undefined;
+  const samplesRaw = competition?.samples ?? [];
+
   if (simResult.all_competitor_locations?.length) {
-    return simResult.all_competitor_locations
+    const merged: Competitor[] = simResult.all_competitor_locations
       .filter((s) => typeof s.lat === 'number' && typeof s.lng === 'number')
-      .slice(0, 200)
       .map((s) => ({
         place_name: s.place_name ?? '경쟁점',
         lat: s.lat,
@@ -48,12 +55,38 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
         place_url: s.place_url ?? null,
         phone: s.phone ?? null,
       }));
+    // samples 추가 (all_competitor_locations 에 없는 매장 union)
+    for (const s of samplesRaw) {
+      const lat = typeof s.lat === 'number' ? s.lat : null;
+      const lng =
+        typeof s.lng === 'number' ? s.lng : typeof s.lon === 'number' ? (s.lon as number) : null;
+      if (lat == null || lng == null) continue;
+      merged.push({
+        place_name: String(s.place_name ?? '경쟁점'),
+        lat,
+        lng,
+        distance_m: typeof s.distance_m === 'number' ? s.distance_m : undefined,
+        is_franchise: Boolean(s.is_franchise),
+        brand_name: typeof s.brand_name === 'string' ? s.brand_name : null,
+        daily_revenue: null,
+        place_url: typeof s.place_url === 'string' ? s.place_url : null,
+        phone: typeof s.phone === 'string' ? s.phone : null,
+      });
+    }
+    // dedup — place_name + 좌표(소수 5자리) 동일하면 동일 매장으로 판단
+    const seen = new Set<string>();
+    const deduped: Competitor[] = [];
+    for (const c of merged) {
+      const key = `${c.place_name}_${c.lat.toFixed(5)}_${c.lng.toFixed(5)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(c);
+      if (deduped.length >= 200) break;
+    }
+    return deduped;
   }
-  const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
-  const competition = compIntel?.['competition_500m'] as
-    | { samples?: Array<Record<string, unknown>> }
-    | undefined;
-  const list = competition?.samples ?? [];
+  // all_competitor_locations 없으면 samples 만 사용 (구버전 응답 호환)
+  const list = samplesRaw;
   return list
     .filter(
       (s) => typeof s.lat === 'number' && (typeof s.lng === 'number' || typeof s.lon === 'number'),

@@ -19,6 +19,7 @@ import type { SimulationOutput } from '../../../../types';
 import type { DetailModalContent } from '../shared/DetailModal';
 import { getGuFromDong } from '../../../../data/seoulRegions';
 import { MapSection } from '../../sections/MapSection';
+import { haversineM } from '../../sections/MarketMap';
 import { IndicatorGrid } from '../../sections/IndicatorGrid';
 import { DistrictRankings } from '../../sections/DistrictRankings';
 import { AgentCard } from '../../shared/AgentCard';
@@ -80,11 +81,89 @@ export function MarketTab({ simResult }: Props) {
   const competitionIntensity = simResult.market_report?.competition_intensity ?? null;
   const rentIndex = simResult.market_report?.rent_index ?? null;
 
-  // 가까운 순 정렬, 상위 5
-  const topCompetitors = [...samples]
-    .filter((s) => s.place_name)
-    .sort((a, b) => (a.distance_m ?? Infinity) - (b.distance_m ?? Infinity))
-    .slice(0, 5);
+  // 주요 경쟁점 — spot 1위 좌표 기준 가까운 순 5개.
+  // 데이터 소스 통합: competitor_intel.samples (분석 동 centroid 500m, top 20) +
+  //                  all_competitor_locations (4동 centroid 1.5km, 357개)
+  // 두 소스 모두 사용해 매장 풀 최대화 + place_name 기준 dedup.
+  // spot 1위 좌표 = vacancy_spots 의 score 1위 (winner 우선, 부족 시 top3 동).
+  const _winnerForTop = simResult.winner_district || simResult.target_district;
+  const _top3 = (simResult.top_3_candidates ?? []).filter(
+    (d): d is string => typeof d === 'string',
+  );
+  const _vacancySpots = ((simResult as SimulationOutput & { vacancy_spots?: unknown[] }).vacancy_spots ?? []) as Array<{
+    lat?: unknown;
+    lon?: unknown;
+    dong_name?: unknown;
+    listing_count?: unknown;
+    score?: unknown;
+  }>;
+  const _spot1: { lat: number; lng: number } | null = (() => {
+    if (!_winnerForTop) return null;
+    const valid = (s: { lat?: unknown; lon?: unknown }) =>
+      typeof s.lat === 'number' &&
+      typeof s.lon === 'number' &&
+      Number.isFinite(s.lat) &&
+      Number.isFinite(s.lon);
+    const winnerSpots = _vacancySpots
+      .filter((s) => s.dong_name === _winnerForTop && valid(s))
+      .sort((a, b) => {
+        const sa = typeof a.score === 'number' ? a.score : Number.NEGATIVE_INFINITY;
+        const sb = typeof b.score === 'number' ? b.score : Number.NEGATIVE_INFINITY;
+        if (sa !== sb) return sb - sa;
+        const la = typeof a.listing_count === 'number' ? a.listing_count : 0;
+        const lb = typeof b.listing_count === 'number' ? b.listing_count : 0;
+        return lb - la;
+      });
+    if (winnerSpots[0]) return { lat: winnerSpots[0].lat as number, lng: winnerSpots[0].lon as number };
+    const top3Set = new Set(_top3);
+    const top3Spots = _vacancySpots
+      .filter((s) => top3Set.has(String(s.dong_name)) && s.dong_name !== _winnerForTop && valid(s))
+      .sort((a, b) => {
+        const la = typeof a.listing_count === 'number' ? a.listing_count : 0;
+        const lb = typeof b.listing_count === 'number' ? b.listing_count : 0;
+        return lb - la;
+      });
+    if (top3Spots[0]) return { lat: top3Spots[0].lat as number, lng: top3Spots[0].lon as number };
+    return null;
+  })();
+
+  const topCompetitors = (() => {
+    if (!_spot1) {
+      return [...samples]
+        .filter((s) => s.place_name)
+        .sort((a, b) => (a.distance_m ?? Infinity) - (b.distance_m ?? Infinity))
+        .slice(0, 5);
+    }
+    type CandidateRaw = {
+      place_name?: string | null;
+      brand_name?: string | null;
+      lat?: number | null;
+      lng?: number | null;
+      lon?: number | null;
+      distance_m?: number | null;
+    };
+    // samples (lat/lon or lat/lng 둘 다 가능) + all_competitor_locations 통합
+    const allLocations = (simResult.all_competitor_locations ?? []) as CandidateRaw[];
+    const merged: CandidateRaw[] = [...samples, ...allLocations];
+    const seen = new Set<string>();
+    const sorted = merged
+      .map((m) => {
+        const lat = typeof m.lat === 'number' ? m.lat : null;
+        const lng = typeof m.lng === 'number' ? m.lng : typeof m.lon === 'number' ? m.lon : null;
+        if (lat == null || lng == null) return null;
+        const dist = haversineM(_spot1.lat, _spot1.lng, lat, lng);
+        return { ...m, lat, lng, distance_m: Math.round(dist) };
+      })
+      .filter((m): m is CandidateRaw & { lat: number; lng: number; distance_m: number } => m !== null && Boolean(m.place_name))
+      .filter((m) => {
+        const key = `${m.place_name}_${m.lat.toFixed(5)}_${m.lng.toFixed(5)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => a.distance_m - b.distance_m);
+    return sorted.slice(0, 5);
+  })();
 
   return (
     <div className="space-y-6">
