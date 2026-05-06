@@ -1551,6 +1551,15 @@ def run_simulation(
                         "archetype": getattr(a, "persona_id", None) or "office_worker",
                         "home_dong": getattr(a, "home_dong", None),
                         "plan": list(getattr(a, "daily_plan", []) or []),
+                        # PersonaPool (Nemotron 7,187) 매칭 페르소나 — UI PersonaCard 노출.
+                        # 사용자 피드백 (2026-05-06): parquet 페르소나 통합.
+                        "occupation": getattr(a, "occupation", "") or None,
+                        "education_level": getattr(a, "education_level", "") or None,
+                        "persona_text": getattr(a, "persona_text", "") or None,
+                        "hobbies": list(getattr(a, "hobbies", []) or []),
+                        "professional_persona": getattr(a, "professional_persona_text", "") or None,
+                        "career_goals": getattr(a, "career_goals_text", "") or None,
+                        "persona_uuid": getattr(a, "persona_uuid", None),
                     }
                     for a in thought_agents
                 }

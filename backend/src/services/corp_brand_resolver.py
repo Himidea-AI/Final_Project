@@ -75,6 +75,8 @@ def get_corp_industries(biz_number: str) -> dict:
 
         # ftc_brand_franchise 에서 corpNm 매칭 (정규화 ILIKE)
         # frcsCnt 큰 row 부터 정렬 — 같은 brand 의 다년 데이터는 max 사용
+        # paper brand 차단 — frcsCnt > 0 인 운영 brand 만 후보. 0 인 brand 는 시뮬 의미 없음
+        # (brand_profile.py 의 paper brand 가드와 동일 정책 — resolver 단계에서 미리 필터).
         rows = c.execute(
             sa.text(
                 """
@@ -83,6 +85,7 @@ def get_corp_industries(biz_number: str) -> dict:
                 WHERE "corpNm" IS NOT NULL
                   AND REGEXP_REPLACE("corpNm", '\\(주\\)|㈜|주식회사|\\([^)]*\\)|\\s+', '', 'g') ILIKE :norm
                 GROUP BY "brandNm", "indutyMlsfcNm"
+                HAVING MAX("frcsCnt") > 0
                 ORDER BY stores DESC NULLS LAST
                 """
             ),

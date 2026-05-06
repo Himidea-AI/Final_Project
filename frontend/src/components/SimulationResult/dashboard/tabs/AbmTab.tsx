@@ -64,35 +64,49 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   const abmLoading = abmStatus === 'running';
 
   // mount 시 persist 복원된 running jobId 가 있으면 polling 재개.
-  // running 일 때만 ABM 모드 자동 진입 — done 결과는 map 모드에서
-  // 공실 스팟 다시 고를 수 있도록 자동 진입 제외 (사용자가 토글로 결과 확인).
   useEffect(() => {
     resumePollingIfNeeded();
-    if (abmStatus === 'running' && focusSpot) {
-      setMode('abm');
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 사용자 피드백 (2026-05-06): AbmFloatingWidget "ABM 결과로 이동" 클릭 시 spot select
+  // 화면이 아니라 선택 spot + 시나리오 페이지로 가야 함. abmStatus / focusSpot 변경 시
+  // 자동으로 mode='abm' 전환 (이전엔 mount 시 1회만 → 위젯 click 후 재진입 시 안 먹힘).
+  useEffect(() => {
+    if ((abmStatus === 'running' || abmStatus === 'done') && focusSpot) {
+      setMode('abm');
+    }
+  }, [abmStatus, focusSpot]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = simResult as any;
   const targetDistrict =
     r?.winner_district || r?.target_district || r?.target_districts?.[0] || '서교동';
 
-  // 지도 마커 데이터 — 상권분석 페이지 (MapSection.buildBestVacancies) 와 동일 로직:
-  // winner_district 의 vacancy_spots 중 score 내림차순 top 4. 별도 추천 에이전트 출력 없음.
-  // recommended_vacancy_spots 가 있으면 그것 우선 (신규 에이전트 도입 시 자동 활용).
+  // 지도 마커 데이터 — 상권분석 MapSection.buildBestVacancies 와 동일 로직:
+  // winner 동 spot (score 정렬) + 부족분 top3 동 spot 으로 채움 (listing_count 정렬) + 50m dedup.
+  // 사용자 피드백 (2026-05-06): 이전엔 winner 만 filter 라 AI 추천 화면과 spot 달랐음 →
+  // top3 fallback 추가로 두 화면 일치.
   const winner: string | undefined = r?.winner_district || r?.target_district;
   const recommendedSpots = Array.isArray(r?.recommended_vacancy_spots)
     ? r.recommended_vacancy_spots.slice(0, 4)
     : [];
+  const top3List: string[] = Array.isArray(r?.top_3_candidates)
+    ? r.top_3_candidates.filter((d: unknown): d is string => typeof d === 'string')
+    : [];
   const allVacancySpots = Array.isArray(r?.vacancy_spots) ? r.vacancy_spots : [];
-  // 상권분석과 동일 — winner dong 만 + score 내림차순 → top 4.
-  const winnerVacancySpots = allVacancySpots
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const validVacancy = allVacancySpots.filter(
+    (s: any) =>
+      typeof s.lat === 'number' &&
+      typeof s.lon === 'number' &&
+      Number.isFinite(s.lat) &&
+      Number.isFinite(s.lon),
+  );
+  // 1) winner 동 spot — score 우선
+  const winnerSorted = validVacancy
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter(
-      (s: any) => s.dong_name === winner && typeof s.lat === 'number' && typeof s.lon === 'number',
-    )
+    .filter((s: any) => s.dong_name === winner)
     .slice()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .sort((a: any, b: any) => {
@@ -100,8 +114,37 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       const sb = typeof b.score === 'number' ? b.score : Number.NEGATIVE_INFINITY;
       if (sa !== sb) return sb - sa;
       return (b.listing_count ?? 0) - (a.listing_count ?? 0);
-    })
-    .slice(0, 4);
+    });
+  // 2) top3 동 spot (winner 제외) — listing_count 정렬
+  const top3Set = new Set(top3List);
+  const top3Sorted = validVacancy
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((s: any) => top3Set.has(String(s.dong_name)) && s.dong_name !== winner)
+    .slice()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .sort((a: any, b: any) => (b.listing_count ?? 0) - (a.listing_count ?? 0));
+  // 3) merge + 50m dedup
+  const merged = [...winnerSorted, ...top3Sorted];
+  const haversineM = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6_371_000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dedupedTop4: any[] = [];
+  for (const cand of merged) {
+    const tooClose = dedupedTop4.some(
+      (k) => haversineM(k.lat, k.lon ?? k.lng, cand.lat, cand.lon ?? cand.lng) <= 50,
+    );
+    if (!tooClose) dedupedTop4.push(cand);
+    if (dedupedTop4.length >= 4) break;
+  }
+  const winnerVacancySpots = dedupedTop4;
   const vacancySpots = recommendedSpots.length > 0 ? recommendedSpots : winnerVacancySpots;
   // 경쟁업체 — 상권분석 페이지 buildCompetitors 와 동일. all_competitor_locations 우선 (max 200),
   // fallback: competitor_intel.competition_500m.samples (max 100).
