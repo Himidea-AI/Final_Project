@@ -385,7 +385,7 @@ def _query_kakao_store_by_coord(
     import os
     from sqlalchemy import text
 
-    from src.database.connection import get_sync_engine
+    from src.database.sync_engine import get_sync_engine
 
     # bounding box (작은 영역에서 평면 근사)
     deg_lat = radius_m / 111_000.0
