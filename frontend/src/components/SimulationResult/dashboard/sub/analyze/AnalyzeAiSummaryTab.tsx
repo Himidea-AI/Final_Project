@@ -147,14 +147,12 @@ export function AnalyzeAiSummaryTab({ simResult }: Props) {
       {summary && (
         <div className="rounded-3xl border border-border bg-card p-8">
           <h3 className="mb-6 flex items-center gap-3 text-base font-black uppercase tracking-widest text-foreground">
-            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted">
-              <img
-                src={synthesisIcon}
-                alt="synthesis"
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            </span>
+            <img
+              src={synthesisIcon}
+              alt="synthesis"
+              className="h-10 w-10 shrink-0 object-contain"
+              loading="lazy"
+            />
             synthesis 종합 분석
           </h3>
           <SynthesisSections text={summary} />

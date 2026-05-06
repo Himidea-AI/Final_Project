@@ -157,15 +157,32 @@ def _make_specialist_fallback(
 # "커피" 입력은 BIZ_NORMALIZE 가 "카페" 로 변환해 들어오므로 이 dict 에 "커피" 키 불필요.
 # 직접 호출자 추가 시 BIZ_NORMALIZE 거치는지 확인.
 _INDUSTRY_DEFAULT = "default"
-_INDUSTRY_LABEL_MAP = {
-    "카페": "cafe",
-    "음식점": "restaurant",
-    # 주점 — commercial_intelligence 거리 감쇠 곡선이 별도로 없어 default 사용.
-    # default 곡선(0.20)이 보수적이라 주점 자기잠식 과대평가 방지.
-    "주점": _INDUSTRY_DEFAULT,
-    # 편의점 — 시뮬 미지원이지만 운영 데이터(매장 분류)에서 여전히 등장 가능.
-    "편의점": "convenience",
+# industry 라벨은 통합 dict (config.business_type_mapping) 의 label_en 에서 가져온 후
+# commercial_intelligence.estimate_cannibalization 의 base_by_industry 키와 매핑.
+# base_by_industry 키: cafe / coffee / restaurant / chicken / burger / korean / convenience / default.
+_LABEL_EN_TO_CANNIBAL: dict[str, str] = {
+    "cafe": "cafe",
+    "burger": "burger",
+    "fastfood": "burger",  # 통합 dict label_en="fastfood" → cannibal 곡선 burger
+    "chicken": "chicken",
+    "korean": "korean",
 }
+
+
+def _resolve_cannibal_industry(business_type: str | None) -> str:
+    """업종 → cannibal industry 라벨 (default fallback).
+
+    BIZ_NORMALIZE → 통합 dict get_entry → label_en → cannibal 라벨 매핑.
+    """
+    from src.config.business_type_mapping import get_entry
+
+    if not business_type:
+        return _INDUSTRY_DEFAULT
+    biz_normalized = BIZ_NORMALIZE.get(business_type.lower(), business_type)
+    entry = get_entry(biz_normalized) or get_entry(business_type)
+    if entry:
+        return _LABEL_EN_TO_CANNIBAL.get(entry["label_en"], _INDUSTRY_DEFAULT)
+    return _INDUSTRY_DEFAULT
 
 
 async def _analyze_territory(
@@ -201,12 +218,11 @@ async def _analyze_territory(
         )
         from src.services.dong_resolver import resolve_dong_code
 
-        # 업종 정규화 후 industry 라벨 매핑. 미매핑은 default — cafe 곡선 강제 회피.
-        biz_normalized = BIZ_NORMALIZE.get((business_type or "").lower(), business_type or "")
-        industry = _INDUSTRY_LABEL_MAP.get(biz_normalized, _INDUSTRY_DEFAULT)
-        if industry == _INDUSTRY_DEFAULT and biz_normalized:
+        # 업종 → cannibal industry 라벨 (통합 dict 기반). 미매핑은 default — cafe 곡선 강제 회피.
+        industry = _resolve_cannibal_industry(business_type)
+        if industry == _INDUSTRY_DEFAULT and business_type:
             logger.debug(
-                f"[_analyze_territory] 업종 '{business_type}' (정규화: '{biz_normalized}') 미매핑 — default 곡선 사용"
+                f"[_analyze_territory] 업종 '{business_type}' 미매핑 — default 곡선 사용"
             )
 
         result = None

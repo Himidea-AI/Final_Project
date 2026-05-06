@@ -121,19 +121,13 @@ export function DecisionCard({
           </span>
           <div className="flex -space-x-1.5">
             {footer.agents.map((agent) => (
-              <div
+              <img
                 key={agent.id}
-                className={`w-6 h-6 overflow-hidden rounded-full bg-card border-2 shadow-md ${
-                  agent.borderCls ?? 'border-card'
-                }`}
-              >
-                <img
-                  src={agent.iconSrc}
-                  alt={agent.name}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              </div>
+                src={agent.iconSrc}
+                alt={agent.name}
+                className="w-6 h-6 object-contain"
+                loading="lazy"
+              />
             ))}
           </div>
         </div>

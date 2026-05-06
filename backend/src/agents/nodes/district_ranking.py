@@ -59,24 +59,8 @@ def _init_optional_clients():
         )
 
 
-# 사용자 입력 업종명 → kakao_store.category 매핑 (vacancy spot 경쟁밀도 계산용).
-# tools.py 의 _KAKAO_CATEGORY_MAP 과 동일 정책 — import 의존 줄이려고 핵심 키만 인라인.
-_VACANCY_SPOT_KAKAO_CATEGORY: dict[str, str] = {
-    "카페": "커피-음료",
-    "커피": "커피-음료",
-    "cafe": "커피-음료",
-    "coffee": "커피-음료",
-    "한식": "한식음식점",
-    "음식점": "한식음식점",
-    "restaurant": "한식음식점",
-    "치킨": "치킨전문점",
-    "분식": "분식전문점",
-    "주점": "호프-간이주점",
-    "베이커리": "제과점",
-    "빵": "제과점",
-    "제과점": "제과점",
-    "편의점": "편의점",
-}
+# 사용자 입력 업종명 → kakao_store.category 매핑은 통합 dict 로 이관.
+# config/business_type_mapping.kakao_category_of() 사용 — 단일 source of truth.
 
 
 def _spot_haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -106,8 +90,9 @@ async def _load_spot_score_features(
     """
     target_cat: str | None = None
     if business_type:
-        bt = business_type.lower().strip()
-        target_cat = _VACANCY_SPOT_KAKAO_CATEGORY.get(bt) or _VACANCY_SPOT_KAKAO_CATEGORY.get(business_type)
+        from src.config.business_type_mapping import kakao_category_of
+
+        target_cat = kakao_category_of(business_type)
     try:
         async with db_client.get_session() as session:
             subway_stmt = select(MasterSubwayStation.lat, MasterSubwayStation.lon).where(
@@ -289,14 +274,15 @@ def _score_winner_spots(
 
     # 검증 로그 — 영업구역 침해 spot 이 후순위로 밀리는지 확인.
     sorted_spots = sorted(target_spots, key=lambda s: -(s.get("score") or 0))
-    print(
-        f"[spot_score:{winner_district}] top5 검증 "
-        f"(총 {len(target_spots)}개 spot, territory={territory_radius_m}m):"
-    )
+    print(f"[spot_score:{winner_district}] top5 검증 (총 {len(target_spots)}개 spot, territory={territory_radius_m}m):")
     for i, s in enumerate(sorted_spots[:5], 1):
         lat_v = s.get("lat")
         lon_v = s.get("lon")
-        coord = f"({lat_v:.4f},{lon_v:.4f})" if isinstance(lat_v, (int, float)) and isinstance(lon_v, (int, float)) else "(좌표X)"
+        coord = (
+            f"({lat_v:.4f},{lon_v:.4f})"
+            if isinstance(lat_v, (int, float)) and isinstance(lon_v, (int, float))
+            else "(좌표X)"
+        )
         viol = s.get("territory_violation")
         viol_str = "침해" if viol is True else ("안전" if viol is False else "—")
         print(
@@ -437,6 +423,73 @@ async def _load_vacancy_map() -> tuple[dict[str, float], bool]:
     except Exception as e:
         logger.warning(f"[district_ranking] 공실률 로드 실패 (패널티 비활성화): {e}")
         return {}, False
+
+
+def _industry_to_cs_code(business_type: str | None) -> str | None:
+    """사용자 입력 업종명 → DistrictSales.industry_code (CS 코드).
+
+    config/business_type_mapping 의 단일 source of truth 로 위임.
+    """
+    from src.config.business_type_mapping import cs_code_of
+
+    return cs_code_of(business_type) if business_type else None
+
+
+async def _load_dong_density_fallback(business_type: str | None) -> dict[str, int]:
+    """SEMAS density 결측 시 KakaoStore 동별 카테고리 매장 수로 대체.
+
+    SEMAS API 키 부재 시 16동 모두 None 으로 빠져 density_score 가 모든 동 결측되는
+    문제 해결용. KakaoStore 는 카카오 로컬 API 전수 수집이라 항상 채워져 있음.
+    """
+    if not business_type:
+        return {}
+    from src.config.business_type_mapping import kakao_category_of
+
+    target_cat = kakao_category_of(business_type)
+    if not target_cat:
+        return {}
+    try:
+        async with db_client.get_session() as session:
+            stmt = (
+                select(KakaoStore.dong_name, func.count().label("cnt"))
+                .where(KakaoStore.category == target_cat, KakaoStore.dong_name.isnot(None))
+                .group_by(KakaoStore.dong_name)
+            )
+            rows = (await session.execute(stmt)).fetchall()
+        result = {r.dong_name: int(r.cnt) for r in rows}
+        logger.info(f"[district_ranking] KakaoStore density fallback ({target_cat}): {len(result)}동")
+        return result
+    except Exception as e:
+        logger.warning(f"[district_ranking] KakaoStore density fallback 실패: {e}")
+        return {}
+
+
+async def _load_dong_closure_rates(business_type: str | None) -> dict[str, float]:
+    """store_quarterly 의 최신 분기 동별 폐업률 (0~1 소수). main.py 가 winner 한 동에만
+    sim 결과를 주입하던 패턴을 보완 — 다른 동도 실측 폐업률을 응답에 포함.
+    """
+    cs_code = _industry_to_cs_code(business_type)
+    if not cs_code:
+        return {}
+    try:
+        async with db_client.get_session() as session:
+            max_q_stmt = select(func.max(StoreQuarterly.quarter)).where(StoreQuarterly.industry_code == cs_code)
+            max_q = (await session.execute(max_q_stmt)).scalar()
+            if max_q is None:
+                return {}
+            stmt = select(StoreQuarterly.dong_name, StoreQuarterly.closure_rate).where(
+                StoreQuarterly.industry_code == cs_code,
+                StoreQuarterly.quarter == max_q,
+                StoreQuarterly.dong_name.isnot(None),
+                StoreQuarterly.closure_rate.isnot(None),
+            )
+            rows = (await session.execute(stmt)).fetchall()
+        result = {r.dong_name: float(r.closure_rate) for r in rows}
+        logger.info(f"[district_ranking] 동별 폐업률 ({cs_code} Q{max_q}): {len(result)}동")
+        return result
+    except Exception as e:
+        logger.warning(f"[district_ranking] 동별 폐업률 로드 실패: {e}")
+        return {}
 
 
 async def _fetch_semas_density(dong_name: str, business_type: str) -> int | None:
@@ -785,10 +838,11 @@ async def district_ranking_node(state: AgentState) -> dict:
     # v11: vacancy_spots 에 spot 단위 score/subway_distance_m/competitor_count_500m 추가 (v10 무효화)
     # v12: spot 점수에 자사 영업구역 안전 항목 추가 (territory_radius_m 반영) — brand_name/territory 키 포함.
     # v13: 경쟁 점수 reverse min-max → U자형 piecewise (외진 zone 우선 패턴 차단). v12 무효화.
+    # v14: SEMAS density KakaoStore fallback + 동별 closure_rate attach (winner 외 동 8지표 결측 해소). v13 무효화.
     _brand_key = state.get("brand_name") or "none"
     _territory_key = state.get("territory_radius_m") or "none"
     cache_key = (
-        f"v13:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:"
+        f"v14:ranking:{_normalized_biz}:{population_weight}:{monthly_rent_budget}:{store_area}:"
         f"{_sorted_dists_key}:{_brand_key}:{_territory_key}"
     )
     _redis = None
@@ -913,8 +967,21 @@ async def district_ranking_node(state: AgentState) -> dict:
         )
     vacancy_rate_map, vacancy_applied = vacancy_result
 
+    # SEMAS API 키 없으면 모든 동의 semas_density=None → density_score 모든 동 결측.
+    # KakaoStore 동별 카테고리 매장 수로 fallback 채워서 density_score 가 항상 산출되게 함.
+    raw_list = list(raw_scores)
+    if not any(r.get("semas_density") is not None for r in raw_list):
+        density_fallback = await _load_dong_density_fallback(business_type)
+        if density_fallback:
+            for r in raw_list:
+                r["semas_density"] = density_fallback.get(r.get("district"))
+
+    # 모든 동의 폐업률(0~1 소수) 일괄 로드 — main.py 가 winner 한 동에만 sim 결과를 주입하던
+    # 패턴이라 다른 동들이 ranking 응답에서 closure_rate=None 으로 보이는 문제 해결.
+    dong_closure_rates = await _load_dong_closure_rates(business_type)
+
     ranked = _normalize_and_rank(
-        list(raw_scores),
+        raw_list,
         population_weight=population_weight,
         monthly_rent_budget=monthly_rent_budget,
         store_area=store_area,
@@ -922,6 +989,12 @@ async def district_ranking_node(state: AgentState) -> dict:
         business_type=business_type,
         operfit_map=operfit_map,
     )
+
+    # ranked row 마다 closure_rate attach (이미 있으면 보존, 없을 때만).
+    if dong_closure_rates:
+        for row in ranked:
+            if row.get("closure_rate") is None:
+                row["closure_rate"] = dong_closure_rates.get(row.get("district"))
 
     # winner = 사용자 선택 동(_target_dists_set) 중 점수 1위
     # 선택 동이 없거나 전체 16개 선택인 경우 전체 1위 반환

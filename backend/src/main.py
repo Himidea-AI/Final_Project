@@ -244,36 +244,8 @@ from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
 
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
-# 업종 → kakao 검색 키워드 매핑
-_BIZ_TO_KAKAO_KW: dict[str, str] = {
-    "치킨전문점": "치킨",
-    "커피-음료": "커피",
-    "한식음식점": "한식",
-    "중식음식점": "중식",
-    "일식음식점": "일식",
-    "양식음식점": "양식",
-    "제과점": "베이커리",
-    "패스트푸드점": "버거",
-    "분식전문점": "분식",
-    "호프-간이주점": "주점",
-    "치킨": "치킨",
-    "커피": "커피",
-    "카페": "커피",
-    "한식": "한식",
-    "중식": "중식",
-    "일식": "일식",
-    "양식": "양식",
-    "베이커리": "베이커리",
-    "버거": "버거",
-    "분식": "분식",
-    "주점": "주점",
-    "chicken": "치킨",
-    "cafe": "커피",
-    "coffee": "커피",
-    "burger": "버거",
-    "bakery": "베이커리",
-    "korean": "한식",
-}
+# 업종 → kakao 검색 키워드 매핑은 통합 dict 로 이관.
+# config/business_type_mapping.kakao_keyword_of() 사용 — 단일 source of truth.
 
 
 async def _collect_all_competitor_locations(
@@ -289,7 +261,9 @@ async def _collect_all_competitor_locations(
     → 모든 80개 샘플이 좌표 None 으로 인식 → 좌표 필터 통과 0개 → 최종 0개.
     'lng' 로 정합성 맞추고 단계별 로깅 추가하여 회귀 조기 감지.
     """
-    keyword = _BIZ_TO_KAKAO_KW.get(business_type, business_type)
+    from src.config.business_type_mapping import kakao_keyword_of
+
+    keyword = kakao_keyword_of(business_type) or business_type
     districts = list({winner} | set(top3 or []))
     print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
     results: list[dict] = []
@@ -353,16 +327,32 @@ async def _collect_same_brand_locations(
     winner: str,
     top3: list,
     brand_name: str,
+    business_type: str | None = None,
 ) -> list[dict]:
     """winner + top3 4동 안에 위치한 자사 브랜드 매장 좌표 수집.
 
-    상권분석탭 지도에 자사 매장 마커 (로고 아이콘) 표시 + 영업구역 반경 원 그리기용.
-    데이터 소스: brand_mapping_resolver.get_all_mapo_stores_by_brand (BRAND_ALIASES 양방향 매핑).
+    상권분석탭 지도에 자사 매장 마커 표시용. 데이터 소스: brand_mapping_resolver.
+
+    옵션 A 정책 (2026-05-05): 사용자 입력 business_type 의 kakao_category 와
+    매장 category 가 일치할 때만 별표 표시. 메가커피 계정이 치킨 시뮬 돌리면
+    자사 매장 0개 반환 (자사 업종 != 시뮬 업종이면 misalign — 별표 숨김).
+    business_type=None 또는 매핑 실패 시 카테고리 필터 비활성 (구버전 호환).
     """
     if not brand_name:
         return []
     districts = list({winner} | set(top3 or []))
-    print(f"[same_brand] 수집 시작 — brand={brand_name} districts={districts}")
+
+    # 입력 업종 → 자사 매장 카테고리 매칭 기준
+    target_category: str | None = None
+    if business_type:
+        from src.config.business_type_mapping import kakao_category_of
+
+        target_category = kakao_category_of(business_type)
+
+    print(
+        f"[same_brand] 수집 시작 — brand={brand_name} biz={business_type} "
+        f"target_cat={target_category} districts={districts}"
+    )
     try:
         from src.services.brand_mapping_resolver import get_all_mapo_stores_by_brand
 
@@ -373,15 +363,23 @@ async def _collect_same_brand_locations(
         print(f"[same_brand] 조회 실패: {e}\n{traceback.format_exc()}")
         return []
 
-    # 4동 안 매장만 필터 (dong_name 일치). dong_name NULL 인 매장은 get_all_mapo_stores_by_brand 가 이미 제외.
+    # 4동 + 카테고리 매칭 필터. dong_name NULL 매장은 SQL 단계에서 이미 제외됨.
     target_set = set(districts)
+    _stats = {"total": len(all_stores), "dong_drop": 0, "cat_drop": 0, "coord_drop": 0}
     results: list[dict] = []
     for s in all_stores:
         if s.get("dong_name") not in target_set:
+            _stats["dong_drop"] += 1
+            continue
+        # 옵션 A: target_category 지정 시 매장 category 일치 필수.
+        # target_category 미지정 (구버전 또는 admin 등) 시 필터 비활성.
+        if target_category is not None and s.get("category") != target_category:
+            _stats["cat_drop"] += 1
             continue
         lat_v = s.get("lat")
         lon_v = s.get("lon")
         if not lat_v or not lon_v:
+            _stats["coord_drop"] += 1
             continue
         results.append(
             {
@@ -396,7 +394,11 @@ async def _collect_same_brand_locations(
                 "phone": s.get("phone"),
             }
         )
-    print(f"[same_brand] 4동({','.join(districts)}) 안 자사 매장 {len(results)}개")
+    print(
+        f"[same_brand] 4동({','.join(districts)}) 안 자사 매장 {len(results)}개 "
+        f"(전체 {_stats['total']} / 동 drop {_stats['dong_drop']} / "
+        f"cat drop {_stats['cat_drop']} / 좌표 drop {_stats['coord_drop']})"
+    )
     return results
 
 
@@ -968,7 +970,7 @@ async def analyze_location(input_data: SimulationInput, response: Response):
         result["all_competitor_locations"] = await _collect_all_competitor_locations(
             winner, top3, input_data.business_type
         )
-        result["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
+        result["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name, input_data.business_type)
         return {"status": "success", "data": result}
     except Exception as e:
         print(f"!!! [API ERROR] !!! {str(e)}")
@@ -1033,7 +1035,7 @@ async def analyze_llm(input_data: SimulationInput):
         print(f"[ANALYZE/LLM] all_competitor_locations 수집 실패 (무시): {e}")
         full["all_competitor_locations"] = []
     try:
-        full["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
+        full["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name, input_data.business_type)
     except Exception as e:
         print(f"[ANALYZE/LLM] same_brand_locations 수집 실패 (무시): {e}")
         full["same_brand_locations"] = []
@@ -1126,7 +1128,7 @@ async def analyze_llm_async(input_data: SimulationInput) -> dict[str, Any]:
                 logger.warning(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
                 full["all_competitor_locations"] = []
             try:
-                full["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
+                full["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name, input_data.business_type)
             except Exception as ce:
                 logger.warning(f"[/analyze/llm/async] same_brand_locations 실패 (무시): {ce}")
                 full["same_brand_locations"] = []
@@ -1870,7 +1872,7 @@ async def run_simulation(input_data: SimulationInput, response: Response):
         winner = result.get("winner_district") or input_data.target_district
         top3 = result.get("top_3_candidates") or []
         try:
-            result["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name)
+            result["same_brand_locations"] = await _collect_same_brand_locations(winner, top3, input_data.brand_name, input_data.business_type)
         except Exception as ce:
             logger.warning(f"[/simulate] same_brand_locations 실패 (무시): {ce}")
             result["same_brand_locations"] = []
