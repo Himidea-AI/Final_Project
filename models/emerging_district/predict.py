@@ -29,6 +29,9 @@ class EmergingResult(TypedDict):
     consecutive_anomaly_quarters: int
     summary: str  # 자연어 설명
     is_mock: bool
+    # 2026-05-06 추가: 시계열 + 분포 (Task 3, 4 에서 산출 로직 추가)
+    quarter_history: list[dict] | None
+    peer_distribution: dict | None
 
 
 _SIGNAL_KO = {
@@ -240,6 +243,8 @@ def predict(
         consecutive_anomaly_quarters=consecutive,
         summary=summary,
         is_mock=False,
+        quarter_history=None,
+        peer_distribution=None,
     )
 
 
@@ -256,4 +261,6 @@ def _mock_result(dong_code: str, industry_code: str) -> EmergingResult:
         consecutive_anomaly_quarters=0,
         summary=f"{dong_name} {industry_name}: 모델 미학습 상태 (mock)",
         is_mock=True,
+        quarter_history=None,
+        peer_distribution=None,
     )
