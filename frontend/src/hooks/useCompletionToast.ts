@@ -20,12 +20,14 @@ export function useCompletionToast() {
         title: 'ANALYSIS COMPLETE',
         description: '시뮬레이션 결과가 준비됐습니다.',
         action: { label: '결과 보기', onClick: () => navigate('/dashboard') },
+        dedupeKey: 'simulation-success',
       });
     } else if (prev === 'running' && status === 'error') {
       push({
         variant: 'error',
         title: 'SIMULATION FAILED',
         description: error ?? '알 수 없는 오류',
+        dedupeKey: 'simulation-error',
       });
     }
   }, [status, error, push, navigate]);

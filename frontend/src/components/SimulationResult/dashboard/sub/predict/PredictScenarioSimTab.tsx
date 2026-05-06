@@ -118,12 +118,14 @@ export function PredictScenarioSimTab({ simResult }: Props) {
         pushToast({
           variant: 'error',
           title: '일시 오류, 다른 동 시도해주세요',
+          dedupeKey: 'scenario-sim-error',
         });
       } else {
         pushToast({
           variant: 'error',
           title: '데이터 로드 실패',
           description: '잠시 후 다시 시도하세요.',
+          dedupeKey: 'scenario-sim-error',
         });
       }
     }
