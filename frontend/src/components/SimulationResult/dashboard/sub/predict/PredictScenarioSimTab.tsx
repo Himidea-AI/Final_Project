@@ -92,6 +92,20 @@ export function PredictScenarioSimTab({ simResult }: Props) {
     seedRef.current = true;
   }, [candidates.length, simResult, businessType, industryCode, availableDongs, addCandidate]);
 
+  // sessionStorage 잔존 후보 자동 정리 — active candidate 의 dongCode 가
+  // 새 시뮬 4동(availableDongs) 에 없으면 첫 동으로 자동 update.
+  // 이전 시뮬에서 동 X 로 변경 후 새 시뮬 [E,F,G,H] 진입 시
+  // 드롭다운 첫 열기에 X 가 5번째 옵션으로 노출되던 회귀 차단.
+  useEffect(() => {
+    if (!activeCandidate) return;
+    if (availableDongs.length === 0) return;
+    const isValid = availableDongs.some((d) => d.code === activeCandidate.dongCode);
+    if (isValid) return;
+    const first = availableDongs[0];
+    if (!first) return;
+    updateCandidateDong(activeCandidate.id, first.name, first.code);
+  }, [activeCandidate, availableDongs, updateCandidateDong]);
+
   const { records } = useElasticityComparison(
     candidates.map((c) => ({
       id: c.id,

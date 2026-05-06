@@ -101,13 +101,10 @@ export function ScenarioDetailPanel({
     };
   }, [data, candidate.sliders]);
 
-  // sessionStorage 잔존 동이 4동 옵션에 없을 때 controlled select 경고 방지용 강제 옵션
-  const dongInOptions = availableDongs.some((d) => d.name === candidate.dong);
-
-  // 동 드롭다운 옵션 — 4동 + sessionStorage 잔존 동 fallback 포함
-  const dongOptions = dongInOptions
-    ? availableDongs.map((d) => d.name)
-    : [...availableDongs.map((d) => d.name), candidate.dong];
+  // 동 드롭다운 옵션 = 시뮬 입력 4동 한정.
+  // sessionStorage 잔존 후보의 invalid dong 은 부모 effect (PredictScenarioSimTab)
+  // 가 자동으로 첫 동으로 update 하므로 fallback 옵션 불필요.
+  const dongOptions = availableDongs.map((d) => d.name);
 
   // 통합 헤더+KPI 박스 inner — 헤더 row + (result 있을 때) KPI row.
   // 우측 컬럼 상단에 위치, loading/error 시에도 헤더는 항상 표시.
