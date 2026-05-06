@@ -34,6 +34,11 @@ import type {
   SimulationHistoryItem,
 } from '../types/simulationHistory';
 import type { TokenUsageResponse } from '../types/tokenUsage';
+import type {
+  AdminBrandsQuery,
+  AdminBrandsResponse,
+  AdminIndustriesResponse,
+} from '../types/admin';
 
 /**
  * [v11.5 멀티테넌시 사전 준비]
@@ -514,6 +519,21 @@ export async function getTokenUsage(params: {
   to?: string;
 }): Promise<TokenUsageResponse> {
   const response = await apiClient.get('/ops/token-usage', { params });
+  return response.data;
+}
+
+// ─────────────────────────────────────────────────────────
+// admin/brands (슈퍼어드민 전용 brand picker)
+// 백엔드: backend/src/api/admin_brands.py — role != 'superadmin' 시 403.
+// ─────────────────────────────────────────────────────────
+
+export async function listAdminBrands(query: AdminBrandsQuery = {}): Promise<AdminBrandsResponse> {
+  const response = await apiClient.get<AdminBrandsResponse>('/admin/brands', { params: query });
+  return response.data;
+}
+
+export async function listAdminIndustries(): Promise<AdminIndustriesResponse> {
+  const response = await apiClient.get<AdminIndustriesResponse>('/admin/brands/industries');
   return response.data;
 }
 
