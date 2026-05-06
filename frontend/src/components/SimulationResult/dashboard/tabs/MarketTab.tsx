@@ -90,7 +90,8 @@ export function MarketTab({ simResult }: Props) {
   const _top3 = (simResult.top_3_candidates ?? []).filter(
     (d): d is string => typeof d === 'string',
   );
-  const _vacancySpots = ((simResult as SimulationOutput & { vacancy_spots?: unknown[] }).vacancy_spots ?? []) as Array<{
+  const _vacancySpots = ((simResult as SimulationOutput & { vacancy_spots?: unknown[] })
+    .vacancy_spots ?? []) as Array<{
     lat?: unknown;
     lon?: unknown;
     dong_name?: unknown;
@@ -168,7 +169,10 @@ export function MarketTab({ simResult }: Props) {
         const dist = haversineM(_spot1.lat, _spot1.lng, lat, lng);
         return { ...m, lat, lng, distance_m: Math.round(dist) };
       })
-      .filter((m): m is CandidateRaw & { lat: number; lng: number; distance_m: number } => m !== null && Boolean(m.place_name))
+      .filter(
+        (m): m is CandidateRaw & { lat: number; lng: number; distance_m: number } =>
+          m !== null && Boolean(m.place_name),
+      )
       .filter((m) => {
         const key = `${m.place_name}_${m.lat.toFixed(5)}_${m.lng.toFixed(5)}`;
         if (seen.has(key)) return false;
@@ -210,7 +214,7 @@ export function MarketTab({ simResult }: Props) {
           </div>
           {/* 기존 MapSection 재활용 (Kakao SDK) */}
           <div className="rounded-2xl overflow-hidden">
-            <MapSection simResult={simResult} />
+            <MapSection simResult={simResult} topCompetitors={topCompetitors} />
           </div>
         </div>
 

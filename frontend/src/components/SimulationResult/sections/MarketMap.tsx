@@ -50,6 +50,8 @@ export interface MarketMapProps {
   // sameBrandLocations 는 winner+top3 4동 안만 수집하므로, 그 외 동의 자사 매장이 competitors 로
   // 들어오는 경우를 커버한다. 정규화 비교(소문자/공백·괄호 제거)로 alias 차이 흡수.
   userBrand?: string | null;
+  // 주요 경쟁점 top5 (사이드바 카드와 동일) — 좌표 매칭 시 큰 번호 라벨 + 노란색으로 강조 렌더.
+  topCompetitors?: Array<{ place_name: string; lat: number; lng: number; rank: number }>;
 }
 
 // 브랜드명 정규화 — "메가엠지씨커피(MEGA MGC COFFEE)" vs "메가엠지씨커피" 같은 변형을 동일 취급.
@@ -213,6 +215,24 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// 팝업 wrapper — innerHTML 로 채우고 X 버튼 클릭 시 onClose 호출.
+// CustomOverlay 자체엔 close UI 가 없어 직접 추가해야 함. zIndex 는 CustomOverlay 옵션으로 강제.
+function buildPopupOverlayContent(innerHtml: string, onClose: () => void): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;transform:translateY(-10px);pointer-events:auto;';
+  wrap.innerHTML = `
+    <div style="position:relative;">
+      ${innerHtml}
+      <button type="button" data-popup-close="1" aria-label="닫기"
+        style="position:absolute;top:6px;right:6px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;background:rgba(63,63,70,0.9);color:#e4e4e7;border:none;border-radius:9999px;font-size:11px;font-weight:900;cursor:pointer;line-height:1;padding:0;">×</button>
+      <div style="position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid rgba(24,24,27,0.95);"></div>
+    </div>
+  `;
+  const btn = wrap.querySelector<HTMLButtonElement>('button[data-popup-close="1"]');
+  if (btn) btn.addEventListener('click', onClose);
+  return wrap;
+}
+
 function buildCompetitorInfoHtml(
   c: Competitor,
   radius: number,
@@ -266,11 +286,14 @@ export function MarketMap({
   sameBrandLocations = [],
   territoryRadiusM = null,
   userBrand = null,
+  topCompetitors = [],
 }: MarketMapProps) {
   const { ready, error, kakao } = useKakaoMap();
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayLayersRef = useRef<Array<{ setMap: (m: unknown) => void }>>([]);
-  const infoWindowRef = useRef<{ open: (m: unknown) => void; close: () => void } | null>(null);
+  // 팝업 — 기존 Kakao InfoWindow 는 다른 CustomOverlay(펄싱 핀/번호 핀) 에 가려지는 이슈가 있어
+  // CustomOverlay (zIndex 100) 로 통일. close 는 X 버튼 클릭 또는 다른 마커 클릭 시.
+  const popupRef = useRef<{ setMap: (m: unknown) => void } | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -289,9 +312,9 @@ export function MarketMap({
 
     overlayLayersRef.current.forEach((layer) => layer.setMap(null));
     overlayLayersRef.current = [];
-    if (infoWindowRef.current) {
-      infoWindowRef.current.close();
-      infoWindowRef.current = null;
+    if (popupRef.current) {
+      popupRef.current.setMap(null);
+      popupRef.current = null;
     }
 
     // 핀/반경원 좌표 우선순위:
@@ -415,6 +438,34 @@ export function MarketMap({
     const sameBrandPosKeys = new Set(
       sameBrandLocations.map((s) => `${s.lat.toFixed(5)},${s.lng.toFixed(5)}`),
     );
+    // 주요 경쟁점 top5 매칭용 — 좌표(소수4자리) 기준 rank lookup.
+    const topCompetitorRankByPos = new Map<string, number>();
+    topCompetitors.forEach((tc) => {
+      if (typeof tc.lat !== 'number' || typeof tc.lng !== 'number') return;
+      topCompetitorRankByPos.set(`${tc.lat.toFixed(4)},${tc.lng.toFixed(4)}`, tc.rank);
+    });
+
+    // 팝업 열기/닫기 헬퍼 — InfoWindow 대체. zIndex=100 강제로 항상 최상단.
+    const openPopup = (pos: unknown, innerHtml: string) => {
+      if (popupRef.current) popupRef.current.setMap(null);
+      const closeFn = () => {
+        if (popupRef.current) {
+          popupRef.current.setMap(null);
+          popupRef.current = null;
+        }
+      };
+      const content = buildPopupOverlayContent(innerHtml, closeFn);
+      const overlay = new maps.CustomOverlay({
+        position: pos,
+        content,
+        xAnchor: 0.5,
+        yAnchor: 1.0,
+        zIndex: 100,
+      });
+      overlay.setMap(mapInstance);
+      popupRef.current = overlay;
+    };
+
     competitors.forEach((c) => {
       if (typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
       // 자사 브랜드 매칭 — competitors 안에 자사 매장이 들어와 있으면 별표 마커로 분기.
@@ -427,6 +478,9 @@ export function MarketMap({
       const distFromCenter = haversineM(withinCenterLat, withinCenterLng, c.lat, c.lng);
       const within = distFromCenter <= radius;
       const pos = new maps.LatLng(c.lat, c.lng);
+      // 주요 경쟁점 top5 매칭 — 사이드바 카드와 동일 좌표면 큰 번호 라벨로 강조.
+      const top5Rank = topCompetitorRankByPos.get(`${c.lat.toFixed(4)},${c.lng.toFixed(4)}`);
+      const isTop5 = top5Rank != null && top5Rank >= 1 && top5Rank <= 5;
 
       const dot = document.createElement('div');
       if (isSelfBrand) {
@@ -435,6 +489,12 @@ export function MarketMap({
           'position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(251,191,36,0.6);font-size:12px;font-weight:900;color:#1c1917;cursor:pointer;';
         dot.innerHTML = '★';
         dot.title = `${c.brand_name || '자사매장'} · ${c.place_name}`;
+      } else if (isTop5) {
+        // 주요 경쟁점 top5 — 노란색 큰 동그라미 + 번호 라벨 (사이드바 카드와 동일 매장).
+        dot.style.cssText =
+          'position:relative;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:#facc15;border:2.5px solid #ffffff;border-radius:9999px;box-shadow:0 0 10px rgba(250,204,21,0.7);font-size:13px;font-weight:900;color:#1c1917;cursor:pointer;';
+        dot.innerHTML = String(top5Rank);
+        dot.title = `주요 경쟁점 ${top5Rank}위 — ${c.place_name}`;
       } else {
         dot.style.cssText = within
           ? 'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #ef4444;filter:drop-shadow(0 0 3px rgba(239,68,68,0.7));cursor:pointer;'
@@ -444,14 +504,7 @@ export function MarketMap({
 
       dot.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        if (infoWindowRef.current) infoWindowRef.current.close();
-        const iw = new maps.InfoWindow({
-          position: pos,
-          content: buildCompetitorInfoHtml(c, radius, withinCenterLat, withinCenterLng),
-          removable: true,
-        });
-        iw.open(mapInstance);
-        infoWindowRef.current = iw;
+        openPopup(pos, buildCompetitorInfoHtml(c, radius, withinCenterLat, withinCenterLng));
       });
 
       const overlay = new maps.CustomOverlay({
@@ -459,7 +512,7 @@ export function MarketMap({
         content: dot,
         xAnchor: 0.5,
         yAnchor: 0.5,
-        zIndex: isSelfBrand ? 4 : 2,
+        zIndex: isTop5 ? 6 : isSelfBrand ? 4 : 2,
       });
       overlay.setMap(mapInstance);
       overlayLayersRef.current.push(overlay);
@@ -477,7 +530,6 @@ export function MarketMap({
       logo.title = `${s.brand_name || '자사매장'} · ${s.place_name}`;
       logo.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        if (infoWindowRef.current) infoWindowRef.current.close();
         const brandName = s.brand_name || '자사매장';
         // place_url 있으면 매장명을 카카오맵 link 로. 없으면 plain text.
         const nameHtml = s.place_url
@@ -489,23 +541,18 @@ export function MarketMap({
         const phoneHtml = s.phone
           ? `<div>전화: <a href="tel:${escapeHtml(s.phone)}" style="color:#60a5fa;text-decoration:none;">${escapeHtml(s.phone)}</a></div>`
           : '';
-        const iw = new maps.InfoWindow({
-          position: pos,
-          content: `<div style="font-family:Pretendard,ui-sans-serif,system-ui;min-width:180px;padding:10px 12px;background:rgba(24,24,27,0.95);color:#e4e4e7;border:1px solid #fbbf24;border-radius:6px;backdrop-filter:blur(8px);">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:#fbbf24;"></span>
-              ${nameHtml}
-            </div>
-            <div style="font-size:11px;color:#a1a1aa;line-height:1.6;">
-              <div>${placeNameHtml}</div>
-              <div>${escapeHtml(s.dong_name || '')} ${escapeHtml(s.address || '')}</div>
-              ${phoneHtml}
-            </div>
-          </div>`,
-          removable: true,
-        });
-        iw.open(mapInstance);
-        infoWindowRef.current = iw;
+        const innerHtml = `<div style="font-family:Pretendard,ui-sans-serif,system-ui;min-width:180px;padding:10px 12px;background:rgba(24,24,27,0.95);color:#e4e4e7;border:1px solid #fbbf24;border-radius:6px;backdrop-filter:blur(8px);">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:#fbbf24;"></span>
+            ${nameHtml}
+          </div>
+          <div style="font-size:11px;color:#a1a1aa;line-height:1.6;">
+            <div>${placeNameHtml}</div>
+            <div>${escapeHtml(s.dong_name || '')} ${escapeHtml(s.address || '')}</div>
+            ${phoneHtml}
+          </div>
+        </div>`;
+        openPopup(pos, innerHtml);
       });
       const sameBrandOverlay = new maps.CustomOverlay({
         position: pos,
@@ -558,9 +605,9 @@ export function MarketMap({
     return () => {
       overlayLayersRef.current.forEach((layer) => layer.setMap(null));
       overlayLayersRef.current = [];
-      if (infoWindowRef.current) {
-        infoWindowRef.current.close();
-        infoWindowRef.current = null;
+      if (popupRef.current) {
+        popupRef.current.setMap(null);
+        popupRef.current = null;
       }
     };
   }, [
@@ -578,6 +625,7 @@ export function MarketMap({
     sameBrandLocations,
     territoryRadiusM,
     userBrand,
+    topCompetitors,
   ]);
 
   if (error) {

@@ -9,6 +9,13 @@ import { MarketMap, haversineM, type Competitor, type RankingEntry } from './Mar
 
 interface Props {
   simResult: SimulationOutput;
+  // 주요 경쟁점 top5 — 사이드바 카드와 동일. MarketMap 에서 큰 번호 라벨로 강조.
+  // lat/lng 가 없는 항목은 내부에서 필터.
+  topCompetitors?: Array<{
+    place_name?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+  }>;
 }
 
 const DEFAULT_MAPO_CENTER = { lat: 37.5558, lng: 126.9193 };
@@ -221,7 +228,7 @@ function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
   return deduped;
 }
 
-export function MapSection({ simResult }: Props) {
+export function MapSection({ simResult, topCompetitors }: Props) {
   // Memoize 대상: buildCompetitors/buildRankings/buildCenter가 매 렌더마다 새 배열 참조를 만들면
   // MarketMap useEffect deps가 매번 바뀌어 지도·choropleth가 무한 재초기화된다.
   const competitors = useMemo(() => buildCompetitors(simResult), [simResult]);
@@ -233,6 +240,24 @@ export function MapSection({ simResult }: Props) {
   const center = bestVacancy ? { lat: bestVacancy.lat, lng: bestVacancy.lng } : fallbackCenter;
   // 자사 매장 좌표 (winner+top3 4동 안) — 로고 마커 + 영업구역 반경 원 표시용.
   const sameBrandLocations = useMemo(() => simResult.same_brand_locations ?? [], [simResult]);
+  // topCompetitors → MarketMap 형식 (rank 부여) 변환. lat/lng 둘 다 number 필수.
+  const topCompetitorsForMap = useMemo(
+    () =>
+      (topCompetitors ?? [])
+        .filter(
+          (t): t is { place_name?: string | null; lat: number; lng: number } =>
+            typeof t.lat === 'number' && typeof t.lng === 'number',
+        )
+        .slice(0, 5)
+        .map((t, idx) => ({
+          place_name: t.place_name ?? '경쟁점',
+          lat: t.lat,
+          lng: t.lng,
+          rank: idx + 1,
+        })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [topCompetitors],
+  );
   // 사용자 입력 영업구역 거리 — store.params 에서 직접 (응답에 echo 안 됨).
   const territoryRadiusM = useSimulationStore((s) => s.params?.territory_radius_m);
 
@@ -337,6 +362,7 @@ export function MapSection({ simResult }: Props) {
           sameBrandLocations={sameBrandLocations}
           territoryRadiusM={territoryRadiusM ?? null}
           userBrand={brand}
+          topCompetitors={topCompetitorsForMap}
         />
 
         {/* Layer 6 — 좌하단 범례 패널 */}
@@ -353,6 +379,29 @@ export function MapSection({ simResult }: Props) {
                 <span className="font-mono text-foreground">{totalCompetitors}</span>
               </span>
             </div>
+            {topCompetitorsForMap.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '9999px',
+                    background: '#facc15',
+                    border: '2px solid #ffffff',
+                    boxShadow: '0 0 6px rgba(250,204,21,0.7)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 9,
+                    fontWeight: 900,
+                    color: '#1c1917',
+                  }}
+                >
+                  1
+                </span>
+                <span>주요 경쟁점 (1~5위)</span>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span
                 style={{
