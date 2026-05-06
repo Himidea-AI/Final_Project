@@ -349,6 +349,18 @@ export interface EmergingSignal {
   tier: 'change_ix' | 'classifier' | 'b1_trend' | 'slope' | 'none';
   raw: Record<string, number | string>;
   is_mock?: boolean;
+  // 2026-05-06 추가: backend EmergingResult TypedDict 와 동기화.
+  // 둘 다 optional null — 단계적 rollout 안전 (구버전 응답 받아도 graceful fallback).
+  quarter_history?: { quarter: string; anomaly_score: number }[] | null;
+  peer_distribution?: {
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    percentile_self: number; // 0~100
+    rank_in_total: number; // 1-based
+    total: number;
+  } | null;
 }
 
 /** 시뮬레이션 결과 출력 */
