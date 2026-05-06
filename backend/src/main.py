@@ -165,6 +165,11 @@ from src.api.sensitivity import router as _sensitivity_router  # noqa: E402
 
 app.include_router(_sensitivity_router)
 
+# --- admin_brands REST (슈퍼어드민 brand picker — 시뮬 가능 brand 통합 목록) ---
+from src.api.admin_brands import router as _admin_brands_router  # noqa: E402
+
+app.include_router(_admin_brands_router)
+
 
 # customer_revenue MLP 모델 startup 시 워밍업 — 첫 미리보기 호출 latency 0.5~1초 → ~100ms.
 # 가중치 부재 환경에선 silent skip (배포 서버 분리 케이스 보호).

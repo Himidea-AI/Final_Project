@@ -29,6 +29,7 @@ YYYY-MM-DD-<짧은-슬러그>.md
 | [`2026-04-28-summary-tab-empty-cards.md`](./2026-04-28-summary-tab-empty-cards.md) | 🔴 High | 미해결 | B1·B2·C1 (A1 영역 외) |
 | [`2026-04-28-end-to-end-data-flow-gaps.md`](./2026-04-28-end-to-end-data-flow-gaps.md) | 🔴 High (24건 drift) | 미해결 | B1·B2·C1 (P0 4건은 main.py + state.py + synthesis_node + SummaryTab) |
 | [`2026-05-05-codebase-ultrareview.md`](./2026-05-05-codebase-ultrareview.md) | 🔴 Critical (P0 2건 + P1 24건 + P2 다수) | 미해결 | A1 일부 (services/SQL, DB 네이밍) + 타 팀원 (agents/simulation/frontend/infra) |
+| [`2026-05-06-superadmin-brand-picker.md`](./2026-05-06-superadmin-brand-picker.md) | 🟡 P1 (1단계 완료) | Backend `/admin/brands` 완료, FE picker + WIP 머지 후 bypass 잔존 | A1 (backend) + B1·B2 (frontend) |
 
 ## 관련 디렉토리
 
