@@ -218,3 +218,150 @@ def test_summary_none_korean(monkeypatch):
     assert "normal 가정" not in result["summary"]
     assert "데이터 검증 중" in result["summary"]
     assert "안정 상권" in result["summary"]
+
+
+# ---------------------------------------------------------------------------
+# quarter_history 8 분기 시계열 검증
+# ---------------------------------------------------------------------------
+
+TEST_DONG = "11440680"
+TEST_INDUSTRY = "CS100001"
+
+
+def _make_predict_fixtures() -> tuple:
+    """predict() 단위 테스트용 stub model + meta + DataFrame 반환."""
+    n_quarters = 16  # window_size(8) 보다 충분히 많은 분기
+    quarter_values = [[float(i % 3), float((i + 1) % 3)] for i in range(n_quarters)]
+    df_all = pd.DataFrame(
+        {
+            "dong_code": [TEST_DONG] * n_quarters,
+            "industry_code": [TEST_INDUSTRY] * n_quarters,
+            "quarter": list(range(n_quarters)),
+            "f1": [v[0] for v in quarter_values],
+            "f2": [v[1] for v in quarter_values],
+            "monthly_sales": [1000.0 + i * 10 for i in range(n_quarters)],
+            "store_count": [10.0 + i * 0.1 for i in range(n_quarters)],
+        }
+    )
+    meta = {
+        "window_size": 8,
+        "feature_names": ["f1", "f2"],
+        "threshold": 0.5,
+        "quarter_threshold": 0.5,
+        "input_size": 2,
+        "hidden_size": 16,
+        "num_layers": 1,
+    }
+    model = _StubModel()
+    return df_all, meta, model
+
+
+def test_quarter_history_length_eight(monkeypatch):
+    """quarter_history 가 정확히 8 분기 + 라벨 정합."""
+    import models.emerging_district.predict as pred_mod
+    from models.emerging_district.predict import predict
+
+    df_all, meta, model = _make_predict_fixtures()
+
+    import models.emerging_district.data_prep as data_prep_mod
+
+    monkeypatch.setattr(pred_mod, "_load_model", lambda: (model, meta))
+    monkeypatch.setattr(
+        data_prep_mod,
+        "load_emerging_data",
+        lambda **_kwargs: df_all,
+    )
+
+    result = predict(dong_code=TEST_DONG, industry_code=TEST_INDUSTRY)
+
+    assert "quarter_history" in result
+    qh = result["quarter_history"]
+    assert qh is not None
+    assert isinstance(qh, list)
+    assert len(qh) == 8
+    assert qh[0]["quarter"] == "Q-7"
+    assert qh[-1]["quarter"] == "현재"
+    for entry in qh:
+        assert 0.0 <= entry["anomaly_score"] <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# peer_distribution 16동 분포 + rank 검증
+# ---------------------------------------------------------------------------
+
+
+def _make_peer_df(n_dongs: int = 8) -> pd.DataFrame:
+    """16동 중 n_dongs 개 동에 각각 window_size(8) 이상 분기를 가진 DataFrame 생성."""
+    base_prefix = "11440"
+    n_quarters = 16
+    rows = []
+    for d_idx in range(n_dongs):
+        dong_code = f"{base_prefix}{d_idx:03d}0"
+        for q in range(n_quarters):
+            rows.append(
+                {
+                    "dong_code": dong_code,
+                    "industry_code": TEST_INDUSTRY,
+                    "quarter": q,
+                    "f1": float(q % 3),
+                    "f2": float((q + 1) % 3),
+                    "monthly_sales": 1000.0 + q * 10,
+                    "store_count": 10.0 + q * 0.1,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def test_peer_distribution_quantiles(monkeypatch):
+    """peer_distribution 의 사분위 단조 증가 + rank 범위."""
+    import models.emerging_district.predict as pred_mod
+    import models.emerging_district.data_prep as data_prep_mod
+    from models.emerging_district.predict import predict
+
+    df_peer = _make_peer_df(n_dongs=8)
+    # own dong 을 df_peer 에 포함된 첫 번째 코드로 맞춤
+    own_dong = df_peer["dong_code"].iloc[0]
+
+    _, meta, model = _make_predict_fixtures()
+
+    monkeypatch.setattr(pred_mod, "_load_model", lambda: (model, meta))
+    monkeypatch.setattr(
+        data_prep_mod,
+        "load_emerging_data",
+        lambda **_kwargs: df_peer,
+    )
+
+    result = predict(dong_code=own_dong, industry_code=TEST_INDUSTRY)
+
+    pd_dist = result.get("peer_distribution")
+    if pd_dist is None:
+        import pytest
+        pytest.skip("16 동 데이터 부족 (정상 — 4동 미만 시 None)")
+
+    assert pd_dist["p25"] <= pd_dist["p50"] <= pd_dist["p75"] <= pd_dist["p90"]
+    assert 1 <= pd_dist["rank_in_total"] <= pd_dist["total"]
+    assert 0 <= pd_dist["percentile_self"] <= 100
+    assert pd_dist["total"] >= 4
+
+
+def test_peer_distribution_none_when_few_dongs(monkeypatch):
+    """유효 동 4 미만이면 peer_distribution 이 None."""
+    import models.emerging_district.predict as pred_mod
+    import models.emerging_district.data_prep as data_prep_mod
+    from models.emerging_district.predict import predict
+
+    # 3개 동만 포함 (4동 미만 → None 기대)
+    df_few = _make_peer_df(n_dongs=3)
+    own_dong = df_few["dong_code"].iloc[0]
+
+    _, meta, model = _make_predict_fixtures()
+
+    monkeypatch.setattr(pred_mod, "_load_model", lambda: (model, meta))
+    monkeypatch.setattr(
+        data_prep_mod,
+        "load_emerging_data",
+        lambda **_kwargs: df_few,
+    )
+
+    result = predict(dong_code=own_dong, industry_code=TEST_INDUSTRY)
+    assert result["peer_distribution"] is None

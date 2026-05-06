@@ -148,6 +148,15 @@ export interface AbmTierSMeta {
   archetype: string;
   home_dong: string | null;
   plan: AbmPlanSlot[];
+  // PersonaPool (Nemotron 7,187) 매칭 페르소나 — backend runner.py 가 채움.
+  // 사용자 피드백 (2026-05-06): 풍부한 persona 풀 통합 → UI 노출.
+  occupation?: string | null;
+  education_level?: string | null;
+  persona_text?: string | null;
+  hobbies?: string[];
+  professional_persona?: string | null;
+  career_goals?: string | null;
+  persona_uuid?: string | null;
 }
 
 // 4950 non-Tier-S 에이전트의 시간별 위치 집계 — 히트맵 렌더용.
@@ -1579,11 +1588,23 @@ export default function AbmPersonaMap({
         const archetype = thoughts[0]?.archetype || '';
         const path = trajectoryPathsRef.current.get(aid);
         const role = path && path[0] ? path[0].role : undefined;
+        const meta = tierSMeta.get(aid);
         setSelectedPersona({
           agentId: aid,
           archetype,
           thoughts,
           role,
+          // PersonaPool 매칭 페르소나 — 사용자 피드백 (2026-05-06).
+          name: meta?.name ?? undefined,
+          age: meta?.age ?? undefined,
+          gender: meta?.gender ?? undefined,
+          occupation: meta?.occupation ?? undefined,
+          educationLevel: meta?.education_level ?? undefined,
+          personaText: meta?.persona_text ?? undefined,
+          hobbies: meta?.hobbies ?? undefined,
+          professionalPersona: meta?.professional_persona ?? undefined,
+          careerGoals: meta?.career_goals ?? undefined,
+          dongName: meta?.home_dong ?? undefined,
         });
       });
     };
@@ -1873,14 +1894,24 @@ export default function AbmPersonaMap({
                     continue;
                   }
                   // log-scale intensity — 저활성 셀도 visible (linear 은 핫스팟 가려짐).
-                  // log(1+v) / log(1+maxC) 라 v=1 도 충분한 밝기 확보.
                   const logIntensity = Math.log(1 + v) / Math.log(1 + maxC);
-                  // 색 보간: pale blue (저, 톤다운) → medium blue (고). 너무 deep 하면 cluster 시
-                  // 검은 blob 처럼 보임 (사용자 피드백 2026-05-04). hue 유지하되 max 명도 ↑ + alpha cap.
-                  const r = Math.round(220 + (37 - 220) * logIntensity);
-                  const g = Math.round(230 + (99 - 230) * logIntensity);
-                  const b = Math.round(250 + (235 - 250) * logIntensity);
-                  const alpha = 0.3 + 0.4 * logIntensity; // 0.3 ~ 0.7 cap (검은 blob 방지)
+                  // 사용자 피드백 (2026-05-06): hot 셀 진하기 강화. cool→warm gradient
+                  // (pale blue → 주황) + alpha 범위 확대 (0.3~0.85) — hot 명확히 구분.
+                  let r: number, g: number, b: number;
+                  if (logIntensity < 0.5) {
+                    // cool: pale blue (220,230,250) → medium blue (80,130,235)
+                    const t = logIntensity * 2; // 0~1
+                    r = Math.round(220 + (80 - 220) * t);
+                    g = Math.round(230 + (130 - 230) * t);
+                    b = Math.round(250 + (235 - 250) * t);
+                  } else {
+                    // warm: medium blue (80,130,235) → orange-red (255,80,40)
+                    const t = (logIntensity - 0.5) * 2; // 0~1
+                    r = Math.round(80 + (255 - 80) * t);
+                    g = Math.round(130 + (80 - 130) * t);
+                    b = Math.round(235 + (40 - 235) * t);
+                  }
+                  const alpha = 0.3 + 0.55 * logIntensity; // 0.3 ~ 0.85 — hot 더 진함
                   ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
                   ctx.translate(hex.x, hex.y);
                   ctx.fill(hexPath);

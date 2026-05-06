@@ -5,8 +5,14 @@
  * 4-tier fallback (change_ix → classifier → b1_trend → slope → none) 이 signal/summary/tier/raw 결정,
  * autoencoder 가 anomaly_score + consecutive_anomaly_quarters 보강.
  *
- * 헤더 우측: tier 배지 (mock 배지 흡수). KPI 그리드: 신호등 + 변화도 점수.
- * 게이지: 평소와 다른 정도 (낮음 ↔ 높음). summary 한 줄. tier별 raw chip.
+ * 카드 구성:
+ *   - 헤더: 동 이름 + tier 배지 + (변화 1위 배지)
+ *   - 신호등 + 변화도 점수 (grid-cols-2)
+ *   - 8 분기 sparkline (quarter_history) + 트렌드 화살표 + Δ%
+ *   - 16 동 분포 안 본 동 위치 (PeerDistributionBar — peer_distribution)
+ *   - 자연어 summary 한 줄
+ *
+ * 2026-05-06: 평소와 다른 정도 게이지 + tier 별 RawChip 제거 — sparkline + peer bar + summary 로 정보 흡수.
  *
  * 렌더링 계약: 부모 (PredictEmergingDistrictTab 등) 가 항상 <div bg-card border rounded-3xl>
  * 로 감싸므로 자체 outer chrome 없이 bare 컨텐츠만 렌더 — 퐁당퐁당 (card→card 중첩 방지).
@@ -14,6 +20,8 @@
 
 import { Sparkles, TrendingDown, ShieldCheck, AlertCircle, Star } from 'lucide-react';
 import type { EmergingSignal } from '../../../../types';
+import { Sparkline } from './Sparkline';
+import { PeerDistributionBar } from './PeerDistributionBar';
 
 interface Props {
   signal: EmergingSignal | null | undefined;
@@ -21,13 +29,16 @@ interface Props {
   district?: string;
   /** 현재 grid 4동 비교에서 anomaly_score 가 최댓값(=상대적으로 평소와 가장 다른 동)인지 여부. true 이면 헤더에 "변화 1위" 배지 노출. */
   isTopChange?: boolean;
+  /** 4동 비교 grid 에서 동별 색 (SERIES_COLORS[idx]). sparkline / peer dot 색에 적용.
+   *  미지정 시 SIGNAL_STYLES[signal.signal].bar 폴백. */
+  seriesColor?: string;
 }
 
 interface SignalStyle {
   label: string;
   /** 아이콘 + 라벨 텍스트 색 — 박스 bg 는 다른 카드들과 통일된 쿨그레이(bg-secondary). */
   text: string;
-  /** 게이지 막대 색 — 박스 bg 와 별개로 막대만 신호색. */
+  /** sparkline / peer dot fallback 색 — seriesColor 미지정 시 사용. */
   bar: string;
   Icon: typeof Sparkles;
 }
@@ -37,21 +48,21 @@ const SIGNAL_STYLES: Record<EmergingSignal['signal'], SignalStyle> = {
   normal: {
     label: '안정 상권',
     text: 'text-success',
-    bar: 'bg-success',
+    bar: 'var(--success)',
     Icon: ShieldCheck,
   },
   // 신흥 상권 — primary(Deep Blue) + Sparkles.
   emerging: {
     label: '신흥 상권',
     text: 'text-primary',
-    bar: 'bg-primary',
+    bar: 'var(--primary)',
     Icon: Sparkles,
   },
   // 쇠퇴 상권 — danger(Vivid Red) + TrendingDown.
   declining: {
     label: '쇠퇴 상권',
     text: 'text-danger',
-    bar: 'bg-danger',
+    bar: 'var(--destructive)',
     Icon: TrendingDown,
   },
 };
@@ -80,80 +91,7 @@ const TIER_BADGE: Record<EmergingSignal['tier'], { label: string; cls: string }>
   },
 };
 
-/** slope 부호별 화살표 — 임계 0.5 (백엔드 _slope_verb 와 동일). */
-function _slopeArrow(value: number): string {
-  if (value > 0.5) return '↑';
-  if (value < -0.5) return '↓';
-  return '→';
-}
-
-/** 비율 부호 포함 한국어 포맷 — +5.0% / -3.2% / +0.0%. */
-function _percentSigned(value: number): string {
-  return `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
-}
-
-/** tier별 raw evidence chip — change_ix·none 은 chip 미렌더. */
-function RawChip({ signal }: { signal: EmergingSignal }) {
-  const { tier, raw } = signal;
-
-  if (tier === 'classifier' && typeof raw.confidence === 'number') {
-    const pct = Math.round(raw.confidence * 100);
-    return (
-      <div className="rounded-2xl border border-border bg-secondary px-3 py-2 text-[0.6875rem] text-foreground">
-        <div className="flex items-center justify-between mb-1">
-          <span className="font-black">신뢰도</span>
-          <span className="font-bold tabular-nums">{pct}%</span>
-        </div>
-        <div className="w-full bg-card h-1.5 rounded-full overflow-hidden">
-          <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-    );
-  }
-
-  if (tier === 'b1_trend') {
-    const sg = raw.subway_growth;
-    const mr = raw.migration_2030_rate;
-    return (
-      <div className="flex flex-wrap gap-2">
-        {typeof sg === 'number' && (
-          <span className="rounded-full border border-border bg-secondary px-3 py-1 text-[0.6875rem] font-black text-foreground tabular-nums">
-            지하철 {_percentSigned(sg)}
-          </span>
-        )}
-        {typeof mr === 'number' && (
-          <span className="rounded-full border border-border bg-secondary px-3 py-1 text-[0.6875rem] font-black text-foreground tabular-nums">
-            청년 {_percentSigned(mr)}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  if (tier === 'slope') {
-    const ss = raw.sales_slope;
-    const sts = raw.store_slope;
-    return (
-      <div className="flex flex-wrap gap-2">
-        {typeof ss === 'number' && (
-          <span className="rounded-full border border-border bg-secondary px-3 py-1 text-[0.6875rem] font-black text-foreground">
-            매출 {_slopeArrow(ss)}
-          </span>
-        )}
-        {typeof sts === 'number' && (
-          <span className="rounded-full border border-border bg-secondary px-3 py-1 text-[0.6875rem] font-black text-foreground">
-            점포수 {_slopeArrow(sts)}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  // change_ix: summary 로 충분, chip 미렌더. none: 데이터 없음, chip 미렌더.
-  return null;
-}
-
-export function EmergingSignalCard({ signal, district, isTopChange = false }: Props) {
+export function EmergingSignalCard({ signal, district, isTopChange = false, seriesColor }: Props) {
   if (!signal) {
     return (
       <div className="text-center">
@@ -171,9 +109,23 @@ export function EmergingSignalCard({ signal, district, isTopChange = false }: Pr
   const scorePct = Math.round(Math.min(1, Math.max(0, signal.anomaly_score)) * 100);
   const tierBadge = TIER_BADGE[signal.tier] ?? TIER_BADGE.none;
   const showAlertIcon = signal.tier === 'none';
+  const effectiveBarColor = seriesColor ?? style.bar;
+
+  // sparkline 트렌드 화살표 + Δ% (8 분기 첫 ↔ 마지막)
+  const history = signal.quarter_history;
+  const sparkData = history?.map((q) => q.anomaly_score) ?? [];
+  const sparkDelta = (() => {
+    if (!history || history.length < 2) return null;
+    const first = history[0]?.anomaly_score ?? 0;
+    const last = history[history.length - 1]?.anomaly_score ?? 0;
+    const delta = last - first;
+    const arrow = delta > 0.05 ? '↗' : delta < -0.05 ? '↘' : '→';
+    const sign = delta >= 0 ? '+' : '';
+    return { arrow, label: `${sign}${(delta * 100).toFixed(0)}%` };
+  })();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* 헤더 — 동 이름이 카드 제목, 우측 tier 배지 (mock 배지 흡수). */}
       {/* isTopChange=true 시 동 이름 옆에 "변화 1위" 배지 — 4동 비교 grid 에서 anomaly_score 최댓값인 동 강조. */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -217,7 +169,7 @@ export function EmergingSignalCard({ signal, district, isTopChange = false }: Pr
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mt-1">
             평소 대비 변화
           </div>
-          {/* per-quarter consecutive 메트릭 노출 — 0 이면 의미 없으므로 숨김. */}
+          {/* per-quarter consecutive 메트릭 — 0 이면 의미 없으므로 숨김. */}
           {signal.consecutive_anomaly_quarters > 0 && (
             <div className="text-[0.5625rem] font-bold text-muted-foreground tabular-nums">
               최근 {signal.consecutive_anomaly_quarters}분기 연속
@@ -226,30 +178,36 @@ export function EmergingSignalCard({ signal, district, isTopChange = false }: Pr
         </div>
       </div>
 
-      {/* 평소와 다른 정도 게이지 — 0~1 정규화 막대. 0.5 이상은 통계적으로 유의미한 패턴 변화. */}
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest">
-            평소와 다른 정도
-          </span>
-          <span className="text-[0.6875rem] font-black text-muted-foreground tabular-nums">
-            {scorePct}
-          </span>
+      {/* 8 분기 sparkline — quarter_history 있을 때만. 트렌드 화살표 + Δ%. */}
+      {sparkData.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
+            <span>최근 8 분기 변화도</span>
+            {sparkDelta && (
+              <span className="tabular-nums" style={{ color: effectiveBarColor }}>
+                {sparkDelta.arrow} {sparkDelta.label}
+              </span>
+            )}
+          </div>
+          <Sparkline data={sparkData} height={32} />
         </div>
-        <div className="w-full bg-card h-2 rounded-full overflow-hidden">
-          <div className={`h-full ${style.bar} transition-all`} style={{ width: `${scorePct}%` }} />
-        </div>
-        <div className="flex justify-between text-[0.5625rem] font-bold text-muted-foreground tabular-nums mt-1">
-          <span>낮음</span>
-          <span>높음</span>
-        </div>
-      </div>
+      )}
 
-      {/* summary 한 줄 — 4-tier fallback 이 만든 사용자 친화 한국어 메시지. */}
-      <p className="text-xs text-foreground tracking-tight leading-relaxed">{signal.summary}</p>
+      {/* 16 동 분포 안 본 동 위치 — peer_distribution 있을 때만. */}
+      {signal.peer_distribution && (
+        <PeerDistributionBar
+          peerDistribution={signal.peer_distribution}
+          ownScore={signal.anomaly_score}
+          seriesColor={effectiveBarColor}
+        />
+      )}
 
-      {/* tier별 raw evidence chip — change_ix·none 은 미렌더. */}
-      <RawChip signal={signal} />
+      {/* summary 한 줄 — 4-tier fallback 이 만든 사용자 친화 한국어 메시지. 카드 하단. */}
+      {signal.summary && (
+        <p className="text-[0.6875rem] text-foreground leading-relaxed border-t border-border/50 pt-3">
+          {signal.summary}
+        </p>
+      )}
     </div>
   );
 }

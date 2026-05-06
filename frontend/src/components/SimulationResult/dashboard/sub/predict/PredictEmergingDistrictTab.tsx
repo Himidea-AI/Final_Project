@@ -11,15 +11,30 @@
 import { Sparkles } from 'lucide-react';
 import type { SimulationOutput } from '../../../../../types';
 import { EmergingSignalCard } from '../../charts/EmergingSignalCard';
+import { EmergingFourDongTrendChart } from '../../charts/EmergingFourDongTrendChart';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
 import { resolveDongName } from '../../../../../constants/mapoDongs';
+import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
+import { sortByRanking } from '../../utils/rankSort';
+
+const TIER_LABEL_KO: Record<string, string> = {
+  change_ix: '공식',
+  classifier: 'AI',
+  b1_trend: '보조',
+  slope: '보조',
+  none: '검증중',
+};
 
 interface Props {
   simResult: SimulationOutput;
 }
 
 export function PredictEmergingDistrictTab({ simResult }: Props) {
-  const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
+  // sortByRanking 으로 winner→4위 순 정렬 → SERIES_COLORS[idx] 가 다른 탭들과 동일 색 매핑.
+  const dpredicts = sortByRanking(
+    (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo),
+    simResult,
+  );
 
   if (dpredicts.length === 0) {
     return (
@@ -47,15 +62,61 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
       return acc;
     }, null)?.district ?? null;
 
+  // tier 분포 + signal 분포 — 헤더 chip strip 용
+  const tierCount: Record<string, number> = {};
+  const signalCount = { normal: 0, emerging: 0, declining: 0 };
+  dpredicts.forEach((p) => {
+    const s = p.emerging_signal;
+    if (!s) return;
+    tierCount[s.tier] = (tierCount[s.tier] ?? 0) + 1;
+    signalCount[s.signal] = (signalCount[s.signal] ?? 0) + 1;
+  });
+
   return (
     <div className="space-y-6">
-      <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
-        <Sparkles className="text-primary" /> 동별 상권 조기감지 신호
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
+          <Sparkles className="text-primary" /> 동별 상권 조기감지 신호
+        </h3>
+        {/* tier 분포 + 4동 신호 종합 chip strip — 한글 chip 은 sans 폰트 (JetBrains Mono 한글 fallback 글자폭 mismatch 회피) */}
+        <div className="flex flex-wrap items-center gap-3 text-[0.6875rem] font-bold tracking-wide text-muted-foreground">
+          {Object.entries(tierCount).map(([k, v]) => (
+            <span key={k}>
+              {TIER_LABEL_KO[k] ?? k} <span className="tabular-nums">{v}</span>
+            </span>
+          ))}
+          {Object.keys(tierCount).length > 0 && <span className="text-border">·</span>}
+          <span className="text-success">
+            안정 <span className="tabular-nums">{signalCount.normal}</span>
+          </span>
+          <span className="text-primary">
+            신흥 <span className="tabular-nums">{signalCount.emerging}</span>
+          </span>
+          <span className="text-danger">
+            쇠퇴 <span className="tabular-nums">{signalCount.declining}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* [1] 4동 변화도 시계열 비교 — quarter_history 활용 + 16동 사분위 reference line */}
+      <div className="bg-card border border-border rounded-3xl p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+            4 동 변화도 시계열 (최근 8 분기)
+          </h4>
+          <span className="text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
+            line + 16동 사분위 reference
+          </span>
+        </div>
+        <EmergingFourDongTrendChart dpredicts={dpredicts} />
+      </div>
+
+      {/* [2] 4동 카드 grid — 카드 안 sparkline + peer bar 는 직전 task 에서 추가됨 */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {dpredicts.map((p) => {
+        {dpredicts.map((p, idx) => {
           // p.district 가 raw code(11440660)로 올 가능성 대비 한국어 이름으로 휴머나이즈.
           const districtLabel = resolveDongName(p.district) ?? p.district;
+          const seriesColor = SERIES_COLORS[idx % SERIES_COLORS.length];
           return (
             <div key={p.district} className="bg-card border border-border rounded-3xl p-5">
               {p.emerging_signal ? (
@@ -63,6 +124,7 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
                   signal={p.emerging_signal}
                   district={districtLabel}
                   isTopChange={topDistrict === p.district}
+                  seriesColor={seriesColor}
                 />
               ) : (
                 <div className="space-y-3">

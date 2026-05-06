@@ -14,6 +14,16 @@ export interface PersonaCardData {
   thoughts: AbmThought[]; // 0~23h 정렬된 thought 배열
   dongName?: string; // 가장 최근 hour 의 dong 추정값
   role?: string;
+  // PersonaPool (Nemotron 7,187) 매칭 페르소나 — 사용자 피드백 (2026-05-06).
+  name?: string;
+  age?: number;
+  gender?: string;
+  occupation?: string;
+  educationLevel?: string;
+  personaText?: string;
+  hobbies?: string[];
+  professionalPersona?: string;
+  careerGoals?: string;
 }
 
 interface PersonaCardProps {
@@ -60,9 +70,15 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
               <span className="text-muted-foreground">Agent #{data.agentId}</span>
             </div>
             <div className="mt-0.5 text-base font-semibold text-foreground">
-              {data.archetype || '—'}
+              {data.name || data.archetype || '—'}
+              {(data.age || data.gender) && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {data.age && `${data.age}세`}
+                  {data.gender && ` · ${data.gender === 'M' ? '남' : '여'}`}
+                </span>
+              )}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               {data.role && <span>{data.role}</span>}
               {data.dongName && (
                 <>
@@ -70,9 +86,75 @@ export default function PersonaCard({ data, onClose, currentHour }: PersonaCardP
                   <span>{data.dongName}</span>
                 </>
               )}
+              {data.occupation && (
+                <>
+                  <span>·</span>
+                  <span className="font-medium text-foreground">{data.occupation}</span>
+                </>
+              )}
+              {data.educationLevel && (
+                <>
+                  <span>·</span>
+                  <span>{data.educationLevel}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
+
+        {/* PersonaPool (Nemotron) 매칭 페르소나 상세 — 있을 때만. */}
+        {(data.personaText ||
+          data.hobbies?.length ||
+          data.professionalPersona ||
+          data.careerGoals) && (
+          <div className="mb-4 flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs">
+            {data.personaText && (
+              <div>
+                <div className="mb-1 text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground">
+                  페르소나
+                </div>
+                <p className="text-foreground leading-relaxed">{data.personaText}</p>
+              </div>
+            )}
+            {data.hobbies && data.hobbies.length > 0 && (
+              <div>
+                <div className="mb-1 text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground">
+                  취미·관심
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {data.hobbies.map((h, i) => (
+                    <span
+                      key={`${h}-${i}`}
+                      className="rounded-full border border-border bg-card px-2 py-0.5 text-[0.625rem] font-medium text-foreground"
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {data.professionalPersona && (
+              <details>
+                <summary className="cursor-pointer text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+                  직업 상세 ▾
+                </summary>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-foreground">
+                  {data.professionalPersona}
+                </p>
+              </details>
+            )}
+            {data.careerGoals && (
+              <details>
+                <summary className="cursor-pointer text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+                  커리어 목표 ▾
+                </summary>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-foreground">
+                  {data.careerGoals}
+                </p>
+              </details>
+            )}
+          </div>
+        )}
 
         {/* 시간별 thought 타임라인 — 0~23h 그리드 */}
         <div className="mt-3">

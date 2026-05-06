@@ -82,9 +82,8 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
       });
     }
     // dedup — place_name + 좌표(소수 5자리) 동일하면 동일 매장으로 판단.
-    // cap 200 → 1000 으로 늘림 — backend 가 spot1 거리순 정렬로 보내는데 cap 200 이면
-    // spot 2,3,4 주변 매장이 (spot1 기준 멀어서) 잘려나가 화면에 안 뜸.
-    // 4 spot × 1.5km 합집합이라 1000개 넘는 일은 사실상 없음 (마포 카페 전체 ~수백개).
+    // cap 2500 — backend 가 공실 spot 1.5km + 행정동 안 매장 합집합 반환. 4 dong × ~500/dong
+    // 최악 ~2000 (현재 마포 kakao_store 4430 / 16동). spot1 거리순 정렬 유지.
     const seen = new Set<string>();
     const deduped: Competitor[] = [];
     for (const c of merged) {
@@ -92,7 +91,7 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
       if (seen.has(key)) continue;
       seen.add(key);
       deduped.push(c);
-      if (deduped.length >= 1000) break;
+      if (deduped.length >= 2500) break;
     }
     return deduped;
   }
@@ -260,6 +259,25 @@ export function MapSection({ simResult, topCompetitors }: Props) {
         })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [topCompetitors],
+  );
+  // DEBUG: 별표 안 뜨는 이슈 추적 — center vs 별표 좌표 비교
+  // eslint-disable-next-line no-console
+  console.log(
+    '[MapSection] simResult.same_brand_locations:',
+    simResult.same_brand_locations,
+    '→ sameBrandLocations:',
+    sameBrandLocations.length,
+    'items',
+  );
+  // eslint-disable-next-line no-console
+  console.log(
+    '[MapSection] winner_district=',
+    (simResult as SimulationOutput & Record<string, unknown>).winner_district,
+    'center=',
+    center,
+    'sameBrand[0] lat/lng=',
+    sameBrandLocations[0]?.lat,
+    sameBrandLocations[0]?.lng,
   );
   // 사용자 입력 영업구역 거리 — store.params 에서 직접 (응답에 echo 안 됨).
   const territoryRadiusM = useSimulationStore((s) => s.params?.territory_radius_m);

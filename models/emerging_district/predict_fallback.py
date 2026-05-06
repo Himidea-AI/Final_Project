@@ -38,6 +38,9 @@ class EmergingFallbackResult(TypedDict):
     tier: str  # change_ix / classifier / b1_trend / slope / none
     raw: dict
     summary: str
+    # 2026-05-06 추가: 시계열 + 분포 (Task 3, 4 에서 산출 로직 추가)
+    quarter_history: list[dict] | None
+    peer_distribution: dict | None
 
 
 _SIGNAL_KO = {
@@ -267,6 +270,8 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
             tier="change_ix",
             raw={"change_ix": cix},
             summary=f"서울시 상권변화지표 기준 — {_SIGNAL_KO[signal]}",
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 1.5: classifier 예측
@@ -281,6 +286,8 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
             tier="classifier",
             raw={"predicted_stage": cls_stage, "confidence": round(prob, 4)},
             summary=f"AI 모델 판정 — {_SIGNAL_KO[signal]} (신뢰도 {prob * 100:.0f}%)",
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 2: B1 trend
@@ -298,6 +305,8 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
                 f"20·30대 유입 {b1['migration_2030_rate']:+.1%} — "
                 f"{_SIGNAL_KO[signal]} 신호"
             ),
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 3: slope
@@ -313,6 +322,8 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
             tier="slope",
             raw=slope,
             summary=(f"최근 3분기 매출 {sales_verb} · 점포수 {store_verb} — {_SIGNAL_KO[signal]} 신호"),
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 4: 모든 데이터 부재
@@ -323,4 +334,6 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
         tier="none",
         raw={},
         summary="데이터 검증 중 — 안정 상권으로 가정",
+        quarter_history=None,
+        peer_distribution=None,
     )
