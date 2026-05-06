@@ -186,7 +186,7 @@ export function ScenarioDetailPanel({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
           <aside className="space-y-4">
             <h4 className="flex items-center gap-2 px-1 text-base font-black tracking-tight text-foreground">
-              What-if 변수 조정
+              시뮬레이션 변수 조절
             </h4>
             <p className="text-[0.6875rem] text-muted-foreground">로드 중…</p>
           </aside>
@@ -223,18 +223,19 @@ export function ScenarioDetailPanel({
         {/* 좌측 — what-if 변수 조정 (bare, 위에서 시작) */}
         <aside className="space-y-3">
           <h4 className="px-1 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
-            What-if 변수 조정
+            시뮬레이션 변수 조절
           </h4>
 
-          {/* 액티브 슬라이더 chip × 4 (delta 모드 차트의 7-tier 표시 대상 선택) */}
-          <div className="flex flex-wrap gap-1">
+          {/* 액티브 슬라이더 chip × 4 (delta 모드 차트의 7-tier 표시 대상 선택).
+              4 chip 한 줄 균등 배치 — flex-1 로 컬럼 폭(280px) 4등분, 폰트·패딩 키워 공백 흡수. */}
+          <div className="flex flex-nowrap gap-1.5">
             {PCT_SLIDER_KEYS.map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setActiveSlider(k)}
                 title={SLIDER_TOOLTIPS[k]}
-                className={`rounded-full border px-2.5 py-1 text-[0.625rem] font-bold transition-colors ${
+                className={`flex-1 whitespace-nowrap rounded-full border px-1 py-1.5 text-center text-[0.6875rem] font-bold transition-colors ${
                   activeSlider === k
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border bg-card text-muted-foreground hover:border-primary/40'
