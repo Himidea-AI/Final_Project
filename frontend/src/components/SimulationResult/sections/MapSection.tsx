@@ -81,7 +81,10 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
         phone: typeof s.phone === 'string' ? s.phone : null,
       });
     }
-    // dedup — place_name + 좌표(소수 5자리) 동일하면 동일 매장으로 판단
+    // dedup — place_name + 좌표(소수 5자리) 동일하면 동일 매장으로 판단.
+    // cap 200 → 1000 으로 늘림 — backend 가 spot1 거리순 정렬로 보내는데 cap 200 이면
+    // spot 2,3,4 주변 매장이 (spot1 기준 멀어서) 잘려나가 화면에 안 뜸.
+    // 4 spot × 1.5km 합집합이라 1000개 넘는 일은 사실상 없음 (마포 카페 전체 ~수백개).
     const seen = new Set<string>();
     const deduped: Competitor[] = [];
     for (const c of merged) {
@@ -89,7 +92,7 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
       if (seen.has(key)) continue;
       seen.add(key);
       deduped.push(c);
-      if (deduped.length >= 200) break;
+      if (deduped.length >= 1000) break;
     }
     return deduped;
   }

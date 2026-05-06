@@ -455,7 +455,7 @@ async def _collect_all_competitor_locations(
     spot_lon: float | None = None,
     spot_coords: list[tuple[float, float]] | None = None,
     spot_radius_m: int = 1500,
-    spot_limit: int = 400,
+    spot_limit: int = 800,
 ) -> list[dict]:
     """경쟁업체 좌표 수집 — 지도 마커용.
 
