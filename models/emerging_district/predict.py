@@ -174,6 +174,75 @@ def _count_consecutive_anomalies(
     return count
 
 
+def _compute_peer_distribution(
+    df_all,
+    industry_code: str,
+    own_dong_code: str,
+    own_score: float,
+    model: LSTMAutoencoder,
+    feature_cols: list[str],
+    threshold: float,
+    window_size: int,
+) -> dict | None:
+    """마포 16 동 기준 anomaly 분포 산출.
+
+    각 동에 대해 동일 industry_code 데이터를 슬라이스하여 새 MinMaxScaler로 스케일,
+    _compute_history_at_offset(q_offset=0) 으로 현재 시점 anomaly_score 산출.
+    데이터 부족 동 (<window_size) 과 예외 발생 동은 제외.
+
+    반환: { p25, p50, p75, p90, percentile_self, rank_in_total, total } 또는 None (4동 미만).
+    """
+    mapo_dongs = sorted(df_all["dong_code"].unique())
+    mapo_dongs = [d for d in mapo_dongs if str(d).startswith("11440")]
+
+    peer_scores: list[float] = []
+    own_rank_score: float | None = None
+
+    for code in mapo_dongs:
+        sub = df_all[
+            (df_all["dong_code"] == code) & (df_all["industry_code"] == industry_code)
+        ].copy()
+        if len(sub) < window_size:
+            continue
+        try:
+            sub = sub.sort_values("quarter")
+            feat_vals = sub[feature_cols].values.astype(np.float32)
+            sc = MinMaxScaler()
+            feat_scaled = sc.fit_transform(feat_vals)
+            score = _compute_history_at_offset(feat_scaled, model, threshold, window_size, q_offset=0)
+            if score is not None:
+                peer_scores.append(score)
+                if str(code) == str(own_dong_code):
+                    own_rank_score = score
+        except Exception:
+            continue
+
+    if len(peer_scores) < 4:
+        return None
+
+    arr = np.array(peer_scores)
+    quantiles = np.percentile(arr, [25, 50, 75, 90])
+
+    # own_score 가 peer_scores 에 없으면(자기 동 데이터 부족 등) own_score fallback
+    ref_score = own_rank_score if own_rank_score is not None else own_score
+    sorted_desc = sorted(peer_scores, reverse=True)
+    rank = next(
+        (i + 1 for i, s in enumerate(sorted_desc) if abs(s - ref_score) < 1e-6),
+        len(sorted_desc),
+    )
+    percentile_self = float((rank / len(peer_scores)) * 100)
+
+    return {
+        "p25": float(quantiles[0]),
+        "p50": float(quantiles[1]),
+        "p75": float(quantiles[2]),
+        "p90": float(quantiles[3]),
+        "percentile_self": percentile_self,
+        "rank_in_total": rank,
+        "total": len(peer_scores),
+    }
+
+
 def predict(
     dong_code: str,
     industry_code: str,
@@ -280,6 +349,18 @@ def predict(
             }
         )
 
+    # 2026-05-06: 마포 16동 peer_distribution 산출
+    peer_distribution = _compute_peer_distribution(
+        df_all=df,
+        industry_code=industry_code,
+        own_dong_code=dong_code,
+        own_score=score,
+        model=model,
+        feature_cols=feature_names,
+        threshold=threshold,
+        window_size=window_size,
+    )
+
     return EmergingResult(
         dong_code=dong_code,
         industry_code=industry_code,
@@ -289,7 +370,7 @@ def predict(
         summary=summary,
         is_mock=False,
         quarter_history=quarter_history,
-        peer_distribution=None,
+        peer_distribution=peer_distribution,
     )
 
 
