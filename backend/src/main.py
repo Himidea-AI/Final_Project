@@ -313,24 +313,159 @@ _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 # config/business_type_mapping.kakao_keyword_of() 사용 — 단일 source of truth.
 
 
+def _resolve_spot1_coord(result: dict) -> tuple[float, float] | None:
+    """vacancy_spots 중 spot 1위 좌표 (lat, lon) 반환.
+
+    선정 규칙 (graph._resolve_spot_dong / frontend buildBestVacancies 와 동일):
+      1) winner 동 spot 중 score 1위 (없으면 listing_count 1위)
+      2) top3 동 spot 중 listing_count 1위 (winner 동 매물 0건일 때)
+      3) 둘 다 없으면 None
+    """
+    spots = result.get("vacancy_spots") or []
+    if not isinstance(spots, list) or not spots:
+        return None
+    winner = result.get("winner_district") or result.get("target_district")
+    top3 = result.get("top_3_candidates") or []
+
+    def _is_valid(s: dict) -> bool:
+        lat, lon = s.get("lat"), s.get("lon")
+        return isinstance(lat, (int, float)) and isinstance(lon, (int, float))
+
+    winner_spots = [s for s in spots if isinstance(s, dict) and s.get("dong_name") == winner and _is_valid(s)]
+    if winner_spots:
+        winner_spots.sort(
+            key=lambda s: (
+                -(s.get("score") if isinstance(s.get("score"), (int, float)) else float("-inf")),
+                -(s.get("listing_count") or 0),
+            )
+        )
+        return float(winner_spots[0]["lat"]), float(winner_spots[0]["lon"])
+    top3_set = set(top3)
+    top3_spots = [
+        s for s in spots
+        if isinstance(s, dict) and s.get("dong_name") in top3_set and s.get("dong_name") != winner and _is_valid(s)
+    ]
+    if top3_spots:
+        top3_spots.sort(key=lambda s: -(s.get("listing_count") or 0))
+        return float(top3_spots[0]["lat"]), float(top3_spots[0]["lon"])
+    return None
+
+
+def _query_kakao_store_by_coord(
+    center_lat: float, center_lon: float, keyword: str, radius_m: int, limit: int
+) -> list[dict]:
+    """spot 좌표 기준 kakao_store 동종 매장 검색 (analyze_competition 의 좌표 기반 변형).
+
+    bounding box → haversine 정확 필터 → 거리순 정렬 → 상위 limit 개.
+    SQL 에 ORDER BY kakao_id 명시 (PG 자연순서 비결정 차단).
+    프론트 관례에 맞춰 lon → lng rename.
+    """
+    import math
+    import os
+    from sqlalchemy import text
+
+    from src.database.connection import get_sync_engine
+
+    # bounding box (작은 영역에서 평면 근사)
+    deg_lat = radius_m / 111_000.0
+    deg_lon = radius_m / (111_000.0 * max(math.cos(math.radians(center_lat)), 1e-6))
+    lat_min, lat_max = center_lat - deg_lat, center_lat + deg_lat
+    lon_min, lon_max = center_lon - deg_lon, center_lon + deg_lon
+
+    sql = text(
+        """
+        SELECT kakao_id, place_name, brand_name, category,
+               lat, lon, is_franchise, place_url, phone
+          FROM kakao_store
+         WHERE lat BETWEEN :lat_min AND :lat_max
+           AND lon BETWEEN :lon_min AND :lon_max
+           AND (category ILIKE :kw OR category_detail ILIKE :kw)
+         ORDER BY kakao_id
+        """
+    )
+    engine = get_sync_engine(os.environ["POSTGRES_URL"])
+    with engine.connect() as conn:
+        rows = (
+            conn.execute(
+                sql,
+                {"lat_min": lat_min, "lat_max": lat_max, "lon_min": lon_min, "lon_max": lon_max, "kw": f"%{keyword}%"},
+            )
+            .mappings()
+            .all()
+        )
+
+    def _haversine(lat1, lon1, lat2, lon2):
+        R = 6_371_000.0
+        rlat1, rlat2 = math.radians(lat1), math.radians(lat2)
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+        return 2 * R * math.asin(math.sqrt(a))
+
+    within: list[dict] = []
+    for r in rows:
+        d = _haversine(center_lat, center_lon, r["lat"], r["lon"])
+        if d <= radius_m:
+            within.append(
+                {
+                    "id": r["kakao_id"] or f"{r['place_name']}_{r['lat']}_{r['lon']}",
+                    "place_name": r["place_name"] or "",
+                    "brand_name": r["brand_name"] or "",
+                    "lat": r["lat"],
+                    "lng": r["lon"],
+                    "distance_m": round(d, 1),
+                    "is_franchise": bool(r["is_franchise"]),
+                    "category": r["category"] or "",
+                    "place_url": r["place_url"],
+                    "phone": r["phone"],
+                    "source_dong": None,  # spot 좌표 기준이라 source 동 무관
+                }
+            )
+    within.sort(key=lambda x: (x["distance_m"], x["id"]))  # 거리 + id tie-breaker
+    return within[:limit]
+
+
 async def _collect_all_competitor_locations(
     winner: str,
     top3: list,
     business_type: str,
+    *,
+    spot_lat: float | None = None,
+    spot_lon: float | None = None,
+    spot_radius_m: int = 1500,
+    spot_limit: int = 400,
 ) -> list[dict]:
-    """winner + top3 추천 동 각각의 500m 반경 경쟁업체 좌표를 수집해 통합 반환.
+    """경쟁업체 좌표 수집 — 지도 마커용.
 
-    2026-05-04 (B1 의뢰서 #3): 좌표 키 mismatch 회귀 fix.
-    `commercial_intelligence.analyze_competition` 가 samples dict 의 'lon' 키를
-    'lng' 로 rename(line 146)해서 반환하는데, 본 함수는 'lon' 으로 조회하고 있었음.
-    → 모든 80개 샘플이 좌표 None 으로 인식 → 좌표 필터 통과 0개 → 최종 0개.
-    'lng' 로 정합성 맞추고 단계별 로깅 추가하여 회귀 조기 감지.
+    분기:
+      · spot_lat/lon 있으면 → 공실 spot 1위 좌표 단일 기준 1.5km 반경 검색
+        (사용자 요청: "모든 분석 기준을 공실 spot 으로 통일")
+      · 없으면 → fallback: winner+top3 4동 centroid 1.5km 검색 (구버전 호환)
+
+    spot 분기는:
+      - 풀 자체가 spot 좌표 기준 → 가장자리 매장 누락 없음
+      - 4동 centroid race condition (asyncio.gather + seen_ids) 자동 제거
+      - SQL 에 ORDER BY kakao_id 명시 → 결정적
     """
     from src.config.business_type_mapping import kakao_keyword_of
 
     keyword = kakao_keyword_of(business_type) or business_type
-    districts = list({winner} | set(top3 or []))
-    print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
+
+    # spot 좌표 모드 — 모든 기준 통일
+    if spot_lat is not None and spot_lon is not None:
+        print(
+            f"[all_competitors:spot] 좌표 기준 검색 — ({spot_lat:.5f},{spot_lon:.5f}) "
+            f"keyword={keyword} radius={spot_radius_m}m limit={spot_limit}"
+        )
+        rows = await asyncio.to_thread(
+            _query_kakao_store_by_coord, spot_lat, spot_lon, keyword, spot_radius_m, spot_limit
+        )
+        print(f"[all_competitors:spot] 최종 {len(rows)}개")
+        return rows
+
+    # fallback — 4동 centroid 분기 (spot 좌표 결정 못 한 경우)
+    districts = sorted({winner} | set(top3 or []))  # set ordering 결정성
+    print(f"[all_competitors:fallback] 4동 centroid 검색 — districts={districts}")
     results: list[dict] = []
     seen_ids: set = set()
     # 단계별 카운터 — raw → dedupe drop → coord drop → 최종
@@ -1038,9 +1173,11 @@ async def analyze_location(
         # 추천 동 전체(winner + top3)의 경쟁업체 좌표 수집 — 지도 멀티핀용
         winner = result.get("winner_district") or input_data.target_district
         top3 = result.get("top_3_candidates") or []
-        print(f"[all_competitors] winner={winner}, top3={top3}")
+        _spot_coord = _resolve_spot1_coord(result)
+        print(f"[all_competitors] winner={winner}, top3={top3}, spot1={_spot_coord}")
+        _spot_lat, _spot_lon = _spot_coord if _spot_coord else (None, None)
         result["all_competitor_locations"] = await _collect_all_competitor_locations(
-            winner, top3, input_data.business_type
+            winner, top3, input_data.business_type, spot_lat=_spot_lat, spot_lon=_spot_lon
         )
         result["same_brand_locations"] = await _collect_same_brand_locations(
             winner, top3, input_data.brand_name, input_data.business_type
@@ -1107,9 +1244,11 @@ async def analyze_llm(
     # 경쟁업체 좌표 수집 (지도 멀티핀용) — winner 기준
     winner = full.get("winner_district") or input_data.target_district
     top3 = full.get("top_3_candidates") or []
+    _spot_coord = _resolve_spot1_coord(full)
+    _spot_lat, _spot_lon = _spot_coord if _spot_coord else (None, None)
     try:
         full["all_competitor_locations"] = await _collect_all_competitor_locations(
-            winner, top3, input_data.business_type
+            winner, top3, input_data.business_type, spot_lat=_spot_lat, spot_lon=_spot_lon
         )
     except Exception as e:
         print(f"[ANALYZE/LLM] all_competitor_locations 수집 실패 (무시): {e}")
@@ -1208,9 +1347,11 @@ async def analyze_llm_async(
             full = map_state_to_simulation_output(final_state, request_id)
             winner = full.get("winner_district") or input_data.target_district
             top3 = full.get("top_3_candidates") or []
+            _spot_coord = _resolve_spot1_coord(full)
+            _spot_lat, _spot_lon = _spot_coord if _spot_coord else (None, None)
             try:
                 full["all_competitor_locations"] = await _collect_all_competitor_locations(
-                    winner, top3, input_data.business_type
+                    winner, top3, input_data.business_type, spot_lat=_spot_lat, spot_lon=_spot_lon
                 )
             except Exception as ce:
                 logger.warning(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
@@ -2040,8 +2181,10 @@ async def run_simulation(
             logger.warning(f"[/simulate] same_brand_locations 실패 (무시): {ce}")
             result["same_brand_locations"] = []
         try:
+            _spot_coord = _resolve_spot1_coord(result)
+            _spot_lat, _spot_lon = _spot_coord if _spot_coord else (None, None)
             result["all_competitor_locations"] = await _collect_all_competitor_locations(
-                winner, top3, input_data.business_type
+                winner, top3, input_data.business_type, spot_lat=_spot_lat, spot_lon=_spot_lon
             )
         except Exception as ce:
             print(f"[SIMULATE] all_competitor_locations 수집 실패 (무시): {ce}")
