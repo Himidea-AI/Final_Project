@@ -304,17 +304,25 @@ async def _load_vacancy_spots(dong_names: list[str]) -> list[dict]:
     """
     try:
         async with db_client.get_session() as session:
-            stmt = select(
-                NaverVacancy.id,
-                NaverVacancy.lat,
-                NaverVacancy.lon,
-                NaverVacancy.dong_name,
-                NaverVacancy.listing_count,
-            ).where(
-                NaverVacancy.trade_type == "월세",
-                NaverVacancy.dong_name.in_(dong_names),
-                NaverVacancy.lat.isnot(None),
-                NaverVacancy.lon.isnot(None),
+            # ORDER BY id 필수 — PostgreSQL 은 ORDER BY 없으면 row 순서 비결정 (vacuum/insert 후 자연순서 변동).
+            # 결정성 잃으면 _matched[0]/spots[:4] 가 매 시뮬마다 다른 spot 을 선택해서
+            # competitor_intel 캐시 키(spot 좌표 포함) 가 매번 달라지고 새 카니발/sample 결과로 덮여씀.
+            # → 사용자 보고 "spot 1위 기준 반경 500m 경쟁업체가 매 시뮬마다 바뀜" 의 root cause.
+            stmt = (
+                select(
+                    NaverVacancy.id,
+                    NaverVacancy.lat,
+                    NaverVacancy.lon,
+                    NaverVacancy.dong_name,
+                    NaverVacancy.listing_count,
+                )
+                .where(
+                    NaverVacancy.trade_type == "월세",
+                    NaverVacancy.dong_name.in_(dong_names),
+                    NaverVacancy.lat.isnot(None),
+                    NaverVacancy.lon.isnot(None),
+                )
+                .order_by(NaverVacancy.id)
             )
             rows = (await session.execute(stmt)).fetchall()
         spots = [
