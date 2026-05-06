@@ -489,17 +489,13 @@ export function MarketMap({
           'position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(251,191,36,0.6);font-size:12px;font-weight:900;color:#1c1917;cursor:pointer;';
         dot.innerHTML = '★';
         dot.title = `${c.brand_name || '자사매장'} · ${c.place_name}`;
-      } else if (isTop5) {
-        // 주요 경쟁점 top5 — 노란색 큰 동그라미 + 번호 라벨 (사이드바 카드와 동일 매장).
-        dot.style.cssText =
-          'position:relative;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:#facc15;border:2.5px solid #ffffff;border-radius:9999px;box-shadow:0 0 10px rgba(250,204,21,0.7);font-size:13px;font-weight:900;color:#1c1917;cursor:pointer;';
-        dot.innerHTML = String(top5Rank);
-        dot.title = `주요 경쟁점 ${top5Rank}위 — ${c.place_name}`;
       } else {
+        // 빨간 삼각형 — 반경 안 진한, 밖 흐린. top5 여부와 무관하게 항상 그려짐
+        // (top5 는 이 위에 별도 번호 동그라미 overlay 로 추가 표시 — 매장 누락 X).
         dot.style.cssText = within
           ? 'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #ef4444;filter:drop-shadow(0 0 3px rgba(239,68,68,0.7));cursor:pointer;'
           : 'width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #ef4444;opacity:0.45;cursor:pointer;';
-        dot.title = c.place_name;
+        dot.title = isTop5 ? `주요 경쟁점 ${top5Rank}위 — ${c.place_name}` : c.place_name;
       }
 
       dot.addEventListener('click', (ev) => {
@@ -512,10 +508,28 @@ export function MarketMap({
         content: dot,
         xAnchor: 0.5,
         yAnchor: 0.5,
-        zIndex: isTop5 ? 6 : isSelfBrand ? 4 : 2,
+        zIndex: isSelfBrand ? 4 : 2,
       });
       overlay.setMap(mapInstance);
       overlayLayersRef.current.push(overlay);
+
+      // top5 별도 번호 라벨 — 빨간 삼각형 위에 약간 떠있게 표시 (매장은 빨간 삼각형으로 그대로).
+      if (isTop5 && !isSelfBrand) {
+        const badge = document.createElement('div');
+        badge.style.cssText =
+          'position:relative;width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:#facc15;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(250,204,21,0.8);font-size:11px;font-weight:900;color:#1c1917;cursor:pointer;pointer-events:none;';
+        badge.innerHTML = String(top5Rank);
+        badge.title = `주요 경쟁점 ${top5Rank}위 — ${c.place_name}`;
+        const badgeOverlay = new maps.CustomOverlay({
+          position: pos,
+          content: badge,
+          xAnchor: 0.5,
+          yAnchor: 1.6, // 빨간 삼각형 위쪽으로 띄움 — 삼각형이 그대로 보임
+          zIndex: 6,
+        });
+        badgeOverlay.setMap(mapInstance);
+        overlayLayersRef.current.push(badgeOverlay);
+      }
     });
 
     // Layer 3 — 자사 매장 마커 (로고 아이콘 별표 only — 영업구역 점선 원은 사용자 요구로 제거)
