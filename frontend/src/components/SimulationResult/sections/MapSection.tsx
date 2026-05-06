@@ -120,46 +120,64 @@ interface BestVacancy {
   competitorCount500m: number | null;
 }
 
-// 추천 동(winner_district) 내 공실 중 score 상위 4개 spot 반환.
-// 기준: backend 가 spot 단위 score 를 부여한 경우(0~100, 경쟁밀도 0.45 + 지하철 접근성 0.35 + 매물 활성도 0.20 가중합).
-// score 가 없으면 listing_count 최대 fallback (구버전 응답 호환).
+// 추천 동(winner_district + top3) 내 공실 중 score 상위 4개 spot 반환.
+// 기준: winner 동 spot 우선 (backend 가 score 부여) → 부족 시 top3 동 spot 으로 채움 (listing_count 정렬).
+// 2026-05-06: winner 동 spot 0건이거나 부족할 때 1~4위 자리 비는 회귀 차단.
+//   사용자 보고 "망원2동(winner) 매물 0건이라 spot 1위만 보임" → top3 spot 으로 4개 채움.
 // 1순위가 펄싱 핀 + 반경원 중심. 2~4순위는 번호 라벨 핀으로 비교 표시.
 function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
   const sim = simResult as SimulationOutput & Record<string, unknown>;
   const winner = (sim.winner_district ?? sim.target_district) as string | undefined;
   if (!winner) return [];
+  const top3 = Array.isArray(sim.top_3_candidates)
+    ? (sim.top_3_candidates as string[]).filter((d): d is string => typeof d === 'string')
+    : [];
   const spots = (sim.vacancy_spots as VacancySpotRaw[] | undefined) ?? [];
-  const sorted = spots
+
+  const toCandidate = (s: VacancySpotRaw) => ({
+    lat: s.lat as number,
+    lng: s.lon as number,
+    listingCount: typeof s.listing_count === 'number' ? s.listing_count : 0,
+    dongName: String(s.dong_name),
+    score: typeof s.score === 'number' ? s.score : null,
+    subwayDistanceM: typeof s.subway_distance_m === 'number' ? s.subway_distance_m : null,
+    competitorCount500m:
+      typeof s.competitor_count_500m === 'number' ? s.competitor_count_500m : null,
+  });
+
+  const validSpots = spots.filter(
+    (s) =>
+      typeof s.lat === 'number' &&
+      typeof s.lon === 'number' &&
+      Number.isFinite(s.lat) &&
+      Number.isFinite(s.lon),
+  );
+
+  // 1순위 후보군: winner 동 spot (backend score 부여됨)
+  const winnerSorted = validSpots
     .filter((s) => s.dong_name === winner)
-    .filter(
-      (s) =>
-        typeof s.lat === 'number' &&
-        typeof s.lon === 'number' &&
-        Number.isFinite(s.lat) &&
-        Number.isFinite(s.lon),
-    )
-    .map((s) => ({
-      lat: s.lat as number,
-      lng: s.lon as number,
-      listingCount: typeof s.listing_count === 'number' ? s.listing_count : 0,
-      dongName: String(s.dong_name),
-      score: typeof s.score === 'number' ? s.score : null,
-      subwayDistanceM: typeof s.subway_distance_m === 'number' ? s.subway_distance_m : null,
-      competitorCount500m:
-        typeof s.competitor_count_500m === 'number' ? s.competitor_count_500m : null,
-    }))
+    .map(toCandidate)
     .sort((a, b) => {
       const sa = a.score ?? Number.NEGATIVE_INFINITY;
       const sb = b.score ?? Number.NEGATIVE_INFINITY;
       if (sa !== sb) return sb - sa;
       return b.listingCount - a.listingCount;
     });
-  // 근접 중복 제거 — 같은 매물군이 다른 row 로 들어와 1·2·3위가 동일 좌표인 케이스 방어.
-  // 50m 이내는 동일 spot 으로 보고 상위 score 만 유지 → 화면에서 #1 펄싱핀에 #2·#3 핀이
-  // 가려지는 회귀 차단 (사용자 보고: "공실 #1 과 #4만 보인다").
+
+  // 2순위 후보군: top3 동 spot (score 없음, listing_count 정렬)
+  const top3Set = new Set(top3);
+  const top3Sorted = validSpots
+    .filter((s) => top3Set.has(String(s.dong_name)) && s.dong_name !== winner)
+    .map(toCandidate)
+    .sort((a, b) => b.listingCount - a.listingCount);
+
+  // winner 부족분만큼 top3 동 spot 으로 채움
+  const merged = [...winnerSorted, ...top3Sorted];
+
+  // 근접 중복 제거 — 50m 이내는 동일 spot 으로 보고 상위 우선 유지.
   const DEDUP_RADIUS_M = 50;
   const deduped: BestVacancy[] = [];
-  for (const cand of sorted) {
+  for (const cand of merged) {
     const tooClose = deduped.some(
       (kept) => haversineM(kept.lat, kept.lng, cand.lat, cand.lng) <= DEDUP_RADIUS_M,
     );
