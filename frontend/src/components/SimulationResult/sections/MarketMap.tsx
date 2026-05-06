@@ -523,12 +523,18 @@ export function MarketMap({
       overlayLayersRef.current.push(overlay);
 
       // top5 별도 번호 라벨 — 빨간 삼각형 위에 약간 떠있게 표시 (매장은 빨간 삼각형으로 그대로).
+      // 노란 뱃지 자체도 클릭 가능 — 같은 경쟁점 정보 popup 열림.
+      // 회귀 fix(2026-05-06): 이전 'pointer-events:none' 으로 클릭 차단되던 문제 제거.
       if (isTop5 && !isSelfBrand) {
         const badge = document.createElement('div');
         badge.style.cssText =
-          'position:relative;width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:#facc15;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(250,204,21,0.8);font-size:11px;font-weight:900;color:#1c1917;cursor:pointer;pointer-events:none;';
+          'position:relative;width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:#facc15;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(250,204,21,0.8);font-size:11px;font-weight:900;color:#1c1917;cursor:pointer;';
         badge.innerHTML = String(top5Rank);
         badge.title = `주요 경쟁점 ${top5Rank}위 — ${c.place_name}`;
+        badge.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          openPopup(pos, buildCompetitorInfoHtml(c, radius, withinCenterLat, withinCenterLng));
+        });
         const badgeOverlay = new maps.CustomOverlay({
           position: pos,
           content: badge,

@@ -283,6 +283,25 @@ export interface CompetitorIntel {
   narrative?: string;
 }
 
+/** 사용자 입력 타겟 vs 동·업종 실측 매출 분포 미스매치 알림. */
+export interface TargetAlignmentAlert {
+  dimension: 'age' | 'gender' | 'hours' | 'day' | 'price';
+  severity: 'high' | 'medium' | 'low';
+  user_input: string;
+  actual: string;
+  message: string;
+}
+
+/** alert high 발생 시 실측 기반 권장 타겟 프로필(역제안). */
+export interface ReverseTargetSuggestion {
+  recommended_age_groups: string[];
+  recommended_gender: string | null;
+  recommended_hours: string[];
+  recommended_day_type: string | null;
+  recommended_price_range: string | null;
+  rationale: string;
+}
+
 /** 인구통계 심층 분석 (demographic_depth 에이전트) */
 export interface DemographicReport {
   core_demographic: { age: string; gender: string; share: number };
@@ -298,6 +317,12 @@ export interface DemographicReport {
   narrative: string;
   // Track B #106 — 백엔드 peak_hour_matrix [7][24] 제공 시 자동 활성화
   peak_hour_matrix?: number[][] | null;
+  // 사용자 입력 타겟(연령·성별·시간·요일·객단가) 정렬도 0-100. 입력 없으면 null.
+  target_alignment_score?: number | null;
+  // 정렬 미스매치 alert 목록. 입력 없거나 모든 차원 매치면 빈 배열.
+  target_alignment?: TargetAlignmentAlert[];
+  // high severity alert 발생 시 실측 기반 권장 타겟 프로필(역제안). 정렬 양호 시 null.
+  reverse_target_suggestion?: ReverseTargetSuggestion | null;
 }
 
 /**
