@@ -5,6 +5,7 @@
  * 3) 하단 풀와이드: 법률 리스크 (InsightsGrid legalOnly)
  */
 
+import { useMemo } from 'react';
 import {
   AlertTriangle,
   Layers,
@@ -142,7 +143,10 @@ export function MarketTab({ simResult }: Props) {
   // 동 한눈에 / 공실률 등 frontend 가 winner 동 데이터 직접 참조하던 곳에서 사용.
   const analysisDong = _spot1Info?.dongName ?? _winnerForTop ?? null;
 
-  const topCompetitors = (() => {
+  // useMemo 필수 — IIFE 로 매 렌더마다 새 배열 참조 만들면 MapSection → MarketMap 의 useEffect deps
+  // 가 매 렌더 변경 → useEffect 재실행 → 마커 cleanup→재생성 무한 루프로 마커가 화면에서 깜빡 사라짐.
+  // simResult / _spot1 좌표만 진짜 의존성. samples 는 simResult 에서 파생되니 simResult 만 추적.
+  const topCompetitors = useMemo(() => {
     if (!_spot1) {
       return [...samples]
         .filter((s) => s.place_name)
@@ -157,7 +161,6 @@ export function MarketTab({ simResult }: Props) {
       lon?: number | null;
       distance_m?: number | null;
     };
-    // samples (lat/lon or lat/lng 둘 다 가능) + all_competitor_locations 통합
     const allLocations = (simResult.all_competitor_locations ?? []) as CandidateRaw[];
     const merged: CandidateRaw[] = [...samples, ...allLocations];
     const seen = new Set<string>();
@@ -181,7 +184,8 @@ export function MarketTab({ simResult }: Props) {
       })
       .sort((a, b) => a.distance_m - b.distance_m);
     return sorted.slice(0, 5);
-  })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simResult, _spot1?.lat, _spot1?.lng]);
 
   return (
     <div className="space-y-6">
