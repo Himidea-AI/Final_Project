@@ -325,11 +325,12 @@ def predict(
     industry_name = _resolve_industry_name(industry_code)
 
     signal_ko = _SIGNAL_KO.get(signal, signal)
+    score_pct = int(round(score * 100))
     if signal == "normal":
-        summary = f"{dong_name} {industry_name}: 정상 상권 패턴 (이상도 {score:.2f})"
+        summary = f"{dong_name} {industry_name}: 정상 상권 패턴 (평소 대비 변화 {score_pct}%)"
     else:
         q_str = f"최근 {consecutive}분기 연속 이상 감지 " if consecutive > 0 else ""
-        summary = f"{dong_name} {industry_name}: {q_str}(이상도 {score:.2f}) — {signal_ko} 가능성"
+        summary = f"{dong_name} {industry_name}: {q_str}(평소 대비 변화 {score_pct}%) — {signal_ko} 가능성"
 
     # 2026-05-06: 8 분기 시계열 history 산출
     quarter_history: list[dict] = []

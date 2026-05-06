@@ -178,7 +178,7 @@ describe('EmergingSignalCard — peer_distribution bar', () => {
       />,
     );
     expect(screen.getByText(/16동 분포/)).toBeInTheDocument();
-    expect(screen.getByText(/4 \/ 16위/)).toBeInTheDocument();
+    expect(screen.getByText(/변화 4위 \/ 16동/)).toBeInTheDocument();
   });
 
   it('peer_distribution null → 16동 분포 라벨 미노출', () => {

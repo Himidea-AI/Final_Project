@@ -24,8 +24,7 @@ export function PeerDistributionBar({ peerDistribution, ownScore, seriesColor }:
       <div className="flex items-center justify-between text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
         <span>16동 분포</span>
         <span>
-          {peerDistribution.rank_in_total} / {peerDistribution.total}위 · 상위{' '}
-          {peerDistribution.percentile_self.toFixed(0)}%
+          변화 {peerDistribution.rank_in_total}위 / {peerDistribution.total}동
         </span>
       </div>
       <div className="relative h-2 w-full rounded-full bg-secondary overflow-visible">
