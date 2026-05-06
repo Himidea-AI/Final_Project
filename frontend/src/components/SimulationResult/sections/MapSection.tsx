@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import type { SimulationOutput } from '../../../types';
 import { useAuth } from '../../../auth/AuthContext';
 import { getDongCount, getGuFromDong } from '../../../data/seoulRegions';
@@ -290,19 +291,36 @@ export function MapSection({ simResult }: Props) {
             </span>
           </div>
         </div>
-        {/* winner 동에 매물 0건이라 spot 1위가 다른 동에서 추천된 경우 안내 라벨.
+        {/* winner != spot 1위 동 케이스 안내 — 큰 배너로 강조.
             bestVacancy.dongName !== winner 일 때만 표시. */}
         {bestVacancy && bestVacancy.dongName !== district && district !== '—' && (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-xs">
-            <span className="text-[0.625rem] font-black uppercase tracking-widest text-warning">
-              안내
-            </span>
-            <span className="text-foreground">
-              추천 1순위 <span className="font-bold text-primary">{district}</span>에 임대 매물이
-              없어, 인접 후보 동{' '}
-              <span className="font-bold text-primary">{bestVacancy.dongName}</span>의 매물에서
-              공실 spot 을 자동 추천합니다.
-            </span>
+          <div className="rounded-2xl border-2 border-warning bg-warning/15 p-4 shadow-[0_0_24px_rgba(251,191,36,0.25)]">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 shrink-0 text-warning" />
+              <div className="flex-1 space-y-2">
+                <div className="text-sm font-black uppercase tracking-widest text-warning">
+                  추천 입지 안내 — 매물 자동 보정
+                </div>
+                <div className="text-sm font-bold leading-relaxed text-foreground">
+                  종합 점수 1순위 추천 동{' '}
+                  <span className="rounded bg-primary/15 px-1.5 py-0.5 font-black text-primary">
+                    {district}
+                  </span>
+                  에 <span className="font-black text-warning">실제 임대 매물이 없어</span>, 인접
+                  후보 동{' '}
+                  <span className="rounded bg-primary/15 px-1.5 py-0.5 font-black text-primary">
+                    {bestVacancy.dongName}
+                  </span>
+                  의 매물 중 최적 위치를 공실 spot 1위로 자동 추천합니다.
+                </div>
+                <div className="text-xs leading-relaxed text-muted-foreground">
+                  ▸ 분석 결과(반경 500m 동일업종, 평균 거리, 경쟁 강도, 임대료 인덱스), 주요 경쟁점,
+                  동 한눈에 — 모두{' '}
+                  <span className="font-bold text-foreground">{bestVacancy.dongName}</span> 기준으로
+                  도출됩니다.
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -97,7 +97,7 @@ export function MarketTab({ simResult }: Props) {
     listing_count?: unknown;
     score?: unknown;
   }>;
-  const _spot1: { lat: number; lng: number } | null = (() => {
+  const _spot1Info: { lat: number; lng: number; dongName: string } | null = (() => {
     if (!_winnerForTop) return null;
     const valid = (s: { lat?: unknown; lon?: unknown }) =>
       typeof s.lat === 'number' &&
@@ -114,7 +114,12 @@ export function MarketTab({ simResult }: Props) {
         const lb = typeof b.listing_count === 'number' ? b.listing_count : 0;
         return lb - la;
       });
-    if (winnerSpots[0]) return { lat: winnerSpots[0].lat as number, lng: winnerSpots[0].lon as number };
+    if (winnerSpots[0])
+      return {
+        lat: winnerSpots[0].lat as number,
+        lng: winnerSpots[0].lon as number,
+        dongName: String(winnerSpots[0].dong_name ?? _winnerForTop),
+      };
     const top3Set = new Set(_top3);
     const top3Spots = _vacancySpots
       .filter((s) => top3Set.has(String(s.dong_name)) && s.dong_name !== _winnerForTop && valid(s))
@@ -123,9 +128,18 @@ export function MarketTab({ simResult }: Props) {
         const lb = typeof b.listing_count === 'number' ? b.listing_count : 0;
         return lb - la;
       });
-    if (top3Spots[0]) return { lat: top3Spots[0].lat as number, lng: top3Spots[0].lon as number };
+    if (top3Spots[0])
+      return {
+        lat: top3Spots[0].lat as number,
+        lng: top3Spots[0].lon as number,
+        dongName: String(top3Spots[0].dong_name ?? _winnerForTop),
+      };
     return null;
   })();
+  const _spot1 = _spot1Info ? { lat: _spot1Info.lat, lng: _spot1Info.lng } : null;
+  // 분석 기준 동 — spot 1위 동(매물 있는 곳) 우선, 없으면 winner.
+  // 동 한눈에 / 공실률 등 frontend 가 winner 동 데이터 직접 참조하던 곳에서 사용.
+  const analysisDong = _spot1Info?.dongName ?? _winnerForTop ?? null;
 
   const topCompetitors = (() => {
     if (!_spot1) {
@@ -208,6 +222,7 @@ export function MarketTab({ simResult }: Props) {
           rentIndex={rentIndex}
           topCompetitors={topCompetitors}
           simResult={simResult}
+          analysisDong={analysisDong}
         />
       </div>
 
@@ -482,6 +497,7 @@ interface SidebarProps {
   rentIndex: number | null;
   topCompetitors: MarketCompetitorSample[];
   simResult: SimulationOutput;
+  analysisDong: string | null;
 }
 
 function MarketAnalysisSidebar({
@@ -491,6 +507,7 @@ function MarketAnalysisSidebar({
   rentIndex,
   topCompetitors,
   simResult,
+  analysisDong,
 }: SidebarProps) {
   const metrics: Array<{ label: string; value: string }> = [
     {
@@ -590,21 +607,31 @@ function MarketAnalysisSidebar({
       <div className="border-t border-border" />
 
       {/* ─ 섹션 4: winner 동 한눈에 — 핵심 고객 + 공실률 + 4분기 매출 흐름 (사실 기반, mock 0) ─ */}
-      <WinnerDistrictSummary simResult={simResult} />
+      <WinnerDistrictSummary simResult={simResult} analysisDong={analysisDong} />
     </aside>
   );
 }
 
-/** A + B 묶음 — winner 동의 기본 통계 3 metric + 분기별 매출 sparkline.
+/** A + B 묶음 — 분석 기준 동(spot 1위 동, fallback: winner)의 기본 통계 + 분기별 매출 sparkline.
+ *  2026-05-06 변경: winner 동 매물 0건 케이스에서도 화면 정보 일관성 — 모든 분석 데이터를
+ *  spot 1위 동 기준으로 추출 (PHASE 2 target 변경과 동일 방향).
  *  데이터 출처:
- *  - 핵심 고객층 = demographic_report.core_demographic (age + gender)
- *  - 공실률 = district_rankings[winner].vacancy_rate (이미 percent 단위, 추가 *100 금지 — 회귀 방지)
- *  - 분기 평균 매출 / 4분기 sparkline = quarterly_projection (winner 동 4 점)
+ *  - 핵심 고객층 = demographic_report.core_demographic (PHASE 2 결과 — spot 1위 동 LLM 산출)
+ *  - 공실률 = district_rankings[analysisDong].vacancy_rate (winner 직접 참조 → spot 1위 동으로 변경)
+ *  - 분기 평균 매출 / 4분기 sparkline = quarterly_projection
  *  데이터 모두 비어있으면 섹션 자체 hide. */
-function WinnerDistrictSummary({ simResult }: { simResult: SimulationOutput }) {
-  const winner = simResult.winner_district;
+function WinnerDistrictSummary({
+  simResult,
+  analysisDong,
+}: {
+  simResult: SimulationOutput;
+  analysisDong: string | null;
+}) {
+  const targetDong = analysisDong ?? simResult.winner_district ?? null;
   const winnerRanking =
-    winner != null ? (simResult.district_rankings ?? []).find((r) => r.district === winner) : null;
+    targetDong != null
+      ? (simResult.district_rankings ?? []).find((r) => r.district === targetDong)
+      : null;
   const vacancyRate = winnerRanking?.vacancy_rate ?? null;
 
   const demo = simResult.demographic_report;
