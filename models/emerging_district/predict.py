@@ -85,6 +85,33 @@ def _anomaly_score(reconstruction_error: float, threshold: float) -> float:
     return round(min(float(score), 1.0), 4)
 
 
+def _compute_history_at_offset(
+    feat_scaled_full: np.ndarray,
+    model: LSTMAutoencoder,
+    threshold: float,
+    window_size: int,
+    q_offset: int,
+) -> float | None:
+    """q_offset 분기 전 시점 anomaly_score 산출.
+
+    feat_scaled_full: 전체 시계열 스케일된 피처 배열 (T x F)
+    q_offset: 0=현재, 7=7분기 전
+    반환: 0~1 anomaly_score 또는 None (데이터 부족)
+    """
+    end_idx = len(feat_scaled_full) - q_offset - 1
+    if end_idx < window_size - 1:
+        return None
+    window = feat_scaled_full[end_idx - window_size + 1 : end_idx + 1]
+    if len(window) < window_size:
+        return None
+    _dev = next(model.parameters()).device
+    x_t = torch.from_numpy(window.astype("float32")).unsqueeze(0).to(_dev)
+    with torch.no_grad():
+        recon = model(x_t).squeeze(0)
+    recon_error = float(((recon - x_t.squeeze(0)) ** 2).mean().item())
+    return _anomaly_score(recon_error, threshold)
+
+
 def _detect_signal(group_df, window: int = 3) -> str:
     """최근 window 분기 추세로 신흥/쇠퇴 구분.
 
@@ -235,6 +262,24 @@ def predict(
         q_str = f"최근 {consecutive}분기 연속 이상 감지 " if consecutive > 0 else ""
         summary = f"{dong_name} {industry_name}: {q_str}(이상도 {score:.2f}) — {signal_ko} 가능성"
 
+    # 2026-05-06: 8 분기 시계열 history 산출
+    quarter_history: list[dict] = []
+    for offset in range(7, -1, -1):  # 7→0 (오름차순으로 표시)
+        h_score = _compute_history_at_offset(
+            feat_scaled,
+            model,
+            threshold,
+            window_size,
+            offset,
+        )
+        quarter_label = "현재" if offset == 0 else f"Q-{offset}"
+        quarter_history.append(
+            {
+                "quarter": quarter_label,
+                "anomaly_score": h_score if h_score is not None else 0.0,
+            }
+        )
+
     return EmergingResult(
         dong_code=dong_code,
         industry_code=industry_code,
@@ -243,7 +288,7 @@ def predict(
         consecutive_anomaly_quarters=consecutive,
         summary=summary,
         is_mock=False,
-        quarter_history=None,
+        quarter_history=quarter_history,
         peer_distribution=None,
     )
 

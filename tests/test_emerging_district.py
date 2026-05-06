@@ -218,3 +218,68 @@ def test_summary_none_korean(monkeypatch):
     assert "normal 가정" not in result["summary"]
     assert "데이터 검증 중" in result["summary"]
     assert "안정 상권" in result["summary"]
+
+
+# ---------------------------------------------------------------------------
+# quarter_history 8 분기 시계열 검증
+# ---------------------------------------------------------------------------
+
+TEST_DONG = "11440680"
+TEST_INDUSTRY = "CS100001"
+
+
+def _make_predict_fixtures() -> tuple:
+    """predict() 단위 테스트용 stub model + meta + DataFrame 반환."""
+    n_quarters = 16  # window_size(8) 보다 충분히 많은 분기
+    quarter_values = [[float(i % 3), float((i + 1) % 3)] for i in range(n_quarters)]
+    df_all = pd.DataFrame(
+        {
+            "dong_code": [TEST_DONG] * n_quarters,
+            "industry_code": [TEST_INDUSTRY] * n_quarters,
+            "quarter": list(range(n_quarters)),
+            "f1": [v[0] for v in quarter_values],
+            "f2": [v[1] for v in quarter_values],
+            "monthly_sales": [1000.0 + i * 10 for i in range(n_quarters)],
+            "store_count": [10.0 + i * 0.1 for i in range(n_quarters)],
+        }
+    )
+    meta = {
+        "window_size": 8,
+        "feature_names": ["f1", "f2"],
+        "threshold": 0.5,
+        "quarter_threshold": 0.5,
+        "input_size": 2,
+        "hidden_size": 16,
+        "num_layers": 1,
+    }
+    model = _StubModel()
+    return df_all, meta, model
+
+
+def test_quarter_history_length_eight(monkeypatch):
+    """quarter_history 가 정확히 8 분기 + 라벨 정합."""
+    import models.emerging_district.predict as pred_mod
+    from models.emerging_district.predict import predict
+
+    df_all, meta, model = _make_predict_fixtures()
+
+    import models.emerging_district.data_prep as data_prep_mod
+
+    monkeypatch.setattr(pred_mod, "_load_model", lambda: (model, meta))
+    monkeypatch.setattr(
+        data_prep_mod,
+        "load_emerging_data",
+        lambda **_kwargs: df_all,
+    )
+
+    result = predict(dong_code=TEST_DONG, industry_code=TEST_INDUSTRY)
+
+    assert "quarter_history" in result
+    qh = result["quarter_history"]
+    assert qh is not None
+    assert isinstance(qh, list)
+    assert len(qh) == 8
+    assert qh[0]["quarter"] == "Q-7"
+    assert qh[-1]["quarter"] == "현재"
+    for entry in qh:
+        assert 0.0 <= entry["anomaly_score"] <= 1.0
