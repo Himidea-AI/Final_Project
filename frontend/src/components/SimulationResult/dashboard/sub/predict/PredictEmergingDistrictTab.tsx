@@ -11,7 +11,7 @@
 import { Sparkles } from 'lucide-react';
 import type { SimulationOutput } from '../../../../../types';
 import { EmergingSignalCard } from '../../charts/EmergingSignalCard';
-import { EmergingPeerComparisonChart } from '../../charts/EmergingPeerComparisonChart';
+import { EmergingFourDongTrendChart } from '../../charts/EmergingFourDongTrendChart';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
 import { resolveDongName } from '../../../../../constants/mapoDongs';
 import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
@@ -78,31 +78,37 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
         <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
           <Sparkles className="text-primary" /> 동별 상권 조기감지 신호
         </h3>
-        {/* tier 분포 + 4동 신호 종합 chip strip */}
-        <div className="flex flex-wrap items-center gap-3 text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
+        {/* tier 분포 + 4동 신호 종합 chip strip — 한글 chip 은 sans 폰트 (JetBrains Mono 한글 fallback 글자폭 mismatch 회피) */}
+        <div className="flex flex-wrap items-center gap-3 text-[0.6875rem] font-bold tracking-wide text-muted-foreground">
           {Object.entries(tierCount).map(([k, v]) => (
             <span key={k}>
-              {TIER_LABEL_KO[k] ?? k} {v}
+              {TIER_LABEL_KO[k] ?? k} <span className="tabular-nums">{v}</span>
             </span>
           ))}
           {Object.keys(tierCount).length > 0 && <span className="text-border">·</span>}
-          <span className="text-success">안정 {signalCount.normal}</span>
-          <span className="text-primary">신흥 {signalCount.emerging}</span>
-          <span className="text-danger">쇠퇴 {signalCount.declining}</span>
+          <span className="text-success">
+            안정 <span className="tabular-nums">{signalCount.normal}</span>
+          </span>
+          <span className="text-primary">
+            신흥 <span className="tabular-nums">{signalCount.emerging}</span>
+          </span>
+          <span className="text-danger">
+            쇠퇴 <span className="tabular-nums">{signalCount.declining}</span>
+          </span>
         </div>
       </div>
 
-      {/* [1] 16동 변화도 비교 차트 — peer_distribution 활용 */}
+      {/* [1] 4동 변화도 시계열 비교 — quarter_history 활용 + 16동 사분위 reference line */}
       <div className="bg-card border border-border rounded-3xl p-6">
         <div className="mb-4 flex items-center gap-3">
           <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
-            16 동 변화도 비교
+            4 동 변화도 시계열 (최근 8 분기)
           </h4>
           <span className="text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
-            anomaly_score 사분위 + 4동 위치
+            line + 16동 사분위 reference
           </span>
         </div>
-        <EmergingPeerComparisonChart dpredicts={dpredicts} />
+        <EmergingFourDongTrendChart dpredicts={dpredicts} />
       </div>
 
       {/* [2] 4동 카드 grid — 카드 안 sparkline + peer bar 는 직전 task 에서 추가됨 */}
