@@ -111,11 +111,9 @@ export function FlowVsRevenueScatter({ rankings, winnerDistrict }: Props) {
           )}
           <Scatter data={points} isAnimationActive={false}>
             {points.map((p, i) => (
-              <Cell
-                key={i}
-                fill={p.isWinner ? 'var(--primary)' : 'var(--muted-foreground)'}
-                r={p.isWinner ? 8 : 4}
-              />
+              // winner 는 색상(var(--danger))으로만 강조 — 크기는 다른 점과 동일하게 통일.
+              // 이전엔 var(--primary)(파랑) 이라 회색 점들과 구분이 약했음.
+              <Cell key={i} fill={p.isWinner ? 'var(--danger)' : 'var(--muted-foreground)'} />
             ))}
           </Scatter>
         </ScatterChart>
