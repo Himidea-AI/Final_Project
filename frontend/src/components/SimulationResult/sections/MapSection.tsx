@@ -257,6 +257,21 @@ export function MapSection({ simResult }: Props) {
             </span>
           </div>
         </div>
+        {/* winner 동에 매물 0건이라 spot 1위가 다른 동에서 추천된 경우 안내 라벨.
+            bestVacancy.dongName !== winner 일 때만 표시. */}
+        {bestVacancy && bestVacancy.dongName !== district && district !== '—' && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-xs">
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-warning">
+              안내
+            </span>
+            <span className="text-foreground">
+              추천 1순위 <span className="font-bold text-primary">{district}</span>에 임대 매물이
+              없어, 인접 후보 동{' '}
+              <span className="font-bold text-primary">{bestVacancy.dongName}</span>의 매물에서
+              공실 spot 을 자동 추천합니다.
+            </span>
+          </div>
+        )}
       </div>
       <div className="relative overflow-hidden rounded-lg border border-border">
         <MarketMap
