@@ -86,6 +86,8 @@ import { getLivePopulation } from './api/client';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
 import NetworkBackground from './components/NetworkBackground';
 import WaveBackground from './pages/landing/WaveBackground';
+import { AdminBrandPicker } from './components/admin/AdminBrandPicker';
+import type { AdminBrand } from './types/admin';
 import PulsatingDots from './components/ui/PulsatingDots';
 // Phase C Round 2 — PDF 묶음 + Dashboard 묶음 추출 (정적 import 유지)
 
@@ -782,6 +784,10 @@ function SimulatorDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brand?.industry_medium]);
   const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
+  // [superadmin] brand picker — role==='superadmin' 만 보이고, 선택 시 brand_name + businessType 오버라이드.
+  const [adminBrand, setAdminBrand] = useState<AdminBrand | null>(null);
+  const [adminPickerOpen, setAdminPickerOpen] = useState(false);
+  const isSuperadmin = user?.role === 'superadmin';
   const [storeArea, setStoreArea] = useState(initParams?.store_area ?? 15); // 평
   const [targetPrice, setTargetPrice] = useState(initParams?.target_price_range ?? '5to10k');
   const [operatingHours, setOperatingHours] = useState<string[]>(
@@ -983,9 +989,14 @@ function SimulatorDashboard({
     // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환.
     // brand_name: 브랜드 자동매핑 결과 우선, 없으면 company_name 폴백.
     // lat/lon: 출점 후보지 좌표 (학교환경위생정화구역 거리 룰 트리거). 미입력 시 backend caution.
+    // [superadmin] adminBrand 선택 시 brand_name 오버라이드. business_type 은 사용자가 dropdown 으로 명시 변경한 값 우선 사용 (admin 도 자유 변경 가능).
+    const effectiveBrandName =
+      isSuperadmin && adminBrand?.brand_name
+        ? adminBrand.brand_name
+        : brand?.brand_name || user?.company_name || '';
     const payload = {
       business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
-      brand_name: brand?.brand_name || user?.company_name || '',
+      brand_name: effectiveBrandName,
       target_district: selectedDongs[0] || '서교동',
       target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
       existing_stores: [],
@@ -1206,6 +1217,43 @@ function SimulatorDashboard({
                 )}
               </div>
             </FormField>
+
+            {/* [superadmin] brand picker — role === 'superadmin' 만 노출 */}
+            {isSuperadmin && (
+              <FormField label="브랜드 (슈퍼어드민)" icon={Store}>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdminPickerOpen(true)}
+                    className="flex-1 flex items-center justify-between px-3 h-10 rounded-lg border border-primary/40 bg-primary/5 text-sm text-foreground hover:border-primary transition-colors"
+                  >
+                    <span className="truncate">
+                      {adminBrand
+                        ? `${adminBrand.brand_name}${adminBrand.industry_medium ? ` · ${adminBrand.industry_medium}` : ''}`
+                        : '브랜드 선택…'}
+                    </span>
+                    <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                  </button>
+                  {adminBrand && (
+                    <button
+                      type="button"
+                      onClick={() => setAdminBrand(null)}
+                      className="px-2 h-10 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="브랜드 선택 해제"
+                    >
+                      해제
+                    </button>
+                  )}
+                </div>
+                {adminBrand && (
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    {adminBrand.corp_name ?? '—'}
+                    {typeof adminBrand.franchise_count === 'number' &&
+                      ` · 가맹점 ${adminBrand.franchise_count.toLocaleString()}개`}
+                  </div>
+                )}
+              </FormField>
+            )}
 
             {/* 유동인구 가중치 */}
             <FormField
@@ -1510,6 +1558,23 @@ function SimulatorDashboard({
           selectedLegalType={selectedLegalType}
         />
       </Suspense>
+
+      {/* [superadmin] brand picker 모달 */}
+      {isSuperadmin && (
+        <AdminBrandPicker
+          open={adminPickerOpen}
+          onClose={() => setAdminPickerOpen(false)}
+          onSelect={(b) => {
+            setAdminBrand(b);
+            // 선택된 브랜드의 cs_code 에 매칭되는 frontend 라벨로 businessType 자동 설정
+            const frontendLabel = FRONTEND_LABEL_FROM_BACKEND_KEY[b.business_type];
+            if (frontendLabel) setBusinessType(frontendLabel);
+          }}
+          initialIndustry={
+            adminBrand?.business_type ?? BUSINESS_TYPE_BACKEND_KEY[businessType] ?? undefined
+          }
+        />
+      )}
     </div>
   );
 }
