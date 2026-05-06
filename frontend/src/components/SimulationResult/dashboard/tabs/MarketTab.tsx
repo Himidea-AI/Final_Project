@@ -362,7 +362,13 @@ export function MarketTab({ simResult }: Props) {
             />
           )}
           {ci?.industry_closure_trend && (
-            <IndustryClosureTrendCard trend={ci.industry_closure_trend} />
+            <IndustryClosureTrendCard
+              trend={ci.industry_closure_trend}
+              dongName={analysisDong}
+              industryLabel={
+                (simResult as SimulationOutput & { business_type?: string }).business_type ?? null
+              }
+            />
           )}
         </div>
       )}
