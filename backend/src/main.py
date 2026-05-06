@@ -333,6 +333,7 @@ def _resolve_top_spot_coords(result: dict, max_n: int = 4) -> list[tuple[float, 
 
     def _haversine(a: tuple[float, float], b: tuple[float, float]) -> float:
         import math
+
         R = 6_371_000.0
         rlat1, rlat2 = math.radians(a[0]), math.radians(b[0])
         dlat = math.radians(b[0] - a[0])
@@ -349,7 +350,8 @@ def _resolve_top_spot_coords(result: dict, max_n: int = 4) -> list[tuple[float, 
     )
     top3_set = set(top3)
     top3_spots = [
-        s for s in spots
+        s
+        for s in spots
         if isinstance(s, dict) and s.get("dong_name") in top3_set and s.get("dong_name") != winner and _is_valid(s)
     ]
     top3_spots.sort(key=lambda s: -(s.get("listing_count") or 0))
@@ -396,7 +398,7 @@ def _query_kakao_store_by_coord(
     sql = text(
         """
         SELECT kakao_id, place_name, brand_name, category,
-               lat, lon, is_franchise, place_url, phone
+               lat, lon, is_franchise, place_url, phone, dong_name
           FROM kakao_store
          WHERE lat BETWEEN :lat_min AND :lat_max
            AND lon BETWEEN :lon_min AND :lon_max
@@ -439,11 +441,65 @@ def _query_kakao_store_by_coord(
                     "category": r["category"] or "",
                     "place_url": r["place_url"],
                     "phone": r["phone"],
-                    "source_dong": None,  # spot 좌표 기준이라 source 동 무관
+                    # kakao_store.dong_name 직접 — 후처리 행정동 필터에 사용 (선택 4동 외 인접 동 매장 컷).
+                    "source_dong": r.get("dong_name"),
                 }
             )
     within.sort(key=lambda x: (x["distance_m"], x["id"]))  # 거리 + id tie-breaker
     return within[:limit]
+
+
+def _query_kakao_store_by_dong(dong_name: str, keyword: str, limit: int = 800) -> list[dict]:
+    """행정동(dong_name) 안 동종 kakao_store 매장 전수 조회.
+
+    좌표 반경 무시 — 행정동 경계 자체가 필터. 거리 컬럼은 호출자가 spot 기준으로 후처리.
+    kakao_store.dong_name 컬럼은 행정동/법정동 혼합 (예: 망원1동 행정동 매장
+    대부분이 '망원동' 법정동으로 등록). MAPO_ADSTRD_TO_KAKAO_DONG_NAMES 로
+    행정동에 속하는 모든 dong_name (행정 + 법정) 조회 → 누락 차단.
+    """
+    import os
+    from sqlalchemy import text
+
+    from src.config.constants import MAPO_ADSTRD_TO_KAKAO_DONG_NAMES
+    from src.database.sync_engine import get_sync_engine
+
+    dong_names = MAPO_ADSTRD_TO_KAKAO_DONG_NAMES.get(dong_name, [dong_name])
+
+    sql = text(
+        """
+        SELECT kakao_id, place_name, brand_name, category,
+               lat, lon, is_franchise, place_url, phone, dong_name
+          FROM kakao_store
+         WHERE dong_name = ANY(:dongs)
+           AND (category ILIKE :kw OR category_detail ILIKE :kw)
+         ORDER BY kakao_id
+         LIMIT :lim
+        """
+    )
+    engine = get_sync_engine(os.environ["POSTGRES_URL"])
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {"dongs": dong_names, "kw": f"%{keyword}%", "lim": limit}).mappings().all()
+
+    out: list[dict] = []
+    for r in rows:
+        if r["lat"] is None or r["lon"] is None:
+            continue
+        out.append(
+            {
+                "id": r["kakao_id"] or f"{r['place_name']}_{r['lat']}_{r['lon']}",
+                "place_name": r["place_name"] or "",
+                "brand_name": r["brand_name"] or "",
+                "lat": r["lat"],
+                "lng": r["lon"],
+                "distance_m": None,  # spot 무관 — frontend 에서 haversine 재계산
+                "is_franchise": bool(r["is_franchise"]),
+                "category": r["category"] or "",
+                "place_url": r["place_url"],
+                "phone": r["phone"],
+                "source_dong": r.get("dong_name"),
+            }
+        )
+    return out
 
 
 async def _collect_all_competitor_locations(
@@ -456,6 +512,8 @@ async def _collect_all_competitor_locations(
     spot_coords: list[tuple[float, float]] | None = None,
     spot_radius_m: int = 1500,
     spot_limit: int = 800,
+    include_dong: bool = True,
+    dong_limit: int = 800,
 ) -> list[dict]:
     """경쟁업체 좌표 수집 — 지도 마커용.
 
@@ -469,14 +527,47 @@ async def _collect_all_competitor_locations(
     합집합 결과의 dedup ordering 도 입력 spot 순서 (= score 순) 결정.
     """
     from src.config.business_type_mapping import kakao_keyword_of
+    from src.config.constants import MAPO_ADSTRD_TO_KAKAO_DONG_NAMES
 
     keyword = kakao_keyword_of(business_type) or business_type
 
-    # 4 spot 모드 — 각 spot 별 1.5km 풀 합집합 (가장 우선)
+    # 선택 4동 (winner+top3) 의 kakao_store dong_name 허용 set — spot bbox 가 인접 동까지
+    # 침범하는 매장 컷용. 각 행정동의 매핑된 법정동 모두 포함.
+    selected_districts = {winner} | set(top3 or [])
+    allowed_dongs: set[str] = set()
+    for d in selected_districts:
+        allowed_dongs.update(MAPO_ADSTRD_TO_KAKAO_DONG_NAMES.get(d, [d]))
+
+    def _filter_allowed(rows: list[dict]) -> list[dict]:
+        """source_dong 이 allowed set 안 매장만 통과. None / 매핑 외 동 = 컷."""
+        before = len(rows)
+        out = [r for r in rows if r.get("source_dong") in allowed_dongs]
+        print(f"[all_competitors:filter] dong filter {before} → {len(out)} (allowed={sorted(allowed_dongs)})")
+        return out
+
+    # 행정동 기준 전수 매장 수집 (winner+top3) — spot/centroid 모드와 합집합.
+    # include_dong=True 면 spot 1.5km 반경 안 매장 + 행정동 안 모든 매장 = 합집합.
+    # 색깔 진하기/연하기 = frontend 가 spot 좌표 기준 haversine 으로 재계산 (radius 안 = 진함).
+    async def _gather_dong_rows() -> list[dict]:
+        if not include_dong:
+            return []
+        districts = sorted(selected_districts)
+        out: list[dict] = []
+        for d in districts:
+            try:
+                rows = await asyncio.to_thread(_query_kakao_store_by_dong, d, keyword, dong_limit)
+                print(f"[all_competitors:dong] {d} → {len(rows)}개")
+                out.extend(rows)
+            except Exception as e:
+                print(f"[all_competitors:dong] {d} 수집 실패: {e}")
+        return out
+
+    # 4 spot 모드 — 각 spot 별 1.5km 풀 + 행정동 안 매장 합집합 (가장 우선)
     if spot_coords:
         print(
             f"[all_competitors:spots] {len(spot_coords)} spot 좌표 기준 검색 — "
-            f"keyword={keyword} per-spot radius={spot_radius_m}m limit={spot_limit}"
+            f"keyword={keyword} per-spot radius={spot_radius_m}m limit={spot_limit} "
+            f"include_dong={include_dong}"
         )
         merged: list[dict] = []
         seen_ids: set = set()
@@ -491,6 +582,14 @@ async def _collect_all_competitor_locations(
                     continue
                 seen_ids.add(rid)
                 merged.append(r)
+        spot_only_count = len(merged)
+        # 행정동 안 추가 매장 합치기 (dedup by kakao_id)
+        for r in await _gather_dong_rows():
+            rid = r.get("id")
+            if rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            merged.append(r)
         # 결정적 정렬 — 1번 spot 좌표 기준 거리순 (frontend 도 spot1 기준 haversine 으로 sort 하니 정합성).
         if spot_coords:
             anchor_lat, anchor_lon = spot_coords[0]
@@ -505,20 +604,35 @@ async def _collect_all_competitor_locations(
                 return 2 * R * math.asin(math.sqrt(a))
 
             merged.sort(key=lambda r: (_hv(r["lat"], r["lng"]), str(r.get("id"))))
-        print(f"[all_competitors:spots] 최종 합집합 {len(merged)}개 (dedup 후)")
-        return merged
+        print(
+            f"[all_competitors:spots] 최종 합집합 {len(merged)}개 "
+            f"(spot {spot_only_count} + dong 추가 {len(merged) - spot_only_count})"
+        )
+        return _filter_allowed(merged)
 
-    # 단일 spot 모드 (구버전 호환)
+    # 단일 spot 모드 (구버전 호환) + 행정동 합집합
     if spot_lat is not None and spot_lon is not None:
         print(
             f"[all_competitors:spot] 좌표 기준 검색 — ({spot_lat:.5f},{spot_lon:.5f}) "
-            f"keyword={keyword} radius={spot_radius_m}m limit={spot_limit}"
+            f"keyword={keyword} radius={spot_radius_m}m limit={spot_limit} "
+            f"include_dong={include_dong}"
         )
         rows = await asyncio.to_thread(
             _query_kakao_store_by_coord, spot_lat, spot_lon, keyword, spot_radius_m, spot_limit
         )
-        print(f"[all_competitors:spot] 최종 {len(rows)}개")
-        return rows
+        seen_ids: set = {r.get("id") for r in rows}
+        spot_only_count = len(rows)
+        for r in await _gather_dong_rows():
+            rid = r.get("id")
+            if rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            rows.append(r)
+        print(
+            f"[all_competitors:spot] 최종 {len(rows)}개 "
+            f"(spot {spot_only_count} + dong 추가 {len(rows) - spot_only_count})"
+        )
+        return _filter_allowed(rows)
 
     # fallback — 4동 centroid 분기 (spot 좌표 결정 못 한 경우)
     districts = sorted({winner} | set(top3 or []))  # set ordering 결정성
@@ -573,9 +687,18 @@ async def _collect_all_competitor_locations(
             print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
 
     await asyncio.gather(*[_fetch_one(d) for d in districts])
+    pre_dong_count = len(results)
+    # fallback 모드도 행정동 안 추가 매장 합치기
+    for r in await _gather_dong_rows():
+        rid = r.get("id")
+        if rid in seen_ids:
+            continue
+        seen_ids.add(rid)
+        results.append(r)
     print(
         f"[all_competitors] 단계별 — raw {_stats['raw']} / dedupe drop {_stats['dedupe_drop']} / "
-        f"coord drop {_stats['coord_drop']} / 최종 {len(results)}개"
+        f"coord drop {_stats['coord_drop']} / centroid {pre_dong_count} + dong 추가 "
+        f"{len(results) - pre_dong_count} / 최종 {len(results)}개"
     )
     return results
 

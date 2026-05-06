@@ -166,8 +166,25 @@ def _build_profile(agent: Agent, arc: dict) -> str:
     토큰 절감: 50 agents × system prompt cache hit 시 입력 비용 -70%.
     축약: 거주→@, 소득N/3→incN, 예산→bud, 특성→tr, 소비→spd, 선호동→pref.
     Decision 다양성 보존 위해 핵심 trait·spending·preferred_dongs 유지.
+
+    PersonaPool 매칭 시 (agent.persona_text 존재) occupation/페르소나 요약/취미 추가.
+    Tier S agent 만 정밀 prompt 받으므로 비용 영향 작음 (50 × extra ~40 tok).
     """
-    return f"""마포 {agent.name} {agent.age}{agent.gender} @{agent.home_dong} inc{agent.income_level}/3 bud{int(agent.budget_today):,}
-타입:{arc["label"]} tr:{arc["traits"]} spd:{arc["spending"]} pref:{",".join(arc["preferred_dongs"])}
+    base = f"""마포 {agent.name} {agent.age}{agent.gender} @{agent.home_dong} inc{agent.income_level}/3 bud{int(agent.budget_today):,}
+타입:{arc["label"]} tr:{arc["traits"]} spd:{arc["spending"]} pref:{",".join(arc["preferred_dongs"])}"""
+    # PersonaPool inject — Nemotron 페르소나 매칭 시 직업/취미/요약 추가.
+    # 사용자 피드백 (2026-05-06): 풍부한 페르소나 LLM prompt 에 활용.
+    if getattr(agent, "persona_text", ""):
+        occ = (agent.occupation or "").strip()[:30]
+        hobbies = ",".join((agent.hobbies or [])[:3])[:60]
+        summary = (agent.persona_text or "").strip()[:120]
+        if occ or hobbies or summary:
+            base += f"\n직업:{occ} 취미:{hobbies}"
+            if summary:
+                base += f"\n요약:{summary}"
+    return (
+        base
+        + """
 결정: 시간 위치 취향 예산 날씨. JSON:
-{{"action":"visit|move|rest|work","target_dong":"동|null","category":"카페|음식점|편의점|주점|null","spend":원,"reason":"30자 fragment"}}"""
+{"action":"visit|move|rest|work","target_dong":"동|null","category":"카페|음식점|편의점|주점|null","spend":원,"reason":"30자 fragment"}"""
+    )

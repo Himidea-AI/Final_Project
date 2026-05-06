@@ -60,8 +60,9 @@ function normalizeBrand(s: string | null | undefined): string {
   if (!s) return '';
   return s
     .toLowerCase()
-    .replace(/\([^)]*\)/g, '')
-    .replace(/[\s\-_·.]/g, '')
+    .replace(/\([^)]*\)/g, '') // 괄호+내용 (예: "(MEGA MGC COFFEE)")
+    .replace(/[\s\-_·.]/g, '') // 공백/하이픈/언더스코어/middle-dot
+    .replace(/\d+$/, '') // 끝 숫자 (FTC 표기: "홍콩반점0410" → "홍콩반점")
     .trim();
 }
 
@@ -132,16 +133,6 @@ interface GeoFeature {
 interface GeoCollection {
   type: 'FeatureCollection';
   features: GeoFeature[];
-}
-
-function rankingColor(score: number): string {
-  if (score >= 75) return '#10b981';
-  if (score >= 55) return '#f59e0b';
-  return '#6b7280';
-}
-
-function rankingOpacity(score: number): number {
-  return Math.max(0.08, Math.min(0.45, score / 220));
 }
 
 const PULSE_STYLE_ID = 'mm-pulse-style';
@@ -365,18 +356,13 @@ export function MarketMap({
           );
           return;
         }
-        const rankingMap = new Map(rankings.map((r) => [r.district, r]));
         let winnerCentroid: { lat: number; lng: number } | null = null;
         geo.features.forEach((f) => {
           const dong = f.properties.dong_name;
-          const ranking = rankingMap.get(dong);
-          const score = ranking?.score;
-          const hasScore = typeof score === 'number';
           const isWinner = dong === winnerDistrict;
-          // 실데이터 원칙: 랭킹 점수 없으면 빗금/투명 중립색 (기존 50 기본값 제거 — 점수 50 동과 구분)
-          // winner = sunshine-yellow (추천 강조, Trophy 와 통일). 12색 팔레트.
-          const fillColor = isWinner ? '#ffde00' : hasScore ? rankingColor(score) : '#27272a';
-          const fillOpacity = isWinner ? 0.35 : hasScore ? rankingOpacity(score) : 0.08;
+          // 사용자 요청: winner(1위) 만 색칠. 다른 동은 점수 있어도 중립 회색 처리.
+          const fillColor = isWinner ? '#ffde00' : '#27272a';
+          const fillOpacity = isWinner ? 0.35 : 0.08;
           const polygons: number[][][] =
             f.geometry.type === 'MultiPolygon'
               ? (f.geometry.coordinates as number[][][][]).flatMap((p) => p)
@@ -548,13 +534,24 @@ export function MarketMap({
     });
 
     // Layer 3 — 자사 매장 마커 (로고 아이콘 별표 only — 영업구역 점선 원은 사용자 요구로 제거)
+    // DEBUG: 별표 안 뜨는 이슈 추적 — sameBrandLocations props 검사
+    console.log(
+      '[MarketMap Layer 3] sameBrandLocations:',
+      sameBrandLocations.length,
+      'items',
+      sameBrandLocations,
+    );
     sameBrandLocations.forEach((s) => {
-      if (typeof s.lat !== 'number' || typeof s.lng !== 'number') return;
+      if (typeof s.lat !== 'number' || typeof s.lng !== 'number') {
+        console.warn('[MarketMap Layer 3] skip — bad lat/lng:', s);
+        return;
+      }
       const pos = new maps.LatLng(s.lat, s.lng);
       // 로고 아이콘 마커 — 금색 동그라미 + 작은 펄스 (자사 매장 표시).
       const logo = document.createElement('div');
+      // DEBUG: 별표 안 보이는 이슈 — 디자인 강화 (크기↑ + 강한 그림자 + 외곽선 추가).
       logo.style.cssText =
-        'position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(251,191,36,0.6);font-size:12px;font-weight:900;color:#1c1917;cursor:pointer;';
+        'position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:3px solid #ffffff;border-radius:9999px;box-shadow:0 0 16px rgba(251,191,36,0.95),0 0 4px rgba(0,0,0,0.5);font-size:18px;font-weight:900;color:#1c1917;cursor:pointer;outline:2px solid #f59e0b;outline-offset:1px;';
       logo.innerHTML = '★';
       logo.title = `${s.brand_name || '자사매장'} · ${s.place_name}`;
       logo.addEventListener('click', (ev) => {
@@ -588,10 +585,19 @@ export function MarketMap({
         content: logo,
         xAnchor: 0.5,
         yAnchor: 0.5,
-        zIndex: 4,
+        zIndex: 100, // DEBUG: 가시성 강화 (4 → 100)
       });
       sameBrandOverlay.setMap(mapInstance);
       overlayLayersRef.current.push(sameBrandOverlay);
+      // eslint-disable-next-line no-console
+      console.log(
+        '[MarketMap Layer 3] ★ overlay placed:',
+        s.place_name,
+        'lat=',
+        s.lat,
+        'lng=',
+        s.lng,
+      );
     });
 
     // Layer 4 — 추천 spot 2~4위 번호 라벨 핀 + 1위와 동일한 핫핑크 반경 원.

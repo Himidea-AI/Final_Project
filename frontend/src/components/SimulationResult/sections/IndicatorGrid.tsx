@@ -27,8 +27,6 @@ const INDICATORS: Array<{
   { key: 'rent_index', label: '임대료 지수', shortLabel: '임대', color: 'bg-primary' },
   { key: 'competition_intensity', label: '경쟁강도', shortLabel: '경쟁', color: 'bg-danger' },
   { key: 'estimated_revenue', label: '예상 매출', shortLabel: '매출', color: 'bg-success' },
-  { key: 'survival_rate', label: '생존율', shortLabel: '생존', color: 'bg-primary' },
-  { key: 'closure_rate', label: '폐업률', shortLabel: '폐업', color: 'bg-danger', scale: 100 },
   { key: 'growth_potential', label: '성장 잠재력', shortLabel: '성장', color: 'bg-primary' },
   { key: 'accessibility', label: '접근성', shortLabel: '접근', color: 'bg-primary' },
 ] as const;
@@ -91,7 +89,7 @@ export function IndicatorGrid({ simResult }: Props) {
   if (!report && districtOrder.length === 0) {
     return (
       <section>
-        <SectionLabel label="INDICATOR GRID" subtitle="8개 핵심 상권 지표" />
+        <SectionLabel label="INDICATOR GRID" subtitle="6개 핵심 상권 지표" />
         <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
           상권 지표 데이터 없음
         </div>
@@ -99,20 +97,15 @@ export function IndicatorGrid({ simResult }: Props) {
     );
   }
 
-  // 선택 동의 8 지표 추출 — winner 면 market_report 풀, 아니면 district_rankings 의
-  // 동별 점수 필드(0~100 정규화, 16동 비교 가능) 로 매핑. 모든 동 8지표 표시 가능.
-  // 주의: winner 의 market_report 8지표와 다른 동의 ranking 점수는 산식이 다르므로
-  //   직접 비교는 신중. 화면엔 안내 문구로 명시.
-  // closure_rate 은 0~1 fraction 이라 scale: 100 적용 후 0~100 점수화.
-  // survival_rate 는 winner 외 동에선 100 - closure_rate*100 으로 역산.
+  // 선택 동의 6 지표 추출 — winner 면 market_report 풀, 아니면 district_rankings 의
+  // 동별 점수 필드(0~100 정규화, 16동 비교 가능) 로 매핑.
+  // 주의: winner 의 market_report 지표와 다른 동의 ranking 점수는 산식이 다름. 화면 안내 명시.
   const values = INDICATORS.map(({ key, label, shortLabel, scale }) => {
     let rawVal: unknown = null;
-    let appliedScale: number | undefined = scale;
     if (isWinnerSelected && report) {
       rawVal = (report as Record<string, unknown>)[key];
     } else if (selectedRanking) {
       // 동별 점수 매핑 — DistrictRanking (backend district_ranking_node) 의 0~100 점수 필드.
-      // keyof DistrictRanking 가 인덱스 시그니처로 string|number|symbol 이 되어 string 으로 좁힘.
       const rankingMap: Record<string, Extract<keyof DistrictRanking, string>> = {
         floating_population: 'pop_score',
         rent_index: 'rent_score',
@@ -120,24 +113,16 @@ export function IndicatorGrid({ simResult }: Props) {
         estimated_revenue: 'sales_score',
         growth_potential: 'trend_score',
         accessibility: 'inflow_score',
-        closure_rate: 'closure_rate',
       };
       const rankingKey = rankingMap[key];
       if (rankingKey) {
         rawVal = (selectedRanking as Record<string, unknown>)[rankingKey] ?? null;
-      } else if (key === 'survival_rate') {
-        // ranking 응답엔 survival_rate 가 없어 closure_rate (0~1 fraction) 으로 역산.
-        const cr = selectedRanking.closure_rate;
-        if (typeof cr === 'number' && Number.isFinite(cr)) {
-          rawVal = 100 - cr * 100;
-          appliedScale = undefined; // 이미 0~100 으로 변환됨
-        }
       }
     }
     if (typeof rawVal !== 'number' || !Number.isFinite(rawVal)) {
       return { key, label, shortLabel, val: null as number | null };
     }
-    const scaled = appliedScale ? rawVal * appliedScale : rawVal;
+    const scaled = scale ? rawVal * scale : rawVal;
     return { key, label, shortLabel, val: Math.max(0, Math.min(100, scaled)) };
   });
 
@@ -156,7 +141,7 @@ export function IndicatorGrid({ simResult }: Props) {
     <section>
       {/* 헤더 row — SectionLabel + 동 chip selector (시뮬 1~4동, winner 첫번째). */}
       <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <SectionLabel label="INDICATOR GRID" subtitle="8개 핵심 상권 지표" />
+        <SectionLabel label="INDICATOR GRID" subtitle="6개 핵심 상권 지표" />
         {districtOrder.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">

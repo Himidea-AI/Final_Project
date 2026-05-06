@@ -68,6 +68,50 @@ export default function AgentMapVisualizer({
   const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | number | null>(null);
   // 비교 반경 (m) — 사용자 조절. 클릭한 경쟁업체의 가장 가까운 공실 spot 주변에 원 그림.
   const [comparisonRadius, setComparisonRadius] = useState<number>(500);
+  // 사용자 피드백 (2026-05-06): 공실 spot hover 시 주소/정보 popup. address 는 lazy fetch + cache.
+  const [hoveredSpotId, setHoveredSpotId] = useState<string | number | null>(null);
+  const [spotAddresses, setSpotAddresses] = useState<Record<string | number, string>>({});
+
+  // hover 된 spot 의 주소 lazy fetch (Kakao reverse geocode). 이미 fetch 했으면 skip.
+  useEffect(() => {
+    if (hoveredSpotId === null) return;
+    if (spotAddresses[hoveredSpotId]) return;
+    const loc = locations.find((l) => l.id === hoveredSpotId);
+    if (!loc || loc.type !== 'vacancy') return;
+    interface KakaoCoord2AddrResult {
+      road_address?: { address_name?: string } | null;
+      address?: { address_name?: string } | null;
+    }
+    interface KakaoServicesGlobal {
+      kakao?: {
+        maps?: {
+          services?: {
+            Geocoder: new () => {
+              coord2Address: (
+                lng: number,
+                lat: number,
+                cb: (
+                  results: KakaoCoord2AddrResult[],
+                  status: 'OK' | 'ZERO_RESULT' | 'ERROR',
+                ) => void,
+              ) => void;
+            };
+          };
+        };
+      };
+    }
+    const services = (window as unknown as KakaoServicesGlobal).kakao?.maps?.services;
+    if (!services?.Geocoder) return;
+    const geocoder = new services.Geocoder();
+    geocoder.coord2Address(loc.lng, loc.lat, (results, status) => {
+      if (status !== 'OK' || !results.length) return;
+      const first = results[0];
+      const addr = first.road_address?.address_name || first.address?.address_name || '';
+      if (addr) {
+        setSpotAddresses((prev) => ({ ...prev, [loc.id]: addr }));
+      }
+    });
+  }, [hoveredSpotId, locations, spotAddresses]);
   // Kakao Circle 인스턴스 ref — selected 변경 시 destroy + 재생성.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const radiusCircleRef = useRef<any>(null);
@@ -315,23 +359,76 @@ export default function AgentMapVisualizer({
             const vacancyNumber = locations
               .slice(0, idx + 1)
               .filter((l) => l.type === 'vacancy').length;
+            const isHovered = hoveredSpotId === loc.id;
+            const addr = spotAddresses[loc.id];
             return (
-              <button
-                type="button"
+              <div
                 key={`pin-${loc.id}`}
-                onClick={() => onSpotClick?.(loc)}
-                disabled={!onSpotClick}
-                title={`${loc.name}${loc.listingCount ? ` — 공실 ×${loc.listingCount}` : ''} 클릭해서 ABM 시뮬`}
-                className="absolute z-30 flex items-center justify-center w-8 h-8 rounded-full bg-decor-cyan border-2 border-decor-cyan text-foreground text-xs font-black shadow-[0_0_14px_rgba(0,224,209,0.8)] transition-transform duration-200 pointer-events-auto cursor-pointer hover:scale-125 hover:bg-decor-cyan disabled:cursor-default disabled:opacity-60"
+                className={`absolute ${isHovered ? 'z-40' : 'z-30'}`}
                 style={{
                   left: pixel.x,
                   top: pixel.y,
                   transform: 'translate(-50%, -50%)',
                 }}
+                onMouseEnter={() => setHoveredSpotId(loc.id)}
+                onMouseLeave={() => setHoveredSpotId((cur) => (cur === loc.id ? null : cur))}
               >
-                {vacancyNumber}
-                <span className="absolute inline-flex h-full w-full rounded-full bg-decor-cyan opacity-40 animate-ping" />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSpotClick?.(loc)}
+                  disabled={!onSpotClick}
+                  className="relative flex items-center justify-center w-8 h-8 rounded-full bg-decor-cyan border-2 border-decor-cyan text-foreground text-xs font-black shadow-[0_0_14px_rgba(0,224,209,0.8)] transition-transform duration-200 pointer-events-auto cursor-pointer hover:scale-125 hover:bg-decor-cyan disabled:cursor-default disabled:opacity-60"
+                >
+                  {vacancyNumber}
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-decor-cyan opacity-40 animate-ping" />
+                </button>
+                {isHovered && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 min-w-[200px] max-w-[280px] rounded-lg border border-decor-cyan/60 bg-card p-3 shadow-2xl pointer-events-none">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-decor-cyan">
+                        공실 spot #{vacancyNumber}
+                      </span>
+                      {typeof loc.score === 'number' && (
+                        <span className="text-[10px] font-mono tabular-nums text-amber-600">
+                          score {loc.score.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11.5px] font-bold text-foreground tracking-tight mb-1">
+                      {loc.name}
+                    </div>
+                    {addr ? (
+                      <div className="text-[10.5px] text-muted-foreground leading-snug break-keep mb-1.5">
+                        {addr}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-muted-foreground italic mb-1.5">
+                        주소 조회 중…
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-1.5 text-[9.5px]">
+                      {typeof loc.listingCount === 'number' && loc.listingCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">
+                          매물 {loc.listingCount}건
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded bg-decor-cyan/15 text-foreground font-mono tabular-nums">
+                        {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}
+                      </span>
+                    </div>
+                    {loc.reason && (
+                      <div className="mt-1.5 pt-1.5 border-t border-border text-[10px] text-foreground leading-snug break-keep">
+                        💡 {loc.reason}
+                      </div>
+                    )}
+                    {onSpotClick && (
+                      <div className="mt-1.5 text-[9.5px] font-mono uppercase tracking-widest text-decor-cyan">
+                        클릭 → ABM 시뮬
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             );
           }
 

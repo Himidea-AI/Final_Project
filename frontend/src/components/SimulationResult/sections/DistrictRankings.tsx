@@ -67,15 +67,6 @@ export function DistrictRankings({ simResult }: Props) {
               <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
                 매출성장
               </th>
-              <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
-                폐업위험
-                <span className="ml-1 text-[0.5625rem] font-normal text-muted-foreground">
-                  (ML예측)
-                </span>
-              </th>
-              <th className="p-3 text-right text-xs font-semibold uppercase text-muted-foreground">
-                BEP
-              </th>
               <th className="p-3 text-center text-xs font-semibold uppercase text-muted-foreground">
                 용도지역
               </th>
@@ -119,16 +110,6 @@ export function DistrictRankings({ simResult }: Props) {
                   <td className="p-3 text-right font-mono text-sm text-foreground">
                     {/* backend qoq_growth는 이미 percent 단위 (tools.py:300 *100 적용). 추가 ×100 금지 */}
                     {isExcluded ? '—' : `${r.sales_growth.toFixed(1)}%`}
-                  </td>
-                  <td className="p-3 text-right font-mono text-sm text-danger">
-                    {isExcluded
-                      ? '—'
-                      : r.closure_rate != null
-                        ? `${(r.closure_rate * 100).toFixed(1)}%`
-                        : '—'}
-                  </td>
-                  <td className="p-3 text-right font-mono text-sm text-foreground">
-                    {isExcluded ? '—' : r.bep_quarters != null ? `${r.bep_quarters}분기` : '—'}
                   </td>
                   <td
                     className={`p-3 text-center text-xs font-semibold ${

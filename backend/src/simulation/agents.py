@@ -117,6 +117,18 @@ class Agent:
     # DB 기반 개인 프로필 (전 tier 공통)
     profile: "AgentProfile | None" = None
 
+    # PersonaPool (Nemotron 7,187 개) 매칭 페르소나 (전 tier 공통, 선택적).
+    # spawn_agents 가 sex+age 매칭으로 부여. LLM prompt + UI PersonaCard 노출.
+    # 사용자 피드백 (2026-05-06): parquet 미통합 → spawn 시 매핑.
+    persona_uuid: str | None = None
+    occupation: str = ""  # 예: "회계사", "대학원생"
+    education_level: str = ""  # 예: "4년제 대학교"
+    persona_text: str = ""  # 한 문단 요약 (Nemotron persona 컬럼)
+    hobbies: list[str] = field(default_factory=list)  # 취미 list
+    professional_persona_text: str = ""  # 직업 관련 상세 (Tier S LLM prompt 용)
+    cultural_background: str = ""  # 문화적 배경
+    career_goals_text: str = ""  # 커리어 목표
+
     # 사회적 상호작용 (원시어 DSL 대화용)
     friends: list[int] = field(default_factory=list)
     pending_invites: list[dict] = field(default_factory=list)
@@ -837,6 +849,24 @@ def spawn_agents(
             arrival_hour=arr_h,
             departure_hour=dep_h,
         )
+        # PersonaPool inject — sex+age 매칭으로 Nemotron 7,187 풀에서 sample.
+        # 사용자 피드백 (2026-05-06): parquet 미통합 → spawn 시 매핑.
+        # 실패 (parquet 미존재 등) 시 무시 — agent 그대로 (필드는 default 빈 값).
+        try:
+            from .persona_pool import sample as _persona_sample
+
+            _pp = _persona_sample(gender, age, rng)
+            if _pp is not None:
+                a.persona_uuid = _pp.uuid
+                a.occupation = _pp.occupation
+                a.education_level = _pp.education_level
+                a.persona_text = _pp.persona_text
+                a.hobbies = _pp.hobbies
+                a.professional_persona_text = _pp.professional_persona
+                a.cultural_background = _pp.cultural_background
+                a.career_goals_text = _pp.career_goals
+        except Exception:
+            pass
         aid += 1
         return a
 
