@@ -82,7 +82,7 @@ import { ToastHost } from './components/simulation/ToastHost';
 import { useCompletionToast } from './hooks/useCompletionToast';
 import { useAbmCompletionToast } from './hooks/useAbmCompletionToast';
 import { useSimulationStore } from './stores/simulationStore';
-import { getLivePopulation } from './api/client';
+import { getLivePopulation, getOperatedIndustries } from './api/client';
 import { useCombinedSimResult, buildCombinedResult } from './hooks/useCombinedSimResult';
 import NetworkBackground from './components/NetworkBackground';
 import WaveBackground from './pages/landing/WaveBackground';
@@ -781,6 +781,36 @@ function SimulatorDashboard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brand?.industry_medium]);
+
+  // 회사 운영 업종 list — mount 시 backend `/corp/operated-industries` 호출.
+  // null = 비회원/미등록 corp (모든 업종 허용), [] 또는 list = 그 list 만 enable.
+  // FTC indutyMlsfcNm 표기 (한식/서양식/제과제빵/주점/피자/...) → frontend 라벨 매핑은
+  // 위 FTC_TO_FRONTEND_INDUSTRY 재사용. 동일 frontend 라벨로 매핑되는 FTC 업종이
+  // 하나라도 운영 중이면 그 frontend 라벨 enable.
+  const [operatedFrontendLabels, setOperatedFrontendLabels] = useState<Set<string> | null>(null);
+  const [operatedCompanyName, setOperatedCompanyName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getOperatedIndustries().then((res) => {
+      if (cancelled) return;
+      setOperatedCompanyName(res.company_name);
+      if (!res.industries) {
+        setOperatedFrontendLabels(null); // 모든 업종 허용
+        return;
+      }
+      const labels = new Set<string>();
+      for (const ftc of res.industries) {
+        const mapped = FTC_TO_FRONTEND_INDUSTRY[ftc];
+        if (mapped) labels.add(mapped);
+      }
+      setOperatedFrontendLabels(labels);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
   const [storeArea, setStoreArea] = useState(initParams?.store_area ?? 15); // 평
   const [targetPrice, setTargetPrice] = useState(initParams?.target_price_range ?? '5to10k');
@@ -1186,22 +1216,41 @@ function SimulatorDashboard({
                 </button>
                 {businessTypeOpen && (
                   <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
-                    {BUSINESS_TYPES.map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => {
-                          setBusinessType(type);
-                          setBusinessTypeOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                          type === businessType
-                            ? 'text-primary bg-primary/10'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                        }`}
-                      >
-                        {type}
-                      </button>
-                    ))}
+                    {BUSINESS_TYPES.map((type) => {
+                      const disabled =
+                        operatedFrontendLabels !== null && !operatedFrontendLabels.has(type);
+                      return (
+                        <button
+                          key={type}
+                          disabled={disabled}
+                          title={
+                            disabled
+                              ? `${operatedCompanyName ?? '우리 회사'} 운영 업종 외 — 시뮬레이션 불가`
+                              : undefined
+                          }
+                          onClick={() => {
+                            if (disabled) {
+                              showToast(
+                                'error',
+                                `${operatedCompanyName ?? '우리 회사'} 운영 외 업종입니다`,
+                              );
+                              return;
+                            }
+                            setBusinessType(type);
+                            setBusinessTypeOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                            disabled
+                              ? 'text-muted-foreground/40 cursor-not-allowed line-through'
+                              : type === businessType
+                                ? 'text-primary bg-primary/10'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>

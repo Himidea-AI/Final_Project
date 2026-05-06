@@ -261,6 +261,30 @@ export async function getLivePopulation(dongs?: string[]): Promise<any> {
   return response.data;
 }
 
+/**
+ * 회사 운영 업종/브랜드 list — 시뮬 폼 mount 시 호출.
+ * 토큰의 user → users.biz_number → ftc_brand_franchise.corpNm 매칭 결과.
+ *
+ * - industries=null: 비회원 또는 corp 미등록 — 모든 업종 허용
+ * - industries=[...] : 운영 업종만 enable, 그 외는 dropdown 에서 disable
+ */
+export interface OperatedIndustriesResponse {
+  company_name: string | null;
+  industries: string[] | null;
+  brands?: { name: string; industry: string; stores: number }[];
+  error?: string;
+  message?: string;
+}
+
+export async function getOperatedIndustries(): Promise<OperatedIndustriesResponse> {
+  try {
+    const response = await apiClient.get('/corp/operated-industries');
+    return response.data as OperatedIndustriesResponse;
+  } catch {
+    return { company_name: null, industries: null, brands: [] };
+  }
+}
+
 // ─────────────────────────────────────────────────────────
 // simulation_history (JWT Bearer 필수 — interceptor가 자동 주입)
 // ─────────────────────────────────────────────────────────
