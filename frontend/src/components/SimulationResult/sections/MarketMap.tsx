@@ -433,6 +433,12 @@ export function MarketMap({
     // 백엔드 c.distance_m 은 source 동 centroid 기준이라 핀과 정합 안 됨 → 무시하고 haversineM 으로 재계산.
     const withinCenterLat = targetSpot?.lat ?? center.lat;
     const withinCenterLng = targetSpot?.lng ?? center.lng;
+    // within 판정 = 4 spot 중 어느 하나라도 radius 안이면 내부 (사용자 요청).
+    // targetSpots 비어있으면 단일 spot1 좌표만 사용 (구버전 호환).
+    const allSpots: { lat: number; lng: number }[] =
+      targetSpots && targetSpots.length > 0
+        ? targetSpots
+        : [{ lat: withinCenterLat, lng: withinCenterLng }];
     const normalizedUserBrand = normalizeBrand(userBrand);
     // sameBrandLocations 와 중복으로 그려지는 자사 매장 좌표 제거용 set (key=lat,lng 4자리).
     const sameBrandPosKeys = new Set(
@@ -475,8 +481,11 @@ export function MarketMap({
       const posKey = `${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
       if (isSelfBrand && sameBrandPosKeys.has(posKey)) return;
 
-      const distFromCenter = haversineM(withinCenterLat, withinCenterLng, c.lat, c.lng);
-      const within = distFromCenter <= radius;
+      // 4 spot 중 최단거리 — 하나라도 radius 안이면 within.
+      const minDistFromAnySpot = Math.min(
+        ...allSpots.map((sp) => haversineM(sp.lat, sp.lng, c.lat, c.lng)),
+      );
+      const within = minDistFromAnySpot <= radius;
       const pos = new maps.LatLng(c.lat, c.lng);
       // 주요 경쟁점 top5 매칭 — 사이드바 카드와 동일 좌표면 큰 번호 라벨로 강조.
       const top5Rank = topCompetitorRankByPos.get(`${c.lat.toFixed(4)},${c.lng.toFixed(4)}`);

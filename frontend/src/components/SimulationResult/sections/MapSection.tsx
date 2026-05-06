@@ -274,11 +274,13 @@ export function MapSection({ simResult, topCompetitors }: Props) {
 
   const effectiveRadius = userRadius ?? 500;
   const totalCompetitors = competitors.length;
-  // within 판정 = 화면 핀 좌표(center) 기준 haversine. 백엔드 distance_m 은 source 동 centroid
-  // 기준이라 핀 위치와 정합 안 됨 → MarketMap 마커 색·legend 카운트 일치시킴.
-  const withinCompetitors = competitors.filter(
-    (c) => haversineM(center.lat, center.lng, c.lat, c.lng) <= effectiveRadius,
-  ).length;
+  // within 판정 = 4 spot 중 최단거리 ≤ radius 면 내부 (MarketMap 의 within 분기와 동일).
+  // bestVacancies 4개 좌표 union → 어느 하나라도 반경 안이면 내부.
+  const _withinSpots = bestVacancies.length > 0 ? bestVacancies : [center];
+  const withinCompetitors = competitors.filter((c) => {
+    const minDist = Math.min(..._withinSpots.map((sp) => haversineM(sp.lat, sp.lng, c.lat, c.lng)));
+    return minDist <= effectiveRadius;
+  }).length;
 
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
   const saturation =
