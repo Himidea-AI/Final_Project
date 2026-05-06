@@ -26,7 +26,8 @@ _bearer_optional = HTTPBearer(auto_error=False)
 # simulation-history 같은 신규 엔드포인트는 토큰 필수
 _bearer_required = HTTPBearer(auto_error=True)
 
-UserRole = Literal["master", "manager"]
+UserRole = Literal["master", "manager", "superadmin"]
+_ALLOWED_ROLES: frozenset[str] = frozenset({"master", "manager", "superadmin"})
 
 
 @dataclass
@@ -66,9 +67,7 @@ def create_access_token(
 def decode_token(token: str) -> UserContext:
     """토큰 검증 → UserContext. 서명 실패·만료 시 HTTPException(401)."""
     try:
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -77,9 +76,15 @@ def decode_token(token: str) -> UserContext:
         ) from exc
 
     try:
+        role = payload["role"]
+        if role not in _ALLOWED_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Unknown role: {role!r}",
+            )
         return UserContext(
             user_id=str(payload["sub"]),
-            role=payload["role"],
+            role=role,
             email=payload["email"],
             owner_id=payload.get("owner_id"),
         )

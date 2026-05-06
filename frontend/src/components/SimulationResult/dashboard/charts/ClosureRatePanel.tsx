@@ -21,7 +21,10 @@ export function ClosureRatePanel({ rate, district, color }: Props) {
   if (!rate || !rate.monthly_closure_rates || rate.monthly_closure_rates.length === 0) {
     return null;
   }
-  const avgPct = rate.closure_rate != null ? (rate.closure_rate * 100).toFixed(1) : '—';
+  // 그래프에 표시되는 4분기 값의 산술평균 (소수 둘째 자리에서 반올림 → 첫째 자리 표시).
+  // backend `closure_rate` 필드는 "최근 분기"라 그래프 평균과 일치하지 않으므로 프론트에서 직접 계산.
+  const rates = rate.monthly_closure_rates;
+  const avgPct = ((rates.reduce((sum, r) => sum + r, 0) / rates.length) * 100).toFixed(1);
   return (
     <div className="bg-card border border-border rounded-3xl p-5">
       {district && (

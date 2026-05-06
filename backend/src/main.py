@@ -1312,6 +1312,7 @@ async def signup(req: SignupRequest):
         result = await auth.signup(req.model_dump())
         if result.get("status") == "success" and result.get("user"):
             u = result["user"]
+            # 회원가입 직후 권한은 항상 master 고정. 신규 가입자에 superadmin 자동 부여 금지.
             result["access_token"] = create_access_token(
                 user_id=str(u["id"]),
                 role="master",
@@ -1342,9 +1343,12 @@ async def login(req: LoginRequest):
         result = await run_in_threadpool(auth.login, req.email, req.password)
         if result.get("status") == "success" and result.get("user"):
             u = result["user"]
+            login_role = u.get("role", "master")
+            if login_role not in {"master", "superadmin"}:
+                login_role = "master"
             result["access_token"] = create_access_token(
                 user_id=str(u["id"]),
-                role="master",
+                role=login_role,
                 email=u.get("email", req.email),
             )
         return result

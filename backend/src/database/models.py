@@ -480,6 +480,13 @@ class User(Base):
         default=False,
         comment="이메일 인증 완료 여부",
     )
+    is_superadmin = Column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="전체 가맹본부 simulation 데이터 조회 권한 (기본 false). 자동 부여 금지.",
+    )
 
 
 class FtcBrandFranchise(Base):
