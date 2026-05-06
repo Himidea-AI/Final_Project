@@ -11,10 +11,19 @@
 import { Sparkles } from 'lucide-react';
 import type { SimulationOutput } from '../../../../../types';
 import { EmergingSignalCard } from '../../charts/EmergingSignalCard';
+import { EmergingPeerComparisonChart } from '../../charts/EmergingPeerComparisonChart';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
 import { resolveDongName } from '../../../../../constants/mapoDongs';
 import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
 import { sortByRanking } from '../../utils/rankSort';
+
+const TIER_LABEL_KO: Record<string, string> = {
+  change_ix: '공식',
+  classifier: 'AI',
+  b1_trend: '보조',
+  slope: '보조',
+  none: '검증중',
+};
 
 interface Props {
   simResult: SimulationOutput;
@@ -53,11 +62,50 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
       return acc;
     }, null)?.district ?? null;
 
+  // tier 분포 + signal 분포 — 헤더 chip strip 용
+  const tierCount: Record<string, number> = {};
+  const signalCount = { normal: 0, emerging: 0, declining: 0 };
+  dpredicts.forEach((p) => {
+    const s = p.emerging_signal;
+    if (!s) return;
+    tierCount[s.tier] = (tierCount[s.tier] ?? 0) + 1;
+    signalCount[s.signal] = (signalCount[s.signal] ?? 0) + 1;
+  });
+
   return (
     <div className="space-y-6">
-      <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
-        <Sparkles className="text-primary" /> 동별 상권 조기감지 신호
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
+          <Sparkles className="text-primary" /> 동별 상권 조기감지 신호
+        </h3>
+        {/* tier 분포 + 4동 신호 종합 chip strip */}
+        <div className="flex flex-wrap items-center gap-3 text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
+          {Object.entries(tierCount).map(([k, v]) => (
+            <span key={k}>
+              {TIER_LABEL_KO[k] ?? k} {v}
+            </span>
+          ))}
+          {Object.keys(tierCount).length > 0 && <span className="text-border">·</span>}
+          <span className="text-success">안정 {signalCount.normal}</span>
+          <span className="text-primary">신흥 {signalCount.emerging}</span>
+          <span className="text-danger">쇠퇴 {signalCount.declining}</span>
+        </div>
+      </div>
+
+      {/* [1] 16동 변화도 비교 차트 — peer_distribution 활용 */}
+      <div className="bg-card border border-border rounded-3xl p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+            16 동 변화도 비교
+          </h4>
+          <span className="text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
+            anomaly_score 사분위 + 4동 위치
+          </span>
+        </div>
+        <EmergingPeerComparisonChart dpredicts={dpredicts} />
+      </div>
+
+      {/* [2] 4동 카드 grid — 카드 안 sparkline + peer bar 는 직전 task 에서 추가됨 */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {dpredicts.map((p, idx) => {
           // p.district 가 raw code(11440660)로 올 가능성 대비 한국어 이름으로 휴머나이즈.
