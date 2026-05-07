@@ -1,82 +1,116 @@
-"""market_analyst.report LLM-as-judge 평가."""
+"""market_analyst.grade 분류 정확도 평가 (v7 재설계).
+
+v6 까지: LLM-as-judge 4축 채점 (factuality 등) → MAPE 0.1% 무의미
+   문제: LLM 에 주입된 수치를 그대로 출력하는 걸 "잘 맞춘다" 로 측정.
+
+v7 재설계 (2026-05-07): grade 분류 정확도.
+   LLM 이 실제로 *판단* 하는 것 = 주어진 수치(QoQ성장률 / 경쟁포화도 / 임대료) 로
+   EXCELLENT/GOOD/NORMAL/RISKY 등급을 매기는 일.
+   → 동일 수치를 룰엔진(임계값) 으로 expected_grade 산출 → LLM grade 와 비교.
+
+룰엔진 임계값 (시스템 프롬프트 명시 기준 추론):
+   EXCELLENT : QoQ ≥ +15% AND saturation in {sparse, low}
+   GOOD      : QoQ ≥ +5%  AND saturation in {sparse, low, medium}
+   NORMAL    : -5% ≤ QoQ ≤ +5% AND saturation != saturated
+   RISKY     : QoQ ≤ -5%  OR saturation in {high, saturated}
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
 from src.evaluation.evaluator import BaseEvaluator, EvalResult, EvalSummary
-from src.evaluation.llm_as_judge import JudgeScore, judge_text, passed
+
+
+def _expected_grade(qoq_growth_pct: float, saturation_level: str) -> str:
+    """수치 → 룰엔진 정답 grade. 시스템 프롬프트 임계값과 동일하게.
+
+    Args:
+        qoq_growth_pct: 분기 성장률 (0.15 = +15%, -0.05 = -5%)
+        saturation_level: sparse/low/medium/high/saturated
+
+    Returns:
+        "EXCELLENT" | "GOOD" | "NORMAL" | "RISKY"
+    """
+    sat = (saturation_level or "").lower()
+    qoq = qoq_growth_pct or 0.0
+
+    # RISKY 우선 (가장 보수적)
+    if qoq <= -0.05 or sat in {"high", "saturated"}:
+        return "RISKY"
+    # EXCELLENT — 강성장 + 저포화 둘 다
+    if qoq >= 0.15 and sat in {"sparse", "low"}:
+        return "EXCELLENT"
+    # GOOD — 성장 + 중간 이하 포화
+    if qoq >= 0.05 and sat in {"sparse", "low", "medium"}:
+        return "GOOD"
+    # 그 외 = NORMAL
+    return "NORMAL"
 
 
 class MarketAnalystEvaluator(BaseEvaluator):
-    """market_analyst.report 자연어 본문 LLM-as-judge."""
+    """market_analyst.grade 룰엔진 비교 평가 (v7).
+
+    v6 LLM-as-judge 폐기 — MAPE 0.1% 가 LLM 의 주입 수치 echo 일 뿐 진짜 판단 측정 X.
+    v7 = LLM 이 실제로 판단하는 *분류 라벨* 정확도로 교체.
+    """
 
     agent_id = "market_analyst"
 
-    def __init__(self, fixtures: list[dict] | None = None, threshold: float = 4.0) -> None:
-        # fixtures = [{case_id, district, business_type, market_data, simulated_report}]
+    def __init__(self, fixtures: list[dict] | None = None) -> None:
+        # fixtures = [{
+        #   "case_id": str,
+        #   "qoq_growth_pct": float,           # 시뮬에 주입된 QoQ
+        #   "saturation_level": str,           # 시뮬에 주입된 포화도
+        #   "actual_grade": str,               # LLM 이 출력한 grade
+        # }]
         self._fixtures = fixtures
-        self._threshold = threshold
 
     async def prepare_dataset(self) -> list[dict]:
         return self._fixtures or []
 
-    async def run_one(self, case: dict) -> str:
-        if "simulated_report" in case:
-            return case["simulated_report"]
-        raise NotImplementedError("case 에 'simulated_report' 미포함")
+    async def run_one(self, case: dict) -> dict:
+        if "actual_grade" in case:
+            return {"grade": case["actual_grade"]}
+        raise NotImplementedError("case 에 'actual_grade' 미포함 — Redis 캐시 dump 필요")
 
     def score(self, case: dict, output: Any) -> EvalResult:
-        # judge 는 async 라 score 안에서 await 가 필요. 동기 호출용 sync wrapper.
-        # 운영은 BaseEvaluator.run() override 또는 async 직접 호출 권장.
-        raise NotImplementedError("async 평가는 ascore 사용")
-
-    async def ascore(self, case: dict, output: Any) -> EvalResult:
-        report = output or ""
-        input_data = {
-            "district": case.get("district"),
-            "business_type": case.get("business_type"),
-            "market_data": case.get("market_data", {}),
-        }
-        judge: JudgeScore = await judge_text(input_data, report)
+        actual = (output or {}).get("grade", "").upper()
+        expected = _expected_grade(
+            case.get("qoq_growth_pct", 0.0) or 0.0,
+            case.get("saturation_level", "low") or "low",
+        )
+        passed = actual == expected
         return EvalResult(
             case_id=case.get("case_id", "unknown"),
             agent_id=self.agent_id,
-            expected="judge_mean >= 4.0",
-            actual=judge.mean,
-            metric_name="judge_score",
-            metric_value=judge.mean,
-            passed=passed(judge, self._threshold),
+            expected=expected,
+            actual=actual or "UNKNOWN",
+            metric_name="grade_accuracy",
+            metric_value=1.0 if passed else 0.0,
+            passed=passed,
             details={
-                "factuality": judge.factuality,
-                "relevance": judge.relevance,
-                "specificity": judge.specificity,
-                "coherence": judge.coherence,
-                "rationale": judge.rationale,
+                "qoq_growth_pct": case.get("qoq_growth_pct"),
+                "saturation_level": case.get("saturation_level"),
             },
         )
-
-    async def run(self, max_cases: int | None = None) -> EvalSummary:
-        cases = await self.prepare_dataset()
-        if max_cases is not None:
-            cases = cases[:max_cases]
-        results: list[EvalResult] = []
-        for case in cases:
-            output = await self.run_one(case)
-            results.append(await self.ascore(case, output))
-        return self.aggregate(results)
 
     def aggregate(self, results: list[EvalResult]) -> EvalSummary:
         n = len(results)
         n_pass = sum(1 for r in results if r.passed)
+        cm: dict[str, dict[str, int]] = {}
+        for r in results:
+            cm.setdefault(r.expected, {}).setdefault(r.actual, 0)
+            cm[r.expected][r.actual] += 1
         values = [r.metric_value for r in results]
         return EvalSummary(
             agent_id=self.agent_id,
             n_cases=n,
             n_passed=n_pass,
-            metric_name="judge_score",
+            metric_name="grade_accuracy",
             metric_mean=sum(values) / n if n else 0.0,
             metric_min=min(values) if values else 0.0,
             metric_max=max(values) if values else 0.0,
+            confusion_matrix=cm,
             raw_results=results,
         )

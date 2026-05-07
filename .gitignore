@@ -171,6 +171,7 @@ validation/results/sweep_boost_*/
 # 벤치마크 결과 (재실행 가능 — repo에 보관 X)
 bench_ragas.json
 bench_*.json
+bench_*.md
 
 # 시뮬레이션 임시 결과 (루트 디렉토리)
 sim_*.json

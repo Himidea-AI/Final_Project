@@ -105,9 +105,7 @@ class LegalEvaluator(BaseEvaluator):
             # 조문 인용 형식 검증 (articles 안에 "제N조" 패턴 존재)
             arts = item.get("articles", [])
             if isinstance(arts, list) and arts:
-                refs = " ".join(
-                    str(a.get("article_ref", "")) for a in arts if isinstance(a, dict)
-                )
+                refs = " ".join(str(a.get("article_ref", "")) for a in arts if isinstance(a, dict))
                 if not _ARTICLE_REF_RE.search(refs):
                     return False
         return True
