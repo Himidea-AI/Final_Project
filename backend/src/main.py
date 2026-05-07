@@ -6,6 +6,7 @@ import sys as _sys
 
 if _sys.platform == "win32":
     import asyncio as _asyncio
+
     _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
 
 import asyncio
@@ -785,11 +786,16 @@ async def _collect_same_brand_locations(
         if s.get("dong_name") not in target_set:
             _stats["dong_drop"] += 1
             continue
-        # 옵션 A: target_category 지정 시 매장 category 일치 필수.
-        # target_category 미지정 (구버전 또는 admin 등) 시 필터 비활성.
-        if target_category is not None and s.get("category") != target_category:
-            _stats["cat_drop"] += 1
-            continue
+        # 옵션 A: target_category 지정 시 매장 category 일치 필수 — misalign 차단용
+        # (메가커피 계정이 치킨 시뮬 돌리면 자사 매장 0개).
+        # 단 "기타" 는 카카오 분류 누락 케이스 (브랜드 명확하지만 category 미지정).
+        # brand 매칭으로 이미 정확히 골라진 매장이라 통과시킴 (cat misalign 아님).
+        # target_category 미지정 (구버전 또는 admin) 시 필터 비활성.
+        if target_category is not None:
+            store_cat = s.get("category") or ""
+            if store_cat != target_category and store_cat != "기타":
+                _stats["cat_drop"] += 1
+                continue
         lat_v = s.get("lat")
         lon_v = s.get("lon")
         if not lat_v or not lon_v:
