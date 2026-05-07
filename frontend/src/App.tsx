@@ -43,7 +43,7 @@
  *   - C2: Docker 배포 시 nginx.conf의 /api 프록시가 백엔드를 가리켜야 함
  */
 
-import { useState, useEffect, useRef, useCallback, useId, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, useId, lazy, Suspense } from 'react';
 import {
   Routes,
   Route,
@@ -789,11 +789,17 @@ function SimulatorDashboard({
   // 하나라도 운영 중이면 그 frontend 라벨 enable.
   const [operatedFrontendLabels, setOperatedFrontendLabels] = useState<Set<string> | null>(null);
   const [operatedCompanyName, setOperatedCompanyName] = useState<string | null>(null);
+  // corp 운영 brand 전체 list — frontend label 별 후보 brand 드롭다운 채움.
+  // 더본코리아 등 다업종+동업종 다brand 회사: 한식 선택 시 한신포차/새마을식당/본가 등 후보 노출.
+  const [corpBrands, setCorpBrands] = useState<
+    { name: string; industry: string; stores: number }[]
+  >([]);
   useEffect(() => {
     let cancelled = false;
     getOperatedIndustries().then((res) => {
       if (cancelled) return;
       setOperatedCompanyName(res.company_name);
+      setCorpBrands(res.brands ?? []);
       if (!res.industries) {
         setOperatedFrontendLabels(null); // 모든 업종 허용
         return;
@@ -812,6 +818,28 @@ function SimulatorDashboard({
   }, [user?.id]);
 
   const [businessTypeOpen, setBusinessTypeOpen] = useState(false);
+  // 시뮬 대상 brand 명시 선택 — 동업종 다brand corp (예: 더본 한식 = 한신포차/새마을식당/본가).
+  // null 이면 backend 가 frcsCnt top brand 자동 선택.
+  const [selectedBrandName, setSelectedBrandName] = useState<string | null>(null);
+  const [brandSelectOpen, setBrandSelectOpen] = useState(false);
+  // 현재 선택 업종에 매칭되는 corp brand 후보 (frcsCnt 내림차순 정렬됨).
+  const availableBrands = useMemo(() => {
+    if (corpBrands.length === 0) return [];
+    return corpBrands
+      .filter((b) => FTC_TO_FRONTEND_INDUSTRY[b.industry] === businessType)
+      .sort((a, b) => b.stores - a.stores);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corpBrands, businessType]);
+  // 업종/brand list 변경 시 selectedBrandName 보정 — 현 후보에 없으면 top 으로 reset.
+  useEffect(() => {
+    if (availableBrands.length === 0) {
+      setSelectedBrandName(null);
+      return;
+    }
+    if (!selectedBrandName || !availableBrands.some((b) => b.name === selectedBrandName)) {
+      setSelectedBrandName(availableBrands[0].name);
+    }
+  }, [availableBrands, selectedBrandName]);
   const [storeArea, setStoreArea] = useState(initParams?.store_area ?? 15); // 평
   const [targetPrice, setTargetPrice] = useState(initParams?.target_price_range ?? '5to10k');
   const [operatingHours, setOperatingHours] = useState<string[]>(
@@ -1011,11 +1039,12 @@ function SimulatorDashboard({
     setReportState('loading');
     // [C1 연동] 백엔드 SimulationInput 전 필드 전송.
     // business_type: UI 한글 라벨 → _SALES_CODE_MAP 키로 변환.
-    // brand_name: 브랜드 자동매핑 결과 우선, 없으면 company_name 폴백.
+    // brand_name: 사용자가 폼에서 명시 선택한 brand 우선 (동업종 다brand corp 케이스),
+    //   없으면 auth brand → company_name 폴백.
     // lat/lon: 출점 후보지 좌표 (학교환경위생정화구역 거리 룰 트리거). 미입력 시 backend caution.
     const payload = {
       business_type: BUSINESS_TYPE_BACKEND_KEY[businessType] || businessType,
-      brand_name: brand?.brand_name || user?.company_name || '',
+      brand_name: selectedBrandName || brand?.brand_name || user?.company_name || '',
       target_district: selectedDongs[0] || '서교동',
       target_districts: selectedDongs.length > 0 ? selectedDongs : ['서교동'],
       existing_stores: [],
@@ -1054,6 +1083,7 @@ function SimulatorDashboard({
     businessType,
     user?.company_name,
     brand?.brand_name, // brand_name 폴백 — 로그아웃 후 재로그인 시 새 brand 반영
+    selectedBrandName,
     storeArea,
     targetPrice,
     operatingHours,
@@ -1129,6 +1159,7 @@ function SimulatorDashboard({
                     onClick={() => {
                       setDongDropdownOpen(!dongDropdownOpen);
                       setBusinessTypeOpen(false);
+                      setBrandSelectOpen(false);
                     }}
                     className="w-full flex items-center justify-between px-3 h-10 rounded-lg border border-border bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
                   >
@@ -1203,6 +1234,7 @@ function SimulatorDashboard({
                   onClick={() => {
                     setBusinessTypeOpen(!businessTypeOpen);
                     setDongDropdownOpen(false);
+                    setBrandSelectOpen(false);
                   }}
                   className="w-full flex items-center justify-between px-3 h-10 rounded-lg border border-border bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
                 >
@@ -1255,6 +1287,54 @@ function SimulatorDashboard({
                 )}
               </div>
             </FormField>
+
+            {/* 자사 brand 선택 — 동업종 다brand corp (예: 더본 한식) 만 노출.
+                후보 1개 이하면 자동 선택 + dropdown 숨김. */}
+            {availableBrands.length > 1 && (
+              <FormField label="자사 브랜드" icon={Store}>
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setBrandSelectOpen(!brandSelectOpen);
+                      setBusinessTypeOpen(false);
+                      setDongDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 h-10 rounded-lg border border-border bg-card text-sm text-foreground hover:border-primary/50 transition-colors"
+                  >
+                    <span className="truncate">{selectedBrandName ?? '브랜드 선택'}</span>
+                    <ChevronRight
+                      size={14}
+                      className={`text-muted-foreground transition-transform duration-200 ${
+                        brandSelectOpen ? 'rotate-90' : ''
+                      }`}
+                    />
+                  </button>
+                  {brandSelectOpen && (
+                    <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border border-border bg-card shadow-2xl custom-scrollbar">
+                      {availableBrands.map((b) => (
+                        <button
+                          key={b.name}
+                          onClick={() => {
+                            setSelectedBrandName(b.name);
+                            setBrandSelectOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between gap-2 ${
+                            b.name === selectedBrandName
+                              ? 'text-primary bg-primary/10'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          <span className="truncate">{b.name}</span>
+                          <span className="tabular-nums text-[0.625rem] text-muted-foreground/70 whitespace-nowrap">
+                            {b.stores.toLocaleString()}개
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </FormField>
+            )}
 
             {/* 유동인구 가중치 */}
             <FormField

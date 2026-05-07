@@ -56,6 +56,7 @@ import {
 } from 'lucide-react';
 import { HistoryList } from '../components/SimulationHistory/HistoryList';
 import { TokenBurnrateSection } from '../components/TokenBurnrate/TokenBurnrateSection';
+import { getOperatedIndustries } from '../api/client';
 
 /* ═══════════════════════════════════════════════════════
    Types
@@ -1584,7 +1585,7 @@ function PipelineKanbanView() {
   const { brand, user } = useAuth();
   // 사용자 브랜드(또는 회사명) 로 모든 mock 카드 brand 통일 — 김밥천국/저가커피 같은
   // 무관한 외부 브랜드가 (주)앤하우스 등 본부 영업팀 워크스페이스에 노출되는 회귀 차단.
-  const brandName = brand?.brand_name || user?.company_name || '본사';
+  const brandName = user?.company_name || brand?.brand_name || '본사';
   const cardsByStage = useMemo<Record<PipelineStageId, PipelineCard[]>>(
     () =>
       Object.fromEntries(
@@ -1792,6 +1793,126 @@ function BrandSubTabButton({
 /* ───── 자사 브랜드 프로필 (읽기 전용 + 간단 메모) ───── */
 const BRAND_MEMO_KEY = 'spotter_brand_memo';
 
+type CorpBrand = { name: string; industry: string; stores: number };
+
+function BrandCarousel({
+  brands,
+  activeIdx,
+  onChange,
+}: {
+  brands: CorpBrand[];
+  activeIdx: number;
+  onChange: (i: number) => void;
+}) {
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number; moved: boolean } | null>(null);
+  const activeIdxRef = useRef(activeIdx);
+  activeIdxRef.current = activeIdx;
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    dragRef.current = { startX: e.clientX, moved: false };
+    setDragX(0);
+    setIsDragging(true);
+
+    const onMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return;
+      const delta = ev.clientX - dragRef.current.startX;
+      if (Math.abs(delta) > 4) dragRef.current.moved = true;
+      setDragX(delta);
+    };
+    const onUp = (ev: PointerEvent) => {
+      if (!dragRef.current) return;
+      const delta = ev.clientX - dragRef.current.startX;
+      const wasMoved = dragRef.current.moved;
+      dragRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      // 거리 기반 commit — 카드 spacing(170px) 의 절반 넘게 끌면 1칸 이동.
+      // 오른쪽 드래그(delta>0) → idx 감소 (왼쪽 brand). 부호 반전.
+      if (wasMoved) {
+        const shift = -Math.round(delta / 170);
+        if (shift !== 0) {
+          const curIdx = activeIdxRef.current;
+          const newIdx = Math.max(0, Math.min(brands.length - 1, curIdx + shift));
+          if (newIdx !== curIdx) onChange(newIdx);
+        }
+      }
+      setDragX(0);
+      setIsDragging(false);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  return (
+    <div
+      className="relative h-[240px] w-full overflow-hidden select-none"
+      style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'pan-y' }}
+      onPointerDown={onPointerDown}
+    >
+      {brands.map((b, i) => {
+        const offset = i - activeIdx;
+        const dragOffset = isDragging ? dragX / 200 : 0;
+        const visualOffset = offset + dragOffset;
+        const abs = Math.abs(visualOffset);
+        if (abs > 3) return null;
+        const scale = Math.max(0.55, 1 - abs * 0.18);
+        const opacity = Math.max(0.18, 1 - abs * 0.32);
+        const translateX = visualOffset * 170;
+        const zIndex = 100 - Math.round(abs * 10);
+        const isActive = Math.round(visualOffset) === 0;
+        return (
+          <motion.div
+            key={`${b.name}-${i}`}
+            onClick={() => {
+              if (offset !== 0 && !isDragging) onChange(i);
+            }}
+            animate={{ x: translateX, scale, opacity }}
+            transition={
+              isDragging
+                ? { duration: 0 }
+                : { type: 'tween', duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }
+            }
+            className="absolute w-[240px] h-[180px] rounded-2xl border bg-card shadow-xl p-5 flex flex-col gap-2"
+            style={{
+              left: 'calc(50% - 120px)',
+              top: 'calc(50% - 90px)',
+              zIndex,
+              cursor: isActive ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
+              borderColor: isActive ? 'var(--primary)' : 'var(--border)',
+              boxShadow: isActive ? '0 12px 40px -12px rgba(0,0,0,0.4)' : undefined,
+            }}
+          >
+            <div className="text-[0.625rem] font-mono uppercase tracking-widest text-muted-foreground">
+              {b.industry}
+            </div>
+            <div className="text-xl font-black text-foreground line-clamp-2 leading-tight">
+              {b.name}
+            </div>
+            <div className="mt-auto text-sm tabular-nums">
+              <span className="text-muted-foreground">전국 가맹점 </span>
+              <span className="font-bold text-primary">{b.stores.toLocaleString()}</span>
+              <span className="text-muted-foreground">개</span>
+            </div>
+          </motion.div>
+        );
+      })}
+
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
+        {brands.map((_, i) => (
+          <div
+            key={i}
+            className={`h-1.5 rounded-full transition-all ${i === activeIdx ? 'w-4 bg-primary' : 'w-1.5 bg-muted-foreground/30'}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BrandProfileView() {
   const { brand, user } = useAuth();
   const { showToast } = useToast();
@@ -1803,6 +1924,25 @@ function BrandProfileView() {
     }
   });
   const [memoDirty, setMemoDirty] = useState(false);
+  const [corpBrands, setCorpBrands] = useState<CorpBrand[]>([]);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    getOperatedIndustries().then((res) => {
+      if (!alive) return;
+      const list = (res.brands ?? []).slice().sort((a, b) => b.stores - a.stores);
+      setCorpBrands(list);
+      setCompanyName(res.company_name ?? null);
+      // auth.brand 와 매칭되는 idx 를 default active 로
+      const matchIdx = list.findIndex((b) => b.name === brand?.brand_name);
+      setActiveIdx(matchIdx >= 0 ? matchIdx : 0);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [brand?.brand_name]);
 
   const formatMoney = (v: number | null | undefined): string => {
     if (v == null) return '—';
@@ -1811,22 +1951,34 @@ function BrandProfileView() {
     return `₩${v.toLocaleString()}`;
   };
 
+  const activeBrand = corpBrands[activeIdx];
+  const isAuthBrand = activeBrand?.name === brand?.brand_name;
+
   const fields: { label: string; value: string; hint?: string }[] = [
-    { label: '브랜드명', value: brand?.brand_name ?? '—', hint: 'users.brand_name' },
+    { label: '브랜드명', value: activeBrand?.name ?? brand?.brand_name ?? '—' },
+    { label: '업종', value: activeBrand?.industry ?? '—' },
     {
       label: '전체 가맹점 수',
-      value: brand?.franchise_count != null ? `${brand.franchise_count.toLocaleString()}개` : '—',
+      value: activeBrand
+        ? `${activeBrand.stores.toLocaleString()}개`
+        : brand?.franchise_count != null
+          ? `${brand.franchise_count.toLocaleString()}개`
+          : '—',
       hint: '본사 공시 기준',
     },
     {
       label: '평균 월매출',
-      value: formatMoney(brand?.avg_sales),
-      hint: '가맹점당 월 평균',
+      value: isAuthBrand ? formatMoney(brand?.avg_sales) : '—',
+      hint: isAuthBrand ? '가맹점당 월 평균' : '대표 brand 만 집계',
     },
     {
       label: '마포구 내 매장',
-      value: brand?.mapo_store_count != null ? `${brand.mapo_store_count.toLocaleString()}개` : '—',
-      hint: '시뮬 지역 기준',
+      value: isAuthBrand
+        ? brand?.mapo_store_count != null
+          ? `${brand.mapo_store_count.toLocaleString()}개`
+          : '—'
+        : '—',
+      hint: isAuthBrand ? '시뮬 지역 기준' : '대표 brand 만 집계',
     },
   ];
 
@@ -1861,6 +2013,20 @@ function BrandProfileView() {
             </span>
           )}
         </div>
+
+        {corpBrands.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-baseline justify-between mb-2 px-1">
+              <span className="text-[0.625rem] font-bold text-muted-foreground uppercase tracking-widest">
+                {companyName ?? '운영 brand'} · {corpBrands.length}개
+              </span>
+              <span className="text-[0.625rem] text-muted-foreground/60">
+                좌우로 드래그 또는 클릭
+              </span>
+            </div>
+            <BrandCarousel brands={corpBrands} activeIdx={activeIdx} onChange={setActiveIdx} />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {fields.map((f) => (

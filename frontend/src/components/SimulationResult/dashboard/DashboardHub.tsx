@@ -93,6 +93,17 @@ export function DashboardHub({
   const isAnalyzeDisabled = analyzeStatus === 'error';
   const isPredictLoading = predictStatus === 'running';
   const isAnalyzeLoading = analyzeStatus === 'running';
+  // ABM gate — 사용자 피드백 (2026-05-06): AI 분석 'done' 일 때만 ABM 활성. idle/running/error 모두 비활성.
+  // (이전엔 isAnalyzeDisabled 만 사용 → error 외 모든 상태에서 ABM clickable 이었음.)
+  const isAbmDisabled = analyzeStatus !== 'done';
+  const abmDisabledReason =
+    analyzeStatus === 'error'
+      ? (analyzeError ?? 'AI 분석 실패 — 재시도 후 ABM 가능')
+      : analyzeStatus === 'running'
+        ? 'AI 분석 진행 중 — 완료 후 ABM 가능'
+        : analyzeStatus === 'idle'
+          ? 'AI 분석 완료 후 ABM 가능'
+          : undefined;
 
   // 새 시뮬 시작 — store.result 비우고 /simulator 진입.
   // mount-restore (App.tsx:1297-1308) 가 store.result null 보고 setReportState 호출 안 함 → input UI 정상 표시.
@@ -242,8 +253,8 @@ export function DashboardHub({
             imgAlt="사람들이 다니는 거리"
             accent="abm"
             ctaLabel="시뮬 실행"
-            disabled={isAnalyzeDisabled}
-            disabledReason={analyzeError ?? undefined}
+            disabled={isAbmDisabled}
+            disabledReason={abmDisabledReason}
             loading={isAnalyzeLoading}
           />
         ) : (
@@ -255,8 +266,8 @@ export function DashboardHub({
             imgAlt="사람들이 다니는 거리"
             accent="abm"
             ctaLabel="시뮬 실행"
-            disabled={isAnalyzeDisabled}
-            disabledReason={analyzeError ?? undefined}
+            disabled={isAbmDisabled}
+            disabledReason={abmDisabledReason}
             loading={isAnalyzeLoading}
           />
         )}

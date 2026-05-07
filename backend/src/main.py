@@ -1,3 +1,13 @@
+# ─── Windows event loop policy 강제 (가장 먼저 — 다른 import 전에) ────────────
+# psycopg 3 async 가 Windows default ProactorEventLoop 와 충돌해 legal RAG 호출 시
+# psycopg.InterfaceError 발생. uvicorn 이 자체 loop 만들기 전에 정책 변경 필수.
+# https://sqlalche.me/e/20/rvf5
+import sys as _sys
+
+if _sys.platform == "win32":
+    import asyncio as _asyncio
+    _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
+
 import asyncio
 import logging
 import math
@@ -294,14 +304,24 @@ def _validate_and_resolve_brand(
         logger.warning(f"[brand_resolver] {result['error']} biz={biz_number} — fallback to input.brand_name")
         return
 
-    # 성공: brand_name override (사용자가 다른 brand 입력했어도 corp 정합 brand 로 교체)
+    # 사용자 명시 선택 우선 — input.brand_name 이 해당 업종 후보 (top + alternatives) 안에 있으면 그대로 사용.
+    # 동업종 다brand corp (예: 더본 한식 = 한신포차/새마을식당/본가) 에서 frontend dropdown 선택 보존.
+    valid_brands = {result["brand_name"], *result.get("alternatives", [])}
+    if input_data.brand_name in valid_brands:
+        if input_data.brand_name != result["brand_name"]:
+            logger.info(
+                f"[brand_resolver] honor-input: input.brand_name='{input_data.brand_name}' "
+                f"(top='{result['brand_name']}' but valid alternative)"
+            )
+        return
+
+    # 사용자 입력이 후보에 없음 → corp top brand 로 override.
     resolved_brand = result["brand_name"]
-    if input_data.brand_name != resolved_brand:
-        logger.info(
-            f"[brand_resolver] auto-resolve: input.brand_name='{input_data.brand_name}' → '{resolved_brand}' "
-            f"(corp={result['company_name']}, industry={input_data.business_type})"
-        )
-        input_data.brand_name = resolved_brand
+    logger.info(
+        f"[brand_resolver] auto-resolve: input.brand_name='{input_data.brand_name}' → '{resolved_brand}' "
+        f"(corp={result['company_name']}, industry={input_data.business_type})"
+    )
+    input_data.brand_name = resolved_brand
 
 
 _BIZ_TYPE_NORMALIZE: dict[str, str] = {

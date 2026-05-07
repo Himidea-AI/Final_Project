@@ -318,36 +318,82 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
           → 안 inner cards(card white). 사용자 피드백 (2026-05-05): 제일 밖 white. */}
       {mode === 'map' ? (
         <div className="bg-secondary border border-border rounded-3xl p-4 flex flex-col gap-3">
-          {/* 시뮬레이션 안내 — 첫 진입 시 컨텍스트. 사용자 피드백 (2026-05-05). */}
-          <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3 flex items-start gap-3">
-            <div className="shrink-0 w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
-              <Radar size={14} className="text-primary" />
+          {/* 시뮬레이션 안내 — 첫 진입 시 컨텍스트. 사용자 피드백 (2026-05-05).
+              초심자 친화 재구성 (2026-05-03): "ABM이 뭐지?" 문답 + 3단계 사용법 + 출력 설명 + 범례. */}
+          <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3.5 flex flex-col gap-2.5">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
+                <Radar size={14} className="text-primary" />
+              </div>
+              <div className="flex flex-col gap-1 min-w-0">
+                <p className="text-[12px] font-black text-foreground tracking-tight leading-tight">
+                  ABM 시뮬레이터 — "이 자리에 매장 열면 하루에 얼마 팔릴까?"
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-snug tracking-tight">
+                  마포에 사는 가상 시민{' '}
+                  <span className="font-bold text-foreground">5,000명(페르소나)</span>이 실제처럼
+                  돌아다니며 점심·저녁을 사 먹습니다. 후보 공실에 매장을 차렸다고 가정하면 누가
+                  들르는지, 하루 매출은 얼마인지, 근처 자사 매장 매출이 얼마나 줄어드는지(잠식)를
+                  계산해줍니다.
+                </p>
+              </div>
             </div>
-            <div className="flex flex-col gap-1 min-w-0">
-              <p className="text-[12px] font-black text-foreground tracking-tight leading-tight">
-                ABM 시뮬레이터 — 마포 5,000 페르소나 행동 시뮬
-              </p>
-              <p className="text-[11px] text-muted-foreground leading-snug tracking-tight">
-                지도에서 <span className="font-bold text-foreground">공실 spot (초록)</span> 클릭 →
-                <span className="font-bold text-foreground"> 시나리오 (날씨/요일/임대료)</span> 설정
-                → 시뮬 실행. 5,000 가상 에이전트가 마포 전역에서 이동·소비 패턴 시뮬 → 선택 spot 의
-                일 방문/매출/잠식 추정. 여러 spot 큐 누적 → 순차 실행 (우하단 패널).
-              </p>
-              <p className="text-[10px] text-muted-foreground/80 leading-snug">
-                범례:{' '}
-                <span className="font-bold" style={{ color: '#fb565b' }}>
-                  ▲ 자사 매장
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
+              <div className="rounded-xl bg-card border border-border/60 px-3 py-2 flex flex-col gap-0.5">
+                <span className="text-[9px] font-mono font-black text-primary tracking-widest">
+                  STEP 1
                 </span>
-                {' · '}
-                <span className="font-bold" style={{ color: '#ffba00' }}>
-                  ▲ 경쟁업체
+                <span className="text-[11px] font-bold text-foreground leading-tight">
+                  공실 클릭
                 </span>
-                {' · '}
-                <span className="font-bold" style={{ color: 'var(--decor-cyan)' }}>
-                  ● 공실 매물
+                <span className="text-[10px] text-muted-foreground leading-snug">
+                  지도에서 초록 점(임대 가능 매물) 하나 선택
                 </span>
-              </p>
+              </div>
+              <div className="rounded-xl bg-card border border-border/60 px-3 py-2 flex flex-col gap-0.5">
+                <span className="text-[9px] font-mono font-black text-primary tracking-widest">
+                  STEP 2
+                </span>
+                <span className="text-[11px] font-bold text-foreground leading-tight">
+                  조건 설정
+                </span>
+                <span className="text-[10px] text-muted-foreground leading-snug">
+                  날씨·요일·임대료 시나리오 입력 후 "시뮬 실행"
+                </span>
+              </div>
+              <div className="rounded-xl bg-card border border-border/60 px-3 py-2 flex flex-col gap-0.5">
+                <span className="text-[9px] font-mono font-black text-primary tracking-widest">
+                  STEP 3
+                </span>
+                <span className="text-[11px] font-bold text-foreground leading-tight">
+                  결과 확인
+                </span>
+                <span className="text-[10px] text-muted-foreground leading-snug">
+                  방문객·매출·자사 잠식률 (1~2분 소요)
+                </span>
+              </div>
             </div>
+
+            <p className="text-[10px] text-muted-foreground/80 leading-snug pt-0.5 border-t border-border/40">
+              <span className="font-bold text-muted-foreground">지도 범례 ─ </span>
+              <span className="font-bold" style={{ color: 'var(--decor-cyan)' }}>
+                ● 공실 매물
+              </span>
+              <span className="text-muted-foreground/60"> (클릭 가능)</span>
+              {' · '}
+              <span className="font-bold" style={{ color: '#fb565b' }}>
+                ▲ 자사 매장
+              </span>
+              {' · '}
+              <span className="font-bold" style={{ color: '#ffba00' }}>
+                ▲ 경쟁업체
+              </span>
+              <span className="text-muted-foreground/60">
+                {' '}
+                · 여러 곳 시뮬 시 우하단 큐 패널 확인
+              </span>
+            </p>
           </div>
           <div className="h-14 bg-muted/90 backdrop-blur-md border border-border rounded-2xl flex justify-between items-center px-6 shrink-0">
             <h4 className="text-xs font-black text-foreground flex items-center gap-3">

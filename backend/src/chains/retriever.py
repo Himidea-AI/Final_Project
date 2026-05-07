@@ -959,6 +959,21 @@ class LegalDocumentRetriever:
             for doc, score in docs_with_score
             if score >= self.RELEVANCE_THRESHOLD
         ]
+        # FALLBACK: RELEVANCE_THRESHOLD 컷 후 0건이지만 raw 결과는 있다면,
+        # 임계 무시하고 raw top_k 사용 — specialist LLM 에 "(자료 없음)" 보내는 케이스 차단.
+        # (한국어 임베딩 코사인 < 0.3 발생 시 building/privacy 등 specialist RAG 실패 사례.)
+        if not vector_results and docs_with_score:
+            logger.warning(
+                f"[LegalDocumentRetriever] RELEVANCE_THRESHOLD({self.RELEVANCE_THRESHOLD}) "
+                f"컷 후 0건 — raw 결과 {len(docs_with_score)}건 임계 무시 폴백 적용"
+            )
+            vector_results = [
+                {
+                    "content": doc.page_content,
+                    "metadata": {**doc.metadata, "relevance": round(score, 4)},
+                }
+                for doc, score in docs_with_score[: top_k * 2]
+            ]
 
         # 2차: BM25 키워드 검색 — 부칙(적용례/경과조치) 감점 적용 (settings.bm25_supplementary_penalty)
         _t = time.perf_counter()
@@ -1431,6 +1446,19 @@ class LegalDocumentRetriever:
             for doc, score in docs_with_score
             if score >= self.RELEVANCE_THRESHOLD
         ]
+        # FALLBACK: 판례도 동일 — 임계 컷 후 0건이지만 raw 있으면 임계 무시 사용.
+        if not vector_results and docs_with_score:
+            logger.warning(
+                f"[search_precedents] RELEVANCE_THRESHOLD({self.RELEVANCE_THRESHOLD}) "
+                f"컷 후 0건 — raw {len(docs_with_score)}건 폴백"
+            )
+            vector_results = [
+                {
+                    "content": doc.page_content,
+                    "metadata": {**doc.metadata, "relevance": round(score, 4)},
+                }
+                for doc, score in docs_with_score[: top_k * 2]
+            ]
 
         # 2차: BM25 — 판례 청크만 대상으로 필터 (메모리 인덱스에서 category 필터링).
         _t = time.perf_counter()
