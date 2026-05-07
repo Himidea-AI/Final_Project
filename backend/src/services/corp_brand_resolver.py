@@ -112,12 +112,28 @@ def get_corp_industries(biz_number: str) -> dict:
     }
 
 
+# 프론트엔드 표기 → FTC indutyMlsfcNm 표기 alias.
+# Frontend dropdown 값과 FTC 등록값이 다른 경우 매핑.
+# 예: 사용자가 "호프" 선택 → FTC는 "주점"으로 등록 (더본코리아 백스비어).
+_INDUSTRY_FTC_ALIAS: dict[str, str] = {
+    "호프": "주점",
+    "호프-간이주점": "주점",
+    "카페": "커피",
+    "커피-음료": "커피",
+    "음식점": "한식",  # 일반 "음식점" → 한식으로 폴백
+    "제과점": "제과제빵",
+    "제과": "제과제빵",
+    "베이커리": "제과제빵",
+}
+
+
 def resolve_brand_for_industry(biz_number: str, industry: str) -> dict:
     """사업자번호 + 업종 → 같은 corp 의 해당 업종 가장 큰 brand 자동 선택.
 
     Args:
         biz_number: 사업자등록번호.
         industry: 업종명 (FTC indutyMlsfcNm 표기 — 한식/중식/일식/...).
+            프론트 표기 (호프/카페/제과점) 입력 시 _INDUSTRY_FTC_ALIAS 로 정규화.
 
     Returns:
         성공: ``{"brand_name": ..., "industry": ..., "stores": int,
@@ -129,7 +145,9 @@ def resolve_brand_for_industry(biz_number: str, industry: str) -> dict:
     if "error" in portfolio:
         return portfolio
 
-    matched = [b for b in portfolio["brands"] if b["industry"] == industry]
+    # 프론트 표기 → FTC 표기 정규화
+    ftc_industry = _INDUSTRY_FTC_ALIAS.get(industry, industry)
+    matched = [b for b in portfolio["brands"] if b["industry"] == ftc_industry]
     if not matched:
         return {
             "error": "INDUSTRY_NOT_OPERATED",
