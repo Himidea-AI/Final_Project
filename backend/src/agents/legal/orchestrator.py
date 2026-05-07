@@ -1,10 +1,14 @@
-"""법률 평가 Orchestrator — 9 룰 + 4 specialist 병렬 실행.
+"""법률 평가 Orchestrator — 5 입지 룰 + 3 specialist 병렬 실행.
 
-진입점: ``run_legal_evaluation`` — ``asyncio.gather`` 로 13 개 평가를
+코드 정의는 9 룰 + 4 specialist 이지만 운영(operation) 카테고리 5종
+(food_hygiene/labor_law/vat_law/privacy_law/sewage_law) 은 frontend
+미표시 + LLM 비용 절감 정책으로 비활성. 실제 활성 = **8 카테고리**.
+
+진입점: ``run_legal_evaluation`` — ``asyncio.gather`` 로 8 개 평가를
 병렬 실행하고 ``return_exceptions=True`` 로 한 항목 실패가 전체에
 영향 주지 않도록 격리.
 
-반환 순서는 ``_RULE_ENGINE_ORDER`` 와 1:1 대응 (13 dict).
+반환 순서는 ``_RULE_ENGINE_ORDER`` 와 1:1 대응 (8 dict).
 
 2026-05-02: school_zone (학교환경위생정화구역) 룰 추가 — 주점 출점 후보지
 좌표 기반 50m/200m 거리 평가. 좌표 미입력 시 caution fallback.
@@ -79,7 +83,7 @@ async def run_legal_evaluation(
     lon: float | None = None,
     territory_radius_m: int | None = None,
 ) -> list[dict]:
-    """9 룰 + 4 specialist 병렬 평가 → 13 dict 반환.
+    """5 입지 룰 + 3 specialist 병렬 평가 → 8 dict 반환 (운영 5 비활성).
 
     Args:
         brand: 브랜드명 (specialist 입력).
@@ -91,7 +95,7 @@ async def run_legal_evaluation(
         lon: 출점 후보지 경도 (lat 와 함께 입력될 때만 유효).
 
     Returns:
-        ``len == 13`` 의 dict 리스트. 각 dict 는 ``type, level, summary, recommendation,
+        ``len == 8`` 의 dict 리스트. 각 dict 는 ``type, level, summary, recommendation,
         articles`` 필드를 가지며 ``_RULE_ENGINE_ORDER`` 순서로 정렬됨.
     """
     # 룰 9 개 — 동기 pure-Python (~ms). asyncio.to_thread executor 점유 회피 위해

@@ -144,7 +144,7 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full">
       {/* ── KPI 카드 4개 (ranking 순, winner ring 강조). 동별 색 = dot + 숫자. ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {summaries.map((s, idx) => {
@@ -205,9 +205,9 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
       </div>
 
       {/* ── Heatmap 4 row × (24×SUB) col ──
-          cell 모양(w-4 h-8) 고정 + 박스 폭에 맞춰 SUB 만큼 cell 개수만 늘려 꽉 채움.
+          cell flex-1 로 컨테이너 폭에 균등 분배 → 저장/리사이즈에도 카드 밖 튀어나감 없음.
           인접 시간대 사이 linear interpolation 으로 자연스러운 그라데이션. */}
-      <div ref={heatmapRef} className="w-full">
+      <div ref={heatmapRef} className="w-full min-w-0">
         {/* row 컨테이너 */}
         <div className="flex flex-col gap-1">
           {summaries.map((s, idx) => {
@@ -225,8 +225,9 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
                     {s.district}
                   </span>
                 </div>
-                {/* (24×SUB) cell row — 인접 시간대 linear interpolation. cell 폭 w-4 고정. */}
-                <div className="flex gap-px">
+                {/* (24×SUB) cell row — 인접 시간대 linear interpolation.
+                    flex-1 + min-w-0 으로 컨테이너 폭에 균등 분배 → 카드 밖 튀어나감 차단. */}
+                <div className="flex flex-1 gap-px min-w-0">
                   {Array.from({ length: TOTAL_CELLS }, (_, i) => {
                     const h0 = Math.floor(i / SUB);
                     const h1 = (h0 + 1) % 24;
@@ -247,7 +248,7 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
                       <div
                         key={i}
                         title={tooltip}
-                        className="w-4 h-8 rounded-sm transition-opacity"
+                        className="flex-1 min-w-0 h-8 rounded-sm transition-opacity"
                         style={{
                           backgroundColor: pop == null ? 'var(--secondary)' : seriesColor,
                           opacity,
@@ -261,17 +262,17 @@ export function CustomerFlowPeakHourChart({ dpredicts, simResult }: Props) {
           })}
         </div>
 
-        {/* X축 시간 라벨 — sub-cell 시작 위치 (i % SUB === 0) 의 3시간 배수만 표시. */}
+        {/* X축 시간 라벨 — cell row 와 동일하게 flex-1 분배. */}
         <div className="mt-2 flex items-center gap-3">
           <div className="w-20 shrink-0" />
-          <div className="flex gap-px">
+          <div className="flex flex-1 gap-px min-w-0">
             {Array.from({ length: TOTAL_CELLS }, (_, i) => {
               const h = Math.floor(i / SUB);
               const isHourStart = i % SUB === 0;
               return (
                 <div
                   key={i}
-                  className="w-4 text-center text-[0.5625rem] tabular-nums text-muted-foreground"
+                  className="flex-1 min-w-0 text-center text-[0.5625rem] tabular-nums text-muted-foreground"
                 >
                   {isHourStart && h % 3 === 0 ? h : ''}
                 </div>

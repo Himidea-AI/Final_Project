@@ -74,18 +74,18 @@ def get_corp_industries(biz_number: str) -> dict:
             return {"error": "INVALID_COMPANY_NAME", "company_name": company_name}
 
         # ftc_brand_franchise 에서 corpNm 매칭 (정규화 ILIKE)
-        # frcsCnt 큰 row 부터 정렬 — 같은 brand 의 다년 데이터는 max 사용
-        # paper brand 차단 — frcsCnt > 0 인 운영 brand 만 후보. 0 인 brand 는 시뮬 의미 없음
-        # (brand_profile.py 의 paper brand 가드와 동일 정책 — resolver 단계에서 미리 필터).
+        # 가맹점 수는 2025 년도 데이터로 통일 — 연도별 표기 변동(BBQ vs 비비큐(BBQ))으로
+        # MAX 사용 시 같은 brand 가 다른 row 로 분리되는 회귀 방지.
+        # paper brand 차단 — frcsCnt > 0 인 운영 brand 만 후보.
         rows = c.execute(
             sa.text(
                 """
-                SELECT "brandNm", "indutyMlsfcNm", MAX("frcsCnt") AS stores
+                SELECT "brandNm", "indutyMlsfcNm", "frcsCnt" AS stores
                 FROM ftc_brand_franchise
                 WHERE "corpNm" IS NOT NULL
+                  AND yr = 2025
+                  AND "frcsCnt" > 0
                   AND REGEXP_REPLACE("corpNm", '\\(주\\)|㈜|주식회사|\\([^)]*\\)|\\s+', '', 'g') ILIKE :norm
-                GROUP BY "brandNm", "indutyMlsfcNm"
-                HAVING MAX("frcsCnt") > 0
                 ORDER BY stores DESC NULLS LAST
                 """
             ),
@@ -99,10 +99,46 @@ def get_corp_industries(biz_number: str) -> dict:
             "message": f"{company_name} 은(는) FTC 가맹사업 정보공개서에 등록되지 않은 corp 입니다.",
         }
 
-    brands = [
-        {"name": r._mapping["brandNm"], "industry": r._mapping["indutyMlsfcNm"], "stores": r._mapping["stores"] or 0}
-        for r in rows
-    ]
+    # 같은 brand 의 연도별 표기 차이 dedup (예: 'BBQ' / '비비큐(BBQ)' → 1개로 통합).
+    # 1) 정확 일치 dedup: (괄호 제거 + 공백 제거 + 대문자) key 같으면 통합
+    # 2) substring dedup: 같은 industry 내 한 표기가 다른 표기에 포함되면 frcsCnt 큰 쪽 채택
+    #    (예: "BBQ" ⊂ "비비큐(BBQ)" → 더 많은 가맹점 가진 표기 1개로)
+
+    def _brand_key(name: str) -> str:
+        if not name:
+            return ""
+        n = re.sub(r"\([^)]*\)", "", name)  # 괄호 안 제거
+        n = re.sub(r"\s+", "", n).upper()  # 공백 제거 + 대문자
+        return n
+
+    # Phase 1: 정확 일치 dedup
+    dedup: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        m = r._mapping
+        key = (_brand_key(m["brandNm"]), m["indutyMlsfcNm"] or "")
+        cur_stores = m["stores"] or 0
+        prev = dedup.get(key)
+        if prev is None or cur_stores > prev["stores"]:
+            dedup[key] = {"name": m["brandNm"], "industry": m["indutyMlsfcNm"], "stores": cur_stores}
+
+    # Phase 2: 같은 industry 내 substring 통합 (큰 표기에 작은 표기가 substring 으로 포함)
+    candidates = sorted(dedup.values(), key=lambda b: b["stores"], reverse=True)
+    merged: list[dict] = []
+    for cand in candidates:
+        cand_key = _brand_key(cand["name"])
+        absorbed = False
+        for kept in merged:
+            if kept["industry"] != cand["industry"]:
+                continue
+            kept_key = _brand_key(kept["name"])
+            if cand_key and kept_key and (cand_key in kept_key or kept_key in cand_key):
+                # 같은 brand 다른 표기 — frcsCnt 큰 쪽 (먼저 추가된 kept) 유지
+                absorbed = True
+                break
+        if not absorbed:
+            merged.append(cand)
+
+    brands = merged
     industries = sorted({b["industry"] for b in brands if b["industry"]})
 
     return {

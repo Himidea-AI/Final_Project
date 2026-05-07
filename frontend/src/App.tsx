@@ -838,7 +838,7 @@ function SimulatorDashboard({
       // ▼ fetch 응답이 'real data' 일 때만 state 갱신.
       // res.industries=null + brands=[] 은 (1) auth 미주입 (2) FTC 미등록 (3) 네트워크 실패 모두 같은 모양 →
       // 캐시 hit 한 state 를 덮어쓰면 'all enabled' 로 회귀. 따라서 빈 응답은 무시하고 캐시 유지.
-      const hasRealData = (res.industries !== null) || (res.brands && res.brands.length > 0);
+      const hasRealData = res.industries !== null || (res.brands && res.brands.length > 0);
       if (!hasRealData) {
         return;
       }
@@ -1414,7 +1414,7 @@ function SimulatorDashboard({
         {/* ─────── ScopeHint 띠 — Cell row2 col-12 (lg:order-3).
             핵심파라미터 박스 안에서 분리되어 row 사이 full-width 시각 띠로 동적 피드백 노출. ─────── */}
         <div className="lg:col-span-12 lg:order-3">
-          <ScopeHint selectedDongCount={selectedDongs.length} />
+          <ScopeHint selectedDongs={selectedDongs} />
         </div>
 
         {/* ─────── 섹션 2: 운영 조건 — Cell row1·col7. p-5 + gap-3 으로 row 1 height 정상화 ─────── */}
@@ -2095,6 +2095,8 @@ function SliceProgressRow({
 function DashboardOutlet() {
   const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const savedForeseeId = useSimulationStore((s) => s.savedForeseeId);
+  const savedAIId = useSimulationStore((s) => s.savedAIId);
   const status = useSimulationStore((s) => s.status);
   const params = useSimulationStore((s) => s.params);
   const { user, brand } = useAuth();
@@ -2123,6 +2125,8 @@ function DashboardOutlet() {
             brandName,
             businessType,
             savedHistoryId,
+            savedForeseeId,
+            savedAIId,
             openModal,
             openConditionDrawer: () => setConditionDrawerOpen(true),
           }}

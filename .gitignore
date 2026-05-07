@@ -121,6 +121,11 @@ tmp_*.py
 tmp_*.json
 tmp_*.txt
 tmp_*.png
+.tmp_*
+
+# DB/CSV 백업 파일 (운영 DB에 만들면 안 되며 repo 비포함)
+*_backup_*.csv
+*_backup_*.sql
 
 # 로컬 프리뷰 HTML (개인 검증용, repo 비포함)
 tools/sensitivity_preview.html

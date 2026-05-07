@@ -13,8 +13,8 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 - **카니발리제이션 분석**: 같은 브랜드 기존 매장과의 매출 잠식률 산출 (Pancras et al. 2012 모델)
 - **간접 경쟁 분석**: 동일 업종 + 대체재(배달 야식 등) 경쟁 반영
 - **매출 예측 (7+ 모델)**: LSTM/TCN/GRU forecast (12개월 매출), closure_risk LightGBM+TCN ensemble, customer_revenue MLP, revenue_predictor BEP, SHAP explainability, emerging_district 분류
-- **법률 리스크**: 9 deterministic rules + 4 RAG specialists = **13 카테고리** (BGE-m3 + Kiwi BM25 RRF + GPT-4.1-mini rerank)
-- **ABM 시뮬레이션**: 마포 1,000 에이전트 LLM 기반 (Haiku + Flash, Tier S/A/B 계층화)
+- **법률 리스크**: 9 rules + 4 RAG specialists 코드 정의 → **운영 5 카테고리 (food_hygiene/labor/vat/privacy/sewage) 비활성** → 실제 활성 **8 카테고리** (5 입지 룰 + 3 specialist) 반환 (BGE-m3 + Kiwi BM25 RRF + GPT-4.1-mini rerank)
+- **ABM 시뮬레이션**: 마포 5,000 에이전트 (Tier S/A/B 계층화, LLM 활성 시 gpt-4.1-mini 통일 — v5 2026-04-29)
 - **사업자번호 기반 운영 업종 자동 차단**: FTC 가맹사업 정보공개서 매칭으로 운영 외 업종 dropdown disable
 - **What-if 시나리오**: 경쟁 진입, 임대료 변동, 정책 변화 시 재시뮬레이션
 
@@ -29,7 +29,7 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 | 백엔드 서버 | Uvicorn |
 | DB | AWS RDS (PostgreSQL 16 + pgvector + HNSW index) — local docker postgres 제거 완료 |
 | 캐시 | Redis 7 |
-| Vector DB | ChromaDB (BGE-m3 1024D, 10,255 legal chunks) |
+| Vector DB | AWS RDS pgvector + HNSW index (BGE-m3 1024D, 10,255 legal chunks) |
 
 ### 백엔드
 
@@ -46,7 +46,7 @@ AI Agent 기반 프랜차이즈 출점 시뮬레이션 플랫폼
 | 관측성 | LangSmith |
 | 인증 | bcrypt + JWT (HS256) |
 | HTTP 클라이언트 | httpx, requests, tenacity (재시도) |
-| ABM | mesa (마포 1,000 에이전트 시뮬) |
+| ABM | 자체 구현 — `backend/src/simulation/` (mesa 등 외부 ABM 라이브러리 미사용) |
 
 ### 프론트엔드
 
@@ -113,7 +113,7 @@ START
 [Phase 2] llm_analysis_phase 6 LLM 에이전트 병렬 (asyncio.gather)
   │   ├── Market Analyst        상권 + 매출 추이 LLM 분석
   │   ├── Population Analyst    생활인구 + 시간대 트렌드
-  │   ├── Legal Analyst         9 deterministic rules + 4 RAG specialists = 13 카테고리
+  │   ├── Legal Analyst         9 rules + 4 specialists 정의 → 운영 5 비활성 → 활성 8 (5 입지 룰 + 3 specialist)
   │   ├── Demographic Depth     연령/성별 코호트 적합도
   │   ├── Trend Forecaster      Naver DataLab + SNS 트렌드
   │   └── Competitor Intel      직접/간접 경쟁 + 카니발리제이션
@@ -137,20 +137,22 @@ END
 | `POST /analyze/llm` | `slow_graph` (Phase 0~3, ML 제외) | 6 LLM + synthesis | ~80~140s |
 | `POST /predict/async` + `GET /predict/{job_id}/status` | — | 250ms polling, 동별 진행률 | — |
 | `POST /analyze/llm/async` + `GET /analyze/llm/{job_id}/status` | — | 250ms polling, 노드별 25%/50%/75%/100% | — |
-| `POST /simulate-abm` | (LangGraph 미사용) | 마포 1,000 에이전트 ABM 시뮬 | ~30~60s |
+| `POST /simulate-abm` | (LangGraph 미사용) | 마포 5,000 에이전트 ABM 시뮬 | ~30~60s |
+| `GET /corp/operated-industries` | — | JWT user → corp 운영 업종/brand list (frontend dropdown gate) | ~50ms |
+| `GET /stores/count-by-dongs?dongs=...&category=...` | — | 동 list × 업종 카테고리 매장 수 — frontend ScopeHint 라이브 카운트 | ~30ms |
 | `POST /simulate` | `app_graph` (Phase 0~3 전체) | **deprecated** — IM3-259 이후 두 endpoint 분리 | ~150s |
 
 > **변경 이력**: 초기 `Supervisor → 순차 실행` → 4 에이전트 병렬 → 5-Phase + 6 에이전트 + ML 분리 + LangGraph 2 인스턴스로 진화. `/simulate` 단일 endpoint 는 deprecated.
 
 ### Sub-routers (`backend/src/api/`)
 
-main.py 38 endpoint 외 5개 도메인별 router 분리:
+main.py 40 endpoint 외 5개 도메인별 router 분리 (실측 18 endpoint):
 
 | Router | Endpoint 수 | JWT | 용도 |
 |--------|-----------|-----|------|
 | `vacancy_evaluation` | 8 | No | ABM PSE 공실 평가 |
 | `customer_segment` | 1 | No | MLP 단발 — frontend 실시간 미리보기 |
-| `simulation_foresee` | 5 | Required | ML 예측 결과 저장 / 조회 / 삭제 |
+| `simulation_foresee` | 4 | Required | ML 예측 결과 저장 / 조회 / 삭제 |
 | `simulation_ai` | 4 | Required | LLM 분석 결과 저장 / 조회 / 삭제 |
 | `sensitivity` | 1 | No | TCN 시나리오 탄성치 캐시 서빙 |
 
@@ -177,6 +179,7 @@ main.py 38 endpoint 외 5개 도메인별 router 분리:
 | 임대료 예산 + 매장 면적 | district_ranking | 예산 초과 동 순위 하락 (평당 허용 임대료) |
 | 인구 가중치 (population_weight) | district_ranking | 가중치 동적 변경 → winner_district 변경 |
 | 사업자번호 (biz_number) | `_validate_and_resolve_brand` | corp 운영 외 업종 → HTTP 400 차단 + 다업종 brand auto-resolve |
+| 자사 brand 명시 선택 (brand_name) | `corp_brand_resolver` honor-input | 동업종 다brand corp (예: 더본 한식 = 한신포차/새마을식당/본가) frontend dropdown 으로 명시 선택 — backend top frcsCnt 자동 override 회피 |
 | 목표 객단가 / 시간대 / 초기 자본금 | synthesis LLM + BEP | ai_recommendation + BEP 개월수 |
 | 타겟 연령대 (target_age_groups, 10~60대+) | demographic_depth | 연령 코호트 적합도 점수 |
 | 타겟 성별 (target_gender, male/female/null) | demographic_depth | 성별 매출 비중 매칭 |
@@ -193,6 +196,8 @@ main.py 38 endpoint 외 5개 도메인별 router 분리:
 {
   "status": "success",
   "data": {
+    "brand_name": "새마을식당",                      // 입력 브랜드 echo (Target 라벨 SoT)
+    "business_type": "한식",                         // 입력 업종 echo
     "ai_recommendation": "AI 최종 분석 요약 (synthesis 에이전트)",
     "winner_district": "성산2동",
     "top_3_candidates": ["성산1동", "망원2동", "염리동"],
@@ -206,7 +211,7 @@ main.py 38 endpoint 외 5개 도메인별 router 분리:
       "growth_potential": 30,
       "accessibility": 75
     },
-    "legal_risks": [ /* 14 카테고리 (8 룰 + 4 specialist + 2 RAG) */ ],
+    "legal_risks": [ /* 활성 8 카테고리 (5 입지 룰 + 3 specialist, 운영 5 비활성) */ ],
     "overall_legal_risk": "CAUTION",
     "all_competitor_locations": [ /* 지도 멀티핀 */ ],
     "same_brand_locations":   [ /* 카니발리제이션 시각화 */ ]
@@ -247,24 +252,29 @@ main.py 38 endpoint 외 5개 도메인별 router 분리:
 
 비회원/CORP 미등록 시 `{"industries": null}` → frontend 모든 업종 허용 (graceful degrade).
 
+**Brand dedup 정책** (`corp_brand_resolver.py`, 2026-05-07):
+- `yr=2025` + `frcsCnt > 0` 만 후보로 (이전 `MAX(frcsCnt)+GROUP BY` 제거 — 연도별 표기 변형 'BBQ' vs '비비큐(BBQ)' 별 row 분리 회피)
+- 2단계 정규화 dedup: ① exact match (괄호/공백 제거 + 대문자) ② substring 포함 — 같은 brand 다양 표기 통합 후 frcsCnt 큰 row 보존
+- 결과: `(주)더본코리아` 27 brand → dedup 후 ~22 brand (5 표기 변형 합쳐짐)
+
 ### Redis 캐싱 전략 (24h TTL)
 
-각 LLM 노드가 자체 `_CACHE_TTL = 86400` 으로 결과 캐싱:
+각 LLM 노드가 자체 `_CACHE_TTL = 86400` 으로 결과 캐싱. 모든 키는 `v{N}:` schema-version prefix 포함 — schema 변경 시 N 증분으로 무효화. 실제 키 구성은 노드 파일 참조.
 
-| 에이전트 | 키 패턴 |
-|---------|--------|
-| market_analyst | `market:{district}:{biz_type}` |
-| population | `population:{district}:{biz_type}` |
-| legal | `legal:{brand}:{district}:{biz_type}` |
-| demographic_depth | `demographic:{district}:{biz_type}` |
-| trend_forecaster | `trend:{biz_type}` |
-| competitor_intel | `competitor:{district}:{biz_type}:{radius}` |
-| district_ranking | `ranking:{biz_type}:{budget}:{area}:{pop_weight}` |
-| synthesis | `synthesis:{brand}:{district}:{biz}:{budget}:{area}:{pop_weight}` |
+| 에이전트 | 키 패턴 (실측) | 파일 |
+|---------|--------|------|
+| market_analyst | `v2:market:{target_district}:{business_type}` | `nodes/market_analyst.py:32` |
+| population | `v2:population:{target_district}:{business_type}` | `nodes/population.py:48` |
+| legal | `v11:legal:{brand}:{district}:{biz}:{store_area}:{coord}:{territory}` | `nodes/legal.py:927` |
+| demographic_depth | `v5:demographic:{brand_name}:{dong_code}:{industry_filter}` | `nodes/demographic_depth.py:582` |
+| trend_forecaster | `v2:trend_forecast:{target_district}:{industry}:{brand_name}` | `nodes/trend_forecaster.py:46` |
+| competitor_intel | `v4:competitor_intel:{dong_code}:{brand_name}:{spot_key}` | `nodes/competitor_intel.py:395` |
+| district_ranking | `v14:ranking:{biz}:{pop_weight}:{budget}:{area}:{dists}:{brand}:{territory}` | `nodes/district_ranking.py:852` |
+| synthesis | `v14:synthesis:{brand}:{winner}:{td_key}:{biz}:{budget}:{area}:{pop_weight}` | `nodes/synthesis.py:81` |
 
 ### Vector RAG (Legal)
 
-ChromaDB host:8001 + AWS RDS pgvector HNSW index 듀얼 저장.
+AWS RDS pgvector + HNSW index 단일 저장.
 
 - **임베딩 모델**: BGE-m3 (1024D, multilingual, 한국어 법률 텍스트 최적)
 - **코퍼스**: 10,255 chunks (`backend/data/legal/processed/chunks.json`)
@@ -293,24 +303,27 @@ backend 외부 `models/` 디렉토리에 분리 — `sys.path` insert 후 `from 
 | `revenue_predictor` | BEP 손익분기 + 12개월 생존율 | INDUSTRY_DEFAULTS 10 식음료 카테고리 | 변동비율 0.26~0.42 |
 | `explainability` | SHAP 기여도 시각화 | GradientExplainer / DeepExplainer | mock fallback (seed=42) |
 | `emerging_district` | 신흥/포화 상권 분류 | — | 신흥 트렌드 chip + 변화 1위 배지 |
+| `living_pop_forecast` | 마포 동별 생활인구 시간대 피크 예측 | predict_naive (DB lag-1, TCN v2 weights 미제공) | 24시간대 × 분기별 peak hour 산출 |
 
 ---
 
 ## ABM 시뮬레이션 (`backend/src/simulation/`)
 
-마포 1,000 에이전트 행위 기반 시뮬 — POST `/simulate-abm`.
+마포 5,000 에이전트 행위 기반 시뮬 — POST `/simulate-abm`. (backend default `n_agents=100`, frontend `AbmTab.tsx` 가 항상 `n_agents=5000` 명시 전송, Tier 분포 비율 5/20/75 자동 scale)
 
 ### Tier 분포 (3-tier 비용 최적화)
 
 | Tier | 인구 | LLM | 비용 비중 |
 |------|-----|-----|----------|
-| **S** | 50 (5%) | Claude Haiku + cache | ~75% (고정밀 의사결정) |
-| **A** | 200 (20%) | Gemini Flash-Lite | ~20% |
-| **B** | 750 (75%) | Rule-based (0 LLM) | 0% (사전 계산 policy) |
+| **S** | 250 (5%) | gpt-4.1-mini (`main.py:2686` 가 ModelConfig 의 anthropic Haiku 기본값을 OpenAI 로 override, v5 통일 2026-04-29) | ~75% (고정밀 의사결정) |
+| **A** | 1,000 (20%) | gpt-4.1-mini (Gemini Flash-Lite 기본값을 OpenAI 로 override) | ~20% |
+| **B** | 3,750 (75%) | Rule-based (0 LLM) | 0% (사전 계산 policy) |
+
+> 주: `enable_llm_decisions=False` (기본) 시 전 Tier 가 policy_cache 만 사용해 LLM 호출 0건. `True` 일 때만 위 모델 적용.
 
 ### 구조
 
-- **30+ Archetype**: homebody / routine_local / trendy_local / family_cook / fitness / night_owl × 6 role (resident / commuter / visitor / owner / ext_commuter / ext_visitor)
+- **31 Archetype** (`backend/src/simulation/archetypes.py:ARCHETYPES`): homebody / routine_local / trendy_local / family_cook / fitness / night_owl 등 × 6 role (resident / commuter / visitor / owner / ext_commuter / ext_visitor)
 - **Layer 2/3/5**:
   - L2: visit_history + learned_prefs + blacklist (incremental satisfaction index O(1))
   - L3: hunger / fatigue / mood / budget per tick
@@ -334,7 +347,7 @@ backend 외부 `models/` 디렉토리에 분리 — `sys.path` insert 후 `from 
 
 ## Frontend 라우트 + Dashboard 구조 (`frontend/src/`)
 
-### 12 Routes
+### Routes (실측 17 경로)
 
 | 경로 | 컴포넌트 | 권한 |
 |------|---------|------|
@@ -342,14 +355,19 @@ backend 외부 `models/` 디렉토리에 분리 — `sys.path` insert 후 `from 
 | `/about` | AboutPage | Public |
 | `/joinus` | JoinUsPage (master + manager signup) | Public |
 | `/explore` | AccordionGallery (25 자치구 showcase) | Public |
-| `/simulator` | SimulatorDashboard (메인 폼) | Auth |
-| `/dashboard` + `/predict` / `/analyze` / `/abm` | DashboardHub | Auth |
-| `/history` | SimulationHistoryDetail | Auth |
-| `/contact` | ContactPage | Public |
 | `/engine` | EnginePage | Public |
+| `/contact` | ContactPage | Public |
 | `/login` | LoginPage | Public |
-| `/managers/*` | ManagerDetail (매니저 프로파일) | Auth (master/self) |
-| `/hq` | HQCommandCenter | Superadmin (Phase 2 mock) |
+| `/simulator` | SimulatorDashboard (메인 폼) | Auth |
+| `/dashboard` (index) | DashboardHubRouteElement | Auth |
+| `/dashboard/predict` | DashboardPredictPage | Auth |
+| `/dashboard/analyze` | DashboardAnalyzePage | Auth |
+| `/dashboard/abm` | DashboardAbmPage | Auth |
+| `/dashboard/history/:id` | SimulationHistoryDetail (legacy) | Auth |
+| `/dashboard/foresee/:id` | SimulationHistoryDetail (kind=foresee) | Auth |
+| `/dashboard/ai/:id` | SimulationHistoryDetail (kind=ai) | Auth |
+| `/hq` | HQCommandCenter | Auth (master/superadmin) |
+| `/hq/managers/:id` | ManagerDetail | Auth |
 
 ### Dashboard Hub (3-card)
 
@@ -366,6 +384,7 @@ ClosureRateHistoryChart / CoreDemographicDonut / CustomerFlowSegmentChart / BepC
 ### State (Zustand)
 
 - `simulationStore` — params + status + **prediction slice** (status, data, error, progress, stage) + **analysis slice** (동일 구조) + retry helper. IM3-259 dual-pipeline 대응.
+  - **Dual-track save** (2026-05-07): `savedForeseeId` (ML 결과) + `savedAIId` (LLM 결과) 분리 state. Predict tab 과 Analyze tab 이 독립적으로 save 가능 (이전 단일 `savedHistoryId` 충돌 해소). legacy field 도 backward compat 으로 유지.
 - `abmStore` — ABM 시뮬 별도 상태
 - `toastStore` — toast notification
 
@@ -382,10 +401,23 @@ ClosureRateHistoryChart / CoreDemographicDonut / CustomerFlowSegmentChart / BepC
 
 ### B1 — LangGraph Agent (예진)
 
+#### 7 LLM agent 정확도 v7 재설계 (2026-05-07)
+- v6 LLM-as-judge → v7 rule-engine + 직접 metric 비교 (deterministic 평가)
+- 정확도 향상: market_analyst 50%→87.5% (+37.5%p), demographic_depth 83%→100% (+16.7%p), trend_forecaster 67%→82% (+15.1%p)
+- 캐시 schema: population/market_analyst 노드가 `raw_metrics` + `raw_inputs` 보존 (v1→v2 prefix)
+- 신규 스크립트: `backend/scripts/eval/run_all_agents_v7.py` (382 line) + `seed_eval_cache.py` + `docs/team/agent-accuracy-v6-vs-v7.md`
+
+#### emerging_district 성능 -86% (2026-05-07)
+- `load_timeseries` TTL 캐시 (300s) — closure_risk / TCN / SHAP 와 공유
+- main.py startup 시 마포 timeseries 워밍업 — 첫 호출 cold start 제거
+- 벤치: 3.86s → 0.17s (-95.6%, 단일), 8.11s → 1.12s (-86.2%, 동별)
+- 벤치 스크립트: `bench_per_component.py`, `bench_emerging_breakdown.py` 등 4종
+
 #### IM3-259 · 2 endpoint 분리 (2026-04~05)
 - `/predict` (TCN ML) + `/analyze/llm` (slow_graph) 분리 — frontend 동시 polling
 - `app_graph` (full 5-Phase) + `slow_graph` (LLM 만, ML 제외) 2 인스턴스
 - async polling endpoint + LangGraph `astream(stream_mode="updates")` 노드 진행률 hook
+- ABM peak_hours fix — `trajectory_path` 가드가 `visits_log` 채움 차단했던 회귀 복구
 
 #### IM3-180 · IM3-32 (2026-04)
 - Supervisor / ContextAnalyst 제거, asyncio.gather 4 → 6 에이전트 병렬
@@ -405,6 +437,14 @@ ClosureRateHistoryChart / CoreDemographicDonut / CustomerFlowSegmentChart / BepC
 - `GET /corp/operated-industries` — JWT user 자동 추출, 비회원/CORP 미등록 graceful degrade
 - frontend dropdown 운영 외 업종 disable + line-through + click toast
 - 다업종 corp 자동 brand 매핑: (주)더본코리아 8 업종 27 brand → 사용자 선택 업종의 top frcsCnt brand auto-resolve
+- 동업종 다brand corp 명시 선택 dropdown (App.tsx, 2026-05-07): selectedBrandName state — 한식 선택 시 한신포차/새마을식당/본가 후보 노출, top frcsCnt auto-fallback
+- corp_brand_resolver dedup (2026-05-07): yr=2025 + frcsCnt>0 필터 + 2단계 normalize ('BBQ' ↔ '비비큐(BBQ)' 표기 변형 통합)
+- Target 라벨 buggfix (2026-05-07): AnalysisOutput schema 에 brand_name + business_type 필드 추가 — payload echo 로 frontend MapSection Target 표시가 authBrand fallback (등록 brand 빽다방) 으로 가는 회귀 차단
+
+#### `/stores/count-by-dongs` 라이브 매장수 endpoint (2026-05-07)
+- frontend ScopeHint 가 selectedDongs 변경 시 실시간 호출 — 동 list × business_type 카테고리 매장 수 집계
+- 클라이언트 추정값 → 서버 SQL 집계로 교체 (정확도 100%)
+- AbortController 패턴 + 로딩 spinner + fetch 실패 시 fallback
 
 #### IM3-alembic-user-lifecycle-catchup · DB schema 정합 (2026-04~05)
 - alembic phantom revision 복구 (a9c2d3e4f5b6 zombie 제거) → head `a8f3d2e7c1b9`
@@ -427,11 +467,13 @@ ClosureRateHistoryChart / CoreDemographicDonut / CustomerFlowSegmentChart / BepC
 ### A2 — RAG + 법률 (봉환)
 
 #### Legal Rule Engine (2026-05)
-- 9 deterministic rules (food_hygiene / safety_regulation / fire_safety / accessibility / commercial_lease / labor / vat / sewage / school_zone) + 4 RAG specialists (franchise_law / fair_trade_law / building_law / privacy_law) = 13 카테고리 (단일 모드 전환, legacy single-LLM batch 제거)
+- 9 rules (food_hygiene / safety_regulation / fire_safety / accessibility / commercial_lease / labor / vat / sewage / school_zone) + 4 specialists (franchise_law / fair_trade_law / building_law / privacy_law) **코드 정의 13** → orchestrator `_RULE_ENGINE_ORDER` 가 운영 카테고리 5종 (food_hygiene/labor/vat/privacy/sewage) 비활성 → **실제 활성 8** (5 입지 룰 + 3 specialist) — frontend 미표시 + LLM 비용 절감 정책
 - BGE-m3 + Kiwi BM25 RRF (vec=0.4 / bm25=0.6) — Recall 0.408 NDCG 0.273 Hit 62.1%
 - Primary-law boost 2.0 (saturate) — Hit 100% MRR 0.570 NDCG 0.525
 - OpenAI rerank (gpt-4.1-mini list-wise) — MRR 0.785→0.931 NDCG 0.642→0.776
 - 판례 RAG (대법원) + Article LLM 풀어쓰기 (1~2문장 케이스 맞춤 설명)
+- Legal z-score 폐점률 (2026-05-07): 하드코딩 10% threshold → FTC 업종별 평균/표준편차 기반 (예: 한식 평균 26.7% → 한신포차 12.9% z=-0.19 'safe' 정확 판정)
+- Windows ProactorEventLoop 회피 (2026-05-07): pgvector retriever 가 sync engine + `asyncio.to_thread` 패턴 — Windows 환경 psycopg async InterfaceError 차단
 
 ### B2 — 딥러닝 모델 (수지니)
 
@@ -449,7 +491,7 @@ ClosureRateHistoryChart / CoreDemographicDonut / CustomerFlowSegmentChart / BepC
 
 ### C2 — 인프라 (혁)
 
-- Docker Compose: Backend (uvicorn) / Frontend (Nginx) / Redis 7 / ChromaDB
+- Docker Compose: Backend (uvicorn) / Frontend (Nginx) / Redis 7
 - **AWS RDS 마이그레이션 (2026-04~05)**: docker-compose 로컬 postgres 제거 → POSTGRES_URL 외부 endpoint
 - HNSW pg_vector index 마이그레이션 (cc33dd44ee55) — legal RAG 검색 가속
 - LangSmith 트레이싱 통합
@@ -460,7 +502,7 @@ ClosureRateHistoryChart / CoreDemographicDonut / CustomerFlowSegmentChart / BepC
 
 ## Database Schema
 
-**규모**: 78 ORM models / ~1,019 columns / 32 explicit FK (`backend/src/database/models.py`)
+**규모**: 78 ORM models / ~1,019 columns / 30 explicit `ForeignKey()` 선언 (`backend/src/database/models.py`)
 
 ### Naming Convention
 
@@ -518,8 +560,7 @@ docker compose up --build
 - Frontend: http://localhost (Nginx)
 - Backend API: http://localhost:8000
 - Redis: localhost:6379
-- ChromaDB: localhost:8001
-- PostgreSQL: AWS RDS (외부) — `POSTGRES_URL` 환경 변수로 주입
+- PostgreSQL + pgvector: AWS RDS (외부) — `POSTGRES_URL` 환경 변수로 주입
 
 > **참고**: 2026-04~05 기점으로 Postgres 컨테이너 제거 및 RDS 마이그레이션 완료. 로컬 개발은 `POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/mapo_simulator` fallback (settings.py default).
 
@@ -562,12 +603,14 @@ alembic revision -m "변경 내용"          # 새 revision (수동 작성)
 |---------|------|
 | LLM | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY` |
 | DB | `POSTGRES_URL`, `POSTGRES_PASSWORD`, `REDIS_URL` |
-| RAG 벡터 | `CHROMA_HOST`, `CHROMA_PORT`, `CHROMA_PERSIST_DIR`, `EMBEDDING_MODE` |
+| RAG 벡터 | `EMBEDDING_MODE` (settings.py default `openai` — **현재 dead config**, legal RAG 는 `vector_db.py`/`retriever.py` 가 항상 `BAAI/bge-m3` 하드코딩 사용), pgvector 는 `POSTGRES_URL` 재사용 |
 | 외부 API | `FTC_API_KEY`, `KAKAO_API_KEY`, `ECOS_API_KEY`, `NTS_API_KEY`, `SEOUL_OPENDATA_KEY`, `SGIS_API_KEY`, `SGIS_SECRET_KEY`, `MOLIT_API_KEY`, `SEMAS_API_KEY`, `LAW_OC` |
 | 트렌드 | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` |
 | 관측성 | `LANGCHAIN_API_KEY`, `LANGCHAIN_TRACING_V2`, `LANGCHAIN_PROJECT` |
 | 인증 | `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES` |
 | RAG 튜닝 | `RRF_VECTOR_WEIGHT=0.4`, `RRF_BM25_WEIGHT=0.6`, `PRIMARY_LAW_BOOST=2.0`, `BM25_SUPPLEMENTARY_PENALTY=0.4` |
 | 재정렬 | `RERANK_ENABLED=true`, `RERANK_PROVIDER=openai`, `RERANK_OPENAI_MODEL=gpt-4.1-mini` |
-| Rate limit | `RATE_LIMIT_MAX=10` (시간당) |
+| Rate limit | `RATE_LIMIT_MAX=10` (시간당, `main.py` 직접 환경변수 — settings.py 미편입) |
+| Logging | `LOG_LEVEL` (`main.py` 직접 환경변수 — settings.py 미편입) |
+| Legacy ChromaDB | `CHROMA_HOST` / `CHROMA_PORT` / `CHROMA_PERSIST_DIR` — settings.py 잔존, 현재 미사용 (pgvector 마이그레이션 후 dead) |
 | App 모드 | `APP_MODE=PROD`, `DEBUG=false`, `DEMO_MODE=false`, `LLM_AGENTS_DISABLED=0` |

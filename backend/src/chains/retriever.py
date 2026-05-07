@@ -918,12 +918,14 @@ class LegalDocumentRetriever:
         # SSL connection abort 등 transient 오류는 1회 재시도 (pool_recycle 적용 후에도 발생).
         async def _vsearch(q: str, k: int) -> list:
             try:
-                return await vs.asimilarity_search_with_relevance_scores(q, k=k, filter=filter_dict)
+                return await asyncio.to_thread(vs.similarity_search_with_relevance_scores, q, k=k, filter=filter_dict)
             except Exception as e:
                 msg = str(e)
-                if "connection" in msg.lower() or "ssl" in msg.lower():
+                if "connection" in msg.lower() or "ssl" in msg.lower() or "ProactorEventLoop" in msg:
                     logger.warning(f"[LegalDocumentRetriever] 1회 재시도 (transient): {type(e).__name__}")
-                    return await vs.asimilarity_search_with_relevance_scores(q, k=k, filter=filter_dict)
+                    return await asyncio.to_thread(
+                        vs.similarity_search_with_relevance_scores, q, k=k, filter=filter_dict
+                    )
                 raise
 
         search_queries = [(query, top_k * 2)]
@@ -943,7 +945,7 @@ class LegalDocumentRetriever:
                     seen_contents.add(doc.page_content[:100])
 
         if not docs_with_score and source_filter:
-            docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k * 2)
+            docs_with_score = await asyncio.to_thread(vs.similarity_search_with_relevance_scores, query, k=top_k * 2)
 
         if _trace_on:
             trace["vector_candidates"] = [
@@ -1416,14 +1418,19 @@ class LegalDocumentRetriever:
         filter_dict = {"category": {"$eq": "판례"}}
         _t = time.perf_counter()
         try:
-            docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k * 3, filter=filter_dict)
+            docs_with_score = await asyncio.to_thread(
+                vs.similarity_search_with_relevance_scores, query, k=top_k * 3, filter=filter_dict
+            )
         except Exception as e:
             msg = str(e)
-            if "connection" in msg.lower() or "ssl" in msg.lower():
+            if "connection" in msg.lower() or "ssl" in msg.lower() or "ProactorEventLoop" in msg:
                 logger.warning(f"[search_precedents] 1회 재시도 (transient): {type(e).__name__}")
                 try:
-                    docs_with_score = await vs.asimilarity_search_with_relevance_scores(
-                        query, k=top_k * 3, filter=filter_dict
+                    docs_with_score = await asyncio.to_thread(
+                        vs.similarity_search_with_relevance_scores,
+                        query,
+                        k=top_k * 3,
+                        filter=filter_dict,
                     )
                 except Exception as e2:
                     logger.warning(f"[search_precedents] 재시도 실패: {e2}")

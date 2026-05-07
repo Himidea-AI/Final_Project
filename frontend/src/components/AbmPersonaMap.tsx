@@ -2753,9 +2753,24 @@ export default function AbmPersonaMap({
               </span>
             )}
             <span className="text-[10px] text-muted-foreground font-mono tracking-widest uppercase">
-              {mode === 'vacancy' && vacancySpot
-                ? `VACANCY PSE · ${vacancySpot.dong}${vacancySpot.category ? ' · ' + vacancySpot.category : ''}`
-                : `MAPO BEHAVIORAL SIM · ${targetDistrict}`}
+              {(() => {
+                // 공실 동 우선순위: vacancySpot props → abmResult 의 spot/vacancy_spot 의 dong → focusSpot.label.
+                // 공실 시뮬에서 사용자 입력 targetDistrict 와 실제 공실 위치 동이 다를 수 있어
+                // 공실 spot 의 dong 을 우선 표시.
+                const vacancyDong: string | undefined =
+                  vacancySpot?.dong ||
+                  abmResult?.vacancy_spot?.dong ||
+                  abmResult?.spot?.dong ||
+                  abmResult?.target_district;
+                const cat = vacancySpot?.category || abmResult?.vacancy_spot?.category;
+                if (mode === 'vacancy' && vacancyDong) {
+                  return `VACANCY PSE · ${vacancyDong}${cat ? ' · ' + cat : ''}`;
+                }
+                if (focusSpot && vacancyDong) {
+                  return `VACANCY · ${vacancyDong}${cat ? ' · ' + cat : ''}`;
+                }
+                return `MAPO BEHAVIORAL SIM · ${vacancyDong || targetDistrict}`;
+              })()}
             </span>
           </div>
         </div>

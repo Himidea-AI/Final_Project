@@ -58,7 +58,7 @@ import redis.asyncio as aioredis
 # LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
 # (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -1749,6 +1749,54 @@ async def get_operated_industries(
         "industries": portfolio["industries"],
         "brands": portfolio["brands"],
     }
+
+
+@app.get("/stores/count-by-dongs")
+async def stores_count_by_dongs(
+    dongs: str = Query("", max_length=500),
+    category: str | None = Query(None, max_length=100),
+) -> dict[str, Any]:
+    """선택된 행정동들의 kakao_store 매장 수 합계 + 동별 카운트.
+
+    프론트 ScopeHint 동적 표시용 — `selectedDongs` 변경 시 실제 매장 수 산출.
+
+    Args:
+        dongs: 콤마 구분 행정동 이름 (예: "서교동,상암동").
+        category: 카카오 카테고리 prefix 매칭 (옵션, 예: "음식점", "카페").
+
+    Returns:
+        ``{"total": int, "by_dong": {동: count}, "dongs": [동...]}``.
+    """
+    from sqlalchemy import text as sa_text
+
+    dong_list = [d.strip() for d in dongs.split(",") if d.strip()]
+    if not dong_list:
+        return {"total": 0, "by_dong": {}, "dongs": []}
+
+    sql = """
+        SELECT dong_name, COUNT(*) AS n
+        FROM kakao_store
+        WHERE dong_name = ANY(:dongs)
+    """
+    params: dict[str, Any] = {"dongs": dong_list}
+    if category:
+        sql += " AND category ILIKE :cat"
+        params["cat"] = f"%{category}%"
+    sql += " GROUP BY dong_name"
+
+    from sqlalchemy.exc import SQLAlchemyError
+    from src.database.sync_engine import get_sync_engine
+
+    try:
+        engine = get_sync_engine(settings.postgres_url)
+        with engine.connect() as conn:
+            rows = conn.execute(sa_text(sql), params).fetchall()
+        by_dong = {r._mapping["dong_name"]: r._mapping["n"] for r in rows}
+        total = sum(by_dong.values())
+        return {"total": total, "by_dong": by_dong, "dongs": dong_list}
+    except SQLAlchemyError as ex:
+        logger.warning(f"[stores/count-by-dongs] DB error: {ex}")
+        raise HTTPException(status_code=503, detail=f"DB unavailable: {ex.__class__.__name__}")
 
 
 @app.post("/biz/lookup")

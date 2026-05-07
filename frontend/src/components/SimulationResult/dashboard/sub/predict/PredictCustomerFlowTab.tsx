@@ -65,7 +65,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
       <div className="space-y-6">
         {/* 섹션 1 — 유동인구 피크시간 예측 (4동 통합) */}
         {anyPeak && (
-          <div className="rounded-3xl border border-border bg-card p-6 space-y-6">
+          <div className="rounded-3xl border border-border bg-card p-6 space-y-6 overflow-hidden min-w-0">
             <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
               <Activity className="text-primary" /> 유동인구 피크시간 예측
             </h3>
@@ -83,7 +83,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
 
         {/* 섹션 2 — 타겟 고객 매출 기여 (4동 통합) */}
         {anySegment ? (
-          <div className="rounded-3xl border border-border bg-card p-6 space-y-6">
+          <div className="rounded-3xl border border-border bg-card p-6 space-y-6 overflow-hidden min-w-0">
             <div className="flex items-center justify-between gap-4">
               <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
                 <Users className="text-primary" /> 타겟 고객 매출 기여
@@ -169,7 +169,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full overflow-hidden">
       {/* [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN) */}
       <PeakHourCard data={livingPop} />
     </div>

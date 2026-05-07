@@ -54,7 +54,7 @@ export function PeakHourCard({ data }: Props) {
   const peakPop = q1.peak_pop;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full overflow-hidden">
       {/* 헤더 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h4 className="text-sm font-black text-foreground flex items-center gap-2 uppercase tracking-tight">

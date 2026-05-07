@@ -44,8 +44,14 @@ interface SimulationState {
   error: string | null;
   params: SimulationInput | null;
   startedAt: number | null;
-  /** 매니저가 [저장] 버튼으로 저장한 이력 ID (SPTR-000142). null이면 DRAFT. R1: store = Single Source of Truth. */
+  /** 매니저가 [저장] 버튼으로 저장한 이력 ID (SPTR-000142). null이면 DRAFT. R1: store = Single Source of Truth.
+   *  legacy 단일 ID — 호환용. 신규 분기 코드는 savedForeseeId / savedAIId 사용.
+   */
   savedHistoryId: number | null;
+  /** ML 예측 (DashboardPredictPage) 저장 이력 ID. /simulation-foresee row. */
+  savedForeseeId: number | null;
+  /** AI 분석 (DashboardAnalyzePage) 저장 이력 ID. /simulation-ai row. */
+  savedAIId: number | null;
 
   /** /predict 응답 슬라이스 (IM3-259 분리 호출). */
   prediction: PredictionSlice;
@@ -61,6 +67,8 @@ interface SimulationState {
   cancelSimulation: () => void;
   dismissResult: () => void;
   setSavedHistoryId: (id: number | null) => void;
+  setSavedForeseeId: (id: number | null) => void;
+  setSavedAIId: (id: number | null) => void;
   reset: () => void;
 }
 
@@ -90,6 +98,8 @@ const INITIAL_STATE = {
   params: null,
   startedAt: null,
   savedHistoryId: null,
+  savedForeseeId: null,
+  savedAIId: null,
   prediction: initialPrediction,
   analysis: initialAnalysis,
   _abortController: null,
@@ -161,6 +171,8 @@ export const useSimulationStore = create<SimulationState>()(
           params,
           startedAt,
           savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
+          savedForeseeId: null,
+          savedAIId: null,
           prediction: { ...initialPrediction, status: 'running' },
           analysis: { ...initialAnalysis, status: 'running' },
           _abortController: abortController,
@@ -360,6 +372,8 @@ export const useSimulationStore = create<SimulationState>()(
           params: null,
           startedAt: null,
           savedHistoryId: null,
+          savedForeseeId: null,
+          savedAIId: null,
           prediction: initialPrediction,
           analysis: initialAnalysis,
           _abortController: null,
@@ -378,11 +392,15 @@ export const useSimulationStore = create<SimulationState>()(
           params: null,
           startedAt: null,
           savedHistoryId: null,
+          savedForeseeId: null,
+          savedAIId: null,
           prediction: initialPrediction,
           analysis: initialAnalysis,
         });
       },
       setSavedHistoryId: (id) => set({ savedHistoryId: id }),
+      setSavedForeseeId: (id) => set({ savedForeseeId: id }),
+      setSavedAIId: (id) => set({ savedAIId: id }),
       reset: () => {
         const { _abortController, _progressTimer } = get();
         _abortController?.abort();
@@ -400,6 +418,8 @@ export const useSimulationStore = create<SimulationState>()(
         result: state.status === 'done' ? state.result : null,
         params: state.status === 'done' ? state.params : null,
         savedHistoryId: state.status === 'done' ? state.savedHistoryId : null,
+        savedForeseeId: state.status === 'done' ? state.savedForeseeId : null,
+        savedAIId: state.status === 'done' ? state.savedAIId : null,
         startedAt: state.status === 'done' ? state.startedAt : null,
         stage: state.status === 'done' ? state.stage : '',
         progress: state.status === 'done' ? 100 : 0,
