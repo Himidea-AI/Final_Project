@@ -62,6 +62,45 @@ _SENSITIVITY_CACHE: dict[str, Any] = _load_json(_CACHE_PATH, label="sensitivity 
 _CORRELATIONS: dict[str, float] = _load_json(_CORR_PATH, label="feature correlations")
 
 
+def _to_float_list(value: Any, *, length: int) -> list[float]:
+    if isinstance(value, list):
+        values: list[float] = []
+        for item in value[:length]:
+            try:
+                values.append(float(item))
+            except (TypeError, ValueError):
+                values.append(0.0)
+        if len(values) < length:
+            values.extend([values[-1] if values else 0.0] * (length - len(values)))
+        return values
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = 0.0
+    return [number] * length
+
+
+def _normalize_elasticity(entry: dict[str, Any]) -> dict[str, dict[str, list[float]]]:
+    """Return v3 list-valued elasticity while accepting older scalar caches."""
+    quarter_count = len(entry.get("baseline") or []) or 4
+    raw_elasticity = entry.get("elasticity") or {}
+    normalized: dict[str, dict[str, list[float]]] = {}
+
+    if not isinstance(raw_elasticity, dict):
+        return normalized
+
+    for slider_name, level_map in raw_elasticity.items():
+        if not isinstance(level_map, dict):
+            continue
+        normalized[str(slider_name)] = {
+            str(level): _to_float_list(value, length=quarter_count)
+            for level, value in level_map.items()
+        }
+
+    return normalized
+
+
 class SensitivityResponse(BaseModel):
     elasticity: dict[str, dict[str, list[float]]]
     correlations: dict[str, float]
@@ -116,7 +155,7 @@ def get_sensitivity(
     for header, value in cache_headers.items():
         response.headers[header] = value
     return SensitivityResponse(
-        elasticity=entry["elasticity"],
+        elasticity=_normalize_elasticity(entry),
         correlations=_CORRELATIONS,
         baseline_sales=entry["baseline"],
         store_count=entry.get("store_count"),
