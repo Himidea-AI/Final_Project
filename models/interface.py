@@ -670,6 +670,8 @@ class ModelOutput:
                 "tier": fallback["tier"],
                 "raw": fallback["raw"],
                 "is_mock": fallback["tier"] == "none",
+                "quarter_history": ae_raw.get("quarter_history"),
+                "peer_distribution": ae_raw.get("peer_distribution"),
             }
             logger.info(
                 "신흥 상권 감지 완료 — tier=%s signal=%s anomaly=%.3f",
