@@ -787,29 +787,86 @@ function SimulatorDashboard({
   // FTC indutyMlsfcNm 표기 (한식/서양식/제과제빵/주점/피자/...) → frontend 라벨 매핑은
   // 위 FTC_TO_FRONTEND_INDUSTRY 재사용. 동일 frontend 라벨로 매핑되는 FTC 업종이
   // 하나라도 운영 중이면 그 frontend 라벨 enable.
-  const [operatedFrontendLabels, setOperatedFrontendLabels] = useState<Set<string> | null>(null);
-  const [operatedCompanyName, setOperatedCompanyName] = useState<string | null>(null);
+  // 회귀 fix(2026-05-07): 결과 → 뒤로가기 → /simulator remount 시 race 로 인해
+  // operatedFrontendLabels 가 잠깐 null 이 되어 모든 업종이 enable 되던 문제.
+  // sessionStorage 에 캐시 저장 → 같은 사용자(user.id) 재진입 시 즉시 복원, fetch 후 갱신.
+  const _LABELS_CACHE_KEY = `spotter_corp_industries_${user?.id ?? 'anon'}`;
+  const _readLabelsCache = (): {
+    labels: Set<string> | null;
+    company: string | null;
+    brands: { name: string; industry: string; stores: number }[];
+  } => {
+    if (!user?.id) return { labels: null, company: null, brands: [] };
+    try {
+      const raw = window.sessionStorage.getItem(_LABELS_CACHE_KEY);
+      if (!raw) return { labels: null, company: null, brands: [] };
+      const parsed = JSON.parse(raw) as {
+        labels: string[] | null;
+        company: string | null;
+        brands: { name: string; industry: string; stores: number }[];
+      };
+      return {
+        labels: parsed.labels ? new Set(parsed.labels) : null,
+        company: parsed.company,
+        brands: parsed.brands ?? [],
+      };
+    } catch {
+      return { labels: null, company: null, brands: [] };
+    }
+  };
+  // lazy init — 첫 mount 만 sessionStorage 읽음. 매 render 마다 IO 회피.
+  // 캐시 miss 면 auth.brand.industry_medium 단일 label 로 fallback (전부 enable 회귀 방지).
+  const [operatedFrontendLabels, setOperatedFrontendLabels] = useState<Set<string> | null>(() => {
+    const cached = _readLabelsCache().labels;
+    if (cached) return cached;
+    const brandLabel = brand?.industry_medium && FTC_TO_FRONTEND_INDUSTRY[brand.industry_medium];
+    return brandLabel ? new Set<string>([brandLabel]) : null;
+  });
+  const [operatedCompanyName, setOperatedCompanyName] = useState<string | null>(
+    () => _readLabelsCache().company,
+  );
   // corp 운영 brand 전체 list — frontend label 별 후보 brand 드롭다운 채움.
   // 더본코리아 등 다업종+동업종 다brand 회사: 한식 선택 시 한신포차/새마을식당/본가 등 후보 노출.
   const [corpBrands, setCorpBrands] = useState<
     { name: string; industry: string; stores: number }[]
-  >([]);
+  >(() => _readLabelsCache().brands);
   useEffect(() => {
     let cancelled = false;
-    getOperatedIndustries().then((res) => {
+    // userId 명시 전달 — JWT interceptor 실패 시 backend 가 user_id 로 폴백 조회.
+    getOperatedIndustries(user?.id).then((res) => {
       if (cancelled) return;
-      setOperatedCompanyName(res.company_name);
-      setCorpBrands(res.brands ?? []);
-      if (!res.industries) {
-        setOperatedFrontendLabels(null); // 모든 업종 허용
+      // ▼ fetch 응답이 'real data' 일 때만 state 갱신.
+      // res.industries=null + brands=[] 은 (1) auth 미주입 (2) FTC 미등록 (3) 네트워크 실패 모두 같은 모양 →
+      // 캐시 hit 한 state 를 덮어쓰면 'all enabled' 로 회귀. 따라서 빈 응답은 무시하고 캐시 유지.
+      const hasRealData = (res.industries !== null) || (res.brands && res.brands.length > 0);
+      if (!hasRealData) {
         return;
       }
-      const labels = new Set<string>();
-      for (const ftc of res.industries) {
-        const mapped = FTC_TO_FRONTEND_INDUSTRY[ftc];
-        if (mapped) labels.add(mapped);
+      setOperatedCompanyName(res.company_name);
+      setCorpBrands(res.brands ?? []);
+      let labels: Set<string> | null = null;
+      if (res.industries) {
+        labels = new Set<string>();
+        for (const ftc of res.industries) {
+          const mapped = FTC_TO_FRONTEND_INDUSTRY[ftc];
+          if (mapped) labels.add(mapped);
+        }
       }
       setOperatedFrontendLabels(labels);
+      if (user?.id) {
+        try {
+          window.sessionStorage.setItem(
+            _LABELS_CACHE_KEY,
+            JSON.stringify({
+              labels: labels ? Array.from(labels) : null,
+              company: res.company_name,
+              brands: res.brands ?? [],
+            }),
+          );
+        } catch {
+          // sessionStorage quota / private mode — 무시
+        }
+      }
     });
     return () => {
       cancelled = true;

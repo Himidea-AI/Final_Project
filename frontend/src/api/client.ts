@@ -276,11 +276,24 @@ export interface OperatedIndustriesResponse {
   message?: string;
 }
 
-export async function getOperatedIndustries(): Promise<OperatedIndustriesResponse> {
+export async function getOperatedIndustries(
+  userId?: string,
+): Promise<OperatedIndustriesResponse> {
+  // userId query param 으로 명시 전달 — JWT interceptor 실패/legacy localStorage 케이스 보완.
+  // backend 는 user_id 우선, 없으면 JWT 의 current_user 폴백 사용.
+  const params = userId ? { user_id: userId } : undefined;
   try {
-    const response = await apiClient.get('/corp/operated-industries');
-    return response.data as OperatedIndustriesResponse;
-  } catch {
+    const response = await apiClient.get('/corp/operated-industries', { params });
+    const data = response.data as OperatedIndustriesResponse;
+    if (data.industries === null) {
+      console.warn(
+        '[operated-industries] backend 가 industries=null 반환. ' +
+          `userId=${userId ?? '없음'}, error=${data.error ?? '없음'}, message=${data.message ?? '없음'}, brands=${data.brands?.length ?? 0}`,
+      );
+    }
+    return data;
+  } catch (e) {
+    console.error('[operated-industries] fetch 실패:', e);
     return { company_name: null, industries: null, brands: [] };
   }
 }
