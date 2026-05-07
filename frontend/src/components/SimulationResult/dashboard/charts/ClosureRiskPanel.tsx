@@ -19,9 +19,11 @@ interface Props {
   district?: string;
   /** "분석 상세" 버튼 클릭 시 부모가 모달 띄움. 없으면 버튼 미노출. */
   onOpenDetail?: () => void;
+  /** 4동 비교 grid 에서 동별 색 (SERIES_COLORS[idx]). 위험 점수 막대 색에 적용. */
+  seriesColor?: string;
 }
 
-export function ClosureRiskPanel({ closure, district, onOpenDetail }: Props) {
+export function ClosureRiskPanel({ closure, district, onOpenDetail, seriesColor }: Props) {
   if (!closure) {
     return (
       <div className="rounded-3xl border border-dashed border-border bg-card p-6 text-center text-xs text-muted-foreground h-full flex items-center justify-center">
@@ -55,7 +57,7 @@ export function ClosureRiskPanel({ closure, district, onOpenDetail }: Props) {
     <div className="bg-card border border-border rounded-3xl p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-3 gap-2">
         {district ? (
-          <div className="text-sm font-black text-foreground tracking-tight truncate">
+          <div className="text-base font-black text-foreground tracking-tight truncate">
             {district}
           </div>
         ) : (
@@ -80,6 +82,7 @@ export function ClosureRiskPanel({ closure, district, onOpenDetail }: Props) {
         thresholds={[30, 60]}
         polarity="lower-better"
         unit="점"
+        barColor={seriesColor}
       />
 
       {summaryLines.length > 0 && (

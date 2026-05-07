@@ -58,7 +58,7 @@ export interface SensitivityResponse {
 export const SLIDER_LABELS: Record<SliderKey, string> = {
   vacancy_rate: '공실률',
   trend_score: '트렌드 점수',
-  cpi_index: '물가지수(CPI)',
+  cpi_index: '물가지수',
   opr_sale_mt_avg: '상권 활성도',
   quarter_num: '분기',
 };

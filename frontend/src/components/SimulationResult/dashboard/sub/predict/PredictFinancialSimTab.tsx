@@ -147,6 +147,23 @@ export function PredictFinancialSimTab({ simResult }: Props) {
       {dpredicts.length > 0 ? (
         <>
           <div className="rounded-3xl border border-border bg-card p-8">
+            <div className="mb-8 flex items-start justify-between gap-6">
+              <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
+                <History className="text-primary" /> 동별 최근 4분기 폐업률 추이
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {dpredicts.map((p, idx) => (
+                <ClosureRatePanel
+                  key={p.district}
+                  district={p.district}
+                  rate={p.closure_rate as ClosureRate | null}
+                  color={SERIES_COLORS[idx % SERIES_COLORS.length]}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="rounded-3xl border border-border bg-card p-8">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
                 <ShieldAlert className="text-primary" /> 동별 폐업위험도
@@ -167,29 +184,13 @@ export function PredictFinancialSimTab({ simResult }: Props) {
                       : ''
               }`}
             >
-              {dpredicts.map((p) => (
+              {dpredicts.map((p, idx) => (
                 <ClosureRiskPanel
                   key={p.district}
                   closure={p.closure_risk as ClosureRisk | null}
                   district={p.district}
                   onOpenDetail={() => setDetailDistrict(p.district)}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="rounded-3xl border border-border bg-card p-8">
-            <div className="mb-8 flex items-start justify-between gap-6">
-              <h3 className="flex items-center gap-3 text-left text-xl font-black italic leading-none tracking-tight text-foreground">
-                <History className="text-primary" /> 동별 최근 4분기 폐업률 추이
-              </h3>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {dpredicts.map((p, idx) => (
-                <ClosureRatePanel
-                  key={p.district}
-                  district={p.district}
-                  rate={p.closure_rate as ClosureRate | null}
-                  color={SERIES_COLORS[idx % SERIES_COLORS.length]}
+                  seriesColor={SERIES_COLORS[idx % SERIES_COLORS.length]}
                 />
               ))}
             </div>

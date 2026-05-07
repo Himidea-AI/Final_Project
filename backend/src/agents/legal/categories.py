@@ -21,16 +21,16 @@ LEGAL_GROUP_DEFAULT = LEGAL_GROUP_OPERATION
 # 카테고리 → 그룹 매핑 (단일 소스)
 LEGAL_CATEGORY_GROUP: dict[str, str] = {
     # ── 입지 그룹 (출점 결정 critical) ──
-    "building_law": LEGAL_GROUP_LOCATION,        # 용도지역/용도변경
-    "school_zone": LEGAL_GROUP_LOCATION,         # 학교환경위생정화구역 (50/200m)
-    "safety_regulation": LEGAL_GROUP_LOCATION,   # 다중이용업소 면적 트리거
-    "fire_safety_law": LEGAL_GROUP_LOCATION,     # 소방시설 면적
-    "accessibility_law": LEGAL_GROUP_LOCATION,   # 편의시설 면적
-    "franchise_law": LEGAL_GROUP_LOCATION,       # 영업지역 침해 (인접 출점)
-    "fair_trade_law": LEGAL_GROUP_LOCATION,      # 공정거래/마포구 조례
+    "building_law": LEGAL_GROUP_LOCATION,  # 용도지역/용도변경
+    "school_zone": LEGAL_GROUP_LOCATION,  # 학교환경위생정화구역 (50/200m)
+    "safety_regulation": LEGAL_GROUP_LOCATION,  # 다중이용업소 면적 트리거
+    "fire_safety_law": LEGAL_GROUP_LOCATION,  # 소방시설 면적
+    "accessibility_law": LEGAL_GROUP_LOCATION,  # 편의시설 면적
+    "franchise_law": LEGAL_GROUP_LOCATION,  # 영업지역 침해 (인접 출점)
+    "fair_trade_law": LEGAL_GROUP_LOCATION,  # 공정거래/마포구 조례
     "commercial_lease_law": LEGAL_GROUP_LOCATION,  # 임대차 — 출점 시 결정
-    "zoning_regulation": LEGAL_GROUP_LOCATION,   # legacy 호환
-    "ftc_franchise": LEGAL_GROUP_LOCATION,       # 정보공개서 — 출점 전 검토
+    "zoning_regulation": LEGAL_GROUP_LOCATION,  # legacy 호환
+    "ftc_franchise": LEGAL_GROUP_LOCATION,  # 정보공개서 — 출점 전 검토
     # ── 운영 그룹 (자영업자 통상 인지) ──
     "food_hygiene": LEGAL_GROUP_OPERATION,
     "labor_law": LEGAL_GROUP_OPERATION,

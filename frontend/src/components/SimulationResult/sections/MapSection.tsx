@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import type { SimulationOutput } from '../../../types';
 import { useAuth } from '../../../auth/AuthContext';
 import { getDongCount, getGuFromDong } from '../../../data/seoulRegions';
@@ -8,6 +9,13 @@ import { MarketMap, haversineM, type Competitor, type RankingEntry } from './Mar
 
 interface Props {
   simResult: SimulationOutput;
+  // 주요 경쟁점 top5 — 사이드바 카드와 동일. MarketMap 에서 큰 번호 라벨로 강조.
+  // lat/lng 가 없는 항목은 내부에서 필터.
+  topCompetitors?: Array<{
+    place_name?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+  }>;
 }
 
 const DEFAULT_MAPO_CENTER = { lat: 37.5558, lng: 126.9193 };
@@ -32,11 +40,18 @@ const DONG_COORDS: Record<string, { lat: number; lng: number }> = {
 };
 
 function buildCompetitors(simResult: SimulationOutput): Competitor[] {
-  // all_competitor_locations (winner+top3 멀티동) 우선, fallback은 winner 단일 동
+  // all_competitor_locations (winner+top3 4동, 1.5km 검색) + competitor_intel.samples (분석 동 500m)
+  // 두 소스 통합 → place_name + 좌표 기준 dedup → 최대 200개.
+  // 사용자 보고 "컴포즈커피 망원시장점이 카드엔 있는데 지도엔 없다" → samples 만 가진 매장 누락 차단.
+  const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
+  const competition = compIntel?.['competition_500m'] as
+    | { samples?: Array<Record<string, unknown>> }
+    | undefined;
+  const samplesRaw = competition?.samples ?? [];
+
   if (simResult.all_competitor_locations?.length) {
-    return simResult.all_competitor_locations
+    const merged: Competitor[] = simResult.all_competitor_locations
       .filter((s) => typeof s.lat === 'number' && typeof s.lng === 'number')
-      .slice(0, 200)
       .map((s) => ({
         place_name: s.place_name ?? '경쟁점',
         lat: s.lat,
@@ -48,12 +63,40 @@ function buildCompetitors(simResult: SimulationOutput): Competitor[] {
         place_url: s.place_url ?? null,
         phone: s.phone ?? null,
       }));
+    // samples 추가 (all_competitor_locations 에 없는 매장 union)
+    for (const s of samplesRaw) {
+      const lat = typeof s.lat === 'number' ? s.lat : null;
+      const lng =
+        typeof s.lng === 'number' ? s.lng : typeof s.lon === 'number' ? (s.lon as number) : null;
+      if (lat == null || lng == null) continue;
+      merged.push({
+        place_name: String(s.place_name ?? '경쟁점'),
+        lat,
+        lng,
+        distance_m: typeof s.distance_m === 'number' ? s.distance_m : undefined,
+        is_franchise: Boolean(s.is_franchise),
+        brand_name: typeof s.brand_name === 'string' ? s.brand_name : null,
+        daily_revenue: null,
+        place_url: typeof s.place_url === 'string' ? s.place_url : null,
+        phone: typeof s.phone === 'string' ? s.phone : null,
+      });
+    }
+    // dedup — place_name + 좌표(소수 5자리) 동일하면 동일 매장으로 판단.
+    // cap 2500 — backend 가 공실 spot 1.5km + 행정동 안 매장 합집합 반환. 4 dong × ~500/dong
+    // 최악 ~2000 (현재 마포 kakao_store 4430 / 16동). spot1 거리순 정렬 유지.
+    const seen = new Set<string>();
+    const deduped: Competitor[] = [];
+    for (const c of merged) {
+      const key = `${c.place_name}_${c.lat.toFixed(5)}_${c.lng.toFixed(5)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(c);
+      if (deduped.length >= 2500) break;
+    }
+    return deduped;
   }
-  const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
-  const competition = compIntel?.['competition_500m'] as
-    | { samples?: Array<Record<string, unknown>> }
-    | undefined;
-  const list = competition?.samples ?? [];
+  // all_competitor_locations 없으면 samples 만 사용 (구버전 응답 호환)
+  const list = samplesRaw;
   return list
     .filter(
       (s) => typeof s.lat === 'number' && (typeof s.lng === 'number' || typeof s.lon === 'number'),
@@ -120,46 +163,64 @@ interface BestVacancy {
   competitorCount500m: number | null;
 }
 
-// 추천 동(winner_district) 내 공실 중 score 상위 4개 spot 반환.
-// 기준: backend 가 spot 단위 score 를 부여한 경우(0~100, 경쟁밀도 0.45 + 지하철 접근성 0.35 + 매물 활성도 0.20 가중합).
-// score 가 없으면 listing_count 최대 fallback (구버전 응답 호환).
+// 추천 동(winner_district + top3) 내 공실 중 score 상위 4개 spot 반환.
+// 기준: winner 동 spot 우선 (backend 가 score 부여) → 부족 시 top3 동 spot 으로 채움 (listing_count 정렬).
+// 2026-05-06: winner 동 spot 0건이거나 부족할 때 1~4위 자리 비는 회귀 차단.
+//   사용자 보고 "망원2동(winner) 매물 0건이라 spot 1위만 보임" → top3 spot 으로 4개 채움.
 // 1순위가 펄싱 핀 + 반경원 중심. 2~4순위는 번호 라벨 핀으로 비교 표시.
 function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
   const sim = simResult as SimulationOutput & Record<string, unknown>;
   const winner = (sim.winner_district ?? sim.target_district) as string | undefined;
   if (!winner) return [];
+  const top3 = Array.isArray(sim.top_3_candidates)
+    ? (sim.top_3_candidates as string[]).filter((d): d is string => typeof d === 'string')
+    : [];
   const spots = (sim.vacancy_spots as VacancySpotRaw[] | undefined) ?? [];
-  const sorted = spots
+
+  const toCandidate = (s: VacancySpotRaw) => ({
+    lat: s.lat as number,
+    lng: s.lon as number,
+    listingCount: typeof s.listing_count === 'number' ? s.listing_count : 0,
+    dongName: String(s.dong_name),
+    score: typeof s.score === 'number' ? s.score : null,
+    subwayDistanceM: typeof s.subway_distance_m === 'number' ? s.subway_distance_m : null,
+    competitorCount500m:
+      typeof s.competitor_count_500m === 'number' ? s.competitor_count_500m : null,
+  });
+
+  const validSpots = spots.filter(
+    (s) =>
+      typeof s.lat === 'number' &&
+      typeof s.lon === 'number' &&
+      Number.isFinite(s.lat) &&
+      Number.isFinite(s.lon),
+  );
+
+  // 1순위 후보군: winner 동 spot (backend score 부여됨)
+  const winnerSorted = validSpots
     .filter((s) => s.dong_name === winner)
-    .filter(
-      (s) =>
-        typeof s.lat === 'number' &&
-        typeof s.lon === 'number' &&
-        Number.isFinite(s.lat) &&
-        Number.isFinite(s.lon),
-    )
-    .map((s) => ({
-      lat: s.lat as number,
-      lng: s.lon as number,
-      listingCount: typeof s.listing_count === 'number' ? s.listing_count : 0,
-      dongName: String(s.dong_name),
-      score: typeof s.score === 'number' ? s.score : null,
-      subwayDistanceM: typeof s.subway_distance_m === 'number' ? s.subway_distance_m : null,
-      competitorCount500m:
-        typeof s.competitor_count_500m === 'number' ? s.competitor_count_500m : null,
-    }))
+    .map(toCandidate)
     .sort((a, b) => {
       const sa = a.score ?? Number.NEGATIVE_INFINITY;
       const sb = b.score ?? Number.NEGATIVE_INFINITY;
       if (sa !== sb) return sb - sa;
       return b.listingCount - a.listingCount;
     });
-  // 근접 중복 제거 — 같은 매물군이 다른 row 로 들어와 1·2·3위가 동일 좌표인 케이스 방어.
-  // 50m 이내는 동일 spot 으로 보고 상위 score 만 유지 → 화면에서 #1 펄싱핀에 #2·#3 핀이
-  // 가려지는 회귀 차단 (사용자 보고: "공실 #1 과 #4만 보인다").
+
+  // 2순위 후보군: top3 동 spot (score 없음, listing_count 정렬)
+  const top3Set = new Set(top3);
+  const top3Sorted = validSpots
+    .filter((s) => top3Set.has(String(s.dong_name)) && s.dong_name !== winner)
+    .map(toCandidate)
+    .sort((a, b) => b.listingCount - a.listingCount);
+
+  // winner 부족분만큼 top3 동 spot 으로 채움
+  const merged = [...winnerSorted, ...top3Sorted];
+
+  // 근접 중복 제거 — 50m 이내는 동일 spot 으로 보고 상위 우선 유지.
   const DEDUP_RADIUS_M = 50;
   const deduped: BestVacancy[] = [];
-  for (const cand of sorted) {
+  for (const cand of merged) {
     const tooClose = deduped.some(
       (kept) => haversineM(kept.lat, kept.lng, cand.lat, cand.lng) <= DEDUP_RADIUS_M,
     );
@@ -169,7 +230,7 @@ function buildBestVacancies(simResult: SimulationOutput): BestVacancy[] {
   return deduped;
 }
 
-export function MapSection({ simResult }: Props) {
+export function MapSection({ simResult, topCompetitors }: Props) {
   // Memoize 대상: buildCompetitors/buildRankings/buildCenter가 매 렌더마다 새 배열 참조를 만들면
   // MarketMap useEffect deps가 매번 바뀌어 지도·choropleth가 무한 재초기화된다.
   const competitors = useMemo(() => buildCompetitors(simResult), [simResult]);
@@ -181,6 +242,43 @@ export function MapSection({ simResult }: Props) {
   const center = bestVacancy ? { lat: bestVacancy.lat, lng: bestVacancy.lng } : fallbackCenter;
   // 자사 매장 좌표 (winner+top3 4동 안) — 로고 마커 + 영업구역 반경 원 표시용.
   const sameBrandLocations = useMemo(() => simResult.same_brand_locations ?? [], [simResult]);
+  // topCompetitors → MarketMap 형식 (rank 부여) 변환. lat/lng 둘 다 number 필수.
+  const topCompetitorsForMap = useMemo(
+    () =>
+      (topCompetitors ?? [])
+        .filter(
+          (t): t is { place_name?: string | null; lat: number; lng: number } =>
+            typeof t.lat === 'number' && typeof t.lng === 'number',
+        )
+        .slice(0, 5)
+        .map((t, idx) => ({
+          place_name: t.place_name ?? '경쟁점',
+          lat: t.lat,
+          lng: t.lng,
+          rank: idx + 1,
+        })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [topCompetitors],
+  );
+  // DEBUG: 별표 안 뜨는 이슈 추적 — center vs 별표 좌표 비교
+  // eslint-disable-next-line no-console
+  console.log(
+    '[MapSection] simResult.same_brand_locations:',
+    simResult.same_brand_locations,
+    '→ sameBrandLocations:',
+    sameBrandLocations.length,
+    'items',
+  );
+  // eslint-disable-next-line no-console
+  console.log(
+    '[MapSection] winner_district=',
+    (simResult as SimulationOutput & Record<string, unknown>).winner_district,
+    'center=',
+    center,
+    'sameBrand[0] lat/lng=',
+    sameBrandLocations[0]?.lat,
+    sameBrandLocations[0]?.lng,
+  );
   // 사용자 입력 영업구역 거리 — store.params 에서 직접 (응답에 echo 안 됨).
   const territoryRadiusM = useSimulationStore((s) => s.params?.territory_radius_m);
 
@@ -197,11 +295,13 @@ export function MapSection({ simResult }: Props) {
 
   const effectiveRadius = userRadius ?? 500;
   const totalCompetitors = competitors.length;
-  // within 판정 = 화면 핀 좌표(center) 기준 haversine. 백엔드 distance_m 은 source 동 centroid
-  // 기준이라 핀 위치와 정합 안 됨 → MarketMap 마커 색·legend 카운트 일치시킴.
-  const withinCompetitors = competitors.filter(
-    (c) => haversineM(center.lat, center.lng, c.lat, c.lng) <= effectiveRadius,
-  ).length;
+  // within 판정 = 4 spot 중 최단거리 ≤ radius 면 내부 (MarketMap 의 within 분기와 동일).
+  // bestVacancies 4개 좌표 union → 어느 하나라도 반경 안이면 내부.
+  const _withinSpots = bestVacancies.length > 0 ? bestVacancies : [center];
+  const withinCompetitors = competitors.filter((c) => {
+    const minDist = Math.min(..._withinSpots.map((sp) => haversineM(sp.lat, sp.lng, c.lat, c.lng)));
+    return minDist <= effectiveRadius;
+  }).length;
 
   const compIntel = simResult.competitor_intel as Record<string, unknown> | null | undefined;
   const saturation =
@@ -239,6 +339,38 @@ export function MapSection({ simResult }: Props) {
             </span>
           </div>
         </div>
+        {/* winner != spot 1위 동 케이스 안내 — 큰 배너로 강조.
+            bestVacancy.dongName !== winner 일 때만 표시. */}
+        {bestVacancy && bestVacancy.dongName !== district && district !== '—' && (
+          <div className="rounded-2xl border-2 border-warning bg-warning/15 p-4 shadow-[0_0_24px_rgba(251,191,36,0.25)]">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 shrink-0 text-warning" />
+              <div className="flex-1 space-y-2">
+                <div className="text-sm font-black uppercase tracking-widest text-warning">
+                  추천 입지 안내 — 매물 자동 보정
+                </div>
+                <div className="text-sm font-bold leading-relaxed text-foreground">
+                  종합 점수 1순위 추천 동{' '}
+                  <span className="rounded bg-primary/15 px-1.5 py-0.5 font-black text-primary">
+                    {district}
+                  </span>
+                  에 <span className="font-black text-warning">실제 임대 매물이 없어</span>, 인접
+                  후보 동{' '}
+                  <span className="rounded bg-primary/15 px-1.5 py-0.5 font-black text-primary">
+                    {bestVacancy.dongName}
+                  </span>
+                  의 매물 중 최적 위치를 공실 spot 1위로 자동 추천합니다.
+                </div>
+                <div className="text-xs leading-relaxed text-muted-foreground">
+                  ▸ 분석 결과(반경 500m 동일업종, 평균 거리, 경쟁 강도, 임대료 인덱스), 주요 경쟁점,
+                  동 한눈에 — 모두{' '}
+                  <span className="font-bold text-foreground">{bestVacancy.dongName}</span> 기준으로
+                  도출됩니다.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <div className="relative overflow-hidden rounded-lg border border-border">
         <MarketMap
@@ -253,6 +385,7 @@ export function MapSection({ simResult }: Props) {
           sameBrandLocations={sameBrandLocations}
           territoryRadiusM={territoryRadiusM ?? null}
           userBrand={brand}
+          topCompetitors={topCompetitorsForMap}
         />
 
         {/* Layer 6 — 좌하단 범례 패널 */}
@@ -269,6 +402,29 @@ export function MapSection({ simResult }: Props) {
                 <span className="font-mono text-foreground">{totalCompetitors}</span>
               </span>
             </div>
+            {topCompetitorsForMap.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '9999px',
+                    background: '#facc15',
+                    border: '2px solid #ffffff',
+                    boxShadow: '0 0 6px rgba(250,204,21,0.7)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 9,
+                    fontWeight: 900,
+                    color: '#1c1917',
+                  }}
+                >
+                  1
+                </span>
+                <span>주요 경쟁점 (1~5위)</span>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span
                 style={{

@@ -23,12 +23,14 @@ export function useAbmCompletionToast() {
           ? `${focusLabel} 페르소나 시뮬 결과가 준비됐습니다.`
           : 'ABM 시뮬레이션 결과가 준비됐습니다.',
         action: { label: '결과 보기', onClick: () => navigate('/dashboard/abm') },
+        dedupeKey: 'abm-success',
       });
     } else if (prev === 'running' && status === 'error') {
       push({
         variant: 'error',
         title: 'ABM SIMULATION FAILED',
         description: error ?? '알 수 없는 오류',
+        dedupeKey: 'abm-error',
       });
     }
   }, [status, error, focusLabel, push, navigate]);

@@ -4,16 +4,20 @@
  */
 
 /** 원 단위 숫자 → "N억 N,NNN만" 또는 "N,NNN만" 형식 */
+// 음수(손실)도 절댓값으로 분기하고 부호 보존. 미보존 시 toLocaleString fallback
+// 으로 빠져 부동소수점이 그대로 노출됨 — 영업이익 평균이 음수일 때 발생.
 export function formatKrw(won: number | null | undefined): string {
   if (won == null || !Number.isFinite(won)) return '—';
-  if (won >= 1_0000_0000) {
-    const eok = won / 1_0000_0000;
-    return `${eok.toFixed(eok >= 10 ? 1 : 2)}억`;
+  const sign = won < 0 ? '-' : '';
+  const abs = Math.abs(won);
+  if (abs >= 1_0000_0000) {
+    const eok = abs / 1_0000_0000;
+    return `${sign}${eok.toFixed(eok >= 10 ? 1 : 2)}억`;
   }
-  if (won >= 1_0000) {
-    return `${Math.round(won / 1_0000).toLocaleString('ko-KR')}만`;
+  if (abs >= 1_0000) {
+    return `${sign}${Math.round(abs / 1_0000).toLocaleString('ko-KR')}만`;
   }
-  return won.toLocaleString('ko-KR');
+  return `${sign}${Math.round(abs).toLocaleString('ko-KR')}`;
 }
 
 /** 0~1 소수 → "42.1%" */

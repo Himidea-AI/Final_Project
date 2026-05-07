@@ -72,10 +72,13 @@ async def synthesis_node(state: AgentState) -> dict:
     # v12: confidence 동적 산출 시도 → 롤백 (0.85 고정 유지). 잠시 v11 캐시에 동적 값
     #      섞여 들어갔을 가능성 있어 안전하게 무효화. 사용자 의도: LLM 에이전트들의
     #      낮은 confidence 가 synthesis 까지 끌고 내려가 신뢰도 위협하는 회귀 차단.
+    # v13: '리스크 및 대응' 섹션 법률 조항 번호 인용 금지 (예: 제12조의4, 제43조).
+    #      사용자 요구: 상권 무관 조항 인용으로 혼란 발생 — 행동 권고만 작성.
     _winner_for_cache = state.get("winner_district", target_district)
     _raw_td = state.get("target_districts") or [target_district]
     _td_key = ",".join(sorted(set(d for d in _raw_td if d)))
-    cache_key = f"v12:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    # v14: 사용자 타겟 정렬도 + 역제안 → '리스크 및 대응' 섹션 액션 제안 반영. 이전 캐시 무효화.
+    cache_key = f"v14:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -291,6 +294,38 @@ async def synthesis_node(state: AgentState) -> dict:
     else:
         shap_block = ""
 
+    # 사용자 타겟 정렬도 + 역제안 — '리스크 및 대응' 섹션 액션 제안 근거.
+    # demographic_report.target_alignment / reverse_target_suggestion (사용자 입력별 fresh).
+    _demo = analysis_results.get("demographic_report") or {}
+    _ta_alerts = _demo.get("target_alignment") or []
+    _ta_score = _demo.get("target_alignment_score")
+    _rev = _demo.get("reverse_target_suggestion") or {}
+    alignment_block = ""
+    if _ta_alerts or _rev:
+        _high = [a for a in _ta_alerts if isinstance(a, dict) and a.get("severity") == "high"]
+        _med = [a for a in _ta_alerts if isinstance(a, dict) and a.get("severity") == "medium"]
+        _alert_lines = "\n".join(
+            f"  - [{a.get('severity', '?')}] {a.get('dimension', '?')}: {a.get('message', '')[:200]}"
+            for a in (_high + _med)[:5]
+        )
+        _rev_line = ""
+        if _rev:
+            _rev_age = ", ".join(_rev.get("recommended_age_groups") or []) or "—"
+            _rev_g = _rev.get("recommended_gender") or "혼재"
+            _rev_h = ", ".join(_rev.get("recommended_hours") or []) or "—"
+            _rev_d = _rev.get("recommended_day_type") or "—"
+            _rev_p = _rev.get("recommended_price_range") or "—"
+            _rev_line = (
+                f"\n역제안 (입지 고정 시 권장 타겟): 연령 {_rev_age} / 성별 {_rev_g} / "
+                f"시간대 {_rev_h} / 요일 {_rev_d} / 객단가 {_rev_p}.\n"
+                f"근거: {(_rev.get('rationale') or '')[:200]}"
+            )
+        alignment_block = (
+            f"\n[사용자 타겟 정렬 — 정렬도 {_ta_score}/100 · 미스매치 {len(_high)}건 high, {len(_med)}건 medium]\n"
+            f"{_alert_lines}"
+            f"{_rev_line}"
+        )
+
     # competitor_intel 요약 (경쟁/카니발/차별화) — legal_risks 와 독립적으로 병합
     competitor_intel = state.get("competitor_intel_result", {}) or {}
     if competitor_intel and "error" not in competitor_intel:
@@ -319,6 +354,7 @@ async def synthesis_node(state: AgentState) -> dict:
         + (f"{quarterly_block}\n" if quarterly_block else "")
         + (f"{shap_block}\n" if shap_block else "")
         + (f"{competitor_block}\n" if competitor_block else "")
+        + (f"{alignment_block}\n" if alignment_block else "")
         + f"법률(caution/danger {len(_active_legal_risks)}건):\n{legal_summary_for_llm}\n"
         f"{legal_override}"
         f"{demographic_context}\n"
@@ -343,6 +379,15 @@ async def synthesis_node(state: AgentState) -> dict:
         "   - 블록에 없는 항목(예: 식품위생법, 위생교육, 소방시설 의무, 근로계약서 등)을 임의로 추가·생성·언급하지 말 것.\n"
         "   - 법률(caution/danger 0건) 인 경우 법률 항목 없이 운영 일반 리스크(경쟁·매출 변동·계절성 등)만 다룬다.\n"
         "   - 각 항목은 위 블록 summary 를 근거로 1-2문장 + 사전 대응 단계.\n"
+        "12. [필수 — 사용자 타겟 정렬 반영]\n"
+        "   - [사용자 타겟 정렬] 블록이 있으면 '리스크 및 대응' 섹션 마지막에 별도 항목으로\n"
+        "     '타겟 정렬 점검' 추가. high/medium alert 의 message 를 근거로 액션 제안 작성.\n"
+        "   - 역제안이 있으면 액션 제안에 '입지 유지 시 [권장 연령/성별/시간/요일/객단가] 로 타겟·\n"
+        "     운영전략 재정의 검토' 한 줄 포함. 사용자 자유 의사결정 보조용 — 강제하지 말 것.\n"
+        "   - 정렬도 60+ 또는 alert 0건이면 본 항목 생략.\n"
+        "   - **법률 조항 번호 인용 금지** (예: '제12조의4', '제43조', '가맹사업법 제○조' 등 조문 ref 표기 절대 금지).\n"
+        "     · 사용자 요구: 상권 무관 조항 인용으로 혼란 발생 → 본 섹션엔 행동 권고만, 조항 인용은 별도 LegalDrawer 가 처리.\n"
+        "     · '제○조' / '제○조의○' 패턴 일체 출력 금지. 법률명만 (예: '가맹사업법') 언급 가능.\n"
         "8. [중요] final_recommendation 출력 형식 — 가독성을 위해 반드시 아래 마크다운 구조로 작성:\n"
         "   - 각 섹션은 '## 섹션제목' 형식의 H2 헤더로 시작 (프론트에서 큰 글씨로 렌더됨)\n"
         "   - 섹션 사이는 빈 줄(\\n\\n) 두 번 들여 문단 분리\n"

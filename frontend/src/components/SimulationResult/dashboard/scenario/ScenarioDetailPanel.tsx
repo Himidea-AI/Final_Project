@@ -101,13 +101,10 @@ export function ScenarioDetailPanel({
     };
   }, [data, candidate.sliders]);
 
-  // sessionStorage 잔존 동이 4동 옵션에 없을 때 controlled select 경고 방지용 강제 옵션
-  const dongInOptions = availableDongs.some((d) => d.name === candidate.dong);
-
-  // 동 드롭다운 옵션 — 4동 + sessionStorage 잔존 동 fallback 포함
-  const dongOptions = dongInOptions
-    ? availableDongs.map((d) => d.name)
-    : [...availableDongs.map((d) => d.name), candidate.dong];
+  // 동 드롭다운 옵션 = 시뮬 입력 4동 한정.
+  // sessionStorage 잔존 후보의 invalid dong 은 부모 effect (PredictScenarioSimTab)
+  // 가 자동으로 첫 동으로 update 하므로 fallback 옵션 불필요.
+  const dongOptions = availableDongs.map((d) => d.name);
 
   // 통합 헤더+KPI 박스 inner — 헤더 row + (result 있을 때) KPI row.
   // 우측 컬럼 상단에 위치, loading/error 시에도 헤더는 항상 표시.
@@ -186,7 +183,7 @@ export function ScenarioDetailPanel({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
           <aside className="space-y-4">
             <h4 className="flex items-center gap-2 px-1 text-base font-black tracking-tight text-foreground">
-              What-if 변수 조정
+              시뮬레이션 변수 조절
             </h4>
             <p className="text-[0.6875rem] text-muted-foreground">로드 중…</p>
           </aside>
@@ -223,18 +220,19 @@ export function ScenarioDetailPanel({
         {/* 좌측 — what-if 변수 조정 (bare, 위에서 시작) */}
         <aside className="space-y-3">
           <h4 className="px-1 text-[0.625rem] font-black uppercase tracking-widest text-muted-foreground">
-            What-if 변수 조정
+            시뮬레이션 변수 조절
           </h4>
 
-          {/* 액티브 슬라이더 chip × 4 (delta 모드 차트의 7-tier 표시 대상 선택) */}
-          <div className="flex flex-wrap gap-1">
+          {/* 액티브 슬라이더 chip × 4 (delta 모드 차트의 7-tier 표시 대상 선택).
+              4 chip 한 줄 균등 배치 — flex-1 로 컬럼 폭(280px) 4등분, 폰트·패딩 키워 공백 흡수. */}
+          <div className="flex flex-nowrap gap-1.5">
             {PCT_SLIDER_KEYS.map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setActiveSlider(k)}
                 title={SLIDER_TOOLTIPS[k]}
-                className={`rounded-full border px-2.5 py-1 text-[0.625rem] font-bold transition-colors ${
+                className={`flex-1 whitespace-nowrap rounded-full border px-1 py-1.5 text-center text-[0.6875rem] font-bold transition-colors ${
                   activeSlider === k
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border bg-card text-muted-foreground hover:border-primary/40'

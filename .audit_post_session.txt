@@ -1,0 +1,57 @@
+### POST-SESSION DB 실측 (PR #178~#197 머지 후) ###
+
+=== alembic head ===
+91b66e68ec18
+
+=== 테이블 + row counts (top 30) ===
+  ('living_population_grid', 10538127)
+  ('bus_boarding_daily', 3710508)
+  ('seoul_ttareungi_usage_daily', 985653)
+  ('living_population', 961071)
+  ('seoul_adstrd_stor', 849552)
+  ('district_sales_seoul', 475334)
+  ('sgis_population', 224517)
+  ('seoul_subway_passenger_daily', 199340)
+  ('golmok_commercial', 178840)
+  ('jeonse_monthly_rent', 168342)
+  ('sgis_business', 137356)
+  ('seoul_district_stores', 100587)
+  ('seoul_training_dataset', 87938)
+  ('seoul_district_sales', 87938)
+  ('kakao_store_menu', 81037)
+  ('seoul_signgu_stor', 69704)
+  ('seoul_signgu_selng', 43043)
+  ('ftc_brand_franchise', 34708)
+  ('naver_trend_monthly', 33985)
+  ('store_info', 30488)
+  ('sgis_household', 25550)
+  ('golmok_stores', 15800)
+  ('seoul_resident_pop_quarterly', 13508)
+  ('seoul_adstrd_flpop', 11900)
+  ('seoul_golmok_rent', 11900)
+  ('seoul_adstrd_change_ix', 11900)
+  ('mart_brand_territory', 11849)
+  ('langchain_pg_embedding', 10255)
+  ('seoul_population_quarterly', 10176)
+  ('small_store_rent_q', 10020)
+
+=== 100% NULL 컬럼 재측정 (master 메타 backfill 후) ===
+  district_sales_seoul: 100% NULL = ['raw_json']
+  dong_mapping: 100% NULL = ['trdar_codes']
+  ecos_timeseries: 100% NULL = ['item_name2', 'cycle']
+  invite_codes: 100% NULL = ['expires_at']
+  kakao_store_hours: 100% NULL = ['mon_hours', 'tue_hours', 'wed_hours', 'thu_hours', 'fri_hours', 'sat_hours', 'sun_hours']
+  living_population: 100% NULL = ['male_70_74', 'female_70_74']
+  mart_brand_territory: 100% NULL = ['extraction_confidence']
+  master_ttareungi_station: 100% NULL = ['dong_code', 'opened_at']
+  molit_nrg_trade: 100% NULL = ['realty_type']
+  rent_cost: 100% NULL = ['transaction_date', 'price', 'floor_area', 'floor']
+  seoul_dong_master: 100% NULL = ['comment']
+
+=== orphan FK ===
+  ✓ orphan 0
+
+=== ORM ↔ DB 정합 ===
+  ORM: 77, DB: 87
+  ORM only (zombie): []
+  DB only (raw SQL): ['alembic_version', 'langchain_pg_collection', 'langchain_pg_embedding', 'living_population_grid', 'mapo_schools', 'password_reset_tokens', 'seoul_district_sales_imputed_v4', 'seoul_district_sales_imputed_v4_detail', 'seoul_resident_pop_quarterly', 'user_usage']

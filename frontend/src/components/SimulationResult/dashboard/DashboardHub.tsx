@@ -242,6 +242,9 @@ export function DashboardHub({
             imgAlt="사람들이 다니는 거리"
             accent="abm"
             ctaLabel="시뮬 실행"
+            disabled={isAnalyzeDisabled}
+            disabledReason={analyzeError ?? undefined}
+            loading={isAnalyzeLoading}
           />
         ) : (
           <HubCard
@@ -252,6 +255,9 @@ export function DashboardHub({
             imgAlt="사람들이 다니는 거리"
             accent="abm"
             ctaLabel="시뮬 실행"
+            disabled={isAnalyzeDisabled}
+            disabledReason={analyzeError ?? undefined}
+            loading={isAnalyzeLoading}
           />
         )}
       </div>

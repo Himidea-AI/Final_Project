@@ -323,7 +323,10 @@ async def competitor_intel_node(state: AgentState) -> dict:
         }
 
     # winner 매물 좌표 (legal agent 와 동일 기준점) — 일관성 확보.
-    # state.vacancy_spots 에서 winner_district 매칭 spot 추출, 없으면 첫 spot.
+    # graph.py 가 target_district 를 spot 1위 동으로 이미 교체한 상태로 진입.
+    # → 그 동의 spot 중 score 1위 (없으면 listing_count 1위) 좌표 사용.
+    # frontend buildBestVacancies 의 1위 spot 좌표와 동일 — 분석 기준점 완전 통일.
+    # 이전 _matched[0] 은 정렬 없는 자연순서 첫 spot 이라 비결정적이었음.
     spot_lat: float | None = None
     spot_lon: float | None = None
     _vac_spots = state.get("vacancy_spots") or []
@@ -331,6 +334,12 @@ async def competitor_intel_node(state: AgentState) -> dict:
         _matched = [
             s for s in _vac_spots if isinstance(s, dict) and s.get("dong_name") == target_district
         ]
+        _matched.sort(
+            key=lambda s: (
+                -(s.get("score") if isinstance(s.get("score"), (int, float)) else float("-inf")),
+                -(s.get("listing_count") or 0),
+            )
+        )
         _spot = _matched[0] if _matched else _vac_spots[0]
         try:
             _slat = _spot.get("lat") if isinstance(_spot, dict) else None

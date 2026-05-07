@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from functools import lru_cache
 
 from sqlalchemy import text
@@ -132,8 +133,35 @@ def get_all_mapo_stores_by_brand(brand_name: str) -> list[dict]:
     resolved = resolve_brand_name(brand_name) or brand_name
     # 1차: 하드코딩 alias 역추적, 그 다음 모든 정방향 변형 + 입력 자체 + DB resolved 포함
     canonical = _REVERSE_ALIASES.get(resolved, resolved)
-    aliases = list(BRAND_ALIASES.get(canonical, [])) + [canonical, brand_name, resolved]
-    aliases = sorted(set(aliases))
+    aliases_raw = list(BRAND_ALIASES.get(canonical, [])) + [canonical, brand_name, resolved]
+
+    # 2차: FTC 표기 ↔ Kakao 표기 mismatch 보정.
+    # FTC brandNm 은 등록번호/연도 접미사 또는 괄호 영문 alias 가 붙는 경우 다수
+    # (홍콩반점0410, 메가엠지씨커피(MEGA MGC COFFEE), 비비큐(BBQ) 등).
+    # kakao_store 는 일반 brand 명만 적재 → 다양한 변형 alias 추출하여 ILIKE 매칭 hit율 ↑.
+    extra_short: list[str] = []
+    for a in aliases_raw:
+        if not a:
+            continue
+        # 끝 숫자 제거 (예: "홍콩반점0410" → "홍콩반점")
+        s1 = re.sub(r"\d+$", "", a).strip()
+        if s1 and s1 != a:
+            extra_short.append(s1)
+        # 괄호+내용 제거 — 한글 표기만 (예: "메가엠지씨커피(MEGA MGC COFFEE)" → "메가엠지씨커피")
+        s2 = re.sub(r"\s*\([^)]*\)\s*$", "", a).strip()
+        if s2 and s2 != a:
+            extra_short.append(s2)
+        # 괄호 안 영문/숫자 추출 — kakao_store 가 영문만 적재한 경우 (예: "비비큐(BBQ)" → "BBQ")
+        m = re.search(r"\(([A-Za-z0-9][A-Za-z0-9 &-]*)\)", a)
+        if m:
+            paren = m.group(1).strip()
+            if paren:
+                extra_short.append(paren)
+        # & 이후 suffix 제거 — kakao 가 첫 단어만 적재한 경우 (예: "본죽&비빔밥" → "본죽")
+        s4 = re.sub(r"\s*&.*$", "", a).strip()
+        if s4 and s4 != a:
+            extra_short.append(s4)
+    aliases = sorted(set(aliases_raw + extra_short))
 
     conditions = " OR ".join(f"brand_name ILIKE :a{i}" for i in range(len(aliases)))
     sql = text(

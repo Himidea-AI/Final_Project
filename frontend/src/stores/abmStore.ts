@@ -370,16 +370,36 @@ export const useAbmStore = create<AbmState>()(
         if (get()._abortController !== _abortController) return;
 
         if (!res.ok) {
-          // 404/5xx — error 로 전환.
-          const msg = `ABM status 조회 실패 (HTTP ${res.status})`;
+          // 404 — backend 메모리 휘발 (재시작) or TTL cleanup. stale jobId.
+          // 5xx — backend 일시 오류.
+          const msg =
+            res.status === 404
+              ? 'ABM 시뮬 정보 만료 (서버 재시작 또는 1시간 초과). 다시 실행하세요.'
+              : `ABM status 조회 실패 (HTTP ${res.status})`;
           const { _pollTimer } = get();
           if (_pollTimer) clearInterval(_pollTimer);
-          set({
-            status: 'error',
-            error: msg,
-            _abortController: null,
-            _pollTimer: null,
-          });
+          // 404 면 idle 로 reset (error 화면 띄우지 말고 그냥 사라지게) — 사용자가 다시 실행하면 됨.
+          // 5xx 는 error 로 (재시도 유도).
+          if (res.status === 404) {
+            set({
+              status: 'idle',
+              jobId: null,
+              result: null,
+              error: null,
+              progress: 0,
+              stage: '',
+              startedAt: null,
+              _abortController: null,
+              _pollTimer: null,
+            });
+          } else {
+            set({
+              status: 'error',
+              error: msg,
+              _abortController: null,
+              _pollTimer: null,
+            });
+          }
           setTimeout(() => get()._processNextInQueue(), 0);
           return;
         }

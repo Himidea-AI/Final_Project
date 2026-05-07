@@ -32,17 +32,9 @@ describe('EmergingSignalCard — 라벨 단어 사전', () => {
     expect(screen.getByText('안정 상권')).toBeInTheDocument();
   });
 
-  it('게이지 좌우 라벨 "낮음" / "높음"', () => {
-    render(<EmergingSignalCard signal={mkSignal()} district="합정동" />);
-    expect(screen.getByText('낮음')).toBeInTheDocument();
-    expect(screen.getByText('높음')).toBeInTheDocument();
-  });
-
-  it('게이지 우측 값이 정수 0~100 스케일 (KPI와 동일)', () => {
+  it('KPI 점수가 정수 0~100 스케일 (소수점 미노출)', () => {
     render(<EmergingSignalCard signal={mkSignal({ anomaly_score: 0.77 })} district="합정동" />);
-    // KPI 박스의 "77" + 게이지 우측 라벨 "77" 두 위치 모두 정수 노출
-    expect(screen.getAllByText('77').length).toBeGreaterThanOrEqual(2);
-    // 소수점 표기 미노출
+    expect(screen.getByText('77')).toBeInTheDocument();
     expect(screen.queryByText('0.77')).toBeNull();
   });
 });
@@ -124,12 +116,11 @@ describe('EmergingSignalCard — tier 헤더 배지', () => {
     expect(screen.getByText('보조 신호')).toBeInTheDocument();
   });
 
-  it('none → "데이터 검증 중" 배지 (is_mock 별도 미렌더)', () => {
+  it('none → "데이터 검증 중" 배지', () => {
     render(
       <EmergingSignalCard signal={mkSignal({ tier: 'none', is_mock: true })} district="합정동" />,
     );
     expect(screen.getByText('데이터 검증 중')).toBeInTheDocument();
-    // is_mock 별도 배지 흡수 — "데이터 신뢰도 검증 중" 미노출
     expect(screen.queryByText('데이터 신뢰도 검증 중')).toBeNull();
   });
 });
@@ -150,88 +141,48 @@ describe('EmergingSignalCard — summary 한 줄', () => {
   });
 });
 
-describe('EmergingSignalCard — raw evidence chip', () => {
-  it('classifier → "신뢰도 87%" chip', () => {
+describe('EmergingSignalCard — quarter_history sparkline', () => {
+  it('quarter_history 있을 때 "최근 8 분기 변화도" 라벨 노출', () => {
+    const history = Array.from({ length: 8 }, (_, i) => ({
+      quarter: i === 7 ? '현재' : `Q-${7 - i}`,
+      anomaly_score: 0.3 + i * 0.05,
+    }));
+    render(
+      <EmergingSignalCard signal={mkSignal({ quarter_history: history })} district="합정동" />,
+    );
+    expect(screen.getByText(/최근 8 분기 변화도/)).toBeInTheDocument();
+  });
+
+  it('quarter_history null → sparkline 라벨 미노출', () => {
+    render(<EmergingSignalCard signal={mkSignal({ quarter_history: null })} district="합정동" />);
+    expect(screen.queryByText(/최근 8 분기 변화도/)).toBeNull();
+  });
+});
+
+describe('EmergingSignalCard — peer_distribution bar', () => {
+  it('peer_distribution 있을 때 "16동 분포" 라벨 + 순위 노출', () => {
     render(
       <EmergingSignalCard
         signal={mkSignal({
-          tier: 'classifier',
-          raw: { predicted_stage: 'LH', confidence: 0.87 },
-          is_mock: false,
+          peer_distribution: {
+            p25: 0.2,
+            p50: 0.4,
+            p75: 0.6,
+            p90: 0.8,
+            percentile_self: 25,
+            rank_in_total: 4,
+            total: 16,
+          },
         })}
         district="합정동"
       />,
     );
-    expect(screen.getByText(/신뢰도/)).toBeInTheDocument();
-    expect(screen.getByText(/87%/)).toBeInTheDocument();
+    expect(screen.getByText(/16동 분포/)).toBeInTheDocument();
+    expect(screen.getByText(/변화 4위 \/ 16동/)).toBeInTheDocument();
   });
 
-  it('b1_trend → "지하철" + "청년" chip 2개', () => {
-    render(
-      <EmergingSignalCard
-        signal={mkSignal({
-          tier: 'b1_trend',
-          raw: { subway_growth: 0.05, migration_2030_rate: 0.02 },
-          is_mock: false,
-        })}
-        district="합정동"
-      />,
-    );
-    expect(screen.getByText(/지하철 \+5\.0%/)).toBeInTheDocument();
-    expect(screen.getByText(/청년 \+2\.0%/)).toBeInTheDocument();
-  });
-
-  it('slope → "매출 ↑" + "점포수 →" 부호 chip', () => {
-    render(
-      <EmergingSignalCard
-        signal={mkSignal({
-          tier: 'slope',
-          raw: { sales_slope: 1.2, store_slope: 0.0 },
-          is_mock: false,
-        })}
-        district="합정동"
-      />,
-    );
-    expect(screen.getByText(/매출 ↑/)).toBeInTheDocument();
-    expect(screen.getByText(/점포수 →/)).toBeInTheDocument();
-  });
-
-  it('change_ix → chip 미렌더 (summary 만으로 충분)', () => {
-    render(
-      <EmergingSignalCard
-        signal={mkSignal({
-          tier: 'change_ix',
-          raw: { change_ix: 'LH' },
-          is_mock: false,
-        })}
-        district="합정동"
-      />,
-    );
-    expect(screen.queryByText(/LH/)).toBeNull();
-  });
-
-  it('none → chip 미렌더', () => {
-    render(
-      <EmergingSignalCard
-        signal={mkSignal({ tier: 'none', raw: {}, is_mock: true })}
-        district="합정동"
-      />,
-    );
-    expect(screen.queryByText(/지하철|청년|매출|점포수|신뢰도/)).toBeNull();
-  });
-
-  it('b1_trend 에서 raw 키 일부 누락 시 누락 chip 미렌더', () => {
-    render(
-      <EmergingSignalCard
-        signal={mkSignal({
-          tier: 'b1_trend',
-          raw: { subway_growth: 0.05 },
-          is_mock: false,
-        })}
-        district="합정동"
-      />,
-    );
-    expect(screen.getByText(/지하철 \+5\.0%/)).toBeInTheDocument();
-    expect(screen.queryByText(/청년/)).toBeNull();
+  it('peer_distribution null → 16동 분포 라벨 미노출', () => {
+    render(<EmergingSignalCard signal={mkSignal({ peer_distribution: null })} district="합정동" />);
+    expect(screen.queryByText(/16동 분포/)).toBeNull();
   });
 });

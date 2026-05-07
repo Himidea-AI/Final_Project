@@ -125,6 +125,13 @@ class SimulationInput(BaseModel):
     target_day_type: str | None = Field(default=None, description="타겟 요일: 'weekday' | 'weekend' | None(전체)")
     target_monthly_sales: int | None = Field(default=None, description="예상 월매출 (원). None=비율만 계산, 금액 제외")
 
+    # [corp_brand_resolver] biz_number 검증 트리거.
+    # frontend 가 보내거나 main.py 에서 JWT 토큰의 user.user_id → users.biz_number 자동 추출.
+    # corp 검증: 해당 biz_number 가 운영하는 brand+업종 list 매핑.
+    biz_number: str | None = Field(
+        default=None, description="사업자등록번호 (corp 다업종 검증 트리거 — 미입력 시 검증 skip)"
+    )
+
     @field_validator("business_type")
     @classmethod
     def _warn_unknown_business_type(cls, v: str) -> str:

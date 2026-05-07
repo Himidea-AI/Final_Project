@@ -18,13 +18,18 @@ interface Props {
   shap: ShapResult | null | undefined;
   /** M9: 동별 grid 호출 시 카드 상단에 표시 (옵셔널) */
   district?: string;
+  /** 4동 비교 grid 에서 동별 색 (SERIES_COLORS[idx]). 미지정 시 success/danger semantic 폴백.
+   *  bar 만 동별 색, 텍스트/화살표(↑↓)는 의미 색(success/danger) 유지 — 기여도 방향 정보 보존. */
+  seriesColor?: string;
 }
 
-export function ShapInsightCard({ shap, district }: Props) {
+export function ShapInsightCard({ shap, district, seriesColor }: Props) {
   if (!shap) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-secondary p-8 text-center text-xs text-muted-foreground">
-        {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
+        {district && (
+          <div className="text-sm font-black text-foreground tracking-tight mb-2">{district}</div>
+        )}
         SHAP 해석 데이터 없음 — 모델 예측 신뢰도가 확정되면 표시됩니다
       </div>
     );
@@ -36,7 +41,9 @@ export function ShapInsightCard({ shap, district }: Props) {
   if (top.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
-        {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
+        {district && (
+          <div className="text-sm font-black text-foreground tracking-tight mb-2">{district}</div>
+        )}
         피처 기여도 산출 결과 없음
       </div>
     );
@@ -54,7 +61,9 @@ export function ShapInsightCard({ shap, district }: Props) {
         isMock ? 'bg-secondary/60 opacity-60' : 'bg-secondary'
       }`}
     >
-      {district && <div className="text-xs font-bold text-muted-foreground mb-2">{district}</div>}
+      {district && (
+        <div className="text-sm font-black text-foreground tracking-tight mb-2">{district}</div>
+      )}
       <div className="flex items-center justify-between mb-4 gap-2">
         <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest leading-tight">
           이 동의 매출 예측에 가장 영향을 준 요인 3가지
@@ -70,7 +79,7 @@ export function ShapInsightCard({ shap, district }: Props) {
           const positive = f.shap_value >= 0;
           const arrow = positive ? '↑' : '↓';
           const colorClass = positive ? 'text-success' : 'text-danger';
-          const barClass = positive ? 'bg-success' : 'bg-danger';
+          const semanticBarClass = positive ? 'bg-success' : 'bg-danger';
           const pct = totalAbs > 0 ? (Math.abs(f.abs_shap ?? f.shap_value) / totalAbs) * 100 : 0;
           return (
             <div
@@ -86,10 +95,17 @@ export function ShapInsightCard({ shap, district }: Props) {
                 </span>
               </div>
               <div className="h-1 rounded-full bg-border/40 overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${barClass}`}
-                  style={{ width: `${pct.toFixed(1)}%` }}
-                />
+                {seriesColor ? (
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${pct.toFixed(1)}%`, backgroundColor: seriesColor }}
+                  />
+                ) : (
+                  <div
+                    className={`h-full rounded-full ${semanticBarClass}`}
+                    style={{ width: `${pct.toFixed(1)}%` }}
+                  />
+                )}
               </div>
             </div>
           );
