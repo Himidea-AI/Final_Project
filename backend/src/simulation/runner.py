@@ -970,8 +970,11 @@ def run_simulation(
                     # v11 Layer 3: 매 tick 내부 상태 진화 (visit 여부 무관)
                     if _a is not None:
                         _a.tick_state(res.hour, dec.action, world)
-                    # 방문 이벤트 수집 (지도 시각화용) + 주문 메뉴 추정
-                    if trajectory_path and dec.action == "visit" and dec.target_store_id:
+                    # 방문 이벤트 수집 — peak_hours 집계 (1316) + sidecar dump (1222/1579) 양쪽 사용.
+                    # trajectory_path 가드 제거 (2026-05-07): 가드 있을 때 trajectory_path 미입력
+                    # 호출자(main.py /simulate-abm 일반 흐름)에서 visits_log 가 영원히 빈 리스트 →
+                    # peak_hours = [] → frontend UI 항상 '—' 표시되던 회귀 fix.
+                    if dec.action == "visit" and dec.target_store_id:
                         store = world.stores.get(dec.target_store_id)
                         if store and store.lat and store.lon:
                             # 주문 메뉴: 가격이 spend에 가장 가까운 것

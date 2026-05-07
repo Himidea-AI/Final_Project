@@ -25,13 +25,16 @@ interface Props {
   width?: number;
   height?: number;
   data: number[];
+  /** 라인 색상 강제 지정. 미지정 시 트렌드(up/down/flat)별 색 fallback. */
+  color?: string;
 }
 
-export function Sparkline({ data, width, height = 24 }: Props) {
+export function Sparkline({ data, width, height = 24, color }: Props) {
   if (!data || data.length === 0) {
     return <span className="text-[0.625rem] text-muted-foreground">—</span>;
   }
   const dir = computeTrendDirection(data);
+  const strokeColor = color ?? TREND_COLOR[dir];
   const points = data.map((v, i) => ({ i, v }));
   // width 미지정이면 부모 100%로 늘어남 (caller가 height만 주는 카드 레이아웃 대응)
   const containerStyle: CSSProperties =
@@ -56,7 +59,7 @@ export function Sparkline({ data, width, height = 24 }: Props) {
           <Line
             type="monotone"
             dataKey="v"
-            stroke={TREND_COLOR[dir]}
+            stroke={strokeColor}
             strokeWidth={1.5}
             dot={false}
             isAnimationActive={false}

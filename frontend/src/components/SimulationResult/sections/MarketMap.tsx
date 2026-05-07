@@ -481,7 +481,7 @@ export function MarketMap({
       if (isSelfBrand) {
         // 자사 매장 별표 — Layer 3 sameBrand 마커와 동일 디자인.
         dot.style.cssText =
-          'position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 8px rgba(251,191,36,0.6);font-size:12px;font-weight:900;color:#1c1917;cursor:pointer;';
+          'position:relative;width:18px;height:18px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 6px rgba(251,191,36,0.7);font-size:10px;font-weight:900;color:#1c1917;cursor:pointer;';
         dot.innerHTML = '★';
         dot.title = `${c.brand_name || '자사매장'} · ${c.place_name}`;
       } else {
@@ -547,11 +547,10 @@ export function MarketMap({
         return;
       }
       const pos = new maps.LatLng(s.lat, s.lng);
-      // 로고 아이콘 마커 — 금색 동그라미 + 작은 펄스 (자사 매장 표시).
+      // 로고 아이콘 마커 — 금색 동그라미 (자사 매장 표시). 18px 콤팩트 사이즈.
       const logo = document.createElement('div');
-      // DEBUG: 별표 안 보이는 이슈 — 디자인 강화 (크기↑ + 강한 그림자 + 외곽선 추가).
       logo.style.cssText =
-        'position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:3px solid #ffffff;border-radius:9999px;box-shadow:0 0 16px rgba(251,191,36,0.95),0 0 4px rgba(0,0,0,0.5);font-size:18px;font-weight:900;color:#1c1917;cursor:pointer;outline:2px solid #f59e0b;outline-offset:1px;';
+        'position:relative;width:18px;height:18px;display:flex;align-items:center;justify-content:center;background:#fbbf24;border:2px solid #ffffff;border-radius:9999px;box-shadow:0 0 6px rgba(251,191,36,0.7);font-size:10px;font-weight:900;color:#1c1917;cursor:pointer;';
       logo.innerHTML = '★';
       logo.title = `${s.brand_name || '자사매장'} · ${s.place_name}`;
       logo.addEventListener('click', (ev) => {

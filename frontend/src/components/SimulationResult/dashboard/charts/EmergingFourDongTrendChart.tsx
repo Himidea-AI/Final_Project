@@ -84,15 +84,22 @@ export function EmergingFourDongTrendChart({ dpredicts, height = 280 }: Props) {
     id: `series-${s.district}`,
   }));
 
-  // 사분위 reference line 정의 — peer 있을 때만
+  // 사분위 reference line 정의 — peer 있을 때만 (사용자 친화 라벨)
   const refLines: { y: number; label: string }[] = peer
     ? [
-        { y: peer.p25, label: '16동 P25' },
-        { y: peer.p50, label: '16동 P50' },
-        { y: peer.p75, label: '16동 P75' },
-        { y: peer.p90, label: '16동 P90' },
+        { y: peer.p25, label: '하위 25%' },
+        { y: peer.p50, label: '마포구 평균' },
+        { y: peer.p75, label: '상위 25%' },
+        { y: peer.p90, label: '상위 10%' },
       ]
     : [];
+
+  // X축 라벨 변환: backend "Q-7"~"Q-1"/"현재" → "7분기 전"~"1분기 전"/"현재"
+  const formatQuarterLabel = (q: string): string => {
+    if (q === '현재') return '현재';
+    const m = /^Q-(\d+)$/.exec(q);
+    return m ? `${m[1]}분기 전` : q;
+  };
 
   return (
     <div className="space-y-2">
@@ -103,6 +110,7 @@ export function EmergingFourDongTrendChart({ dpredicts, height = 280 }: Props) {
             dataKey="quarter"
             tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
             axisLine={{ stroke: 'var(--border)' }}
+            tickFormatter={formatQuarterLabel}
           />
           <YAxis
             domain={[0, 1]}
@@ -128,7 +136,7 @@ export function EmergingFourDongTrendChart({ dpredicts, height = 280 }: Props) {
               }
               return [`${(value * 100).toFixed(0)}%`, name];
             }}
-            labelFormatter={(q: string) => q}
+            labelFormatter={formatQuarterLabel}
           />
           <Legend
             verticalAlign="bottom"
