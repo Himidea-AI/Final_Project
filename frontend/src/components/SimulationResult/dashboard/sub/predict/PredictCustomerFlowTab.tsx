@@ -82,7 +82,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
         )}
 
         {/* 섹션 2 — 타겟 고객 매출 기여 (4동 통합) */}
-        {anySegment && (
+        {anySegment ? (
           <div className="rounded-3xl border border-border bg-card p-6 space-y-6">
             <div className="flex items-center justify-between gap-4">
               <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
@@ -128,6 +128,18 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
                 결과.
               </p>
             </div>
+          </div>
+        ) : (
+          // 타겟 고객 미선택 — 안내 카드 (border-dashed + muted 톤으로 미활성 상태 시각화)
+          <div className="rounded-3xl border border-dashed border-border bg-card p-6 space-y-2">
+            <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-muted-foreground">
+              <Users /> 타겟 고객 매출 기여 (예측)
+            </h3>
+            <p className="text-[0.8125rem] text-muted-foreground leading-relaxed pt-2">
+              입력 화면의 「타겟 고객」 섹션에서 연령대 · 성별 · 시간대 · 요일을 선택하시면 해당
+              고객층이 동별 매출에서 차지하는 비중과 동별 매출 비교 · 타겟 프로필 분석을 이 영역에서
+              확인하실 수 있습니다.
+            </p>
           </div>
         )}
       </div>

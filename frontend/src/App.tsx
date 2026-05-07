@@ -1478,6 +1478,11 @@ function SimulatorDashboard({
             row 2 우측 col-5 자리(RUN 버튼 이관 후 빈 공간)를 없애고 full-width 로 시원하게. ─────── */}
         <div className="lg:col-span-12 lg:order-4 box-glass rounded-2xl p-6 transition-all duration-700">
           <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
+          <p className="text-[0.6875rem] text-muted-foreground leading-relaxed whitespace-nowrap mb-3">
+            ※ 연령대 · 성별 · 시간대 · 요일을 선택하시면 결과 화면의 「타겟 고객 매출 기여 (예측)」
+            섹션에서 해당 고객층이 동별 매출에서 차지하는 비중과 타겟 프로필 분석을 확인하실 수
+            있습니다.
+          </p>
           <div>
             <div className="flex items-baseline justify-end mb-3">
               <span className="text-[0.625rem] text-muted-foreground opacity-60">
