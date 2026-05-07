@@ -40,24 +40,24 @@ export function LegalDistributionBar({ risks }: Props) {
       <div className="flex h-6 w-full overflow-hidden rounded-lg border border-border">
         <div
           className="flex items-center justify-center bg-danger text-[0.5625rem] font-black text-white"
-          style={{ width: `${pct(counts.high)}%` }}
+          style={{ width: `${pct(counts.high)}%`, minWidth: counts.high >= 1 ? '20px' : 0 }}
           title={`필수이행 ${counts.high}`}
         >
-          {counts.high >= 1 && pct(counts.high) > 10 ? counts.high : ''}
+          {counts.high >= 1 ? counts.high : ''}
         </div>
         <div
           className="flex items-center justify-center bg-warning text-[0.5625rem] font-black text-white"
-          style={{ width: `${pct(counts.medium)}%` }}
+          style={{ width: `${pct(counts.medium)}%`, minWidth: counts.medium >= 1 ? '20px' : 0 }}
           title={`확인필요 ${counts.medium}`}
         >
-          {counts.medium >= 1 && pct(counts.medium) > 10 ? counts.medium : ''}
+          {counts.medium >= 1 ? counts.medium : ''}
         </div>
         <div
           className="flex items-center justify-center bg-success text-[0.5625rem] font-black text-white"
-          style={{ width: `${pct(counts.low)}%` }}
+          style={{ width: `${pct(counts.low)}%`, minWidth: counts.low >= 1 ? '20px' : 0 }}
           title={`참고사항 ${counts.low}`}
         >
-          {counts.low >= 1 && pct(counts.low) > 10 ? counts.low : ''}
+          {counts.low >= 1 ? counts.low : ''}
         </div>
       </div>
       <div className="flex flex-wrap gap-4 text-[0.625rem]">

@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 BRAND_ALIASES: dict[str, list[str]] = {
     "이디야커피": ["이디야", "EDIYA", "EDIYA COFFEE"],
-    "빽다방": ["백다방", "빽다방빵연구소"],
+    # 빽다방 = 커피전문점. "빽다방빵연구소"는 베이커리 별개 가맹사업이라 alias 제외.
+    # 가맹사업법 제12조의4 = 동일 업종 침해 금지. 베이커리는 다른 업종이라 카운트 X.
+    "빽다방": ["백다방"],
     "메가엠지씨커피(MEGA MGC COFFEE)": ["메가커피", "메가MGC커피", "메가엠지씨커피", "MGC", "MEGA", "MEGA COFFEE"],
     "스타벅스": ["STARBUCKS", "스타벅스커피"],
     "투썸플레이스": ["TWOSOME", "A TWOSOME PLACE", "투썸"],
@@ -34,11 +36,21 @@ BRAND_ALIASES: dict[str, list[str]] = {
     "교촌치킨": ["교촌"],
     "BBQ": ["BBQ치킨", "비비큐"],
     "BHC": ["BHC치킨"],
-    "맘스터치": ["맘스터치 피자앤치킨", "맘스터치피자"],
+    # 맘스터치 = 햄버거. "맘스터치 피자앤치킨"/"맘스터치피자"는 별개 가맹사업이라 alias 제외.
+    "맘스터치": [],
     "롯데리아": ["LOTTERIA"],
     "버거킹": ["BURGER KING", "버거킹(Burger King)"],
     "파리바게뜨": ["PARIS BAGUETTE"],
     "뚜레쥬르": ["TOUS LES JOURS"],
+}
+
+
+# ILIKE 부분 매칭 false positive 제외 — canonical 별 별개 가맹사업 (다른 업종) 매장 명시.
+# 예: "빽다방" 검색 시 ILIKE '%빽다방%' 가 "빽다방빵연구소" (베이커리) 도 매칭 → 가맹사업법
+# 제12조의4 (동일 업종 침해 금지) 관점에서 카운트 안 됨. 후처리로 제외.
+BRAND_EXCLUDE: dict[str, list[str]] = {
+    "빽다방": ["빵연구소"],
+    "맘스터치": ["피자앤치킨", "피자"],
 }
 
 
@@ -178,7 +190,24 @@ def get_all_mapo_stores_by_brand(brand_name: str) -> list[dict]:
     engine = get_sync_engine(os.environ["POSTGRES_URL"])
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()
-    return [dict(r) for r in rows]
+    results = [dict(r) for r in rows]
+
+    # ILIKE 부분 매칭 false positive 제외 — canonical 별 BRAND_EXCLUDE 단어 포함된 매장 제거.
+    # 예: 빽다방 검색 시 "빽다방빵연구소" 매장은 "빵연구소" 키워드로 제외.
+    excludes = BRAND_EXCLUDE.get(canonical, [])
+    if excludes:
+        before = len(results)
+        results = [
+            r
+            for r in results
+            if not any(ex in (r.get("brand_name") or "") for ex in excludes)
+        ]
+        if before != len(results):
+            logger.debug(
+                f"[get_all_mapo_stores_by_brand] {canonical} false positive {before - len(results)}개 제외 "
+                f"(excludes={excludes})"
+            )
+    return results
 
 
 @lru_cache(maxsize=1)

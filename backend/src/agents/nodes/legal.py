@@ -724,11 +724,36 @@ async def _run_legal_pipeline(state: dict) -> dict:
                 "편의점": "convenience",
             }.get(biz_norm_for_curve, "default")
             _radius_scan = _terr_radius_m or 500  # 영업구역 미입력 시 500m default
-            _candidate_spots = [
-                s
-                for s in _vac_spots[:4]
-                if isinstance(s, dict) and s.get("lat") is not None and s.get("lon") is not None
-            ]
+
+            # spot 정렬 — winner_district (target_district) 매칭 spot 우선, 그 다음 나머지.
+            # 동별 1개씩 sampling 해서 4 spot 분석 (DB 순서 무관 winner 우선 원칙).
+            def _spot_priority(s: dict) -> int:
+                if not isinstance(s, dict):
+                    return 999
+                _dong = s.get("dong_name") or ""
+                if district and _dong == district:
+                    return 0  # winner 동 spot 최우선
+                return 1
+
+            _sorted_spots = sorted(
+                [
+                    s
+                    for s in _vac_spots
+                    if isinstance(s, dict) and s.get("lat") is not None and s.get("lon") is not None
+                ],
+                key=_spot_priority,
+            )
+            # 동별 dedupe — 같은 동 spot 4개 들어가지 않도록 (4 동 → 4 spot 1:1).
+            _seen_dongs: set[str] = set()
+            _candidate_spots: list[dict] = []
+            for _s in _sorted_spots:
+                _d = _s.get("dong_name") or ""
+                if _d in _seen_dongs:
+                    continue
+                _seen_dongs.add(_d)
+                _candidate_spots.append(_s)
+                if len(_candidate_spots) >= 4:
+                    break
             if brand:
                 for _s in _candidate_spots:
                     try:
@@ -747,9 +772,18 @@ async def _run_legal_pipeline(state: dict) -> dict:
                     if not _r or "error" in _r:
                         continue
                     nearby = _r.get("nearby_stores", []) or []
-                    same_within = sum(
-                        1 for n in nearby if isinstance(n, dict) and (n.get("distance_m") or 0) <= _radius_scan
-                    )
+                    within_list = [
+                        n for n in nearby if isinstance(n, dict) and (n.get("distance_m") or 0) <= _radius_scan
+                    ]
+                    same_within = len(within_list)
+                    if same_within > 0:
+                        _details = ", ".join(
+                            f"{n.get('place_name', '')}({n.get('distance_m'):.0f}m)" for n in within_list
+                        )
+                        logger.info(
+                            f"[legal_node] vacancy_spot scan brand={brand} dong={_s.get('dong_name')} "
+                            f"@({_s.get('lat')},{_s.get('lon')}) territory={_radius_scan}m within={same_within}: {_details}"
+                        )
                     vacancy_spot_analyses.append(
                         {
                             "dong_name": _s.get("dong_name"),
@@ -764,22 +798,13 @@ async def _run_legal_pipeline(state: dict) -> dict:
         except Exception as e:
             logger.warning(f"[legal_node] vacancy_spot 사전 스캔 전체 실패 ({e})")
 
-        # 2차: worst-case spot 선정 — territory 안 동일 브랜드 가장 많은 spot, 동률이면 closest_m 작은 쪽
+        # 2차: 메인 평가 spot 선정 — winner_district 매칭 첫 spot (competitor_intel 와 일관).
+        # 4 spot 각각 분석은 spot_evaluations 카드로 별도 노출. 메인 franchise_law summary 는
+        # 사용자가 실제 출점할 winner spot 기준으로 평가해야 상권분석 탭과 카운트 일치.
         _spot: dict | None = None
-        if vacancy_spot_analyses:
-            _spot_idx = max(
-                range(len(vacancy_spot_analyses)),
-                key=lambda i: (
-                    vacancy_spot_analyses[i].get("same_brand_within_territory") or 0,
-                    -(vacancy_spot_analyses[i].get("closest_m") or 1e9),
-                ),
-            )
-            _worst = vacancy_spot_analyses[_spot_idx]
-            # 원본 spot dict 매칭
-            for _s in _vac_spots:
-                if isinstance(_s, dict) and _s.get("lat") == _worst["lat"] and _s.get("lon") == _worst["lon"]:
-                    _spot = _s
-                    break
+        if district:
+            _matched = [s for s in _vac_spots if isinstance(s, dict) and s.get("dong_name") == district]
+            _spot = _matched[0] if _matched else (_vac_spots[0] if _vac_spots else None)
         # 폴백: 분석 실패 시 winner_district 매칭 spot, 없으면 첫 spot
         if _spot is None and district:
             _matched = [s for s in _vac_spots if isinstance(s, dict) and s.get("dong_name") == district]
@@ -820,9 +845,9 @@ async def _run_legal_pipeline(state: dict) -> dict:
     # 좌표 누락 시 "none" 으로 정규화 — 좌표·영업구역 입력 시 자동 invalidation.
     _coord_key = f"{lat_val:.5f},{lon_val:.5f}" if lat_val is not None and lon_val is not None else "none"
     _territory_key = state.get("territory_radius_m") or "none"
-    # v9 → v10: brand 내부 공백 collapse + biz lower (D5 정규화 강화). 옛 v9 캐시 자동 무효화.
+    # v10 → v11: _territory_to_level 분기 수정 (terr_radius 우선, 500m fallback 분리). 옛 v10 캐시 무효화.
     cache_key = (
-        f"v10:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}:{_territory_key}"
+        f"v11:legal:{_norm_brand}:{_norm_district}:{_norm_biz}:{float(store_area):.1f}:{_coord_key}:{_territory_key}"
     )
     _redis = None
     try:
@@ -1032,7 +1057,7 @@ async def _run_legal_pipeline(state: dict) -> dict:
                         recommendation="전문가 상담 권장",
                     )
                 )
-        logger.info(f"[legal_node] rule engine 완료 - {len(batch_results)}개 항목 (12 expected)")
+        logger.info(f"[legal_node] rule engine 완료 - {len(batch_results)}개 항목 ({len(_BATCH_TYPES)} expected)")
     except Exception as e:
         # 룰엔진 전체 실패 → 12 항목 caution fallback (legacy 경로 없음)
         logger.error(f"[legal_node] rule engine 실패 - 전체 caution fallback: {e}")

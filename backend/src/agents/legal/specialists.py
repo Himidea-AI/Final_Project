@@ -221,9 +221,7 @@ async def _analyze_territory(
         # 업종 → cannibal industry 라벨 (통합 dict 기반). 미매핑은 default — cafe 곡선 강제 회피.
         industry = _resolve_cannibal_industry(business_type)
         if industry == _INDUSTRY_DEFAULT and business_type:
-            logger.debug(
-                f"[_analyze_territory] 업종 '{business_type}' 미매핑 — default 곡선 사용"
-            )
+            logger.debug(f"[_analyze_territory] 업종 '{business_type}' 미매핑 — default 곡선 사용")
 
         result = None
         # 1순위: 좌표 기반 (공실 스팟 추천 위치)
@@ -254,9 +252,24 @@ async def _analyze_territory(
         same_brand_within_territory: int | None = None
         if territory_radius_m:
             nearby = result.get("nearby_stores", []) or []
-            same_brand_within_territory = sum(
-                1 for s in nearby if isinstance(s, dict) and (s.get("distance_m") or 0) <= territory_radius_m
-            )
+            within_list = [
+                s for s in nearby if isinstance(s, dict) and (s.get("distance_m") or 0) <= territory_radius_m
+            ]
+            same_brand_within_territory = len(within_list)
+            # 디버깅: territory 안 매장 발견 시 어떤 매장인지 로그
+            if same_brand_within_territory > 0:
+                _details = ", ".join(f"{s.get('place_name', '')}({s.get('distance_m'):.0f}m)" for s in within_list)
+                logger.info(
+                    f"[_analyze_territory] brand={brand} ref=({lat},{lon}) "
+                    f"territory={territory_radius_m}m within={same_brand_within_territory}: {_details}"
+                )
+            else:
+                _ref_src = result.get("ref_source", "?")
+                _closest = result.get("closest_distance_m")
+                logger.info(
+                    f"[_analyze_territory] brand={brand} ref=({lat},{lon},src={_ref_src}) "
+                    f"territory={territory_radius_m}m within=0 closest={_closest}m"
+                )
         return {
             "same_brand_500m": same_brand_500m,
             "same_brand_2000m": result.get("same_brand_nearby", 0),
@@ -293,30 +306,34 @@ def _territory_to_level(t: dict) -> tuple[str | None, str]:
     impact = t.get("impact_pct", 0.0)
 
     closest_str = f"{closest:.0f}m" if closest is not None else "N/A"
-    territory_str = ""
+
+    # 사용자 입력 영업구역 (정보공개서 표준 거리) 우선 — 그 외 500m/2km 는 fallback only.
+    # terr_radius 설정 시 territory 결과가 authoritative — 500m/2km hint 노출 안 함
+    # (LLM hallucination + 사용자 혼동 방지).
     if terr_radius and s_terr is not None:
-        territory_str = f"자사 영업구역({terr_radius}m) 안: {s_terr}개 / "
+        terr_hint = (
+            f"자사 영업구역({terr_radius}m) 안 동일 브랜드: {s_terr}개 / "
+            f"최근접: {closest_str} / 자기잠식률: {impact * 100:.1f}%"
+        )
+        if s_terr >= 1:
+            return (
+                "danger",
+                terr_hint + f" — 영업구역({terr_radius}m) 안 동일 브랜드 {s_terr}개, 가맹사업법 제12조의4 명백 침해",
+            )
+        return None, terr_hint + f" — 영업구역({terr_radius}m) 안 동일 브랜드 0개, 침해 없음"
+
+    # terr_radius 미설정 fallback — 일반 500m/2km 임계값
     hint = (
-        f"{territory_str}"
         f"500m 내 동일 브랜드 매장: {s500}개 / "
         f"2km 내: {s2000}개 / 최근접: {closest_str} / "
         f"자기잠식률: {impact * 100:.1f}%"
     )
-
-    # 1순위: 사용자 입력 영업구역 침해 — 정보공개서 표준 거리 기준이라 가장 강력한 근거
-    if terr_radius and s_terr is not None and s_terr >= 1:
-        return (
-            "danger",
-            hint + f" — 자사 영업구역({terr_radius}m) 안 동일 브랜드 {s_terr}개, 가맹사업법 제12조의4 명백 침해",
-        )
     if s500 >= 1 and impact <= -0.05:
         return "danger", hint + " — 가맹사업법 제12조의4 인접 출점 강력 의심"
     if s500 >= 1:
         return "caution", hint + " — 인접 출점, 영업지역 협의 필요"
     if s2000 >= 3:
         return "caution", hint + " — 자기잠식 위험"
-    # 정량 임계값 미달 — LLM 이 hint 수치를 위험 신호로 과잉 해석하지 않도록
-    # "정량 임계값 미달 (참고용)" 맥락 명시
     return None, hint + " — 정량 임계값 미달 (참고용, level 결정에 사용 안 함)"
 
 
@@ -397,9 +414,16 @@ async def specialist_franchise_law(
     territory_floor, territory_hint = _territory_to_level(territory)
 
     # 평가 기준 — 사용자 입력 영업구역 우선. 영업구역 미입력 시만 500m 일반 임계값.
+    # 환각 차단: territory dict 의 정확한 카운트를 prompt 에 deterministic 명시.
     if territory_radius_m:
+        _det_within = territory.get("same_brand_within_territory") if isinstance(territory, dict) else None
+        _det_str = (
+            f"**확정 사실: {territory_radius_m}m 영업구역 안 동일 브랜드 매장 = {_det_within}개**. "
+            f"summary 와 recommendation 에서 이 숫자({_det_within}개) 그대로 인용. 다른 숫자 만들지 말 것."
+        )
         _territory_criteria = (
             f"- 사용자 정의 영업구역 = **{territory_radius_m}m**. 이 거리만 침해 판정 기준으로 사용.\n"
+            f"- {_det_str}\n"
             f"- {territory_radius_m}m 안 동일 브랜드 1개 이상 → danger (가맹사업법 제12조의4 명백 침해)\n"
             f"- {territory_radius_m}m 안 동일 브랜드 0개 → safe (정보공개서 기준 충족)\n"
             "- summary/recommendation 에서 '500m' 같은 다른 거리 임계값 인용 금지. "
@@ -492,6 +516,15 @@ async def specialist_franchise_law(
                 if _territory_article["article_ref"] not in _existing_refs:
                     # territory 조문 prepend, 법조문 1개 + 판례 유지
                     articles = [_territory_article] + law_articles[:1] + precedent_articles
+        # 환각 차단 — territory 카운트 deterministic prefix.
+        # LLM 이 prompt hint "0개" 보고도 "1개 있다" 환각 생성 케이스 차단.
+        if territory and territory_radius_m:
+            _within = territory.get("same_brand_within_territory")
+            if _within is not None:
+                _fact = f"[사실확인: 영업구역({territory_radius_m}m) 안 동일 브랜드 매장 {_within}개]"
+                _summary_str = result.summary or ""
+                if _fact not in _summary_str:
+                    result.summary = f"{_fact} {_summary_str}"
         # B 단계: articles 에 케이스 맞춤 1~2문장 explanation 추가
         articles = await _explain_articles_batch(articles, brand, business_type, district, "가맹사업법")
         return _to_dict(result, articles)
