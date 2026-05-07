@@ -54,9 +54,7 @@ class CompetitorIntelEvaluator(BaseEvaluator):
         # 없으면 실제 노드 호출 — 비용 큰 작업이라 별도 진입점 필요.
         if "simulated_output" in case:
             return case["simulated_output"]
-        raise NotImplementedError(
-            "case 에 'simulated_output' 미포함 — 실제 시뮬 호출 진입점 별도 구현 필요"
-        )
+        raise NotImplementedError("case 에 'simulated_output' 미포함 — 실제 시뮬 호출 진입점 별도 구현 필요")
 
     def score(self, case: dict, output: Any) -> EvalResult:
         # output 은 competitor_intel 결과 dict — market_entry_signal + cannibalization + competition_500m 보유.
