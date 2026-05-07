@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.evaluation.evaluator import BaseEvaluator, EvalResult, EvalSummary
-from src.evaluation.llm_as_judge import JudgeScore, judge_text, passed
+from src.evaluation.llm_as_judge import JudgeScore, judge_text
 
 
 class DemographicDepthEvaluator(BaseEvaluator):

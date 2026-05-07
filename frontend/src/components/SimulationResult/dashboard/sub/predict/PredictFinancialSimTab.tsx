@@ -90,16 +90,22 @@ export function PredictFinancialSimTab({ simResult }: Props) {
       : null;
   const dataSource: 'ml' | 'none' = avg != null ? 'ml' : 'none';
   const bepQuarters = bepObj?.bep_quarters ?? null;
+  // 동별 bep_quarters 도 시리즈에 동봉 — 그래프 헤더에서 "도달 불가 / 5년+ 소요" 분기 표시.
   const bepSeries =
     dpredicts.length > 0
-      ? dpredicts.map((p) => ({
-          district: p.district,
-          projection: p.quarterly_projection ?? [],
-        }))
+      ? dpredicts.map((p) => {
+          const b = p.bep as BepDict | null | undefined;
+          return {
+            district: p.district,
+            projection: p.quarterly_projection ?? [],
+            bepQuarters: b?.bep_quarters ?? null,
+          };
+        })
       : [
           {
             district: simResult.winner_district ?? '단일',
             projection: simResult.quarterly_projection ?? [],
+            bepQuarters: null,
           },
         ];
   const hasAnyProjection = bepSeries.some((s) => s.projection.length > 0);
@@ -268,11 +274,39 @@ function ProfitSimulationPanelFull({
               마진 {formatPct(margin)}
             </div>
           )}
-          {bepQuarters != null && (
-            <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[0.6875rem] font-black tabular-nums text-primary">
-              BEP {bepQuarters}분기
-            </div>
-          )}
+          {bepQuarters != null &&
+            (() => {
+              // bep_quarters 의미 분기:
+              //   -1 → 분기 영업이익 ≤ 0 으로 영구 도달 불가 (현 비용 가정 기준).
+              //   > 20 → 도달은 하지만 가시범위(5년) 외. 그래프에서도 안 보임.
+              //   1~20 → 정상 도달. 숫자 그대로 표시.
+              const isUnreachable = bepQuarters === -1;
+              const isBeyondVisible = bepQuarters > 20;
+              const label = isUnreachable
+                ? '도달 불가'
+                : isBeyondVisible
+                  ? '5년+ 소요'
+                  : `${bepQuarters}분기`;
+              const isWarning = isUnreachable || isBeyondVisible;
+              return (
+                <div
+                  className={`rounded-full border px-3 py-1 text-[0.6875rem] font-black tabular-nums ${
+                    isWarning
+                      ? 'border-warning/40 bg-warning/10 text-warning'
+                      : 'border-primary/20 bg-primary/10 text-primary'
+                  }`}
+                  title={
+                    isUnreachable
+                      ? '현재 비용 가정 기준 분기 영업이익이 0 이하 — 임대료/초기자본을 조정하면 달라질 수 있습니다.'
+                      : isBeyondVisible
+                        ? `BEP 도달까지 ${bepQuarters}분기 (5년 이상)`
+                        : undefined
+                  }
+                >
+                  BEP {label}
+                </div>
+              );
+            })()}
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 AgentState — 모든 Agent가 공유하는 상태 객체.
 LangGraph의 StateGraph에서 사용.
 """
-from typing import Any, Optional
+from typing import Optional
 from pydantic import BaseModel, Field
 
 

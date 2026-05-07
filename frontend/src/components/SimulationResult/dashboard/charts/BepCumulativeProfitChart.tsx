@@ -25,8 +25,19 @@ import {
 import type { QuarterlyProjection } from '../../../../types';
 import { SERIES_COLORS } from '../../QuarterlyProjectionChart';
 
-/** 동별 분기 누적이익 시리즈 1건 */
-type ChartSeries = { district: string; projection: QuarterlyProjection[] };
+/** 동별 분기 누적이익 시리즈 1건.
+ * bepQuarters: 백엔드 산출 BEP 분기 수.
+ *   -1 = 분기 영업이익 ≤ 0 → 영구 도달 불가 (현 비용 가정 기준).
+ *   >20 = 도달 가능하지만 가시범위(5년) 외.
+ *   1~20 = 정상 도달.
+ *   chart 가 cumulative_profit 만 보고 가시범위 밖 미도달을 일률 "20+분기" 로
+ *   라벨링하던 문제를 차단하기 위해 backend bep_quarters 직접 동봉.
+ */
+type ChartSeries = {
+  district: string;
+  projection: QuarterlyProjection[];
+  bepQuarters?: number | null;
+};
 
 interface Props {
   series: ChartSeries[];
@@ -65,6 +76,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const trimmedSeries = validSeries.map((s) => ({
     district: s.district,
     data: s.projection.slice(0, visibleLen).map((d, i) => ({ ...d, quarter: i + 1 })),
+    bepQuarters: s.bepQuarters ?? null,
   }));
 
   // wide format: row = { quarter, [동]_cumulative, ... } — 트림된 길이로 동적 생성
@@ -79,14 +91,26 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   });
 
   // BEP 도달 분기 — 동별 계산. 각 동의 색상으로 세로 점선 + 라벨 표시.
-  // null 이면 가시 범위(20분기) 내 미도달 → 헤더에 "{동} 20+분기" 안내.
+  // bepQuarter null + backend bep_quarters 로 분기:
+  //   - bepQuarters === -1 → "도달 불가" (분기 영업이익 ≤ 0)
+  //   - bepQuarters > 20 → "5년+ 소요" (가시범위 외)
+  //   - 둘 다 아님 → 기존 fallback "5년+ 소요" (백엔드 정보 부재 시 보수적)
   const bepPerSeries = trimmedSeries.map((s, idx) => ({
     district: s.district,
     color: COLORS[idx % COLORS.length]!,
     bepQuarter: s.data.find((d) => (d.cumulative_profit ?? -1) >= 0)?.quarter ?? null,
+    backendBepQuarters: s.bepQuarters,
   }));
   const reachedBeps = bepPerSeries.filter((b) => b.bepQuarter !== null);
-  const beyondCapBeps = bepPerSeries.filter((b) => b.bepQuarter === null && maxLen >= QUARTER_CAP);
+  const unreachableBeps = bepPerSeries.filter(
+    (b) => b.bepQuarter === null && b.backendBepQuarters === -1,
+  );
+  const beyondCapBeps = bepPerSeries.filter(
+    (b) =>
+      b.bepQuarter === null &&
+      b.backendBepQuarters !== -1 &&
+      (maxLen >= QUARTER_CAP || (b.backendBepQuarters ?? 0) > QUARTER_CAP),
+  );
 
   // mock 배지 — 임의 동에 mock 분기가 하나라도 있으면 표시
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
@@ -100,7 +124,7 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
             일부 분기 mock
           </span>
         )}
-        {(reachedBeps.length > 0 || beyondCapBeps.length > 0) && (
+        {(reachedBeps.length > 0 || beyondCapBeps.length > 0 || unreachableBeps.length > 0) && (
           <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.625rem] font-black tabular-nums">
             {reachedBeps.map((b) => (
               <span
@@ -119,12 +143,26 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
               <span
                 key={`bep-beyond-${b.district}`}
                 className="inline-flex items-center gap-1 text-warning"
+                title={`BEP 도달까지 ${b.backendBepQuarters ?? '?'}분기 (5년 이상)`}
               >
                 <span
                   className="inline-block h-2 w-2 rounded-full"
                   style={{ backgroundColor: b.color }}
                 />
-                {b.district} BEP {QUARTER_CAP}+분기
+                {b.district} BEP 5년+ 소요
+              </span>
+            ))}
+            {unreachableBeps.map((b) => (
+              <span
+                key={`bep-unreachable-${b.district}`}
+                className="inline-flex items-center gap-1 text-warning"
+                title="현재 비용 가정 기준 분기 영업이익 ≤ 0 — 임대료/초기자본 조정 시 달라질 수 있습니다."
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: b.color }}
+                />
+                {b.district} BEP 도달 불가
               </span>
             ))}
           </div>
