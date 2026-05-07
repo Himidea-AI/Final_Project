@@ -131,7 +131,9 @@ describe('simulationStore — cancelSimulation', () => {
     vi.spyOn(api, 'runPredictPolling').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
+    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(
+      () => new Promise<AnalysisOutput>(() => {}),
+    );
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     expect(useSimulationStore.getState().status).toBe('running');
@@ -155,7 +157,9 @@ describe('simulationStore — 교체 실행', () => {
     vi.spyOn(api, 'runPredictPolling').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
+    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(
+      () => new Promise<AnalysisOutput>(() => {}),
+    );
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     controllers.push(useSimulationStore.getState()._abortController!);
@@ -219,7 +223,9 @@ describe('simulationStore — 진행률 타이머', () => {
     vi.spyOn(api, 'runPredictPolling').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
+    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(
+      () => new Promise<AnalysisOutput>(() => {}),
+    );
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     expect(useSimulationStore.getState().progress).toBe(0);
@@ -234,7 +240,9 @@ describe('simulationStore — 진행률 타이머', () => {
     vi.spyOn(api, 'runPredictPolling').mockImplementation(
       () => new Promise<DistrictPredictionResult[]>(() => {}),
     );
-    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(() => new Promise<AnalysisOutput>(() => {}));
+    vi.spyOn(api, 'runAnalyzeLlmPolling').mockImplementation(
+      () => new Promise<AnalysisOutput>(() => {}),
+    );
 
     useSimulationStore.getState().startSimulation(MOCK_INPUT);
     vi.advanceTimersByTime(200_000);

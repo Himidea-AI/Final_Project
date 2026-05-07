@@ -3,7 +3,7 @@
 retry, rate limit, 에러 핸들링, 로깅 공통 처리
 """
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential

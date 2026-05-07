@@ -49,7 +49,7 @@ interface SalesRow {
 function buildSalesRows(sorted: DistrictPredictionResult[]): { rows: SalesRow[]; max: number } {
   const rows: SalesRow[] = sorted.map((p) => {
     const seg = p.customer_segment as CustomerSegment | null;
-    const total = seg?.total_sales_ref ?? 0;
+    const total = seg?.total_sales_per_store ?? 0;
     const identified = seg?.identified_sales ?? 0;
     const segment = seg?.segment_sales ?? 0;
     return {
@@ -116,7 +116,7 @@ function SalesNestedProgress({
             {/* 3 layer progress — 같은 색, opacity 1.0 / 0.7 / 0.4 */}
             <div className="space-y-2">
               <ProgressLayer
-                label="전체 매출"
+                label="점포당 분기 매출"
                 widthPct={totalPct}
                 color={baseColor}
                 opacity={1.0}

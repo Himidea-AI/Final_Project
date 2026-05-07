@@ -168,7 +168,7 @@ class SimulationOutput(BaseModel):
     # 항목 키: id, place_name, brand_name, lat, lng, dong_name, address
     same_brand_locations: list[dict] = Field(default_factory=list)
     # [customer_revenue P1-C] 타겟 고객 매출 분석 — dict | None (predict.py 반환값 그대로)
-    # 키: segment_ratio, segment_sales, identified_sales, total_sales_ref, profile_summary, dimension_ratios
+    # 키: segment_ratio, segment_sales, identified_sales, total_sales_per_store, profile_summary, dimension_ratios
     customer_segment: dict | None = None
     # [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN). dict | None
     # 키: dong_code, dong_name, n_quarters, quarters[{quarter_offset, peak_time_zone, peak_pop, all_hours}], is_mock

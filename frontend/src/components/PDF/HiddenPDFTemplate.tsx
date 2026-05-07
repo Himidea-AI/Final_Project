@@ -497,11 +497,11 @@ export const HiddenPDFTemplate = forwardRef<HTMLDivElement, HiddenPDFTemplatePro
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-white p-3">
                   <div className="text-[0.5625rem] text-slate-500 uppercase tracking-wider">
-                    참조 월매출
+                    점포당 분기 매출
                   </div>
                   <div className="mt-1 text-[0.875rem] font-bold text-slate-900 font-mono">
-                    {customerSegment.total_sales_ref != null
-                      ? `₩${customerSegment.total_sales_ref.toLocaleString('ko-KR')}`
+                    {customerSegment.total_sales_per_store != null
+                      ? `₩${customerSegment.total_sales_per_store.toLocaleString('ko-KR')}`
                       : '—'}
                   </div>
                 </div>
