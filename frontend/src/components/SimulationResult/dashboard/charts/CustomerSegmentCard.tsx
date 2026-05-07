@@ -93,7 +93,7 @@ export function CustomerSegmentCard({ segment }: Props) {
   const ratioPct = (segment.segment_ratio * 100).toFixed(1);
   const sales = segment.segment_sales;
   const identified = segment.identified_sales;
-  const totalRef = segment.total_sales_ref;
+  const totalRef = segment.total_sales_per_store;
 
   // dimension_ratios에서 상위 6개 차원 추출
   const dimensions = Object.entries(segment.dimension_ratios)
@@ -138,7 +138,7 @@ export function CustomerSegmentCard({ segment }: Props) {
         </div>
         <div className="rounded-xl border border-border bg-secondary p-4">
           <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-widest mb-2">
-            전체 매출 기준
+            점포당 분기 매출(참고)
           </div>
           <div className="text-2xl font-black text-muted-foreground tabular-nums tracking-tighter">
             {totalRef != null ? `₩${formatKrw(totalRef)}` : '—'}

@@ -43,7 +43,8 @@ export interface CustomerSegment {
   segment_ratio: number;
   segment_sales: number | null;
   identified_sales: number | null;
-  total_sales_ref: number | null;
+  /** 점포당 분기 매출 참고값 (원) — TCN 매출예측 탭과 동일 단위. backend predict 입력 echo. */
+  total_sales_per_store: number | null;
   profile_summary: string;
   dimension_ratios: Record<string, number>;
 }

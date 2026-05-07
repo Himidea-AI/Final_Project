@@ -75,9 +75,7 @@ export function LiquidGlassSwitcher<T extends string | number | boolean | null>(
             onClick={() => onChange(opt.value)}
             className={
               'relative z-10 flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-bold tracking-tight transition-colors duration-200 cursor-pointer select-none whitespace-nowrap ' +
-              (active
-                ? 'text-primary'
-                : 'text-muted-foreground hover:text-foreground')
+              (active ? 'text-primary' : 'text-muted-foreground hover:text-foreground')
             }
             style={{ minWidth: `${optionPct}%` }}
           >

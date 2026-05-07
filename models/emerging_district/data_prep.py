@@ -62,11 +62,11 @@ def load_emerging_data(
     pd.DataFrame
         시계열 데이터 (quarter, dong_code, industry_code + EMERGING_FEATURES).
     """
-    from models.lstm_forecast.data_prep import build_timeseries, load_sales_data, load_store_data  # noqa: E402
+    # closure_risk/TCN/SHAP 와 동일하게 load_timeseries TTL=300s 캐시 공유 →
+    # 동일 dong_prefix 반복 호출 시 build_timeseries 재실행 방지 (3.8s → 0.05s).
+    from models.lstm_forecast.data_prep import load_timeseries  # noqa: E402
 
-    sales_df = load_sales_data(db_url=db_url, dong_prefix=dong_prefix)
-    store_df = load_store_data(db_url=db_url, dong_prefix=dong_prefix)
-    ts = build_timeseries(sales_df, store_df)
+    ts = load_timeseries(db_url=db_url, dong_prefix=dong_prefix)
 
     # 누락 피처 0 패딩
     for col in EMERGING_FEATURES:
