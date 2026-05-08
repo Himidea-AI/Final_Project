@@ -136,10 +136,15 @@ export function SaveSimulationActions({ simResult, brandName, kind, savedHistory
     }
 
     if (res) {
-      // store.savedHistoryId 는 단일 통합 ID 시대 유산 — DB 분리 후엔 (kind, id) 쌍 관리가 정확.
-      // 일단 마지막 저장 id 만 store 에 반영 (예측/분석 둘 다 누른 후엔 마지막 누른 쪽 = saved 표시).
-      // 후속 cycle 에서 store 구조 (kind 별 id) 분리 권장.
-      useSimulationStore.getState().setSavedHistoryId(res.id);
+      // 2026-05-07: kind 별 저장 ID 분리 — 예측/분석 탭 저장 상태 독립.
+      const store = useSimulationStore.getState();
+      if (kind === 'foresee') {
+        store.setSavedForeseeId(res.id);
+      } else {
+        store.setSavedAIId(res.id);
+      }
+      // legacy 단일 savedHistoryId — PDF/기타 호환용 마지막 저장 id 유지.
+      store.setSavedHistoryId(res.id);
       setSaveDialogOpen(false);
       const kindLabel = kind === 'foresee' ? 'ML 예측' : 'AI 분석';
       showToast(

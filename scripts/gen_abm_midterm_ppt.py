@@ -1,6 +1,12 @@
-"""ABM 중간발표 PPT — 시각 중심 (텍스트 최소화).
+"""SPOTTER 중간발표 PPT — ABM(17~20) + DB(7) 시나리오용.
 
-8장. 슬라이드당 핵심 3~4 불릿, 큰 숫자/모듈명 hero, 충분한 여백.
+이팀장 스토리 톤. 슬라이드 번호는 25장 시나리오 기준.
+코드 검토 기반 정확한 수치:
+- agents.py: Layer 1~5 인간다움
+- vacancy_pse.py: 1일 × 5 seed, 분기/연 환산
+- vacancy_inject.py: measure_cannibalization (with/without 같은 seed)
+- config.py: TierDistribution 5%/20%/75%, PopulationMix v12
+- models.py: 26+ 테이블 (운영 핵심)
 """
 
 from __future__ import annotations
@@ -24,10 +30,13 @@ GREEN = RGBColor(0x10, 0xB9, 0x81)
 ORANGE = RGBColor(0xF5, 0x9E, 0x0B)
 RED = RGBColor(0xEF, 0x44, 0x44)
 PURPLE = RGBColor(0x8B, 0x5C, 0xF6)
+PINK = RGBColor(0xEC, 0x48, 0x99)
+SOFT_GREEN = RGBColor(0xDC, 0xFC, 0xE7)
+SOFT_RED = RGBColor(0xFE, 0xE2, 0xE2)
 
 
-def add_title(slide, num: int, text: str) -> None:
-    badge = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(0.6), Inches(0.5), Inches(0.7), Inches(0.7))
+def add_title(slide, num, text, sub=None):
+    badge = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(0.5), Inches(0.95), Inches(0.7))
     badge.fill.solid()
     badge.fill.fore_color.rgb = ACCENT
     badge.line.fill.background()
@@ -43,44 +52,40 @@ def add_title(slide, num: int, text: str) -> None:
     bp.font.bold = True
     bp.font.color.rgb = WHITE
 
-    tb = slide.shapes.add_textbox(Inches(1.5), Inches(0.5), Inches(11), Inches(0.7))
+    tb = slide.shapes.add_textbox(Inches(1.65), Inches(0.45), Inches(11), Inches(0.7))
     p = tb.text_frame.paragraphs[0]
     p.text = text
-    p.font.size = Pt(32)
+    p.font.size = Pt(28)
     p.font.bold = True
     p.font.color.rgb = NAVY
 
-    line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.6), Inches(1.35), Inches(1.5), Inches(0.05))
+    if sub:
+        sb = slide.shapes.add_textbox(Inches(1.65), Inches(1.05), Inches(11), Inches(0.4))
+        sp = sb.text_frame.paragraphs[0]
+        sp.text = sub
+        sp.font.size = Pt(14)
+        sp.font.italic = True
+        sp.font.color.rgb = SUB
+
+    line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.5), Inches(1.55), Inches(1.5), Inches(0.05))
     line.fill.solid()
     line.fill.fore_color.rgb = ACCENT
     line.line.fill.background()
 
 
-def add_bullets(slide, items: list[str], left=1.0, top=2.0, width=11.3, size=22) -> None:
-    box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(5.0))
-    tf = box.text_frame
-    tf.word_wrap = True
-    for i, item in enumerate(items):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.text = item
-        p.font.size = Pt(size)
-        p.font.color.rgb = GRAY
-        p.space_after = Pt(18)
-
-
-def hero_number(slide, left: float, top: float, big: str, label: str, color=ACCENT, w: float = 3.0) -> None:
+def hero(slide, left, top, w, big, label, color=ACCENT, big_size=44):
     box = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top), Inches(w), Inches(2.0))
     box.fill.solid()
     box.fill.fore_color.rgb = LIGHT
     box.line.color.rgb = color
-    box.line.width = Pt(2)
+    box.line.width = Pt(2.5)
     tf = box.text_frame
     tf.word_wrap = True
     tf.margin_top = Inches(0.2)
     p = tf.paragraphs[0]
     p.text = big
     p.alignment = 2
-    p.font.size = Pt(44)
+    p.font.size = Pt(big_size)
     p.font.bold = True
     p.font.color.rgb = color
     p2 = tf.add_paragraph()
@@ -90,369 +95,440 @@ def hero_number(slide, left: float, top: float, big: str, label: str, color=ACCE
     p2.font.color.rgb = GRAY
 
 
-def chip(slide, left: float, top: float, text: str, color=NAVY, w: float = 3.5) -> None:
-    c = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top), Inches(w), Inches(0.45))
-    c.fill.solid()
-    c.fill.fore_color.rgb = color
-    c.line.fill.background()
-    tf = c.text_frame
-    tf.margin_left = Inches(0.15)
-    tf.margin_top = Inches(0.05)
+def card(slide, left, top, w, h, title, body, color=ACCENT, title_size=20, body_size=15):
+    box = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top), Inches(w), Inches(h))
+    box.fill.solid()
+    box.fill.fore_color.rgb = WHITE
+    box.line.color.rgb = color
+    box.line.width = Pt(2.5)
+    tf = box.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Inches(0.25)
+    tf.margin_top = Inches(0.2)
     p = tf.paragraphs[0]
-    p.text = text
-    p.font.size = Pt(13)
-    p.font.name = "Consolas"
+    p.text = title
+    p.font.size = Pt(title_size)
     p.font.bold = True
-    p.font.color.rgb = WHITE
+    p.font.color.rgb = color
+    p.space_after = Pt(10)
+    for item in body:
+        pi = tf.add_paragraph()
+        pi.text = f"· {item}"
+        pi.font.size = Pt(body_size)
+        pi.font.color.rgb = GRAY
+        pi.space_after = Pt(5)
 
 
 # ============================================================
-# 1 — 문제
+# [7] 6 채널 → 26 테이블, 분산된 데이터를 한 곳으로
 # ============================================================
-def slide_problem(prs):
+def slide_07_db(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 1, "문제 — 비용 vs 다양성")
+    add_title(slide, 7, "6 채널 → 26 테이블, 분산된 데이터를 한 곳으로", "PostgreSQL 메인 RDB · PGVector 법률 RAG")
 
-    hero_number(slide, 1.0, 2.0, "$0.37", "v1 run당 LLM 비용", RED, 3.5)
-    hero_number(slide, 4.9, 2.0, "0.58~0.76", "v1 Pearson r", ORANGE, 3.5)
-    hero_number(slide, 8.8, 2.0, "1000+", "마포 에이전트", ACCENT, 3.5)
-
-    add_bullets(
-        slide,
-        [
-            "매 tick LLM 호출 → agent·일수 늘릴수록 비용 폭증",
-            "룰 기반만 쓰면 시간대·날씨 반응 다양성 손실",
-            "Optuna 100 trials = 비용 폭발 → 튜닝 불가",
-        ],
-        top=4.5,
-        size=20,
-    )
-
-
-# ============================================================
-# 2 — 아키텍처
-# ============================================================
-def slide_architecture(prs):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 2, "3 Layer 하이브리드")
-
-    layers = [
-        ("L1", "Policy\nGeneration", "LLM 11회", ACCENT),
-        ("L2", "Time +\nArchetype", "곱셈 테이블", GREEN),
-        ("L3", "Agent\nDecision", "Tier S/A/B", ORANGE),
+    # 6 채널 (위)
+    sources = [
+        ("KT", "생활인구", ACCENT),
+        ("카카오", "매장 16K", PURPLE),
+        ("통계청", "SGIS 인구·가구", GREEN),
+        ("네이버", "트렌드", ORANGE),
+        ("공정위", "FTC 프랜차이즈", PINK),
+        ("서울", "상권 매출·임대", RED),
     ]
-    for i, (tag, title, sub, color) in enumerate(layers):
-        x = 1.0 + i * 4.15
-        card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(2.3), Inches(3.7), Inches(3.3))
-        card.fill.solid()
-        card.fill.fore_color.rgb = color
-        card.line.fill.background()
-        tf = card.text_frame
+    for i, (name, role, color) in enumerate(sources):
+        x = 0.5 + i * 2.13
+        b = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(1.85), Inches(2.0), Inches(0.95))
+        b.fill.solid()
+        b.fill.fore_color.rgb = color
+        b.line.fill.background()
+        tf = b.text_frame
         tf.word_wrap = True
-        tf.margin_top = Inches(0.4)
+        tf.margin_top = Inches(0.08)
         p = tf.paragraphs[0]
-        p.text = tag
+        p.text = name
         p.alignment = 2
-        p.font.size = Pt(36)
+        p.font.size = Pt(15)
         p.font.bold = True
         p.font.color.rgb = WHITE
         p2 = tf.add_paragraph()
-        p2.text = title
+        p2.text = role
         p2.alignment = 2
-        p2.font.size = Pt(22)
-        p2.font.bold = True
-        p2.font.color.rgb = WHITE
-        p2.space_before = Pt(20)
-        p3 = tf.add_paragraph()
-        p3.text = sub
-        p3.alignment = 2
-        p3.font.size = Pt(16)
-        p3.font.color.rgb = LIGHT
-        p3.space_before = Pt(12)
+        p2.font.size = Pt(11)
+        p2.font.color.rgb = LIGHT
 
-        if i < 2:
-            arr = slide.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, Inches(x + 3.75), Inches(3.6), Inches(0.4), Inches(0.6))
-            arr.fill.solid()
-            arr.fill.fore_color.rgb = NAVY
-            arr.line.fill.background()
+    # 화살표
+    for x in (1.5, 3.6, 5.7, 7.8, 9.9, 12.0):
+        arr = slide.shapes.add_shape(MSO_SHAPE.DOWN_ARROW, Inches(x - 0.55), Inches(2.95), Inches(0.4), Inches(0.4))
+        arr.fill.solid()
+        arr.fill.fore_color.rgb = NAVY
+        arr.line.fill.background()
 
-    chip(slide, 1.0, 6.2, "policy_generator.py", ACCENT, w=3.7)
-    chip(slide, 5.15, 6.2, "archetypes.py", GREEN, w=3.7)
-    chip(slide, 9.3, 6.2, "brain.py + policy_executor.py", ORANGE, w=3.7)
+    # 가운데 RDB
+    rdb = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(2.5), Inches(3.55), Inches(8.3), Inches(1.3))
+    rdb.fill.solid()
+    rdb.fill.fore_color.rgb = NAVY
+    rdb.line.fill.background()
+    tf = rdb.text_frame
+    tf.margin_top = Inches(0.2)
+    p = tf.paragraphs[0]
+    p.text = "PostgreSQL — 26 테이블"
+    p.alignment = 2
+    p.font.size = Pt(24)
+    p.font.bold = True
+    p.font.color.rgb = WHITE
+    p2 = tf.add_paragraph()
+    p2.text = "SQLAlchemy 2.0 async · pool 25 · alembic 30+ migration"
+    p2.alignment = 2
+    p2.font.size = Pt(13)
+    p2.font.color.rgb = LIGHT
+    p2.space_before = Pt(4)
 
-
-# ============================================================
-# 3 — Layer 1
-# ============================================================
-def slide_layer1(prs):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 3, "Layer 1 — Policy Generation")
-
-    hero_number(slide, 1.0, 2.0, "11", "LLM 호출 (1회)", ACCENT, 3.0)
-    hero_number(slide, 4.4, 2.0, "6 × 2", "role × weather", GREEN, 3.0)
-    hero_number(slide, 7.8, 2.0, "0", "재실행 시 호출", PURPLE, 3.0)
-
-    add_bullets(
-        slide,
-        [
-            "역할 6종 × 날씨 2종 = 11 base PersonaPolicy",
-            "PersonaPolicy = 0~1 float 12 필드 + dong_affinity",
-            "OpenAI gpt-4o-mini → Ollama qwen2.5:3b → mock",
-            "policy_cache.json 영속 → 재실행 0회",
-        ],
-        top=4.5,
-        size=20,
-    )
-
-
-# ============================================================
-# 4 — Layer 2
-# ============================================================
-def slide_layer2(prs):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 4, "Layer 2 — 시간 확장 + Archetype")
-
-    hero_number(slide, 1.0, 2.0, "11 → 66", "정책 확장", GREEN, 3.5)
-    hero_number(slide, 4.9, 2.0, "30+", "Archetype 종류", ACCENT, 3.5)
-    hero_number(slide, 8.8, 2.0, "±15%", "개체 jitter", ORANGE, 3.5)
-
-    add_bullets(
-        slide,
-        [
-            "_TIME_BLOCK_DELTAS — morning/lunch/afternoon/evening/night 곱셈",
-            "_ROLE_TIME_OVERRIDES — ext_visitor evening pub ×1.7 등",
-            "Archetype: homebody / night_owl / trendy_local / fitness ...",
-            "1000명 × 66 정책 × ±15% = 사실상 1000 고유 행동",
-        ],
-        top=4.5,
-        size=20,
-    )
-
-
-# ============================================================
-# 5 — Layer 3
-# ============================================================
-def slide_layer3(prs):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 5, "Layer 3 — Tier 라우팅")
-
-    tiers = [
-        ("S", "50명", "Haiku 4.5\n+ ephemeral cache", "풀 LLM + 서사", PURPLE),
-        ("A", "200명", "Gemini 2.5\nFlash-Lite", "경량 LLM", GREEN),
-        ("B", "750명", "policy_executor\n순수 Python", "결정적 함수", ORANGE),
+    # 아래 분류 + PGVector
+    cats = [
+        ("상권/매출", "district_sales · golmok_*", ACCENT),
+        ("인구", "living_pop · sgis_* · resident_*", GREEN),
+        ("매장/브랜드", "kakao_store · ftc_* · biz_*", PURPLE),
+        ("부동산", "rent_cost · jeonse_* · apt_*", ORANGE),
     ]
-    for i, (tag, n, model, role, color) in enumerate(tiers):
-        x = 1.0 + i * 4.15
-        card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(2.0), Inches(3.7), Inches(4.2))
-        card.fill.solid()
-        card.fill.fore_color.rgb = LIGHT
-        card.line.color.rgb = color
-        card.line.width = Pt(3)
-        tf = card.text_frame
+    for i, (cat, ex, color) in enumerate(cats):
+        x = 0.5 + i * 3.2
+        b = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(5.1), Inches(3.0), Inches(1.1))
+        b.fill.solid()
+        b.fill.fore_color.rgb = LIGHT
+        b.line.color.rgb = color
+        b.line.width = Pt(1.5)
+        tf = b.text_frame
         tf.word_wrap = True
-        tf.margin_top = Inches(0.3)
+        tf.margin_left = Inches(0.15)
+        tf.margin_top = Inches(0.1)
         p = tf.paragraphs[0]
-        p.text = f"Tier {tag}"
-        p.alignment = 2
-        p.font.size = Pt(28)
-        p.font.bold = True
-        p.font.color.rgb = color
-        p2 = tf.add_paragraph()
-        p2.text = n
-        p2.alignment = 2
-        p2.font.size = Pt(36)
-        p2.font.bold = True
-        p2.font.color.rgb = NAVY
-        p2.space_before = Pt(8)
-        p3 = tf.add_paragraph()
-        p3.text = model
-        p3.alignment = 2
-        p3.font.size = Pt(15)
-        p3.font.color.rgb = GRAY
-        p3.space_before = Pt(20)
-        p4 = tf.add_paragraph()
-        p4.text = role
-        p4.alignment = 2
-        p4.font.size = Pt(13)
-        p4.font.italic = True
-        p4.font.color.rgb = SUB
-        p4.space_before = Pt(8)
-
-    box = slide.shapes.add_textbox(Inches(1.0), Inches(6.4), Inches(11.3), Inches(0.6))
-    p = box.text_frame.paragraphs[0]
-    p.text = "Auto-downgrade: anthropic → openai → ollama → mock"
-    p.font.size = Pt(16)
-    p.font.italic = True
-    p.font.color.rgb = SUB
-    p.alignment = 1
-
-
-# ============================================================
-# 6 — 메모리·상태·소셜
-# ============================================================
-def slide_memory(prs):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 6, "기억 · 상태 · 소셜")
-
-    cards = [
-        ("Layer 2", "기억", ["visit_history", "learned_prefs", "blacklist", "habit_store"], ACCENT),
-        ("Layer 3", "상태", ["hunger", "fatigue", "mood", "tick decay/recover"], GREEN),
-        ("Layer 5", "소셜", ["만족도 > 0.7", "친구 2명 전파", "다음 tick visit_p ↑", "매장 평판 확산"], ORANGE),
-    ]
-    for i, (lab, title, items, color) in enumerate(cards):
-        x = 1.0 + i * 4.15
-        card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(2.0), Inches(3.7), Inches(3.5))
-        card.fill.solid()
-        card.fill.fore_color.rgb = WHITE
-        card.line.color.rgb = color
-        card.line.width = Pt(2.5)
-        tf = card.text_frame
-        tf.word_wrap = True
-        tf.margin_left = Inches(0.3)
-        tf.margin_top = Inches(0.3)
-        p = tf.paragraphs[0]
-        p.text = lab
+        p.text = cat
         p.font.size = Pt(13)
         p.font.bold = True
         p.font.color.rgb = color
         p2 = tf.add_paragraph()
-        p2.text = title
-        p2.font.size = Pt(26)
-        p2.font.bold = True
-        p2.font.color.rgb = NAVY
-        p2.space_after = Pt(15)
-        for it in items:
-            pi = tf.add_paragraph()
-            pi.text = f"· {it}"
-            pi.font.size = Pt(16)
-            pi.font.color.rgb = GRAY
-            pi.space_after = Pt(6)
+        p2.text = ex
+        p2.font.size = Pt(10)
+        p2.font.name = "Consolas"
+        p2.font.color.rgb = GRAY
+        p2.space_before = Pt(3)
 
-    box = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1.0), Inches(5.8), Inches(11.3), Inches(1.2))
-    box.fill.solid()
-    box.fill.fore_color.rgb = LIGHT
-    box.line.fill.background()
-    tf = box.text_frame
+    # PGVector 별도 박스 (오른쪽)
+    pg = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(6.4), Inches(12.3), Inches(0.85))
+    pg.fill.solid()
+    pg.fill.fore_color.rgb = WHITE
+    pg.line.color.rgb = PURPLE
+    pg.line.width = Pt(2)
+    tf = pg.text_frame
+    tf.word_wrap = True
     tf.margin_left = Inches(0.3)
-    tf.margin_top = Inches(0.2)
+    tf.margin_top = Inches(0.1)
     p = tf.paragraphs[0]
-    p.text = "Memory Seeder"
+    p.text = "+  PGVector (법률 RAG)"
     p.font.size = Pt(15)
     p.font.bold = True
     p.font.color.rgb = PURPLE
     p2 = tf.add_paragraph()
-    p2.text = "14일 가상 visit 주입 → cold start 완화"
-    p2.font.size = Pt(18)
+    p2.text = "BAAI/bge-m3 1024차원 임베딩 · HNSW index · 10K+ 법률 chunk"
+    p2.font.size = Pt(12)
     p2.font.color.rgb = GRAY
+    p2.space_before = Pt(2)
 
 
 # ============================================================
-# 7 — 동 DNA
+# [17] 카페 차리기 전, 가상으로 90일 운영해본다
 # ============================================================
-def slide_dong(prs):
+def slide_17_hook(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 7, "마포 16동 상권 DNA")
+    add_title(slide, 17, "카페 차리기 전, 1일 시뮬 × 5 seed로 미리 답을 본다")
 
-    types = [
-        ("nightlife", "서교 · 합정 · 신수", "주점 1.5", PURPLE),
-        ("trendy", "연남 · 망원1", "카페 1.5", RGBColor(0xEC, 0x48, 0x99)),
-        ("office", "상암 · 공덕 · 도화", "음식점 1.3", ACCENT),
-        ("residential", "용강 · 아현 · 염리 · 대흥 · 서강 · 성산", "편의점 1.2", GREEN),
-        ("traditional", "망원2", "혼합 1.2", ORANGE),
-    ]
-    for i, (tname, dongs, boost, color) in enumerate(types):
-        y = 2.0 + i * 0.9
-        tag = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1.0), Inches(y), Inches(2.2), Inches(0.7))
-        tag.fill.solid()
-        tag.fill.fore_color.rgb = color
-        tag.line.fill.background()
-        tf = tag.text_frame
+    # 큰 인용
+    quote = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1.5), Inches(2.0), Inches(10.3), Inches(1.5))
+    quote.fill.solid()
+    quote.fill.fore_color.rgb = LIGHT
+    quote.line.color.rgb = ACCENT
+    quote.line.width = Pt(3)
+    tf = quote.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Inches(0.5)
+    tf.margin_top = Inches(0.25)
+    p = tf.paragraphs[0]
+    p.text = "“망원동 빈 가게에 카페 차리려는데, 잘 될까요?”"
+    p.alignment = 2
+    p.font.size = Pt(26)
+    p.font.bold = True
+    p.font.color.rgb = NAVY
+
+    # 좌우 비교
+    card(
+        slide,
+        0.6,
+        3.7,
+        6.0,
+        3.3,
+        "기존 방식",
+        ["부동산 수수료 + 컨설팅 수백만원", "6개월 운영 후 망하면 손해 1억", "실패 비용 = 실제 손실"],
+        color=RED,
+        title_size=22,
+        body_size=18,
+    )
+
+    card(
+        slide,
+        6.85,
+        3.7,
+        6.0,
+        3.3,
+        "ABM",
+        ["가상 시민 5,000명에게 카페 차려봄", "1일 시뮬 × 5 seed (PSE) → 분기/연 환산", "실패 비용 = 0원"],
+        color=GREEN,
+        title_size=22,
+        body_size=18,
+    )
+
+
+# ============================================================
+# [18] 5,000명, NVIDIA 7,187 페르소나로 채운다
+# ============================================================
+def slide_18_tier(prs):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    add_title(
+        slide,
+        18,
+        "5,000명, NVIDIA 7,187 페르소나로 채운다",
+        "기본 운영 LLM 0회 — Tier S Plan은 옵션 (Stanford UIST'23, default off)",
+    )
+
+    # Hero 3개
+    hero(slide, 0.6, 1.85, 4.0, "7,187", "NVIDIA Nemotron 합성 페르소나", PURPLE, big_size=44)
+    hero(slide, 4.7, 1.85, 4.0, "26 컬럼", "직업·학력·취미·가치관 등", ACCENT, big_size=36)
+    hero(slide, 8.8, 1.85, 4.05, "0회", "vacancy 평가 LLM 호출", GREEN, big_size=44)
+
+    # 흐름 — 7187 → sample → 5000
+    flow = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.6), Inches(4.1), Inches(12.15), Inches(1.4))
+    flow.fill.solid()
+    flow.fill.fore_color.rgb = NAVY
+    flow.line.fill.background()
+    tf = flow.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Inches(0.3)
+    tf.margin_top = Inches(0.2)
+    p = tf.paragraphs[0]
+    p.text = "Nemotron 7,187 (마포 합성)   →   sex + age_bucket 매칭 sample   →   5,000 가상 시민"
+    p.alignment = 2
+    p.font.size = Pt(17)
+    p.font.bold = True
+    p.font.color.rgb = WHITE
+    p2 = tf.add_paragraph()
+    p2.text = "occupation · education · hobbies · professional / sports / arts / culinary persona"
+    p2.alignment = 2
+    p2.font.size = Pt(13)
+    p2.font.color.rgb = LIGHT
+    p2.space_before = Pt(8)
+
+    # 두뇌 — 단순화
+    card(
+        slide,
+        0.6,
+        5.7,
+        6.0,
+        1.5,
+        "행동 결정 (default)",
+        ["policy_executor.py — 순수 Python 가중합", "거리·선호·dong_affinity·시간×동×연령"],
+        color=ORANGE,
+        title_size=16,
+        body_size=14,
+    )
+    card(
+        slide,
+        6.85,
+        5.7,
+        5.9,
+        1.5,
+        "옵션 LLM (use_llm_decisions=True)",
+        ["Tier S 250명 하루 1회 plan batch (Stanford UIST'23)", "vacancy 평가는 mock 강제 → Optuna 튜닝 가능"],
+        color=GREEN,
+        title_size=16,
+        body_size=14,
+    )
+    return  # skip old tier rendering
+
+    # (legacy below, unreachable)
+    for i, (tag, n, model, model2, role, color) in enumerate([]):
+        x = 0.5 + i * 4.25
+        head = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(1.85), Inches(4.0), Inches(0.85))
+        head.fill.solid()
+        head.fill.fore_color.rgb = color
+        head.line.fill.background()
+        tf = head.text_frame
         tf.margin_top = Inches(0.1)
         p = tf.paragraphs[0]
-        p.text = tname
+        p.text = f"Tier {tag}  ·  {n}"
         p.alignment = 2
-        p.font.size = Pt(16)
+        p.font.size = Pt(20)
         p.font.bold = True
         p.font.color.rgb = WHITE
 
-        db = slide.shapes.add_textbox(Inches(3.4), Inches(y + 0.05), Inches(7.0), Inches(0.6))
-        p = db.text_frame.paragraphs[0]
-        p.text = dongs
+        body = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(2.7), Inches(4.0), Inches(4.3))
+        body.fill.solid()
+        body.fill.fore_color.rgb = LIGHT
+        body.line.color.rgb = color
+        body.line.width = Pt(1.5)
+        tf = body.text_frame
+        tf.word_wrap = True
+        tf.margin_left = Inches(0.3)
+        tf.margin_top = Inches(0.3)
+        p = tf.paragraphs[0]
+        p.text = model
+        p.alignment = 2
         p.font.size = Pt(18)
-        p.font.color.rgb = GRAY
+        p.font.bold = True
+        p.font.color.rgb = NAVY
+        p2 = tf.add_paragraph()
+        p2.text = model2
+        p2.alignment = 2
+        p2.font.size = Pt(12)
+        p2.font.name = "Consolas"
+        p2.font.color.rgb = SUB
+        p2.space_before = Pt(4)
 
-        bb = slide.shapes.add_textbox(Inches(10.5), Inches(y + 0.05), Inches(2.5), Inches(0.6))
-        p = bb.text_frame.paragraphs[0]
-        p.text = boost
-        p.font.size = Pt(16)
+        # 구분선
+        p3 = tf.add_paragraph()
+        p3.text = "─────"
+        p3.alignment = 2
+        p3.font.size = Pt(12)
+        p3.font.color.rgb = LIGHT
+        p3.space_before = Pt(20)
+
+        for line in role.split("\n"):
+            pi = tf.add_paragraph()
+            pi.text = line
+            pi.alignment = 2
+            pi.font.size = Pt(15)
+            pi.font.color.rgb = GRAY
+            pi.space_after = Pt(2)
+
+
+# ============================================================
+# [19] 사람처럼 행동하는 가상 시민 — 5 Layer 인간다움
+# ============================================================
+def slide_19_layers(prs):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    add_title(slide, 19, "사람처럼 행동하는 가상 시민 — 5 Layer 인간다움")
+
+    layers = [
+        ("L1", "정책", "성향 (mobility, 카테고리 선호)\nrole × weather × time_block", ACCENT),
+        ("L2", "기억", "visit_history · learned_prefs\nblacklist · habit_store", GREEN),
+        ("L3", "내부 상태", "hunger · fatigue · mood\n매 tick 변화 → 의사결정 가중", ORANGE),
+        ("L4", "시간 · 날씨 적응", "5 시간대 곱셈 테이블\n동 character cat_boost", PURPLE),
+        ("L5", "소셜", "Dunbar k=5 친구\n만족도 > 0.7 → 추천 전파", PINK),
+    ]
+    for i, (tag, title, body, color) in enumerate(layers):
+        x = 0.4 + i * 2.55
+
+        # 번호 뱃지
+        b = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(x + 0.7), Inches(1.85), Inches(1.1), Inches(1.1))
+        b.fill.solid()
+        b.fill.fore_color.rgb = color
+        b.line.fill.background()
+        tf = b.text_frame
+        tf.margin_left = Inches(0)
+        tf.margin_top = Inches(0)
+        tf.margin_bottom = Inches(0)
+        tf.margin_right = Inches(0)
+        p = tf.paragraphs[0]
+        p.text = tag
+        p.alignment = 2
+        p.font.size = Pt(28)
+        p.font.bold = True
+        p.font.color.rgb = WHITE
+
+        # 카드
+        cb = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(3.15), Inches(2.5), Inches(3.6))
+        cb.fill.solid()
+        cb.fill.fore_color.rgb = WHITE
+        cb.line.color.rgb = color
+        cb.line.width = Pt(2)
+        tf = cb.text_frame
+        tf.word_wrap = True
+        tf.margin_left = Inches(0.2)
+        tf.margin_top = Inches(0.25)
+        p = tf.paragraphs[0]
+        p.text = title
+        p.alignment = 2
+        p.font.size = Pt(20)
         p.font.bold = True
         p.font.color.rgb = color
-        p.alignment = 2
+        p.space_after = Pt(15)
+        for line in body.split("\n"):
+            pi = tf.add_paragraph()
+            pi.text = line
+            pi.alignment = 2
+            pi.font.size = Pt(12)
+            pi.font.color.rgb = GRAY
+            pi.space_after = Pt(4)
 
-    box = slide.shapes.add_textbox(Inches(1.0), Inches(6.7), Inches(11.3), Inches(0.5))
-    p = box.text_frame.paragraphs[0]
-    p.text = "DONG_CHARACTER → 매장 score에 cat_boost 직접 곱"
-    p.font.size = Pt(14)
+    # 하단 한 줄
+    note = slide.shapes.add_textbox(Inches(0.5), Inches(6.85), Inches(12.3), Inches(0.4))
+    p = note.text_frame.paragraphs[0]
+    p.text = "agents.py · 정책만 있으면 똑같이 행동 → 5 Layer 더해서 사람마다 달라진다"
+    p.alignment = 1
+    p.font.size = Pt(13)
     p.font.italic = True
     p.font.color.rgb = SUB
-    p.alignment = 1
 
 
 # ============================================================
-# 8 — 결과
+# [20] 신규 진입은 시장을 키우는가, 빼앗는가
 # ============================================================
-def slide_results(prs):
+def slide_20_cannibal(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_title(slide, 8, "결과 — 학술 최첨단 수준 + 비용 $0")
+    add_title(slide, 20, "신규 진입은 시장을 키우는가, 빼앗는가")
 
-    hero_number(slide, 1.0, 1.9, "4.6%", "RMSE", GREEN, 3.5)
-    hero_number(slide, 4.9, 1.9, "0.69", "Pearson r", ACCENT, 3.5)
-    hero_number(slide, 8.8, 1.9, "92%", "External 귀환", PURPLE, 3.5)
-
-    # 학술 비교 테이블
-    rows = [
-        ["연구 / 모델", "Pearson r", "RMSE / MAPE", "단위"],
-        ["우리 ABM (v12)", "0.688", "4.6%", "visit ↔ presence"],
-        ["Crols & Malleson 2019", "0.7~0.9", "MAPE 10~25%", "pedestrian count (최첨단)"],
-        ["Sommet & Lipps 2025", "0.5~0.85", "—", "panel stock"],
-        ["Brussels 2024 (천장)", "0.96", "—", "trip ↔ trip (같은 단위)"],
-    ]
-    table_shape = slide.shapes.add_table(len(rows), 4, Inches(1.0), Inches(4.1), Inches(11.3), Inches(2.4))
-    tbl = table_shape.table
-    widths = [Inches(3.5), Inches(2.0), Inches(2.5), Inches(3.3)]
-    for i, w in enumerate(widths):
-        tbl.columns[i].width = w
-    for r, row_data in enumerate(rows):
-        for c, val in enumerate(row_data):
-            cell = tbl.cell(r, c)
-            cell.text = val
-            for para in cell.text_frame.paragraphs:
-                para.alignment = 1
-                for run in para.runs:
-                    run.font.size = Pt(15)
-                    run.font.color.rgb = WHITE if r == 0 else GRAY
-                    run.font.bold = r == 0 or "우리" in row_data[0]
-            cell.fill.solid()
-            if r == 0:
-                cell.fill.fore_color.rgb = NAVY
-            elif "우리" in row_data[0]:
-                cell.fill.fore_color.rgb = RGBColor(0xDC, 0xFC, 0xE7)
-            else:
-                cell.fill.fore_color.rgb = LIGHT if r % 2 == 0 else WHITE
-
-    note = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1.0), Inches(6.65), Inches(11.3), Inches(0.55))
-    note.fill.solid()
-    note.fill.fore_color.rgb = LIGHT
-    note.line.color.rgb = GREEN
-    note.line.width = Pt(1.5)
-    tf = note.text_frame
-    tf.margin_left = Inches(0.2)
-    tf.margin_top = Inches(0.08)
+    # 측정 방법 박스
+    method = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(1.85), Inches(12.3), Inches(1.4))
+    method.fill.solid()
+    method.fill.fore_color.rgb = NAVY
+    method.line.fill.background()
+    tf = method.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Inches(0.3)
+    tf.margin_top = Inches(0.15)
     p = tf.paragraphs[0]
-    p.text = "v12 = Crols 2019 최첨단(Pearson 0.7~0.9) 하단 + RMSE는 그보다 낮음 — 비용 $0로 달성"
-    p.font.size = Pt(14)
-    p.font.italic = True
-    p.font.color.rgb = GRAY
+    p.text = "측정 방법 — 같은 seed, 두 번 시뮬"
+    p.font.size = Pt(15)
+    p.font.bold = True
+    p.font.color.rgb = ACCENT
+    p2 = tf.add_paragraph()
+    p2.text = "  baseline (vacancy 없이)   vs   with_vacancy   →   동 카페 합계 차이 = 카니발 / 시너지"
+    p2.font.size = Pt(15)
+    p2.font.color.rgb = WHITE
+    p2.space_before = Pt(8)
+
+    # 결과 hero 2개
+    hero(slide, 1.0, 3.55, 5.5, "+1.4 ± 3.5%", "동 카페 시장 성장률 (95% CI)", ACCENT, big_size=38)
+    hero(slide, 6.85, 3.55, 5.5, "CI 0 포함", "통계적으로 시장 확장 없음", RED, big_size=32)
+
+    # 결론
+    box = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(5.85), Inches(12.3), Inches(1.4))
+    box.fill.solid()
+    box.fill.fore_color.rgb = SOFT_GREEN
+    box.line.color.rgb = GREEN
+    box.line.width = Pt(2.5)
+    tf = box.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Inches(0.3)
+    tf.margin_top = Inches(0.2)
+    p = tf.paragraphs[0]
+    p.text = "발견 — zero-sum 구조"
+    p.font.size = Pt(18)
+    p.font.bold = True
+    p.font.color.rgb = GREEN
+    p2 = tf.add_paragraph()
+    p2.text = "마포 카페 시장은 신규 진입에 zero-sum — 새 카페 손님은 동 다른 카페 손님 이동"
+    p2.font.size = Pt(15)
+    p2.font.color.rgb = GRAY
+    p2.space_before = Pt(8)
 
 
 # ============================================================
@@ -461,14 +537,11 @@ def main():
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
 
-    slide_problem(prs)
-    slide_architecture(prs)
-    slide_layer1(prs)
-    slide_layer2(prs)
-    slide_layer3(prs)
-    slide_memory(prs)
-    slide_dong(prs)
-    slide_results(prs)
+    slide_07_db(prs)
+    slide_17_hook(prs)
+    slide_18_tier(prs)
+    slide_19_layers(prs)
+    slide_20_cannibal(prs)
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     prs.save(OUTPUT)

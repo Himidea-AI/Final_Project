@@ -427,6 +427,55 @@ def _load_article_index() -> None:
         logger.info(f"[legal_node] 조문 인덱스 로드 완료: {len(_ARTICLE_FULL_TEXT)}개 조문")
 
 
+# 업종별 churn_rate baseline (mean, std) — 첫 호출 시 1회 계산 후 메모리 캐시.
+# z = (churn - mean) / std → z>1 danger, z>0 caution, else safe.
+# 외식업 평균 폐점률 25-37% 인 현실 반영 — 이전 hardcode 10% 임계는 거의 모든 brand 를
+# 자동 danger 로 잘못 판정하던 회귀 (2026-05-07 fix).
+_INDUSTRY_BASELINE_CACHE: dict[str, tuple[float, float]] = {}
+
+
+async def _get_industry_baseline(industry: str | None) -> tuple[float, float] | None:
+    """업종별 churn_rate (mean, std) 반환. 미산출 시 None.
+
+    n<5 brand 인 업종은 통계 신뢰도 낮아 None 반환 → 호출자가 폴백 임계값 사용.
+    """
+    if not industry:
+        return None
+    if industry in _INDUSTRY_BASELINE_CACHE:
+        return _INDUSTRY_BASELINE_CACHE[industry]
+
+    from src.agents.nodes.market_analyst import db_client
+
+    try:
+        if db_client.engine is None:
+            await db_client.connect()
+        async with db_client.get_session() as session:
+            from sqlalchemy import text as sa_text
+
+            stmt = sa_text("""
+                SELECT
+                    AVG((\"ctrtEndCnt\"+\"ctrtCncltnCnt\")::float / NULLIF(\"frcsCnt\",0)) AS mean_churn,
+                    STDDEV_SAMP((\"ctrtEndCnt\"+\"ctrtCncltnCnt\")::float / NULLIF(\"frcsCnt\",0)) AS std_churn,
+                    COUNT(*) AS n
+                FROM ftc_brand_franchise
+                WHERE \"indutyMlsfcNm\" = :ind
+                  AND yr = (SELECT MAX(yr) FROM ftc_brand_franchise WHERE \"indutyMlsfcNm\" = :ind)
+                  AND \"frcsCnt\" > 0
+            """)
+            row = (await session.execute(stmt, {"ind": industry})).fetchone()
+            if not row or row.n is None or row.n < 5:
+                return None
+            mean = float(row.mean_churn or 0)
+            std = float(row.std_churn or 0)
+            if std <= 0:
+                return None
+            _INDUSTRY_BASELINE_CACHE[industry] = (mean, std)
+            return (mean, std)
+    except Exception as ex:
+        logger.warning(f"[_get_industry_baseline] {industry} 조회 실패: {ex}")
+        return None
+
+
 async def _search_ftc_from_db(brand_name: str) -> dict | None:
     """
     ftc_brand_franchise 테이블에서 브랜드 정보 검색 (DB 직접 조회).
@@ -446,7 +495,7 @@ async def _search_ftc_from_db(brand_name: str) -> dict | None:
             # LIKE 검색 (부분 일치) — 브랜드명 내 %,_ 문자 이스케이프
             safe_brand = brand_name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             stmt = text("""
-                SELECT yr, "corpNm", "brandNm", "frcsCnt", "newFrcsRgsCnt",
+                SELECT yr, "corpNm", "brandNm", "indutyMlsfcNm", "frcsCnt", "newFrcsRgsCnt",
                        "ctrtEndCnt", "ctrtCncltnCnt", "avrgSlsAmt"
                 FROM ftc_brand_franchise
                 WHERE "brandNm" LIKE :pattern ESCAPE '\\'
@@ -475,6 +524,7 @@ async def _search_ftc_from_db(brand_name: str) -> dict | None:
             return {
                 "brand_name": row.brandNm,
                 "corp_name": row.corpNm,
+                "indutyMlsfcNm": row.indutyMlsfcNm,
                 "store_count_total": store_count,
                 "churn_rate": churn_rate,
                 "avg_sales_amount": avg_sales,
@@ -546,36 +596,64 @@ async def check_ftc_franchise(state: AgentState) -> dict:
         avg_sales = detail.get("avg_sales_amount", 0)
         franchise_fee = detail.get("franchise_fee")  # None이면 "정보 없음" 표시
         store_count = detail.get("store_count_total", 0)
+        industry = detail.get("indutyMlsfcNm")
 
-        # 리스크 레벨 판정 — churn_rate None 이면 매출 기준만 사용 (또는 caution)
+        # 업종별 baseline z-score 판정 (2026-05-07) — hardcode 10% → 업종 평균 대비 상대 평가.
+        # 외식업 평균 폐점률 25-37% (FTC 2024 raw) 인데 이전 hardcode 10% 는 거의 모든 brand 를
+        # danger 로 오판정. baseline 미산출 (n<5 업종) 시 hardcode fallback 유지.
+        baseline = await _get_industry_baseline(industry) if churn_rate is not None else None
+        z_score: float | None = None
         if churn_rate is None:
-            level = "caution"  # 폐점률 미산출 — 보수적 caution
-        elif churn_rate > 0.10:
-            level = "danger"
-        elif churn_rate > 0.05 or avg_sales < 100_000_000:
-            level = "caution"
+            level = "caution"  # 폐점률 미산출 — 보수적
+        elif baseline is not None:
+            mean, std = baseline
+            z_score = (churn_rate - mean) / std
+            if z_score > 1.0:
+                level = "danger"
+            elif z_score > 0.0 or avg_sales < 100_000_000:
+                level = "caution"
+            else:
+                level = "safe"
         else:
-            level = "safe"
+            # baseline 없음 → 종전 임계 fallback
+            if churn_rate > 0.10:
+                level = "danger"
+            elif churn_rate > 0.05 or avg_sales < 100_000_000:
+                level = "caution"
+            else:
+                level = "safe"
 
-        # churn_rate None 표기 — 가짜 1500% 차단
         churn_str = f"{churn_rate:.1%}" if churn_rate is not None else "데이터 부족"
+        baseline_str = (
+            f" (업종 평균 {baseline[0]*100:.1f}%, z={z_score:+.2f})"
+            if (baseline is not None and z_score is not None)
+            else ""
+        )
         summary = (
             f"'{detail.get('brand_name', brand)}' ({detail.get('corp_name', '')}) "
             f"정보공개서 기준 — "
             f"전체 가맹점 수: {store_count}개, "
-            f"폐점률: {churn_str}, "
+            f"폐점률: {churn_str}{baseline_str}, "
             f"평균 매출액: {avg_sales:,}원, "
             f"가입비: {f'{franchise_fee:,}원' if franchise_fee is not None else '정보 없음'}. "
         )
         if level == "danger":
-            summary += "폐점률이 10%를 초과하여 사업 안정성 리스크가 높습니다."
+            if z_score is not None:
+                summary += f"폐점률이 업종 평균 +1σ 초과 ({industry} 평균 {baseline[0]*100:.1f}%) — 동종 brand 대비 상위 위험."
+            else:
+                summary += "폐점률이 10%를 초과하여 사업 안정성 리스크가 높습니다."
         elif level == "caution":
             if churn_rate is None:
                 summary += "정보공개서에 가맹점 수 데이터가 없어 폐점률을 산출하지 못해 수동 검토가 필요합니다."
+            elif z_score is not None and z_score > 0:
+                summary += f"폐점률이 업종 평균 ({baseline[0]*100:.1f}%) 보다 다소 높음 — 주의 필요."
             else:
                 summary += "폐점률 또는 매출 수준에서 주의가 필요합니다."
         else:
-            summary += "공정위 지표 기준 안정적인 브랜드로 판단됩니다."
+            if z_score is not None:
+                summary += f"폐점률이 업종 평균 ({baseline[0]*100:.1f}%) 이하 — 동종 대비 안정적."
+            else:
+                summary += "공정위 지표 기준 안정적인 브랜드로 판단됩니다."
 
         recommendation = ""
         if level == "danger":

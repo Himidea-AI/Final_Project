@@ -58,7 +58,7 @@ import redis.asyncio as aioredis
 # LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
 # (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -1484,6 +1484,10 @@ async def analyze_llm(
     payload = {k: v for k, v in full.items() if k in analysis_keys}
     payload["request_id"] = request_id
     payload["target_district"] = full.get("target_district") or input_data.target_district
+    # 다업종 corp brand auto-resolve 후 input_data.brand_name 이 정답 — UI Target 라벨 SoT.
+    # state echo 가 비면 input_data 값 그대로 (frontend authBrand fallback = 등록 brand 빽다방으로 오인 방지).
+    payload["brand_name"] = full.get("brand_name") or input_data.brand_name
+    payload["business_type"] = full.get("business_type") or input_data.business_type
 
     return {"status": "success", "data": payload}
 
@@ -1585,6 +1589,9 @@ async def analyze_llm_async(
             payload = {k: v for k, v in full.items() if k in analysis_keys}
             payload["request_id"] = request_id
             payload["target_district"] = full.get("target_district") or input_data.target_district
+            # 다업종 corp brand auto-resolve 후 input_data.brand_name 이 정답 — UI Target 라벨 SoT.
+            payload["brand_name"] = full.get("brand_name") or input_data.brand_name
+            payload["business_type"] = full.get("business_type") or input_data.business_type
             # DEBUG: payload 직전 same_brand_locations 검증 (frontend 측 누락 의심 시)
             logger.info(
                 f"[/analyze/llm/async] payload check job={job_id[:8]} "
@@ -1689,6 +1696,7 @@ class BizLookupRequest(BaseModel):
 @app.get("/corp/operated-industries")
 async def get_operated_industries(
     biz_number: str | None = None,
+    user_id: str | None = None,
     current_user: UserContext | None = Depends(get_optional_user),
 ) -> dict:
     """사용자 corp 의 운영 업종/브랜드 list 반환.
@@ -1697,7 +1705,8 @@ async def get_operated_industries(
 
     biz_number 우선순위:
     1. query param ``biz_number`` (frontend 명시)
-    2. JWT 토큰의 user.user_id → users.biz_number 자동 추출
+    2. query param ``user_id`` → users.biz_number 직접 lookup (JWT interceptor 실패 폴백, 2026-05-07)
+    3. JWT 토큰의 user.user_id → users.biz_number 자동 추출
 
     Returns:
         성공: ``{"company_name": str, "industries": [str, ...], "brands": [{name, industry, stores}, ...]}``
@@ -1706,7 +1715,24 @@ async def get_operated_industries(
     """
     from src.services.corp_brand_resolver import get_corp_industries
 
-    biz = biz_number or _resolve_user_biz_number(current_user)
+    biz = biz_number
+    if not biz and user_id:
+        # user_id query param 으로 직접 lookup — JWT 미주입 케이스 폴백.
+        try:
+            import sqlalchemy as sa
+
+            engine = sa.create_engine(settings.postgres_url)
+            with engine.connect() as conn:
+                row = conn.execute(
+                    sa.text("SELECT biz_number FROM users WHERE id = :id"),
+                    {"id": user_id},
+                ).first()
+            if row:
+                biz = row._mapping["biz_number"]
+        except Exception as ex:
+            logger.warning(f"[operated-industries] user_id lookup 실패: {ex}")
+    if not biz:
+        biz = _resolve_user_biz_number(current_user)
     if not biz:
         return {"industries": None, "company_name": None, "brands": []}
 
@@ -1723,6 +1749,54 @@ async def get_operated_industries(
         "industries": portfolio["industries"],
         "brands": portfolio["brands"],
     }
+
+
+@app.get("/stores/count-by-dongs")
+async def stores_count_by_dongs(
+    dongs: str = Query("", max_length=500),
+    category: str | None = Query(None, max_length=100),
+) -> dict[str, Any]:
+    """선택된 행정동들의 kakao_store 매장 수 합계 + 동별 카운트.
+
+    프론트 ScopeHint 동적 표시용 — `selectedDongs` 변경 시 실제 매장 수 산출.
+
+    Args:
+        dongs: 콤마 구분 행정동 이름 (예: "서교동,상암동").
+        category: 카카오 카테고리 prefix 매칭 (옵션, 예: "음식점", "카페").
+
+    Returns:
+        ``{"total": int, "by_dong": {동: count}, "dongs": [동...]}``.
+    """
+    from sqlalchemy import text as sa_text
+
+    dong_list = [d.strip() for d in dongs.split(",") if d.strip()]
+    if not dong_list:
+        return {"total": 0, "by_dong": {}, "dongs": []}
+
+    sql = """
+        SELECT dong_name, COUNT(*) AS n
+        FROM kakao_store
+        WHERE dong_name = ANY(:dongs)
+    """
+    params: dict[str, Any] = {"dongs": dong_list}
+    if category:
+        sql += " AND category ILIKE :cat"
+        params["cat"] = f"%{category}%"
+    sql += " GROUP BY dong_name"
+
+    from sqlalchemy.exc import SQLAlchemyError
+    from src.database.sync_engine import get_sync_engine
+
+    try:
+        engine = get_sync_engine(settings.postgres_url)
+        with engine.connect() as conn:
+            rows = conn.execute(sa_text(sql), params).fetchall()
+        by_dong = {r._mapping["dong_name"]: r._mapping["n"] for r in rows}
+        total = sum(by_dong.values())
+        return {"total": total, "by_dong": by_dong, "dongs": dong_list}
+    except SQLAlchemyError as ex:
+        logger.warning(f"[stores/count-by-dongs] DB error: {ex}")
+        raise HTTPException(status_code=503, detail=f"DB unavailable: {ex.__class__.__name__}")
 
 
 @app.post("/biz/lookup")

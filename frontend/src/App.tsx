@@ -787,29 +787,86 @@ function SimulatorDashboard({
   // FTC indutyMlsfcNm 표기 (한식/서양식/제과제빵/주점/피자/...) → frontend 라벨 매핑은
   // 위 FTC_TO_FRONTEND_INDUSTRY 재사용. 동일 frontend 라벨로 매핑되는 FTC 업종이
   // 하나라도 운영 중이면 그 frontend 라벨 enable.
-  const [operatedFrontendLabels, setOperatedFrontendLabels] = useState<Set<string> | null>(null);
-  const [operatedCompanyName, setOperatedCompanyName] = useState<string | null>(null);
+  // 회귀 fix(2026-05-07): 결과 → 뒤로가기 → /simulator remount 시 race 로 인해
+  // operatedFrontendLabels 가 잠깐 null 이 되어 모든 업종이 enable 되던 문제.
+  // sessionStorage 에 캐시 저장 → 같은 사용자(user.id) 재진입 시 즉시 복원, fetch 후 갱신.
+  const _LABELS_CACHE_KEY = `spotter_corp_industries_${user?.id ?? 'anon'}`;
+  const _readLabelsCache = (): {
+    labels: Set<string> | null;
+    company: string | null;
+    brands: { name: string; industry: string; stores: number }[];
+  } => {
+    if (!user?.id) return { labels: null, company: null, brands: [] };
+    try {
+      const raw = window.sessionStorage.getItem(_LABELS_CACHE_KEY);
+      if (!raw) return { labels: null, company: null, brands: [] };
+      const parsed = JSON.parse(raw) as {
+        labels: string[] | null;
+        company: string | null;
+        brands: { name: string; industry: string; stores: number }[];
+      };
+      return {
+        labels: parsed.labels ? new Set(parsed.labels) : null,
+        company: parsed.company,
+        brands: parsed.brands ?? [],
+      };
+    } catch {
+      return { labels: null, company: null, brands: [] };
+    }
+  };
+  // lazy init — 첫 mount 만 sessionStorage 읽음. 매 render 마다 IO 회피.
+  // 캐시 miss 면 auth.brand.industry_medium 단일 label 로 fallback (전부 enable 회귀 방지).
+  const [operatedFrontendLabels, setOperatedFrontendLabels] = useState<Set<string> | null>(() => {
+    const cached = _readLabelsCache().labels;
+    if (cached) return cached;
+    const brandLabel = brand?.industry_medium && FTC_TO_FRONTEND_INDUSTRY[brand.industry_medium];
+    return brandLabel ? new Set<string>([brandLabel]) : null;
+  });
+  const [operatedCompanyName, setOperatedCompanyName] = useState<string | null>(
+    () => _readLabelsCache().company,
+  );
   // corp 운영 brand 전체 list — frontend label 별 후보 brand 드롭다운 채움.
   // 더본코리아 등 다업종+동업종 다brand 회사: 한식 선택 시 한신포차/새마을식당/본가 등 후보 노출.
   const [corpBrands, setCorpBrands] = useState<
     { name: string; industry: string; stores: number }[]
-  >([]);
+  >(() => _readLabelsCache().brands);
   useEffect(() => {
     let cancelled = false;
-    getOperatedIndustries().then((res) => {
+    // userId 명시 전달 — JWT interceptor 실패 시 backend 가 user_id 로 폴백 조회.
+    getOperatedIndustries(user?.id).then((res) => {
       if (cancelled) return;
-      setOperatedCompanyName(res.company_name);
-      setCorpBrands(res.brands ?? []);
-      if (!res.industries) {
-        setOperatedFrontendLabels(null); // 모든 업종 허용
+      // ▼ fetch 응답이 'real data' 일 때만 state 갱신.
+      // res.industries=null + brands=[] 은 (1) auth 미주입 (2) FTC 미등록 (3) 네트워크 실패 모두 같은 모양 →
+      // 캐시 hit 한 state 를 덮어쓰면 'all enabled' 로 회귀. 따라서 빈 응답은 무시하고 캐시 유지.
+      const hasRealData = res.industries !== null || (res.brands && res.brands.length > 0);
+      if (!hasRealData) {
         return;
       }
-      const labels = new Set<string>();
-      for (const ftc of res.industries) {
-        const mapped = FTC_TO_FRONTEND_INDUSTRY[ftc];
-        if (mapped) labels.add(mapped);
+      setOperatedCompanyName(res.company_name);
+      setCorpBrands(res.brands ?? []);
+      let labels: Set<string> | null = null;
+      if (res.industries) {
+        labels = new Set<string>();
+        for (const ftc of res.industries) {
+          const mapped = FTC_TO_FRONTEND_INDUSTRY[ftc];
+          if (mapped) labels.add(mapped);
+        }
       }
       setOperatedFrontendLabels(labels);
+      if (user?.id) {
+        try {
+          window.sessionStorage.setItem(
+            _LABELS_CACHE_KEY,
+            JSON.stringify({
+              labels: labels ? Array.from(labels) : null,
+              company: res.company_name,
+              brands: res.brands ?? [],
+            }),
+          );
+        } catch {
+          // sessionStorage quota / private mode — 무시
+        }
+      }
     });
     return () => {
       cancelled = true;
@@ -1357,7 +1414,7 @@ function SimulatorDashboard({
         {/* ─────── ScopeHint 띠 — Cell row2 col-12 (lg:order-3).
             핵심파라미터 박스 안에서 분리되어 row 사이 full-width 시각 띠로 동적 피드백 노출. ─────── */}
         <div className="lg:col-span-12 lg:order-3">
-          <ScopeHint selectedDongCount={selectedDongs.length} />
+          <ScopeHint selectedDongs={selectedDongs} />
         </div>
 
         {/* ─────── 섹션 2: 운영 조건 — Cell row1·col7. p-5 + gap-3 으로 row 1 height 정상화 ─────── */}
@@ -1478,6 +1535,11 @@ function SimulatorDashboard({
             row 2 우측 col-5 자리(RUN 버튼 이관 후 빈 공간)를 없애고 full-width 로 시원하게. ─────── */}
         <div className="lg:col-span-12 lg:order-4 box-glass rounded-2xl p-6 transition-all duration-700">
           <SectionLabel icon={UserCheck} title="타겟 고객" sub="Target Audience · 페르소나" />
+          <p className="text-[0.6875rem] text-muted-foreground leading-relaxed whitespace-nowrap mb-3">
+            ※ 연령대 · 성별 · 시간대 · 요일을 선택하시면 결과 화면의 「타겟 고객 매출 기여 (예측)」
+            섹션에서 해당 고객층이 동별 매출에서 차지하는 비중과 타겟 프로필 분석을 확인하실 수
+            있습니다.
+          </p>
           <div>
             <div className="flex items-baseline justify-end mb-3">
               <span className="text-[0.625rem] text-muted-foreground opacity-60">
@@ -2033,6 +2095,8 @@ function SliceProgressRow({
 function DashboardOutlet() {
   const simResult = useCombinedSimResult();
   const savedHistoryId = useSimulationStore((s) => s.savedHistoryId);
+  const savedForeseeId = useSimulationStore((s) => s.savedForeseeId);
+  const savedAIId = useSimulationStore((s) => s.savedAIId);
   const status = useSimulationStore((s) => s.status);
   const params = useSimulationStore((s) => s.params);
   const { user, brand } = useAuth();
@@ -2061,6 +2125,8 @@ function DashboardOutlet() {
             brandName,
             businessType,
             savedHistoryId,
+            savedForeseeId,
+            savedAIId,
             openModal,
             openConditionDrawer: () => setConditionDrawerOpen(true),
           }}

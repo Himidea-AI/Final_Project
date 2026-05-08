@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { PLANS } from './constants/plans';
 import type { Plan } from './types';
 import PricingCard from './components/PricingCard';
@@ -69,29 +69,8 @@ export default function JoinUsPage({ onBack }: Props) {
       ref={scrollRef}
       className="absolute inset-0 z-20 flex flex-col bg-card text-foreground overflow-y-auto custom-scrollbar"
     >
-      {/* Header */}
-      <div className="fixed top-0 left-0 w-full h-24 border-b border-border flex items-center px-8 md:px-16 bg-card/80 backdrop-blur-md z-50">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300"
-          >
-            <img src="/logo.svg" alt="SPOTTER" className="h-5 w-auto" />
-            <span className="text-sm font-bold tracking-wider text-foreground">SPOTTER</span>
-          </button>
-          <span className="text-border">/</span>
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
-          >
-            <ChevronRight size={14} className="rotate-180" />
-            BACK
-          </button>
-        </div>
-      </div>
-
       {/* Body */}
-      <div className="flex-1 flex flex-col items-center pt-36 pb-20 px-6">
+      <div className="flex-1 flex flex-col items-center pt-32 pb-20 px-6">
         <AnimatePresence mode="wait">
           {/* Phase 0: Role Select */}
           {phase === 'role_select' && (

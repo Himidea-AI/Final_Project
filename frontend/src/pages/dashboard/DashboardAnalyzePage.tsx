@@ -14,13 +14,17 @@ interface OutletCtx {
   simResult: SimulationOutput;
   brandName: string;
   savedHistoryId?: number | null;
+  savedForeseeId?: number | null;
+  savedAIId?: number | null;
   openModal: (content: DetailModalContent) => void;
   openConditionDrawer?: () => void;
 }
 
 export default function DashboardAnalyzePage() {
-  const { simResult, brandName, savedHistoryId, openModal, openConditionDrawer } =
+  const { simResult, brandName, savedAIId, openModal, openConditionDrawer } =
     useOutletContext<OutletCtx>();
+  // AI 분석 페이지는 ai 저장 ID 만 사용 (예측 저장과 독립).
+  const savedHistoryId = savedAIId ?? null;
   const navigate = useNavigate();
 
   return (

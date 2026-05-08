@@ -102,10 +102,10 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
       <div className="bg-card border border-border rounded-3xl p-6">
         <div className="mb-4 flex items-center gap-3">
           <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
-            4 동 변화도 시계열 (최근 8 분기)
+            동별 상권 변화도 추이
           </h4>
           <span className="text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
-            line + 16동 사분위 reference
+            최근 2년 분기별 · 마포구 평균선 비교
           </span>
         </div>
         <EmergingFourDongTrendChart dpredicts={dpredicts} />

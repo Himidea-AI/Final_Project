@@ -10,7 +10,7 @@ import logging
 
 from langchain_postgres.vectorstores import PGVector
 from langchain_huggingface import HuggingFaceEmbeddings
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import create_engine
 from src.config.settings import settings
 from dotenv import load_dotenv
 
@@ -52,7 +52,7 @@ class LegalVectorDB:
             _singleton_instance.collection_name = collection_name
             _singleton_instance._vectorstore = None
             _singleton_instance._embeddings = None
-            _singleton_instance._async_engine = None
+            _singleton_instance._engine = None
         return _singleton_instance
 
     def __init__(self, collection_name: str = "legal_documents"):
@@ -73,13 +73,13 @@ class LegalVectorDB:
     def vectorstore(self):
         if self._vectorstore is None:
             if not settings.postgres_url:
-                logger.warning(
-                    "[LegalVectorDB] POSTGRES_URL이 설정되지 않아 RAG 검색을 사용할 수 없습니다."
-                )
+                logger.warning("[LegalVectorDB] POSTGRES_URL이 설정되지 않아 RAG 검색을 사용할 수 없습니다.")
                 return None
             try:
+                # Windows ProactorEventLoop + psycopg async = InterfaceError.
+                # 동기 엔진 + asyncio.to_thread 우회 (retriever.py 호출부 참조).
                 conn_string = settings.postgres_url.replace("postgresql://", "postgresql+psycopg://", 1)
-                self._async_engine = create_async_engine(
+                self._engine = create_engine(
                     conn_string,
                     pool_size=_POOL_SIZE,
                     max_overflow=_MAX_OVERFLOW,
@@ -88,28 +88,27 @@ class LegalVectorDB:
                     pool_recycle=_POOL_RECYCLE,
                 )
                 self._vectorstore = PGVector(
-                    connection=self._async_engine,
+                    connection=self._engine,
                     embeddings=self.embeddings,
                     collection_name=self.collection_name,
                     use_jsonb=True,
+                    async_mode=False,
                 )
             except Exception as e:
                 logger.warning(f"[LegalVectorDB] PGVector 초기화 실패 - RAG 검색 불가: {e}")
                 return None
         return self._vectorstore
 
-    async def dispose(self) -> None:
-        """async engine을 정리한다 (앱 shutdown 시 호출)."""
-        if self._async_engine is not None:
-            await self._async_engine.dispose()
-            self._async_engine = None
+    def dispose(self) -> None:
+        """sync engine 정리 (앱 shutdown 시 호출)."""
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None
             self._vectorstore = None
 
     def get_total_count(self) -> int:
         if not settings.postgres_url:
-            logger.warning(
-                "[LegalVectorDB] POSTGRES_URL이 설정되지 않아 count 조회를 건너뜁니다."
-            )
+            logger.warning("[LegalVectorDB] POSTGRES_URL이 설정되지 않아 count 조회를 건너뜁니다.")
             return 0
         try:
             import psycopg2
@@ -130,7 +129,7 @@ class LegalVectorDB:
             finally:
                 conn.close()
         except Exception as e:
-            print(f"DEBUG: DB Count 조회 실패 - {str(e)}")
+            logger.warning(f"[LegalVectorDB] DB Count 조회 실패 - {e}")
             return 0
 
 

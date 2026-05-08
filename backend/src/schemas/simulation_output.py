@@ -240,6 +240,8 @@ class AnalysisOutput(BaseModel):
     request_id: str
     target_district: str
     target_districts: list[str] = Field(default_factory=list)
+    business_type: str | None = None
+    brand_name: str | None = None
     winner_district: str | None = None
     top_3_candidates: list[str] = Field(default_factory=list)
     district_rankings: list[DistrictRanking] = Field(default_factory=list)
