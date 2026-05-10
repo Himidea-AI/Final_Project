@@ -351,6 +351,37 @@ describe('simulationStore — Promise.allSettled', () => {
     expect(s.error).toContain('a fail');
   });
 
+  it('savedAbmId setter — 다른 kind 의 saved id 와 독립 (Phase 4-C)', () => {
+    const { setSavedAbmId, setSavedForeseeId, setSavedAIId } = useSimulationStore.getState();
+
+    setSavedForeseeId(101);
+    setSavedAIId(202);
+    setSavedAbmId(303);
+
+    const s = useSimulationStore.getState();
+    expect(s.savedAbmId).toBe(303);
+    expect(s.savedForeseeId).toBe(101);
+    expect(s.savedAIId).toBe(202);
+
+    setSavedAbmId(null);
+    expect(useSimulationStore.getState().savedAbmId).toBeNull();
+    // 다른 kind 의 id 는 유지.
+    expect(useSimulationStore.getState().savedForeseeId).toBe(101);
+    expect(useSimulationStore.getState().savedAIId).toBe(202);
+  });
+
+  it('dismissResult 호출 시 savedAbmId 도 reset (status=done 가정)', () => {
+    useSimulationStore.setState({ status: 'done' });
+    useSimulationStore.getState().setSavedAbmId(7);
+    useSimulationStore.getState().setSavedForeseeId(8);
+    expect(useSimulationStore.getState().savedAbmId).toBe(7);
+
+    useSimulationStore.getState().dismissResult();
+    const s = useSimulationStore.getState();
+    expect(s.savedAbmId).toBeNull();
+    expect(s.savedForeseeId).toBeNull();
+  });
+
   it('retryPrediction 만 재호출 → analysis 슬라이스 보존', async () => {
     useSimulationStore.setState({
       params: { districts: ['공덕동'] } as unknown as SimulationInput,

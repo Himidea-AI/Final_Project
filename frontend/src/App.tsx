@@ -920,9 +920,8 @@ function SimulatorDashboard({
   const [targetDayType, setTargetDayType] = useState<'weekday' | 'weekend' | null>(
     initParams?.target_day_type ?? null,
   );
-  const [targetMonthlySales, setTargetMonthlySales] = useState<number | null>(
-    initParams?.target_monthly_sales ?? null,
-  );
+  // 예상 월매출 input 제거 (2026-05-10) — 항상 null 전달. 백엔드 미입력 동작 (비율만 표시) 동일.
+  const targetMonthlySales: number | null = initParams?.target_monthly_sales ?? null;
 
   // 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 룰 트리거.
   // 미입력 (둘 다 null) 시 backend 가 보수적 caution. 주점(pub) 외 업종은 좌표 영향 없음.
@@ -983,20 +982,6 @@ function SimulatorDashboard({
       prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot],
     );
   }, []);
-  // monthly_sales 입력 clamp: 음수/NaN 방어 — 빈 문자열은 null 유지 (전체 비율만 반환)
-  const handleMonthlySalesChange = useCallback((raw: string) => {
-    if (raw.trim() === '') {
-      setTargetMonthlySales(null);
-      return;
-    }
-    const n = Number(raw.replace(/[^0-9]/g, ''));
-    if (!Number.isFinite(n) || n < 0) {
-      setTargetMonthlySales(null);
-      return;
-    }
-    setTargetMonthlySales(n);
-  }, []);
-
   // 결과 화면 진입 시 스크롤을 맨 위로 리셋 (리포트 최상단부터 보이도록)
   const dashboardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1616,24 +1601,8 @@ function SimulatorDashboard({
               </FormField>
             </div>
 
-            {/* 예상 월매출 — full-width */}
-            <div className="mt-4">
-              <FormField label="예상 월매출" hint="선택 사항">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="예: 23150000 (원)"
-                  value={
-                    targetMonthlySales != null ? targetMonthlySales.toLocaleString('ko-KR') : ''
-                  }
-                  onChange={(e) => handleMonthlySalesChange(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg text-xs font-mono tabular-nums bg-card border border-border text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/15 focus:outline-none transition-colors"
-                />
-                <p className="mt-1.5 text-[11px] text-muted-foreground/70">
-                  입력 시 세그먼트 매출 금액 계산 (미입력 시 비율만 표시)
-                </p>
-              </FormField>
-            </div>
+            {/* 예상 월매출 input 제거 (사용자 요청 2026-05-10) — 미입력 시 세그먼트 비율만 표시 동일 동작.
+                handleMonthlySalesChange / targetMonthlySales 는 store 잔존 (다른 곳에서 참조 가능). */}
           </div>
         </div>
         {/* /타겟 페르소나 카드 끝 */}
@@ -2444,6 +2413,15 @@ export default function App() {
                     element={
                       <ProtectedRoute>
                         <SimulationHistoryDetail kind="ai" />
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* /dashboard/abm/:id — simulation_abm row 재현. ABM PDF 빌더는 다른 에이전트가 처리. */}
+                  <Route
+                    path="/dashboard/abm/:id"
+                    element={
+                      <ProtectedRoute>
+                        <SimulationHistoryDetail kind="abm" />
                       </ProtectedRoute>
                     }
                   />

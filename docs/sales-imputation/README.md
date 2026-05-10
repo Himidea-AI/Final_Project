@@ -127,8 +127,11 @@ print(df_regular[["dong_name", "industry", "quarter", "sales_pred", "ci_lower_95
 | 5 | `v3_revised_report.md` | **v3 재설계** (sales_per_store target, dong dummy 제거) |
 | 6 | `validation_critical_review.md` | **검증 방법론 재평가** (정직한 WAPE 25.7%) |
 | 7 | `store_quarterly_audit.md` | **입력 데이터 감사** (서울 상권분석 크롤 교차 검증) |
-| 8 | `model_comparison.md` | **5 sklearn 모델 × 3 버전** 비교 (ExtraTrees 발견) |
-| 9 | **`sota_comparison.md`** | ⭐ **10 SOTA 모델 최종 비교** (HyperImpute·LGBM·XGBoost·CatBoost) |
+| 8 | [`../ml-models/imputation/sales-model-comparison.md`](../ml-models/imputation/sales-model-comparison.md) | **5 sklearn 모델 × 3 버전** 비교 (ExtraTrees 발견) |
+| 9 | ⭐ [`../ml-models/imputation/sales-sota-comparison.md`](../ml-models/imputation/sales-sota-comparison.md) | **10 SOTA 모델 최종 비교** (HyperImpute·LGBM·XGBoost·CatBoost) |
+| 10 | [`../ml-models/imputation/sales-step2-transfer-learning.md`](../ml-models/imputation/sales-step2-transfer-learning.md) | Seoul-wide Transfer Learning 실험 |
+
+> **이동 알림 (2026-05-09)**: ML 모델 비교 문서는 [`docs/ml-models/imputation/`](../ml-models/) 로 통합 이동.
 
 ---
 

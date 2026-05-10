@@ -119,6 +119,23 @@ def _build_index() -> dict[tuple[str, str], list[int]]:
     return dict(idx)
 
 
+@lru_cache(maxsize=1)
+def _uuid_by_idx() -> dict[int, str]:
+    """DataFrame index → uuid string 매핑. 1회 prime 후 dict lookup → O(1).
+
+    사용자 피드백 (2026-05-09): 이전 sample() 의 exclude_uuids 분기에서
+    `df.iloc[i].get("uuid")` 를 candidates 마다 호출 → 5K agent × ~500 candidates =
+    2.5M iloc 호출로 spawn 30-120s 페널티. 미리 dict 로 캐시해 lookup 으로 변경.
+    """
+    df = _load_dataframe()
+    if df is None:
+        return {}
+    # values 직접 접근 — iloc 보다 빠름. uuid 컬럼 없으면 빈 dict.
+    if "uuid" not in df.columns:
+        return {}
+    return {int(i): str(v) if v is not None else "" for i, v in enumerate(df["uuid"].values)}
+
+
 def _safe_str(v: Any, default: str = "") -> str:
     """None/NaN 안전 문자열화."""
     if v is None:
@@ -177,13 +194,21 @@ def is_available() -> bool:
     return _load_dataframe() is not None
 
 
-def sample(sex: str, age: int, rng: random.Random | None = None) -> PersonaProfile | None:
+def sample(
+    sex: str,
+    age: int,
+    rng: random.Random | None = None,
+    exclude_uuids: set[str] | None = None,
+) -> PersonaProfile | None:
     """sex (M/F) + age 에 매칭되는 페르소나 1개 무작위 sample.
 
     매칭:
         1) (sex, age_bucket) 정확 매칭
         2) 비면 (sex, ANY bucket)
         3) 비면 None
+
+    exclude_uuids 가 주어지면 해당 uuid 는 후보에서 제외 (without-replacement sampling).
+    spawn_agents 가 5,000 agent 분배 시 페르소나 중복 방지용.
     """
     df = _load_dataframe()
     if df is None:
@@ -195,6 +220,17 @@ def sample(sex: str, age: int, rng: random.Random | None = None) -> PersonaProfi
     if not candidates:
         # bucket fallback — 같은 sex 의 모든 row
         candidates = [i for (s, _b), idxs in idx_map.items() if s == sex_norm for i in idxs]
+
+    # exclude 적용 — 이미 사용된 uuid 제거. uuid 사전 캐시 (_uuid_by_idx) 사용 →
+    # df.iloc 5K×500 호출 회피 → spawn 단계 30-120s 절약.
+    if exclude_uuids:
+        uuid_map = _uuid_by_idx()
+        candidates = [i for i in candidates if uuid_map.get(i, "") not in exclude_uuids]
+        if not candidates:
+            # bucket 소진 — sex 전체에서 unused 재시도
+            broader = [i for (s, _b), idxs in idx_map.items() if s == sex_norm for i in idxs]
+            candidates = [i for i in broader if uuid_map.get(i, "") not in exclude_uuids]
+
     if not candidates:
         return None
     rng = rng or random

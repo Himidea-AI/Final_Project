@@ -172,6 +172,11 @@ from src.api.simulation_ai import router as _sim_ai_router  # noqa: E402
 
 app.include_router(_sim_ai_router)
 
+# --- simulation_abm history REST (ABM 시뮬 결과 영구 저장, JWT Bearer 요구) ---
+from src.api.simulation_abm_history import router as _sim_abm_history_router  # noqa: E402
+
+app.include_router(_sim_abm_history_router)
+
 # --- sensitivity REST (TCN 시나리오 시뮬레이터 탄성치 캐시 서빙) ---
 from src.api.sensitivity import router as _sensitivity_router  # noqa: E402
 
@@ -2681,14 +2686,14 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         )
     else:
         tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
-    # 전 Tier OpenAI gpt-4.1-mini 통일 — Anthropic/Gemini 키 분기 제거,
+    # 전 Tier OpenAI gpt-5.4-nano 통일 — Anthropic/Gemini 키 분기 제거,
     # 단일 provider 로 비용·rate-limit 단순화. generate_thought 도 동일 모델 사용 중.
     cfg = ModelConfig(
         n_personas=req.n_agents,
         tier_s_provider="openai",
-        tier_s_model="gpt-4.1-mini",
+        tier_s_model="gpt-5.4-nano",
         tier_a_provider="openai",
-        tier_a_model="gpt-4.1-mini",
+        tier_a_model="gpt-5.4-nano",
     )
     # A1 Scenario dataclass — weather_override / date_override / weekend_force / rent_shock_pct
     scenario = Scenario(
@@ -2723,11 +2728,12 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     # v2: collect_trajectory=True 회귀 fix + thoughts 필드 (2026-04-28).
     # v3: 신규 매장 popularity_boost=5.0 적용 (visits=0 회귀 fix, 2026-04-28).
     # v4: Tier S/A LLM decisions 도입 (use_llm_decisions, 2026-04-29).
-    # v5: 전 Tier OpenAI gpt-4.1-mini 통일 (Haiku/Gemini 제거, 2026-04-29).
+    # v5: 전 Tier OpenAI gpt-5.4-nano 통일 (Haiku/Gemini 제거, 2026-04-29 v5; 2026-05-09 nano 전환).
     # v6: Tier S 50 전용 LLM 모드 (Tier A/B → policy_decide, 2026-04-29).
     # v7: ext_commuter LLM plan 활성 + new_store_role_dist + tier_s_meta 응답 추가 (2026-05-03).
+    # v8: hourly_visits (24h 분포) 응답 추가 — 시간대 막대/필터용 (2026-05-10).
     cache_key = (
-        "abm_sim:v7:"
+        "abm_sim:v8:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -2855,6 +2861,8 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "total_daily_visits": result.get("daily_visits", 0),
         "total_daily_revenue": result.get("daily_revenue", 0),
         "peak_hours": result.get("peak_hours", []),
+        # 24시간 visits 분포 (length 24, 0~23). frontend 시간대 막대/필터용.
+        "hourly_visits": result.get("hourly_visits", []),
         "customer_profile_dist": result.get("customer_profile_dist", {}),
         "dong_totals": dong_totals,  # 프론트에서 동별 비교 차트용
         "cannibalization": result.get("cannibalization", {}),
@@ -2888,7 +2896,7 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     try:
         async with aioredis.from_url(settings.redis_url, decode_responses=True) as r:
             cache_body = {k: v for k, v in response.items() if k != "trajectory"}
-            # 사용자 피드백 (2026-05-04): TTL 1h → 24h. ABM 시뮬 비용 큼 (gpt-4.1-mini ~$0.05/회) →
+            # 사용자 피드백 (2026-05-04): TTL 1h → 24h. ABM 시뮬 비용 큼 (gpt-5.4-nano ~$0.01/회) →
             # 같은 시나리오 재시뮬 회피 위해 캐시 더 오래 유지.
             await r.setex(cache_key, 86400, _json.dumps(cache_body, ensure_ascii=False))
             logger.info(f"[ABM] cache SET key={cache_key[:16]}... ttl=86400s")

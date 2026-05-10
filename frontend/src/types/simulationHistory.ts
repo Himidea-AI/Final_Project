@@ -3,12 +3,13 @@ import type { SimulationOutput } from './index';
 export type MarketEntrySignal = 'green' | 'yellow' | 'red';
 export type HistorySort = 'created_at_desc' | 'client_name_asc';
 /**
- * 시뮬 슬라이스 종류 — DB 분리 후 양 테이블(simulation_foresee/simulation_ai) 에서 온 row.
+ * 시뮬 슬라이스 종류 — DB 분리 후 세 테이블(simulation_foresee/simulation_ai/simulation_abm) 에서 온 row.
  * - 'foresee' : ML 예측 (Predict 탭)  → /simulation-foresee
  * - 'ai'      : LLM 분석 (Analyze 탭) → /simulation-ai
+ * - 'abm'     : ABM 시뮬 (AbmTab)     → /history/abm
  * - null      : legacy /simulation-history (마이그레이션 대상, 읽기 전용 유지)
  */
-export type SimulationKind = 'foresee' | 'ai';
+export type SimulationKind = 'foresee' | 'ai' | 'abm';
 
 export interface SimulationHistoryItem {
   id: number;
@@ -72,6 +73,24 @@ export interface SaveAIPayload {
   ai_result: Record<string, unknown>;
   /** 원본 SimulationInput. DB 컬럼 추가 후 활성. */
   scenario?: Record<string, unknown> | null;
+}
+
+/**
+ * POST /history/abm body — backend AbmSaveRequest 와 1:1.
+ * result 는 /simulate-abm/{job_id}/result 응답 그대로 (dong_totals/cannibalization/peak_hours 등).
+ * scenario 는 ABM 전용 (weather_override / weekend_force / rent_shock_pct / date_override / store_area).
+ */
+export interface SaveAbmPayload {
+  client_name: string;
+  brand_name: string;
+  business_type?: string | null;
+  target_district?: string | null;
+  spot_lat?: number | null;
+  spot_lon?: number | null;
+  n_agents?: number | null;
+  days?: number | null;
+  scenario?: Record<string, unknown> | null;
+  result: Record<string, unknown>;
 }
 
 export interface SaveSimulationResponse {

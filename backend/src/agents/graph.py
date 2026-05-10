@@ -17,7 +17,7 @@ from src.schemas.state import AgentState
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 전체 파이프라인 토큰 예산 (입력+출력 합산 추정치 기준)
-# gpt-4.1-mini: 입력 $0.15/1M, 출력 $0.60/1M
+# gpt-5.4-nano: 입력 $0.10/1M, 출력 $0.40/1M (placeholder, 4.1-nano 동등 가정)
 _TOKEN_BUDGET_PER_RUN = 16000  # 토큰 초과 시 경고 로그 (legal 에이전트 평균 7k, 전체 평균 10k)
 
 

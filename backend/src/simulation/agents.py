@@ -674,6 +674,9 @@ def spawn_agents(
     agents: list[Agent] = []
     aid = 1
 
+    # 사용자 피드백 (2026-05-08): persona_uuid 중복 방지 — sample() 에 exclude 전달.
+    used_persona_uuids: set[str] = set()
+
     # 사용자 피드백 (2026-05-04): agent 이름 중복 다수 → unique 풀 사전 생성.
     # 30 surnames × 30 names = 900 per gender. n>900 케이스 자동 #suffix fallback.
     total_agents = n_residents + n_commuters + n_visitors + n_owners + n_ext_commuters + n_ext_visitors
@@ -851,13 +854,15 @@ def spawn_agents(
         )
         # PersonaPool inject — sex+age 매칭으로 Nemotron 7,187 풀에서 sample.
         # 사용자 피드백 (2026-05-06): parquet 미통합 → spawn 시 매핑.
+        # 사용자 피드백 (2026-05-08): 페르소나 중복 발생 → used_persona_uuids 로 dedup.
         # 실패 (parquet 미존재 등) 시 무시 — agent 그대로 (필드는 default 빈 값).
         try:
             from .persona_pool import sample as _persona_sample
 
-            _pp = _persona_sample(gender, age, rng)
+            _pp = _persona_sample(gender, age, rng, exclude_uuids=used_persona_uuids)
             if _pp is not None:
                 a.persona_uuid = _pp.uuid
+                used_persona_uuids.add(_pp.uuid)
                 a.occupation = _pp.occupation
                 a.education_level = _pp.education_level
                 a.persona_text = _pp.persona_text
@@ -865,6 +870,11 @@ def spawn_agents(
                 a.professional_persona_text = _pp.professional_persona
                 a.cultural_background = _pp.cultural_background
                 a.career_goals_text = _pp.career_goals
+                # Tier B 규칙도 페르소나 영향 받게 — hobbies/persona 키워드 → 카테고리 가중 dict.
+                # 1회 계산 (string scan), score_store 매 호출 시 dict lookup 만.
+                from .policy_executor import compute_nemotron_cat_pref
+
+                a.hobby_cat_pref = compute_nemotron_cat_pref(a)
         except Exception:
             pass
         aid += 1

@@ -26,6 +26,7 @@ import type {
 import type {
   HistoryFilterParams,
   HistoryListResponse,
+  SaveAbmPayload,
   SaveAIPayload,
   SaveForeseePayload,
   SaveSimulationPayload,
@@ -276,9 +277,7 @@ export interface OperatedIndustriesResponse {
   message?: string;
 }
 
-export async function getOperatedIndustries(
-  userId?: string,
-): Promise<OperatedIndustriesResponse> {
+export async function getOperatedIndustries(userId?: string): Promise<OperatedIndustriesResponse> {
   // userId query param 으로 명시 전달 — JWT interceptor 실패/legacy localStorage 케이스 보완.
   // backend 는 user_id 우선, 없으면 JWT 의 current_user 폴백 사용.
   const params = userId ? { user_id: userId } : undefined;
@@ -397,6 +396,36 @@ export async function deleteForeseeHistory(id: number): Promise<void> {
 /** DELETE /simulation-ai/{id} */
 export async function deleteAIHistory(id: number): Promise<void> {
   await apiClient.delete(`/simulation-ai/${id}`);
+}
+
+// ─────────────────────────────────────────────────────────
+// ABM 시뮬 영구 저장 (Phase 4-A) — /history/abm
+// /simulate-abm/{job_id}/result 응답을 result JSONB 로 그대로 저장.
+// ─────────────────────────────────────────────────────────
+
+/** POST /history/abm — ABM 시뮬 결과 저장 */
+export async function saveAbmHistory(payload: SaveAbmPayload): Promise<SaveSimulationResponse> {
+  const response = await apiClient.post('/history/abm', payload);
+  return response.data;
+}
+
+/** GET /history/abm — ABM 이력 목록 */
+export async function listAbmHistory(
+  filter: HistoryFilterParams = {},
+): Promise<HistoryListResponse> {
+  const response = await apiClient.get('/history/abm', { params: filter });
+  return response.data;
+}
+
+/** GET /history/abm/{id} — ABM row 상세 (raw row 그대로 반환) */
+export async function getAbmDetail(id: number): Promise<Record<string, unknown>> {
+  const response = await apiClient.get(`/history/abm/${id}`);
+  return response.data;
+}
+
+/** DELETE /history/abm/{id} */
+export async function deleteAbmHistory(id: number): Promise<void> {
+  await apiClient.delete(`/history/abm/${id}`);
 }
 
 /**
@@ -538,6 +567,23 @@ export function mapAIListItem(row: Record<string, any>): SimulationHistoryItem {
     market_entry_signal: (row.market_entry_signal as 'green' | 'yellow' | 'red' | null) ?? null,
     created_at: row.created_at ?? '',
     kind: 'ai',
+  };
+}
+
+/** ABM list row → 통합 list item. simulation_abm 테이블 row 구조 매핑. */
+export function mapAbmListItem(row: Record<string, any>): SimulationHistoryItem {
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: null,
+    market_entry_signal: null,
+    created_at: row.created_at ?? '',
+    kind: 'abm',
   };
 }
 

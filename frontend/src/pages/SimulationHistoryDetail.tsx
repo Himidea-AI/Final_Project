@@ -5,7 +5,12 @@ import { useSimulationDetail } from '../hooks/useSimulationDetail';
 import { HistoryDashboardView } from './HistoryDashboardView';
 import { formatDocumentId, type SimulationKind } from '../types/simulationHistory';
 import { HiddenPDFTemplate } from '../components/PDF/HiddenPDFTemplate';
-import { buildPdfPropsFromSimulation } from '../utils/pdfPropsBuilder';
+import {
+  buildAbmPdfProps,
+  buildAiPdfProps,
+  buildForeseePdfProps,
+  buildPdfPropsFromSimulation,
+} from '../utils/pdfPropsBuilder';
 import { useSimulationStore } from '../stores/simulationStore';
 import type { SimulationInput } from '../types';
 
@@ -22,6 +27,7 @@ interface SimulationHistoryDetailProps {
    * 진입 라우트 별 kind 주입 — App.tsx 에서 wrapper element 로 prop 전달.
    * - 'foresee' : /dashboard/foresee/:id
    * - 'ai'      : /dashboard/ai/:id
+   * - 'abm'     : /dashboard/abm/:id
    * - undefined : /dashboard/history/:id (legacy) — pathname 으로 자동 fallback
    */
   kind?: SimulationKind;
@@ -42,6 +48,7 @@ export default function SimulationHistoryDetail({
     const p = location.pathname;
     if (p.startsWith('/dashboard/foresee/')) return 'foresee';
     if (p.startsWith('/dashboard/ai/')) return 'ai';
+    if (p.startsWith('/dashboard/abm/')) return 'abm';
     return null;
   }, [kindProp, location.pathname]);
 
@@ -53,13 +60,42 @@ export default function SimulationHistoryDetail({
   const pdfTemplateRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  const pdfProps = data
-    ? buildPdfPropsFromSimulation({
+  // kind-aware PDF builder 선택 — 'foresee'(ML 예측) 또는 'ai'(LangGraph 분석).
+  // legacy /dashboard/history/:id (kind=null) 는 통합 빌더로 호환 유지.
+  const pdfProps = useMemo(() => {
+    if (!data) return null;
+    if (kind === 'foresee') {
+      return buildForeseePdfProps({
         simResult: data.simulation_result,
         businessType: data.business_type ?? null,
+        brandName: data.brand_name,
         savedHistoryId: data.id,
-      })
-    : null;
+      });
+    }
+    if (kind === 'ai') {
+      return buildAiPdfProps({
+        simResult: data.simulation_result,
+        businessType: data.business_type ?? null,
+        brandName: data.brand_name,
+        savedHistoryId: data.id,
+      });
+    }
+    if (kind === 'abm') {
+      // ABM 은 simulation_result 가 곧 ABM 응답 schema (dong_totals/cannibalization 등).
+      // useSimulationDetail abmFetcher 가 raw row.result → simulation_result 로 매핑함.
+      return buildAbmPdfProps({
+        abmResult: data.simulation_result as unknown as Record<string, unknown> | null,
+        brandName: data.brand_name,
+        businessType: data.business_type ?? null,
+        savedHistoryId: data.id,
+      });
+    }
+    return buildPdfPropsFromSimulation({
+      simResult: data.simulation_result,
+      businessType: data.business_type ?? null,
+      savedHistoryId: data.id,
+    });
+  }, [data, kind]);
 
   const handleDownloadPDF = useCallback(async () => {
     if (!pdfTemplateRef.current || !data) return;
@@ -174,21 +210,65 @@ export default function SimulationHistoryDetail({
               isGeneratingPDF={isGeneratingPDF}
             />
             <div className="mt-6">
-              <HistoryDashboardView
-                simResult={data.simulation_result}
-                savedHistoryId={data.id}
-                brandName={data.brand_name}
-                businessType={data.business_type}
-                kind={kind}
-              />
+              {kind === 'abm' ? (
+                // ABM 은 PDF 만 제공 — 사용자 요청 (2026-05-10). 화면 view 제거.
+                // 결과는 상단 우측 'PDF 다운로드' 버튼으로만 확인.
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+                  <p className="text-sm font-bold text-foreground">ABM 시뮬 결과</p>
+                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                    ABM 시뮬 결과는 상단 우측{' '}
+                    <span className="font-bold text-primary">PDF 다운로드</span> 버튼으로 확인하실
+                    수 있습니다.
+                  </p>
+                </div>
+              ) : (
+                <HistoryDashboardView
+                  simResult={data.simulation_result}
+                  savedHistoryId={data.id}
+                  brandName={data.brand_name}
+                  businessType={data.business_type}
+                  kind={kind}
+                />
+              )}
             </div>
           </>
         )}
 
         {/* A4 PDF 템플릿 — 화면 밖 렌더, html2canvas 캡처용 */}
-        {pdfProps && (
+        {pdfProps && 'mode' in pdfProps && pdfProps.mode === 'foresee' && (
           <HiddenPDFTemplate
             ref={pdfTemplateRef}
+            mode="foresee"
+            districtFull={pdfProps.districtFull}
+            reportDate={pdfProps.reportDate}
+            savedHistoryId={pdfProps.savedHistoryId}
+            foresee={pdfProps.foresee}
+          />
+        )}
+        {pdfProps && 'mode' in pdfProps && pdfProps.mode === 'ai' && (
+          <HiddenPDFTemplate
+            ref={pdfTemplateRef}
+            mode="ai"
+            districtFull={pdfProps.districtFull}
+            reportDate={pdfProps.reportDate}
+            savedHistoryId={pdfProps.savedHistoryId}
+            ai={pdfProps.ai}
+          />
+        )}
+        {pdfProps && 'mode' in pdfProps && pdfProps.mode === 'abm' && (
+          <HiddenPDFTemplate
+            ref={pdfTemplateRef}
+            mode="abm"
+            districtFull={pdfProps.districtFull}
+            reportDate={pdfProps.reportDate}
+            savedHistoryId={pdfProps.savedHistoryId}
+            abm={pdfProps.abm}
+          />
+        )}
+        {pdfProps && !('mode' in pdfProps) && (
+          <HiddenPDFTemplate
+            ref={pdfTemplateRef}
+            mode="legacy"
             districtFull={pdfProps.districtFull}
             stats={pdfProps.stats}
             cannibalizationRows={pdfProps.cannibalizationRows}
@@ -227,13 +307,16 @@ function DetailHeader({
   onDownloadPDF,
   isGeneratingPDF,
 }: DetailHeaderProps) {
-  const kindLabel = kind === 'foresee' ? 'ML 예측' : kind === 'ai' ? 'AI 분석' : null;
+  const kindLabel =
+    kind === 'foresee' ? 'ML 예측' : kind === 'ai' ? 'AI 분석' : kind === 'abm' ? 'ABM 시뮬' : null;
   const kindCls =
     kind === 'foresee'
       ? 'bg-primary/10 text-primary border-primary/40'
       : kind === 'ai'
         ? 'bg-chart-4/10 text-chart-4 border-chart-4/40'
-        : '';
+        : kind === 'abm'
+          ? 'bg-chart-3/10 text-chart-3 border-chart-3/40'
+          : '';
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-muted p-5">
       <div>

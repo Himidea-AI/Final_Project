@@ -12,7 +12,7 @@ RAG + 작은 LLM 으로 평가. 각 specialist 는 ``async`` 함수로 ``dict`` 
     }
 
 설계 근거: ``docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md``
-모델 선택: 현재 cheap helper 미존재 — ``get_fast_llm()`` (gpt-4.1-mini 동급) 사용.
+모델 선택: 현재 cheap helper 미존재 — ``get_fast_llm()`` (gpt-5.4-nano 동급) 사용.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 def _get_specialist_llm():
     """specialist 전용 LLM — max_tokens=2000 cap 으로 무한 reasoning 차단.
 
-    gpt-4.1-mini structured output 시 32768 token 도달 사례 (SC03 fair_trade_law,
+    gpt-5.4-nano structured output 시 32768 token 도달 사례 (SC03 fair_trade_law,
     franchise_law). _build_llm 으로 별도 인스턴스 + max_tokens 적용 (LLMRetryProxy
     bypass — get_fast_llm 의 LLMRetryProxy 가 max_tokens 속성 노출 안 함).
     """
@@ -47,7 +47,7 @@ def _get_specialist_llm():
         import os as _os
 
         provider = _os.getenv("LLM_PROVIDER", "openai").lower()
-        default = "gpt-4.1-mini" if provider == "openai" else "gemini-2.0-flash"
+        default = "gpt-5.4-nano" if provider == "openai" else "gemini-2.0-flash"
         model = _os.getenv("FAST_LLM_MODEL", default)
         _get_specialist_llm._instance = _build_llm(model, max_tokens=4000)
     return _get_specialist_llm._instance

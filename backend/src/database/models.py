@@ -1915,6 +1915,50 @@ class SimulationAI(Base):
     )
 
 
+# ---------------------------------------------------------------------------
+# ABM 시뮬 이력 (Agent-Based Model — 5K agent 행동 시뮬)
+# ---------------------------------------------------------------------------
+
+
+class SimulationABM(Base):
+    """ABM 시뮬 결과 이력 — 5,000 페르소나 행동 시뮬 + 잠식/매출/시간대 결과 저장.
+
+    /simulate-abm/{job_id}/result 응답 schema 그대로 result JSONB 에 저장.
+    """
+
+    __tablename__ = "simulation_abm"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    manager_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id",
+    )
+    user_type = Column(String(10), default="manager", comment="master | manager")
+    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
+    brand_name = Column(String(100), nullable=False, comment="브랜드명")
+    business_type = Column(String(50), comment="업종 (cafe/restaurant/...)")
+    target_district = Column(String(50), comment="대상 동")
+    spot_lat = Column(Float, comment="후보 공실 위도")
+    spot_lon = Column(Float, comment="후보 공실 경도")
+    n_agents = Column(Integer, comment="에이전트 수 (default 5000)")
+    days = Column(Integer, comment="시뮬 일수 (default 1)")
+    scenario = Column(
+        JSONB,
+        comment="ABM 시나리오 파라미터 — weather_override / weekend_force / rent_shock_pct / date_override / store_area",
+    )
+    result = Column(
+        JSONB,
+        comment="/simulate-abm/{job_id}/result 응답 그대로 (dong_totals/cannibalization/peak_hours/new_store_*/narrator_summary 등)",
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_abm_manager_created", "manager_id", "created_at"),
+        {"comment": "담당: 봉환 | ABM 시뮬 결과 이력 | 5K agent 행동 시뮬"},
+    )
+
+
 # ===========================================================================
 # Emerging Trend B1 — 인구·이동성 (2026-04-29)
 # spec: docs/superpowers/specs/2026-04-29-emerging-trend-data-b1-design.md

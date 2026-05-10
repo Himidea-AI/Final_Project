@@ -95,6 +95,36 @@ except Exception:
         return _decorator
 
 
+# Nemotron 26-col persona → 짧은 prompt brief.
+# spawn_agents 가 a.persona_text / a.occupation / a.hobbies / a.professional_persona_text /
+# a.cultural_background / a.career_goals_text 를 inject 함. 이전엔 LLM prompt 에서 사용 안 됐음.
+# 토큰 절감 위해 직업 + persona 1-2 줄 요약 + 취미 3개 만 추출.
+def _nemotron_brief(agent) -> str:
+    """Nemotron 페르소나 → ' | <occ> · <persona 80자> · 취미: a/b/c' 형식."""
+    parts: list[str] = []
+    occ = getattr(agent, "occupation", "") or ""
+    if occ and occ != "알 수 없음":
+        parts.append(occ)
+    pt = getattr(agent, "persona_text", "") or ""
+    if pt:
+        # 첫 80자 (한국어 약 40자) — 토큰 폭발 방지
+        snippet = pt.replace("\n", " ").strip()[:80]
+        if snippet:
+            parts.append(snippet)
+    hobbies = getattr(agent, "hobbies", None) or []
+    if hobbies:
+        # list[str] 또는 str 모두 지원
+        if isinstance(hobbies, list):
+            top = ", ".join(str(h) for h in hobbies[:3])
+        else:
+            top = str(hobbies)[:30]
+        if top:
+            parts.append(f"취미:{top}")
+    if not parts:
+        return ""
+    return " | " + " · ".join(parts)
+
+
 # Gemini 등 wrap_*가 미지원인 SDK는 함수 안에서 직접 토큰 정보를 현재 run에 첨부.
 # LangSmith UI는 usage_metadata 의 input_tokens / output_tokens / total_tokens 키를 인식해
 # 토큰·비용 칼럼에 표시한다. (Anthropic SDK schema 와 동일)
@@ -482,7 +512,7 @@ class LLMBrain:
 
     @traceable(run_type="llm", name="brain.tier_s.batch.openai")
     def _batch_smart_decide_openai(self, agents: list["Agent"], world: "World") -> list[tuple[int, "Decision"]]:
-        # agent별 user block — 페르소나 첫 줄 (lifestyle) + dynamic ctx
+        # agent별 user block — 페르소나 첫 줄 (lifestyle) + Nemotron 26-col + dynamic ctx
         user_blocks: list[str] = []
         for a in agents:
             persona = self.personas.get(a.agent_id)
@@ -492,7 +522,8 @@ class LLMBrain:
             if persona is not None:
                 first = persona.full_profile.split("\n", 1)[0]
                 persona_brief = first[:200]
-            user_blocks.append(f"#{a.agent_id} | {persona_brief}\n{ctx}")
+            nemo = _nemotron_brief(a)
+            user_blocks.append(f"#{a.agent_id} | {persona_brief}{nemo}\n{ctx}")
 
         user_prompt = (
             "\n\n".join(user_blocks) + "\n\n각 agent 결정을 JSON 객체 {decisions:[...]} 로 반환. "
@@ -663,6 +694,7 @@ class LLMBrain:
             if persona is not None:
                 first = persona.full_profile.split("\n", 1)[0]
                 persona_brief = first[:200]
+            nemo = _nemotron_brief(a)
             # ext_commuter/ext_visitor 는 마포 체류 시간만 표기 (외부 시간 슬롯은 policy 가 무시).
             window = ""
             arr = getattr(a, "arrival_hour", None)
@@ -670,7 +702,7 @@ class LLMBrain:
             if a.role.value in ("ext_commuter", "ext_visitor") and arr is not None and dep is not None:
                 window = f", 마포체류={arr:02d}-{dep:02d}h, work={getattr(a, 'work_dong', None) or '?'}"
             user_blocks.append(
-                f"#{a.agent_id} | home={a.home_dong}, age={a.age}, role={a.role.value}{window} | {persona_brief}"
+                f"#{a.agent_id} | home={a.home_dong}, age={a.age}, role={a.role.value}{window} | {persona_brief}{nemo}"
             )
 
         wkd_label = "주말" if getattr(world, "is_weekend", False) else "평일"
@@ -937,7 +969,7 @@ class LLMBrain:
                 current_dong = getattr(a, "home_dong", None) or "마포"
             user_blocks.append(
                 f"#{a.agent_id} archetype={archetype} hour={hour} weather={weather} "
-                f"mood={mood_label} hunger={hunger} dong={current_dong}"
+                f"mood={mood_label} hunger={hunger} dong={current_dong}{_nemotron_brief(a)}"
             )
 
         user_prompt = (
@@ -950,7 +982,7 @@ class LLMBrain:
 
         try:
             resp = self._openai.chat.completions.create(
-                model="gpt-4.1-mini",
+                model="gpt-5.4-nano",
                 messages=[
                     {"role": "system", "content": _THOUGHT_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -1322,8 +1354,9 @@ class LLMBrain:
         if tier == "S":
             persona = self.personas.get(agent.agent_id)
             persona_block = persona.full_profile if persona else ""
+            nemo = _nemotron_brief(agent)
             return (
-                f"{persona_block}\n\n"
+                f"{persona_block}{nemo}\n\n"
                 f"지금 D{world.current_day} {h}시 ({'주말' if world.is_weekend else '평일'}{', 공휴일' if world.is_holiday else ''}), "
                 f"{world.weather} {world.temperature:.0f}도, 현재 {agent.current_dong}, 예산잔여 {budget_k}k원.\n"
                 f"행동을 단 한 줄 DSL로 출력하세요:\n"
@@ -1449,7 +1482,7 @@ class LLMBrain:
             dialog_templates 의 hardcoded 문장 fallback.
 
         비용:
-            gpt-4.1-mini 기준 평균 326 input + 10 output token / call.
+            gpt-5.4-nano 기준 평균 326 input + 10 output token / call.
             Tier S 50명 × 24h = 1,200 call → cache 활성 시 ~$0.05/시뮬.
 
         설계:
@@ -1474,7 +1507,7 @@ class LLMBrain:
 
         try:
             resp = self._openai.chat.completions.create(
-                model="gpt-4.1-mini",
+                model="gpt-5.4-nano",
                 messages=[
                     {"role": "system", "content": _THOUGHT_SYSTEM_PROMPT},
                     {

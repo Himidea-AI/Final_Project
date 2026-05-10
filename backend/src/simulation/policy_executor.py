@@ -33,6 +33,49 @@ def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
 
 import math as _math  # noqa: E402
 
+
+# ---------------------------------------------------------------
+# Nemotron 페르소나 hobbies/persona 키워드 → 카테고리 가중치
+# spawn_agents 가 a.hobby_cat_pref dict 를 inject (1회 계산, score_store 매 호출 시 lookup).
+# 이전엔 26 컬럼 페르소나가 inject 만 되고 Tier B 규칙 의사결정에 미사용 (dead data).
+# 사용자 피드백 (2026-05-08): hobbies/persona 단어로 카테고리 선호 차등화 → 페르소나 반영.
+# ---------------------------------------------------------------
+_HOBBY_CAT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "카페": ("커피", "카페", "디저트", "베이커리", "브런치", "차"),
+    "음식점": ("요리", "미식", "맛집", "외식", "한식", "양식", "일식", "중식", "분식"),
+    "주점": ("맥주", "술", "와인", "소주", "음주", "펍", "이자카야", "와인바"),
+    "편의점": (),  # 편의점은 페르소나 영향 거의 없음 (편의 목적)
+}
+
+
+def compute_nemotron_cat_pref(agent) -> dict[str, float]:
+    """agent 의 nemotron persona 텍스트에서 카테고리별 키워드 매칭 수 → multiplier.
+
+    spawn_agents 가 페르소나 inject 직후 1회 호출 → agent.hobby_cat_pref 저장.
+    score_store 매 호출 시 dict lookup 만 (string scan 회피).
+    """
+    out: dict[str, float] = {"카페": 1.0, "음식점": 1.0, "주점": 1.0, "편의점": 1.0}
+    hobbies = getattr(agent, "hobbies", None)
+    if isinstance(hobbies, list):
+        text = " ".join(str(h) for h in hobbies)
+    elif isinstance(hobbies, str):
+        text = hobbies
+    else:
+        text = ""
+    text += " " + (getattr(agent, "persona_text", "") or "")
+    text += " " + (getattr(agent, "professional_persona_text", "") or "")
+    if not text.strip():
+        return out
+    for cat, kws in _HOBBY_CAT_KEYWORDS.items():
+        if not kws:
+            continue
+        n = sum(1 for kw in kws if kw in text)
+        if n > 0:
+            # 매치 1개당 +12%, 최대 3개 cap → 1.0~1.36
+            out[cat] = 1.0 + 0.12 * min(n, 3)
+    return out
+
+
 # 마포 중심 좌표 (대략 합정~공덕 중간)
 _MAPO_CENTER = (37.555, 126.923)
 # Haversine 기반 km 거리 → 0~1 정규화 (마포 대각선 최대 약 6km)
@@ -414,6 +457,11 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
         else:
             profile_cat_pref = 0.5
         cat_pref *= 0.75 + 0.5 * profile_cat_pref
+
+    # 3.5. Nemotron 페르소나 hobbies/persona 키워드 boost (spawn 시 사전 계산된 dict)
+    nemo_pref = getattr(agent, "hobby_cat_pref", None)
+    if nemo_pref is not None:
+        cat_pref *= nemo_pref.get(cat, 1.0)
 
     # 4. 실측 연령×동×시간×요일 가중치 (living_population 13,440 entries)
     age_time_boost = 1.0

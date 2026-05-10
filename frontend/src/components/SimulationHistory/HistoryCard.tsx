@@ -22,15 +22,17 @@ const SIGNAL_LABEL: Record<string, string> = {
   red: 'RED',
 };
 
-/** kind badge — Deep Blue (foresee) / Vibrant Purple chart-4 (ai). 새 hex 0. */
+/** kind badge — Deep Blue (foresee) / Vibrant Purple chart-4 (ai) / Cyan chart-2 (abm). */
 const KIND_BADGE_CLS: Record<SimulationKind, string> = {
   foresee: 'bg-primary/10 text-primary border-primary/40',
   ai: 'bg-chart-4/10 text-chart-4 border-chart-4/40',
+  abm: 'bg-chart-2/10 text-chart-2 border-chart-2/40',
 };
 
 const KIND_LABEL: Record<SimulationKind, string> = {
   foresee: 'ML 예측',
   ai: 'AI 분석',
+  abm: 'ABM 시뮬',
 };
 
 function formatWhen(iso: string): string {

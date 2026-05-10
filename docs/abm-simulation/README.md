@@ -20,13 +20,15 @@
 
 ## 🤖 모델 리포트
 
-| 파일 | 내용 |
-|:-----|:-----|
-| [`model-comparison-report.md`](model-comparison-report.md) | 모델 종합 비교 |
-| [`model-adoption-roadmap.md`](model-adoption-roadmap.md) | 모델 채택 로드맵 |
-| [`lstm-model-report.md`](lstm-model-report.md) | LSTM 백테스트 |
-| [`gru-model-report.md`](gru-model-report.md) | GRU 백테스트 |
-| [`tcn-model-report.md`](tcn-model-report.md) | TCN 백테스트 |
+> **이동 알림 (2026-05-09)**: 머신러닝 모델 문서는 [`docs/ml-models/`](../ml-models/README.md) 로 통합 이동.
+> 본 ABM 시뮬레이션 README 에는 시뮬 시스템 자체 문서만 남김.
+
+| 카테고리 | 위치 |
+|:---------|:-----|
+| 시계열 모델 비교 (LSTM/GRU/TCN) | [`docs/ml-models/timeseries/`](../ml-models/timeseries/) |
+| 모델 평가 리포트 (closure_risk·customer_revenue·living_pop) | [`docs/ml-models/evaluation/`](../ml-models/evaluation/) |
+| 결측치 보간 / TCN imputation | [`docs/ml-models/imputation/`](../ml-models/imputation/) |
+| 모델 채택 로드맵 | [`docs/ml-models/model-adoption-roadmap.md`](../ml-models/model-adoption-roadmap.md) |
 
 ## 🧩 에이전트 & 정책
 

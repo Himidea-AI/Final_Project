@@ -52,6 +52,8 @@ interface SimulationState {
   savedForeseeId: number | null;
   /** AI 분석 (DashboardAnalyzePage) 저장 이력 ID. /simulation-ai row. */
   savedAIId: number | null;
+  /** ABM 시뮬 (AbmTab) 저장 이력 ID. /history/abm row. */
+  savedAbmId: number | null;
 
   /** /predict 응답 슬라이스 (IM3-259 분리 호출). */
   prediction: PredictionSlice;
@@ -69,6 +71,7 @@ interface SimulationState {
   setSavedHistoryId: (id: number | null) => void;
   setSavedForeseeId: (id: number | null) => void;
   setSavedAIId: (id: number | null) => void;
+  setSavedAbmId: (id: number | null) => void;
   reset: () => void;
 }
 
@@ -100,6 +103,7 @@ const INITIAL_STATE = {
   savedHistoryId: null,
   savedForeseeId: null,
   savedAIId: null,
+  savedAbmId: null,
   prediction: initialPrediction,
   analysis: initialAnalysis,
   _abortController: null,
@@ -173,6 +177,7 @@ export const useSimulationStore = create<SimulationState>()(
           savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
           savedForeseeId: null,
           savedAIId: null,
+          savedAbmId: null,
           prediction: { ...initialPrediction, status: 'running' },
           analysis: { ...initialAnalysis, status: 'running' },
           _abortController: abortController,
@@ -374,6 +379,7 @@ export const useSimulationStore = create<SimulationState>()(
           savedHistoryId: null,
           savedForeseeId: null,
           savedAIId: null,
+          savedAbmId: null,
           prediction: initialPrediction,
           analysis: initialAnalysis,
           _abortController: null,
@@ -394,6 +400,7 @@ export const useSimulationStore = create<SimulationState>()(
           savedHistoryId: null,
           savedForeseeId: null,
           savedAIId: null,
+          savedAbmId: null,
           prediction: initialPrediction,
           analysis: initialAnalysis,
         });
@@ -401,6 +408,7 @@ export const useSimulationStore = create<SimulationState>()(
       setSavedHistoryId: (id) => set({ savedHistoryId: id }),
       setSavedForeseeId: (id) => set({ savedForeseeId: id }),
       setSavedAIId: (id) => set({ savedAIId: id }),
+      setSavedAbmId: (id) => set({ savedAbmId: id }),
       reset: () => {
         const { _abortController, _progressTimer } = get();
         _abortController?.abort();
@@ -420,6 +428,7 @@ export const useSimulationStore = create<SimulationState>()(
         savedHistoryId: state.status === 'done' ? state.savedHistoryId : null,
         savedForeseeId: state.status === 'done' ? state.savedForeseeId : null,
         savedAIId: state.status === 'done' ? state.savedAIId : null,
+        savedAbmId: state.status === 'done' ? state.savedAbmId : null,
         startedAt: state.status === 'done' ? state.startedAt : null,
         stage: state.status === 'done' ? state.stage : '',
         progress: state.status === 'done' ? 100 : 0,

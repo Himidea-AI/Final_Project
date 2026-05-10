@@ -401,6 +401,9 @@ class SimulationResult:
     daily_revenue: float = 0.0
     daily_revenue_std: float = 0.0
     peak_hours: list = field(default_factory=list)
+    # 24시간 visits 분포 (length 24, 0~23 시각 별 방문 카운트). hour_visits Counter 직렬화.
+    # frontend 시간대 필터 / 막대 차트용 (2026-05-10 사용자 요청).
+    hourly_visits: list = field(default_factory=list)
     customer_profile_dist: dict = field(default_factory=dict)
     cannibalization: dict = field(default_factory=dict)
     narrator_summary: str = ""
@@ -1318,6 +1321,8 @@ def run_simulation(
         # 이전: agent._hourly_visits 인데 그 attr 정의 안 돼 항상 빈 list 반환 (peak_hours UI 항상 '-' 표시 bug).
         hour_visits: Counter = Counter(v["hour"] for v in visits_log if isinstance(v.get("hour"), int))
         peak_hours_val = [h for h, _ in hour_visits.most_common(3)]
+        # 24시간 분포 (0~23) — frontend 막대 차트용. 방문 없는 시간 0 채움.
+        hourly_visits_val = [int(hour_visits.get(h, 0)) for h in range(24)]
 
         # customer_profile_dist — role별 방문 비율
         role_counts: Counter = Counter()
@@ -1519,6 +1524,7 @@ def run_simulation(
             daily_revenue=daily_revenue_val,
             daily_revenue_std=daily_revenue_std_val,
             peak_hours=peak_hours_val,
+            hourly_visits=hourly_visits_val,
             customer_profile_dist=customer_profile_dist_val,
             cannibalization=cannibalization_val,
             narrator_summary=narrator_summary_val,

@@ -1,14 +1,22 @@
 /**
  * 시뮬 이력 저장 hooks — 2026-05-02 DB 분리 후 ML(foresee) / AI(ai) 별 분리.
+ * 2026-05-09: ABM 영구 저장 추가 (Phase 4-C).
  *
  * - useSaveForeseeHistory : POST /simulation-foresee
  * - useSaveAIHistory      : POST /simulation-ai
+ * - useSaveAbmHistory     : POST /history/abm
  * - useSaveSimulation     : @deprecated legacy /simulation-history. 다른 곳에서 import 중일 가능성으로 유지.
  */
 import { useCallback, useState } from 'react';
 import axios from 'axios';
-import { saveAIHistory, saveForeseeHistory, saveSimulationHistory } from '../api/client';
+import {
+  saveAbmHistory,
+  saveAIHistory,
+  saveForeseeHistory,
+  saveSimulationHistory,
+} from '../api/client';
 import type {
+  SaveAbmPayload,
   SaveAIPayload,
   SaveForeseePayload,
   SaveSimulationPayload,
@@ -75,6 +83,9 @@ export const useSaveForeseeHistory = makeSaveHook<SaveForeseePayload>(saveForese
 
 /** AI 분석 (Analyze 탭) 저장 hook */
 export const useSaveAIHistory = makeSaveHook<SaveAIPayload>(saveAIHistory);
+
+/** ABM 시뮬 (AbmTab) 저장 hook */
+export const useSaveAbmHistory = makeSaveHook<SaveAbmPayload>(saveAbmHistory);
 
 /** @deprecated legacy /simulation-history. 신규 코드는 useSaveForeseeHistory / useSaveAIHistory 사용. */
 export const useSaveSimulation = makeSaveHook<SaveSimulationPayload>(saveSimulationHistory);

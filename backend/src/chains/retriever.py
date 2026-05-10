@@ -1041,7 +1041,7 @@ class LegalDocumentRetriever:
             sorted_keys = sorted(combined_scores, key=lambda k: combined_scores[k], reverse=True)
             merged = [combined_docs[k] for k in sorted_keys if k in combined_docs]
 
-        # 5차: Reranker — settings.rerank_provider="openai" (default) → gpt-4.1-mini list-wise
+        # 5차: Reranker — settings.rerank_provider="openai" (default) → gpt-5.4-nano list-wise
         if self._RERANK_ENABLED and len(merged) > 1:
             rerank_provider = getattr(_settings, "rerank_provider", "openai")
             if rerank_provider == "openai":
@@ -1305,7 +1305,7 @@ class LegalDocumentRetriever:
         return [d for d, s in filtered[:top_k]]
 
     async def _rerank_openai(self, query: str, docs: list[dict], top_k: int) -> list[dict]:
-        """OpenAI gpt-4.1-mini list-wise rerank.
+        """OpenAI gpt-5.4-nano list-wise rerank.
 
         한 호출로 30개 문서 ranking — 비용 효율적.
         반환: 모델이 가장 관련 높다고 판단한 순서대로 top_k 개.
@@ -1344,7 +1344,7 @@ class LegalDocumentRetriever:
 
             client = AsyncOpenAI(api_key=oai_key)
             resp = await client.chat.completions.create(
-                model=getattr(settings, "rerank_openai_model", "gpt-4.1-mini"),
+                model=getattr(settings, "rerank_openai_model", "gpt-5.4-nano"),
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200,
                 temperature=0,

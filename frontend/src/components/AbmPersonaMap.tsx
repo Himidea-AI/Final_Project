@@ -88,6 +88,8 @@ export interface AbmScenario {
   date_override: string | null; // ISO 날짜 or null (= 오늘). 공휴일 옵션도 이 필드로 전달.
   weekend_force: boolean;
   rent_shock_pct: number; // 0.0 / 0.15 / 0.30 / 0.50
+  /** 시뮬 일수 — 1/3/7. 길수록 안정적 평균 + 비용 ↑. 사용자 요청 (2026-05-10) 가변. */
+  days: number;
 }
 
 // 에이전트(district_ranking 노드) 가 /simulate 응답으로 내려주는 공실 스팟 형태
@@ -531,6 +533,7 @@ export default function AbmPersonaMap({
     date_override: null,
     weekend_force: false,
     rent_shock_pct: 0.0,
+    days: 1,
   });
 
   // 마포 polygon GeoJSON load (1회) — public/mapo-dong.geo.json 16 동.
@@ -3793,6 +3796,29 @@ export default function AbmPersonaMap({
                           }`}
                         >
                           {pct === 0 ? '현재' : `+${Math.round(pct * 100)}%`}
+                        </button>
+                      ))}
+                    </div>
+                  </FormField>
+
+                  {/* 시뮬 기간 */}
+                  <FormField
+                    label="시뮬 기간"
+                    icon={Calendar}
+                    info="길수록 안정적 평균 + 비용 ↑ (5K agent · 1일당 ~$0.01)"
+                  >
+                    <div className="flex flex-wrap gap-1.5">
+                      {[1, 3, 7].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setScenario((s) => ({ ...s, days: d }))}
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
+                            scenario.days === d
+                              ? 'bg-primary/15 border-primary/60 text-primary'
+                              : 'border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {d}일
                         </button>
                       ))}
                     </div>

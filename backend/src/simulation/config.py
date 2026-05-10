@@ -205,6 +205,14 @@ PRICING = {
         "cache_read": 0.10,
         "cache_write": 0.40,
     },
+    # gpt-5.4-nano — 2026 신규 nano 모델. 가격 placeholder (4.1-nano 동등 가정).
+    # 실제 가격 확정되면 갱신.
+    "gpt-5.4-nano": {
+        "input": 0.10,
+        "output": 0.40,
+        "cache_read": 0.025,  # 가정 75% 할인
+        "cache_write": 0.10,
+    },
 }
 
 

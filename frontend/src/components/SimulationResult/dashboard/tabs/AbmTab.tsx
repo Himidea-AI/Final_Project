@@ -20,6 +20,8 @@ import type { SimulationOutput } from '../../../../types';
 import AgentMapVisualizer from '../../../AgentMapVisualizer';
 import AbmPersonaMap from '../../../AbmPersonaMap';
 import { useAbmStore } from '../../../../stores/abmStore';
+import { useSimulationStore } from '../../../../stores/simulationStore';
+import { SaveSimulationActions } from '../../../SimulationHistory/SaveSimulationActions';
 
 interface Props {
   simResult: SimulationOutput;
@@ -35,6 +37,8 @@ interface AbmScenario {
   date_override: string | null;
   weekend_force: boolean;
   rent_shock_pct: number;
+  /** 시뮬 일수 — scenario panel 에서 1/3/7 선택 (default 1). */
+  days?: number;
 }
 
 type DashboardMode = 'map' | 'abm';
@@ -62,6 +66,14 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   const resumePollingIfNeeded = useAbmStore((s) => s.resumePollingIfNeeded);
 
   const abmLoading = abmStatus === 'running';
+
+  // ABM 시뮬 영구 저장 — store.savedAbmId 가 있으면 저장됨 표시.
+  const savedAbmId = useSimulationStore((s) => s.savedAbmId);
+  // 저장 버튼은 result 가 있고 진행 중이 아닐 때만 활성.
+  const canSaveAbm = abmResult != null && abmStatus !== 'running';
+  // active params (abmStore.params) 우선, 없으면 displayResult 의 params (loadHistory 시).
+  const abmParams = useAbmStore((s) => s.params);
+  const abmScenarioParams = abmParams?.scenario ?? null;
 
   // mount 시 persist 복원된 running jobId 가 있으면 polling 재개.
   useEffect(() => {
@@ -223,7 +235,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
       brand_name: brandName || '신규 매장',
       langgraph_result: r?._raw ?? r,
       n_agents: 5000,
-      days: 1,
+      days: params.scenario.days ?? 1,
       spot_lat: params.spotLat,
       spot_lon: params.spotLon,
       scenario: params.scenario,
@@ -243,21 +255,26 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   // "시뮬 실행" 누르면 enqueueAbm 으로 queue 에 추가됨 (active 종료 후 자동 pop).
   // 사용자 피드백 (2026-05-05): spot 새로 클릭 시 직전 abmResult 가 살아있으면 결과 화면이
   // 바로 나와 시나리오 form 이 안 보임 → dismissResult 호출. result 는 history 에 유지.
+  // 사용자 피드백 (2026-05-10): 새 스팟 선택 시 직전 저장 ID 도 초기화 → 새 시뮬 별도로 저장 가능.
   const handleAgentMapSpotClick = async (loc: { lat: number; lng: number; name: string }) => {
     setMode('abm');
     setFocusSpot({ lat: loc.lat, lon: loc.lng, label: loc.name });
     clearDisplayResult();
+    useSimulationStore.getState().setSavedAbmId(null);
     if (abmStatus === 'done' || abmStatus === 'error') dismissResult();
   };
 
   const handleAbmSpotClick = async (spot: { lat: number; lon: number; dong_name: string }) => {
     setFocusSpot({ lat: spot.lat, lon: spot.lon, label: spot.dong_name });
     clearDisplayResult();
+    useSimulationStore.getState().setSavedAbmId(null);
     if (abmStatus === 'done' || abmStatus === 'error') dismissResult();
   };
 
   // 시나리오 패널 "시뮬 실행" 버튼 — focusSpot 좌표 + scenario 로 enqueueAbm.
   const handleRunSimulation = async (scenario: AbmScenario) => {
+    // 새 시뮬 시작 시 직전 저장 ID 초기화 — 새 결과는 새로 저장 가능해야 함.
+    useSimulationStore.getState().setSavedAbmId(null);
     runAbm({
       districtOverride: focusSpot?.label,
       spotLat: focusSpot?.lat,
@@ -272,6 +289,7 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
   const handleClearResult = () => {
     setFocusSpot(null);
     clearDisplayResult();
+    useSimulationStore.getState().setSavedAbmId(null);
     setMode('map');
   };
 
@@ -295,15 +313,35 @@ export function AbmTab({ simResult, brandName, businessType, storeArea }: Props)
           </h3>
           {abmLoading && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
         </div>
-        {mode === 'abm' && (
-          <button
-            type="button"
-            onClick={handleClearResult}
-            className="text-[0.6875rem] font-bold text-muted-foreground hover:text-foreground uppercase tracking-widest"
-          >
-            ← 지도로 돌아가기
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* ABM 시뮬 결과가 있으면 저장 버튼 노출. 진행 중이면 disabled. */}
+          {canSaveAbm && (
+            <SaveSimulationActions
+              simResult={simResult}
+              brandName={brandName ?? ''}
+              kind="abm"
+              savedHistoryId={savedAbmId}
+              abmContext={{
+                abmResult,
+                spotLat: focusSpot?.lat ?? null,
+                spotLon: focusSpot?.lon ?? null,
+                scenario: abmScenarioParams as Record<string, unknown> | null,
+                nAgents: abmParams?.n_agents ?? 5000,
+                days: abmParams?.days ?? 1,
+                targetDistrict: focusSpot?.label ?? targetDistrict ?? null,
+              }}
+            />
+          )}
+          {mode === 'abm' && (
+            <button
+              type="button"
+              onClick={handleClearResult}
+              className="text-[0.6875rem] font-bold text-muted-foreground hover:text-foreground uppercase tracking-widest"
+            >
+              ← 지도로 돌아가기
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 에러 배너 */}

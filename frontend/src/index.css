@@ -14,13 +14,62 @@
    ═══════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════
-   Viewport-aware root font scaling (2026-04-29)
+   Viewport-aware root font scaling (2026-04-29 원본 유지)
    16인치 노트북 (~1280px) = 16px → 24인치+ 모니터 (~1920px) = 18px.
+   루트 base size 는 원본. 제목만 따로 키움 (tailwind.config.js fontSize 확장).
    Tailwind 의 모든 rem 기반 utility (text-xs/sm/base/lg ...) 가
    자동 비례 확대. text-[10px] 등 고정 px 클래스는 영향 받지 않음.
    ═══════════════════════════════════════════════════════ */
 html {
   font-size: clamp(16px, 0.32vw + 12px, 18px);
+}
+
+/* ═══════════════════════════════════════════════════════
+   제목 사이즈 직접 override (2026-05-09)
+   tailwind.config.js fontSize extend 가 vite HMR 미반영 → utility 직접 재정의.
+   본문 (text-xs/sm/base/lg) 은 Tailwind 기본 유지 → 빽빽함 방지.
+   ═══════════════════════════════════════════════════════ */
+@layer utilities {
+  /* ── 1. text-xl ~ text-5xl utility 자체 확대 (헤딩 typical) */
+  .text-xl {
+    font-size: 1.5625rem !important;
+    line-height: 2rem !important;
+  }
+  .text-2xl {
+    font-size: 1.875rem !important;
+    line-height: 2.25rem !important;
+  }
+  .text-3xl {
+    font-size: 2.4375rem !important;
+    line-height: 2.75rem !important;
+  }
+  .text-4xl {
+    font-size: 2.9375rem !important;
+    line-height: 3.25rem !important;
+  }
+  .text-5xl {
+    font-size: 3.75rem !important;
+    line-height: 1 !important;
+  }
+
+  /* ── 2. h1~h4 태그가 작은 utility (text-sm/base/lg) 사용 시 강제 승격.
+      예: <h3 className="text-sm font-black ...">. 이 케이스 위에 utility만 키워도
+      text-sm 셀렉터가 이김 → 여기서 tag+class 조합 (specificity (0,1,1)) 으로 승격.
+      본문 text-sm/lg 는 그대로 — 헤딩 태그일 때만.
+      text-xs 는 의도적 캡션/sub-header (예: "동 전체 폐업률 (4분기)" h4 라벨) 이라
+      제외 — 작게 유지. */
+  :is(h1, h2).text-sm,
+  :is(h1, h2).text-base,
+  :is(h1, h2).text-lg {
+    font-size: 1.875rem !important;
+    line-height: 2.25rem !important;
+  }
+  :is(h3, h4, h5).text-sm,
+  :is(h3, h4, h5).text-base,
+  :is(h3, h4, h5).text-lg {
+    font-size: 1.4375rem !important;
+    line-height: 1.875rem !important;
+  }
 }
 
 @layer base {

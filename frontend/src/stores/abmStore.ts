@@ -378,14 +378,16 @@ export const useAbmStore = create<AbmState>()(
               : `ABM status 조회 실패 (HTTP ${res.status})`;
           const { _pollTimer } = get();
           if (_pollTimer) clearInterval(_pollTimer);
-          // 404 면 idle 로 reset (error 화면 띄우지 말고 그냥 사라지게) — 사용자가 다시 실행하면 됨.
+          // 404 면 idle 로 reset + 안내 hint (이전: silent → 사용자가 멈춘 줄로 오해).
           // 5xx 는 error 로 (재시도 유도).
           if (res.status === 404) {
             set({
               status: 'idle',
               jobId: null,
               result: null,
-              error: null,
+              // idle + error hint 동시 보존 — 다음 startAbm 호출 시 자동 clear.
+              error:
+                '이전 ABM 시뮬 정보가 만료되었습니다 (서버 재시작 또는 1시간 초과). 시나리오를 확인하고 시뮬을 다시 실행하세요.',
               progress: 0,
               stage: '',
               startedAt: null,

@@ -91,12 +91,12 @@ class Settings(BaseSettings):
     bm25_supplementary_penalty: float = float(os.getenv("BM25_SUPPLEMENTARY_PENALTY", "0.4"))
 
     # Reranker — top-K 재정렬 (정밀도 ↑, 검색 속도 ↓)
-    # provider="openai" (default, gpt-4.1-mini list-wise) 또는 "local" (BGE CrossEncoder).
+    # provider="openai" (default, gpt-5.4-nano list-wise) 또는 "local" (BGE CrossEncoder).
     # OpenAI rerank bench (2026-05-04, K=10): MRR 0.785 → 0.931, NDCG 0.642 → 0.776 (+19%/+21%).
     # Local CrossEncoder 는 한국어 법률 article 판정 약함 → Hit -20p 역효과.
     rerank_enabled: bool = os.getenv("RERANK_ENABLED", "true").lower() == "true"
     rerank_provider: str = os.getenv("RERANK_PROVIDER", "openai").lower()
-    rerank_openai_model: str = os.getenv("RERANK_OPENAI_MODEL", "gpt-4.1-mini")
+    rerank_openai_model: str = os.getenv("RERANK_OPENAI_MODEL", "gpt-5.4-nano")
     rerank_model: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
     rerank_initial_k: int = int(os.getenv("RERANK_INITIAL_K", "30"))  # 1차 검색 K
     rerank_final_k: int = int(os.getenv("RERANK_FINAL_K", "10"))  # 재정렬 후 반환 K
@@ -104,13 +104,13 @@ class Settings(BaseSettings):
     # Chunk Compression — cheap LLM으로 RAG 청크를 1~2문장 핵심 요약 → 메인 LLM 컨텍스트 ↓
     # default OFF. CHUNK_COMPRESSION_ENABLED=true 활성화. cheap model: gemini-flash/gpt-4o-mini.
     chunk_compression_enabled: bool = os.getenv("CHUNK_COMPRESSION_ENABLED", "false").lower() == "true"
-    chunk_compression_model: str = os.getenv("CHUNK_COMPRESSION_MODEL", "gpt-4.1-mini")
+    chunk_compression_model: str = os.getenv("CHUNK_COMPRESSION_MODEL", "gpt-5.4-nano")
 
     # Multi-query expansion — cheap LLM이 1쿼리 → N개 변형 → 병렬 검색 후 RRF fusion.
     # 기대: Recall +10~15%. 비용: cheap LLM 1회 + RAG 검색 N배.
     multi_query_enabled: bool = os.getenv("MULTI_QUERY_ENABLED", "false").lower() == "true"
     multi_query_n: int = int(os.getenv("MULTI_QUERY_N", "3"))
-    multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-4.1-mini")
+    multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-5.4-nano")
 
     # RAG 검색 trace — 각 search() 호출 단계별 후보/점수를 JSONL로 기록
     # default OFF (성능 영향). RAG_TRACE_ENABLED=true 활성화.
