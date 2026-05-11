@@ -117,11 +117,11 @@ export function DashboardHub({
   // 있어야 UX 자연. 공통 컴포넌트: SaveSimulationActions (components/SimulationHistory/).
 
   return (
-    <div className="mx-auto max-w-[1728px] px-8 pt-12 pb-12">
+    <div className="mx-auto max-w-[1728px] px-4 pt-6 pb-6 sm:px-8 sm:pt-12 sm:pb-12">
       {/* header height 는 우측 박스 (DOC ID + 새 시뮬 버튼) 자연 높이(~44px)에 의해 결정.
           좌측은 가로 레이아웃 (h1 + 동/업종 한 줄) 으로 자연 height ~35px → 우측보다 작아
           self-center 로 그 안에 가운데 정렬. 우측은 그대로 items-end (= header bottom). */}
-      <header className="flex items-end justify-between gap-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
         {/* 좌측 — h1 옆에 동·업종 chip 을 가로 배치. self-center 로 우측 박스 높이 안 가운데. */}
         <div className="flex min-w-0 items-center gap-5 self-center">
           <h1 className="shrink-0 truncate text-2xl font-black text-foreground tracking-tight">
@@ -153,7 +153,7 @@ export function DashboardHub({
             </div>
           )}
         </div>
-        <div className="flex items-end gap-6">
+        <div className="flex flex-wrap items-end gap-3 sm:gap-6">
           <div className="text-right">
             <div className="text-[0.6875rem] font-mono uppercase tracking-widest text-muted-foreground">
               {docId}

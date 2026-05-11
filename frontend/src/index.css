@@ -752,3 +752,150 @@ html {
     opacity: 0;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   Mobile responsive overrides (2026-05-11)
+   ───────────────────────────────────────────────────────
+   Desktop-first 디자인 (overflow:hidden + h-screen + 큰 패딩/제목) 을
+   모바일(≤768px)에서 사용 가능한 형태로 조정. 데스크탑 동작 영향 없음.
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* index.html inline overflow:hidden + height:100% 해제 → 페이지 스크롤 허용 */
+  html,
+  body {
+    overflow: auto !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100%;
+  }
+
+  /* App root w-screen h-screen overflow-hidden → 모바일에선 스크롤 가능한 컨테이너로 */
+  #root > div {
+    overflow-x: hidden !important;
+  }
+  #root > div.w-screen.h-screen {
+    height: auto !important;
+    min-height: 100vh;
+    overflow-y: auto !important;
+  }
+
+  /* 헤딩 사이즈 축소 — desktop overrides(text-xl=1.5625rem 등) 모바일에선 부담 */
+  .text-xl {
+    font-size: 1.125rem !important;
+    line-height: 1.5rem !important;
+  }
+  .text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.625rem !important;
+  }
+  .text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 1.875rem !important;
+  }
+  .text-4xl {
+    font-size: 1.75rem !important;
+    line-height: 2rem !important;
+  }
+  .text-5xl {
+    font-size: 2rem !important;
+    line-height: 2.25rem !important;
+  }
+  .text-6xl {
+    font-size: 2.25rem !important;
+    line-height: 2.5rem !important;
+  }
+
+  /* 컨테이너 padding 압축 — 좁은 화면에서 콘텐츠 영역 확보 */
+  .p-8 {
+    padding: 1rem !important;
+  }
+  .p-6 {
+    padding: 0.875rem !important;
+  }
+  .px-8 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  .py-8 {
+    padding-top: 1.25rem !important;
+    padding-bottom: 1.25rem !important;
+  }
+  .px-6 {
+    padding-left: 0.875rem !important;
+    padding-right: 0.875rem !important;
+  }
+  .py-6 {
+    padding-top: 0.875rem !important;
+    padding-bottom: 0.875rem !important;
+  }
+  .gap-8 {
+    gap: 1rem !important;
+  }
+  .gap-6 {
+    gap: 0.75rem !important;
+  }
+  .mb-8 {
+    margin-bottom: 1.25rem !important;
+  }
+  .mt-10 {
+    margin-top: 1.25rem !important;
+  }
+
+  /* 고정폭 max-width 컨테이너 → 모바일에선 viewport 가득 */
+  .max-w-\[1650px\],
+  .max-w-7xl,
+  .max-w-6xl,
+  .max-w-5xl,
+  .max-w-4xl {
+    max-width: 100% !important;
+  }
+
+  /* 표(table) 자동 가로 스크롤 — 좁은 화면에서 컬럼 짤림 방지 */
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 4 spot 동시 표시 등 가로 grid 가 너무 좁아질 때 — sm: prefix 가 없는 grid-cols-{2,3,4}
+     컴포넌트들은 모바일에서 1열로 강제 (단, lg: prefix 가 붙은 건 이미 mobile=1col 이라 영향 없음) */
+  .grid-cols-2:not([class*='sm:']):not([class*='md:']):not([class*='lg:']),
+  .grid-cols-3:not([class*='sm:']):not([class*='md:']):not([class*='lg:']),
+  .grid-cols-4:not([class*='sm:']):not([class*='md:']):not([class*='lg:']) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* 가로 정렬 헤더(좌우 flex justify-between gap-8) → 좁은 화면에선 stack */
+  header.flex.items-end.justify-between,
+  header.flex.items-center.justify-between {
+    flex-wrap: wrap;
+    gap: 0.75rem !important;
+  }
+
+  /* 터치 타깃 최소 36px — 작은 버튼 클릭 누락 방지 */
+  button,
+  [role='button'] {
+    min-height: 36px;
+  }
+
+  /* 가로 overflow 방지 — 긴 한글/영문 단어 wrap */
+  body {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+}
+
+/* 초소형 화면 — 추가 압축 */
+@media (max-width: 480px) {
+  html {
+    font-size: 13px;
+  }
+  .p-8 {
+    padding: 0.75rem !important;
+  }
+  .px-8 {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+}
