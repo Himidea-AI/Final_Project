@@ -4,7 +4,7 @@ cheap LLM이 카테고리별 5 청크를 1~2문장 핵심 요약 → 메인 LLM 
 
 흐름:
     [12 카테고리 × 5 청크 × 400자 = 24K]
-       ↓ cheap LLM (gpt-5.4-nano, 12 병렬)
+       ↓ cheap LLM (gpt-4.1-mini, 12 병렬)
     [12 카테고리 × 100~150자 = 1.5K]
 
 호출:
@@ -13,7 +13,7 @@ cheap LLM이 카테고리별 5 청크를 1~2문장 핵심 요약 → 메인 LLM 
 
 env:
     CHUNK_COMPRESSION_ENABLED=true        # 활성화
-    CHUNK_COMPRESSION_MODEL=gpt-5.4-nano  # cheap model
+    CHUNK_COMPRESSION_MODEL=gpt-4.1-mini  # cheap model
 """
 
 from __future__ import annotations
@@ -63,8 +63,7 @@ async def _compress_one(
     # SP6 보안: 각 청크를 <<<CHUNK n>>>...<<<END>>> 구분자로 감싸 prompt injection 방어
     n_chunks = min(len(docs), 5)
     chunks_text = "\n".join(
-        f"<<<CHUNK {i + 1}>>>\n{(d.get('content') or '')[:400]}\n<<<END>>>"
-        for i, d in enumerate(docs[:5])
+        f"<<<CHUNK {i + 1}>>>\n{(d.get('content') or '')[:400]}\n<<<END>>>" for i, d in enumerate(docs[:5])
     )
 
     # head/tail은 .format()으로 안전한 변수만 치환 → chunks_text는 별도 단순 치환.

@@ -5,13 +5,25 @@
 "서울 생활인구" 데이터(KT 통신 기반, 행정동 단위)를 사용해야 함.
 API 코드: OA-14991 (서울 생활인구 - 행정동)
 """
+
 from src.services.base_client import BaseAPIClient
 
 # 생활인구 API 연령대 구간 목록
 AGE_RANGES = [
-    "F0T9", "F10T14", "F15T19", "F20T24", "F25T29",
-    "F30T34", "F35T39", "F40T44", "F45T49", "F50T54",
-    "F55T59", "F60T64", "F65T69", "F70T74",
+    "F0T9",
+    "F10T14",
+    "F15T19",
+    "F20T24",
+    "F25T29",
+    "F30T34",
+    "F35T39",
+    "F40T44",
+    "F45T49",
+    "F50T54",
+    "F55T59",
+    "F60T64",
+    "F65T69",
+    "F70T74",
 ]
 
 
@@ -72,14 +84,8 @@ class SeoulOpendataClient(BaseAPIClient):
 
         total_population = float(row.get("TOT_LVPOP_CO", 0))
 
-        male = {
-            age: float(row.get(f"MALE_{age}_LVPOP_CO", 0))
-            for age in AGE_RANGES
-        }
-        female = {
-            age: float(row.get(f"FEMALE_{age}_LVPOP_CO", 0))
-            for age in AGE_RANGES
-        }
+        male = {age: float(row.get(f"MALE_{age}_LVPOP_CO", 0)) for age in AGE_RANGES}
+        female = {age: float(row.get(f"FEMALE_{age}_LVPOP_CO", 0)) for age in AGE_RANGES}
 
         return {
             "total_population": total_population,

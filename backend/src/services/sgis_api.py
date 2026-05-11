@@ -5,6 +5,7 @@
 consumer_key + consumer_secret으로 access_token을 먼저 발급받아야 함.
 토큰 유효시간은 1시간.
 """
+
 from typing import List
 
 from src.services.base_client import BaseAPIClient

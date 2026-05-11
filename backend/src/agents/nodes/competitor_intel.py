@@ -184,6 +184,7 @@ def _run_data_collection(
     comp_1000 = analyze_competition(dong_code, keyword, radius_m=1000)
     if spot_lat is not None and spot_lon is not None:
         from src.services.commercial_intelligence import analyze_cannibalization_at
+
         cannibal = analyze_cannibalization_at(spot_lat, spot_lon, brand_name, radius_m=2000, industry=ind_label)
         if not cannibal or "error" in cannibal:
             cannibal = analyze_cannibalization(dong_code, brand_name, radius_m=2000, industry=ind_label)
@@ -331,9 +332,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
     spot_lon: float | None = None
     _vac_spots = state.get("vacancy_spots") or []
     if isinstance(_vac_spots, list) and _vac_spots and target_district:
-        _matched = [
-            s for s in _vac_spots if isinstance(s, dict) and s.get("dong_name") == target_district
-        ]
+        _matched = [s for s in _vac_spots if isinstance(s, dict) and s.get("dong_name") == target_district]
         _matched.sort(
             key=lambda s: (
                 -(s.get("score") if isinstance(s.get("score"), (int, float)) else float("-inf")),
@@ -484,8 +483,7 @@ async def competitor_intel_node(state: AgentState) -> dict:
 
     competitor_attr = _make_competitor_attr(
         f"진입 신호 {llm_parsed.get('market_entry_signal', 'N/A')} · 포화 {(data.get('competition_500m') or {}).get('saturation_level', 'N/A')}",
-        str(llm_parsed.get("narrative") or "")
-        or "경쟁 인텔 종합 (Pancras 2013 distance-decay 기반 카니발 보정).",
+        str(llm_parsed.get("narrative") or "") or "경쟁 인텔 종합 (Pancras 2013 distance-decay 기반 카니발 보정).",
         0.85,
         status=llm_status,
     )

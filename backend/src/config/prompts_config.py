@@ -21,13 +21,13 @@ PROMPT_VERSION = "v0.1.0"
 # 키: Agent 노드 이름 (graph.py의 노드명과 일치)
 # 값: LLM system prompt 문자열 (빈 문자열이면 chains/prompts.py의 기본값 사용)
 AGENT_PROMPTS = {
-    "commercial": "",      # 상권분석 Agent
-    "population": "",      # 유동인구 Agent
-    "demographics": "",    # 인구통계 Agent
-    "cost": "",            # 비용산정 Agent
-    "competition": "",     # 경쟁분석 Agent (카니발리제이션 포함)
-    "trend": "",           # 트렌드 Agent (Naver DataLab)
-    "legal": "",           # 법규검토 Agent (RAG)
-    "report": "",          # 리포트 생성 Agent
-    "supervisor": "",      # Supervisor (재분석 판단)
+    "commercial": "",  # 상권분석 Agent
+    "population": "",  # 유동인구 Agent
+    "demographics": "",  # 인구통계 Agent
+    "cost": "",  # 비용산정 Agent
+    "competition": "",  # 경쟁분석 Agent (카니발리제이션 포함)
+    "trend": "",  # 트렌드 Agent (Naver DataLab)
+    "legal": "",  # 법규검토 Agent (RAG)
+    "report": "",  # 리포트 생성 Agent
+    "supervisor": "",  # Supervisor (재분석 판단)
 }

@@ -2,6 +2,7 @@
 공통 API 클라이언트 — 모든 외부 API 서비스의 베이스 클래스
 retry, rate limit, 에러 핸들링, 로깅 공통 처리
 """
+
 from datetime import datetime
 from typing import Optional
 

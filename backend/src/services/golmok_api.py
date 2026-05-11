@@ -7,6 +7,7 @@
 Base URL: http://openapi.seoul.go.kr:8088
 Auth: API key in URL path.
 """
+
 from src.services.base_client import BaseAPIClient
 
 
@@ -16,9 +17,7 @@ class GolmokAPIClient(BaseAPIClient):
     def __init__(self, api_key: str):
         super().__init__(base_url="http://openapi.seoul.go.kr:8088", api_key=api_key)
 
-    async def get_estimated_sales(
-        self, trdar_cd: str, svc_induty_cd: str, start: int = 1, end: int = 100
-    ) -> dict:
+    async def get_estimated_sales(self, trdar_cd: str, svc_induty_cd: str, start: int = 1, end: int = 100) -> dict:
         """
         추정매출 조회 — 카드사 결제금액 기반 추정 매출
 
@@ -59,9 +58,7 @@ class GolmokAPIClient(BaseAPIClient):
             "weekend_sales": int(row.get("WKN_SELNG_AMT", 0)),
         }
 
-    async def get_store_count(
-        self, trdar_cd: str, svc_induty_cd: str, start: int = 1, end: int = 100
-    ) -> dict:
+    async def get_store_count(self, trdar_cd: str, svc_induty_cd: str, start: int = 1, end: int = 100) -> dict:
         """
         점포 수 조회 — 업종별 점포 현황
 
@@ -94,9 +91,7 @@ class GolmokAPIClient(BaseAPIClient):
             "close_count": int(row.get("CLSBIZ_STOR_CO", 0)),
         }
 
-    async def get_commercial_area_info(
-        self, trdar_cd: str, start: int = 1, end: int = 100
-    ) -> dict:
+    async def get_commercial_area_info(self, trdar_cd: str, start: int = 1, end: int = 100) -> dict:
         """
         상권 현황 조회
 

@@ -106,11 +106,11 @@ def _build_llm(model: str, max_tokens: int | None = None):
 @retry_on_429
 def get_fast_llm():
     """Market Analyst, Population Analyst용 경량 모델 (Structured Output — max_tokens 미설정)
-    모델: FAST_LLM_MODEL 환경변수 우선, 미설정 시 gpt-5.4-nano / gemini-2.0-flash
+    모델: FAST_LLM_MODEL 환경변수 우선, 미설정 시 gpt-4.1-mini / gemini-2.0-flash
     """
     if not hasattr(get_fast_llm, "_instance"):
         provider = os.getenv("LLM_PROVIDER", "openai").lower()
-        default = "gpt-5.4-nano" if provider == "openai" else "gemini-2.0-flash"
+        default = "gpt-4.1-mini" if provider == "openai" else "gemini-2.0-flash"
         model = os.getenv("FAST_LLM_MODEL", default)
         get_fast_llm._instance = _build_llm(model)
     return get_fast_llm._instance
@@ -120,13 +120,13 @@ def get_fast_llm():
 def get_smart_llm():
     """Synthesis 전용 LLM — 최종 리포트 합성에만 사용.
 
-    기본값은 fast LLM과 동일(gpt-5.4-nano / gemini-2.0-flash). Synthesis는 상위 에이전트가
+    기본값은 fast LLM과 동일(gpt-4.1-mini / gemini-2.0-flash). Synthesis는 상위 에이전트가
     이미 정리한 결과를 구조화 스키마로 재구성하는 작업이라 mini로 충분함.
     품질 비교 후 상위 모델이 필요하면 SMART_LLM_MODEL 환경변수로 옵트인 (예: gpt-4.1).
     """
     if not hasattr(get_smart_llm, "_instance"):
         provider = os.getenv("LLM_PROVIDER", "openai").lower()
-        default = "gpt-5.4-nano" if provider == "openai" else "gemini-2.0-flash"
+        default = "gpt-4.1-mini" if provider == "openai" else "gemini-2.0-flash"
         model = os.getenv("SMART_LLM_MODEL", default)
         get_smart_llm._instance = _build_llm(model)
     return get_smart_llm._instance

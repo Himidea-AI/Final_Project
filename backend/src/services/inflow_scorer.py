@@ -178,14 +178,7 @@ def _baseline_normalize(
     avg = sum(real) / len(real)
     if avg <= 0:
         return {k: baseline for k in values}
-    return {
-        k: (
-            baseline
-            if v is None
-            else max(floor, min(ceiling, (v / avg) * baseline))
-        )
-        for k, v in values.items()
-    }
+    return {k: (baseline if v is None else max(floor, min(ceiling, (v / avg) * baseline))) for k, v in values.items()}
 
 
 # ---------------------------------------------------------------------------

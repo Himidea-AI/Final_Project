@@ -625,7 +625,7 @@ async def check_ftc_franchise(state: AgentState) -> dict:
 
         churn_str = f"{churn_rate:.1%}" if churn_rate is not None else "데이터 부족"
         baseline_str = (
-            f" (업종 평균 {baseline[0]*100:.1f}%, z={z_score:+.2f})"
+            f" (업종 평균 {baseline[0] * 100:.1f}%, z={z_score:+.2f})"
             if (baseline is not None and z_score is not None)
             else ""
         )
@@ -639,19 +639,19 @@ async def check_ftc_franchise(state: AgentState) -> dict:
         )
         if level == "danger":
             if z_score is not None:
-                summary += f"폐점률이 업종 평균 +1σ 초과 ({industry} 평균 {baseline[0]*100:.1f}%) — 동종 brand 대비 상위 위험."
+                summary += f"폐점률이 업종 평균 +1σ 초과 ({industry} 평균 {baseline[0] * 100:.1f}%) — 동종 brand 대비 상위 위험."
             else:
                 summary += "폐점률이 10%를 초과하여 사업 안정성 리스크가 높습니다."
         elif level == "caution":
             if churn_rate is None:
                 summary += "정보공개서에 가맹점 수 데이터가 없어 폐점률을 산출하지 못해 수동 검토가 필요합니다."
             elif z_score is not None and z_score > 0:
-                summary += f"폐점률이 업종 평균 ({baseline[0]*100:.1f}%) 보다 다소 높음 — 주의 필요."
+                summary += f"폐점률이 업종 평균 ({baseline[0] * 100:.1f}%) 보다 다소 높음 — 주의 필요."
             else:
                 summary += "폐점률 또는 매출 수준에서 주의가 필요합니다."
         else:
             if z_score is not None:
-                summary += f"폐점률이 업종 평균 ({baseline[0]*100:.1f}%) 이하 — 동종 대비 안정적."
+                summary += f"폐점률이 업종 평균 ({baseline[0] * 100:.1f}%) 이하 — 동종 대비 안정적."
             else:
                 summary += "공정위 지표 기준 안정적인 브랜드로 판단됩니다."
 

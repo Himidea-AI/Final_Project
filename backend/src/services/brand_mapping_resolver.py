@@ -197,11 +197,7 @@ def get_all_mapo_stores_by_brand(brand_name: str) -> list[dict]:
     excludes = BRAND_EXCLUDE.get(canonical, [])
     if excludes:
         before = len(results)
-        results = [
-            r
-            for r in results
-            if not any(ex in (r.get("brand_name") or "") for ex in excludes)
-        ]
+        results = [r for r in results if not any(ex in (r.get("brand_name") or "") for ex in excludes)]
         if before != len(results):
             logger.debug(
                 f"[get_all_mapo_stores_by_brand] {canonical} false positive {before - len(results)}개 제외 "

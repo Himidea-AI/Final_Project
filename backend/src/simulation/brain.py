@@ -982,7 +982,7 @@ class LLMBrain:
 
         try:
             resp = self._openai.chat.completions.create(
-                model="gpt-5.4-nano",
+                model="gpt-4.1-mini",
                 messages=[
                     {"role": "system", "content": _THOUGHT_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -1482,7 +1482,7 @@ class LLMBrain:
             dialog_templates 의 hardcoded 문장 fallback.
 
         비용:
-            gpt-5.4-nano 기준 평균 326 input + 10 output token / call.
+            gpt-4.1-mini 기준 평균 326 input + 10 output token / call.
             Tier S 50명 × 24h = 1,200 call → cache 활성 시 ~$0.05/시뮬.
 
         설계:
@@ -1507,7 +1507,7 @@ class LLMBrain:
 
         try:
             resp = self._openai.chat.completions.create(
-                model="gpt-5.4-nano",
+                model="gpt-4.1-mini",
                 messages=[
                     {"role": "system", "content": _THOUGHT_SYSTEM_PROMPT},
                     {

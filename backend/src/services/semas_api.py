@@ -1,6 +1,7 @@
 """
 소상공인시장진흥공단 API — 업종밀도, 평균매출, 폐업률 데이터 조회
 """
+
 from src.services.base_client import BaseAPIClient
 
 
@@ -41,9 +42,7 @@ class SemasAPIClient(BaseAPIClient):
         params["adongCd"] = adong_cd
         params["indsLclsCd"] = business_code[:3]
 
-        raw = await self.get(
-            "/api/DataInqireService/getStoreInfoInUpjong", params=params
-        )
+        raw = await self.get("/api/DataInqireService/getStoreInfoInUpjong", params=params)
         body = raw.get("body", {})
         total_count = body.get("totalCount", 0)
         raw_items = body.get("items", [])
@@ -67,9 +66,7 @@ class SemasAPIClient(BaseAPIClient):
         params["adongCd"] = adong_cd
         params["indsLclsCd"] = business_code[:3]
 
-        raw = await self.get(
-            "/api/DataInqireService/getStoreInfoInRevenue", params=params
-        )
+        raw = await self.get("/api/DataInqireService/getStoreInfoInRevenue", params=params)
         body = raw.get("body", {})
         total_count = body.get("totalCount", 0)
         raw_items = body.get("items", [])
@@ -92,9 +89,7 @@ class SemasAPIClient(BaseAPIClient):
         params["adongCd"] = adong_cd
         params["indsLclsCd"] = business_code[:3]
 
-        raw = await self.get(
-            "/api/DataInqireService/getStoreInfoInClose", params=params
-        )
+        raw = await self.get("/api/DataInqireService/getStoreInfoInClose", params=params)
         body = raw.get("body", {})
         total_count = body.get("totalCount", 0)
         raw_items = body.get("items", [])
