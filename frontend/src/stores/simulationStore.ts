@@ -164,10 +164,19 @@ export const useSimulationStore = create<SimulationState>()(
         const abortController = new AbortController();
         const startedAt = nextStartedAt();
 
+        // Fake-progress timer — 1%/s, cap 90%. Real-progress (slice 평균) 가 더 높으면 덮어씀.
+        // pending API 의 UX 정체 방지 + history 가시성.
+        const timer = setInterval(() => {
+          if (get().startedAt !== startedAt) return;
+          const cur = get().progress;
+          if (cur < 90) {
+            const next = cur + 1;
+            set({ progress: next, stage: stageFor(next) });
+          }
+        }, 1000);
+
         set({
           status: 'running',
-          // Real-progress 전환: 가짜 fake-progress timer 제거. 글로벌 progress 는
-          // prediction/analysis slice progress 의 평균으로 derive (slice 갱신 시 함께 갱신).
           progress: 0,
           stage: 'INITIALIZING',
           result: null,
@@ -181,7 +190,7 @@ export const useSimulationStore = create<SimulationState>()(
           prediction: { ...initialPrediction, status: 'running' },
           analysis: { ...initialAnalysis, status: 'running' },
           _abortController: abortController,
-          _progressTimer: null,
+          _progressTimer: timer,
         });
 
         const isAbortError = (e: unknown): boolean => {
@@ -189,12 +198,16 @@ export const useSimulationStore = create<SimulationState>()(
           return name === 'CanceledError' || name === 'AbortError' || axios.isCancel(e);
         };
 
+        let predictAborted = false;
+        let analyzeAborted = false;
+
         // 글로벌 progress = (prediction.progress + analysis.progress) / 2 — 양 슬라이스
-        // 평균치. 단일 SimulationFloatingWidget 의 0~100 표시용 (legacy 호환).
+        // 평균치. Fake timer 가 이미 더 높이 올렸으면 유지.
         const recalcGlobal = () => {
-          const { prediction, analysis } = get();
+          const { prediction, analysis, progress: cur } = get();
           const avg = (prediction.progress + analysis.progress) / 2;
-          set({ progress: Math.round(avg * 100), stage: stageFor(avg * 100) });
+          const realPct = Math.round(avg * 100);
+          if (realPct > cur) set({ progress: realPct, stage: stageFor(realPct) });
         };
 
         // /predict polling — 동별 완료마다 backend progress 갱신, 250ms 폴링.
@@ -224,7 +237,10 @@ export const useSimulationStore = create<SimulationState>()(
           })
           .catch((err) => {
             if (get().startedAt !== startedAt) return;
-            if (isAbortError(err)) return;
+            if (isAbortError(err)) {
+              predictAborted = true;
+              return;
+            }
             const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
             const cur = get().prediction;
             set({
@@ -266,7 +282,10 @@ export const useSimulationStore = create<SimulationState>()(
           })
           .catch((err) => {
             if (get().startedAt !== startedAt) return;
-            if (isAbortError(err)) return;
+            if (isAbortError(err)) {
+              analyzeAborted = true;
+              return;
+            }
             const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
             const cur = get().analysis;
             set({
@@ -281,15 +300,31 @@ export const useSimulationStore = create<SimulationState>()(
             });
           });
 
-        // 양쪽 settle 후 글로벌 status 결정 — 하나라도 done 이면 done, 둘 다 error 면 error.
+        // 양쪽 settle 후 글로벌 status 결정.
         await Promise.allSettled([predictPromise, analyzePromise]);
         if (get().startedAt !== startedAt) return;
+        const { _progressTimer: doneTimer } = get();
+        if (doneTimer) clearInterval(doneTimer);
         const { prediction: p, analysis: a } = get();
         const anyDone = p.status === 'done' || a.status === 'done';
+        const anyError = p.status === 'error' || a.status === 'error';
         if (anyDone) {
-          set({ status: 'done', progress: 100, stage: 'COMPLETE' });
+          set({ status: 'done', progress: 100, stage: 'COMPLETE', _progressTimer: null });
+        } else if (anyError) {
+          const combined = [p.error, a.error].filter(Boolean).join(' / ');
+          set({ status: 'error', stage: '시뮬 실패', error: combined, _progressTimer: null });
+        } else if (predictAborted && analyzeAborted) {
+          // 양쪽 모두 abort — 사용자 cancel 등. error 가 아닌 idle 로 복귀.
+          set({
+            status: 'idle',
+            progress: 0,
+            stage: '',
+            prediction: initialPrediction,
+            analysis: initialAnalysis,
+            _progressTimer: null,
+          });
         } else {
-          set({ status: 'error', stage: '시뮬 실패', error: p.error || a.error });
+          set({ _progressTimer: null });
         }
       },
 

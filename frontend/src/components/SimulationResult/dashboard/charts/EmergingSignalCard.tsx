@@ -182,7 +182,7 @@ export function EmergingSignalCard({ signal, district, isTopChange = false, seri
       {sparkData.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
-            <span>최근 2년 변화도</span>
+            <span>최근 8 분기 변화도</span>
             {sparkDelta && (
               <span className="tabular-nums" style={{ color: effectiveBarColor }}>
                 {sparkDelta.arrow} {sparkDelta.label}
