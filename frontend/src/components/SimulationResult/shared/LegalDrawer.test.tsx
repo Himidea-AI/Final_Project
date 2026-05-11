@@ -6,20 +6,47 @@ const mockRisk = {
   type: '가맹사업법',
   risk_level: 'HIGH' as const,
   articles: [
-    { article_ref: '가맹사업법 제5조', content: '가맹본부의 의무...' },
+    { article_ref: '가맹사업법 제5조', content: '가맹본부의 의무...', kind: 'article' as const },
     { article_ref: '가맹사업법 제9조', content: '정보공개서...' },
+    {
+      article_ref: '대법원 2019다12345',
+      content: '정보공개서 미제공 시 계약 해지 인정...',
+      kind: 'precedent' as const,
+    },
   ],
   checklist: [{ text: '정보공개서 수령', isRequired: true }],
   recommendation: '계약 전 14일 숙고기간 확보',
+};
+
+const mockRiskNoPrecedent = {
+  type: '식품위생법',
+  risk_level: 'MEDIUM' as const,
+  articles: [{ article_ref: '식품위생법 제37조', content: '영업허가...' }],
 };
 
 describe('LegalDrawer', () => {
   it('open 시 조항 본문·체크리스트·권고 모두 렌더', () => {
     render(<LegalDrawer risk={mockRisk} open={true} onClose={() => {}} />);
     expect(screen.getByText('가맹사업법')).toBeInTheDocument();
+    expect(screen.getByText('조항 본문')).toBeInTheDocument();
     expect(screen.getByText('가맹사업법 제5조')).toBeInTheDocument();
+    // kind 미설정 → default 'article' 처리 검증
+    expect(screen.getByText('가맹사업법 제9조')).toBeInTheDocument();
     expect(screen.getByText('정보공개서 수령')).toBeInTheDocument();
     expect(screen.getByText(/14일 숙고기간/)).toBeInTheDocument();
+  });
+
+  it('precedent 항목은 "참고 판례" 섹션에 분리되어 렌더', () => {
+    render(<LegalDrawer risk={mockRisk} open={true} onClose={() => {}} />);
+    expect(screen.getByText('참고 판례')).toBeInTheDocument();
+    expect(screen.getByText('대법원 2019다12345')).toBeInTheDocument();
+    // 판례는 조항 섹션에 섞이지 않아야 함 (ref가 조항 본문 아래에 노출되더라도 헤더는 분리)
+  });
+
+  it('precedent 0건이면 "참고 판례" 섹션 미표시', () => {
+    render(<LegalDrawer risk={mockRiskNoPrecedent} open={true} onClose={() => {}} />);
+    expect(screen.getByText('조항 본문')).toBeInTheDocument();
+    expect(screen.queryByText('참고 판례')).not.toBeInTheDocument();
   });
 
   it('X 버튼 클릭 시 onClose 호출', () => {
@@ -32,5 +59,81 @@ describe('LegalDrawer', () => {
   it('open=false 시 렌더 안 함', () => {
     render(<LegalDrawer risk={mockRisk} open={false} onClose={() => {}} />);
     expect(screen.queryByText('가맹사업법')).not.toBeInTheDocument();
+  });
+
+  it('체크박스 토글 가능 + localStorage 영속화', () => {
+    window.localStorage.clear();
+    render(<LegalDrawer risk={mockRisk} open={true} onClose={() => {}} />);
+    const cb = screen.getByLabelText('정보공개서 수령') as HTMLInputElement;
+    expect(cb.disabled).toBe(false);
+    expect(cb.checked).toBe(false);
+    fireEvent.click(cb);
+    expect(cb.checked).toBe(true);
+    const stored = window.localStorage.getItem('legal-checklist-v1:가맹사업법');
+    expect(stored).toBeTruthy();
+    expect(stored).toContain('정보공개서 수령');
+  });
+
+  it('재오픈 시 저장된 체크 상태 복원', () => {
+    window.localStorage.setItem(
+      'legal-checklist-v1:가맹사업법',
+      JSON.stringify({ '0:정보공개서 수령': true }),
+    );
+    render(<LegalDrawer risk={mockRisk} open={true} onClose={() => {}} />);
+    const cb = screen.getByLabelText('정보공개서 수령') as HTMLInputElement;
+    expect(cb.checked).toBe(true);
+  });
+
+  it('article.explanation 있으면 primary 로 노출 + 조문 원문은 details 토글', () => {
+    const mockRiskWithExplanation = {
+      type: '가맹사업법',
+      risk_level: 'HIGH' as const,
+      articles: [
+        {
+          article_ref: '가맹사업법 제12조의4',
+          content: '가맹본부는 정당한 사유 없이 영업지역 내 추가 가맹점을 설치할 수 없다…',
+          kind: 'article' as const,
+          explanation: '이 사례에서는 영업지역 내 추가 출점 시 협의 의무가 있습니다.',
+        },
+      ],
+    };
+    render(<LegalDrawer risk={mockRiskWithExplanation} open={true} onClose={() => {}} />);
+    // explanation primary 표시
+    expect(
+      screen.getByText('이 사례에서는 영업지역 내 추가 출점 시 협의 의무가 있습니다.'),
+    ).toBeInTheDocument();
+    // details summary 라벨 존재 (원문은 토글 전이라도 DOM 존재)
+    expect(screen.getByText('조문 원문 보기')).toBeInTheDocument();
+  });
+
+  it('article.explanation 없으면 content 만 fallback 으로 노출 (details 없음)', () => {
+    const mockRiskNoExpl = {
+      type: '식품위생법',
+      risk_level: 'MEDIUM' as const,
+      articles: [{ article_ref: '식품위생법 제37조', content: '영업허가 본문 내용...' }],
+    };
+    render(<LegalDrawer risk={mockRiskNoExpl} open={true} onClose={() => {}} />);
+    expect(screen.getByText('식품위생법 제37조')).toBeInTheDocument();
+    expect(screen.getByText(/영업허가 본문 내용/)).toBeInTheDocument();
+    // explanation 없을 땐 "조문 원문 보기" 토글 미생성
+    expect(screen.queryByText('조문 원문 보기')).not.toBeInTheDocument();
+  });
+
+  it('precedent.explanation 도 동일 패턴 + 판례 원문 보기 토글', () => {
+    const mockRiskPrecExpl = {
+      type: '가맹사업법',
+      risk_level: 'HIGH' as const,
+      articles: [
+        {
+          article_ref: '대법원 2024다294033',
+          content: '판시사항 원문 본문...',
+          kind: 'precedent' as const,
+          explanation: '권리금 회수기회 보호가 인정된 판례입니다.',
+        },
+      ],
+    };
+    render(<LegalDrawer risk={mockRiskPrecExpl} open={true} onClose={() => {}} />);
+    expect(screen.getByText('권리금 회수기회 보호가 인정된 판례입니다.')).toBeInTheDocument();
+    expect(screen.getByText('판례 원문 보기')).toBeInTheDocument();
   });
 });

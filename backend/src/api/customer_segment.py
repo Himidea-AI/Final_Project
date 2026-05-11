@@ -24,7 +24,9 @@ class SegmentRequest(BaseModel):
     target_gender: str | None = Field(default=None, description="'male' | 'female' | None")
     target_time_slots: list[str] = Field(default_factory=list)
     target_day_type: str | None = Field(default=None, description="'weekday' | 'weekend' | None")
-    target_monthly_sales: int | None = Field(default=None)
+    target_quarterly_sales: int | None = Field(
+        default=None, description="점포당 분기 매출(원). TCN 매출예측 탭과 동일 단위."
+    )
     quarter_num: int = Field(default=1, ge=1, le=4)
 
 
@@ -32,7 +34,7 @@ class SegmentResponse(BaseModel):
     segment_ratio: float
     segment_sales: float | None = None
     identified_sales: float | None = None
-    total_sales_ref: float | None = None
+    total_sales_per_store: float | None = None
     profile_summary: str
     dimension_ratios: dict[str, float] = Field(default_factory=dict)
 
@@ -72,7 +74,7 @@ def predict_segment(body: SegmentRequest) -> dict:
             dong_code,
             industry_code,
             profile_dict=profile,
-            monthly_sales=body.target_monthly_sales,
+            quarterly_sales=body.target_quarterly_sales,
             quarter_num=body.quarter_num,
         )
     except FileNotFoundError as exc:

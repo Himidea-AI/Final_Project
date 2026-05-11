@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 
 export type TrendDirection = 'up' | 'down' | 'flat';
 
@@ -15,9 +15,9 @@ export function computeTrendDirection(data: number[]): TrendDirection {
 }
 
 const TREND_COLOR: Record<TrendDirection, string> = {
-  up: '#22c55e',
-  down: '#ef4444',
-  flat: '#a8a29e',
+  up: 'var(--success)',
+  down: 'var(--danger)',
+  flat: 'var(--muted-foreground)',
 };
 
 interface Props {
@@ -25,13 +25,16 @@ interface Props {
   width?: number;
   height?: number;
   data: number[];
+  /** 라인 색상 강제 지정. 미지정 시 트렌드(up/down/flat)별 색 fallback. */
+  color?: string;
 }
 
-export function Sparkline({ data, width, height = 24 }: Props) {
+export function Sparkline({ data, width, height = 24, color }: Props) {
   if (!data || data.length === 0) {
-    return <span className="text-[0.625rem] text-stone-500">—</span>;
+    return <span className="text-[0.625rem] text-muted-foreground">—</span>;
   }
   const dir = computeTrendDirection(data);
+  const strokeColor = color ?? TREND_COLOR[dir];
   const points = data.map((v, i) => ({ i, v }));
   // width 미지정이면 부모 100%로 늘어남 (caller가 height만 주는 카드 레이아웃 대응)
   const containerStyle: CSSProperties =
@@ -40,10 +43,23 @@ export function Sparkline({ data, width, height = 24 }: Props) {
     <div style={containerStyle}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={points} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
+          <Tooltip
+            cursor={{ stroke: 'var(--muted-foreground)', strokeDasharray: '3 3' }}
+            contentStyle={{
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '0.375rem',
+              fontSize: '0.6875rem',
+              padding: '4px 8px',
+            }}
+            labelFormatter={() => ''}
+            formatter={(value: number) => [value.toFixed(1), '']}
+            separator=""
+          />
           <Line
             type="monotone"
             dataKey="v"
-            stroke={TREND_COLOR[dir]}
+            stroke={strokeColor}
             strokeWidth={1.5}
             dot={false}
             isAnimationActive={false}

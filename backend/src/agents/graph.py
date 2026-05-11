@@ -17,7 +17,7 @@ from src.schemas.state import AgentState
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
 # 전체 파이프라인 토큰 예산 (입력+출력 합산 추정치 기준)
-# gpt-4.1-mini: 입력 $0.15/1M, 출력 $0.60/1M
+# gpt-5.4-nano: 입력 $0.10/1M, 출력 $0.40/1M (placeholder, 4.1-nano 동등 가정)
 _TOKEN_BUDGET_PER_RUN = 16000  # 토큰 초과 시 경고 로그 (legal 에이전트 평균 7k, 전체 평균 10k)
 
 
@@ -75,22 +75,68 @@ async def llm_analysis_phase_node(state: AgentState) -> dict:
     """
     Phase 2: 6개 LLM 에이전트 병렬 실행
 
-    target_district를 Phase 1에서 확정된 winner_district로 덮어쓰고 실행.
-    이로써 시장/인구/법률 분석 데이터가 추천 1위 동을 기준으로 생성됨.
+    target_district 결정 우선순위 (2026-05-06 변경):
+      1. spot 1위 동 (실제 입주 가능 매물 위치) — winner 동 spot 우선,
+         부족 시 top3 동 spot 으로 채움 (frontend buildBestVacancies 와 동일 로직).
+      2. winner_district fallback (vacancy_spots 데이터 자체 없을 때).
+
+    의도: winner=망원2동(매물 0건) + spot 1위=망원1동(인접 동 매물) 케이스에서
+    분석 결과 (시장/인구/법률 등) 가 winner 가 아닌 실제 매물 동 기준으로 산출되어
+    화면 정보 일치 (사용자 요구).
+
+    winner_district 자체는 그대로 보존 (노란 강조·라벨 표시용).
     """
     t_start = time.perf_counter()
 
-    # winner_district를 분석 기준동으로 사용 (Phase 1에서 확정)
     winner = state.get("winner_district") or state.get("target_district", "")
     original_target = state.get("target_district", "")
-    if winner and winner != original_target:
+    top3 = state.get("top_3_candidates") or []
+    vacancy_spots = state.get("vacancy_spots") or []
+
+    def _resolve_spot_dong() -> str:
+        """spot 1위 동 결정 — frontend buildBestVacancies 와 동일 로직."""
+
+        def _is_valid(s: dict) -> bool:
+            lat, lon = s.get("lat"), s.get("lon")
+            return isinstance(lat, (int, float)) and isinstance(lon, (int, float))
+
+        # 1순위: winner 동 spot 중 score(또는 listing_count) 1위
+        winner_spots = [s for s in vacancy_spots if s.get("dong_name") == winner and _is_valid(s)]
+        if winner_spots:
+            winner_spots.sort(
+                key=lambda s: (
+                    -(s.get("score") if isinstance(s.get("score"), (int, float)) else float("-inf")),
+                    -(s.get("listing_count") or 0),
+                )
+            )
+            return str(winner_spots[0].get("dong_name") or winner)
+        # 2순위: top3 동 spot 중 listing_count 1위 (winner 동 매물 0건 케이스)
+        top3_set = set(top3)
+        top3_spots = [
+            s for s in vacancy_spots if s.get("dong_name") in top3_set and s.get("dong_name") != winner and _is_valid(s)
+        ]
+        if top3_spots:
+            top3_spots.sort(key=lambda s: -(s.get("listing_count") or 0))
+            return str(top3_spots[0].get("dong_name") or winner)
+        return winner  # fallback
+
+    spot_dong = _resolve_spot_dong()
+    analysis_target = spot_dong or winner
+
+    if winner and analysis_target != winner:
+        print(
+            f"--- [PHASE 2] target_district 교체: {original_target} → {analysis_target} "
+            f"(winner={winner}, spot 1위 동 기준 분석 — winner 동 매물 부족) ---"
+        )
+    elif winner and winner != original_target:
         print(f"--- [PHASE 2] target_district 교체: {original_target} → {winner} (winner 기준 분석) ---")
     else:
-        print(f"--- [PHASE 2] target_district={winner} (변경 없음) ---")
+        print(f"--- [PHASE 2] target_district={analysis_target} (변경 없음) ---")
 
-    # winner를 target_district로 주입한 상태로 LLM 에이전트 실행
+    # spot 1위 동을 target_district로 주입한 상태로 LLM 에이전트 실행.
+    # winner_district 는 그대로 보존 (별도 표시용).
     analysis_state = dict(state)
-    analysis_state["target_district"] = winner
+    analysis_state["target_district"] = analysis_target
 
     print("--- [PHASE 2] 6개 LLM 에이전트 병렬 실행 시작 ---")
     (

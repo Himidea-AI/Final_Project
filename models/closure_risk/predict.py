@@ -23,9 +23,7 @@ from models.lstm_forecast.data_prep import (
     DB_URL,
     EXCLUDE_COMBOS,
     ExcludedComboError,
-    build_timeseries,
-    load_sales_data,
-    load_store_data,
+    load_timeseries,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,11 +81,24 @@ _cache: dict = {}
 
 
 def _load_models() -> tuple:
-    """LightGBM, TCNClassifier, 앙상블 가중치 로드 (캐시)."""
+    """LightGBM, TCNClassifier, 앙상블 가중치, scaler, Stage 1 prior, calibrator 로드 (캐시).
+
+    Returns 6-tuple: (lgbm, tcn, ensemble_w, scaler, stage1_data, calibrator)
+    stage1_data is dict {"model": LGBMRegressor, "agg": pd.DataFrame} or None if pkl missing.
+    calibrator is sklearn.isotonic.IsotonicRegression or None (D-3, 2026-05-01).
+    """
     global _cache  # noqa: PLW0603
 
     if _cache:
-        return _cache["lgbm"], _cache["tcn"], _cache["weights"], _cache["scaler"]
+        return (
+            _cache["lgbm"],
+            _cache["tcn"],
+            _cache["weights"],
+            _cache["scaler"],
+            _cache.get("stage1"),
+            _cache.get("calibrator"),
+            _cache.get("b3_lookup"),
+        )
 
     lgbm_path = WEIGHTS_DIR / "closure_risk_lgbm.pkl"
     tcn_path = WEIGHTS_DIR / "closure_risk_tcn.pt"
@@ -109,7 +120,6 @@ def _load_models() -> tuple:
         with open(ew_path, "rb") as f:
             ensemble_w = pickle.load(f)  # noqa: S301
 
-    # TCN 모델 — input_size는 ensemble_weights에 저장된 값 사용 (기본 34)
     import torch as _torch
 
     _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
@@ -119,12 +129,58 @@ def _load_models() -> tuple:
     tcn.to(_device)
     tcn.eval()
 
-    # TCN 스케일러 — 학습 시 저장된 스케일러 로드 (위에서 존재 보장됨)
     with open(scaler_path, "rb") as f:
         tcn_scaler = pickle.load(f)  # noqa: S301
 
-    _cache.update({"lgbm": lgbm, "tcn": tcn, "weights": ensemble_w, "scaler": tcn_scaler})
-    return lgbm, tcn, ensemble_w, tcn_scaler
+    # A-2 Stage 1 prior — graceful fallback if missing
+    stage1_path = WEIGHTS_DIR / "stage1_industry_prior.pkl"
+    stage1_data = None
+    if stage1_path.exists():
+        try:
+            with open(stage1_path, "rb") as f:
+                stage1_data = pickle.load(f)  # noqa: S301
+            logger.info("Stage 1 industry prior 로드: %s", stage1_path)
+        except Exception as e:
+            logger.warning("Stage 1 pkl load 실패 — fallback 0.0: %s", e)
+            stage1_data = None
+
+    # D-3 isotonic calibrator — graceful fallback (2026-05-01)
+    cal_path = WEIGHTS_DIR / "ensemble_calibrator.pkl"
+    calibrator = None
+    if cal_path.exists():
+        try:
+            with open(cal_path, "rb") as f:
+                calibrator = pickle.load(f)  # noqa: S301
+            if calibrator is not None:
+                logger.info("ensemble calibrator 로드: %s", cal_path)
+        except Exception as e:
+            logger.warning("calibrator pkl load 실패 — raw proba 사용: %s", e)
+            calibrator = None
+
+    # Sprint 9 (2026-05-01): B-3 dong residual lookup — graceful fallback
+    b3_path = WEIGHTS_DIR / "b3_dong_residual_lookup.pkl"
+    b3_lookup = None
+    if b3_path.exists():
+        try:
+            with open(b3_path, "rb") as f:
+                b3_lookup = pickle.load(f)  # noqa: S301
+            logger.info("B-3 dong residual lookup 로드: %s", b3_path)
+        except Exception as e:
+            logger.warning("B-3 lookup pkl load 실패 — residual=0 fallback: %s", e)
+            b3_lookup = None
+
+    _cache.update(
+        {
+            "lgbm": lgbm,
+            "tcn": tcn,
+            "weights": ensemble_w,
+            "scaler": tcn_scaler,
+            "stage1": stage1_data,
+            "calibrator": calibrator,
+            "b3_lookup": b3_lookup,
+        }
+    )
+    return lgbm, tcn, ensemble_w, tcn_scaler, stage1_data, calibrator, b3_lookup
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +212,9 @@ _FEATURE_KO = {
     "total_pop_yoy": "거주인구 전년동기 변화율",
     "holiday_count": "분기 공휴일 수",
     "cpi_index_yoy": "물가 전년동기 변화율",
+    # Stage 1 / B-3 (2026-05-04 추가) — LGBM 학습 피처에 포함되어 SHAP top_signals 노출됨
+    "industry_prior_pred": "업종 평균 폐업 신호",
+    "dong_closure_rate_residual_lag1": "직전 분기 폐업률",
 }
 
 _RISK_SUMMARY_TEMPLATES: dict[str, dict[str, str]] = {
@@ -412,17 +471,16 @@ def predict(
     window_size = 4
 
     try:
-        lgbm_model, tcn_model, ensemble_w, tcn_scaler = _load_models()
+        lgbm_model, tcn_model, ensemble_w, tcn_scaler, stage1_data, calibrator, b3_lookup = _load_models()
     except FileNotFoundError as e:
         logger.warning("모델 없음 — mock 반환: %s", e)
         return _mock_result()
 
-    # 과거 데이터 로드
+    # 과거 데이터 로드 — load_timeseries 가 build_timeseries 결과까지 TTL=300s 캐싱
+    # (TCN predict 와 동일 패턴: 4-동 병렬 호출 시 build_timeseries 중복 실행 방지)
     dong_prefix = dong_code[:5] if len(dong_code) >= 5 else dong_code
     try:
-        sales_df = load_sales_data(db_url=db_url, dong_prefix=dong_prefix)
-        store_df = load_store_data(db_url=db_url, dong_prefix=dong_prefix)
-        ts = build_timeseries(sales_df, store_df)
+        ts = load_timeseries(db_url=db_url, dong_prefix=dong_prefix)
     except Exception as e:
         logger.warning("데이터 로드 실패 — mock 반환: %s", e)
         return _mock_result()
@@ -445,7 +503,38 @@ def predict(
         return _mock_result()
 
     latest = grp_eng.iloc[-1]
-    x_lgbm = np.array([latest.get(f, 0.0) for f in LGBM_FEATURES], dtype=np.float32)
+
+    # A-2 Stage 1 prior lookup
+    industry_prior_pred = 0.0
+    if stage1_data is not None:
+        agg = stage1_data["agg"]
+        latest_quarter = int(latest["quarter"])
+        matching = agg[(agg["industry_code"] == industry_code) & (agg["quarter"] == latest_quarter)]
+        if len(matching) > 0:
+            if "industry_prior_pred" in matching.columns:
+                industry_prior_pred = float(matching["industry_prior_pred"].iloc[0])
+            else:
+                # agg 에 prediction 미저장 → on-the-fly
+                from models.closure_risk.stage1_industry_prior import STAGE1_FEATURES
+
+                X_stage1 = matching[STAGE1_FEATURES].fillna(0).values
+                industry_prior_pred = float(stage1_data["model"].predict(X_stage1)[0])
+
+    # Sprint 9 (2026-05-01): B-3 dong residual lookup at inference
+    dong_residual_lag1 = 0.0
+    if b3_lookup is not None:
+        ind_mean = b3_lookup.get("industry_mean_lag1", {}).get(industry_code, b3_lookup.get("global_mean_lag1", 0.0))
+        closure_lag1 = float(latest.get("closure_rate_lag1", 0.0) or 0.0)
+        dong_residual_lag1 = closure_lag1 - ind_mean
+
+    def _feature_value(f: str) -> float:
+        if f == "industry_prior_pred":
+            return industry_prior_pred
+        if f == "dong_closure_rate_residual_lag1":
+            return dong_residual_lag1
+        return float(latest.get(f, 0.0) or 0.0)
+
+    x_lgbm = np.array([_feature_value(f) for f in LGBM_FEATURES], dtype=np.float32)
     p_lgbm = float(lgbm_model.predict_proba(x_lgbm.reshape(1, -1))[0, 1])
 
     # --- TCN 브랜치 ---
@@ -468,10 +557,19 @@ def predict(
     # --- 앙상블 ---
     w_lgbm = ensemble_w.get("w_lgbm", 0.5)
     w_tcn = ensemble_w.get("w_tcn", 0.5)
-    risk_score = round((w_lgbm * p_lgbm + w_tcn * p_tcn) / (w_lgbm + w_tcn), 4)
+    raw_score = (w_lgbm * p_lgbm + w_tcn * p_tcn) / (w_lgbm + w_tcn)
+
+    # D-3 isotonic calibration (2026-05-01) — graceful fallback if calibrator None
+    if calibrator is not None:
+        risk_score = float(calibrator.transform([raw_score])[0])
+    else:
+        risk_score = raw_score
+    risk_score = round(risk_score, 4)
 
     # --- SHAP (LightGBM + TCN 분리) ---
-    lgbm_signals = _top_signals(lgbm_model, x_lgbm, LGBM_FEATURES)
+    # LightGBM: 전체 피처(15개) SHAP 모두 반환 — frontend heatmap 에서 작은 contribution 도
+    # alpha 약하게 시각화하여 "이 피처는 위험에 영향 없음" 도 정직히 표현.
+    lgbm_signals = _top_signals(lgbm_model, x_lgbm, LGBM_FEATURES, top_n=len(LGBM_FEATURES))
     tcn_signals = _top_signals_tcn(tcn_model, x_tcn, tcn_features)
 
     return {

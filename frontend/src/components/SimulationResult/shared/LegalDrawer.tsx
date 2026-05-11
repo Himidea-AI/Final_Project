@@ -1,12 +1,41 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { LegalChecklistItem } from '../../../types';
+
+const STORAGE_PREFIX = 'legal-checklist-v1:';
+
+function loadChecked(typeKey: string): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + typeKey);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveChecked(typeKey: string, state: Record<string, boolean>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STORAGE_PREFIX + typeKey, JSON.stringify(state));
+  } catch {
+    /* quota or privacy mode — ignore */
+  }
+}
 
 interface LegalRiskDetail {
   type: string;
   risk_level: 'HIGH' | 'MEDIUM' | 'LOW';
-  articles?: { article_ref: string; content: string }[];
+  summary?: string;
+  articles?: {
+    article_ref: string;
+    content: string;
+    kind?: 'article' | 'precedent';
+    /** B 단계 — backend LLM 풀어쓰기 결과 (케이스 맞춤 1~2문장). */
+    explanation?: string;
+  }[];
   checklist?: LegalChecklistItem[];
   recommendation?: string;
 }
@@ -18,12 +47,31 @@ interface LegalDrawerProps {
 }
 
 const RISK_BADGE: Record<string, { cls: string; label: string }> = {
-  HIGH: { cls: 'bg-rose-500/10 text-rose-400 border-rose-500/30', label: '필수이행' },
-  MEDIUM: { cls: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30', label: '확인필요' },
-  LOW: { cls: 'bg-green-500/10 text-green-400 border-green-500/30', label: '참고사항' },
+  HIGH: { cls: 'bg-danger/10 text-danger border-danger/30', label: '필수이행' },
+  MEDIUM: { cls: 'bg-warning/10 text-warning border-warning/30', label: '확인필요' },
+  LOW: { cls: 'bg-success/10 text-success border-success/30', label: '참고사항' },
 };
 
 export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
+  const typeKey = risk?.type ?? '';
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!open || !typeKey) return;
+    setChecked(loadChecked(typeKey));
+  }, [open, typeKey]);
+
+  const toggleItem = useCallback(
+    (itemKey: string) => {
+      setChecked((prev) => {
+        const next = { ...prev, [itemKey]: !prev[itemKey] };
+        if (typeKey) saveChecked(typeKey, next);
+        return next;
+      });
+    },
+    [typeKey],
+  );
+
   useEffect(() => {
     if (!open) return;
     const handleEsc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -35,7 +83,8 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
     };
   }, [open, onClose]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <AnimatePresence>
       {open && risk && (
         <>
@@ -43,7 +92,7 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/50"
+            className="fixed inset-0 z-[100] bg-black/50"
             onClick={onClose}
           />
           <motion.div
@@ -54,11 +103,11 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="legal-drawer-title"
-            className="fixed right-0 top-0 z-50 h-full w-full max-w-[480px] overflow-y-auto bg-stone-900 border-l border-stone-700"
+            className="fixed right-0 top-20 bottom-0 z-[110] flex w-full max-w-[480px] flex-col bg-card border-l border-border shadow-2xl"
           >
-            <div className="flex items-start justify-between border-b border-stone-700 p-6">
+            <div className="flex shrink-0 items-start justify-between border-b-2 border-border bg-card p-6 shadow-sm">
               <div>
-                <h2 id="legal-drawer-title" className="text-xl font-semibold text-stone-100">
+                <h2 id="legal-drawer-title" className="text-xl font-semibold text-foreground">
                   {risk.type}
                 </h2>
                 <span
@@ -70,67 +119,179 @@ export function LegalDrawer({ risk, open, onClose }: LegalDrawerProps) {
               <button
                 onClick={onClose}
                 aria-label="닫기"
-                className="text-stone-400 hover:text-stone-100"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-6">
+              {/* 1. 평가 요약 — 사용자 친화 케이스 맞춤 1~2문장 (primary) */}
+              {risk.summary && (
+                <section>
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                    이 케이스 평가
+                  </h3>
+                  <p className="text-sm text-foreground leading-relaxed font-medium">
+                    {risk.summary}
+                  </p>
+                </section>
+              )}
+
+              {/* 2. AI 권고 — 행동 체크리스트 (primary) */}
               {risk.recommendation && (
                 <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-stone-400 mb-3">
-                    AI 권고
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                    어떻게 해야 하나
                   </h3>
-                  <p className="text-sm text-stone-300 leading-relaxed">{risk.recommendation}</p>
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
+                    {risk.recommendation}
+                  </p>
                 </section>
               )}
 
               {risk.checklist && risk.checklist.length > 0 && (
                 <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-stone-400 mb-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
                     창업 체크리스트
                   </h3>
                   <ul className="space-y-2">
-                    {risk.checklist.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          disabled
-                          className="mt-1 shrink-0 cursor-not-allowed"
-                          aria-label={item.text}
-                        />
-                        <span className="text-stone-300">
-                          {item.text}
-                          {item.isRequired && <span className="ml-1 text-rose-400">*</span>}
-                        </span>
-                      </li>
-                    ))}
+                    {risk.checklist.map((item, i) => {
+                      const itemKey = `${i}:${item.text}`;
+                      const isChecked = !!checked[itemKey];
+                      return (
+                        <li key={itemKey} className="flex items-start gap-2 text-sm">
+                          <input
+                            id={`legal-check-${typeKey}-${i}`}
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleItem(itemKey)}
+                            className="mt-1 shrink-0 cursor-pointer accent-primary"
+                            aria-label={item.text}
+                          />
+                          <label
+                            htmlFor={`legal-check-${typeKey}-${i}`}
+                            className={`cursor-pointer select-none ${
+                              isChecked ? 'text-muted-foreground line-through' : 'text-foreground'
+                            }`}
+                          >
+                            {item.text}
+                            {item.isRequired && <span className="ml-1 text-danger">*</span>}
+                          </label>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               )}
 
-              {risk.articles && risk.articles.length > 0 && (
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-stone-400 mb-3">
-                    조항 본문
-                  </h3>
-                  <div className="space-y-3">
-                    {risk.articles.map((a, i) => (
-                      <div key={i} className="border-l-2 border-indigo-500 pl-4 py-2">
-                        <div className="text-sm font-semibold text-indigo-500">{a.article_ref}</div>
-                        <div className="mt-1 text-sm text-stone-300 whitespace-pre-line leading-relaxed">
-                          {a.content}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+              {/* 3. 조문/판례 — secondary, default 접힘 (사용자 요청 시만 펼침) */}
+              {(() => {
+                const allArticles = risk.articles ?? [];
+                const lawArticles = allArticles.filter((a) => (a.kind ?? 'article') === 'article');
+                const precedents = allArticles.filter((a) => a.kind === 'precedent');
+                if (lawArticles.length === 0 && precedents.length === 0) return null;
+                return (
+                  <details className="rounded border border-border bg-muted/30">
+                    <summary className="cursor-pointer select-none p-3 text-sm font-semibold text-muted-foreground hover:bg-muted/50">
+                      조문 / 판례 원문 보기 ({lawArticles.length + precedents.length}건)
+                    </summary>
+                    <div className="space-y-4 p-4">
+                      {lawArticles.length > 0 && (
+                        <section>
+                          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+                            조항 본문
+                          </h4>
+                          <div className="space-y-3">
+                            {lawArticles.map((a, i) => (
+                              <div key={`art-${i}`} className="border-l-2 border-primary pl-4 py-2">
+                                <div className="text-sm font-semibold text-primary">
+                                  {a.article_ref}
+                                </div>
+                                {/* B 단계: explanation primary — 케이스 맞춤 풀어쓰기 (큰 글씨). */}
+                                {a.explanation && (
+                                  <div className="mt-1 text-sm text-foreground font-medium leading-relaxed">
+                                    {a.explanation}
+                                  </div>
+                                )}
+                                {/* 조문 원문은 secondary — explanation 있으면 details 토글, 없으면 fallback 으로 직접 노출. */}
+                                {a.explanation ? (
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                      조문 원문 보기
+                                    </summary>
+                                    <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                      {a.content.length > 300
+                                        ? a.content.slice(0, 300) + '…'
+                                        : a.content}
+                                    </div>
+                                  </details>
+                                ) : (
+                                  <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                    {a.content.length > 300
+                                      ? a.content.slice(0, 300) + '…'
+                                      : a.content}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {precedents.length > 0 && (
+                        <section>
+                          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+                            참고 판례
+                          </h4>
+                          <div className="space-y-3">
+                            {precedents.map((a, i) => (
+                              <div
+                                key={`prec-${i}`}
+                                className="border-l-2 border-warning/60 pl-4 py-2 bg-warning/5 rounded"
+                              >
+                                <div className="flex items-center gap-1 text-sm font-semibold text-warning">
+                                  <span aria-hidden="true">⚖</span>
+                                  <span>{a.article_ref}</span>
+                                </div>
+                                {/* B 단계: explanation primary — 케이스 맞춤 풀어쓰기. */}
+                                {a.explanation && (
+                                  <div className="mt-1 text-sm text-foreground font-medium leading-relaxed">
+                                    {a.explanation}
+                                  </div>
+                                )}
+                                {a.explanation ? (
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                      판례 원문 보기
+                                    </summary>
+                                    <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                      {a.content.length > 300
+                                        ? a.content.slice(0, 300) + '…'
+                                        : a.content}
+                                    </div>
+                                  </details>
+                                ) : (
+                                  <div className="mt-1 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                    {a.content.length > 300
+                                      ? a.content.slice(0, 300) + '…'
+                                      : a.content}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  </details>
+                );
+              })()}
             </div>
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

@@ -134,7 +134,12 @@ class GolmokCommercial(Base):
     quarter = Column(Integer, index=True, comment="기준 분기 (YYYYQ)")
     trdar_code = Column(String(10), comment="상권 코드")
     data_type = Column(String(20), index=True, comment="데이터 유형 (sales/store/population 등)")
-    industry_code = Column(String(20), default="ALL", comment="업종 코드 (기본값: ALL)")
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        default="ALL",
+        comment="업종 코드 (기본값: ALL)",
+    )
     metrics = Column(JSONB, comment="지표 데이터 (JSON)")
 
 
@@ -146,7 +151,12 @@ class DistrictSales(Base):
     # 복합 PK
     quarter = Column(Integer, primary_key=True, comment="기준 분기 (YYYYQ)")
     dong_code = Column(String(10), primary_key=True, index=True, comment="행정동 코드")
-    industry_code = Column(String(20), primary_key=True, comment="업종 코드")
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+        comment="업종 코드",
+    )
 
     dong_name = Column(String(20), comment="행정동명")
     industry_name = Column(String(50), comment="업종명")
@@ -251,7 +261,12 @@ class StoreQuarterly(Base):
     # 복합 PK
     quarter = Column(Integer, primary_key=True, comment="기준 분기 (YYYYQ)")
     dong_code = Column(String(10), primary_key=True, index=True, comment="행정동 코드")
-    industry_code = Column(String(20), primary_key=True, comment="업종 코드")
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+        comment="업종 코드",
+    )
 
     dong_name = Column(String(20), comment="행정동명")
     industry_name = Column(String(50), comment="업종명")
@@ -308,7 +323,16 @@ class GolmokRent(Base):
 
 
 class DongMapping(Base):
-    """행정동 매핑 테이블 — 동코드 ↔ 동명, 인구, 상권 코드 매핑 (마포 16동 운영 마스터)"""
+    """행정동 매핑 테이블 — 동코드 ↔ 동명, 인구, 상권 코드 매핑 (마포 16동 운영 마스터)
+
+    ⚠️ FK 가이드 (dong_code 이중 master 혼선 주의):
+    - **마포 한정** 데이터(16 row): district_sales/store_quarterly/store_info/
+      living_population/living_population_grid/mapo_resident_pop/golmok_rent/
+      seoul_adstrd_fclty 가 이 테이블 참조.
+    - **서울 전역** 데이터(431 row): seoul_dong_master 참조 (아래 클래스).
+    - 같은 `dong_code` 컬럼이 테이블마다 다른 master 가리킴 — 새 ETL 추가 시
+      범위(마포/서울)에 맞춰 FK 대상 결정.
+    """
 
     __tablename__ = "dong_mapping"
 
@@ -321,11 +345,40 @@ class DongMapping(Base):
     trdar_codes = Column(JSONB, comment="상권 코드 목록 (JSON 배열)")
 
 
+class IndustryMaster(Base):
+    """업종 마스터 — 업종 코드 ↔ 업종명 매핑 (101 row).
+
+    Alembic 마이그레이션 정의 없음 (직접 DDL 또는 외부 시드 스크립트로 생성).
+    DB 측 FK constraint **미존재** (alembic versions 검색 0건 — 2026-05-05 검증).
+
+    자식 industry_code 컬럼 type:
+      - String(20): district_sales, store_quarterly, district_sales_seoul,
+        seoul_adstrd_stor, seoul_signgu_selng, seoul_signgu_stor, golmok_commercial
+      - Text: golmok_sales, golmok_stores, seoul_district_sales,
+        seoul_district_stores, seoul_training_dataset
+      → PostgreSQL string family 호환 (Text/VARCHAR 모두 String(20) PK 참조 가능)
+
+    ORM ForeignKey 동기화 (2026-05-05): 자식 13개에 ForeignKey 추가하여 양방향
+    lazy load + relationship() navigation 가능. DB 레벨 enforcement 부재 →
+    별도 alembic 마이그레이션으로 NOT VALID + VALIDATE 추가 권장.
+    """
+
+    __tablename__ = "industry_master"
+
+    industry_code = Column(String(20), primary_key=True, comment="업종 코드 (CS100001~CS100010, ALL 등)")
+    industry_name = Column(String(100), nullable=False, comment="업종명 (한글명, 예: 한식음식점)")
+    industry_name_alt = Column(String(100), comment="업종명 대체 표기 (별칭/영문명)")
+    created_at = Column(DateTime, server_default=func.now(), comment="생성 일시")
+
+
 class SeoulDongMaster(Base):
     """서울 행정동 마스터 — 서울 전체 ~425개 행정동 (8자리 코드, ML/분석용)
 
     alembic d1a2b3c4e5f6 (B-3.1)에서 신설. 마이그레이션이 자식 테이블 union으로 적재.
     11개 자식 테이블(seoul_*, district_sales_seoul, dong_subway_access 등)이 FK 참조.
+
+    ⚠️ DongMapping (마포 16동) 과 dong_code 동일 컬럼 — 자식 테이블별 FK 대상 다름.
+    DongMapping 클래스 docstring 참고.
     """
 
     __tablename__ = "seoul_dong_master"
@@ -374,33 +427,6 @@ class DongCentroid(Base):
 
 
 # ---------------------------------------------------------------------------
-# 시뮬레이션 결과 테이블
-# ---------------------------------------------------------------------------
-
-
-class SimulationResult(Base):
-    """시뮬레이션 결과 — 프랜차이즈 출점 분석 요청 및 결과 저장"""
-
-    __tablename__ = "simulation_result"
-
-    request_id = Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-        comment="요청 고유 ID (UUID v4)",
-    )
-    created_at = Column(
-        Date,
-        server_default=func.now(),
-        comment="요청 생성 일시",
-    )
-    workspace_id = Column(String(100), index=True, comment="워크스페이스 ID (멀티테넌시)")
-    input_params = Column(JSONB, comment="시뮬레이션 입력 파라미터 (JSON)")
-    output_result = Column(JSONB, comment="시뮬레이션 분석 결과 (JSON)")
-    status = Column(String(20), default="pending", comment="처리 상태 (pending/running/done/error)")
-
-
-# ---------------------------------------------------------------------------
 # 회원 관련 테이블
 # ---------------------------------------------------------------------------
 
@@ -424,8 +450,8 @@ class User(Base):
     phone = Column(String(20), nullable=False, comment="연락처 (010-0000-0000)")
     store_count = Column(Integer, comment="현재 가맹점 수")
     password_hash = Column(String(255), nullable=False, comment="비밀번호 해시")
-    plan = Column(String(20), default="starter", comment="요금제 (starter/growth)")
-    agree_terms = Column(Boolean, default=False, comment="이용약관 동의 여부")
+    plan = Column(String(20), nullable=False, default="starter", comment="요금제 (starter/growth)")
+    agree_terms = Column(Boolean, nullable=False, default=False, comment="이용약관 동의 여부")
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -442,15 +468,24 @@ class User(Base):
     )
     is_active = Column(
         Boolean,
+        nullable=False,
         server_default=text("true"),
         default=True,
         comment="계정 활성 여부 (소프트 삭제: false=탈퇴)",
     )
     email_verified = Column(
         Boolean,
+        nullable=False,
         server_default=text("false"),
         default=False,
         comment="이메일 인증 완료 여부",
+    )
+    is_superadmin = Column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        default=False,
+        comment="전체 가맹본부 simulation 데이터 조회 권한 (기본 false). 자동 부여 금지.",
     )
 
 
@@ -492,6 +527,33 @@ class BizBrandMapping(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         comment="등록 일시",
+    )
+
+
+class MartBrandTerritory(Base):
+    """브랜드 영업지역 데이터 마트 — FTC 정보공개서·가맹계약서 추출 결과 (11,849 row).
+
+    영업지역(territory) 텍스트와 표준 거리(m) 를 brand+corp+yr 단위로 적재.
+    extraction_method/confidence 로 추출 품질 추적.
+    consumer 미배선 (raw SQL 사용 0건) — 향후 territory 침해 분석 로직 배선 예정.
+    Alembic 정의 없음 (외부 ETL 스크립트로 생성).
+    """
+
+    __tablename__ = "mart_brand_territory"
+    __table_args__ = (UniqueConstraint("brand_name", "corp_name", "yr", name="uq_mart_brand_territory_brand_corp_yr"),)
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="자동증가 PK")
+    brand_name = Column(Text, nullable=False, index=True, comment="브랜드명")
+    corp_name = Column(Text, comment="법인명")
+    yr = Column(Integer, nullable=False, comment="기준 연도")
+    territory_text = Column(Text, comment="영업지역 텍스트 설명 (가맹계약서 발췌)")
+    territory_distance_m = Column(Float, index=True, comment="영업지역 표준 반경 (m)")
+    extraction_method = Column(Text, comment="추출 방법 (not_in_ftc_list / ftc_text / contract_pdf 등)")
+    extraction_confidence = Column(Float, comment="추출 신뢰도 (0~1)")
+    extracted_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="추출 일시",
     )
 
 
@@ -564,9 +626,9 @@ class InviteCode(Base):
         nullable=False,
         comment="발급한 팀장 ID",
     )
-    max_uses = Column(Integer, default=10, comment="최대 사용 가능 횟수")
-    used_count = Column(Integer, default=0, comment="현재 사용된 횟수")
-    is_active = Column(Boolean, default=True, comment="활성 여부")
+    max_uses = Column(Integer, nullable=False, default=10, comment="최대 사용 가능 횟수")
+    used_count = Column(Integer, nullable=False, default=0, comment="현재 사용된 횟수")
+    is_active = Column(Boolean, nullable=False, default=True, comment="활성 여부")
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -603,10 +665,11 @@ class ManagerUser(Base):
     email = Column(String(100), unique=True, nullable=False, index=True, comment="이메일")
     phone = Column(String(20), nullable=False, comment="연락처")
     password_hash = Column(String(255), nullable=False, comment="비밀번호 해시")
-    is_active = Column(Boolean, default=True, comment="활성 여부")
-    is_approved = Column(Boolean, default=False, comment="팀장 승인 여부")
+    is_active = Column(Boolean, nullable=False, default=True, comment="활성 여부")
+    is_approved = Column(Boolean, nullable=False, default=False, comment="팀장 승인 여부")
     email_verified = Column(
         Boolean,
+        nullable=False,
         server_default=text("false"),
         default=False,
         comment="이메일 인증 완료 여부",
@@ -632,18 +695,6 @@ class ManagerUser(Base):
 # ---------------------------------------------------------------------------
 
 
-class BrandLogo(Base):
-    """브랜드 로고 수집 결과"""
-
-    __tablename__ = "brand_logo"
-
-    brand_name = Column(String(100), primary_key=True, comment="브랜드명")
-    domain = Column(String(100), comment="도메인")
-    logo_url = Column(Text, comment="로고 URL")
-    logo_source = Column(String(30), comment="수집 소스")
-    collected_at = Column(DateTime(timezone=True), server_default=func.now(), comment="수집 시각")
-
-
 class CpiDiningQuarterly(Base):
     """분기별 외식 소비자물가지수 (통계청)"""
 
@@ -662,7 +713,11 @@ class GolmokSales(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True, comment="분기 (YYYYQ)")
     trdar_code = Column(Text, index=True, comment="상권 코드")
-    industry_code = Column(Text, comment="업종 코드")
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        comment="업종 코드",
+    )
     monthly_sales = Column(BigInteger, comment="월평균 매출")
     monthly_count = Column(BigInteger, comment="월평균 건수")
     weekday_sales = Column(BigInteger)
@@ -721,7 +776,11 @@ class GolmokStores(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True, comment="분기 (YYYYQ)")
     trdar_code = Column(Text, index=True, comment="상권 코드")
-    industry_code = Column(Text, comment="업종 코드")
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        comment="업종 코드",
+    )
     store_count = Column(BigInteger, comment="점포 수")
     similar_store_count = Column(BigInteger, comment="유사 점포 수")
     open_rate = Column(BigInteger, comment="개업률")
@@ -744,15 +803,25 @@ class MapoResidentPop(Base):
 
 
 class SeoulDistrictSales(Base):
-    """서울 전체 행정동 분기 매출 — 사전학습용"""
+    """서울 전체 행정동 분기 매출 — 사전학습용
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료 (NOT VALID + VALIDATE).
+    """
 
     __tablename__ = "seoul_district_sales"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
-    industry_code = Column(Text)
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(BigInteger)
@@ -805,15 +874,25 @@ class SeoulDistrictSales(Base):
 
 
 class SeoulDistrictStores(Base):
-    """서울 전체 행정동 분기 점포 — 사전학습용"""
+    """서울 전체 행정동 분기 점포 — 사전학습용
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_district_stores"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
-    industry_code = Column(Text)
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+    )
     industry_name = Column(Text)
     store_count = Column(BigInteger)
     similar_store_count = Column(BigInteger)
@@ -824,14 +903,21 @@ class SeoulDistrictStores(Base):
 
 
 class SeoulGolmokRent(Base):
-    """서울 전체 골목상권 환산임대료 — 사전학습용"""
+    """서울 전체 골목상권 환산임대료 — 사전학습용
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_golmok_rent"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     year = Column(BigInteger, index=True)
     quarter = Column(BigInteger)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
     gubun = Column(Text)
     rent_1f = Column(Float)
@@ -841,26 +927,43 @@ class SeoulGolmokRent(Base):
 
 
 class SeoulPopulationQuarterly(Base):
-    """서울 행정동별 분기 인구"""
+    """서울 행정동별 분기 인구
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_population_quarterly"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     total_pop = Column(Float)
 
 
 class SeoulTrainingDataset(Base):
-    """서울 LSTM 사전학습용 통합 데이터셋"""
+    """서울 LSTM 사전학습용 통합 데이터셋
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_training_dataset"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="자동증가 PK")
     quarter = Column(BigInteger, index=True)
-    dong_code = Column(Text, index=True)
+    dong_code = Column(
+        Text,
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
-    industry_code = Column(Text)
+    industry_code = Column(
+        Text,
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(BigInteger)
@@ -969,15 +1072,27 @@ class BusBoardingDaily(Base):
 
 
 class DistrictSalesSeoul(Base):
-    """district_sales_seoul — reflected from DB (2026-04-20)."""
+    """district_sales_seoul — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "district_sales_seoul"
 
     id = Column(BigInteger, primary_key=True)
     quarter = Column(Integer, nullable=False)
-    dong_code = Column(String(15), nullable=False)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     dong_name = Column(Text)
-    industry_code = Column(String(20), nullable=False)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        nullable=False,
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(Integer)
@@ -1046,7 +1161,11 @@ class HolidayCalendar(Base):
 
 
 class JeonseMonthlyRent(Base):
-    """jeonse_monthly_rent — reflected from DB (2026-04-20)."""
+    """jeonse_monthly_rent — 국토부 전월세 신고 원본 (법정동 10자리).
+
+    alembic f3c4d5e6a7b8 에서 jeonse_dong_master FK 추가 완료 (NOT VALID + VALIDATE).
+    ORM 은 reflected 시 String(15) 였으나, 실제 데이터는 모두 10자리 → DB 마이그레이션 설계와 동기화.
+    """
 
     __tablename__ = "jeonse_monthly_rent"
 
@@ -1054,7 +1173,11 @@ class JeonseMonthlyRent(Base):
     rcpt_year = Column(Integer)
     gu_code = Column(String(10))
     gu_name = Column(Text)
-    dong_code = Column(String(15))
+    dong_code = Column(
+        String(10),
+        ForeignKey("jeonse_dong_master.dong_code", onupdate="CASCADE"),
+        index=True,
+    )
     dong_name = Column(Text)
     jibun_type = Column(Integer)
     jibun_type_name = Column(Text)
@@ -1285,12 +1408,19 @@ class ResidentPopMonthly(Base):
 
 
 class SeoulAdstrdChangeIx(Base):
-    """seoul_adstrd_change_ix — reflected from DB (2026-04-20)."""
+    """seoul_adstrd_change_ix — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_adstrd_change_ix"
 
     quarter = Column(Integer, primary_key=True)
-    dong_code = Column(String(15), primary_key=True)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     dong_name = Column(Text)
     change_ix = Column(String(10))
     change_ix_name = Column(String(50))
@@ -1331,12 +1461,19 @@ class SeoulAdstrdFclty(Base):
 
 
 class SeoulAdstrdFlpop(Base):
-    """seoul_adstrd_flpop — reflected from DB (2026-04-20)."""
+    """seoul_adstrd_flpop — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료.
+    """
 
     __tablename__ = "seoul_adstrd_flpop"
 
     quarter = Column(Integer, primary_key=True)
-    dong_code = Column(String(15), primary_key=True)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     dong_name = Column(Text)
     total_flpop = Column(Integer)
     male_flpop = Column(Integer)
@@ -1363,14 +1500,25 @@ class SeoulAdstrdFlpop(Base):
 
 
 class SeoulAdstrdStor(Base):
-    """seoul_adstrd_stor — reflected from DB (2026-04-20)."""
+    """seoul_adstrd_stor — reflected from DB (2026-04-20).
+
+    alembic e2b3c4d5f6a7 에서 seoul_dong_master FK 추가 완료 (849k row VALIDATE).
+    """
 
     __tablename__ = "seoul_adstrd_stor"
 
     quarter = Column(Integer, primary_key=True)
-    dong_code = Column(String(15), primary_key=True)
+    dong_code = Column(
+        String(15),
+        ForeignKey("seoul_dong_master.dong_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     dong_name = Column(Text)
-    industry_code = Column(String(20), primary_key=True)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     industry_name = Column(Text)
     store_count = Column(Integer)
     similar_store_count = Column(Integer)
@@ -1467,7 +1615,11 @@ class SeoulSignguSelng(Base):
     quarter = Column(Integer, primary_key=True)
     signgu_code = Column(String(10), primary_key=True)
     signgu_name = Column(Text)
-    industry_code = Column(String(20), primary_key=True)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     industry_name = Column(Text)
     monthly_sales = Column(BigInteger)
     monthly_count = Column(BigInteger)
@@ -1490,7 +1642,11 @@ class SeoulSignguStor(Base):
     quarter = Column(Integer, primary_key=True)
     signgu_code = Column(String(10), primary_key=True)
     signgu_name = Column(Text)
-    industry_code = Column(String(20), primary_key=True)
+    industry_code = Column(
+        String(20),
+        ForeignKey("industry_master.industry_code", onupdate="CASCADE"),
+        primary_key=True,
+    )
     industry_name = Column(Text)
     store_count = Column(Integer)
     similar_store_count = Column(Integer)
@@ -1662,40 +1818,145 @@ class Customer(Base):
 
 
 # ---------------------------------------------------------------------------
-# 시뮬레이션 이력 (매니저 저장 이력)
+# 시뮬레이션 이력 — simulation_history 는 미구현 기능으로 alembic 91b66e68ec18 에서 drop.
+# 매니저 시뮬 저장은 simulation_ai / simulation_foresee 가 담당.
 # ---------------------------------------------------------------------------
 
 
-class SimulationHistory(Base):
-    """시뮬레이션 이력 — 매니저가 시뮬 실행 후 [저장] 버튼으로 남긴 영구 이력"""
+# ---------------------------------------------------------------------------
+# 예측 결과 이력 (Predict 탭)
+# ---------------------------------------------------------------------------
 
-    __tablename__ = "simulation_history"
+
+class SimulationForesee(Base):
+    """예측 결과 이력 — ML 기반 매출/재무/고객/신흥상권 예측 저장"""
+
+    __tablename__ = "simulation_foresee"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    # index=True 는 복합 idx_simhist_manager_created 의 leftmost prefix 와 중복되므로 제거
-    # ForeignKey 제거: alembic a3b4c5d6e7f8 가 FK drop — master 본인 시뮬은 manager_id가 users.id 가리킴 (manager_users 외 ref)
     manager_id = Column(
         UUID(as_uuid=True),
         nullable=False,
-        comment="작성자 ID — master면 users.id, manager면 manager_users.id (user_type 필드로 구분)",
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id",
     )
+    user_type = Column(String(10), default="manager", comment="master | manager")
     client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
-
-    # 시뮬 입력
-    district = Column(String(50), nullable=False, comment="출점 후보 행정동")
     brand_name = Column(String(100), nullable=False, comment="브랜드명")
-    business_type = Column(String(50), comment="업종 (cafe/restaurant/convenience)")
-    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터")
-
-    # 시뮬 결과 전체 (8 agent + ABM + B2 ML 9개)
-    simulation_result = Column(JSONB, nullable=False, comment="시뮬 결과 전체")
-
-    # 리스트 표시용 요약 (빠른 조회)
-    ai_verdict_summary = Column(Text, comment="AI 판정 요약")
-    market_entry_signal = Column(String(10), comment="green|yellow|red")
-
+    business_type = Column(String(50), comment="업종")
+    districts = Column(JSONB, comment="선택 동 목록 (최대 4개)")
+    target_district = Column(String(50), comment="대상 동")
+    winner_district = Column(String(50), comment="1순위 추천 동")
+    district_predictions = Column(
+        JSONB, comment="동별 ML 예측 전체 (quarterly/bep/closure/shap/customer/living_pop/emerging)"
+    )
+    quarterly_projection = Column(JSONB, comment="분기 매출 예측 (단일 동 fallback)")
+    scenarios = Column(JSONB, comment="낙관/기본/비관 시나리오")
+    shap_result = Column(JSONB, comment="SHAP 피처 기여도")
+    bep_months = Column(Integer, comment="BEP 도달 개월수")
+    predicted_monthly_revenue = Column(BigInteger, comment="예측 월매출")
+    closure_rate = Column(JSONB, comment="폐업률 (실측)")
+    closure_risk = Column(JSONB, comment="폐업위험도 (LightGBM+TCN)")
+    final_report = Column(JSONB, comment="수익성 시뮬 (profit_simulation)")
+    market_report = Column(JSONB, comment="7개 지표 (생존율 등)")
+    customer_segment = Column(JSONB, comment="고객 세그먼트 분석")
+    living_pop_forecast = Column(JSONB, comment="유동인구 예측")
+    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터 (재실행용)")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_foresee_manager_created", "manager_id", "created_at"),
+        {"comment": "담당: 봉환 | 예측 결과 이력 (Predict 탭) | ML 매출/재무/고객/신흥상권"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# AI 분석 이력 (Analyze 탭)
+# ---------------------------------------------------------------------------
+
+
+class SimulationAI(Base):
+    """AI 분석 이력 — LLM 기반 상권/법률/인구/트렌드/경쟁 분석 저장"""
+
+    __tablename__ = "simulation_ai"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    manager_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id",
+    )
+    user_type = Column(String(10), default="manager", comment="master | manager")
+    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
+    brand_name = Column(String(100), nullable=False, comment="브랜드명")
+    business_type = Column(String(50), comment="업종")
+    target_district = Column(String(50), comment="대상 동")
+    winner_district = Column(String(50), comment="1순위 추천 동")
+    top_3_candidates = Column(JSONB, comment="상위 3동")
+    analysis_report = Column(Text, comment="synthesis 종합 리포트")
+    ai_recommendation = Column(Text, comment="최종 권고")
+    ai_verdict_summary = Column(Text, comment="한 줄 판단 요약")
+    market_entry_signal = Column(String(10), comment="green | yellow | red")
+    overall_legal_risk = Column(String(10), comment="safe | caution | danger")
+    legal_risks = Column(JSONB, comment="14개 법률 리스크")
+    market_report = Column(JSONB, comment="7개 정규화 지표")
+    trend_forecast = Column(JSONB, comment="트렌드 전망")
+    competitor_intel = Column(JSONB, comment="경쟁사 분석")
+    demographic_report = Column(JSONB, comment="인구통계 심화")
+    district_rankings = Column(JSONB, comment="16동 랭킹")
+    agent_attributions = Column(JSONB, comment="에이전트별 판단 근거")
+    vacancy_applied = Column(Boolean, default=False, comment="공실 페널티 반영 여부")
+    all_competitor_locations = Column(JSONB, comment="경쟁점포 좌표 목록")
+    scenario = Column(JSONB, comment="시뮬 시나리오 파라미터 (재실행용)")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_ai_manager_created", "manager_id", "created_at"),
+        {"comment": "담당: 봉환 | AI 분석 이력 (Analyze 탭) | LLM 상권/법률/인구/트렌드/경쟁"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# ABM 시뮬 이력 (Agent-Based Model — 5K agent 행동 시뮬)
+# ---------------------------------------------------------------------------
+
+
+class SimulationABM(Base):
+    """ABM 시뮬 결과 이력 — 5,000 페르소나 행동 시뮬 + 잠식/매출/시간대 결과 저장.
+
+    /simulate-abm/{job_id}/result 응답 schema 그대로 result JSONB 에 저장.
+    """
+
+    __tablename__ = "simulation_abm"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    manager_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        comment="작성자 ID — master면 users.id, manager면 manager_users.id",
+    )
+    user_type = Column(String(10), default="manager", comment="master | manager")
+    client_name = Column(String(100), nullable=False, comment="예비 가맹점주 이름")
+    brand_name = Column(String(100), nullable=False, comment="브랜드명")
+    business_type = Column(String(50), comment="업종 (cafe/restaurant/...)")
+    target_district = Column(String(50), comment="대상 동")
+    spot_lat = Column(Float, comment="후보 공실 위도")
+    spot_lon = Column(Float, comment="후보 공실 경도")
+    n_agents = Column(Integer, comment="에이전트 수 (default 5000)")
+    days = Column(Integer, comment="시뮬 일수 (default 1)")
+    scenario = Column(
+        JSONB,
+        comment="ABM 시나리오 파라미터 — weather_override / weekend_force / rent_shock_pct / date_override / store_area",
+    )
+    result = Column(
+        JSONB,
+        comment="/simulate-abm/{job_id}/result 응답 그대로 (dong_totals/cannibalization/peak_hours/new_store_*/narrator_summary 등)",
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_abm_manager_created", "manager_id", "created_at"),
+        {"comment": "담당: 봉환 | ABM 시뮬 결과 이력 | 5K agent 행동 시뮬"},
+    )
 
 
 # ===========================================================================

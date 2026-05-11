@@ -1,0 +1,207 @@
+"""사업자번호 + 업종 → 같은 corp 의 해당 업종 자동 brand 매핑.
+
+다업종 법인 (예: (주)더본코리아 = 빽다방·홍콩반점·빽보이피자·새마을식당...) 의 경우
+회원가입 시 ``biz_brand_mapping`` 에 top frcsCnt brand 1개만 저장됨.
+시뮬레이션 시 사용자가 다른 업종 (예: 중식) 선택하면 같은 corp 의 해당 업종
+가장 큰 brand (홍콩반점0410) 로 자동 resolve.
+
+운영 외 업종 선택 시 ``INDUSTRY_NOT_OPERATED`` 에러 + 운영 가능 업종 list 반환.
+
+설계:
+- ``users.company_name`` (회원가입 시 기록) 기준 ``ftc_brand_franchise.corpNm`` 매칭
+- corpNm 표기 변형 흡수 — ILIKE + corp 핵심어 추출 (괄호/특수문자 제거)
+- 매칭 brand 중 ``frcsCnt`` 큰 것 1개 선택
+- 운영 외 업종 → 거부 (사용자에게 운영 업종 list 안내)
+
+사용처: ``main.py`` 시뮬 endpoint 호출 직후, 시뮬 input.brand_name override.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+
+import sqlalchemy as sa
+
+from src.config.settings import settings
+
+logger = logging.getLogger(__name__)
+
+
+_engine: sa.Engine | None = None
+
+
+def _get_engine() -> sa.Engine:
+    global _engine
+    if _engine is None:
+        _engine = sa.create_engine(settings.postgres_url)
+    return _engine
+
+
+# corpNm 핵심어 추출용 — '(주)', '㈜', '주식회사' 등 법인 prefix/suffix 제거
+_CORP_NOISE_RE = re.compile(r"\(주\)|㈜|주식회사|\([^)]*\)|\s+")
+
+
+def _normalize_corp(name: str) -> str:
+    """corpNm 정규화 — 법인 표기 noise 제거 후 핵심어 추출."""
+    if not name:
+        return ""
+    return _CORP_NOISE_RE.sub("", name).strip()
+
+
+def get_corp_industries(biz_number: str) -> dict:
+    """사업자번호 → corp 의 운영 brand+업종 list.
+
+    Args:
+        biz_number: 사업자등록번호 (하이픈 제거).
+
+    Returns:
+        ``{"company_name": ..., "brands": [...], "industries": [...]}`` 또는
+        ``{"error": "USER_NOT_FOUND" | "CORP_NOT_IN_FTC", ...}``.
+    """
+    engine = _get_engine()
+    with engine.connect() as c:
+        user = c.execute(
+            sa.text("SELECT company_name FROM users WHERE biz_number = :biz"),
+            {"biz": biz_number},
+        ).first()
+        if not user:
+            return {"error": "USER_NOT_FOUND", "biz_number": biz_number}
+
+        company_name = user._mapping["company_name"]
+        norm = _normalize_corp(company_name)
+        if not norm:
+            return {"error": "INVALID_COMPANY_NAME", "company_name": company_name}
+
+        # ftc_brand_franchise 에서 corpNm 매칭 (정규화 ILIKE)
+        # 가맹점 수는 2025 년도 데이터로 통일 — 연도별 표기 변동(BBQ vs 비비큐(BBQ))으로
+        # MAX 사용 시 같은 brand 가 다른 row 로 분리되는 회귀 방지.
+        # paper brand 차단 — frcsCnt > 0 인 운영 brand 만 후보.
+        rows = c.execute(
+            sa.text(
+                """
+                SELECT "brandNm", "indutyMlsfcNm", "frcsCnt" AS stores
+                FROM ftc_brand_franchise
+                WHERE "corpNm" IS NOT NULL
+                  AND yr = 2025
+                  AND "frcsCnt" > 0
+                  AND REGEXP_REPLACE("corpNm", '\\(주\\)|㈜|주식회사|\\([^)]*\\)|\\s+', '', 'g') ILIKE :norm
+                ORDER BY stores DESC NULLS LAST
+                """
+            ),
+            {"norm": f"%{norm}%"},
+        ).fetchall()
+
+    if not rows:
+        return {
+            "error": "CORP_NOT_IN_FTC",
+            "company_name": company_name,
+            "message": f"{company_name} 은(는) FTC 가맹사업 정보공개서에 등록되지 않은 corp 입니다.",
+        }
+
+    # 같은 brand 의 연도별 표기 차이 dedup (예: 'BBQ' / '비비큐(BBQ)' → 1개로 통합).
+    # 1) 정확 일치 dedup: (괄호 제거 + 공백 제거 + 대문자) key 같으면 통합
+    # 2) substring dedup: 같은 industry 내 한 표기가 다른 표기에 포함되면 frcsCnt 큰 쪽 채택
+    #    (예: "BBQ" ⊂ "비비큐(BBQ)" → 더 많은 가맹점 가진 표기 1개로)
+
+    def _brand_key(name: str) -> str:
+        if not name:
+            return ""
+        n = re.sub(r"\([^)]*\)", "", name)  # 괄호 안 제거
+        n = re.sub(r"\s+", "", n).upper()  # 공백 제거 + 대문자
+        return n
+
+    # Phase 1: 정확 일치 dedup
+    dedup: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        m = r._mapping
+        key = (_brand_key(m["brandNm"]), m["indutyMlsfcNm"] or "")
+        cur_stores = m["stores"] or 0
+        prev = dedup.get(key)
+        if prev is None or cur_stores > prev["stores"]:
+            dedup[key] = {"name": m["brandNm"], "industry": m["indutyMlsfcNm"], "stores": cur_stores}
+
+    # Phase 2: 같은 industry 내 substring 통합 (큰 표기에 작은 표기가 substring 으로 포함)
+    candidates = sorted(dedup.values(), key=lambda b: b["stores"], reverse=True)
+    merged: list[dict] = []
+    for cand in candidates:
+        cand_key = _brand_key(cand["name"])
+        absorbed = False
+        for kept in merged:
+            if kept["industry"] != cand["industry"]:
+                continue
+            kept_key = _brand_key(kept["name"])
+            if cand_key and kept_key and (cand_key in kept_key or kept_key in cand_key):
+                # 같은 brand 다른 표기 — frcsCnt 큰 쪽 (먼저 추가된 kept) 유지
+                absorbed = True
+                break
+        if not absorbed:
+            merged.append(cand)
+
+    brands = merged
+    industries = sorted({b["industry"] for b in brands if b["industry"]})
+
+    return {
+        "company_name": company_name,
+        "brands": brands,
+        "industries": industries,
+    }
+
+
+# 프론트엔드 표기 → FTC indutyMlsfcNm 표기 alias.
+# Frontend dropdown 값과 FTC 등록값이 다른 경우 매핑.
+# 예: 사용자가 "호프" 선택 → FTC는 "주점"으로 등록 (더본코리아 백스비어).
+_INDUSTRY_FTC_ALIAS: dict[str, str] = {
+    "호프": "주점",
+    "호프-간이주점": "주점",
+    "카페": "커피",
+    "커피-음료": "커피",
+    "음식점": "한식",  # 일반 "음식점" → 한식으로 폴백
+    "제과점": "제과제빵",
+    "제과": "제과제빵",
+    "베이커리": "제과제빵",
+}
+
+
+def resolve_brand_for_industry(biz_number: str, industry: str) -> dict:
+    """사업자번호 + 업종 → 같은 corp 의 해당 업종 가장 큰 brand 자동 선택.
+
+    Args:
+        biz_number: 사업자등록번호.
+        industry: 업종명 (FTC indutyMlsfcNm 표기 — 한식/중식/일식/...).
+            프론트 표기 (호프/카페/제과점) 입력 시 _INDUSTRY_FTC_ALIAS 로 정규화.
+
+    Returns:
+        성공: ``{"brand_name": ..., "industry": ..., "stores": int,
+                 "alternatives": [...], "company_name": ...}``.
+        실패: ``{"error": "INDUSTRY_NOT_OPERATED" | "USER_NOT_FOUND" | "CORP_NOT_IN_FTC",
+                 "operated_industries": [...], ...}``.
+    """
+    portfolio = get_corp_industries(biz_number)
+    if "error" in portfolio:
+        return portfolio
+
+    # 프론트 표기 → FTC 표기 정규화
+    ftc_industry = _INDUSTRY_FTC_ALIAS.get(industry, industry)
+    matched = [b for b in portfolio["brands"] if b["industry"] == ftc_industry]
+    if not matched:
+        return {
+            "error": "INDUSTRY_NOT_OPERATED",
+            "company_name": portfolio["company_name"],
+            "requested_industry": industry,
+            "operated_industries": portfolio["industries"],
+            "message": (
+                f"'{industry}' 업종은 {portfolio['company_name']} 운영 brand 에 없습니다. "
+                f"운영 가능 업종: {', '.join(portfolio['industries'])}"
+            ),
+        }
+
+    # frcsCnt 내림차순 정렬됨 (get_corp_industries 가 보장) — 첫 항목 = top brand
+    top = matched[0]
+    return {
+        "brand_name": top["name"],
+        "industry": top["industry"],
+        "stores": top["stores"],
+        "alternatives": [b["name"] for b in matched[1:]],
+        "company_name": portfolio["company_name"],
+    }

@@ -65,10 +65,20 @@ async def synthesis_node(state: AgentState) -> dict:
 
     # Redis 캐시 조회 (사용자 조건이 달라지면 다른 캐시 사용)
     # v7: SHAP 주입 + bep_months 스키마 추가 — 이전 v6 캐시 무효화
+    # v8: legal DANGER prompt 톤 조정 (자기모순 출력 차단) — v7 캐시 무효화
+    # v9: BEP 분기 단위 통일 + TCN 키 오타 fix (quarterly_per_store/bep_quarters) — v8 무효화
+    # v10: 종합 톤 — 법률 리스크 과부각 차단, 다른 에이전트 우위 반영 — v9 무효화
+    # v11: '리스크 및 대응' 섹션 — caution/danger 만 LLM 노출 + 블록 외 항목 hallucination 차단 — v10 무효화
+    # v12: confidence 동적 산출 시도 → 롤백 (0.85 고정 유지). 잠시 v11 캐시에 동적 값
+    #      섞여 들어갔을 가능성 있어 안전하게 무효화. 사용자 의도: LLM 에이전트들의
+    #      낮은 confidence 가 synthesis 까지 끌고 내려가 신뢰도 위협하는 회귀 차단.
+    # v13: '리스크 및 대응' 섹션 법률 조항 번호 인용 금지 (예: 제12조의4, 제43조).
+    #      사용자 요구: 상권 무관 조항 인용으로 혼란 발생 — 행동 권고만 작성.
     _winner_for_cache = state.get("winner_district", target_district)
     _raw_td = state.get("target_districts") or [target_district]
     _td_key = ",".join(sorted(set(d for d in _raw_td if d)))
-    cache_key = f"v7:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
+    # v14: 사용자 타겟 정렬도 + 역제안 → '리스크 및 대응' 섹션 액션 제안 반영. 이전 캐시 무효화.
+    cache_key = f"v14:synthesis:{brand_name}:{_winner_for_cache}:{_td_key}:{business_type}:{monthly_rent_budget}:{store_area}:{state.get('population_weight', True)}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -82,6 +92,18 @@ async def synthesis_node(state: AgentState) -> dict:
             # [#3] 캐시 히트 시 legal_risks 복원 (캐시에 저장된 값 우선, 없으면 state에서 유지)
             if "legal_risks" in cached_data:
                 analysis["legal_risks"] = cached_data["legal_risks"]
+            # ranking 결과는 캐시되지 않음 — Phase 1 ranking_phase가 state top-level에 둔 값을 analysis_results로 승격.
+            # 누락 시 main.py 응답의 district_rankings/winner_district/top_3_candidates 가 비어 프론트에서
+            # "입지 랭킹 데이터가 없습니다" 가 표시되던 회귀를 막는다.
+            _state_scouting = state.get("scouting_results") or []
+            if _state_scouting or not analysis.get("district_rankings"):
+                analysis["district_rankings"] = _state_scouting or analysis.get("district_rankings", [])
+            _state_winner = state.get("winner_district")
+            if _state_winner or not analysis.get("winner_district"):
+                analysis["winner_district"] = _state_winner or analysis.get("winner_district")
+            _state_top3 = state.get("top_3_candidates") or []
+            if _state_top3 or not analysis.get("top_3_candidates"):
+                analysis["top_3_candidates"] = _state_top3 or analysis.get("top_3_candidates", [])
             await _redis.aclose()
 
             # 캐시 히트 시에도 agent_attributions 집계 — 다른 에이전트의 attribution은 state/analysis에서 수집
@@ -151,10 +173,17 @@ async def synthesis_node(state: AgentState) -> dict:
 
     # 2. LLM 합성용 컨텍스트 구성
     # [토큰 절감] 중간 에이전트 리포트 전문 대신 핵심 수치만 전달
-    # legal: summary 60자 이내로 축약 (level이 핵심)
-    legal_summary_for_llm = "\n".join(
-        [f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}" for r in legal_risks]
-    )
+    # legal: '리스크 및 대응' 섹션 hallucination 방지를 위해 caution/danger 만 LLM 에 노출.
+    # safe 항목까지 넣으면 LLM 이 "식품위생/소방/근로계약" 같은 보편 카테고리를 safe 여도
+    # 끌어다 써서 legal_node 실제 판정과 어긋남.
+    _active_legal_risks = [r for r in legal_risks if isinstance(r, dict) and r.get("level") in ("caution", "danger")]
+    if _active_legal_risks:
+        legal_summary_for_llm = "\n".join(
+            f"- {r.get('type', '미분류')}: {r.get('level', 'Normal')} — {r.get('summary', '')[:300]}"
+            for r in _active_legal_risks
+        )
+    else:
+        legal_summary_for_llm = "- (해당 입지·업종 조건에서 caution/danger 등급 법률 항목 없음)"
 
     # trend_forecaster 결과 요약 (legal 뒤에 독립 배치, legal 블록 미접촉)
     trend_forecast_data = analysis_results.get("trend_forecast", {})
@@ -169,14 +198,37 @@ async def synthesis_node(state: AgentState) -> dict:
             f"- 요약: {(f.get('narrative') or '')[:250]}"
         )
 
-    # 법률 DANGER 시 대안 지역 강조
+    # 법률 리스크 톤 가이드 — 2026-05-04 v10 재조정.
+    # 변경 의도: CAUTION/DANGER 모두에서 "법률 리스크 때문에 꺼려진다"는 인상을 차단하고,
+    # 다른 에이전트(상권·인구·경쟁·트렌드·SHAP) 종합 우위가 있으면 결론은 우호적으로 내되
+    # 법률은 '주의·완화 가능한 절차적 사안'으로 다룰 것.
+    # 2026-05-03: DANGER 자기모순 출력 차단 (이전 변경).
+    # 2026-05-04: CAUTION 케이스에도 톤 가이드 적용 — "맨날 법률 때문에 주의 필요" 패턴 제거.
     if overall_legal_risk == "danger":
+        _alt = ", ".join(top_3_candidates[:2]) if top_3_candidates else None
         legal_override = (
-            f"\n⚠️ 경고: 법률 리스크 DANGER. {target_district} 출점은 법률 위반 가능성이 높습니다. "
-            f"final_recommendation에 대안 지역({', '.join(top_3_candidates[:2]) if top_3_candidates else '다른 지역'})을 최우선 제시하세요."
+            f"\n[법률 리스크 톤 가이드 — DANGER]\n"
+            f"  - {target_district}는 시스템이 종합 분석으로 추천 확정한 입지. 법률은 14개 분석 항목 중 하나일 뿐.\n"
+            f"  - 법률 리스크는 '준비·완화 가능한 절차적 사안'으로 다룰 것 — '권장하지 않음/금지/회피' 표현 금지.\n"
+            f"  - '리스크 및 대응' 섹션에 구체적 위반 가능 항목 + 사전 대응 단계 명시 (영업신고·허가·용도변경 등).\n"
+            f"  - 톤: '법적 리스크는 존재하나 사전 대응으로 충분히 해소 가능, 다른 지표가 우수해 입지 가치 높음'.\n"
+            + (f"  - 비교 검토용 대안({_alt})은 보조 정보로만 한 줄. 메인 추천은 {target_district}.\n" if _alt else "")
+        )
+    elif overall_legal_risk == "caution":
+        legal_override = (
+            "\n[법률 리스크 톤 가이드 — CAUTION]\n"
+            "  - 법률 CAUTION은 '일반적인 창업 준수 사항' 수준 — 대부분의 신규 출점에서 마주하는 표준 절차.\n"
+            "  - final_recommendation에서 법률 리스크를 결론의 부정적 근거로 부각하지 말 것.\n"
+            "  - '리스크 및 대응' 섹션에서만 간결하게 다루고, 다른 섹션(추천 입지·핵심 근거·수익성·타이밍)은\n"
+            "    상권·인구·경쟁·트렌드·SHAP 우위 요인 중심으로 우호적으로 작성.\n"
+            "  - 톤: '주의 사항만 챙기면 진입 적합, 종합적으로 양호한 상권'.\n"
         )
     else:
-        legal_override = ""
+        # safe — 법률 리스크 거의 언급 불필요
+        legal_override = (
+            "\n[법률 리스크 톤 가이드 — SAFE]\n"
+            "  - 법률 SAFE — 별도 우려 없음. '리스크 및 대응' 섹션은 운영 일반 리스크(경쟁·매출 변동) 중심으로 작성.\n"
+        )
 
     # [NEW] demographic_depth 결과를 LLM 프롬프트에 추가 (legal 블록 뒤에 배치, legal 블록은 그대로 보존)
     demographic = analysis_results.get("demographic_report") or {}
@@ -196,16 +248,21 @@ async def synthesis_node(state: AgentState) -> dict:
             demographic_context += f"  → {dc.get('match_rationale', '')}\n"
 
     # TCN ML 실측 수치 (Phase 2.5에서 계산된 값 — 없으면 빈 블록)
+    # 2026-05-04: B2 핸드오프 — 키 오타 fix (monthly_per_store → quarterly_per_store,
+    # bep_months → bep_quarters). 기존 키는 None 반환되어 LLM hallucination 유발.
+    # models/interface.py:241, 509 의 실제 반환 키와 정합성 맞춤.
     _tcn = state.get("tcn_sim_result") or {}
-    _tcn_rev = _tcn.get("revenue_forecast", {}).get("monthly_per_store")
-    _tcn_bep = _tcn.get("bep", {}).get("bep_months")
+    _tcn_rev_quarter = _tcn.get("revenue_forecast", {}).get("quarterly_per_store")
+    _tcn_bep_q = _tcn.get("bep", {}).get("bep_quarters")
     _tcn_closure = _tcn.get("closure_rate", {}).get("closure_rate")
     _tcn_risk = (_tcn.get("closure_risk") or {}).get("risk_score")
-    if _tcn_rev or _tcn_bep or _tcn_closure or _tcn_risk:
+    # LLM 의 monthly_revenue 필드 입력용 (분기 → 월 환산)
+    _tcn_rev_month = (_tcn_rev_quarter / 3) if _tcn_rev_quarter else None
+    if _tcn_rev_quarter or _tcn_bep_q or _tcn_closure or _tcn_risk:
         tcn_block = (
             "\n[ML 모델 실측 수치 — 추측 금지, 아래 수치를 profit_simulation에 그대로 사용]\n"
-            + (f"- 월 예상 매출(monthly_revenue): {_tcn_rev:,.0f}원\n" if _tcn_rev else "")
-            + (f"- 손익분기점(bep_months): {_tcn_bep}개월\n" if _tcn_bep else "")
+            + (f"- 분기 예상 매출(quarterly_revenue, 점포당): {_tcn_rev_quarter:,.0f}원\n" if _tcn_rev_quarter else "")
+            + (f"- 손익분기점(bep_quarters): {_tcn_bep_q}분기\n" if _tcn_bep_q else "")
             + (f"- 3년 폐업률: {_tcn_closure * 100:.1f}%\n" if _tcn_closure is not None else "")
             + (f"- 폐업 위험도: {_tcn_risk * 100:.1f}%\n" if _tcn_risk is not None else "")
         )
@@ -237,6 +294,38 @@ async def synthesis_node(state: AgentState) -> dict:
     else:
         shap_block = ""
 
+    # 사용자 타겟 정렬도 + 역제안 — '리스크 및 대응' 섹션 액션 제안 근거.
+    # demographic_report.target_alignment / reverse_target_suggestion (사용자 입력별 fresh).
+    _demo = analysis_results.get("demographic_report") or {}
+    _ta_alerts = _demo.get("target_alignment") or []
+    _ta_score = _demo.get("target_alignment_score")
+    _rev = _demo.get("reverse_target_suggestion") or {}
+    alignment_block = ""
+    if _ta_alerts or _rev:
+        _high = [a for a in _ta_alerts if isinstance(a, dict) and a.get("severity") == "high"]
+        _med = [a for a in _ta_alerts if isinstance(a, dict) and a.get("severity") == "medium"]
+        _alert_lines = "\n".join(
+            f"  - [{a.get('severity', '?')}] {a.get('dimension', '?')}: {a.get('message', '')[:200]}"
+            for a in (_high + _med)[:5]
+        )
+        _rev_line = ""
+        if _rev:
+            _rev_age = ", ".join(_rev.get("recommended_age_groups") or []) or "—"
+            _rev_g = _rev.get("recommended_gender") or "혼재"
+            _rev_h = ", ".join(_rev.get("recommended_hours") or []) or "—"
+            _rev_d = _rev.get("recommended_day_type") or "—"
+            _rev_p = _rev.get("recommended_price_range") or "—"
+            _rev_line = (
+                f"\n역제안 (입지 고정 시 권장 타겟): 연령 {_rev_age} / 성별 {_rev_g} / "
+                f"시간대 {_rev_h} / 요일 {_rev_d} / 객단가 {_rev_p}.\n"
+                f"근거: {(_rev.get('rationale') or '')[:200]}"
+            )
+        alignment_block = (
+            f"\n[사용자 타겟 정렬 — 정렬도 {_ta_score}/100 · 미스매치 {len(_high)}건 high, {len(_med)}건 medium]\n"
+            f"{_alert_lines}"
+            f"{_rev_line}"
+        )
+
     # competitor_intel 요약 (경쟁/카니발/차별화) — legal_risks 와 독립적으로 병합
     competitor_intel = state.get("competitor_intel_result", {}) or {}
     if competitor_intel and "error" not in competitor_intel:
@@ -253,6 +342,7 @@ async def synthesis_node(state: AgentState) -> dict:
     # Phase 2 (llm_analysis_phase)에서 이미 winner 동 기준으로 분석이 실행됐음
     # target_district == winner_district (graph.py Phase 2에서 교체)
     prompt = (
+        "[AGENT: synthesis] 최종 전략 합성 에이전트 — LangSmith 식별용 라벨.\n\n"
         "프랜차이즈 창업 전략 컨설턴트로서 아래 데이터를 종합해 최종 리포트를 작성하세요.\n\n"
         f"브랜드:{brand_name}({business_type}) | 추천입지:{winner_district} | 법률리스크:{overall_legal_risk}\n"
         f"입지랭킹: {ranking_summary}\n"
@@ -264,7 +354,8 @@ async def synthesis_node(state: AgentState) -> dict:
         + (f"{quarterly_block}\n" if quarterly_block else "")
         + (f"{shap_block}\n" if shap_block else "")
         + (f"{competitor_block}\n" if competitor_block else "")
-        + f"법률(14개):\n{legal_summary_for_llm}\n"
+        + (f"{alignment_block}\n" if alignment_block else "")
+        + f"법률(caution/danger {len(_active_legal_risks)}건):\n{legal_summary_for_llm}\n"
         f"{legal_override}"
         f"{demographic_context}\n"
         f"창업조건: 객단가={target_price_range or '미지정'} | 시간대={','.join(operating_hours) or '미지정'} | "
@@ -276,6 +367,27 @@ async def synthesis_node(state: AgentState) -> dict:
         "4. 분기별 매출 흐름(성수기·비수기)을 창업 타이밍 제안에 활용\n"
         "5. FinalStrategyResult 스키마로 응답\n"
         f"6. overall_legal_risk는 반드시 '{overall_legal_risk}'\n"
+        "10. [중요 — 종합 톤] summary와 final_recommendation은 입지 가치 중심으로 우호적으로 작성.\n"
+        "   - 법률은 분석 항목 중 하나일 뿐 — 결론을 좌우하는 핵심 근거가 아님.\n"
+        "   - 법률 리스크가 CAUTION/DANGER여도 '리스크 및 대응' 섹션 한 곳에서만 다루고,\n"
+        "     summary·핵심 근거·수익성 전망·타이밍 제언에는 법률 부정 톤을 넣지 말 것.\n"
+        "   - 상권·인구·경쟁·트렌드·SHAP·접근성 등 다른 에이전트 우위가 있으면 그것을 결론의 주된 근거로 삼을 것.\n"
+        "   - 금지 표현: '법률 리스크 때문에 주의가 필요', '꺼려진다', '권장하지 않는다', '신중한 검토 필요'.\n"
+        "   - 권장 표현: '주의 사항만 준수하면 적합', '사전 대응 가능한 절차적 사안', '종합적으로 양호한 상권'.\n"
+        "11. [필수 — '리스크 및 대응' 섹션 작성 규칙]\n"
+        "   - 법률 리스크는 위 [법률(caution/danger N건)] 블록에 명시된 type 만 사용한다.\n"
+        "   - 블록에 없는 항목(예: 식품위생법, 위생교육, 소방시설 의무, 근로계약서 등)을 임의로 추가·생성·언급하지 말 것.\n"
+        "   - 법률(caution/danger 0건) 인 경우 법률 항목 없이 운영 일반 리스크(경쟁·매출 변동·계절성 등)만 다룬다.\n"
+        "   - 각 항목은 위 블록 summary 를 근거로 1-2문장 + 사전 대응 단계.\n"
+        "12. [필수 — 사용자 타겟 정렬 반영]\n"
+        "   - [사용자 타겟 정렬] 블록이 있으면 '리스크 및 대응' 섹션 마지막에 별도 항목으로\n"
+        "     '타겟 정렬 점검' 추가. high/medium alert 의 message 를 근거로 액션 제안 작성.\n"
+        "   - 역제안이 있으면 액션 제안에 '입지 유지 시 [권장 연령/성별/시간/요일/객단가] 로 타겟·\n"
+        "     운영전략 재정의 검토' 한 줄 포함. 사용자 자유 의사결정 보조용 — 강제하지 말 것.\n"
+        "   - 정렬도 60+ 또는 alert 0건이면 본 항목 생략.\n"
+        "   - **법률 조항 번호 인용 금지** (예: '제12조의4', '제43조', '가맹사업법 제○조' 등 조문 ref 표기 절대 금지).\n"
+        "     · 사용자 요구: 상권 무관 조항 인용으로 혼란 발생 → 본 섹션엔 행동 권고만, 조항 인용은 별도 LegalDrawer 가 처리.\n"
+        "     · '제○조' / '제○조의○' 패턴 일체 출력 금지. 법률명만 (예: '가맹사업법') 언급 가능.\n"
         "8. [중요] final_recommendation 출력 형식 — 가독성을 위해 반드시 아래 마크다운 구조로 작성:\n"
         "   - 각 섹션은 '## 섹션제목' 형식의 H2 헤더로 시작 (프론트에서 큰 글씨로 렌더됨)\n"
         "   - 섹션 사이는 빈 줄(\\n\\n) 두 번 들여 문단 분리\n"
@@ -288,13 +400,23 @@ async def synthesis_node(state: AgentState) -> dict:
         "     ## 리스크 및 대응\n"
         "     ## 창업 타이밍 제언\n"
         "   - 한 줄에 모든 내용을 몰아쓰지 말 것. 줄글이라도 2~3 문장마다 문단 분리\n"
+        "   - 시간 범위·수치 범위 표기 시 물결표(~) 대신 하이픈(-) 사용 "
+        "(예: '11시-14시', '30대-40대', '월 200-300만원'). "
+        "물결표는 마크다운 취소선(~~text~~)과 충돌해 텍스트가 잘려 보일 수 있음.\n"
         "9. summary 는 한 줄(80자 내) 짧은 헤드라인으로 작성 — final_recommendation 과 중복 금지\n"
         + (
+            # 2026-05-04: B2 핸드오프 — 분기 단위 통일.
+            # bep_months 언급 제거, bep_quarters 강제. monthly_revenue 는 분기 매출/3 환산값.
             "7. profit_simulation에 ML 실측 수치를 반드시 사용:\n"
-            + (f"   - monthly_revenue = {_tcn_rev:,.0f}원 (TCN 점포평균 월매출, 변경 금지)\n" if _tcn_rev else "")
             + (
-                f"   - bep_months = {_tcn_bep} (TCN 예측값, profit_simulation.bep_months 필드에 정수로 입력)\n"
-                if _tcn_bep
+                f"   - quarterly_revenue (점포당 분기 매출) = {_tcn_rev_quarter:,.0f}원 (TCN 실측값, 변경 금지)\n"
+                f"   - monthly_revenue = {_tcn_rev_month:,.0f}원 (분기 매출 ÷ 3 환산, profit_simulation.monthly_revenue 필드에 정수로 입력)\n"
+                if _tcn_rev_quarter
+                else ""
+            )
+            + (
+                f"   - bep_quarters = {_tcn_bep_q} (TCN 예측값, profit_simulation.bep_quarters 필드에 정수로 입력)\n"
+                if _tcn_bep_q
                 else ""
             )
             + "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
@@ -306,9 +428,10 @@ async def synthesis_node(state: AgentState) -> dict:
             "   - monthly_cost = 임대료 + 인건비(매출의 25%) + 재료비(매출의 30%) + 기타(5%)\n"
             "   - net_profit = monthly_revenue - monthly_cost\n"
             "   - margin_rate = net_profit / monthly_revenue (소수점 2자리)\n"
-            "   - bep_months = 초기자본금 / max(net_profit, 1) (정수 반올림)\n"
+            "   - bep_quarters = (초기자본금 / max(net_profit, 1)) ÷ 3 (정수 반올림, 분기 단위)\n"
         )
         + "   ※ 추측값 사용 금지 — 제공된 실데이터 수치만 사용\n"
+        + "   ※ bep_months 필드는 deprecated — bep_quarters 만 사용\n"
     )
 
     try:

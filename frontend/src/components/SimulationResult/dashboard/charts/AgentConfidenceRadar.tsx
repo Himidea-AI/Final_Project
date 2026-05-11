@@ -16,7 +16,7 @@ const AGENT_ORDER: { id: AgentId; label: string }[] = [
   { id: 'legal', label: '법률' },
   { id: 'trend_forecaster', label: '트렌드' },
   { id: 'district_ranking', label: '랭킹' },
-  { id: 'synthesis', label: '종합' },
+  { id: 'inflow', label: '접근성' },
 ];
 
 export interface RadarRow {
@@ -48,19 +48,22 @@ export function AgentConfidenceRadar({ attributions }: Props) {
       <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={data} outerRadius="70%">
-            <PolarGrid stroke="#292524" />
-            <PolarAngleAxis dataKey="label" tick={{ fontSize: 10, fill: '#a8a29e' }} />
+            <PolarGrid stroke="var(--border)" />
+            <PolarAngleAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            />
             <PolarRadiusAxis
               angle={90}
               domain={[0, 100]}
-              tick={{ fontSize: 9, fill: '#57534e' }}
+              tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }}
               axisLine={false}
             />
             {/* Recharts Radar는 null 값에서 vertex를 건너뜀 → 미실행 축은 그래프에서 자연스럽게 빠짐 */}
             <Radar
               dataKey="score"
-              stroke="#818cf8"
-              fill="#818cf8"
+              stroke="var(--primary)"
+              fill="var(--primary)"
               fillOpacity={0.25}
               isAnimationActive={false}
               connectNulls={false}
@@ -69,14 +72,16 @@ export function AgentConfidenceRadar({ attributions }: Props) {
         </ResponsiveContainer>
       </div>
       <div className="flex items-center justify-center gap-2 text-[0.625rem] font-black uppercase tracking-widest">
-        <span className="text-stone-500">
-          실행 <span className="text-cyan-400 tabular-nums">{executedCount}</span>
-          <span className="text-stone-600">/{data.length}</span>
+        <span className="text-muted-foreground">
+          실행 <span className="text-primary tabular-nums">{executedCount}</span>
+          <span className="text-muted-foreground">/{data.length}</span>
         </span>
         {missingAgents.length > 0 && (
-          <span className="text-stone-600">
+          <span className="text-muted-foreground">
             · 미실행:{' '}
-            <span className="text-stone-400">{missingAgents.map((a) => a.label).join(', ')}</span>
+            <span className="text-muted-foreground">
+              {missingAgents.map((a) => a.label).join(', ')}
+            </span>
           </span>
         )}
       </div>

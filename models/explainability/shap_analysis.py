@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 
@@ -149,6 +150,10 @@ _TCN_FEATURE_KO: dict[str, str] = {
     "floating_pop": "골목상권 유동인구",
     "pop_per_store_gm": "골목상권 점포당 유동인구",
     "normal_ratio": "일반 점포 비율",
+    # TCN-only 추가 피처 (2026-05-04) — TCN ALL_FEATURES 에 포함, SHAP top_signals 노출
+    "opr_sale_mt_avg": "동 평균 개업 수",
+    "cls_sale_mt_avg": "동 평균 폐업 수",
+    "industry_trend": "업종 검색 트렌드",
 }
 
 
@@ -306,12 +311,15 @@ def explain_tcn_prediction(
         DB_URL,
         load_timeseries,
     )
-    from models.tcn_forecast.model import WEIGHTS_DIR, TCNForecaster
+    from models.tcn_forecast.model import TCNForecaster
+    from models.tcn_forecast.predict import DEFAULT_PREDICT_CONFIG
     from models.tcn_forecast.train import load_scalers
 
-    # 34피처 기반 가중치 사용 (finetuned_mapo_tcn_34f.pt)
-    weights_path = WEIGHTS_DIR / "finetuned_mapo_tcn_34f.pt"
-    scalers_path = WEIGHTS_DIR / "finetune_tcn_scalers_34f.pkl"
+    # 본 예측(predict.py)과 동일 cfg 공유 — v3 자기회귀(37f, output_size=1, window=4).
+    # 2026-05-04: v2 DMS 경로에서 v3 자기회귀로 정합. predict.py 변경 시 SHAP도 자동 추종.
+    cfg = DEFAULT_PREDICT_CONFIG
+    weights_path = Path(cfg["weights_path"])
+    scalers_path = Path(cfg["scalers_path"])
 
     # ---- 1) 가중치·스케일러 파일 존재 확인 → 없으면 mock ----
     if not weights_path.exists() or not scalers_path.exists():
@@ -344,13 +352,15 @@ def explain_tcn_prediction(
             return result
 
     # ---- 3) TCN 모델 로드 (호출마다 신규 인스턴스 — hook 간섭 방지) ----
+    # 모델 하이퍼파라미터는 predict.py DEFAULT_PREDICT_CONFIG와 1:1 일치.
     try:
         model = TCNForecaster(
             input_size=input_size,
-            n_channels=128,  # DEFAULT_PREDICT_CONFIG와 일치
-            kernel_size=2,
-            dilations=[1, 2],
-            dropout=0.2,
+            n_channels=cfg["n_channels"],
+            kernel_size=cfg["kernel_size"],
+            dilations=cfg["dilations"],
+            dropout=cfg["dropout"],
+            output_size=cfg["output_size"],  # v3 자기회귀: 1
         )
         model.load_weights(weights_path)
         model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
@@ -364,7 +374,7 @@ def explain_tcn_prediction(
         return result
 
     # ---- 4) 입력 텐서 준비 — predict.py와 동일 로직 재사용 ----
-    window_size = 4  # DEFAULT_PREDICT_CONFIG["window_size"]
+    window_size = cfg["window_size"]  # v3: 4
     feature_cols = list(ALL_FEATURES)
 
     try:
@@ -409,23 +419,27 @@ def explain_tcn_prediction(
         return result
 
     # ---- 5) 모델 순전파 — 기준 예측값 확보 (매출액 원 단위) ----
+    # v3 자기회귀(output_size=1): 1step 예측에 대한 SHAP 분석.
+    # (4step 누적 SHAP은 자기회귀 재주입 그래프가 끊겨 GradientExplainer가 처리 못 함.
+    #  사용자에겐 "다음 분기 매출 신호"가 본질이므로 1step만 분석해도 의사결정 충분.)
     with torch.no_grad():
         raw_output = model(input_tensor)
-        # 역변환: 스케일러 → log 도메인 → 원 단위 매출액
-        # 학습 시 타겟은 log1p 변환된 값이므로 expm1로 복원해야 원 단위가 나옴
-        # (models/tcn_forecast/predict.py:188-189 와 동일 패턴)
         try:
-            pred_log = tgt_scaler.inverse_transform([[raw_output.item()]])[0][0]
+            raw_arr = raw_output.detach().cpu().numpy().reshape(-1, 1)
+            pred_log = float(tgt_scaler.inverse_transform(raw_arr).mean())
             predicted_value = float(np.expm1(pred_log))
         except Exception:
-            # 역변환 실패 시 raw 출력 그대로 사용
-            predicted_value = float(raw_output.item())
+            predicted_value = float(raw_output.mean().item())
     predicted_value = max(0.0, predicted_value)
     _log("INFO", f"TCN 예측값: {predicted_value:,.0f}원")
 
     # ---- 6) SHAP — GradientExplainer 우선 (TCN Conv1d에 더 안정적), DeepExplainer 2순위 ----
+    # background tensor: 종전 zeros 였으나 모든 SHAP 부호가 한 방향으로 쏠리는 트리비얼
+    # 패턴(매출 변수만 양수 top3) 발생. StandardScaler 후 입력 분포는 평균0/std1에 근사하므로
+    # randn(10,...)을 baseline으로 두면 양/음 기여가 자연스럽게 출현 + 음수 리스크 시그널 노출.
     _dev = next(model.parameters()).device
-    background = torch.zeros(10, window_size, input_size).to(_dev)  # 배경 텐서: 영벡터 10개
+    _gen = torch.Generator(device="cpu").manual_seed(42)  # 재현성
+    background = torch.randn(10, window_size, input_size, generator=_gen).to(_dev)
 
     shap_values_raw = None
     base_value = 0.0
@@ -472,12 +486,13 @@ def explain_tcn_prediction(
             return result
 
     # ---- 7) SHAP 값 후처리: (..., window_size, input_size) → 시간축 평균 → (input_size,) ----
-    shap_array = np.array(shap_values_raw)
+    # v2 DMS (output_size=4): GradientExplainer가 list of 4 arrays 반환 → 4분기 평균
+    if isinstance(shap_values_raw, list) and len(shap_values_raw) > 1:
+        shap_array = np.mean(np.array(shap_values_raw), axis=0)
+    else:
+        shap_array = np.array(shap_values_raw)
 
-    # shap GradientExplainer는 single-output 회귀 모델에 targets=1 축을 말단에 추가해 반환함
-    # 예: (batch, window, features, 1). 이후 while/if 로직은 (batch, window, features) 3D를
-    # 가정하므로, targets 축이 살아있으면 축소 단계에서 features 축이 잘못 제거됨.
-    # 따라서 squeeze로 targets 축을 먼저 제거한 뒤 기존 로직 실행.
+    # single-output 모델에서 targets=1 축이 말단에 추가되는 경우 squeeze 처리
     if shap_array.ndim >= 3 and shap_array.shape[-1] == 1:
         shap_array = shap_array.squeeze(-1)
 

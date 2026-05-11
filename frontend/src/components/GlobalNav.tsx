@@ -3,6 +3,7 @@
  * App.tsx Phase C Round 3 코드 스플릿으로 추출 — 기능 변경 없음.
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   User,
   Bell,
@@ -31,12 +32,45 @@ export function LogoutButton() {
         logout();
         nav('/login');
       }}
-      className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-[#9ca3af] hover:text-rose-400 hover:bg-rose-500/10 rounded-full text-xs font-medium transition-colors border border-transparent hover:border-rose-500/30"
+      className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-muted-foreground hover:text-danger hover:bg-danger/10 rounded-full text-xs font-medium transition-colors border border-transparent hover:border-danger/30"
       title="로그아웃"
     >
       <LogOut className="w-3.5 h-3.5" />
       <span>로그아웃</span>
     </button>
+  );
+}
+
+/**
+ * WelcomeWidget — 글로벌 헤더 중앙. 로그인 시 "{브랜드} {담당자} {직급}님 환영합니다" 표시.
+ * 클릭 무반응(정보 표시 only). role 기반 이동은 GlobalLimelightNav 4 아이콘이 처리.
+ * IntroScene 우상단 토글 로직에서 이전 (2026-05-01).
+ */
+export function WelcomeWidget() {
+  const { isLoggedIn, user, brand } = useAuth();
+  if (!isLoggedIn) return null;
+
+  const brandName = user?.company_name || brand?.brand_name || '';
+  const personName = user?.contact_name || '';
+  // role 기반 강제 매핑 — user.position(자유 입력 텍스트) 가 무엇이든 무시.
+  // master = 팀장 / manager = 매니저. position 잘못 입력으로 인한 라벨 회귀 차단.
+  const roleTitle = user?.role === 'master' ? '팀장' : '매니저';
+
+  if (!brandName && !personName) return null;
+
+  return (
+    <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center pointer-events-none select-none">
+      <span className="text-[0.6875rem] font-medium tracking-wide whitespace-nowrap">
+        {brandName && <span className="text-primary font-semibold">{brandName}</span>}
+        {brandName && personName && <span className="text-muted-foreground"> · </span>}
+        {personName && (
+          <span className="text-foreground">
+            {personName} {roleTitle}
+          </span>
+        )}
+        <span className="text-muted-foreground">님 환영합니다</span>
+      </span>
+    </div>
   );
 }
 
@@ -73,13 +107,24 @@ const NOTIFICATION_MOCK_ITEMS = [
 
 function GlobalLimelightNav() {
   const nav = useTransition();
+  const location = useLocation();
   const { isLoggedIn, user } = useAuth();
   const { showToast } = useToast();
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, opacity: 0 });
   const [openDropdown, setOpenDropdown] = useState<'bell' | null>(null);
   const navRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // URL → activeIndex 매핑. 페이지 이동/리마운트 후에도 빔이 현재 위치를 따라가도록.
+  // navItems 순서: 0=folder(workspace/pipeline), 1=user(history), 2=settings(mypage), 3=bell.
+  const activeIndex = (() => {
+    if (!location.pathname.startsWith('/hq')) return null;
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab === 'workspace' || tab === 'pipeline') return 0;
+    if (tab === 'history') return 1;
+    if (tab === 'mypage') return 2;
+    return null;
+  })();
 
   // 매니저 목록 — Bell 빨간 점 + 드롭다운 알림 소스
   const { pending: pendingManagers } = useManagerList();
@@ -112,14 +157,14 @@ function GlobalLimelightNav() {
     }
   }, [targetIndex]);
 
-  const handleItemClick = (index: number, type: NavItemType) => {
+  const handleItemClick = (_index: number, type: NavItemType) => {
     // 비로그인 시 로그인 페이지로
     if (!isLoggedIn) {
       nav('/login');
       return;
     }
 
-    setActiveIndex(index);
+    // activeIndex 는 URL 기반 자동 계산이므로 여기서 직접 set 하지 않음.
     const isManager = user?.role === 'manager';
 
     if (type === 'folder') {
@@ -141,10 +186,12 @@ function GlobalLimelightNav() {
     <div className="relative hidden md:flex">
       {/* 아이콘 바 — overflow-hidden으로 빔 클리핑 */}
       <div
-        className="relative flex items-center bg-[#2c2825] border border-[#3a3633] rounded-full h-10 px-2 shadow-sm overflow-hidden"
+        className="relative flex items-center bg-card border border-border rounded-full h-10 px-2 shadow-sm overflow-hidden"
         onMouseLeave={() => setHoverIndex(null)}
       >
-        {/* 호버 조명 효과 */}
+        {/* 호버/active 조명 효과 — 사다리꼴 빔 +상단 발광 막대.
+            bg-primary/20 알파 modifier 가 CSS variable hex 와 충돌해 transparent 폴백되던
+            회귀를 inline opacity 로 fix (LegalDistributionBar 사례 동일 원인). */}
         <div
           className="absolute top-0 z-10 pointer-events-none flex flex-col items-center transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
           style={{
@@ -153,10 +200,14 @@ function GlobalLimelightNav() {
             opacity: indicatorStyle.opacity,
           }}
         >
-          <div className="w-6 h-[2px] bg-[#818cf8] rounded-b-full shadow-[0_0_8px_#818cf8]" />
+          <div className="w-6 h-[2px] bg-primary rounded-b-full shadow-[0_0_8px_var(--primary)]" />
           <div
-            className="w-12 h-10 bg-[#818cf8]/20"
-            style={{ clipPath: 'polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)' }}
+            className="w-12 h-10"
+            style={{
+              backgroundColor: 'var(--primary)',
+              opacity: 0.2,
+              clipPath: 'polygon(25% 0%, 75% 0%, 100% 100%, 0% 100%)',
+            }}
           />
         </div>
 
@@ -169,21 +220,21 @@ function GlobalLimelightNav() {
             }}
             onClick={() => handleItemClick(index, item.type)}
             onMouseEnter={() => setHoverIndex(index)}
-            className="relative z-20 flex items-center justify-center h-full px-3 text-[#9ca3af] hover:text-[#e2e8f0] transition-colors group"
+            className="relative z-20 flex items-center justify-center h-full px-3 text-muted-foreground hover:text-foreground transition-colors group"
             title={item.label}
           >
             {React.cloneElement(item.icon, {
               className: `w-4 h-4 transition-all duration-300 ${
                 targetIndex === index
-                  ? 'text-[#818cf8] scale-110 drop-shadow-[0_0_5px_rgba(129,140,248,0.5)]'
+                  ? 'text-primary scale-110 drop-shadow-[0_0_5px_rgba(0,44,209,0.5)]'
                   : 'scale-100 group-hover:scale-110'
               }`,
             } as React.HTMLAttributes<HTMLElement>)}
 
             {item.hasNoti && (
               <span className="absolute top-2 right-2 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
               </span>
             )}
           </button>
@@ -196,13 +247,13 @@ function GlobalLimelightNav() {
       {openDropdown === 'bell' && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpenDropdown(null)} />
-          <div className="absolute top-12 right-0 w-80 bg-[#1e1b18] border border-[#3a3633] rounded-xl shadow-2xl py-2 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="absolute top-12 right-0 w-80 bg-card border border-border rounded-xl shadow-2xl py-2 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-[#3a3633] flex justify-between items-center bg-[#2c2825]/50">
+            <div className="px-4 py-3 border-b border-border flex justify-between items-center bg-card/50">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[#e2e8f0]">최근 알림</span>
+                <span className="text-xs font-bold text-foreground">최근 알림</span>
                 {totalUnread > 0 && (
-                  <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-500 text-[0.5625rem] font-black rounded-full">
+                  <span className="px-1.5 py-0.5 bg-danger/20 text-danger text-[0.5625rem] font-black rounded-full">
                     {totalUnread}
                   </span>
                 )}
@@ -212,7 +263,7 @@ function GlobalLimelightNav() {
                   showToast('info', '모든 알림을 읽음 처리했습니다.');
                   setOpenDropdown(null);
                 }}
-                className="text-[0.625rem] text-[#818cf8] font-bold hover:text-[#6366f1] transition-colors"
+                className="text-[0.625rem] text-primary font-bold hover:text-primary transition-colors"
               >
                 모두 읽음
               </button>
@@ -222,8 +273,8 @@ function GlobalLimelightNav() {
             <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
               {totalUnread === 0 ? (
                 <div className="px-4 py-10 text-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto mb-2 opacity-60" />
-                  <p className="text-[0.6875rem] text-[#9ca3af]">새 알림이 없습니다</p>
+                  <CheckCircle2 className="w-5 h-5 text-success mx-auto mb-2 opacity-60" />
+                  <p className="text-[0.6875rem] text-muted-foreground">새 알림이 없습니다</p>
                 </div>
               ) : (
                 <>
@@ -235,22 +286,22 @@ function GlobalLimelightNav() {
                         setOpenDropdown(null);
                         nav('/hq?tab=team');
                       }}
-                      className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] flex gap-3 group"
+                      className="px-4 py-3 hover:bg-card cursor-pointer transition-colors border-b border-border flex gap-3 group"
                     >
-                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40 transition-colors flex items-center justify-center">
-                        <ShieldAlert className="w-4 h-4 text-rose-500" />
+                      <div className="shrink-0 mt-0.5 p-1.5 rounded-lg border bg-danger/10 border-danger/20 group-hover:border-danger/40 transition-colors flex items-center justify-center">
+                        <ShieldAlert className="w-4 h-4 text-danger" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#e2e8f0] leading-snug group-hover:text-white transition-colors">
-                          <strong className="font-bold text-white mr-1">[권한 승인]</strong>
+                        <p className="text-xs text-foreground leading-snug group-hover:text-foreground transition-colors">
+                          <strong className="font-bold text-foreground mr-1">[권한 승인]</strong>
                           새로운 매니저 워크스페이스 승인 대기 ({m.contact_name} 님)
                         </p>
-                        <p className="text-[0.625rem] text-[#9ca3af] mt-1.5 font-mono">
+                        <p className="text-[0.625rem] text-muted-foreground mt-1.5 font-mono">
                           {formatRelativeTime(m.created_at)} · {m.email}
                         </p>
                       </div>
                       <div className="shrink-0 flex items-center justify-center w-2">
-                        <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />
+                        <div className="w-1.5 h-1.5 bg-primary rounded-full" />
                       </div>
                     </div>
                   ))}
@@ -261,10 +312,10 @@ function GlobalLimelightNav() {
                     const body = item.title.split(']').slice(1).join(']').trim();
                     const bgCls =
                       item.type === 'critical'
-                        ? 'bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40'
+                        ? 'bg-danger/10 border-danger/20 group-hover:border-danger/40'
                         : item.type === 'warning'
-                          ? 'bg-amber-500/10 border-amber-500/20 group-hover:border-amber-500/40'
-                          : 'bg-emerald-500/10 border-emerald-500/20 group-hover:border-emerald-500/40';
+                          ? 'bg-warning/10 border-warning/20 group-hover:border-warning/40'
+                          : 'bg-success/10 border-success/20 group-hover:border-success/40';
                     const Icon =
                       item.iconType === 'legal'
                         ? Scale
@@ -273,10 +324,10 @@ function GlobalLimelightNav() {
                           : CheckCircle2;
                     const iconColor =
                       item.type === 'critical'
-                        ? 'text-rose-500'
+                        ? 'text-danger'
                         : item.type === 'warning'
-                          ? 'text-amber-500'
-                          : 'text-emerald-500';
+                          ? 'text-warning'
+                          : 'text-success';
                     return (
                       <div
                         key={item.id}
@@ -284,7 +335,7 @@ function GlobalLimelightNav() {
                           showToast('info', item.action);
                           setOpenDropdown(null);
                         }}
-                        className="px-4 py-3 hover:bg-[#2c2825] cursor-pointer transition-colors border-b border-[#3a3633] last:border-b-0 flex gap-3 group"
+                        className="px-4 py-3 hover:bg-card cursor-pointer transition-colors border-b border-border last:border-b-0 flex gap-3 group"
                       >
                         <div
                           className={`shrink-0 mt-0.5 p-1.5 rounded-lg border transition-colors flex items-center justify-center ${bgCls}`}
@@ -292,16 +343,16 @@ function GlobalLimelightNav() {
                           <Icon className={`w-4 h-4 ${iconColor}`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-[#e2e8f0] leading-snug group-hover:text-white transition-colors">
-                            <strong className="font-bold text-white mr-1">{tag}</strong>
+                          <p className="text-xs text-foreground leading-snug group-hover:text-foreground transition-colors">
+                            <strong className="font-bold text-foreground mr-1">{tag}</strong>
                             {body}
                           </p>
-                          <p className="text-[0.625rem] text-[#9ca3af] mt-1.5 font-mono">
+                          <p className="text-[0.625rem] text-muted-foreground mt-1.5 font-mono">
                             {item.time}
                           </p>
                         </div>
                         <div className="shrink-0 flex items-center justify-center w-2">
-                          <div className="w-1.5 h-1.5 bg-[#818cf8] rounded-full" />
+                          <div className="w-1.5 h-1.5 bg-primary rounded-full" />
                         </div>
                       </div>
                     );
@@ -311,13 +362,13 @@ function GlobalLimelightNav() {
             </div>
 
             {/* Footer */}
-            <div className="p-2 border-t border-[#3a3633]">
+            <div className="p-2 border-t border-border">
               <button
                 onClick={() => {
                   showToast('info', '전체 알림 센터는 준비 중입니다.');
                   setOpenDropdown(null);
                 }}
-                className="w-full py-2 text-[0.625rem] font-bold text-[#9ca3af] hover:text-white hover:bg-[#2c2825] rounded-lg transition-colors"
+                className="w-full py-2 text-[0.625rem] font-bold text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-colors"
               >
                 알림 센터 전체 보기
               </button>

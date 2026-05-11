@@ -29,6 +29,9 @@ class EmergingResult(TypedDict):
     consecutive_anomaly_quarters: int
     summary: str  # 자연어 설명
     is_mock: bool
+    # 2026-05-06 추가: 시계열 + 분포 (Task 3, 4 에서 산출 로직 추가)
+    quarter_history: list[dict] | None
+    peer_distribution: dict | None
 
 
 _SIGNAL_KO = {
@@ -61,6 +64,7 @@ def _load_model() -> tuple[LSTMAutoencoder, dict]:
         meta = pickle.load(f)  # noqa: S301
 
     import torch as _torch
+
     _device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
     model = LSTMAutoencoder(
         input_size=meta["input_size"],
@@ -79,6 +83,33 @@ def _anomaly_score(reconstruction_error: float, threshold: float) -> float:
     """reconstruction error → 0~1 이상도 점수 (threshold 기준 정규화, 최대 1.0 클리핑)."""
     score = reconstruction_error / (threshold + 1e-9)
     return round(min(float(score), 1.0), 4)
+
+
+def _compute_history_at_offset(
+    feat_scaled_full: np.ndarray,
+    model: LSTMAutoencoder,
+    threshold: float,
+    window_size: int,
+    q_offset: int,
+) -> float | None:
+    """q_offset 분기 전 시점 anomaly_score 산출.
+
+    feat_scaled_full: 전체 시계열 스케일된 피처 배열 (T x F)
+    q_offset: 0=현재, 7=7분기 전
+    반환: 0~1 anomaly_score 또는 None (데이터 부족)
+    """
+    end_idx = len(feat_scaled_full) - q_offset - 1
+    if end_idx < window_size - 1:
+        return None
+    window = feat_scaled_full[end_idx - window_size + 1 : end_idx + 1]
+    if len(window) < window_size:
+        return None
+    _dev = next(model.parameters()).device
+    x_t = torch.from_numpy(window.astype("float32")).unsqueeze(0).to(_dev)
+    with torch.no_grad():
+        recon = model(x_t).squeeze(0)
+    recon_error = float(((recon - x_t.squeeze(0)) ** 2).mean().item())
+    return _anomaly_score(recon_error, threshold)
 
 
 def _detect_signal(group_df, window: int = 3) -> str:
@@ -109,10 +140,15 @@ def _count_consecutive_anomalies(
     meta: dict,
     scaler: MinMaxScaler,
 ) -> int:
-    """뒤에서부터 연속 이상 분기(window) 수 카운트."""
+    """뒤에서부터 분기 단위 연속 이상 분기 수 카운트.
+
+    윈도우는 1분기씩 뒤로 밀지만, 비교는 윈도우의 마지막 timestep MSE만 사용 →
+    "분기 t의 패턴이 평소와 다른가"를 분기 단위로 판정. quarter_threshold 미존재
+    시 기존 threshold 로 fallback (구버전 meta 호환).
+    """
     window_size = meta["window_size"]
     feature_names = meta["feature_names"]
-    threshold = meta["threshold"]
+    quarter_threshold = meta.get("quarter_threshold", meta["threshold"])
 
     group_df = group_df.sort_values("quarter")
     feat_vals = group_df[feature_names].values.astype(np.float32)
@@ -129,13 +165,82 @@ def _count_consecutive_anomalies(
         x_t = torch.from_numpy(seq).unsqueeze(0).to(_dev)  # (1, window, features)
         with torch.no_grad():
             recon = model(x_t)
-        err = float(((recon - x_t) ** 2).mean().item())
-        if err > threshold:
+        last_err = float(((recon[:, -1, :] - x_t[:, -1, :]) ** 2).mean().item())
+        if last_err > quarter_threshold:
             count += 1
         else:
             break
 
     return count
+
+
+def _compute_peer_distribution(
+    df_all,
+    industry_code: str,
+    own_dong_code: str,
+    own_score: float,
+    model: LSTMAutoencoder,
+    feature_cols: list[str],
+    threshold: float,
+    window_size: int,
+) -> dict | None:
+    """마포 16 동 기준 anomaly 분포 산출.
+
+    각 동에 대해 동일 industry_code 데이터를 슬라이스하여 새 MinMaxScaler로 스케일,
+    _compute_history_at_offset(q_offset=0) 으로 현재 시점 anomaly_score 산출.
+    데이터 부족 동 (<window_size) 과 예외 발생 동은 제외.
+
+    반환: { p25, p50, p75, p90, percentile_self, rank_in_total, total } 또는 None (4동 미만).
+    """
+    mapo_dongs = sorted(df_all["dong_code"].unique())
+    mapo_dongs = [d for d in mapo_dongs if str(d).startswith("11440")]
+
+    peer_scores: list[float] = []
+    own_rank_score: float | None = None
+
+    for code in mapo_dongs:
+        sub = df_all[
+            (df_all["dong_code"] == code) & (df_all["industry_code"] == industry_code)
+        ].copy()
+        if len(sub) < window_size:
+            continue
+        try:
+            sub = sub.sort_values("quarter")
+            feat_vals = sub[feature_cols].values.astype(np.float32)
+            sc = MinMaxScaler()
+            feat_scaled = sc.fit_transform(feat_vals)
+            score = _compute_history_at_offset(feat_scaled, model, threshold, window_size, q_offset=0)
+            if score is not None:
+                peer_scores.append(score)
+                if str(code) == str(own_dong_code):
+                    own_rank_score = score
+        except Exception:
+            continue
+
+    if len(peer_scores) < 4:
+        return None
+
+    arr = np.array(peer_scores)
+    quantiles = np.percentile(arr, [25, 50, 75, 90])
+
+    # own_score 가 peer_scores 에 없으면(자기 동 데이터 부족 등) own_score fallback
+    ref_score = own_rank_score if own_rank_score is not None else own_score
+    sorted_desc = sorted(peer_scores, reverse=True)
+    rank = next(
+        (i + 1 for i, s in enumerate(sorted_desc) if abs(s - ref_score) < 1e-6),
+        len(sorted_desc),
+    )
+    percentile_self = float((rank / len(peer_scores)) * 100)
+
+    return {
+        "p25": float(quantiles[0]),
+        "p50": float(quantiles[1]),
+        "p75": float(quantiles[2]),
+        "p90": float(quantiles[3]),
+        "percentile_self": percentile_self,
+        "rank_in_total": rank,
+        "total": len(peer_scores),
+    }
 
 
 def predict(
@@ -220,11 +325,42 @@ def predict(
     industry_name = _resolve_industry_name(industry_code)
 
     signal_ko = _SIGNAL_KO.get(signal, signal)
+    score_pct = int(round(score * 100))
     if signal == "normal":
-        summary = f"{dong_name} {industry_name}: 정상 상권 패턴 (이상도 {score:.2f})"
+        summary = f"{dong_name} {industry_name}: 정상 상권 패턴 (평소 대비 변화 {score_pct}%)"
     else:
         q_str = f"최근 {consecutive}분기 연속 이상 감지 " if consecutive > 0 else ""
-        summary = f"{dong_name} {industry_name}: {q_str}(이상도 {score:.2f}) — {signal_ko} 가능성"
+        summary = f"{dong_name} {industry_name}: {q_str}(평소 대비 변화 {score_pct}%) — {signal_ko} 가능성"
+
+    # 2026-05-06: 8 분기 시계열 history 산출
+    quarter_history: list[dict] = []
+    for offset in range(7, -1, -1):  # 7→0 (오름차순으로 표시)
+        h_score = _compute_history_at_offset(
+            feat_scaled,
+            model,
+            threshold,
+            window_size,
+            offset,
+        )
+        quarter_label = "현재" if offset == 0 else f"Q-{offset}"
+        quarter_history.append(
+            {
+                "quarter": quarter_label,
+                "anomaly_score": h_score if h_score is not None else 0.0,
+            }
+        )
+
+    # 2026-05-06: 마포 16동 peer_distribution 산출
+    peer_distribution = _compute_peer_distribution(
+        df_all=df,
+        industry_code=industry_code,
+        own_dong_code=dong_code,
+        own_score=score,
+        model=model,
+        feature_cols=feature_names,
+        threshold=threshold,
+        window_size=window_size,
+    )
 
     return EmergingResult(
         dong_code=dong_code,
@@ -234,6 +370,8 @@ def predict(
         consecutive_anomaly_quarters=consecutive,
         summary=summary,
         is_mock=False,
+        quarter_history=quarter_history,
+        peer_distribution=peer_distribution,
     )
 
 
@@ -250,4 +388,6 @@ def _mock_result(dong_code: str, industry_code: str) -> EmergingResult:
         consecutive_anomaly_quarters=0,
         summary=f"{dong_name} {industry_name}: 모델 미학습 상태 (mock)",
         is_mock=True,
+        quarter_history=None,
+        peer_distribution=None,
     )

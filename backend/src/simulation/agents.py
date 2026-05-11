@@ -117,6 +117,18 @@ class Agent:
     # DB 기반 개인 프로필 (전 tier 공통)
     profile: "AgentProfile | None" = None
 
+    # PersonaPool (Nemotron 7,187 개) 매칭 페르소나 (전 tier 공통, 선택적).
+    # spawn_agents 가 sex+age 매칭으로 부여. LLM prompt + UI PersonaCard 노출.
+    # 사용자 피드백 (2026-05-06): parquet 미통합 → spawn 시 매핑.
+    persona_uuid: str | None = None
+    occupation: str = ""  # 예: "회계사", "대학원생"
+    education_level: str = ""  # 예: "4년제 대학교"
+    persona_text: str = ""  # 한 문단 요약 (Nemotron persona 컬럼)
+    hobbies: list[str] = field(default_factory=list)  # 취미 list
+    professional_persona_text: str = ""  # 직업 관련 상세 (Tier S LLM prompt 용)
+    cultural_background: str = ""  # 문화적 배경
+    career_goals_text: str = ""  # 커리어 목표
+
     # 사회적 상호작용 (원시어 DSL 대화용)
     friends: list[int] = field(default_factory=list)
     pending_invites: list[dict] = field(default_factory=list)
@@ -135,6 +147,9 @@ class Agent:
     # v11 (2026-04) — 인간다움 Layer 2 (기억) / Layer 3 (내부상태) / Layer 5 (소셜)
     # Layer 2: 장기 방문 이력 — 재방문 패턴·학습
     visit_history: list[dict] = field(default_factory=list)
+    # store_id → (sum, count) — recall_satisfaction O(N) 스캔 회피용 incremental index.
+    # cProfile 측정 시 recall_satisfaction 1.92s tottime / 2.3M call → 거의 0s.
+    _satisfaction_idx: dict[int, tuple[float, int]] = field(default_factory=dict)
     # [{"day": int, "hour": int, "store_id": int, "category": str, "satisfaction": float}]
     learned_prefs: dict[str, float] = field(default_factory=dict)  # category → 0~1 학습 선호
     blacklist: set[int] = field(default_factory=set)  # 만족도 <0.2 매장 ID
@@ -148,6 +163,25 @@ class Agent:
     pending_recommendations: list[dict] = field(default_factory=list)
     # [{"store_id": int, "from_agent": int, "category": str, "strength": float}]
 
+    # v13 (2026-05) — Hierarchical Planning (Stanford Generative Agents UIST'23 적용)
+    # Tier S 만 사용. 시뮬 시작 시 1회 LLM 으로 하루 일정 생성, 매 hour 슬롯 조회로 LLM 회피.
+    # 슬롯 부재 (예: warmup 끝나고 plan 만료) 시 batch_smart_decide 로 fallback.
+    daily_plan: list[dict] = field(default_factory=list)
+    # [{"start": int, "end": int, "action": "visit|move|rest|work",
+    #   "dong": str, "category": str | None, "reason": str}]
+
+    def get_plan_slot(self, hour: int) -> dict | None:
+        """현재 hour 에 해당하는 plan slot 반환 (없으면 None)."""
+        for item in self.daily_plan:
+            try:
+                start = int(item.get("start", 0))
+                end = int(item.get("end", 0))
+            except (TypeError, ValueError):
+                continue
+            if start <= hour < end:
+                return item
+        return None
+
     def __post_init__(self):
         if not self.current_dong:
             self.current_dong = self.home_dong
@@ -159,15 +193,19 @@ class Agent:
     # -----------------------------------------------------------
     def record_visit(self, day: int, hour: int, store_id: int, category: str, satisfaction: float) -> None:
         """방문 기록 — visit_history append + learned_prefs 업데이트 + blacklist 체크."""
+        sat_round = round(satisfaction, 3)
         self.visit_history.append(
             {
                 "day": day,
                 "hour": hour,
                 "store_id": store_id,
                 "category": category,
-                "satisfaction": round(satisfaction, 3),
+                "satisfaction": sat_round,
             }
         )
+        # incremental satisfaction index — recall_satisfaction O(1) 조회용
+        prev_s, prev_c = self._satisfaction_idx.get(store_id, (0.0, 0))
+        self._satisfaction_idx[store_id] = (prev_s + sat_round, prev_c + 1)
         # 카테고리 학습 (exponential moving average, α=0.3)
         prev = self.learned_prefs.get(category, 0.5)
         self.learned_prefs[category] = round(0.7 * prev + 0.3 * satisfaction, 3)
@@ -178,14 +216,18 @@ class Agent:
         recent_same = [v for v in self.visit_history[-20:] if v["hour"] == hour and v["store_id"] == store_id]
         if len(recent_same) >= 3:
             self.habit_store[hour] = store_id
-        # 히스토리 캡 (최근 100건만 유지)
+        # 히스토리 캡 (최근 100건만 유지) — index 는 cap 안 함 (over-counting 영향 미미,
+        # blacklist 와 동일 원칙. 매일 reset 안 됨 — multi-day 시뮬에서 학습 누적).
         if len(self.visit_history) > 100:
             self.visit_history = self.visit_history[-100:]
 
     def recall_satisfaction(self, store_id: int) -> float | None:
-        """해당 store 의 누적 만족도 평균 (없으면 None)."""
-        recs = [v["satisfaction"] for v in self.visit_history if v["store_id"] == store_id]
-        return sum(recs) / len(recs) if recs else None
+        """해당 store 의 누적 만족도 평균 (없으면 None). O(1) 인덱스 lookup."""
+        rec = self._satisfaction_idx.get(store_id)
+        if not rec:
+            return None
+        s, c = rec
+        return s / c if c > 0 else None
 
     # -----------------------------------------------------------
     # Layer 3: 내부 상태 업데이트
@@ -213,6 +255,11 @@ class Agent:
         self.spent_today = 0.0
         self.budget_left_today = self.budget_today
         self.visited_today = []
+        # daily_plan 도 일별 갱신 — runner.py 가 measurement 일 시작 시 재생성.
+        # 미초기화 시 Day2 부터 전날 plan 시간 슬롯이 wrong hour 매칭 (review HIGH-1).
+        self.daily_plan = []
+        # friend_visits 자정 누적 방지 — 어제 visit 이 오늘 peer influence 로 잘못 활용.
+        self.friend_visits = []
 
     # -----------------------------------------------------------
     # 의사결정 라우터 - tier에 따라 다른 경로
@@ -473,15 +520,135 @@ class Agent:
 # ---------------------------------------------------------------
 # 에이전트 팩토리
 # ---------------------------------------------------------------
-KOREAN_SURNAMES = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임"]
-KOREAN_NAMES_M = ["민준", "서준", "도윤", "하준", "지호", "준우", "은우", "선우"]
-KOREAN_NAMES_F = ["서연", "지유", "하윤", "서윤", "지우", "수아", "하은", "지아"]
+KOREAN_SURNAMES = [
+    "김",
+    "이",
+    "박",
+    "최",
+    "정",
+    "강",
+    "조",
+    "윤",
+    "장",
+    "임",
+    "한",
+    "오",
+    "서",
+    "신",
+    "권",
+    "황",
+    "안",
+    "송",
+    "전",
+    "홍",
+    "유",
+    "고",
+    "문",
+    "양",
+    "손",
+    "배",
+    "백",
+    "허",
+    "남",
+    "심",
+]
+KOREAN_NAMES_M = [
+    "민준",
+    "서준",
+    "도윤",
+    "하준",
+    "지호",
+    "준우",
+    "은우",
+    "선우",
+    "현우",
+    "지우",
+    "유준",
+    "건우",
+    "우진",
+    "민재",
+    "지훈",
+    "예준",
+    "주원",
+    "서진",
+    "시우",
+    "준서",
+    "이준",
+    "재윤",
+    "지환",
+    "성민",
+    "도현",
+    "태윤",
+    "승호",
+    "영민",
+    "동현",
+    "재현",
+]
+KOREAN_NAMES_F = [
+    "서연",
+    "지유",
+    "하윤",
+    "서윤",
+    "지우",
+    "수아",
+    "하은",
+    "지아",
+    "지민",
+    "예린",
+    "예나",
+    "유진",
+    "다은",
+    "소율",
+    "채원",
+    "지원",
+    "수빈",
+    "민서",
+    "윤서",
+    "유나",
+    "예원",
+    "혜린",
+    "예은",
+    "은서",
+    "다인",
+    "나윤",
+    "서아",
+    "민아",
+    "현지",
+    "도연",
+]
 
 
 def _gen_name(rng: random.Random, gender: str) -> str:
+    """단순 random — 충돌 가능. 시뮬 시작 시 _gen_unique_names 사용 권장."""
     sn = rng.choice(KOREAN_SURNAMES)
     given = rng.choice(KOREAN_NAMES_M if gender == "M" else KOREAN_NAMES_F)
     return f"{sn}{given}"
+
+
+def _gen_unique_names(rng: random.Random, n: int, gender: str) -> list[str]:
+    """N 개 unique 이름 — surname × given 풀 (30×30=900) 에서 sample.
+
+    Tier S 50명 + Tier A 200명 같은 다수 agent 에 unique 이름 보장. 풀 풍부해서
+    충돌 없음. n > 900 (예: Tier B 4750) 면 풀 부족 → fallback 으로 #N suffix 추가.
+    """
+    given_pool = KOREAN_NAMES_M if gender == "M" else KOREAN_NAMES_F
+    combos = [(sn, gv) for sn in KOREAN_SURNAMES for gv in given_pool]
+    rng.shuffle(combos)
+    out: list[str] = []
+    if n <= len(combos):
+        out = [sn + gv for sn, gv in combos[:n]]
+    else:
+        # 풀 부족 — 처음 풀 다 쓰고 #N suffix 로 unique 보장
+        for sn, gv in combos:
+            out.append(sn + gv)
+        i = 1
+        while len(out) < n:
+            for sn, gv in combos:
+                out.append(f"{sn}{gv}#{i}")
+                if len(out) >= n:
+                    break
+            i += 1
+    return out
 
 
 def spawn_agents(
@@ -506,6 +673,27 @@ def spawn_agents(
     rng = random.Random(seed)
     agents: list[Agent] = []
     aid = 1
+
+    # 사용자 피드백 (2026-05-08): persona_uuid 중복 방지 — sample() 에 exclude 전달.
+    used_persona_uuids: set[str] = set()
+
+    # 사용자 피드백 (2026-05-04): agent 이름 중복 다수 → unique 풀 사전 생성.
+    # 30 surnames × 30 names = 900 per gender. n>900 케이스 자동 #suffix fallback.
+    total_agents = n_residents + n_commuters + n_visitors + n_owners + n_ext_commuters + n_ext_visitors
+    name_pool_m = _gen_unique_names(rng, total_agents, "M")
+    name_pool_f = _gen_unique_names(rng, total_agents, "F")
+    m_idx = 0
+    f_idx = 0
+
+    def _next_name(gender: str) -> str:
+        nonlocal m_idx, f_idx
+        if gender == "M":
+            n = name_pool_m[m_idx % len(name_pool_m)]
+            m_idx += 1
+        else:
+            n = name_pool_f[f_idx % len(name_pool_f)]
+            f_idx += 1
+        return n
 
     role_quota = [
         (Role.RESIDENT, n_residents),
@@ -651,7 +839,8 @@ def spawn_agents(
             agent_id=aid,
             tier=tier,
             role=role,
-            name=_gen_name(rng, gender),
+            # 우선순위: nemotron profile 본문 추출 이름 → fallback unique pool.
+            name=(getattr(profile_obj, "name", None) or _next_name(gender)),
             age=age,
             gender=gender,
             home_dong=home,
@@ -663,6 +852,31 @@ def spawn_agents(
             arrival_hour=arr_h,
             departure_hour=dep_h,
         )
+        # PersonaPool inject — sex+age 매칭으로 Nemotron 7,187 풀에서 sample.
+        # 사용자 피드백 (2026-05-06): parquet 미통합 → spawn 시 매핑.
+        # 사용자 피드백 (2026-05-08): 페르소나 중복 발생 → used_persona_uuids 로 dedup.
+        # 실패 (parquet 미존재 등) 시 무시 — agent 그대로 (필드는 default 빈 값).
+        try:
+            from .persona_pool import sample as _persona_sample
+
+            _pp = _persona_sample(gender, age, rng, exclude_uuids=used_persona_uuids)
+            if _pp is not None:
+                a.persona_uuid = _pp.uuid
+                used_persona_uuids.add(_pp.uuid)
+                a.occupation = _pp.occupation
+                a.education_level = _pp.education_level
+                a.persona_text = _pp.persona_text
+                a.hobbies = _pp.hobbies
+                a.professional_persona_text = _pp.professional_persona
+                a.cultural_background = _pp.cultural_background
+                a.career_goals_text = _pp.career_goals
+                # Tier B 규칙도 페르소나 영향 받게 — hobbies/persona 키워드 → 카테고리 가중 dict.
+                # 1회 계산 (string scan), score_store 매 호출 시 dict lookup 만.
+                from .policy_executor import compute_nemotron_cat_pref
+
+                a.hobby_cat_pref = compute_nemotron_cat_pref(a)
+        except Exception:
+            pass
         aid += 1
         return a
 

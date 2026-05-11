@@ -3,10 +3,12 @@
  *
  * 데이터: competitor_intel.differentiation_position / key_opportunities / key_risks
  * 디자인: pull-quote 스타일 + 양분 칩 리스트
- * Best practice: LLM narrative는 blockquote, 액션 항목은 칩
+ *
+ * 렌더링 계약: 부모(MarketTab 등)가 outer wrapper(bg-card rounded-[40px] p-6) + 헤더 제공.
+ * 본 컴포넌트는 bare content (blockquote + 기회/리스크 grid) 만 렌더 — 퐁당퐁당 중첩 회피.
  */
 
-import { Target, Lightbulb, ShieldAlert } from 'lucide-react';
+import { Lightbulb, ShieldAlert } from 'lucide-react';
 
 interface Props {
   differentiation?: string | null;
@@ -24,29 +26,20 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
   }
 
   return (
-    <div className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Target size={14} className="text-indigo-400" />
-        <h4 className="text-xs font-black uppercase tracking-widest text-stone-500">
-          차별화 포지셔닝
-        </h4>
-        <span className="text-[0.625rem] font-black text-stone-600 normal-case tracking-normal">
-          competitor_intel
-        </span>
-      </div>
-
+    <>
       {hasDiff && (
-        <div className="relative pl-4 border-l-2 border-indigo-500/40 mb-4">
-          <p className="text-sm text-stone-200 leading-relaxed italic">{differentiation}</p>
+        <div className="relative pl-4 border-l-2 border-primary/40 mb-4">
+          <p className="text-sm text-foreground leading-relaxed italic">{differentiation}</p>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        {/* 기회 */}
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+        {/* 기회 — 퐁당퐁당 룰: outer card(white) ↔ inner secondary(cool gray).
+            의미 색은 텍스트/아이콘에만 — bg/border tint 금지. */}
+        <div className="rounded-2xl border border-border bg-secondary p-3">
           <div className="flex items-center gap-1.5 mb-2">
-            <Lightbulb size={12} className="text-emerald-400" />
-            <span className="text-[0.625rem] font-black uppercase tracking-widest text-emerald-400">
+            <Lightbulb size={12} className="text-success" />
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-success">
               핵심 기회
             </span>
           </div>
@@ -55,23 +48,23 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
               {opportunities!.map((o, i) => (
                 <li
                   key={i}
-                  className="text-[0.6875rem] text-stone-200 leading-relaxed flex items-start gap-1.5"
+                  className="text-[0.6875rem] text-foreground leading-relaxed flex items-start gap-1.5"
                 >
-                  <span className="text-emerald-500 mt-0.5">•</span>
+                  <span className="text-success mt-0.5">•</span>
                   <span>{o}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <span className="text-[0.625rem] text-stone-500">식별된 기회 없음</span>
+            <span className="text-[0.625rem] text-muted-foreground">식별된 기회 없음</span>
           )}
         </div>
 
         {/* 리스크 */}
-        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-3">
+        <div className="rounded-2xl border border-border bg-secondary p-3">
           <div className="flex items-center gap-1.5 mb-2">
-            <ShieldAlert size={12} className="text-rose-400" />
-            <span className="text-[0.625rem] font-black uppercase tracking-widest text-rose-400">
+            <ShieldAlert size={12} className="text-danger" />
+            <span className="text-[0.625rem] font-black uppercase tracking-widest text-danger">
               핵심 리스크
             </span>
           </div>
@@ -80,18 +73,18 @@ export function DifferentiationCard({ differentiation, opportunities, risks }: P
               {risks!.map((r, i) => (
                 <li
                   key={i}
-                  className="text-[0.6875rem] text-stone-200 leading-relaxed flex items-start gap-1.5"
+                  className="text-[0.6875rem] text-foreground leading-relaxed flex items-start gap-1.5"
                 >
-                  <span className="text-rose-500 mt-0.5">•</span>
+                  <span className="text-danger mt-0.5">•</span>
                   <span>{r}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <span className="text-[0.625rem] text-stone-500">식별된 리스크 없음</span>
+            <span className="text-[0.625rem] text-muted-foreground">식별된 리스크 없음</span>
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

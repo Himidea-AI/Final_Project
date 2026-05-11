@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, FileDown, Loader2, RotateCw } from 'lucide-react';
 import { useSimulationDetail } from '../hooks/useSimulationDetail';
 import { HistoryDashboardView } from './HistoryDashboardView';
-import { formatDocumentId } from '../types/simulationHistory';
+import { formatDocumentId, type SimulationKind } from '../types/simulationHistory';
 import { HiddenPDFTemplate } from '../components/PDF/HiddenPDFTemplate';
-import { buildPdfPropsFromSimulation } from '../utils/pdfPropsBuilder';
+import {
+  buildAbmPdfProps,
+  buildAiPdfProps,
+  buildForeseePdfProps,
+  buildPdfPropsFromSimulation,
+} from '../utils/pdfPropsBuilder';
+import { useSimulationStore } from '../stores/simulationStore';
+import type { SimulationInput } from '../types';
 
 function formatWhen(iso: string): string {
   try {
@@ -15,23 +22,80 @@ function formatWhen(iso: string): string {
   }
 }
 
-export default function SimulationHistoryDetail() {
+interface SimulationHistoryDetailProps {
+  /**
+   * 진입 라우트 별 kind 주입 — App.tsx 에서 wrapper element 로 prop 전달.
+   * - 'foresee' : /dashboard/foresee/:id
+   * - 'ai'      : /dashboard/ai/:id
+   * - 'abm'     : /dashboard/abm/:id
+   * - undefined : /dashboard/history/:id (legacy) — pathname 으로 자동 fallback
+   */
+  kind?: SimulationKind;
+}
+
+export default function SimulationHistoryDetail({
+  kind: kindProp,
+}: SimulationHistoryDetailProps = {}) {
   const { id: raw } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const id = raw ? Number(raw) : null;
-  const { data, isLoading, error, notFound } = useSimulationDetail(Number.isFinite(id) ? id : null);
+
+  // kind: prop 우선 → 없으면 pathname 분기 → 그래도 없으면 null (legacy fallback)
+  const kind: SimulationKind | null = useMemo(() => {
+    if (kindProp) return kindProp;
+    const p = location.pathname;
+    if (p.startsWith('/dashboard/foresee/')) return 'foresee';
+    if (p.startsWith('/dashboard/ai/')) return 'ai';
+    if (p.startsWith('/dashboard/abm/')) return 'abm';
+    return null;
+  }, [kindProp, location.pathname]);
+
+  const { data, isLoading, error, notFound } = useSimulationDetail(
+    Number.isFinite(id) ? id : null,
+    kind,
+  );
 
   const pdfTemplateRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  const pdfProps = data
-    ? buildPdfPropsFromSimulation({
+  // kind-aware PDF builder 선택 — 'foresee'(ML 예측) 또는 'ai'(LangGraph 분석).
+  // legacy /dashboard/history/:id (kind=null) 는 통합 빌더로 호환 유지.
+  const pdfProps = useMemo(() => {
+    if (!data) return null;
+    if (kind === 'foresee') {
+      return buildForeseePdfProps({
         simResult: data.simulation_result,
         businessType: data.business_type ?? null,
+        brandName: data.brand_name,
         savedHistoryId: data.id,
-      })
-    : null;
+      });
+    }
+    if (kind === 'ai') {
+      return buildAiPdfProps({
+        simResult: data.simulation_result,
+        businessType: data.business_type ?? null,
+        brandName: data.brand_name,
+        savedHistoryId: data.id,
+      });
+    }
+    if (kind === 'abm') {
+      // ABM 은 simulation_result 가 곧 ABM 응답 schema (dong_totals/cannibalization 등).
+      // useSimulationDetail abmFetcher 가 raw row.result → simulation_result 로 매핑함.
+      return buildAbmPdfProps({
+        abmResult: data.simulation_result as unknown as Record<string, unknown> | null,
+        brandName: data.brand_name,
+        businessType: data.business_type ?? null,
+        savedHistoryId: data.id,
+      });
+    }
+    return buildPdfPropsFromSimulation({
+      simResult: data.simulation_result,
+      businessType: data.business_type ?? null,
+      savedHistoryId: data.id,
+    });
+  }, [data, kind]);
 
   const handleDownloadPDF = useCallback(async () => {
     if (!pdfTemplateRef.current || !data) return;
@@ -81,35 +145,37 @@ export default function SimulationHistoryDetail() {
 
   if (!id || !Number.isFinite(id)) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-[#1e1b18] text-sm text-rose-400">
+      <div className="flex min-h-[60vh] items-center justify-center bg-card text-sm text-danger">
         잘못된 경로입니다.
       </div>
     );
   }
 
   return (
-    <div className="h-screen overflow-y-auto custom-scrollbar bg-[#0C0B0A] pb-16 text-stone-100">
+    // relative z-10 — 글로벌 NetworkBackground (fixed inset-0 z-0 별자리 캔버스) 가
+    // 페이지 위로 비치는 회귀 차단. dashboard outlet 과 동일 stacking 패턴.
+    <div className="custom-scrollbar relative z-10 h-screen overflow-y-auto bg-background pb-16 text-foreground">
       <div className="mx-auto max-w-[1600px] px-6 pt-20">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-4 inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-100"
+          className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           목록으로
         </button>
 
         {isLoading && (
-          <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-500">
+          <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
             불러오는 중…
           </div>
         )}
 
         {error && !isLoading && (
-          <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-6 text-center text-sm text-rose-300">
+          <div className="rounded-lg border border-danger/40 bg-danger/10 p-6 text-center text-sm text-danger">
             {error}
             {notFound && (
-              <div className="mt-2 text-xs text-stone-500">
+              <div className="mt-2 text-xs text-muted-foreground">
                 다른 매니저의 이력은 조회할 수 없습니다.
               </div>
             )}
@@ -124,29 +190,85 @@ export default function SimulationHistoryDetail() {
               brandName={data.brand_name}
               district={data.district}
               createdAt={data.created_at}
+              kind={kind}
               onRerun={() => {
-                // Phase 1: SimulatorDashboard가 별도 state로 payload 받는 경로가 없어
-                // 우선 시뮬레이터로 이동. Phase 2에서 sessionStorage 경유 재실행 자동 주입.
-                navigate('/simulator');
+                // Phase 2 (2026-05-03) — saved 시뮬의 scenario(=원본 SimulationInput) 를
+                // simulationStore.params 에 주입 후 /simulator 로 이동. SimulatorDashboard 의
+                // initParams lazy useState 가 mount 시 store.params 에서 폼 자동 채움 (분석조건
+                // drawer "조건 수정" 동선 동일 패턴).
+                // intent='edit' state — App.tsx 의 auto-redirect (rawSimResult 있으면 dashboard
+                // 로 다시 보내는 effect) skip. saved detail 본 후 새 시뮬 돌렸던 회귀 차단.
+                // data.scenario 가 null (DB 컬럼 추가 전) 이면 빈 폼 fallback.
+                const savedInput = (data.scenario as SimulationInput | null) ?? null;
+                useSimulationStore.getState().dismissResult();
+                if (savedInput) {
+                  useSimulationStore.setState({ params: savedInput });
+                }
+                navigate('/simulator', { state: { intent: 'edit' } });
               }}
               onDownloadPDF={handleDownloadPDF}
               isGeneratingPDF={isGeneratingPDF}
             />
             <div className="mt-6">
-              <HistoryDashboardView
-                simResult={data.simulation_result}
-                savedHistoryId={data.id}
-                brandName={data.brand_name}
-                businessType={data.business_type}
-              />
+              {kind === 'abm' ? (
+                // ABM 은 PDF 만 제공 — 사용자 요청 (2026-05-10). 화면 view 제거.
+                // 결과는 상단 우측 'PDF 다운로드' 버튼으로만 확인.
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+                  <p className="text-sm font-bold text-foreground">ABM 시뮬 결과</p>
+                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                    ABM 시뮬 결과는 상단 우측{' '}
+                    <span className="font-bold text-primary">PDF 다운로드</span> 버튼으로 확인하실
+                    수 있습니다.
+                  </p>
+                </div>
+              ) : (
+                <HistoryDashboardView
+                  simResult={data.simulation_result}
+                  savedHistoryId={data.id}
+                  brandName={data.brand_name}
+                  businessType={data.business_type}
+                  kind={kind}
+                />
+              )}
             </div>
           </>
         )}
 
         {/* A4 PDF 템플릿 — 화면 밖 렌더, html2canvas 캡처용 */}
-        {pdfProps && (
+        {pdfProps && 'mode' in pdfProps && pdfProps.mode === 'foresee' && (
           <HiddenPDFTemplate
             ref={pdfTemplateRef}
+            mode="foresee"
+            districtFull={pdfProps.districtFull}
+            reportDate={pdfProps.reportDate}
+            savedHistoryId={pdfProps.savedHistoryId}
+            foresee={pdfProps.foresee}
+          />
+        )}
+        {pdfProps && 'mode' in pdfProps && pdfProps.mode === 'ai' && (
+          <HiddenPDFTemplate
+            ref={pdfTemplateRef}
+            mode="ai"
+            districtFull={pdfProps.districtFull}
+            reportDate={pdfProps.reportDate}
+            savedHistoryId={pdfProps.savedHistoryId}
+            ai={pdfProps.ai}
+          />
+        )}
+        {pdfProps && 'mode' in pdfProps && pdfProps.mode === 'abm' && (
+          <HiddenPDFTemplate
+            ref={pdfTemplateRef}
+            mode="abm"
+            districtFull={pdfProps.districtFull}
+            reportDate={pdfProps.reportDate}
+            savedHistoryId={pdfProps.savedHistoryId}
+            abm={pdfProps.abm}
+          />
+        )}
+        {pdfProps && !('mode' in pdfProps) && (
+          <HiddenPDFTemplate
+            ref={pdfTemplateRef}
+            mode="legacy"
             districtFull={pdfProps.districtFull}
             stats={pdfProps.stats}
             cannibalizationRows={pdfProps.cannibalizationRows}
@@ -168,6 +290,7 @@ interface DetailHeaderProps {
   brandName: string;
   district: string;
   createdAt: string;
+  kind: SimulationKind | null;
   onRerun: () => void;
   onDownloadPDF: () => void;
   isGeneratingPDF: boolean;
@@ -179,32 +302,52 @@ function DetailHeader({
   brandName,
   district,
   createdAt,
+  kind,
   onRerun,
   onDownloadPDF,
   isGeneratingPDF,
 }: DetailHeaderProps) {
+  const kindLabel =
+    kind === 'foresee' ? 'ML 예측' : kind === 'ai' ? 'AI 분석' : kind === 'abm' ? 'ABM 시뮬' : null;
+  const kindCls =
+    kind === 'foresee'
+      ? 'bg-primary/10 text-primary border-primary/40'
+      : kind === 'ai'
+        ? 'bg-chart-4/10 text-chart-4 border-chart-4/40'
+        : kind === 'abm'
+          ? 'bg-chart-3/10 text-chart-3 border-chart-3/40'
+          : '';
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-stone-700 bg-stone-800 p-5">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-muted p-5">
       <div>
         <div className="flex items-center gap-2">
-          <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-mono font-bold text-amber-400">
+          <span className="rounded bg-warning/15 px-2 py-0.5 text-xs font-mono font-bold text-warning">
             {formatDocumentId(id)}
           </span>
-          <span className="text-[0.625rem] uppercase tracking-widest text-stone-500">
+          {kindLabel && (
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.625rem] font-bold ${kindCls}`}
+            >
+              {kindLabel}
+            </span>
+          )}
+          <span className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
             읽기 전용
           </span>
         </div>
-        <h1 className="mt-2 text-xl font-semibold text-stone-100">
+        <h1 className="mt-2 text-xl font-semibold text-foreground">
           {clientName} 고객님 · {brandName} — {district}
         </h1>
-        <div className="mt-1 font-mono text-xs text-stone-500">저장 {formatWhen(createdAt)}</div>
+        <div className="mt-1 font-mono text-xs text-muted-foreground">
+          저장 {formatWhen(createdAt)}
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onDownloadPDF}
           disabled={isGeneratingPDF}
-          className="inline-flex items-center gap-2 rounded-md border border-indigo-500/60 bg-indigo-500/10 px-3 py-2 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-md border border-primary/60 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isGeneratingPDF ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -216,7 +359,7 @@ function DetailHeader({
         <button
           type="button"
           onClick={onRerun}
-          className="inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-xs font-semibold text-stone-900 hover:bg-amber-400"
+          className="inline-flex items-center gap-2 rounded-md bg-warning px-3 py-2 text-xs font-semibold text-warning-foreground hover:bg-warning"
         >
           <RotateCw className="h-4 w-4" />
           시뮬레이터로 이동

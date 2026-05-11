@@ -169,7 +169,7 @@ class AuthService:
             }
 
         finally:
-            engine.dispose()
+            pass
 
     def login(self, email: str, password: str) -> dict:
         """
@@ -184,7 +184,8 @@ class AuthService:
                 row = conn.execute(
                     text(
                         "SELECT id, company_name, biz_number, contact_name, position, "
-                        "email, phone, store_count, password_hash, plan, is_active "
+                        "email, phone, store_count, password_hash, plan, is_active, "
+                        "is_superadmin "
                         "FROM users WHERE email = :email"
                     ),
                     {"email": email},
@@ -229,10 +230,12 @@ class AuthService:
                     else:
                         brand_data = None
 
+                role = "superadmin" if user.get("is_superadmin") else "master"
                 return {
                     "status": "success",
                     "user": {
                         "id": str(user["id"]),
+                        "role": role,
                         "company_name": user["company_name"],
                         "contact_name": user["contact_name"],
                         "email": user["email"],
@@ -243,17 +246,17 @@ class AuthService:
                     },
                     "brand": {
                         "brand_name": brand_data.get("brand_name", ""),
-                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")),
-                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")),
-                        "franchise_count": brand_data.get("franchise_count", 0),
-                        "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)),
-                        "mapo_store_count": brand_data.get("mapo_store_count", 0),
+                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")) or "",
+                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")) or "",
+                        "franchise_count": brand_data.get("franchise_count", 0) or 0,
+                        "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)) or 0,
+                        "mapo_store_count": brand_data.get("mapo_store_count", 0) or 0,
                     }
                     if brand_data
                     else None,
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 초대코드 발급
@@ -289,7 +292,7 @@ class AuthService:
                     "company_name": owner._mapping["company_name"],
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 초대코드 검증 — 팀장 기업정보 반환
@@ -331,7 +334,7 @@ class AuthService:
                     "owner_id": str(inv["owner_id"]),
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 매니저 회원가입
@@ -432,7 +435,7 @@ class AuthService:
                     },
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 매니저 로그인
@@ -476,6 +479,27 @@ class AuthService:
                 )
                 conn.commit()
 
+                # 소속 팀장의 브랜드 매핑 조회
+                brand_data = None
+                if mgr.get("biz_number"):
+                    brand_row = conn.execute(
+                        text(
+                            "SELECT brand_name, industry_large, industry_medium, "
+                            "franchise_count, avg_sales, mapo_store_count "
+                            "FROM biz_brand_mapping WHERE biz_number = :biz"
+                        ),
+                        {"biz": mgr["biz_number"]},
+                    ).fetchone()
+
+                    if brand_row:
+                        brand_data = dict(brand_row._mapping)
+                    else:
+                        brands = self._mapper.search_brand_by_company(mgr["company_name"])
+                        top = brands[0] if brands else None
+                        if top:
+                            top["mapo_store_count"] = self._mapper.count_mapo_stores(top["brand_name"])
+                            brand_data = top
+
                 return {
                     "status": "success",
                     "user": {
@@ -490,9 +514,19 @@ class AuthService:
                         "store_count": str(mgr["store_count"]) if mgr["store_count"] is not None else "",
                         "plan": mgr["plan"],
                     },
+                    "brand": {
+                        "brand_name": brand_data.get("brand_name", ""),
+                        "industry_large": brand_data.get("indutyLclasNm", brand_data.get("industry_large", "")) or "",
+                        "industry_medium": brand_data.get("indutyMlsfcNm", brand_data.get("industry_medium", "")) or "",
+                        "franchise_count": brand_data.get("franchise_count", brand_data.get("frcsCnt", 0)) or 0,
+                        "avg_sales": brand_data.get("avrgSlsAmt", brand_data.get("avg_sales", 0)) or 0,
+                        "mapo_store_count": brand_data.get("mapo_store_count", 0) or 0,
+                    }
+                    if brand_data
+                    else None,
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 매니저 승인 관리
@@ -533,7 +567,7 @@ class AuthService:
 
                 return {"status": "success", "managers": managers}
         finally:
-            engine.dispose()
+            pass
 
     def approve_manager(
         self,
@@ -580,7 +614,7 @@ class AuthService:
                     "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 승인했습니다.{dong_info}",
                 }
         finally:
-            engine.dispose()
+            pass
 
     def reject_manager(self, owner_id: str, manager_id: str) -> dict:
         """팀장이 매니저 가입을 거절한다 (비활성화)."""
@@ -610,7 +644,7 @@ class AuthService:
                     "message": f"{mgr['contact_name']}({mgr['email']}) 매니저를 거절했습니다.",
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 회원 탈퇴 (소프트 삭제)
@@ -661,7 +695,7 @@ class AuthService:
                     "deactivated_managers": result.rowcount,
                 }
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 마이페이지 — 프로필 조회/수정
@@ -675,7 +709,7 @@ class AuthService:
                 row = conn.execute(
                     text(
                         "SELECT id, company_name, biz_number, contact_name, position, "
-                        "email, phone, store_count, plan, created_at "
+                        "email, phone, store_count, plan, created_at, is_superadmin "
                         "FROM users WHERE id = :id"
                     ),
                     {"id": user_id},
@@ -715,11 +749,12 @@ class AuthService:
                     {"id": user_id},
                 ).scalar()
 
+                role = "superadmin" if user.get("is_superadmin") else "master"
                 return {
                     "status": "success",
                     "user": {
                         "id": str(user["id"]),
-                        "role": "master",
+                        "role": role,
                         "company_name": user["company_name"],
                         "biz_number": user["biz_number"],
                         "contact_name": user["contact_name"],
@@ -737,7 +772,7 @@ class AuthService:
                     else None,
                 }
         finally:
-            engine.dispose()
+            pass
 
     def get_manager_profile(self, manager_id: str) -> dict:
         """매니저 프로필 조회 (소속 팀장 기업정보 포함)."""
@@ -777,7 +812,7 @@ class AuthService:
                     },
                 }
         finally:
-            engine.dispose()
+            pass
 
     def update_user_profile(self, user_id: str, data: dict) -> dict:
         """팀장 프로필 수정 (이름, 직책, 전화번호, 가맹점 수)."""
@@ -807,7 +842,7 @@ class AuthService:
                     "updated_fields": list(updates.keys()),
                 }
         finally:
-            engine.dispose()
+            pass
 
     def update_manager_profile(self, manager_id: str, data: dict) -> dict:
         """매니저 프로필 수정 (이름, 직책, 전화번호)."""
@@ -840,7 +875,7 @@ class AuthService:
                     "updated_fields": list(updates.keys()),
                 }
         finally:
-            engine.dispose()
+            pass
 
     def change_password(self, user_id: str, role: str, old_password: str, new_password: str) -> dict:
         """비밀번호 변경 (팀장/매니저 공용)."""
@@ -868,7 +903,7 @@ class AuthService:
 
                 return {"status": "success", "message": "비밀번호가 변경되었습니다."}
         finally:
-            engine.dispose()
+            pass
 
     def get_organization(self, owner_id: str) -> dict:
         """팀장의 전체 조직 정보 (멀티테넌시 — 팀장 + 매니저 + 초대코드 + 브랜드)."""
@@ -972,4 +1007,4 @@ class AuthService:
                     },
                 }
         finally:
-            engine.dispose()
+            pass

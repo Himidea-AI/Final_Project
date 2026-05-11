@@ -24,10 +24,10 @@ export function TrendDriversRisks({ drivers, risks }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {/* 드라이버 */}
-      <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+      <div className="rounded-2xl border border-success/20 bg-success/10 p-4">
         <div className="flex items-center gap-1.5 mb-2.5">
-          <Sparkles size={12} className="text-emerald-400" />
-          <span className="text-[0.625rem] font-black uppercase tracking-widest text-emerald-400">
+          <Sparkles size={12} className="text-success" />
+          <span className="text-[0.625rem] font-black uppercase tracking-widest text-success">
             성장 드라이버
           </span>
         </div>
@@ -36,23 +36,23 @@ export function TrendDriversRisks({ drivers, risks }: Props) {
             {drivers!.map((d, i) => (
               <li
                 key={i}
-                className="text-[0.6875rem] text-stone-200 leading-relaxed flex items-start gap-1.5"
+                className="text-[0.6875rem] text-foreground leading-relaxed flex items-start gap-1.5"
               >
-                <span className="text-emerald-500 mt-0.5">•</span>
+                <span className="text-success mt-0.5">•</span>
                 <span>{d}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <span className="text-[0.625rem] text-stone-500">식별된 드라이버 없음</span>
+          <span className="text-[0.625rem] text-muted-foreground">식별된 드라이버 없음</span>
         )}
       </div>
 
       {/* 리스크 */}
-      <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+      <div className="rounded-2xl border border-danger/20 bg-danger/10 p-4">
         <div className="flex items-center gap-1.5 mb-2.5">
-          <AlertTriangle size={12} className="text-rose-400" />
-          <span className="text-[0.625rem] font-black uppercase tracking-widest text-rose-400">
+          <AlertTriangle size={12} className="text-danger" />
+          <span className="text-[0.625rem] font-black uppercase tracking-widest text-danger">
             리스크 요인
           </span>
         </div>
@@ -61,15 +61,15 @@ export function TrendDriversRisks({ drivers, risks }: Props) {
             {risks!.map((r, i) => (
               <li
                 key={i}
-                className="text-[0.6875rem] text-stone-200 leading-relaxed flex items-start gap-1.5"
+                className="text-[0.6875rem] text-foreground leading-relaxed flex items-start gap-1.5"
               >
-                <span className="text-rose-500 mt-0.5">•</span>
+                <span className="text-danger mt-0.5">•</span>
                 <span>{r}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <span className="text-[0.625rem] text-stone-500">식별된 리스크 없음</span>
+          <span className="text-[0.625rem] text-muted-foreground">식별된 리스크 없음</span>
         )}
       </div>
     </div>

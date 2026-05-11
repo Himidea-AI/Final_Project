@@ -67,31 +67,31 @@ function ToastCard({ toast, onClose }: { toast: ToastItem; onClose: () => void }
 
   const config = {
     success: {
-      icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-      border: 'border-emerald-500/30',
-      bg: 'bg-emerald-500/5',
+      icon: <CheckCircle2 className="w-4 h-4 text-success" />,
+      border: 'border-success/30',
+      bg: 'bg-success/5',
     },
     error: {
-      icon: <XCircle className="w-4 h-4 text-rose-400" />,
-      border: 'border-rose-500/30',
-      bg: 'bg-rose-500/5',
+      icon: <XCircle className="w-4 h-4 text-danger" />,
+      border: 'border-danger/30',
+      bg: 'bg-danger/5',
     },
     info: {
-      icon: <Info className="w-4 h-4 text-[#818cf8]" />,
-      border: 'border-[#818cf8]/30',
-      bg: 'bg-[#818cf8]/5',
+      icon: <Info className="w-4 h-4 text-primary" />,
+      border: 'border-primary/30',
+      bg: 'bg-primary/5',
     },
   }[toast.type];
 
   return (
     <div
       onClick={onClose}
-      className={`flex items-center gap-3 px-4 py-3 rounded-xl border bg-[#2c2825] shadow-2xl cursor-pointer transition-all duration-300 ${config.border} ${
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl border bg-card shadow-2xl cursor-pointer transition-all duration-300 ${config.border} ${
         visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'
       }`}
     >
       {config.icon}
-      <p className="text-xs font-medium text-[#e2e8f0]">{toast.message}</p>
+      <p className="text-xs font-medium text-foreground">{toast.message}</p>
     </div>
   );
 }

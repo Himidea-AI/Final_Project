@@ -4,7 +4,6 @@ Usage:
     cd backend && python scripts/gen_db_dictionary.py
 """
 
-import json
 import os
 import sys
 
@@ -14,7 +13,7 @@ from dotenv import load_dotenv
 from sqlalchemy import text
 
 load_dotenv()
-from src.database.sync_engine import get_sync_engine
+from src.database.sync_engine import get_sync_engine  # noqa: E402
 
 
 def main():
@@ -53,19 +52,14 @@ def main():
             ).fetchall()
             cc = {x[0]: x[1] for x in col_comments if x[1]}
 
-            idxs = conn.execute(
-                text(f"SELECT indexname FROM pg_indexes WHERE tablename = '{name}'")
-            ).fetchall()
+            idxs = conn.execute(text(f"SELECT indexname FROM pg_indexes WHERE tablename = '{name}'")).fetchall()
 
             tables.append(
                 {
                     "name": name,
                     "comment": r[1] or "",
                     "rows": cnt,
-                    "cols": [
-                        {"n": c[0], "t": c[1], "null": c[2], "c": cc.get(c[0], "")}
-                        for c in cols
-                    ],
+                    "cols": [{"n": c[0], "t": c[1], "null": c[2], "c": cc.get(c[0], "")} for c in cols],
                     "idxs": [x[0] for x in idxs],
                 }
             )
@@ -75,12 +69,20 @@ def main():
     # 분류
     CAT_MAP = {
         "서비스 (인증/시뮬레이션)": [
-            "users", "manager_users", "invite_codes", "simulation_history",
-            "password_reset_tokens", "user_usage", "biz_brand_mapping",
+            "users",
+            "manager_users",
+            "invite_codes",
+            "simulation_ai",
+            "simulation_foresee",
+            "password_reset_tokens",
+            "user_usage",
+            "biz_brand_mapping",
         ],
         "법률 RAG": [
-            "langchain_pg_collection", "langchain_pg_embedding",
-            "law_legislations", "law_precedents",
+            "langchain_pg_collection",
+            "langchain_pg_embedding",
+            "law_legislations",
+            "law_precedents",
         ],
         "시스템": ["alembic_version"],
     }
@@ -90,14 +92,31 @@ def main():
             if n in names:
                 return cat
         if n.startswith("seoul_") or n in (
-            "district_sales_seoul", "sgis_business", "sgis_household", "sgis_population",
-            "resident_pop_monthly", "elderly_ratio_region", "kosis_regional_income",
-            "ecos_key_statistics", "ecos_timeseries", "cpi_dining_quarterly",
+            "district_sales_seoul",
+            "sgis_business",
+            "sgis_household",
+            "sgis_population",
+            "resident_pop_monthly",
+            "elderly_ratio_region",
+            "kosis_regional_income",
+            "ecos_key_statistics",
+            "ecos_timeseries",
+            "cpi_dining_quarterly",
         ):
             return "서울 전역 데이터"
-        if n.startswith("golmok_") or n.startswith("kakao_") or n.startswith("naver_") or n in (
-            "ftc_brand_franchise", "store_info", "apt_trade_real", "molit_nrg_trade",
-            "jeonse_dong_master", "jeonse_monthly_rent",
+        if (
+            n.startswith("golmok_")
+            or n.startswith("kakao_")
+            or n.startswith("naver_")
+            or n
+            in (
+                "ftc_brand_franchise",
+                "store_info",
+                "apt_trade_real",
+                "molit_nrg_trade",
+                "jeonse_dong_master",
+                "jeonse_monthly_rent",
+            )
         ):
             return "외부 API 수집 데이터"
         return "마포구 상권 데이터"
@@ -107,7 +126,8 @@ def main():
         "users": "팀장(master) 계정. 사업자번호로 가입, biz_brand_mapping과 연동",
         "manager_users": "매니저 계정. 초대코드로 가입, owner_id로 팀장에 소속",
         "invite_codes": "팀장이 발급한 초대코드. max_uses/used_count로 사용 제한",
-        "simulation_history": "시뮬레이션 저장 이력. master는 소속 매니저 이력도 조회 가능 (4/28 구현)",
+        "simulation_ai": "AI 분석(Analyze 탭) 저장 이력. master는 소속 매니저 이력도 조회 가능",
+        "simulation_foresee": "예측 결과(Predict 탭) 저장 이력. ML 기반 매출/재무/고객/신흥상권 예측",
         "biz_brand_mapping": "사업자번호-브랜드 매핑. 5,900개 FTC seed + 주요 55개 진짜 번호. API 키 발급 후 나머지 교체 예정",
         "password_reset_tokens": "비밀번호 찾기용 토큰 — 아직 미구현, 향후 사용",
         "user_usage": "요금제별 시뮬 횟수 제한용 — 아직 미구현, 향후 사용",
@@ -198,8 +218,12 @@ h1{font-size:28px;font-weight:700;color:#fff;margin-bottom:4px}
 """)
 
     cat_order = [
-        "서비스 (인증/시뮬레이션)", "마포구 상권 데이터", "서울 전역 데이터",
-        "외부 API 수집 데이터", "법률 RAG", "시스템",
+        "서비스 (인증/시뮬레이션)",
+        "마포구 상권 데이터",
+        "서울 전역 데이터",
+        "외부 API 수집 데이터",
+        "법률 RAG",
+        "시스템",
     ]
 
     for cat_name in cat_order:
@@ -227,14 +251,18 @@ h1{font-size:28px;font-weight:700;color:#fff;margin-bottom:4px}
                 lines.append(f'<div class="pn">{note}</div>')
 
             lines.append(f'<div class="dt" id="d-{n}">')
-            lines.append('<table class="ct2"><thead><tr><th>컬럼명</th><th>타입</th><th>NULL</th><th>설명</th></tr></thead><tbody>')
+            lines.append(
+                '<table class="ct2"><thead><tr><th>컬럼명</th><th>타입</th><th>NULL</th><th>설명</th></tr></thead><tbody>'
+            )
             for col in t["cols"]:
                 nl = "O" if col["null"] == "YES" else "X"
-                lines.append(f'<tr><td>{col["n"]}</td><td>{col["t"]}</td><td>{nl}</td><td class="cc">{col["c"]}</td></tr>')
+                lines.append(
+                    f'<tr><td>{col["n"]}</td><td>{col["t"]}</td><td>{nl}</td><td class="cc">{col["c"]}</td></tr>'
+                )
             lines.append("</tbody></table>")
 
             if t["idxs"]:
-                idx_str = ", ".join(f'<span>{i}</span>' for i in t["idxs"])
+                idx_str = ", ".join(f"<span>{i}</span>" for i in t["idxs"])
                 lines.append(f'<div class="ix"><strong>인덱스:</strong> {idx_str}</div>')
 
             lines.append("</div></div>")

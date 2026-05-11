@@ -44,7 +44,8 @@ async def population_analyst_node(state: AgentState) -> dict:
     logger.info(f"--- [POPULATION ANALYST] {target_district} 입동인구 분석 시작 ---")
 
     # Redis 캐시 조회
-    cache_key = f"population:{target_district}:{business_type}"
+    # v2: raw_metrics(age/gender/time distribution) 캐시 추가 — v7 정확도 평가용.
+    cache_key = f"v2:population:{target_district}:{business_type}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -64,7 +65,7 @@ async def population_analyst_node(state: AgentState) -> dict:
                 sources=["seoul_adstrd_flpop", "sgis"],
                 verdict=f"주 타겟 {_cached_metrics.get('main_target_age', 'N/A')} · 피크 {_cached_metrics.get('peak_time', '미확인')}",
                 reasoning=str(_cached_report) if _cached_report else "유동인구 분석 (캐시)",
-                confidence=0.8,
+                confidence=0.85,
             )
             analysis["population_analyst_result"] = {"agent_attribution": cached_attribution}
             return {
@@ -143,6 +144,7 @@ async def population_analyst_node(state: AgentState) -> dict:
 
     # 3. LLM 분석 (Structured Output)
     system_content = (
+        "[AGENT: population] 유동인구 분석 에이전트 — LangSmith 식별용 라벨.\n\n"
         "당신은 인구통계학 및 상권 유동인구 분석 전문가입니다. "
         "제보된 실데이터를 바탕으로 해당 지역의 유동인구 특성분석 리포트를 작성하세요.\n\n"
         f"### {target_district} 유동인구 실데이터:\n"
@@ -182,10 +184,31 @@ async def population_analyst_node(state: AgentState) -> dict:
             "peak_time": result.peak_time,
         }
 
+        # v7 정확도 평가용 — LLM 출력과 함께 raw distribution 도 캐시 저장.
+        # _expected_top_age / _expected_top_gender / _expected_peak 가
+        # 정답 라벨 산출에 사용. 캐시 prefix v2 로 schema 변경 표시.
+        raw_metrics = {
+            "age_distribution": {
+                "20": int(demographics.get("20대", 0)),
+                "30": int(demographics.get("30대", 0)),
+                "40": int(demographics.get("40대", 0)),
+            }
+            if "error" not in demo_data
+            else {},
+            "gender_distribution": {
+                "male": int(demographics.get("남성", 0)),
+                "female": int(demographics.get("여성", 0)),
+            }
+            if "error" not in demo_data
+            else {},
+            "time_peak": real_peak_time or "",
+        }
+
     except Exception as e:
         logger.error(f"[POPULATION ANALYST ERROR] !!! {str(e)}")
         population_report = f"{target_district} 인구 분석 중 오류가 발생했습니다."
         new_metrics = {}
+        raw_metrics = {}
 
     analysis_results = state.get("analysis_results", {})
     analysis_results["population_report"] = population_report
@@ -195,7 +218,14 @@ async def population_analyst_node(state: AgentState) -> dict:
         try:
             await _redis.set(
                 cache_key,
-                json.dumps({"population_report": population_report, "metrics": new_metrics}, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "population_report": population_report,
+                        "metrics": new_metrics,
+                        "raw_metrics": raw_metrics,  # v7 평가용 raw distribution
+                    },
+                    ensure_ascii=False,
+                ),
                 ex=_CACHE_TTL,
             )
             logger.info(f"[population_analyst] 캐시 저장: {cache_key} (TTL: {_CACHE_TTL}s)")
@@ -214,7 +244,7 @@ async def population_analyst_node(state: AgentState) -> dict:
         sources=["seoul_adstrd_flpop", "sgis"],
         verdict=f"주 타겟 {new_metrics.get('main_target_age', 'N/A')} · 피크 {new_metrics.get('peak_time', '미확인')}",
         reasoning=str(population_report) if population_report else "유동인구 분석 데이터 기반",
-        confidence=0.8,
+        confidence=0.85,
     )
     analysis_results["population_analyst_result"] = {"agent_attribution": attribution}
 

@@ -199,7 +199,52 @@ PRICING = {
         "input": 0.10,
         "output": 0.40,
     },
+    "gpt-4.1-mini": {
+        "input": 0.40,
+        "output": 1.60,
+        "cache_read": 0.10,
+        "cache_write": 0.40,
+    },
+    # gpt-5.4-nano — 2026 신규 nano 모델. 가격 placeholder (4.1-nano 동등 가정).
+    # 실제 가격 확정되면 갱신.
+    "gpt-5.4-nano": {
+        "input": 0.10,
+        "output": 0.40,
+        "cache_read": 0.025,  # 가정 75% 할인
+        "cache_write": 0.10,
+    },
 }
+
+
+def log_llm_call(name: str, model: str, usage, n_agents: int = 1) -> float:
+    """LLM 호출 직후 토큰/비용 콘솔 출력 + USD return.
+
+    usage: openai SDK ChatCompletion.usage 객체. prompt_tokens / completion_tokens /
+    prompt_tokens_details.cached_tokens 추출.
+    """
+    in_tok = getattr(usage, "prompt_tokens", 0) or 0
+    out_tok = getattr(usage, "completion_tokens", 0) or 0
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached = (getattr(details, "cached_tokens", 0) or 0) if details else 0
+
+    p = PRICING.get(model, {})
+    in_rate = p.get("input", 0.0)
+    out_rate = p.get("output", 0.0)
+    cache_rate = p.get("cache_read", in_rate)
+
+    fresh_in = max(0, in_tok - cached)
+    in_cost = fresh_in * in_rate / 1e6
+    cache_cost = cached * cache_rate / 1e6
+    out_cost = out_tok * out_rate / 1e6
+    total = in_cost + cache_cost + out_cost
+
+    print(
+        f"[LLM] {name:30s} model={model} n={n_agents:3d} "
+        f"in={in_tok:5d}(cached={cached:5d}) out={out_tok:5d} "
+        f"cost=${total:.5f}",
+        flush=True,
+    )
+    return total
 
 
 def estimate_cost(

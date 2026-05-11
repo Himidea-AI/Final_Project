@@ -72,6 +72,7 @@ class AgentProfile:
     nemotron_occupation: str | None = None  # 통계청 기반 실제 직업 분포
     nemotron_family_type: str | None = None  # 39종 가구형태
     nemotron_persona: str | None = None  # 500토큰 자연어 서사 (Tier S 프롬프트용)
+    name: str | None = None  # nemotron persona 본문에서 추출한 이름 (예: "안채승")
 
     def category_weights(self) -> dict[str, float]:
         return {
@@ -95,6 +96,9 @@ class AgentProfile:
 # ---------------------------------------------------------------
 # 연령 버킷 (living_population 컬럼명과 일치)
 # ---------------------------------------------------------------
+# 주의: living_population 의 male_70_74/female_70_74 컬럼은 100% NULL (audit 2026-05-04).
+#       male_70_plus/female_70_plus 만 실데이터 보유. 70대 통합 버킷("70_plus") 만 사용.
+#       70_74/70_79 등 분리 버킷 추가 금지 — column 자체가 비어 있음.
 AGE_BUCKETS = [
     ("20_24", 20, 24),
     ("25_29", 25, 29),
@@ -134,9 +138,13 @@ def _lifestyle_tag(age: int, gender: str, dong: str, role: Role) -> str:
 # ---------------------------------------------------------------
 class ProfileBuilder:
     def __init__(self, db_url: str | None = None, seed: int = 42):
+        # pool_pre_ping=True — stale connection (RDS idle timeout / network blip) 자동 검출 + reconnect.
+        # pool_recycle 1800 — 30분 마다 connection 강제 재생 (idle close 보호).
         self.engine = create_engine(
             db_url or os.environ["POSTGRES_URL"],
             isolation_level="AUTOCOMMIT",
+            pool_pre_ping=True,
+            pool_recycle=1800,
         )
         self.rng = random.Random(seed)
         self._cache: dict[str, dict] = {}
@@ -149,10 +157,12 @@ class ProfileBuilder:
         if "dong_mix" in self._cache:
             return self._cache["dong_mix"]
 
+        # COALESCE — male_70_74/female_70_74 가 100% NULL 이지만 AGE_BUCKETS 는
+        # "70_plus" 만 사용하므로 영향 없음. 그래도 다른 _XX_XX 컬럼 NULL row 방어.
         sql = text(f"""
             SELECT dong_name,
-                   {", ".join(f"AVG(male_{k}) m_{k}" for k, _, _ in AGE_BUCKETS)},
-                   {", ".join(f"AVG(female_{k}) f_{k}" for k, _, _ in AGE_BUCKETS)},
+                   {", ".join(f"AVG(COALESCE(male_{k},0)) m_{k}" for k, _, _ in AGE_BUCKETS)},
+                   {", ".join(f"AVG(COALESCE(female_{k},0)) f_{k}" for k, _, _ in AGE_BUCKETS)},
                    AVG(total_pop) total_pop
             FROM living_population
             WHERE date >= (SELECT MAX(date) - 30 FROM living_population)
@@ -192,12 +202,43 @@ class ProfileBuilder:
         return out
 
     def load_rent_index(self) -> dict[str, float]:
-        """apt_trade_real 최근 거래의 단위면적 가격 → 0~1 normalized."""
+        """apt_trade_real 최근 거래의 단위면적 가격 → 0~1 normalized.
+
+        매핑 정책 (2026-05-04 강화):
+          - 마포 16동 모두 명시 매핑 (망원2동/성산2동 누락 fix).
+          - region_full 에 행정동 번호 존재 시 우선 (예: '망원2동' → 망원2동).
+          - 매핑 실패 동은 인접 동 평균으로 fallback (income 0.5 default 회피).
+        """
         if "rent" in self._cache:
             return self._cache["rent"]
+        # 인접 동 (지리적 근접) — ILIKE 매칭 누락 시 평균 fallback 용.
+        # 동명 약어 ILIKE 가 망원2동 / 성산2동 과 같은 번호 동을 1동에만 귀속시키는 문제 보완.
+        neighbor_groups = {
+            "망원1동": ["망원2동", "합정동", "서교동"],
+            "망원2동": ["망원1동", "성산1동", "성산2동"],
+            "성산1동": ["성산2동", "망원2동", "상암동"],
+            "성산2동": ["성산1동", "연남동"],
+            "공덕동": ["아현동", "도화동", "용강동"],
+            "아현동": ["공덕동", "대흥동", "염리동"],
+            "도화동": ["공덕동", "용강동"],
+            "용강동": ["공덕동", "도화동"],
+            "대흥동": ["아현동", "염리동", "신수동"],
+            "염리동": ["대흥동", "아현동"],
+            "신수동": ["대흥동", "서강동"],
+            "서강동": ["신수동", "서교동"],
+            "서교동": ["합정동", "연남동", "서강동"],
+            "합정동": ["서교동", "망원1동"],
+            "연남동": ["서교동", "성산2동"],
+            "상암동": ["성산1동"],
+        }
+        # 망원2동 / 성산2동 도 region_full 에 직접 적시되는 경우 우선 매핑.
         sql = text("""
             SELECT
               CASE
+                WHEN region_full ILIKE '%망원2%' OR region_full ILIKE '%망원 2%' THEN '망원2동'
+                WHEN region_full ILIKE '%망원1%' OR region_full ILIKE '%망원 1%' THEN '망원1동'
+                WHEN region_full ILIKE '%성산2%' OR region_full ILIKE '%성산 2%' THEN '성산2동'
+                WHEN region_full ILIKE '%성산1%' OR region_full ILIKE '%성산 1%' THEN '성산1동'
                 WHEN region_full ILIKE '%서교%' THEN '서교동'
                 WHEN region_full ILIKE '%연남%' THEN '연남동'
                 WHEN region_full ILIKE '%합정%' THEN '합정동'
@@ -226,9 +267,21 @@ class ProfileBuilder:
         if not valid:
             self._cache["rent"] = {}
             return {}
-        mn = min(v for _, v in valid)
-        mx = max(v for _, v in valid)
-        out = {d: round((v - mn) / (mx - mn), 3) if mx > mn else 0.5 for d, v in valid}
+        # 1) 매핑된 동 → 가격
+        raw = {d: float(v) for d, v in valid}
+        # 2) 인접 동 평균 fallback — 매핑 실패한 마포 16동에 대해 보완
+        from .config import MAPO_DONGS
+
+        for dong in MAPO_DONGS:
+            if dong in raw:
+                continue
+            neighbors = [raw[n] for n in neighbor_groups.get(dong, []) if n in raw]
+            if neighbors:
+                raw[dong] = sum(neighbors) / len(neighbors)
+        # 3) 정규화 (전체 평균 활용)
+        mn = min(raw.values())
+        mx = max(raw.values())
+        out = {d: round((v - mn) / (mx - mn), 3) if mx > mn else 0.5 for d, v in raw.items()}
         self._cache["rent"] = out
         return out
 
@@ -565,6 +618,16 @@ class ProfileBuilder:
         persona_text = str(record.get("persona") or "")
         if persona_text:
             profile.nemotron_persona = persona_text[:500]
+        # 이름 추출 — persona 본문 시작 패턴 "<name> 씨는" / "<name> 씨 ".
+        # nemotron 데이터셋이 한국어 인명 + " 씨" 로 자연어 시작. 정규식 first match.
+        # 길이 2~4자 (한국 이름 보편) 만 허용 — 오추출 방지.
+        import re as _re
+
+        for src in (persona_text, str(record.get("professional_persona") or "")):
+            m = _re.match(r"\s*([가-힣]{2,4})\s*씨", src)
+            if m:
+                profile.name = m.group(1)
+                break
 
     # -----------------------------------------------------------
     # 실데이터 기반 시간×동×연령×요일 가중치

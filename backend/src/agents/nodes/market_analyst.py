@@ -28,7 +28,8 @@ async def market_analyst_node(state: AgentState) -> dict:
     print(f"--- [MARKET ANALYST] {target_district} 실데이터 분석 시작 ---")
 
     # Redis 캐시 조회 (예진 synthesis 패턴 — 조회 실패 시 연결 누수 방지)
-    cache_key = f"market:{target_district}:{business_type}"
+    # v2: raw_inputs(qoq_growth_pct/saturation_level) 추가 — v7 grade 분류 평가용.
+    cache_key = f"v2:market:{target_district}:{business_type}"
     _redis = None
     try:
         _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -47,7 +48,7 @@ async def market_analyst_node(state: AgentState) -> dict:
                 sources=["district_sales", "kakao_store", "golmok_rent"],
                 verdict=f"상권 등급 {_cached_metrics.get('district_grade', 'NORMAL')} / 성장률 {_cached_metrics.get('growth_rate', 0)}%",
                 reasoning=str(cached_data.get("market_report", "")) or "시장 분석 데이터 기반 (캐시)",
-                confidence=0.8,
+                confidence=0.85,
             )
             analysis["market_analyst_result"] = {"agent_attribution": cached_attribution}
             return {
@@ -128,6 +129,7 @@ async def market_analyst_node(state: AgentState) -> dict:
     await asyncio.sleep(2)
 
     system_content = (
+        "[AGENT: market_analyst] 상권 분석 에이전트 — LangSmith 식별용 라벨.\n\n"
         "당신은 상권 분석 전문가이자 프랜차이즈 전략 컨설턴트입니다. "
         "공급된 실데이터를 분석하여 전문가 리포트와 정량 지표를 출력하세요.\n\n"
         f"### {target_district} 실데이터 분석 요약:\n"
@@ -176,6 +178,30 @@ async def market_analyst_node(state: AgentState) -> dict:
     # Redis 캐시 저장 (finally로 연결 누수 방지)
     if _redis is not None:
         try:
+            # v7 평가용 raw_inputs — 룰엔진이 expected_grade 산출에 사용.
+            # qoq_growth_pct: pop_data.qoq_growth (% → 비율: 12 → 0.12)
+            # saturation_level: comp_data 명시 필드 또는 competitor_count 기반 추론.
+            _qoq_raw = pop_data.get("qoq_growth")
+            _qoq_pct = (float(_qoq_raw) / 100.0) if _qoq_raw is not None else None
+            _comp_count = comp_data.get("competitor_count", 0) or 0
+            _sat_level = comp_data.get("saturation_level")
+            if not _sat_level:
+                # competitor_count → saturation_level 추론 (반경 500m 기준)
+                if _comp_count >= 16:
+                    _sat_level = "saturated"
+                elif _comp_count >= 11:
+                    _sat_level = "high"
+                elif _comp_count >= 7:
+                    _sat_level = "medium"
+                elif _comp_count >= 3:
+                    _sat_level = "low"
+                else:
+                    _sat_level = "sparse"
+            raw_inputs = {
+                "qoq_growth_pct": _qoq_pct,
+                "saturation_level": _sat_level,
+                "competitor_count": _comp_count,
+            }
             await _redis.set(
                 cache_key,
                 json.dumps(
@@ -183,6 +209,7 @@ async def market_analyst_node(state: AgentState) -> dict:
                         "market_report": market_summary,
                         "market_data": real_market_data,
                         "metrics": final_metrics,
+                        "raw_inputs": raw_inputs,  # v7 평가 — 룰엔진 expected_grade 산출용
                     },
                     ensure_ascii=False,
                     default=str,
@@ -205,7 +232,7 @@ async def market_analyst_node(state: AgentState) -> dict:
         sources=["district_sales", "kakao_store", "golmok_rent"],
         verdict=f"상권 등급 {final_metrics.get('district_grade', 'NORMAL')} / 성장률 {final_metrics.get('growth_rate', 0)}%",
         reasoning=str(market_summary) if market_summary else "시장 분석 데이터 기반",
-        confidence=0.8,
+        confidence=0.85,
     )
     analysis_results["market_analyst_result"] = {"agent_attribution": attribution}
 

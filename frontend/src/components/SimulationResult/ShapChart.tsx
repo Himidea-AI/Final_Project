@@ -26,16 +26,16 @@ interface Props {
 
 /** 방향별 색상 매핑 */
 const DIRECTION_COLOR: Record<string, string> = {
-  positive: '#3B82F6', // 파랑 — 매출 증가 기여
-  negative: '#EF4444', // 빨강 — 매출 감소 기여
-  neutral: '#94A3B8', // 회색 — 중립
+  positive: 'var(--success)', // 매출 증가 기여
+  negative: 'var(--danger)', // 매출 감소 기여
+  neutral: 'var(--muted-foreground)', // 중립
 };
 
 export function ShapChart({ data }: Props) {
   // data 없으면 안내 메시지 표시
   if (!data || !data.feature_importance || data.feature_importance.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
         SHAP 분석 데이터 없음
       </div>
     );
@@ -56,15 +56,15 @@ export function ShapChart({ data }: Props) {
     <div>
       {/* mock 데이터 안내 배지 */}
       {data.is_mock && (
-        <div className="mb-2 inline-block px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded">
+        <div className="mb-2 inline-block px-2 py-0.5 bg-warning/20 text-warning text-xs rounded">
           참고용 데이터 (모델 가중치 미로드)
         </div>
       )}
 
       {/* 예측 매출액 요약 */}
-      <p className="text-xs text-[#9ca3af] mb-3">
+      <p className="text-xs text-muted-foreground mb-3">
         예측 매출:{' '}
-        <span className="text-white font-semibold">
+        <span className="text-foreground font-semibold">
           {(data.predicted_value / 100_000_000).toFixed(1)}억{data.predicted_value_unit}
         </span>
       </p>
@@ -76,13 +76,13 @@ export function ShapChart({ data }: Props) {
           margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
         >
           {/* 격자선 */}
-          <CartesianGrid strokeDasharray="3 3" stroke="#3a3633" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
 
           {/* X축 — SHAP 값 (소수점 4자리) */}
           <XAxis
             type="number"
             tickFormatter={(v: number) => v.toFixed(4)}
-            tick={{ fill: '#9ca3af', fontSize: 11 }}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
           />
 
           {/* Y축 — 피처 한국어명 */}
@@ -90,35 +90,38 @@ export function ShapChart({ data }: Props) {
             type="category"
             dataKey="feature_ko"
             width={130}
-            tick={{ fill: '#9ca3af', fontSize: 11 }}
+            tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
           />
 
           {/* Tooltip — SHAP 값 소수점 4자리 */}
           <Tooltip
             formatter={(value: number) => [value.toFixed(4), 'SHAP 기여도']}
             contentStyle={{
-              backgroundColor: '#1e1b18',
-              border: '1px solid #3a3633',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
             }}
-            labelStyle={{ color: '#fff', fontSize: 12 }}
-            itemStyle={{ color: '#9ca3af' }}
+            labelStyle={{ color: 'var(--card-foreground)', fontSize: 12 }}
+            itemStyle={{ color: 'var(--muted-foreground)' }}
           />
 
           {/* 범례 */}
           <Legend
             payload={[
-              { value: '매출 증가 기여', type: 'square', color: '#3B82F6' },
-              { value: '매출 감소 기여', type: 'square', color: '#EF4444' },
-              { value: '중립', type: 'square', color: '#94A3B8' },
+              { value: '매출 증가 기여', type: 'square', color: 'var(--success)' },
+              { value: '매출 감소 기여', type: 'square', color: 'var(--danger)' },
+              { value: '중립', type: 'square', color: 'var(--muted-foreground)' },
             ]}
-            wrapperStyle={{ fontSize: 12, color: '#9ca3af' }}
+            wrapperStyle={{ fontSize: 12, color: 'var(--muted-foreground)' }}
           />
 
           {/* 수평 바 — 방향별 색상 적용 */}
           <Bar dataKey="shap_value" name="SHAP 기여도">
             {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={DIRECTION_COLOR[entry.direction] ?? '#94A3B8'} />
+              <Cell
+                key={`cell-${index}`}
+                fill={DIRECTION_COLOR[entry.direction] ?? 'var(--muted-foreground)'}
+              />
             ))}
           </Bar>
         </BarChart>
@@ -127,14 +130,14 @@ export function ShapChart({ data }: Props) {
       {/* 자연어 요약 문장 */}
       {data.summary && data.summary.length > 0 && (
         <div className="mt-4 space-y-2">
-          <p className="text-xs text-[#9ca3af] font-medium">AI 분석 요약</p>
+          <p className="text-xs text-muted-foreground font-medium">AI 분석 요약</p>
           {data.summary.map((sentence, idx) => (
             <div
               key={idx}
-              className="flex items-start gap-2 px-3 py-2 bg-[#1e1b18] rounded-lg border border-[#3a3633]"
+              className="flex items-start gap-2 px-3 py-2 bg-card rounded-lg border border-border"
             >
-              <span className="mt-0.5 text-[#f97316] text-xs flex-shrink-0">•</span>
-              <span className="text-xs text-[#d1d5db] leading-relaxed">{sentence}</span>
+              <span className="mt-0.5 text-warning text-xs flex-shrink-0">•</span>
+              <span className="text-xs text-muted-foreground leading-relaxed">{sentence}</span>
             </div>
           ))}
         </div>

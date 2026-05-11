@@ -261,7 +261,7 @@ def load_world_from_rds(
     """RDS의 카카오 점포 + 메뉴 + 매출/감성 보정으로 World 구성."""
     load_dotenv()
     db_url = db_url or os.environ["POSTGRES_URL"]
-    engine = create_engine(db_url, echo=False)
+    engine = create_engine(db_url, echo=False, pool_pre_ping=True, pool_recycle=1800)
 
     sql = text("""
         SELECT k.kakao_id, k.place_name, k.brand_name, k.category,
@@ -321,9 +321,13 @@ def load_world_from_rds(
         # 인기 보정 (매출 × 감성)
         pop = dong_industry_w.get((dong, cat), 1.0) * sentiment_map.get(r.place_name or "", 1.0)
 
+        # brand_name 정규화 — 빈 문자열 / 공백만은 NULL 취급.
+        # kakao_store.brand_name 72.8% NULL (audit 2026-05-04) → cannibalization skip 분기에서 사용.
+        brand_raw = (r.brand_name or "").strip()
+        brand_clean: str | None = brand_raw if brand_raw else None
         store = Store(
             store_id=sid,
-            name=r.place_name or r.brand_name or f"store_{sid}",
+            name=r.place_name or brand_clean or f"store_{sid}",
             dong=dong,
             category=cat,
             seats=30,
@@ -333,6 +337,7 @@ def load_world_from_rds(
             lon=float(r.lon) if r.lon is not None else None,
             menu_items=menu,
             popularity_boost=round(pop, 3),
+            brand_name=brand_clean,
         )
         world.add_store(store)
 
@@ -371,6 +376,20 @@ from datetime import date as _date, timedelta as _timedelta  # noqa: E402
 from src.database.sync_engine import get_sync_engine  # noqa: E402
 
 
+# living_population.time_zone (6/11/14/17/20/24) → 24h hour 범위 expansion.
+# 이전: time_zone 값을 그대로 hour 자리에 넣어 consumer (24h hour 기대) 와 mismatch
+#       → daily boost dict swap 시 hour 6/11/14/17/20/24 만 갱신, 나머지 18시간 무시.
+# fix (2026-05-04): time_zone 마다 해당 시간 구간 전체로 확장하여 정합성 확보.
+_TIME_ZONE_TO_HOURS: dict[int, list[int]] = {
+    6: list(range(6, 11)),  # 06~10
+    11: list(range(11, 14)),  # 11~13
+    14: list(range(14, 17)),  # 14~16
+    17: list(range(17, 20)),  # 17~19
+    20: list(range(20, 24)),  # 20~23
+    24: list(range(0, 6)),  # 00~05 (자정 ~ 새벽)
+}
+
+
 def _load_living_population_daily(
     start_date: _date,
     days: int,
@@ -384,8 +403,12 @@ def _load_living_population_daily(
         days: 시뮬 일수 (90 분기 권장).
 
     Returns:
-        {(dong_name, hour, day_idx): float}.
+        {(dong_name, hour, day_idx): float} — hour 는 0~23 (24h 해상도).
         DB 데이터 부재 시 빈 dict (시뮬은 정적 boost fallback).
+
+    주의: living_population.time_zone 은 6구간 코드(6/11/14/17/20/24).
+          consumer (_swap_dong_hour_boost_for_day, score_store) 가 24h hour 기대 →
+          여기서 _TIME_ZONE_TO_HOURS 로 expansion 후 반환.
     """
     sql = text("""
         WITH avg_pop AS (
@@ -419,5 +442,10 @@ def _load_living_population_daily(
                 continue
             ratio = float(r["total_pop"] or 0) / avg
             ratio = max(0.5, min(ratio, 2.0))  # clamp 0.5~2.0
-            out[(r["dong_name"], int(r["time_zone"]), int(r["day_idx"]))] = ratio
+            tz = int(r["time_zone"])
+            hours = _TIME_ZONE_TO_HOURS.get(tz, [tz])
+            day_idx = int(r["day_idx"])
+            dong_name = r["dong_name"]
+            for h in hours:
+                out[(dong_name, h, day_idx)] = ratio
     return out

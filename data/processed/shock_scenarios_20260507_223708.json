@@ -1,0 +1,110 @@
+{
+  "config": {
+    "n_personas": 200,
+    "days": 1,
+    "seed": 42
+  },
+  "scenarios": {
+    "base": {
+      "total_revenue": 4516545.0,
+      "total_visits": 242,
+      "by_category": {
+        "음식점": 4031021.0,
+        "카페": 441563.0,
+        "주점": 25849.0,
+        "편의점": 18112.0
+      },
+      "by_dong_top5": {
+        "공덕동": 786109.0,
+        "망원2동": 429718.0,
+        "서교동": 359163.0,
+        "서강동": 338399.0,
+        "합정동": 329933.0
+      },
+      "estimated_cost_usd": 0.0001,
+      "elapsed_sec": 40.2
+    },
+    "rent_shock_30pct": {
+      "total_revenue": 4391484.0,
+      "total_visits": 200,
+      "by_category": {
+        "음식점": 3407741.0,
+        "카페": 983743.0
+      },
+      "by_dong_top5": {
+        "공덕동": 602663.0,
+        "서교동": 433434.0,
+        "성산1동": 325088.0,
+        "도화동": 305512.0,
+        "합정동": 305385.0
+      },
+      "estimated_cost_usd": 0.0001,
+      "elapsed_sec": 2.3
+    },
+    "weekend_force": {
+      "total_revenue": 4700178.0,
+      "total_visits": 254,
+      "by_category": {
+        "음식점": 4121135.0,
+        "편의점": 10401.0,
+        "카페": 531677.0,
+        "주점": 36965.0
+      },
+      "by_dong_top5": {
+        "공덕동": 956151.0,
+        "서교동": 388274.0,
+        "서강동": 377422.0,
+        "망원2동": 342951.0,
+        "합정동": 336394.0
+      },
+      "estimated_cost_usd": 0.0001,
+      "elapsed_sec": 2.3
+    },
+    "rainy": {
+      "total_revenue": 4506560.0,
+      "total_visits": 235,
+      "by_category": {
+        "음식점": 3506017.0,
+        "카페": 1000543.0
+      },
+      "by_dong_top5": {
+        "서교동": 504614.0,
+        "망원2동": 494035.0,
+        "공덕동": 381720.0,
+        "합정동": 376118.0,
+        "망원1동": 316209.0
+      },
+      "estimated_cost_usd": 0.0001,
+      "elapsed_sec": 2.3
+    }
+  },
+  "diff_vs_base": {
+    "rent_shock_30pct": {
+      "revenue_pct": -2.77,
+      "visits_pct": -17.36,
+      "by_category_pct": {
+        "음식점": -15.46,
+        "카페": 122.79
+      }
+    },
+    "weekend_force": {
+      "revenue_pct": 4.07,
+      "visits_pct": 4.96,
+      "by_category_pct": {
+        "음식점": 2.24,
+        "편의점": -42.57,
+        "카페": 20.41,
+        "주점": 43.0
+      }
+    },
+    "rainy": {
+      "revenue_pct": -0.22,
+      "visits_pct": -2.89,
+      "by_category_pct": {
+        "음식점": -13.02,
+        "카페": 126.59
+      }
+    }
+  },
+  "generated_at": "2026-05-07T22:37:08.382647"
+}

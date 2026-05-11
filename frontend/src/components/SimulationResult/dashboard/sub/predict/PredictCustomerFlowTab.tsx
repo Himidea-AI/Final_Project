@@ -8,11 +8,23 @@
  *   - district_predictions 도착 시 동별 grid (PeakHourCard + CustomerSegmentCard).
  *   - backend (수지니 c8ea31f) 는 customer_segment / living_pop_forecast 미구현 →
  *     항상 null. UI guard 로 null 시 hide + 안내. 단일 동 fallback (B5 케이스) 보존.
+ *
+ * 2026-05-03 (재구조 — 강민): 동별 grid → 섹션별 4동 통합 차트 2개.
+ *   - 섹션 1: CustomerFlowPeakHourChart (24시간 grouped bar)
+ *   - 섹션 2: CustomerFlowSegmentChart (매출 3종 + 차원별 비율 가로 grouped bar)
+ *   - 단일 동 fallback (B5) 변경 없음.
  */
 
-import { Activity } from 'lucide-react';
-import type { CustomerSegment, LivingPopForecast, SimulationOutput } from '../../../../../types';
-import { CustomerSegmentCard } from '../../charts/CustomerSegmentCard';
+import { Activity, Users } from 'lucide-react';
+import type {
+  CustomerSegment,
+  DistrictPredictionResult,
+  LivingPopForecast,
+  SimulationOutput,
+} from '../../../../../types';
+import { CustomerFlowPeakHourChart } from '../../charts/CustomerFlowPeakHourChart';
+import { CustomerFlowSegmentChart } from '../../charts/CustomerFlowSegmentChart';
+import { humanizeProfileSummary } from '../../charts/CustomerSegmentCard';
 import { PeakHourCard } from '../../charts/PeakHourCard';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
 
@@ -21,16 +33,19 @@ interface Props {
 }
 
 export function PredictCustomerFlowTab({ simResult }: Props) {
-  const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
+  const dpredicts = (simResult.district_predictions ?? []).filter(
+    (p) => !p.is_excluded_combo,
+  ) as DistrictPredictionResult[];
 
   // 다중 동 (district_predictions) 모드
   if (dpredicts.length > 0) {
-    // backend 미구현 → 모든 동에서 두 필드 모두 null 가능. anyData false 면 안내.
-    const anyData = dpredicts.some(
-      (p) => p.living_pop_forecast != null || p.customer_segment != null,
-    );
+    const anyPeak = dpredicts.some((p) => {
+      const lp = p.living_pop_forecast as LivingPopForecast | null;
+      return lp != null && Array.isArray(lp.quarters) && lp.quarters.length > 0;
+    });
+    const anySegment = dpredicts.some((p) => p.customer_segment != null);
 
-    if (!anyData) {
+    if (!anyPeak && !anySegment) {
       return (
         <div className="space-y-6">
           <PlaceholderPanel
@@ -41,35 +56,92 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
       );
     }
 
+    // winner 동 (없으면 첫 동) 의 customer_segment 헤더 보강용
+    const winnerDistrict = simResult.winner_district ?? dpredicts[0]!.district;
+    const winnerPred = dpredicts.find((p) => p.district === winnerDistrict) ?? dpredicts[0]!;
+    const winnerSegment = winnerPred.customer_segment as CustomerSegment | null;
+
     return (
       <div className="space-y-6">
-        <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest">
-          동별 유동인구 피크 / 고객 세그먼트
-        </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {dpredicts.map((p) => {
-            const livingPop = p.living_pop_forecast as LivingPopForecast | null;
-            const segment = p.customer_segment as CustomerSegment | null;
-            return (
-              <div
-                key={p.district}
-                className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-4 space-y-3"
-              >
-                <div className="text-xs font-bold text-stone-300">{p.district}</div>
-                {livingPop ? (
-                  <PeakHourCard data={livingPop} />
-                ) : (
-                  <div className="text-[0.625rem] text-stone-500">유동인구 데이터 미수신</div>
-                )}
-                {segment ? (
-                  <CustomerSegmentCard segment={segment} />
-                ) : (
-                  <div className="text-[0.625rem] text-stone-500">고객 세그먼트 데이터 미수신</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {/* 섹션 1 — 유동인구 피크시간 예측 (4동 통합) */}
+        {anyPeak && (
+          <div className="rounded-3xl border border-border bg-card p-6 space-y-6 overflow-hidden min-w-0">
+            <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
+              <Activity className="text-primary" /> 유동인구 피크시간 예측
+            </h3>
+            <CustomerFlowPeakHourChart dpredicts={dpredicts} simResult={simResult} />
+            <div className="pt-4 border-t border-border space-y-1">
+              <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
+                ※ 코로나 시기(2020~2021) 가중치 0.5 보정 적용.
+              </p>
+              <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
+                ※ 마포구 16동 × 24시간대 단일 학습. 다른 조합/시간대는 외삽 결과로 신뢰도 하락 가능.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 섹션 2 — 타겟 고객 매출 기여 (4동 통합) */}
+        {anySegment ? (
+          <div className="rounded-3xl border border-border bg-card p-6 space-y-6 overflow-hidden min-w-0">
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
+                <Users className="text-primary" /> 타겟 고객 매출 기여
+              </h3>
+              {winnerSegment && (
+                <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[0.6875rem] font-black tabular-nums text-primary">
+                  {winnerDistrict} 전체의 {(winnerSegment.segment_ratio * 100).toFixed(1)}%
+                </div>
+              )}
+            </div>
+            {winnerSegment && (
+              <p className="text-[0.8125rem] text-foreground leading-relaxed">
+                <span className="font-bold">{winnerDistrict}:</span>{' '}
+                {humanizeProfileSummary(winnerSegment.profile_summary)}
+              </p>
+            )}
+            {/* sub-header: 동별 매출 비교 */}
+            <div className="space-y-3">
+              <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
+                동별 매출 비교
+              </h4>
+              <CustomerFlowSegmentChart dpredicts={dpredicts} mode="sales" simResult={simResult} />
+            </div>
+            {/* sub-header: winner 타겟 프로필 */}
+            <div className="space-y-3">
+              <h4 className="text-[0.6875rem] font-black uppercase tracking-widest text-muted-foreground">
+                {winnerDistrict} 타겟 프로필
+              </h4>
+              <CustomerFlowSegmentChart
+                dpredicts={dpredicts}
+                mode="dimensions"
+                simResult={simResult}
+              />
+            </div>
+            <div className="pt-4 border-t border-border/50 space-y-1">
+              <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
+                ※ 4차원(연령·성별·시간대·요일) 독립 가정(곱셈)으로 산출됩니다 — 실제 분포와 차이
+                가능, 유동인구 실측치로 일부 보정.
+              </p>
+              <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
+                ※ 학습 데이터는 마포구 16동 × 10업종 · 2019~2024 4분기 기준. 다른 조합/연도는 외삽
+                결과.
+              </p>
+            </div>
+          </div>
+        ) : (
+          // 타겟 고객 미선택 — 안내 카드 (border-dashed + muted 톤으로 미활성 상태 시각화)
+          <div className="rounded-3xl border border-dashed border-border bg-card p-6 space-y-2">
+            <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-muted-foreground">
+              <Users /> 타겟 고객 매출 기여 (예측)
+            </h3>
+            <p className="text-[0.8125rem] text-muted-foreground leading-relaxed pt-2">
+              입력 화면의 「타겟 고객」 섹션에서 연령대 · 성별 · 시간대 · 요일을 선택하시면 해당
+              고객층이 동별 매출에서 차지하는 비중과 동별 매출 비교 · 타겟 프로필 분석을 이 영역에서
+              확인하실 수 있습니다.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -81,10 +153,10 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
   if (!hasLivingPop) {
     return (
       <div className="space-y-6">
-        <div className="rounded-3xl border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center">
-          <Activity className="mx-auto text-stone-600 mb-2" size={22} />
-          <p className="text-xs text-stone-500">유동인구 피크 시간 예측 데이터 없음</p>
-          <p className="mt-1 text-[0.625rem] text-stone-600">
+        <div className="rounded-3xl border border-dashed border-border bg-card p-6 text-center">
+          <Activity className="mx-auto text-muted-foreground mb-2" size={22} />
+          <p className="text-xs text-muted-foreground">유동인구 피크 시간 예측 데이터 없음</p>
+          <p className="mt-1 text-[0.625rem] text-muted-foreground">
             living_pop_forecast (TCN) 모델 호출 실패 시 표시됩니다
           </p>
         </div>
@@ -97,7 +169,7 @@ export function PredictCustomerFlowTab({ simResult }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full overflow-hidden">
       {/* [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN) */}
       <PeakHourCard data={livingPop} />
     </div>

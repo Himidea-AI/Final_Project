@@ -1,179 +1,189 @@
 {
+  "rag_metrics": {
+    "k": 10,
+    "mean_recall@k": 0.7988,
+    "mean_precision@k": 0.295,
+    "mean_mrr": 0.931,
+    "mean_ndcg@k": 0.7762,
+    "hit@k_count": 27,
+    "hit@k_total": 29,
+    "hit@k_rate": 0.931
+  },
   "f1_score": {
-    "micro_precision": 0.2066,
-    "micro_recall": 0.3968,
-    "micro_f1": 0.2717,
-    "macro_f1": 0.2831,
+    "micro_precision": 0.2576,
+    "micro_recall": 0.7846,
+    "micro_f1": 0.3878,
+    "macro_f1": 0.4137,
     "per_query": [
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "precision": 0.4,
-        "recall": 0.667,
-        "f1": 0.5,
-        "tp": 2,
-        "fp": 3,
-        "fn": 1
-      },
-      {
-        "law": "가맹사업법",
-        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
-        "precision": 0.2,
+        "precision": 0.167,
         "recall": 0.333,
-        "f1": 0.25,
+        "f1": 0.222,
         "tp": 1,
-        "fp": 4,
+        "fp": 5,
         "fn": 2
       },
       {
         "law": "가맹사업법",
-        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "precision": 0.429,
+        "recall": 1.0,
+        "f1": 0.6,
+        "tp": 3,
         "fp": 4,
-        "fn": 3
+        "fn": 0
+      },
+      {
+        "law": "가맹사업법",
+        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
+        "precision": 0.5,
+        "recall": 0.333,
+        "f1": 0.4,
+        "tp": 1,
+        "fp": 1,
+        "fn": 2
       },
       {
         "law": "상가임대차보호법",
         "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "precision": 0.25,
-        "recall": 0.5,
-        "f1": 0.333,
-        "tp": 1,
-        "fp": 3,
-        "fn": 1
+        "precision": 0.333,
+        "recall": 1.0,
+        "f1": 0.5,
+        "tp": 2,
+        "fp": 4,
+        "fn": 0
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 4,
-        "fn": 3
+        "precision": 0.6,
+        "recall": 1.0,
+        "f1": 0.75,
+        "tp": 3,
+        "fp": 2,
+        "fn": 0
       },
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
-        "precision": 0.2,
+        "precision": 0.125,
         "recall": 0.333,
-        "f1": 0.25,
+        "f1": 0.182,
         "tp": 1,
-        "fp": 4,
+        "fp": 7,
         "fn": 2
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
-        "precision": 0.2,
+        "precision": 0.125,
         "recall": 0.5,
-        "f1": 0.286,
+        "f1": 0.2,
         "tp": 1,
-        "fp": 4,
+        "fp": 7,
         "fn": 1
       },
       {
         "law": "식품위생법",
         "query": "위생교육 식품접객업 의무 식품위생법",
         "precision": 0.5,
-        "recall": 0.5,
-        "f1": 0.5,
-        "tp": 1,
-        "fp": 1,
-        "fn": 1
+        "recall": 1.0,
+        "f1": 0.667,
+        "tp": 2,
+        "fp": 2,
+        "fn": 0
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 3,
-        "fn": 2
+        "precision": 0.222,
+        "recall": 1.0,
+        "f1": 0.364,
+        "tp": 2,
+        "fp": 7,
+        "fn": 0
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
-        "precision": 0.25,
-        "recall": 0.5,
-        "f1": 0.333,
-        "tp": 1,
-        "fp": 3,
-        "fn": 1
+        "precision": 0.333,
+        "recall": 1.0,
+        "f1": 0.5,
+        "tp": 2,
+        "fp": 4,
+        "fn": 0
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 5,
-        "fn": 2
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방시설 설치 의무 기준 소방시설법",
-        "precision": 0.4,
+        "precision": 0.25,
         "recall": 1.0,
-        "f1": 0.571,
+        "f1": 0.4,
         "tp": 2,
-        "fp": 3,
+        "fp": 6,
         "fn": 0
       },
       {
         "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 4,
-        "fn": 2
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "precision": 0.286,
+        "recall": 1.0,
+        "f1": 0.444,
+        "tp": 2,
+        "fp": 5,
+        "fn": 0
+      },
+      {
+        "law": "화재예방법",
+        "query": "소방안전관리자 선임 의무 화재예방법",
+        "precision": 0.25,
+        "recall": 1.0,
+        "f1": 0.4,
+        "tp": 2,
+        "fp": 6,
+        "fn": 0
       },
       {
         "law": "소방시설법",
         "query": "소방시설 자체점검 정기점검 소방시설법",
-        "precision": 0.5,
-        "recall": 0.5,
-        "f1": 0.5,
-        "tp": 1,
+        "precision": 0.667,
+        "recall": 1.0,
+        "f1": 0.8,
+        "tp": 2,
         "fp": 1,
-        "fn": 1
+        "fn": 0
       },
       {
         "law": "근로기준법",
         "query": "근로계약서 서면 명시 의무 근로기준법",
-        "precision": 0.2,
-        "recall": 0.5,
-        "f1": 0.286,
-        "tp": 1,
-        "fp": 4,
-        "fn": 1
+        "precision": 0.222,
+        "recall": 1.0,
+        "f1": 0.364,
+        "tp": 2,
+        "fp": 7,
+        "fn": 0
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 3,
-        "fn": 2
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "precision": 0.2,
+        "recall": 1.0,
+        "f1": 0.333,
+        "tp": 2,
+        "fp": 8,
+        "fn": 0
       },
       {
         "law": "근로기준법",
         "query": "근로시간 휴게 휴일 연장근로 근로기준법",
-        "precision": 0.25,
-        "recall": 0.333,
-        "f1": 0.286,
-        "tp": 1,
-        "fp": 3,
-        "fn": 2
+        "precision": 0.3,
+        "recall": 1.0,
+        "f1": 0.462,
+        "tp": 3,
+        "fp": 7,
+        "fn": 0
       },
       {
         "law": "부가가치세법",
@@ -188,162 +198,174 @@
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
-        "precision": 0.2,
-        "recall": 0.5,
-        "f1": 0.286,
-        "tp": 1,
+        "precision": 0.429,
+        "recall": 1.0,
+        "f1": 0.6,
+        "tp": 3,
         "fp": 4,
-        "fn": 1
+        "fn": 0
       },
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "precision": 0.2,
-        "recall": 0.5,
-        "f1": 0.286,
-        "tp": 1,
-        "fp": 4,
+        "precision": 0.286,
+        "recall": 0.667,
+        "f1": 0.4,
+        "tp": 2,
+        "fp": 5,
         "fn": 1
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
-        "precision": 0.4,
+        "precision": 0.286,
         "recall": 1.0,
-        "f1": 0.571,
+        "f1": 0.444,
         "tp": 2,
-        "fp": 3,
+        "fp": 5,
         "fn": 0
       },
       {
         "law": "개인정보보호법",
         "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "tp": 2,
-        "fp": 0,
-        "fn": 0
+        "precision": 0.333,
+        "recall": 0.5,
+        "f1": 0.4,
+        "tp": 1,
+        "fp": 2,
+        "fn": 1
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "precision": 0.2,
-        "recall": 0.5,
-        "f1": 0.286,
-        "tp": 1,
-        "fp": 4,
-        "fn": 1
+        "precision": 0.286,
+        "recall": 1.0,
+        "f1": 0.444,
+        "tp": 2,
+        "fp": 5,
+        "fn": 0
       },
       {
         "law": "장애인편의법",
         "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "precision": 0.25,
-        "recall": 0.5,
+        "precision": 0.2,
+        "recall": 1.0,
         "f1": 0.333,
-        "tp": 1,
-        "fp": 3,
-        "fn": 1
+        "tp": 2,
+        "fp": 8,
+        "fn": 0
       },
       {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "precision": 0.25,
-        "recall": 0.5,
-        "f1": 0.333,
-        "tp": 1,
-        "fp": 3,
-        "fn": 1
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "tp": 0,
+        "fp": 10,
+        "fn": 2
       },
       {
         "law": "하수도법",
         "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
+        "precision": 0.333,
+        "recall": 1.0,
+        "f1": 0.5,
+        "tp": 2,
         "fp": 4,
-        "fn": 2
+        "fn": 0
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "precision": 0.25,
-        "recall": 0.5,
-        "f1": 0.333,
-        "tp": 1,
-        "fp": 3,
-        "fn": 1
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 0.667,
+        "tp": 2,
+        "fp": 2,
+        "fn": 0
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": 0.0,
-        "tp": 0,
-        "fp": 5,
-        "fn": 2
+        "precision": 0.143,
+        "recall": 0.5,
+        "f1": 0.222,
+        "tp": 1,
+        "fp": 6,
+        "fn": 1
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "precision": 0.2,
-        "recall": 0.5,
-        "f1": 0.286,
-        "tp": 1,
-        "fp": 4,
-        "fn": 1
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "tp": 0,
+        "fp": 10,
+        "fn": 2
       }
     ]
   },
   "exact_match": {
-    "hit": 25,
-    "total": 63,
-    "accuracy_pct": 39.7
+    "hit": 51,
+    "total": 65,
+    "accuracy_pct": 78.5
   },
   "llm_judge": {
-    "exact_hit": 25,
-    "llm_relevant": 81,
-    "llm_not_relevant": 15,
-    "total_returned": 121,
-    "relevance_pct": 87.6,
+    "exact_hit": 51,
+    "llm_relevant": 126,
+    "llm_not_relevant": 21,
+    "total_returned": 198,
+    "relevance_pct": 89.4,
     "details": [
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "article": "제14조의2",
+        "article": "제11조",
         "relevant": true
       },
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "article": "제13조",
+        "article": "제3조",
+        "relevant": false
+      },
+      {
+        "law": "가맹사업법",
+        "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
+        "article": "제12조",
         "relevant": true
       },
       {
         "law": "가맹사업법",
         "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
-        "article": "제7조",
+        "article": "제9조",
         "relevant": true
       },
       {
         "law": "가맹사업법",
-        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
-        "article": "제31조",
-        "relevant": true
-      },
-      {
-        "law": "가맹사업법",
-        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
-        "article": "제14조의3",
-        "relevant": true
-      },
-      {
-        "law": "가맹사업법",
-        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "query": "영업지역 보장 동일 브랜드 출점 제한 가맹사업법",
         "article": "제2조",
         "relevant": false
+      },
+      {
+        "law": "가맹사업법",
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "article": "제6조의4",
+        "relevant": true
+      },
+      {
+        "law": "가맹사업법",
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "article": "제4조",
+        "relevant": true
+      },
+      {
+        "law": "가맹사업법",
+        "query": "정보공개서 등록 의무 가맹본부 가맹사업법",
+        "article": "제6조",
+        "relevant": true
       },
       {
         "law": "가맹사업법",
@@ -354,31 +376,7 @@
       {
         "law": "가맹사업법",
         "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
-        "article": "제13조",
-        "relevant": false
-      },
-      {
-        "law": "가맹사업법",
-        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
-        "article": "제3조",
-        "relevant": false
-      },
-      {
-        "law": "가맹사업법",
-        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
-        "article": "제43조",
-        "relevant": false
-      },
-      {
-        "law": "가맹사업법",
-        "query": "가맹금 반환 예치 가맹계약 해제 가맹사업법",
         "article": "제5조의10",
-        "relevant": true
-      },
-      {
-        "law": "상가임대차보호법",
-        "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "article": "제5조",
         "relevant": true
       },
       {
@@ -390,31 +388,49 @@
       {
         "law": "상가임대차보호법",
         "query": "권리금 회수 기회 보호 상가임대차보호법",
-        "article": "제10조의6",
+        "article": "제3조",
+        "relevant": true
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "권리금 회수 기회 보호 상가임대차보호법",
+        "article": "2018다284226",
+        "relevant": false
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "권리금 회수 기회 보호 상가임대차보호법",
+        "article": "제4조",
         "relevant": true
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
-        "article": "제7조",
+        "article": "제10조의9",
         "relevant": true
       },
       {
         "law": "상가임대차보호법",
         "query": "계약갱신요구권 임대차 기간 상가건물",
-        "article": "제6조",
+        "article": "제2조",
         "relevant": true
       },
       {
         "law": "상가임대차보호법",
-        "query": "계약갱신요구권 임대차 기간 상가건물",
-        "article": "제3조의3",
+        "query": "환산보증금 차임 증감청구 보증금 보호",
+        "article": "제10조의2",
         "relevant": true
       },
       {
         "law": "상가임대차보호법",
-        "query": "계약갱신요구권 임대차 기간 상가건물",
-        "article": "제21조",
+        "query": "환산보증금 차임 증감청구 보증금 보호",
+        "article": "제10조",
+        "relevant": true
+      },
+      {
+        "law": "상가임대차보호법",
+        "query": "환산보증금 차임 증감청구 보증금 보호",
+        "article": "제14조",
         "relevant": true
       },
       {
@@ -438,103 +454,181 @@
       {
         "law": "상가임대차보호법",
         "query": "환산보증금 차임 증감청구 보증금 보호",
-        "article": "제10조의2",
+        "article": "제4조",
         "relevant": true
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
-        "article": "제5조의4",
+        "article": "제38조",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "제40조",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "제42조",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "제41조",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "slide",
         "relevant": false
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
-        "article": "제59조",
-        "relevant": true
+        "article": "2012두18882",
+        "relevant": false
       },
       {
         "law": "식품위생법",
         "query": "영업신고 영업허가 절차 식품위생법",
+        "article": "2020도12944",
+        "relevant": false
+      },
+      {
+        "law": "식품위생법",
+        "query": "위생교육 식품접객업 의무 식품위생법",
         "article": "제52조",
         "relevant": true
       },
       {
         "law": "식품위생법",
-        "query": "영업신고 영업허가 절차 식품위생법",
-        "article": "제41조",
-        "relevant": true
-      },
-      {
-        "law": "식품위생법",
         "query": "위생교육 식품접객업 의무 식품위생법",
-        "article": "제54조",
+        "article": "slide",
+        "relevant": false
+      },
+      {
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "제57조",
         "relevant": true
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "article": "제49조",
+        "article": "제29조",
         "relevant": true
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "article": "제41조",
+        "article": "제36조",
         "relevant": true
       },
       {
         "law": "식품위생법",
         "query": "시설기준 영업자 준수사항 식품위생법",
-        "article": "제47조의2",
+        "article": "제38조",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "slide",
+        "relevant": false
+      },
+      {
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "제48조",
+        "relevant": true
+      },
+      {
+        "law": "식품위생법",
+        "query": "시설기준 영업자 준수사항 식품위생법",
+        "article": "제74조",
         "relevant": true
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
-        "article": "제8조",
+        "article": "제14조",
         "relevant": false
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
-        "article": "제11조",
+        "article": "제61조",
         "relevant": true
       },
       {
         "law": "건축법",
         "query": "건축물 용도변경 근린생활시설 건축법",
-        "article": "제48조의3",
+        "article": "제56조",
+        "relevant": true
+      },
+      {
+        "law": "건축법",
+        "query": "건축물 용도변경 근린생활시설 건축법",
+        "article": "제47조",
         "relevant": true
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
-        "article": "제22조",
+        "article": "제9조",
         "relevant": true
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
-        "article": "제18조",
+        "article": "제8조",
         "relevant": true
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
-        "article": "제76조",
-        "relevant": true
-      },
-      {
-        "law": "건축법",
-        "query": "건축허가 건축신고 절차 건축법",
-        "article": "제89조",
+        "article": "제17조",
         "relevant": true
       },
       {
         "law": "건축법",
         "query": "건축허가 건축신고 절차 건축법",
         "article": "제10조",
+        "relevant": true
+      },
+      {
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "article": "제5조",
+        "relevant": true
+      },
+      {
+        "law": "건축법",
+        "query": "건축허가 건축신고 절차 건축법",
+        "article": "제2조",
+        "relevant": false
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제10조",
+        "relevant": true
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제16조",
+        "relevant": true
+      },
+      {
+        "law": "소방시설법",
+        "query": "소방시설 설치 의무 기준 소방시설법",
+        "article": "제14조",
         "relevant": true
       },
       {
@@ -546,61 +640,85 @@
       {
         "law": "소방시설법",
         "query": "소방시설 설치 의무 기준 소방시설법",
-        "article": "제37조",
-        "relevant": true
-      },
-      {
-        "law": "소방시설법",
-        "query": "소방시설 설치 의무 기준 소방시설법",
         "article": "제7조",
         "relevant": true
       },
       {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "article": "제12조",
+        "law": "화재예방법",
+        "query": "소방안전관리자 선임 의무 화재예방법",
+        "article": "제28조",
         "relevant": true
       },
       {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "article": "제23조",
+        "law": "화재예방법",
+        "query": "소방안전관리자 선임 의무 화재예방법",
+        "article": "제26조",
         "relevant": true
       },
       {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "article": "제37조",
+        "law": "화재예방법",
+        "query": "소방안전관리자 선임 의무 화재예방법",
+        "article": "제30조",
         "relevant": true
       },
       {
-        "law": "소방시설법",
-        "query": "소방안전관리자 선임 의무 소방시설법",
-        "article": "제57조",
+        "law": "화재예방법",
+        "query": "소방안전관리자 선임 의무 화재예방법",
+        "article": "제36조",
+        "relevant": true
+      },
+      {
+        "law": "화재예방법",
+        "query": "소방안전관리자 선임 의무 화재예방법",
+        "article": "제34조",
+        "relevant": true
+      },
+      {
+        "law": "화재예방법",
+        "query": "소방안전관리자 선임 의무 화재예방법",
+        "article": "제33조",
         "relevant": true
       },
       {
         "law": "소방시설법",
         "query": "소방시설 자체점검 정기점검 소방시설법",
-        "article": "제12조",
+        "article": "제20조",
         "relevant": true
       },
       {
         "law": "근로기준법",
         "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제63조",
+        "article": "제19조",
         "relevant": true
       },
       {
         "law": "근로기준법",
         "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제37조",
+        "article": "제67조",
         "relevant": true
       },
       {
         "law": "근로기준법",
         "query": "근로계약서 서면 명시 의무 근로기준법",
-        "article": "제26조",
+        "article": "제8조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제42조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제51조의2",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로계약서 서면 명시 의무 근로기준법",
+        "article": "제57조",
         "relevant": true
       },
       {
@@ -611,26 +729,74 @@
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제95조",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제57조",
         "relevant": true
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제6조",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제55조",
         "relevant": true
       },
       {
         "law": "근로기준법",
-        "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
-        "article": "제8조",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제51조의2",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제12조",
+        "relevant": false
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제37조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제46조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제70조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
+        "article": "제45조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제53조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제56조",
         "relevant": true
       },
       {
         "law": "근로기준법",
         "query": "근로시간 휴게 휴일 연장근로 근로기준법",
         "article": "제57조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제51조의2",
         "relevant": true
       },
       {
@@ -642,49 +808,73 @@
       {
         "law": "근로기준법",
         "query": "근로시간 휴게 휴일 연장근로 근로기준법",
-        "article": "제60조",
+        "article": "제59조",
+        "relevant": true
+      },
+      {
+        "law": "근로기준법",
+        "query": "근로시간 휴게 휴일 연장근로 근로기준법",
+        "article": "제70조",
         "relevant": true
       },
       {
         "law": "부가가치세법",
         "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제53조",
+        "article": "제14조",
         "relevant": false
       },
       {
         "law": "부가가치세법",
         "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제48조",
+        "article": "제11조",
         "relevant": false
       },
       {
         "law": "부가가치세법",
         "query": "사업자등록 신청 절차 부가가치세법",
-        "article": "제6조",
+        "article": "제9조",
         "relevant": false
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제37조",
+        "article": "제71조",
         "relevant": true
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제39조",
+        "article": "제52조",
         "relevant": true
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제60조",
+        "article": "제71조의2",
         "relevant": true
       },
       {
         "law": "부가가치세법",
         "query": "세금계산서 발급 의무 부가가치세법",
-        "article": "제33조",
+        "article": "제34조의2",
+        "relevant": true
+      },
+      {
+        "law": "부가가치세법",
+        "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
+        "article": "제69조",
+        "relevant": true
+      },
+      {
+        "law": "부가가치세법",
+        "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
+        "article": "제68조",
+        "relevant": true
+      },
+      {
+        "law": "부가가치세법",
+        "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
+        "article": "제67조",
         "relevant": true
       },
       {
@@ -696,91 +886,139 @@
       {
         "law": "부가가치세법",
         "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제48조",
-        "relevant": true
+        "article": "제111조",
+        "relevant": false
       },
       {
-        "law": "부가가치세법",
-        "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제60조",
-        "relevant": true
-      },
-      {
-        "law": "부가가치세법",
-        "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
-        "article": "제15조",
+        "law": "개인정보보호법",
+        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
+        "article": "제22조",
         "relevant": true
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
-        "article": "제26조",
+        "article": "제3조",
         "relevant": true
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
-        "article": "제28조의2",
+        "article": "제18조",
         "relevant": true
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
+        "article": "제17조",
+        "relevant": true
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "개인정보 수집 이용 동의 목적 개인정보보호법",
+        "article": "제14조의2",
+        "relevant": true
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
+        "article": "제24조",
+        "relevant": true
+      },
+      {
+        "law": "개인정보보호법",
+        "query": "CCTV 영상정보처리기기 설치 운영 개인정보보호법",
         "article": "제23조",
         "relevant": true
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제26조",
+        "article": "제30조의2",
         "relevant": true
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제28조의2",
+        "article": "제31조의2",
         "relevant": true
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제5조",
+        "article": "제32조",
         "relevant": true
       },
       {
         "law": "개인정보보호법",
         "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
-        "article": "제29조",
-        "relevant": true
-      },
-      {
-        "law": "장애인편의법",
-        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제3조",
-        "relevant": true
-      },
-      {
-        "law": "장애인편의법",
-        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제17조",
-        "relevant": true
-      },
-      {
-        "law": "장애인편의법",
-        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
-        "article": "제16조",
-        "relevant": true
-      },
-      {
-        "law": "장애인편의법",
-        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
         "article": "제3조",
         "relevant": false
       },
       {
+        "law": "개인정보보호법",
+        "query": "개인정보 처리방침 수립 공개 의무 개인정보보호법",
+        "article": "제22조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제16조의2",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제3조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제9조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제9조의2",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제12조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제1조",
+        "relevant": false
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제9조의3",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "대상시설 편의시설 설치 공공건물 공중이용시설 장애인편의법",
+        "article": "제13조",
+        "relevant": true
+      },
+      {
         "law": "장애인편의법",
         "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
-        "article": "제10조의2",
+        "article": "제8조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제9조",
         "relevant": true
       },
       {
@@ -790,9 +1028,63 @@
         "relevant": true
       },
       {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제3조",
+        "relevant": false
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제7조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제15조",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제2조",
+        "relevant": false
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제9조의3",
+        "relevant": true
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제87조",
+        "relevant": false
+      },
+      {
+        "law": "장애인편의법",
+        "query": "편의시설 설치기준 경사로 출입구 장애인편의법",
+        "article": "제16조의2",
+        "relevant": true
+      },
+      {
         "law": "하수도법",
         "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제40조",
+        "article": "제39조",
+        "relevant": true
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제27조",
+        "relevant": true
+      },
+      {
+        "law": "하수도법",
+        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
+        "article": "제30조",
         "relevant": true
       },
       {
@@ -803,50 +1095,38 @@
       },
       {
         "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제2조",
-        "relevant": false
-      },
-      {
-        "law": "하수도법",
-        "query": "오수 배출 개인하수처리시설 설치 배수설비 하수도법",
-        "article": "제35조",
+        "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
+        "article": "제30조",
         "relevant": true
       },
       {
         "law": "하수도법",
         "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제2조",
-        "relevant": false
-      },
-      {
-        "law": "하수도법",
-        "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제11조",
-        "relevant": true
-      },
-      {
-        "law": "하수도법",
-        "query": "공공하수도 배수구역 배수설비 유입 설치 하수도법",
-        "article": "제19조",
+        "article": "제29조",
         "relevant": true
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제38조",
+        "article": "제48조",
         "relevant": true
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제125조",
-        "relevant": false
+        "article": "제46조",
+        "relevant": true
       },
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제89조",
+        "article": "제72조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "query": "불공정거래행위 금지 거래강제 공정거래법",
+        "article": "제108조",
         "relevant": true
       },
       {
@@ -858,8 +1138,26 @@
       {
         "law": "공정거래법",
         "query": "불공정거래행위 금지 거래강제 공정거래법",
-        "article": "제120조의3",
-        "relevant": false
+        "article": "제38조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
+        "article": "제45조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
+        "article": "제38조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
+        "article": "제13조",
+        "relevant": true
       },
       {
         "law": "공정거래법",
@@ -870,19 +1168,37 @@
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제26조",
+        "article": "제6조",
         "relevant": true
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제9조",
+        "article": "제25조",
         "relevant": true
       },
       {
         "law": "공정거래법",
         "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
-        "article": "제120조의3",
+        "article": "제22조의2",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
+        "article": "제18조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
+        "article": "제23조",
+        "relevant": true
+      },
+      {
+        "law": "공정거래법",
+        "query": "가맹본부 필수물품 공급 부당한 거래 공정거래법",
+        "article": "제4조",
         "relevant": false
       }
     ]
@@ -897,15 +1213,24 @@
         "제14조"
       ],
       "returned": [
-        "제14조의2",
-        "제13조",
-        "제14조",
         "제12조의4",
-        "제7조"
+        "제11조",
+        "제3조",
+        "제12조",
+        "제9조",
+        "제2조"
       ],
-      "hits": 2,
+      "hits": 1,
       "total": 3,
-      "time_ms": 9421
+      "time_ms": 75697,
+      "metrics": {
+        "recall@k": 0.3333,
+        "precision@k": 0.1667,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.4693,
+        "f1@k": 0.2222
+      }
     },
     {
       "law": "가맹사업법",
@@ -916,15 +1241,25 @@
         "제7조"
       ],
       "returned": [
-        "제31조",
-        "제14조의3",
+        "제6조의2",
+        "제7조",
         "제6조의3",
-        "제2조",
+        "제6조의4",
+        "제4조",
+        "제6조",
         "제5조의2"
       ],
-      "hits": 1,
+      "hits": 3,
       "total": 3,
-      "time_ms": 157
+      "time_ms": 2071,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.4286,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 1.0,
+        "f1@k": 0.6
+      }
     },
     {
       "law": "가맹사업법",
@@ -935,14 +1270,20 @@
         "제15조의2"
       ],
       "returned": [
-        "제13조",
-        "제3조",
-        "제43조",
+        "제10조",
         "제5조의10"
       ],
-      "hits": 0,
+      "hits": 1,
       "total": 3,
-      "time_ms": 160
+      "time_ms": 2974,
+      "metrics": {
+        "recall@k": 0.3333,
+        "precision@k": 0.5,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.4693,
+        "f1@k": 0.4
+      }
     },
     {
       "law": "상가임대차보호법",
@@ -953,13 +1294,23 @@
       ],
       "returned": [
         "제10조의4",
-        "제5조",
+        "제10조의5",
         "제10조의3",
-        "제10조의6"
+        "제3조",
+        "2018다284226",
+        "제4조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 154
+      "time_ms": 1885,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.3333,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 1.0,
+        "f1@k": 0.5
+      }
     },
     {
       "law": "상가임대차보호법",
@@ -970,14 +1321,23 @@
         "제9조"
       ],
       "returned": [
-        "제7조",
-        "제6조",
-        "제3조의3",
-        "제21조"
+        "제10조",
+        "제10조의2",
+        "제10조의9",
+        "제2조",
+        "제9조"
       ],
-      "hits": 0,
+      "hits": 3,
       "total": 3,
-      "time_ms": 141
+      "time_ms": 1994,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.6,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9469,
+        "f1@k": 0.75
+      }
     },
     {
       "law": "상가임대차보호법",
@@ -988,15 +1348,26 @@
         "제12조"
       ],
       "returned": [
+        "제11조",
+        "제10조의2",
+        "제10조",
+        "제14조",
         "제6조",
         "제7조",
         "제5조",
-        "제10조의2",
-        "제2조"
+        "제4조"
       ],
       "hits": 1,
       "total": 3,
-      "time_ms": 154
+      "time_ms": 3055,
+      "metrics": {
+        "recall@k": 0.3333,
+        "precision@k": 0.125,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.4693,
+        "f1@k": 0.1818
+      }
     },
     {
       "law": "식품위생법",
@@ -1006,30 +1377,51 @@
         "제36조"
       ],
       "returned": [
-        "제5조의4",
-        "제59조",
-        "제52조",
+        "제37조",
+        "제38조",
+        "제40조",
+        "제42조",
         "제41조",
-        "제37조"
+        "slide",
+        "2012두18882",
+        "2020도12944"
       ],
       "hits": 1,
       "total": 2,
-      "time_ms": 169
+      "time_ms": 1725,
+      "metrics": {
+        "recall@k": 0.5,
+        "precision@k": 0.125,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.6131,
+        "f1@k": 0.2
+      }
     },
     {
       "law": "식품위생법",
       "query": "위생교육 식품접객업 의무 식품위생법",
       "expected": [
         "제41조",
-        "제43조"
+        "제51조"
       ],
       "returned": [
-        "제54조",
-        "제41조"
+        "제41조",
+        "제51조",
+        "제52조",
+        "slide"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 168
+      "time_ms": 1741,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.5,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 1.0,
+        "f1@k": 0.6667
+      }
     },
     {
       "law": "식품위생법",
@@ -1039,13 +1431,27 @@
         "제44조"
       ],
       "returned": [
-        "제49조",
-        "제41조",
-        "제47조의2"
+        "제44조",
+        "제57조",
+        "제29조",
+        "제36조",
+        "제38조",
+        "제3조",
+        "slide",
+        "제48조",
+        "제74조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 165
+      "time_ms": 1728,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.2222,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8316,
+        "f1@k": 0.3636
+      }
     },
     {
       "law": "건축법",
@@ -1055,14 +1461,24 @@
         "제2조"
       ],
       "returned": [
-        "제8조",
-        "제11조",
+        "제19조",
         "제2조",
-        "제48조의3"
+        "제14조",
+        "제61조",
+        "제56조",
+        "제47조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 135
+      "time_ms": 2281,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.3333,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 1.0,
+        "f1@k": 0.5
+      }
     },
     {
       "law": "건축법",
@@ -1072,15 +1488,26 @@
         "제14조"
       ],
       "returned": [
-        "제22조",
-        "제18조",
-        "제76조",
-        "제89조",
-        "제10조"
+        "제11조",
+        "제14조",
+        "제9조",
+        "제8조",
+        "제17조",
+        "제10조",
+        "제5조",
+        "제2조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 133
+      "time_ms": 1985,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.25,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 1.0,
+        "f1@k": 0.4
+      }
     },
     {
       "law": "소방시설법",
@@ -1091,31 +1518,53 @@
       ],
       "returned": [
         "제12조",
-        "제15조",
+        "제10조",
         "제13조",
-        "제37조",
+        "제16조",
+        "제14조",
+        "제15조",
         "제7조"
       ],
       "hits": 2,
       "total": 2,
-      "time_ms": 102
+      "time_ms": 1801,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.2857,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9197,
+        "f1@k": 0.4444
+      }
     },
     {
-      "law": "소방시설법",
-      "query": "소방안전관리자 선임 의무 소방시설법",
+      "law": "화재예방법",
+      "query": "소방안전관리자 선임 의무 화재예방법",
       "expected": [
         "제24조",
         "제25조"
       ],
       "returned": [
-        "제12조",
-        "제23조",
-        "제37조",
-        "제57조"
+        "제24조",
+        "제28조",
+        "제26조",
+        "제25조",
+        "제30조",
+        "제36조",
+        "제34조",
+        "제33조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 143
+      "time_ms": 1566,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.25,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8772,
+        "f1@k": 0.4
+      }
     },
     {
       "law": "소방시설법",
@@ -1125,12 +1574,21 @@
         "제23조"
       ],
       "returned": [
-        "제12조",
-        "제22조"
+        "제22조",
+        "제20조",
+        "제23조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 140
+      "time_ms": 1921,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.6667,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9197,
+        "f1@k": 0.8
+      }
     },
     {
       "law": "근로기준법",
@@ -1140,31 +1598,58 @@
         "제2조"
       ],
       "returned": [
-        "제63조",
-        "제37조",
-        "제26조",
         "제17조",
+        "제19조",
+        "제67조",
+        "제8조",
+        "제42조",
+        "제2조",
+        "제51조의2",
+        "제57조",
         "제27조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 137
+      "time_ms": 2037,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.2222,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8316,
+        "f1@k": 0.3636
+      }
     },
     {
       "law": "근로기준법",
-      "query": "임금 지급 최저임금 주휴수당 가산임금 근로기준법",
+      "query": "임금 지급 가산임금 연장근로 휴일근로 근로기준법",
       "expected": [
         "제43조",
         "제56조"
       ],
       "returned": [
-        "제95조",
-        "제6조",
-        "제8조"
+        "제56조",
+        "제57조",
+        "제55조",
+        "제51조의2",
+        "제12조",
+        "제43조",
+        "제37조",
+        "제46조",
+        "제70조",
+        "제45조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 149
+      "time_ms": 1798,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8316,
+        "f1@k": 0.3333
+      }
     },
     {
       "law": "근로기준법",
@@ -1175,14 +1660,28 @@
         "제55조"
       ],
       "returned": [
+        "제50조",
+        "제54조",
+        "제53조",
+        "제56조",
+        "제55조",
         "제57조",
+        "제51조의2",
         "제51조",
-        "제60조",
-        "제54조"
+        "제59조",
+        "제70조"
       ],
-      "hits": 1,
+      "hits": 3,
       "total": 3,
-      "time_ms": 147
+      "time_ms": 2157,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.3,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9469,
+        "f1@k": 0.4615
+      }
     },
     {
       "law": "부가가치세법",
@@ -1191,50 +1690,80 @@
         "제8조"
       ],
       "returned": [
-        "제53조",
-        "제48조",
-        "제6조",
-        "제8조"
+        "제8조",
+        "제14조",
+        "제11조",
+        "제9조"
       ],
       "hits": 1,
       "total": 1,
-      "time_ms": 142
+      "time_ms": 1626,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.25,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 1.0,
+        "f1@k": 0.4
+      }
     },
     {
       "law": "부가가치세법",
       "query": "세금계산서 발급 의무 부가가치세법",
       "expected": [
         "제32조",
+        "제33조",
         "제34조"
       ],
       "returned": [
-        "제37조",
-        "제39조",
-        "제60조",
+        "제32조",
         "제33조",
-        "제32조"
+        "제71조",
+        "제52조",
+        "제71조의2",
+        "제34조",
+        "제34조의2"
       ],
-      "hits": 1,
-      "total": 2,
-      "time_ms": 202
+      "hits": 3,
+      "total": 3,
+      "time_ms": 1553,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.4286,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9325,
+        "f1@k": 0.6
+      }
     },
     {
       "law": "부가가치세법",
       "query": "간이과세자 공급대가 개인사업자 과세표준 부가가치세법",
       "expected": [
         "제61조",
+        "제62조",
         "제63조"
       ],
       "returned": [
-        "제70조",
         "제61조",
-        "제48조",
-        "제60조",
-        "제15조"
+        "제69조",
+        "제63조",
+        "제68조",
+        "제67조",
+        "제70조",
+        "제111조"
       ],
-      "hits": 1,
-      "total": 2,
-      "time_ms": 164
+      "hits": 2,
+      "total": 3,
+      "time_ms": 2439,
+      "metrics": {
+        "recall@k": 0.6667,
+        "precision@k": 0.2857,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.7039,
+        "f1@k": 0.4
+      }
     },
     {
       "law": "개인정보보호법",
@@ -1244,15 +1773,25 @@
         "제16조"
       ],
       "returned": [
-        "제26조",
         "제15조",
-        "제28조의2",
-        "제23조",
-        "제16조"
+        "제16조",
+        "제22조",
+        "제3조",
+        "제18조",
+        "제17조",
+        "제14조의2"
       ],
       "hits": 2,
       "total": 2,
-      "time_ms": 125
+      "time_ms": 1941,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.2857,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 1.0,
+        "f1@k": 0.4444
+      }
     },
     {
       "law": "개인정보보호법",
@@ -1262,12 +1801,21 @@
         "제25조의2"
       ],
       "returned": [
-        "제25조의2",
-        "제25조"
+        "제25조",
+        "제24조",
+        "제23조"
       ],
-      "hits": 2,
+      "hits": 1,
       "total": 2,
-      "time_ms": 160
+      "time_ms": 1540,
+      "metrics": {
+        "recall@k": 0.5,
+        "precision@k": 0.3333,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.6131,
+        "f1@k": 0.4
+      }
     },
     {
       "law": "개인정보보호법",
@@ -1277,15 +1825,25 @@
         "제31조"
       ],
       "returned": [
-        "제26조",
-        "제28조의2",
-        "제5조",
-        "제29조",
-        "제30조"
+        "제30조",
+        "제30조의2",
+        "제31조",
+        "제31조의2",
+        "제32조",
+        "제3조",
+        "제22조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 159
+      "time_ms": 1980,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.2857,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9197,
+        "f1@k": 0.4444
+      }
     },
     {
       "law": "장애인편의법",
@@ -1295,14 +1853,28 @@
         "제8조"
       ],
       "returned": [
-        "제3조",
         "제7조",
-        "제17조",
-        "제16조"
+        "제16조의2",
+        "제3조",
+        "제9조",
+        "제8조",
+        "제9조의2",
+        "제12조",
+        "제1조",
+        "제9조의3",
+        "제13조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 160
+      "time_ms": 1835,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.2,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8503,
+        "f1@k": 0.3333
+      }
     },
     {
       "law": "장애인편의법",
@@ -1312,14 +1884,28 @@
         "제17조"
       ],
       "returned": [
-        "제17조",
+        "제8조",
+        "제9조",
+        "제9조의2",
         "제3조",
-        "제10조의2",
-        "제9조의2"
+        "제7조",
+        "제15조",
+        "제2조",
+        "제9조의3",
+        "제87조",
+        "제16조의2"
       ],
-      "hits": 1,
+      "hits": 0,
       "total": 2,
-      "time_ms": 247
+      "time_ms": 1845,
+      "metrics": {
+        "recall@k": 0.0,
+        "precision@k": 0.0,
+        "hit@k": 0,
+        "mrr": 0.0,
+        "ndcg@k": 0.0,
+        "f1@k": 0.0
+      }
     },
     {
       "law": "하수도법",
@@ -1329,14 +1915,24 @@
         "제37조"
       ],
       "returned": [
-        "제40조",
+        "제34조",
+        "제39조",
+        "제27조",
+        "제30조",
         "제38조",
-        "제2조",
-        "제35조"
+        "제37조"
       ],
-      "hits": 0,
+      "hits": 2,
       "total": 2,
-      "time_ms": 257
+      "time_ms": 1764,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.3333,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.8316,
+        "f1@k": 0.5
+      }
     },
     {
       "law": "하수도법",
@@ -1346,14 +1942,22 @@
         "제28조"
       ],
       "returned": [
-        "제2조",
-        "제11조",
         "제27조",
-        "제19조"
+        "제30조",
+        "제28조",
+        "제29조"
       ],
-      "hits": 1,
+      "hits": 2,
       "total": 2,
-      "time_ms": 185
+      "time_ms": 1720,
+      "metrics": {
+        "recall@k": 1.0,
+        "precision@k": 0.5,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.9197,
+        "f1@k": 0.6667
+      }
     },
     {
       "law": "공정거래법",
@@ -1363,15 +1967,25 @@
         "제40조"
       ],
       "returned": [
-        "제38조",
-        "제125조",
-        "제89조",
+        "제45조",
+        "제48조",
+        "제46조",
+        "제72조",
+        "제108조",
         "제51조",
-        "제120조의3"
+        "제38조"
       ],
-      "hits": 0,
+      "hits": 1,
       "total": 2,
-      "time_ms": 146
+      "time_ms": 1718,
+      "metrics": {
+        "recall@k": 0.5,
+        "precision@k": 0.1429,
+        "hit@k": 1,
+        "mrr": 1.0,
+        "ndcg@k": 0.6131,
+        "f1@k": 0.2222
+      }
     },
     {
       "law": "공정거래법",
@@ -1381,15 +1995,28 @@
         "제55조"
       ],
       "returned": [
+        "제45조",
+        "제38조",
+        "제13조",
         "제73조",
-        "제26조",
-        "제47조",
-        "제9조",
-        "제120조의3"
+        "제6조",
+        "제25조",
+        "제22조의2",
+        "제18조",
+        "제23조",
+        "제4조"
       ],
-      "hits": 1,
+      "hits": 0,
       "total": 2,
-      "time_ms": 154
+      "time_ms": 1631,
+      "metrics": {
+        "recall@k": 0.0,
+        "precision@k": 0.0,
+        "hit@k": 0,
+        "mrr": 0.0,
+        "ndcg@k": 0.0,
+        "f1@k": 0.0
+      }
     }
   ]
 }

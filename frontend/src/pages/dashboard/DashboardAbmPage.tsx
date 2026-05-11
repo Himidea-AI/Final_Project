@@ -19,12 +19,12 @@ export default function DashboardAbmPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="mx-auto max-w-[1728px] px-8 pt-28 pb-8">
+    <div className="mx-auto max-w-[1728px] px-8 pt-8 pb-8">
       <div className="mb-6">
         <button
           type="button"
           onClick={() => navigate('/dashboard')}
-          className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-xs font-bold uppercase tracking-widest text-stone-500 transition-colors hover:text-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400"
+          className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-xs font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Hub

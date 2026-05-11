@@ -142,7 +142,7 @@ export function useAuth() {
 
 export type LoginResult =
   | { success: true; role: 'master'; user: User; brand: Brand | null; token: string | null }
-  | { success: true; role: 'manager'; user: User; token: string | null }
+  | { success: true; role: 'manager'; user: User; brand: Brand | null; token: string | null }
   | {
       success: false;
       reason: 'pending_approval' | 'invalid_credentials' | 'network_error';
@@ -184,6 +184,7 @@ export async function loginWithFallback(email: string, password: string): Promis
           role: 'manager',
           plan: managerData.user.plan ?? '',
         },
+        brand: managerData.brand ?? null,
         token: typeof managerData.access_token === 'string' ? managerData.access_token : null,
       };
     }

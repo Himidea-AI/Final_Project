@@ -6,18 +6,26 @@
 - PGVectorDBClient  : pgvector(PostgreSQL) 기반 (프로덕션 대체)
 """
 
+import logging
+
 from langchain_postgres.vectorstores import PGVector
 from langchain_huggingface import HuggingFaceEmbeddings
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import create_engine
 from src.config.settings import settings
 from dotenv import load_dotenv
 
-# 커넥션 풀 설정 — RDS max_connections=81 제약 고려
-# db_client(market/ranking)가 별도 풀을 사용하므로 RAG용은 최소화
-_POOL_SIZE = 3  # 기본 커넥션 수 (10→3 축소)
-_MAX_OVERFLOW = 5  # 초과 허용 커넥션 수 (20→5 축소, 최대 8개)
+logger = logging.getLogger(__name__)
+
+# 커넥션 풀 설정 — RDS max_connections=191 제약 고려
+# legal_node Phase 1 = RAG×13 + 판례×6 = 19 동시 검색 → 풀이 작으면 timeout 후 빈 결과 반환
+# 다른 노드들(market/population 등)이 별도 풀을 사용해도 RAG는 19 동시 보장 필요
+_POOL_SIZE = 10  # 기본 커넥션 수 — Phase 1 동시성 + 마진
+_MAX_OVERFLOW = 15  # 초과 허용 — 최대 25개 (RDS max_connections=191 내)
 _POOL_TIMEOUT = 30  # 커넥션 대기 타임아웃(초)
 _POOL_PRE_PING = True  # 끊긴 커넥션 자동 재연결
+# RDS 연결 누수 방지 — uvicorn dev reload 시 idle 연결이 계속 쌓이는 문제 차단
+# (이전 진단: 1h↑ idle 102개 누수 → 102 강제 종료)
+_POOL_RECYCLE = 1800  # 30분 후 연결 재사용 (idle 누수 차단)
 
 load_dotenv()
 
@@ -44,6 +52,7 @@ class LegalVectorDB:
             _singleton_instance.collection_name = collection_name
             _singleton_instance._vectorstore = None
             _singleton_instance._embeddings = None
+            _singleton_instance._engine = None
         return _singleton_instance
 
     def __init__(self, collection_name: str = "legal_documents"):
@@ -64,50 +73,63 @@ class LegalVectorDB:
     def vectorstore(self):
         if self._vectorstore is None:
             if not settings.postgres_url:
-                print("[LegalVectorDB] WARNING: POSTGRES_URL이 설정되지 않아 RAG 검색을 사용할 수 없습니다.")
+                logger.warning("[LegalVectorDB] POSTGRES_URL이 설정되지 않아 RAG 검색을 사용할 수 없습니다.")
                 return None
             try:
+                # Windows ProactorEventLoop + psycopg async = InterfaceError.
+                # 동기 엔진 + asyncio.to_thread 우회 (retriever.py 호출부 참조).
                 conn_string = settings.postgres_url.replace("postgresql://", "postgresql+psycopg://", 1)
-                async_engine = create_async_engine(
+                self._engine = create_engine(
                     conn_string,
                     pool_size=_POOL_SIZE,
                     max_overflow=_MAX_OVERFLOW,
                     pool_timeout=_POOL_TIMEOUT,
                     pool_pre_ping=_POOL_PRE_PING,
+                    pool_recycle=_POOL_RECYCLE,
                 )
                 self._vectorstore = PGVector(
-                    connection=async_engine,
+                    connection=self._engine,
                     embeddings=self.embeddings,
                     collection_name=self.collection_name,
                     use_jsonb=True,
+                    async_mode=False,
                 )
             except Exception as e:
-                print(f"[LegalVectorDB] WARNING: PGVector 초기화 실패 - RAG 검색 불가 ({e})")
+                logger.warning(f"[LegalVectorDB] PGVector 초기화 실패 - RAG 검색 불가: {e}")
                 return None
         return self._vectorstore
 
+    def dispose(self) -> None:
+        """sync engine 정리 (앱 shutdown 시 호출)."""
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None
+            self._vectorstore = None
+
     def get_total_count(self) -> int:
         if not settings.postgres_url:
-            print("[LegalVectorDB] WARNING: POSTGRES_URL이 설정되지 않아 count 조회를 건너뜁니다.")
+            logger.warning("[LegalVectorDB] POSTGRES_URL이 설정되지 않아 count 조회를 건너뜁니다.")
             return 0
         try:
             import psycopg2
 
             # settings에서 주소를 가져옵니다.
             conn = psycopg2.connect(settings.postgres_url)
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*) FROM langchain_pg_embedding e "
-                "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
-                "WHERE c.name = %s",
-                (self.collection_name,),
-            )
-            count = cur.fetchone()[0]
-            cur.close()
-            conn.close()
-            return count
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(*) FROM langchain_pg_embedding e "
+                    "JOIN langchain_pg_collection c ON e.collection_id = c.uuid "
+                    "WHERE c.name = %s",
+                    (self.collection_name,),
+                )
+                count = cur.fetchone()[0]
+                cur.close()
+                return count
+            finally:
+                conn.close()
         except Exception as e:
-            print(f"DEBUG: DB Count 조회 실패 - {str(e)}")
+            logger.warning(f"[LegalVectorDB] DB Count 조회 실패 - {e}")
             return 0
 
 

@@ -2,7 +2,62 @@
 시뮬레이션 요청 입력 모델 — 클라이언트에서 API로 보내는 요청 스키마
 """
 
-from pydantic import BaseModel, Field
+import logging
+
+from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# business_type 화이트리스트
+# - Korean(프론트 BUSINESS_TYPE_BACKEND_KEY 출력값) + 영문 alias(테스트/구버전 호환).
+# - 런타임에는 main.py `_BIZ_TYPE_NORMALIZE` 가 영문→한글 정규화하므로
+#   양쪽 모두 받아주되, 화이트리스트 외 입력은 WARN 로그만 찍고 통과.
+# - 향후 데이터 정합성 강화 시 strict Literal 로 교체 가능 (TODO 참조).
+# ─────────────────────────────────────────────────────────────────────────────
+_BUSINESS_TYPE_KOREAN = {
+    "한식",
+    "중식",
+    "일식",
+    "양식",
+    "제과점",
+    "제과",
+    "패스트푸드",
+    "치킨",
+    "분식",
+    "호프",
+    "커피",
+    "카페",
+    "편의점",
+    "베이커리",
+    "음식점",
+    "커피-음료",
+    "호프-간이주점",
+}
+_BUSINESS_TYPE_ENGLISH = {
+    "cafe",
+    "coffee",
+    "restaurant",
+    "food",
+    "chicken",
+    "convenience",
+    "bakery",
+    "pub",
+    "burger",
+    "korean",
+    "default",
+}
+_BUSINESS_TYPE_ALLOWED = _BUSINESS_TYPE_KOREAN | _BUSINESS_TYPE_ENGLISH
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 마포구 lat/lon bounding box (서비스 대상 지역)
+# - 마포구 외 좌표가 들어오면 학교 거리 룰 / 카니발리제이션 분석이 의미 없는 결과 반환.
+# - bbox 는 마포구 행정경계 + 약간의 여유(약 ±0.005도, 500m).
+# - 출처: 마포구 행정경계 GeoJSON 외접 사각형 (37.534~37.582, 126.890~126.945).
+# ─────────────────────────────────────────────────────────────────────────────
+_MAPO_LAT_MIN, _MAPO_LAT_MAX = 37.50, 37.65
+_MAPO_LON_MIN, _MAPO_LON_MAX = 126.85, 126.95
 
 
 class ExistingStoreInput(BaseModel):
@@ -32,9 +87,29 @@ class SimulationInput(BaseModel):
     operating_hours: list[str] = Field(default_factory=lambda: ["점심", "저녁"], description="주 타겟 영업 시간대")
     initial_capital: int = Field(default=50_000_000, description="초기 자본금 (원)")
     commercial_radius: int = Field(default=500, description="상권 분석 반경 (m)")
+    # 자사 영업구역 거리. 가맹사업법 제12조의4 인접 출점 정량 룰에 사용.
+    # 미입력 시 specialists.py 의 기본 500m 임계값 적용.
+    territory_radius_m: int | None = Field(
+        default=None, description="자사 영업구역 거리(m) — 사용자 입력 (메가 250m / 빽다방 350m / 이디야 500m 등)"
+    )
     population_weight: bool = Field(default=True, description="인구 가중치 반영 여부")
     industry_filter: str | None = Field(
         default=None, description="CS 업종 코드 필터 (예: CS100010). 미지정 시 전체 업종."
+    )
+
+    # 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 계산 트리거
+    # 마포구 bounding box (37.50~37.65, 126.85~126.95) 강제. 범위 외 입력은 422 에러.
+    lat: float | None = Field(
+        default=None,
+        ge=_MAPO_LAT_MIN,
+        le=_MAPO_LAT_MAX,
+        description="출점 후보지 위도 (학교 거리 룰 트리거, 마포구 bbox)",
+    )
+    lon: float | None = Field(
+        default=None,
+        ge=_MAPO_LON_MIN,
+        le=_MAPO_LON_MAX,
+        description="출점 후보지 경도 (마포구 bbox)",
     )
 
     # [customer_revenue P1-C] 타겟 고객 프로필 — models/customer_revenue/predict.py 입력
@@ -49,3 +124,60 @@ class SimulationInput(BaseModel):
     )
     target_day_type: str | None = Field(default=None, description="타겟 요일: 'weekday' | 'weekend' | None(전체)")
     target_monthly_sales: int | None = Field(default=None, description="예상 월매출 (원). None=비율만 계산, 금액 제외")
+
+    # [corp_brand_resolver] biz_number 검증 트리거.
+    # frontend 가 보내거나 main.py 에서 JWT 토큰의 user.user_id → users.biz_number 자동 추출.
+    # corp 검증: 해당 biz_number 가 운영하는 brand+업종 list 매핑.
+    biz_number: str | None = Field(
+        default=None, description="사업자등록번호 (corp 다업종 검증 트리거 — 미입력 시 검증 skip)"
+    )
+
+    @field_validator("business_type")
+    @classmethod
+    def _warn_unknown_business_type(cls, v: str) -> str:
+        """업종 화이트리스트 검증 — 외 값은 WARN 로그 (silent fallback 차단 1단계).
+
+        TODO: 데이터 정합성 강화 시 Literal[...] 로 격상 (현재는 backward compat 우선).
+        """
+        if not v:
+            raise ValueError("business_type 은 비어있을 수 없습니다.")
+        if v.lower() not in _BUSINESS_TYPE_ALLOWED and v not in _BUSINESS_TYPE_ALLOWED:
+            logger.warning(
+                "[SimulationInput] 화이트리스트 외 business_type=%r — 다운스트림 분석 정확도 저하 가능. 허용 값: %s",
+                v,
+                sorted(_BUSINESS_TYPE_ALLOWED),
+            )
+        return v
+
+    @field_validator("target_district", "target_districts", mode="before")
+    @classmethod
+    def _validate_dong_code_format(cls, v):
+        """target_district / target_districts 입력 검증.
+
+        사용자가 dong_code 형식 (8자리 숫자) 으로 입력 시 행정동 형식 강제 검증.
+        한글 동명 (예: '서교동') 입력은 통과 — dong_resolver 가 후속 매핑.
+        법정동 10자리 코드 입력 시 reject (잘못된 컬럼 적재 차단).
+        """
+        if v is None or v == "":
+            return v
+        # list 입력 처리
+        if isinstance(v, list):
+            return [cls._check_single(d) for d in v]
+        return cls._check_single(v)
+
+    @staticmethod
+    def _check_single(value: str) -> str:
+        """단일 동 입력값 검증 — 숫자 형식이면 8자리 강제, 한글이면 통과."""
+        if not value or not isinstance(value, str):
+            return value
+        s = value.strip()
+        # 숫자 입력 (dong_code 직접 입력 케이스) — 8자리 강제
+        if s.isdigit():
+            if len(s) != 8:
+                raise ValueError(
+                    f"dong_code 형식 오류: {value!r} (행정동 8자리 숫자 기대, "
+                    "10자리 법정동 또는 잘못된 형식이면 한글 동명 또는 8자리 행정동 코드 사용)"
+                )
+            return s
+        # 한글 동명 — dong_resolver 가 후속 매핑 (validator 통과)
+        return s

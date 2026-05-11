@@ -1,7 +1,10 @@
 """
 타겟 고객 매출 기여 예측 추론
 
-predict(dong_code, industry_code, profile, monthly_sales) → 세그먼트 기여 매출
+predict(dong_code, industry_code, profile, quarterly_sales) → 세그먼트 기여 매출
+
+quarterly_sales 는 **점포당 분기 매출** (TCN 매출예측 탭과 동일 단위) 을 받는다.
+응답 키 ``total_sales_per_store`` 가 동일 값을 그대로 노출한다 — 프론트 단위 통일용.
 
 담당: B2 — 수지니
 """
@@ -397,7 +400,7 @@ def predict(
     dong_code: str,
     industry_code: str,
     profile: SegmentProfile,
-    monthly_sales: float | None = None,
+    quarterly_sales: float | None = None,
     quarter_num: int = 1,
     year: int | None = None,
     config: dict | None = None,
@@ -412,8 +415,9 @@ def predict(
         업종 코드 (예: "CS100001").
     profile : SegmentProfile
         타겟 고객 프로필.
-    monthly_sales : float, optional
-        기준 월 매출 (전체). None이면 세그먼트 비율만 반환.
+    quarterly_sales : float, optional
+        기준 **점포당 분기 매출** (원). TCN 매출예측 탭과 동일 단위 — 프론트 단위 통일용.
+        None 이면 세그먼트 비율만 반환하고 절대 매출은 모두 None.
     quarter_num : int
         예측 분기 (1~4). 계절성 반영에 사용.
     year : int, optional
@@ -425,12 +429,12 @@ def predict(
     -------
     dict
         {
-            "segment_ratio": float,        # 신원 파악 고객 매출 대비 세그먼트 비율
-            "segment_sales": float | None, # 세그먼트 예상 매출 (identified_sales 기준)
-            "identified_sales": float | None, # 신원 파악 고객 매출 (카드 결제)
-            "total_sales_ref": float | None,  # 전체 월 매출 참고값
-            "profile_summary": str,        # "30대 여성 주말 오후" 형태
-            "dimension_ratios": dict,      # 차원별 개별 비율 (디버깅용)
+            "segment_ratio": float,                  # 신원 파악 고객 매출 대비 세그먼트 비율
+            "segment_sales": float | None,           # 세그먼트 예상 매출 (점포당 분기, identified_sales 기준)
+            "identified_sales": float | None,        # 신원 파악 고객 매출 (점포당 분기, 카드 결제)
+            "total_sales_per_store": float | None,   # 점포당 분기 매출 참고값 (입력 echo)
+            "profile_summary": str,                  # "30대 여성 주말 오후" 형태
+            "dimension_ratios": dict,                # 차원별 개별 비율 (디버깅용)
         }
     """
     model, dong_to_idx, industry_to_idx, identified_ratios, year_max = _load_model()
@@ -467,7 +471,7 @@ def predict(
 
     # (동, 업종)별 identified_ratio 딕셔너리 조회 (없으면 전체 평균 0.8637 fallback)
     id_ratio = identified_ratios.get((dong_code, industry_code), 0.8637)
-    identified_sales = round(monthly_sales * id_ratio) if monthly_sales is not None else None
+    identified_sales = round(quarterly_sales * id_ratio) if quarterly_sales is not None else None
     seg_sales = round(identified_sales * seg_ratio) if identified_sales is not None else None
 
     # 차원별 비율 (디버깅/설명용)
@@ -477,7 +481,7 @@ def predict(
         "segment_ratio": round(seg_ratio, 4),
         "segment_sales": seg_sales,
         "identified_sales": identified_sales,
-        "total_sales_ref": monthly_sales,
+        "total_sales_per_store": quarterly_sales,
         "profile_summary": profile.summary(),
         "dimension_ratios": dimension_ratios,
     }
@@ -486,7 +490,7 @@ def predict(
 def predict_all_dongs(
     industry_code: str,
     profile: SegmentProfile,
-    monthly_sales_map: dict[str, float] | None = None,
+    quarterly_sales_map: dict[str, float] | None = None,
     quarter_num: int = 1,
     year: int | None = None,
 ) -> list[dict]:
@@ -498,8 +502,8 @@ def predict_all_dongs(
         업종 코드.
     profile : SegmentProfile
         타겟 고객 프로필.
-    monthly_sales_map : dict[str, float], optional
-        동코드 → 월 매출 매핑. None이면 비율만 계산.
+    quarterly_sales_map : dict[str, float], optional
+        동코드 → **점포당 분기 매출** 매핑. None이면 비율만 계산.
     quarter_num : int
         예측 분기.
     year : int, optional
@@ -516,8 +520,8 @@ def predict_all_dongs(
     results = []
     for dong_code in DONG_CODES:
         try:
-            monthly_sales = monthly_sales_map.get(dong_code) if monthly_sales_map else None
-            result = predict(dong_code, industry_code, profile, monthly_sales, quarter_num, year)
+            quarterly_sales = quarterly_sales_map.get(dong_code) if quarterly_sales_map else None
+            result = predict(dong_code, industry_code, profile, quarterly_sales, quarter_num, year)
             result["dong_code"] = dong_code
             results.append(result)
         except Exception as exc:

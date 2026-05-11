@@ -7,54 +7,120 @@ export function qualitativeBand(value: number, thresholds: [number, number]): Bu
   return 'bad';
 }
 
+/**
+ * polarity — 점수 해석 방향.
+ *   'higher-better' (default): 점수가 높을수록 좋음 (예: 매출 점수, 생존율).
+ *     low zone(빨강 tint) → ok zone(노랑) → high zone(초록).
+ *   'lower-better': 점수가 낮을수록 좋음 (예: 폐업 위험도).
+ *     low zone(초록) → ok zone(노랑) → high zone(빨강).
+ *
+ * 색은 의미 시멘틱 (success/warning/danger) 만 사용 — 12색 토큰 SoT.
+ */
+type Polarity = 'higher-better' | 'lower-better';
+
 interface Props {
   actual: number | null | undefined;
   target?: number;
   max?: number;
   label?: string;
   thresholds?: [number, number];
+  polarity?: Polarity;
+  /** 단위 표기 (예: "점", "%", "₩"). 값 옆에 작은 muted suffix 로 렌더. */
+  unit?: string;
+  /** 4동 비교 grid 에서 동별 색 (SERIES_COLORS[idx]). 미지정 시 zone 시멘틱 색 폴백.
+   *  zone 배경(safe/warning/danger tint) 은 그대로 두고 막대 색만 동별로 override. */
+  barColor?: string;
 }
 
-export function BulletChart({ actual, target, max = 100, label, thresholds = [40, 70] }: Props) {
+function bandFor(value: number, thresholds: [number, number], polarity: Polarity): BulletBand {
+  const [low, high] = thresholds;
+  if (polarity === 'lower-better') {
+    if (value <= low) return 'good';
+    if (value <= high) return 'ok';
+    return 'bad';
+  }
+  // higher-better
+  if (value >= high) return 'good';
+  if (value >= low) return 'ok';
+  return 'bad';
+}
+
+const ZONE_FILL: Record<BulletBand, string> = {
+  good: 'bg-success/15',
+  ok: 'bg-warning/15',
+  bad: 'bg-danger/15',
+};
+const BAR_FILL: Record<BulletBand, string> = {
+  good: 'bg-success',
+  ok: 'bg-warning',
+  bad: 'bg-danger',
+};
+
+export function BulletChart({
+  actual,
+  target,
+  max = 100,
+  label,
+  thresholds = [40, 70],
+  polarity = 'higher-better',
+  unit = '',
+  barColor,
+}: Props) {
   const hasValue = actual != null;
   const pct = hasValue ? Math.min(100, Math.max(0, (actual / max) * 100)) : 0;
   const targetPct = target != null ? Math.min(100, Math.max(0, (target / max) * 100)) : null;
   const [lowPct, highPct] = [(thresholds[0] / max) * 100, (thresholds[1] / max) * 100];
 
+  // zone 색 — polarity 에 따라 left→right 순서 반전.
+  // higher-better: low(bad) → mid(ok) → high(good)
+  // lower-better:  low(good) → mid(ok) → high(bad)
+  const [leftBand, midBand, rightBand]: [BulletBand, BulletBand, BulletBand] =
+    polarity === 'lower-better' ? ['good', 'ok', 'bad'] : ['bad', 'ok', 'good'];
+
+  // actual 위치의 band — bar 색을 그 zone 의 시멘틱 색으로 동적 매칭.
+  const actualBand: BulletBand | null =
+    hasValue && actual != null ? bandFor(actual, thresholds, polarity) : null;
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between">
         {label && (
-          <span className="text-[0.5625rem] font-bold text-stone-500 uppercase tracking-widest">
+          <span className="text-[0.5625rem] font-bold text-muted-foreground uppercase tracking-widest">
             {label}
           </span>
         )}
-        <span className="text-xs font-black text-stone-200 tabular-nums">
+        <span className="text-xs font-black text-foreground tabular-nums">
           {hasValue ? actual : '—'}
+          {hasValue && unit && (
+            <span className="ml-0.5 text-[0.625rem] font-bold text-muted-foreground">{unit}</span>
+          )}
         </span>
       </div>
-      <div className="relative h-2 w-full rounded-full bg-stone-800 overflow-hidden">
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-card">
         <div
-          className="absolute top-0 left-0 h-full bg-stone-700/40"
+          className={`absolute top-0 left-0 h-full ${ZONE_FILL[leftBand]}`}
           style={{ width: `${lowPct}%` }}
         />
         <div
-          className="absolute top-0 h-full bg-stone-600/40"
+          className={`absolute top-0 h-full ${ZONE_FILL[midBand]}`}
           style={{ left: `${lowPct}%`, width: `${highPct - lowPct}%` }}
         />
         <div
-          className="absolute top-0 h-full bg-stone-500/40"
+          className={`absolute top-0 h-full ${ZONE_FILL[rightBand]}`}
           style={{ left: `${highPct}%`, width: `${100 - highPct}%` }}
         />
-        {hasValue && (
+        {hasValue && actualBand && (
           <div
-            className="absolute top-0.5 h-1 rounded-full bg-indigo-400"
-            style={{ width: `${pct}%` }}
+            className={`absolute top-0.5 h-1 rounded-full ${barColor ? '' : BAR_FILL[actualBand]}`}
+            style={{
+              width: `${pct}%`,
+              ...(barColor ? { backgroundColor: barColor } : {}),
+            }}
           />
         )}
         {targetPct != null && (
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-indigo-200"
+            className="absolute top-0 bottom-0 w-0.5 bg-primary"
             style={{ left: `${targetPct}%` }}
           />
         )}

@@ -39,6 +39,11 @@ class Scheduler:
     ):
         self.world = world
         self.agents = agents
+        # peer influence O(1) lookup — policy_executor.py:1220 friend resolution.
+        # 이전: O(N) `next((a for a in world.agents if a.agent_id == fid), None)` —
+        # 5000 agents × 5 friends × 24h = 600K linear scan (review HIGH-2 fix).
+        world.agents = agents
+        world.agent_by_id = {a.agent_id: a for a in agents}
         self.rng = random.Random(seed)
         self.hours_map = hours_map
         self.llm_concurrency = max(1, llm_concurrency)
@@ -143,16 +148,65 @@ class Scheduler:
                 llm_active.append(a)
 
         # 1) LLM 에이전트 병렬 결정 (apply는 아직 하지 않음 — race 방지)
+        # Tier S: batch_smart_decide 로 N agents 한 번에 호출 (~10x 호출 절감)
+        # Tier A: 기존 ThreadPool 병렬 호출 유지
         llm_decisions: list = []
         if llm_active:
+            tier_s_active: list[Agent] = []
+            tier_a_active: list[Agent] = []
+            for a in llm_active:
+                if a.tier == Tier.S:
+                    tier_s_active.append(a)
+                else:
+                    tier_a_active.append(a)
 
-            def _decide(a: Agent):
-                return (a, a.decide(self.world, brain, self.rng))
-
-            if self._executor is not None:
-                llm_decisions = list(self._executor.map(_decide, llm_active))
+            # Tier S — Hierarchical Planning + batch fallback
+            # 1단계: daily_plan 슬롯 있으면 LLM 호출 없이 변환 (paper UIST'23 패턴)
+            # 2단계: 슬롯 없는 agent 만 batch_smart_decide 로 묶어 1 호출
+            if tier_s_active and getattr(self.world, "tier_s_llm_only", False) and hasattr(brain, "batch_smart_decide"):
+                planned: list[Agent] = []
+                unplanned: list[Agent] = []
+                hour = self.world.current_hour
+                for a in tier_s_active:
+                    slot = a.get_plan_slot(hour) if hasattr(a, "get_plan_slot") else None
+                    if slot is not None:
+                        planned.append(a)
+                        try:
+                            dec = brain.decision_from_plan_slot(a, self.world, slot)
+                        except Exception as e:
+                            print(f"[scheduler] plan slot → Decision 실패: {e}")
+                            dec = a.decide(self.world, brain, self.rng)
+                        llm_decisions.append((a, dec))
+                    else:
+                        unplanned.append(a)
+                # 슬롯 없는 agent 는 batch LLM
+                if unplanned:
+                    try:
+                        pairs = brain.batch_smart_decide(unplanned, self.world)
+                        by_id = {a.agent_id: a for a in unplanned}
+                        for aid, dec in pairs:
+                            a = by_id.get(aid)
+                            if a is not None:
+                                llm_decisions.append((a, dec))
+                    except Exception as e:
+                        print(f"[scheduler] batch_smart_decide 실패 — single fallback: {e}")
+                        for a in unplanned:
+                            llm_decisions.append((a, a.decide(self.world, brain, self.rng)))
             else:
-                llm_decisions = [_decide(a) for a in llm_active]
+                # 기존 single-call 경로 (tier_s_llm_only=False 또는 batch 미지원)
+                for a in tier_s_active:
+                    llm_decisions.append((a, a.decide(self.world, brain, self.rng)))
+
+            # Tier A — 기존 ThreadPool 병렬
+            if tier_a_active:
+
+                def _decide(a: Agent):
+                    return (a, a.decide(self.world, brain, self.rng))
+
+                if self._executor is not None:
+                    llm_decisions.extend(list(self._executor.map(_decide, tier_a_active)))
+                else:
+                    llm_decisions.extend([_decide(a) for a in tier_a_active])
 
         # 2) 결정 적용 (main thread — World 갱신 race 방지)
         for a, dec in llm_decisions:
@@ -191,6 +245,12 @@ class Scheduler:
         self.world.weekday = (self.world.weekday + 1) % 7
         self.world.is_weekend = self.world.weekday in (5, 6)
         for a in self.agents:
+            # 예산 갱신 — reset_daily 가 다루지 않는 일별 saving/spending dynamics.
             a.budget_today = max(15000, a.budget_today * 0.5 + 30000)
-            a.spent_today = 0
-            a.visited_today.clear()
+            # Agent.reset_daily 위임 — hunger / fatigue 계산 위해 단발성 필드 모두 리셋.
+            # 이전 budget/spent/visited 만 처리 → daily_plan / friend_visits / hunger /
+            # busy_until_hour 잔존으로 multi-day 시뮬 drift (review H-1 fix).
+            a.reset_daily()
+            # 체류·이동 lock — 자정 넘긴 값 carryover 방지 (Day2 06시에 busy=25 등).
+            a.busy_until_hour = -1
+            a.in_transit_until = -1

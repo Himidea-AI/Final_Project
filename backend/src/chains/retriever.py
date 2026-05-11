@@ -2,14 +2,100 @@
 RAG 문서 검색 — 하이브리드 (벡터 유사도 + BM25 키워드) + RRF 결합 + HyDE 쿼리 확장 + Cross-encoder Reranker
 """
 
+import asyncio
+import datetime
 import json
 import logging
 import math
+import os
+import time
 from pathlib import Path
 
 from ..database.vector_db import LegalVectorDB
 
 logger = logging.getLogger(__name__)
+
+
+def _trace_candidate(doc_obj, score, rank: int, max_preview: int = 120) -> dict:
+    """벡터 검색 후보 1건 → trace dict 변환. doc_obj는 langchain Document."""
+    meta = getattr(doc_obj, "metadata", {}) or {}
+    content = getattr(doc_obj, "page_content", "") or ""
+    return {
+        "rank": rank,
+        "chunk_id": meta.get("chunk_id"),
+        "score": round(float(score), 4) if score is not None else None,
+        "source": meta.get("source"),
+        "article": meta.get("article"),
+        "preview": content[:max_preview],
+    }
+
+
+def _trace_bm25_candidate(idx: int, score: float, rank: int, bm25_docs: list, max_preview: int = 120) -> dict:
+    """BM25 후보 1건 (chunk_idx, score) → trace dict."""
+    if 0 <= idx < len(bm25_docs):
+        text, meta = bm25_docs[idx]
+    else:
+        text, meta = "", {}
+    return {
+        "rank": rank,
+        "chunk_idx": idx,
+        "chunk_id": (meta or {}).get("chunk_id"),
+        "score": round(float(score), 4),
+        "source": (meta or {}).get("source"),
+        "article": (meta or {}).get("article"),
+        "preview": (text or "")[:max_preview],
+    }
+
+
+def _trace_merged_doc(doc: dict, rank: int, max_preview: int = 120) -> dict:
+    """RRF/최종 doc dict → trace dict."""
+    meta = doc.get("metadata", {}) or {}
+    return {
+        "rank": rank,
+        "chunk_id": meta.get("chunk_id"),
+        "source": meta.get("source"),
+        "article": meta.get("article"),
+        "relevance": meta.get("relevance"),
+        "is_parent": bool(meta.get("is_parent", False)),
+        "preview": (doc.get("content") or "")[:max_preview],
+    }
+
+
+def _write_trace_jsonl(trace: dict) -> None:
+    """trace 1건을 시간 단위 JSONL 파일에 append. 실패는 무시 (warning).
+
+    파일명: rag_trace_YYYYMMDD_HH.jsonl (UTC).
+    """
+    try:
+        from src.config.settings import settings as _settings
+
+        if not _settings.rag_trace_enabled:
+            return
+        trace_dir = Path(_settings.rag_trace_dir)
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        fname = trace_dir / f"rag_trace_{datetime.datetime.utcnow().strftime('%Y%m%d_%H')}.jsonl"
+        with open(fname, "a", encoding="utf-8") as f:
+            f.write(json.dumps(trace, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.warning(f"[rag_trace] JSONL 기록 실패 (무시): {e}")
+
+
+# S-5 Parent-child: chunk_id → parent_text 매핑 모듈 top-level pre-load (race condition 회피)
+def _load_parent_articles_eager() -> dict:
+    path = Path(__file__).resolve().parent.parent.parent / "data" / "legal" / "processed" / "parent_articles.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        logger.info(f"[retriever] parent_articles 로드: {len(data)} 매핑")
+        return data
+    except Exception as e:
+        logger.warning(f"[retriever] parent_articles 로드 실패: {e}")
+        return {}
+
+
+_PARENT_ARTICLES: dict = _load_parent_articles_eager()
 
 
 # HyDE용 일상 용어 → 법률 용어 매핑 (LLM 호출 없이 빠르게 치환)
@@ -180,11 +266,27 @@ SOURCE_TO_SHORT_MAP = {
 
 
 class LegalDocumentRetriever:
-    """법률 문서 검색기 — 하이브리드 RAG (벡터 + BM25 + RRF)"""
+    """법률 문서 검색기 — 하이브리드 RAG (벡터 + BM25 + RRF).
+
+    싱글톤: 매 specialist 호출마다 새 인스턴스 생성 시 BM25 인덱스가
+    매번 재구축되는 문제 차단 (구축 비용 ~30초). __new__ 기반 싱글톤 +
+    BM25 인덱스/문서 리스트는 인스턴스 변수로 1회 빌드 후 재사용.
+    """
+
+    _instance: "LegalDocumentRetriever | None" = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            inst = super().__new__(cls)
+            inst._db = LegalVectorDB()
+            inst._bm25_index = None
+            inst._bm25_docs = None  # type: ignore[attr-defined]
+            cls._instance = inst
+        return cls._instance
 
     def __init__(self):
-        self._db = LegalVectorDB()
-        self._bm25_index: dict | None = None  # 지연 초기화
+        # 싱글톤 — __new__ 에서 이미 _db / _bm25_index 초기화 완료. 추가 작업 불필요.
+        pass
 
     # ------------------------------------------------------------------
     # HyDE (Hypothetical Document Embeddings) — LLM 가상 조문 생성
@@ -231,8 +333,8 @@ class LegalDocumentRetriever:
             if cached:
                 hyde_text = cached
                 logger.info(f"[HyDE] cache HIT: {cache_key[:20]}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[HyDE] Redis 조회 실패: {e}")
 
         # 캐시 미스 -> LLM 호출
         if hyde_text is None:
@@ -247,11 +349,18 @@ class LegalDocumentRetriever:
                     messages.append({"role": "assistant", "content": ex["output"]})
                 messages.append({"role": "user", "content": query})
 
+                # SP3: 유효 키만 사용 (placeholder 거부) — env로 prefer 가능
+                _ant_key = settings.anthropic_api_key or ""
+                _oai_key = settings.openai_api_key or ""
+                _ant_valid = _ant_key.startswith("sk-ant-")
+                _oai_valid = _oai_key.startswith("sk-")
+                _prefer = os.getenv("HYDE_PROVIDER", "auto").lower()  # "openai" | "anthropic" | "auto"
+
                 # Anthropic SDK (claude-haiku-4.5)
-                if settings.anthropic_api_key:
+                if _ant_valid and (_prefer == "anthropic" or (_prefer == "auto" and not _oai_valid)):
                     from anthropic import AsyncAnthropic
 
-                    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+                    client = AsyncAnthropic(api_key=_ant_key)
                     resp = await asyncio.wait_for(
                         client.messages.create(
                             model="claude-haiku-4-5-20251001",
@@ -264,8 +373,8 @@ class LegalDocumentRetriever:
                         timeout=10.0,
                     )
                     hyde_text = resp.content[0].text.strip()
-                # OpenAI fallback (gpt-4o-mini)
-                elif settings.openai_api_key:
+                # OpenAI (gpt-4o-mini)
+                elif _oai_valid:
                     from openai import AsyncOpenAI
 
                     client = AsyncOpenAI(api_key=settings.openai_api_key)
@@ -286,8 +395,8 @@ class LegalDocumentRetriever:
                 if hyde_text and _redis:
                     try:
                         await _redis.setex(cache_key, 86400, hyde_text)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"[HyDE] Redis 캐시 저장 실패: {e}")
 
                 if hyde_text:
                     logger.info(f"[HyDE] LLM 생성 완료 ({len(hyde_text)}자)")
@@ -302,28 +411,41 @@ class LegalDocumentRetriever:
                 if _redis:
                     try:
                         await _redis.aclose()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"[HyDE] Redis aclose 실패: {e}")
 
         # 결합: 원문 + 사전 확장 + 가상 조문
         if hyde_text:
             return f"{dict_expanded} {hyde_text}"
         return dict_expanded
 
-    # 청크가 인덱싱된 source 메타데이터 값 (parse_pdfs.py의 파일명 stem과 일치)
+    # 청크가 인덱싱된 source 메타데이터 값.
+    # SP2 후 두 종류의 source 형식이 공존:
+    #   1) PDF chunks: parse_pdfs.py의 파일명 stem (전체 명칭)
+    #   2) 법령_본문 chunks: build_law_chunks.py의 law_short_name (단축명, e.g. "가맹사업법")
+    # Vector $in 매칭은 정확 일치만 → 두 형식 모두 명시 등록.
     FRANCHISE_LAW_SOURCES = [
         "가맹사업거래의 공정화에 관한 법률(법률)(제20712호)(20250121)",
         "가맹사업거래의 공정화에 관한 법률 시행령(대통령령)(제36220호)(20260324)",
+        "가맹사업법",
+        "가맹사업법 시행령",
+        "가맹사업진흥법",
+        "가맹사업진흥법 시행령",
     ]
     LEASE_LAW_SOURCES = [
         "상가건물 임대차보호법(법률)(제21065호)(20260102)",
         "상가건물 임대차보호법 시행령(대통령령)(제35947호)(20260102)",
         "서울시_2023_상가임대차_상담사례집_내지_전자책",
+        "상가임대차법",
+        "상가임대차법 시행령",
+        "상가건물 임대차계약서상의 확정일자 부여 및 임대차 정보제공에 관한 규칙",
     ]
     # 조문 검색 전용 — 상담사례집 제외 (비조문 문서가 조문 검색 정확도를 낮춤)
     LEASE_LAW_STRICT_SOURCES = [
         "상가건물 임대차보호법(법률)(제21065호)(20260102)",
         "상가건물 임대차보호법 시행령(대통령령)(제35947호)(20260102)",
+        "상가임대차법",
+        "상가임대차법 시행령",
     ]
     MAPO_SOURCES = [
         "서울특별시 마포구 지역상권 상생협력에 관한 조례",
@@ -332,36 +454,91 @@ class LegalDocumentRetriever:
         "식품위생법(법률)(제21065호)(20251001)",
         "식품위생법 시행규칙(총리령)(제02077호)(20260301)",
         "[한국외식업중앙회] 2026 위생교육교재 (표지 포함)",
+        "식품위생법",
+        "식품위생법 시행령",
+        "식품위생법 시행규칙",
+        "식품위생 분야 종사자의 건강진단 규칙",
     ]
     SAFETY_SOURCES = [
         "210226_ 「다중이용업소의 안전관리에 관한 특별법」업무처리 지침",
         "제4차(2024~2028) 다중이용업소 안전관리 기본계획(전문)",
+        "다중이용업소법",
+        "다중이용업소법 시행령",
+        "다중이용업소법 시행규칙",
     ]
     BUILDING_LAW_SOURCES = [
         "건축법(법률)(20250101)",
+        "건축법",
+        "건축법 시행령",
+        "건축법 시행규칙",
+        "녹색건축법",
+        "녹색건축법 시행령",
+        "녹색건축법 시행규칙",
     ]
     FIRE_SAFETY_SOURCES = [
         "소방시설 설치 및 관리에 관한 법률(법률)(20250101)",
+        "소방시설법",
+        "소방시설법 시행령",
+        "소방시설법 시행규칙",
+        "소방시설공사업법",
+        "소방시설공사업법 시행령",
+        "소방시설공사업법 시행규칙",
+    ]
+    # 화재예방법 (소방안전관리자 선임 의무 등) — 화재예방법은 소방시설법과 별개 법률
+    FIRE_PREVENTION_SOURCES = [
+        "화재의 예방 및 안전관리에 관한 법률",
+        "화재의 예방 및 안전관리에 관한 법률 시행령",
+        "화재의 예방 및 안전관리에 관한 법률 시행규칙",
+        "화재예방법",
+        "화재예방법 시행령",
+        "화재예방법 시행규칙",
     ]
     LABOR_LAW_SOURCES = [
         "근로기준법(법률)(20250101)",
         "최저임금법(법률)(제17326호)(20200526)",
+        "근로기준법",
+        "근로기준법 시행령",
+        "근로기준법 시행규칙",
+        "최저임금법",
+        "최저임금법 시행령",
+        "최저임금법 시행규칙",
     ]
     VAT_LAW_SOURCES = [
         "부가가치세법(법률)(제21065호)(20260102)",
+        "부가가치세법",
+        "부가가치세법 시행령",
+        "부가가치세법 시행규칙",
+        "외국인관광객면세규정",
+        "영농기자재등면세규정",
     ]
     PRIVACY_LAW_SOURCES = [
         "개인정보 보호법(법률)(제20897호)(20251002)",
+        "개인정보 보호법",
+        "개인정보 보호법 시행령",
+        "개인정보 보호위원회 직제",
+        "개인정보 보호위원회 직제 시행규칙",
     ]
     ACCESSIBILITY_LAW_SOURCES = [
         "장애인ㆍ노인ㆍ임산부 등의 편의증진 보장에 관한 법률(법률)(제20594호)(20251221)",
+        "장애인편의법",
+        "장애인편의법 시행령",
+        "장애인편의법 시행규칙",
     ]
     FAIR_TRADE_SOURCES = [
         "독점규제 및 공정거래에 관한 법률(법률)(제21066호)(20251001)",
+        "공정거래법",
+        "공정거래법 시행령",
+        "공정거래법 시행규칙",
     ]
     SEWAGE_LAW_SOURCES = [
         "하수도법(법률)(제21065호)(20251001)",
         "물환경보전법(법률)(제21368호)(20260219)",
+        "하수도법",
+        "하수도법 시행령",
+        "하수도법 시행규칙",
+        "물환경보전법",
+        "물환경보전법 시행령",
+        "물환경보전법 시행규칙",
     ]
     LIQUOR_LAW_SOURCES = [
         "주세법(법률)(제20618호)(20250101)",
@@ -389,14 +566,21 @@ class LegalDocumentRetriever:
 
         return settings.rrf_bm25_weight
 
-    # Reranker (전부 비활성 — 3종 모두 역효과 확인)
-    # ms-marco-MiniLM: F1 -0.247
-    # mmarco-mMiniLMv2: F1 -0.128
-    # BGE-Reranker-v2-m3: F1 -0.030, F1>=0.7: 43→20 폭락
-    # 결론: 현재 RRF(벡터+BM25) 순서가 리랭커보다 우수
+    # Reranker — Cross-encoder. settings.rerank_enabled로 toggle.
+    # 이전 baseline (MiniLM + 4배 중복) 측정 시 마이너스 → 비활성. SP3 후 재측정 권장.
     _reranker = None
-    _RERANK_ENABLED = False
-    _RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
+
+    @property
+    def _RERANK_ENABLED(self) -> bool:
+        from src.config.settings import settings
+
+        return settings.rerank_enabled
+
+    @property
+    def _RERANK_MODEL(self) -> str:
+        from src.config.settings import settings
+
+        return settings.rerank_model
 
     # Multi-Vector Q2Q (예상 질문 벡터 검색)
     _vq_index = None  # 지연 로딩
@@ -476,13 +660,45 @@ class LegalDocumentRetriever:
         self._bm25_avg_dl = sum(self._bm25_doc_lens) / max(len(self._bm25_doc_lens), 1)
         logger.info(f"[BM25] Kiwi 인덱스 구축 완료: 문서 {self._bm25_doc_count}, 평균 토큰 {self._bm25_avg_dl:.1f}")
 
+    # 부칙(supplementary) 청크 패턴 — 본법의 적용례/경과조치/특례. 본문 article과 같은 번호를
+    # 재사용하지만 의미가 다름 → 정답 article 본문을 BM25 상위에서 밀어내는 주범.
+    _SUPPLEMENTARY_PATTERNS = (
+        "경과조치)",
+        "적용례)",
+        "에 관한 경과조치",
+        "에 관한 적용례",
+        "에 관한 특례",
+        "이 법 시행 당시",
+        "이 법 시행 전에",
+        "이 법 시행 이후",
+        "이 영 시행 당시",
+        "이 영 시행 전에",
+        "이 영 시행 이후",
+        "이 규칙 시행 당시",
+        "이 규칙 시행 전에",
+        "이 규칙 시행 이후",
+        "종전법 시행 당시",
+        "종전의 규정에 따라",
+    )
+
+    @classmethod
+    def _is_supplementary_chunk(cls, text: str) -> bool:
+        """부칙(적용례/경과조치/특례) 청크 여부. text 의 앞쪽 80자 기준."""
+        head = text[:80] if text else ""
+        return any(p in head for p in cls._SUPPLEMENTARY_PATTERNS)
+
     def _bm25_search(
         self,
         query: str,
         source_filter: list[str] | None = None,
         top_k: int = 20,
+        supplementary_penalty: float = 0.0,
     ) -> list[tuple[int, float]]:
-        """BM25 스코어 계산. Returns: [(chunk_idx, score), ...] top_k개."""
+        """BM25 스코어 계산. Returns: [(chunk_idx, score), ...] top_k개.
+
+        supplementary_penalty: 부칙(적용례/경과조치) 청크에 곱해지는 감점 비율 (0.0 = 비활성).
+            예: 0.5 → 부칙 청크 score *= 0.5 (본법 본문 article 우선).
+        """
         self._build_bm25_index()
         if not self._bm25_index:
             return []
@@ -509,6 +725,14 @@ class LegalDocumentRetriever:
                 tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / self._bm25_avg_dl))
                 scores[doc_idx] = scores.get(doc_idx, 0) + idf * tf_norm
 
+        # 부칙 청크 감점 — 본법 본문 article 을 상위로 끌어올림
+        if supplementary_penalty > 0 and supplementary_penalty <= 1.0:
+            multiplier = 1.0 - supplementary_penalty
+            for doc_idx in list(scores.keys()):
+                text, _ = self._bm25_docs[doc_idx]
+                if self._is_supplementary_chunk(text):
+                    scores[doc_idx] *= multiplier
+
         # source_filter 적용
         if source_filter:
             scores = {
@@ -522,6 +746,46 @@ class LegalDocumentRetriever:
         return ranked[:top_k]
 
     @staticmethod
+    def _is_primary_law_source(source: str) -> bool:
+        """주 법률(본법)인지 판별. 시행령/시행규칙/조례/지침/규정/특례 등은 False.
+
+        예:
+            "식품위생법" -> True
+            "식품위생법 시행규칙" -> False
+            "식품위생법(법률)(제21065호)(20251001)" -> True
+            "[한국외식업중앙회] 위생교육교재" -> False (지침/교재)
+        """
+        if not source:
+            return False
+        # 시행령/시행규칙/규칙/규정/특례/지침/조례/직제/계획/사례집/교재 등은 보조 자료
+        secondary_kw = (
+            "시행령",
+            "시행규칙",
+            " 규칙",
+            "규정",
+            "특례규정",
+            "지침",
+            "조례",
+            "직제",
+            "기본계획",
+            "사례집",
+            "교재",
+            "단체소송",
+            "보호 규칙",
+        )
+        for kw in secondary_kw:
+            if kw in source:
+                return False
+        # 시작이 [...] (보조 자료/판례) 인 경우도 비주
+        if source.startswith("["):
+            return False
+        # 판례/사건/위반 키워드 (사건명/판례)
+        case_kw = ("위반", "취소", "반환", "손해배상", "양도", "사건", "청구")
+        if any(kw in source for kw in case_kw):
+            return False
+        return True
+
+    @staticmethod
     def _rrf_merge(
         vector_results: list[dict],
         bm25_results: list[tuple[int, float]],
@@ -529,8 +793,13 @@ class LegalDocumentRetriever:
         k: int = 60,
         vector_w: float = 0.5,
         bm25_w: float = 0.5,
+        primary_law_boost: float = 0.0,
     ) -> list[dict]:
-        """Reciprocal Rank Fusion으로 벡터 + BM25 결과를 결합합니다."""
+        """Reciprocal Rank Fusion으로 벡터 + BM25 결과를 결합합니다.
+
+        primary_law_boost: 주 법률(본법) source 의 RRF 스코어에 곱해지는 보너스 (0.0 = 비활성).
+            예: 0.10 → 본법 청크의 score *= 1.10 (시행령/시행규칙/판례를 본법보다 위로 못 올리게).
+        """
 
         # chunk_id 기반 통합 (없으면 content hash)
         def _key(meta: dict, content: str = "") -> str:
@@ -556,6 +825,13 @@ class LegalDocumentRetriever:
                     "metadata": {**meta, "relevance": 0.4},  # BM25 전용은 고정 관련도
                 }
 
+        # 주 법률(본법) boost — 시행령/시행규칙/판례를 본법보다 위로 못 올리게
+        if primary_law_boost > 0:
+            for key, doc in doc_map.items():
+                src = doc.get("metadata", {}).get("source", "")
+                if LegalDocumentRetriever._is_primary_law_source(src):
+                    rrf_scores[key] = rrf_scores.get(key, 0) * (1.0 + primary_law_boost)
+
         # RRF 스코어 순 정렬
         sorted_keys = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)
         return [doc_map[k] for k in sorted_keys if k in doc_map]
@@ -576,6 +852,7 @@ class LegalDocumentRetriever:
         query: str,
         top_k: int = 10,
         source_filter: list[str] | None = None,
+        prefer_primary_law: bool = True,
     ) -> list[dict]:
         """
         하이브리드 법률 문서 검색 (HyDE 확장 + 벡터 + BM25 + RRF)
@@ -589,34 +866,92 @@ class LegalDocumentRetriever:
             query: 검색 쿼리
             top_k: 반환할 문서 수
             source_filter: 검색할 source 목록
+            prefer_primary_law: True면 RRF 결합 시 본법 source에 가산점 부여 (시행령/시행규칙/판례
+                밀어내기). settings.primary_law_boost 값 사용. False면 boost 0 (legacy 동작).
 
         Returns:
             list[dict]: 관련 법률 문서 리스트
         """
         vs = self._db.vectorstore
         if vs is None:
-            print(f"[LegalDocumentRetriever] WARNING: vectorstore가 초기화되지 않아 '{query}' 검색을 건너뜁니다.")
+            logger.warning(f"[LegalDocumentRetriever] vectorstore 초기화 실패 — '{query}' 검색 skip")
             return []
 
+        from src.config.settings import settings as _settings
+
+        # trace 수집용 컨테이너 (rag_trace_enabled 시에만 채움 — 비활성 시 거의 비용 없음)
+        _trace_on = bool(_settings.rag_trace_enabled)
+        trace: dict = {
+            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "kind": "search",
+            "query": query,
+            "source_filter": source_filter,
+            "top_k": top_k,
+            "elapsed_ms": {},
+        }
+        _t_total = time.perf_counter()
+
         # 0차: 하이브리드 HyDE 쿼리 확장 (사전 + LLM)
+        _t = time.perf_counter()
         expanded_query = await self._expand_query_hybrid(query)
+        if _trace_on:
+            trace["expanded_query"] = expanded_query
+            trace["elapsed_ms"]["hyde"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        # 0.5차: S-2 Multi-query — cheap LLM이 1쿼리 → N개 변형 (settings.multi_query_enabled)
+        from src.chains.multi_query import expand_query as _multi_expand
+
+        _t = time.perf_counter()
+        mq_variants: list[str] = []
+        if _settings.multi_query_enabled:
+            try:
+                mq_variants = await _multi_expand(query, n=_settings.multi_query_n)
+            except Exception as e:
+                logger.warning(f"[LegalDocumentRetriever] multi-query 실패 (무시): {e}")
+        if _trace_on:
+            trace["multi_query_variants"] = mq_variants
+            trace["elapsed_ms"]["multi_query"] = round((time.perf_counter() - _t) * 1000, 2)
 
         filter_dict = {"source": {"$in": source_filter}} if source_filter else None
 
-        # 1차: 벡터 유사도 검색 — 원래 쿼리 + 확장 쿼리 모두 검색 후 합침
-        docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k * 2, filter=filter_dict)
+        # 1차: 벡터 유사도 검색 — 원래 + HyDE 확장 + Multi-query 변형 모두 병렬 검색 후 합침
+        # SSL connection abort 등 transient 오류는 1회 재시도 (pool_recycle 적용 후에도 발생).
+        async def _vsearch(q: str, k: int) -> list:
+            try:
+                return await asyncio.to_thread(vs.similarity_search_with_relevance_scores, q, k=k, filter=filter_dict)
+            except Exception as e:
+                msg = str(e)
+                if "connection" in msg.lower() or "ssl" in msg.lower() or "ProactorEventLoop" in msg:
+                    logger.warning(f"[LegalDocumentRetriever] 1회 재시도 (transient): {type(e).__name__}")
+                    return await asyncio.to_thread(
+                        vs.similarity_search_with_relevance_scores, q, k=k, filter=filter_dict
+                    )
+                raise
+
+        search_queries = [(query, top_k * 2)]
         if expanded_query != query:
-            # 확장 쿼리로 추가 검색
-            extra_docs = await vs.asimilarity_search_with_relevance_scores(expanded_query, k=top_k, filter=filter_dict)
-            # 중복 제거하여 합침
-            seen_contents = {doc.page_content[:100] for doc, _ in docs_with_score}
+            search_queries.append((expanded_query, top_k))
+        for v in mq_variants:
+            search_queries.append((v, top_k))
+
+        _t = time.perf_counter()
+        all_results = await asyncio.gather(*[_vsearch(q, k) for q, k in search_queries])
+        docs_with_score = list(all_results[0])
+        seen_contents = {doc.page_content[:100] for doc, _ in docs_with_score}
+        for extra_docs in all_results[1:]:
             for doc, score in extra_docs:
                 if doc.page_content[:100] not in seen_contents:
                     docs_with_score.append((doc, score))
                     seen_contents.add(doc.page_content[:100])
 
         if not docs_with_score and source_filter:
-            docs_with_score = await vs.asimilarity_search_with_relevance_scores(query, k=top_k * 2)
+            docs_with_score = await asyncio.to_thread(vs.similarity_search_with_relevance_scores, query, k=top_k * 2)
+
+        if _trace_on:
+            trace["vector_candidates"] = [
+                _trace_candidate(doc, score, i + 1) for i, (doc, score) in enumerate(docs_with_score[:10])
+            ]
+            trace["elapsed_ms"]["vector_search"] = round((time.perf_counter() - _t) * 1000, 2)
 
         vector_results = [
             {
@@ -626,11 +961,41 @@ class LegalDocumentRetriever:
             for doc, score in docs_with_score
             if score >= self.RELEVANCE_THRESHOLD
         ]
+        # FALLBACK: RELEVANCE_THRESHOLD 컷 후 0건이지만 raw 결과는 있다면,
+        # 임계 무시하고 raw top_k 사용 — specialist LLM 에 "(자료 없음)" 보내는 케이스 차단.
+        # (한국어 임베딩 코사인 < 0.3 발생 시 building/privacy 등 specialist RAG 실패 사례.)
+        if not vector_results and docs_with_score:
+            logger.warning(
+                f"[LegalDocumentRetriever] RELEVANCE_THRESHOLD({self.RELEVANCE_THRESHOLD}) "
+                f"컷 후 0건 — raw 결과 {len(docs_with_score)}건 임계 무시 폴백 적용"
+            )
+            vector_results = [
+                {
+                    "content": doc.page_content,
+                    "metadata": {**doc.metadata, "relevance": round(score, 4)},
+                }
+                for doc, score in docs_with_score[: top_k * 2]
+            ]
 
-        # 2차: BM25 키워드 검색
-        bm25_ranked = self._bm25_search(query, source_filter, top_k=top_k * 2)
+        # 2차: BM25 키워드 검색 — 부칙(적용례/경과조치) 감점 적용 (settings.bm25_supplementary_penalty)
+        _t = time.perf_counter()
+        supp_penalty = float(getattr(_settings, "bm25_supplementary_penalty", 0.0))
+        bm25_ranked = self._bm25_search(
+            query,
+            source_filter,
+            top_k=top_k * 2,
+            supplementary_penalty=supp_penalty,
+        )
+        if _trace_on:
+            bm25_docs_ref = getattr(self, "_bm25_docs", []) or []
+            trace["bm25_candidates"] = [
+                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref) for i, (idx, sc) in enumerate(bm25_ranked[:10])
+            ]
+            trace["elapsed_ms"]["bm25"] = round((time.perf_counter() - _t) * 1000, 2)
 
-        # 3차: RRF 결합
+        # 3차: RRF 결합 — prefer_primary_law 시 본법 source에 boost 적용
+        _t = time.perf_counter()
+        boost = float(getattr(_settings, "primary_law_boost", 0.15)) if prefer_primary_law else 0.0
         if bm25_ranked and hasattr(self, "_bm25_docs"):
             merged = self._rrf_merge(
                 vector_results,
@@ -639,9 +1004,13 @@ class LegalDocumentRetriever:
                 k=self._RRF_K,
                 vector_w=self._VECTOR_WEIGHT,
                 bm25_w=self._BM25_WEIGHT,
+                primary_law_boost=boost,
             )
         else:
             merged = vector_results
+        if _trace_on:
+            trace["rrf_merged"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])]
+            trace["elapsed_ms"]["rrf"] = round((time.perf_counter() - _t) * 1000, 2)
 
         # 4차: Multi-Vector Q2Q — 비활성 (RRF 결합 시 기존 결과를 밀어내는 역효과 확인)
         # 파일럿에서 개별 유사도 +0.1~0.28 개선 확인했으나 전체 F1 -0.012 하락
@@ -672,14 +1041,61 @@ class LegalDocumentRetriever:
             sorted_keys = sorted(combined_scores, key=lambda k: combined_scores[k], reverse=True)
             merged = [combined_docs[k] for k in sorted_keys if k in combined_docs]
 
-        # 5차: Reranker (비활성)
+        # 5차: Reranker — settings.rerank_provider="openai" (default) → gpt-5.4-nano list-wise
         if self._RERANK_ENABLED and len(merged) > 1:
-            merged = self._rerank(query, merged[:30], top_k)
+            rerank_provider = getattr(_settings, "rerank_provider", "openai")
+            if rerank_provider == "openai":
+                merged = await self._rerank_openai(query, merged[:30], top_k)
+            else:
+                merged = self._rerank(query, merged[:30], top_k)
 
         # 6차: 오답 방지 필터 (비활성 — 페널티가 정답까지 밀어내는 역효과 확인)
         # merged = self._apply_failure_filter(merged, source_filter)
 
-        return merged[:top_k]
+        # 7차: Parent-child 후처리 — chunk_id → parent_text 치환 + parent 단위 dedup
+        # 검색은 작은 child로 (정밀), 반환은 article 단위 parent로 (cover ↑)
+        _t = time.perf_counter()
+        _before_count = len(merged)
+        _dropped_chunk_ids: list = []
+        _parent_replacements: list = []
+        parent_map = _PARENT_ARTICLES
+        if parent_map:
+            seen_parents: set[str] = set()
+            deduped: list[dict] = []
+            for d in merged:
+                cid = d.get("metadata", {}).get("chunk_id")
+                parent_text = parent_map.get(cid) if cid else None
+                if parent_text:
+                    parent_key = parent_text[:100]
+                    if parent_key in seen_parents:
+                        if _trace_on:
+                            _dropped_chunk_ids.append(cid)
+                        continue
+                    seen_parents.add(parent_key)
+                    if _trace_on:
+                        _parent_replacements.append([cid, parent_text[:100]])
+                    new_d = dict(d)
+                    new_d["content"] = parent_text
+                    new_d["metadata"] = {**d.get("metadata", {}), "is_parent": True}
+                    deduped.append(new_d)
+                else:
+                    deduped.append(d)
+            merged = deduped
+        if _trace_on:
+            trace["parent_dedup"] = {
+                "before_count": _before_count,
+                "after_count": len(merged),
+                "dropped_chunk_ids": _dropped_chunk_ids,
+                "parent_replacements": _parent_replacements,
+            }
+            trace["elapsed_ms"]["parent_dedup"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        final_docs = merged[:top_k]
+        if _trace_on:
+            trace["final_top_k"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)]
+            trace["elapsed_ms"]["total"] = round((time.perf_counter() - _t_total) * 1000, 2)
+            _write_trace_jsonl(trace)
+        return final_docs
 
     @classmethod
     def _load_confusion_map(cls) -> dict:
@@ -861,11 +1277,14 @@ class LegalDocumentRetriever:
         이번 전략: 재정렬 + 노이즈 필터링 (score < 0.01 제거)
         폴백: 필터 후 결과가 top_k 미만이면 원본 RRF 결과로 보충
         """
+        from src.config.settings import settings
+
         if cls._reranker is None:
             from sentence_transformers import CrossEncoder
 
-            cls._reranker = CrossEncoder(cls._RERANK_MODEL, max_length=512)
-            logger.info(f"[Reranker] {cls._RERANK_MODEL} 로드 완료")
+            model_name = settings.rerank_model  # property 회피 — settings에서 직접
+            cls._reranker = CrossEncoder(model_name, max_length=512)
+            logger.info(f"[Reranker] {model_name} 로드 완료")
 
         pairs = [(query, d["content"][:300]) for d in docs]  # 300자 제한 (속도)
         scores = cls._reranker.predict(pairs, batch_size=32)
@@ -884,6 +1303,214 @@ class LegalDocumentRetriever:
                     filtered.append((d, 0.0))
 
         return [d for d, s in filtered[:top_k]]
+
+    async def _rerank_openai(self, query: str, docs: list[dict], top_k: int) -> list[dict]:
+        """OpenAI gpt-5.4-nano list-wise rerank.
+
+        한 호출로 30개 문서 ranking — 비용 효율적.
+        반환: 모델이 가장 관련 높다고 판단한 순서대로 top_k 개.
+        실패 시 원본 순서 유지.
+        """
+        if not docs:
+            return docs
+
+        from src.config.settings import settings
+
+        oai_key = settings.openai_api_key or ""
+        if not oai_key.startswith("sk-"):
+            logger.warning("[Reranker-openai] OPENAI_API_KEY 없음 - 원본 순서 유지")
+            return docs[:top_k]
+
+        # 프롬프트 — 각 문서 200자 발췌 + index
+        doc_lines: list[str] = []
+        for i, d in enumerate(docs):
+            preview = (d.get("content") or "")[:200].replace("\n", " ")
+            meta = d.get("metadata", {})
+            src = meta.get("source", "")
+            art = meta.get("article", "")
+            doc_lines.append(f"[{i}] {src} {art}: {preview}")
+        docs_block = "\n".join(doc_lines)
+
+        prompt = (
+            "한국 법률 검색 결과 reranking. 사용자 질문에 직접 관련된 조문을 가장 관련 높은 순으로 다시 정렬.\n\n"
+            f"질문: {query}\n\n"
+            f"검색 결과 ({len(docs)}개):\n{docs_block}\n\n"
+            f"가장 관련 높은 {min(top_k, len(docs))}개의 인덱스를 콤마 구분으로만 출력 (예: 3,7,1,12,5).\n"
+            "다른 텍스트 없이 인덱스 리스트만."
+        )
+
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(api_key=oai_key)
+            resp = await client.chat.completions.create(
+                model=getattr(settings, "rerank_openai_model", "gpt-5.4-nano"),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+                temperature=0,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+        except Exception as e:
+            logger.warning(f"[Reranker-openai] 호출 실패 ({e}) - 원본 순서 유지")
+            return docs[:top_k]
+
+        # 인덱스 파싱
+        import re
+
+        indices: list[int] = []
+        seen: set[int] = set()
+        for tok in re.findall(r"\d+", text):
+            try:
+                idx = int(tok)
+                if 0 <= idx < len(docs) and idx not in seen:
+                    indices.append(idx)
+                    seen.add(idx)
+            except ValueError:
+                continue
+            if len(indices) >= top_k:
+                break
+
+        if not indices:
+            logger.warning(f"[Reranker-openai] 응답 파싱 실패 ({text[:80]!r}) - 원본 순서 유지")
+            return docs[:top_k]
+
+        # 누락된 docs 보충 (top_k 미달 시)
+        for i in range(len(docs)):
+            if i not in seen and len(indices) < top_k:
+                indices.append(i)
+
+        return [docs[i] for i in indices[:top_k]]
+
+    async def search_precedents(
+        self,
+        query: str,
+        top_k: int = 3,
+    ) -> list[dict]:
+        """판례 카테고리만 검색 — ``metadata.category == '판례'`` 필터.
+
+        - 단순화: multi-query/HyDE 미사용 (판례는 키워드 직접 매칭이 더 정확).
+        - BM25 보조 매칭은 ``category=='판례'`` 청크에 한정해서 결합.
+        - 실패 시 빈 리스트 반환 (graceful degradation).
+
+        Returns:
+            list[dict]: ``[{"content", "metadata"}]`` (top_k 이내).
+        """
+        vs = self._db.vectorstore
+        if vs is None:
+            logger.warning(f"[search_precedents] vectorstore 미초기화 — '{query}' skip")
+            return []
+
+        from src.config.settings import settings as _settings
+
+        _trace_on = bool(_settings.rag_trace_enabled)
+        trace: dict = {
+            "ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "kind": "search_precedents",
+            "query": query,
+            "source_filter": None,
+            "category_filter": "판례",
+            "top_k": top_k,
+            "elapsed_ms": {},
+        }
+        _t_total = time.perf_counter()
+
+        # 1차: 벡터 유사도 (PGVector JSONB 메타데이터 필터)
+        filter_dict = {"category": {"$eq": "판례"}}
+        _t = time.perf_counter()
+        try:
+            docs_with_score = await asyncio.to_thread(
+                vs.similarity_search_with_relevance_scores, query, k=top_k * 3, filter=filter_dict
+            )
+        except Exception as e:
+            msg = str(e)
+            if "connection" in msg.lower() or "ssl" in msg.lower() or "ProactorEventLoop" in msg:
+                logger.warning(f"[search_precedents] 1회 재시도 (transient): {type(e).__name__}")
+                try:
+                    docs_with_score = await asyncio.to_thread(
+                        vs.similarity_search_with_relevance_scores,
+                        query,
+                        k=top_k * 3,
+                        filter=filter_dict,
+                    )
+                except Exception as e2:
+                    logger.warning(f"[search_precedents] 재시도 실패: {e2}")
+                    return []
+            else:
+                logger.warning(f"[search_precedents] 벡터 검색 실패: {e}")
+                return []
+
+        if _trace_on:
+            trace["vector_candidates"] = [
+                _trace_candidate(doc, score, i + 1) for i, (doc, score) in enumerate(docs_with_score[:10])
+            ]
+            trace["elapsed_ms"]["vector_search"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        vector_results = [
+            {
+                "content": doc.page_content,
+                "metadata": {**doc.metadata, "relevance": round(score, 4)},
+            }
+            for doc, score in docs_with_score
+            if score >= self.RELEVANCE_THRESHOLD
+        ]
+        # FALLBACK: 판례도 동일 — 임계 컷 후 0건이지만 raw 있으면 임계 무시 사용.
+        if not vector_results and docs_with_score:
+            logger.warning(
+                f"[search_precedents] RELEVANCE_THRESHOLD({self.RELEVANCE_THRESHOLD}) "
+                f"컷 후 0건 — raw {len(docs_with_score)}건 폴백"
+            )
+            vector_results = [
+                {
+                    "content": doc.page_content,
+                    "metadata": {**doc.metadata, "relevance": round(score, 4)},
+                }
+                for doc, score in docs_with_score[: top_k * 2]
+            ]
+
+        # 2차: BM25 — 판례 청크만 대상으로 필터 (메모리 인덱스에서 category 필터링).
+        _t = time.perf_counter()
+        try:
+            self._build_bm25_index()
+        except Exception as e:
+            logger.warning(f"[search_precedents] BM25 index 구축 실패: {e}")
+
+        bm25_ranked: list[tuple[int, float]] = []
+        if self._bm25_index and hasattr(self, "_bm25_docs"):
+            # 전체 BM25 후 category 필터 (인덱스 분리는 비용 대비 이득 적음).
+            raw = self._bm25_search(query, source_filter=None, top_k=top_k * 5)
+            bm25_ranked = [(idx, sc) for idx, sc in raw if (self._bm25_docs[idx][1] or {}).get("category") == "판례"][
+                : top_k * 2
+            ]
+        if _trace_on:
+            bm25_docs_ref = getattr(self, "_bm25_docs", []) or []
+            trace["bm25_candidates"] = [
+                _trace_bm25_candidate(idx, sc, i + 1, bm25_docs_ref) for i, (idx, sc) in enumerate(bm25_ranked[:10])
+            ]
+            trace["elapsed_ms"]["bm25"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        # 3차: RRF 결합
+        _t = time.perf_counter()
+        if bm25_ranked:
+            merged = self._rrf_merge(
+                vector_results,
+                bm25_ranked,
+                self._bm25_docs,
+                k=self._RRF_K,
+                vector_w=self._VECTOR_WEIGHT,
+                bm25_w=self._BM25_WEIGHT,
+            )
+        else:
+            merged = vector_results
+        if _trace_on:
+            trace["rrf_merged"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(merged[:10])]
+            trace["elapsed_ms"]["rrf"] = round((time.perf_counter() - _t) * 1000, 2)
+
+        final_docs = merged[:top_k]
+        if _trace_on:
+            trace["final_top_k"] = [_trace_merged_doc(d, i + 1) for i, d in enumerate(final_docs)]
+            trace["elapsed_ms"]["total"] = round((time.perf_counter() - _t_total) * 1000, 2)
+            _write_trace_jsonl(trace)
+        return final_docs
 
     async def ingest_from_json(self, json_path: str | Path) -> int:
         """

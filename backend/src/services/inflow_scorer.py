@@ -48,22 +48,24 @@ _SUBWAY_COUNT_BONUS = 10.0
 # 버스 최근 집계 기간 — 371만 행 전체 평균은 비용 과다, 최신 추세만 반영
 _BUS_RECENT_DAYS = 30
 
-# 서브점수 가중치 — 2026-04-24 실매출 상관(R²) 리포트 기반 재조정
+# 서브점수 가중치 — 2026-05-03 UX 재조정.
 #
-# 초기 휴리스틱(TOD 경험치) 0.40/0.30/0.30 → R² 0.33 중간상관
-# 데이터 드리븐(마포 16동 × 최신 8분기 평균 매출 회귀):
-#   - 지하철 서브 R² = 0.004 (상관 없음, r=-0.06)
-#     * 동 행정중심 기준 물리적 거리라 동 경계 환승역(예: 홍대입구, 공덕) 반영 불가
-#     * 가중치 대폭 축소
-#   - 버스 서브   R² = 0.48  (중간~강한 상관, r=+0.69)
-#   - 집객 서브   R² = 0.54  (강한 상관, r=+0.73)
-# 최종 가중치: 0.10·지하철 + 0.40·버스 + 0.50·집객
-# 예상 전체 R² : 0.33 → 0.50+
+# 이전(R² 기반): 0.10·지하철 + 0.40·버스 + 0.50·집객
+#   문제: 사용자 직관(환승역 다수 보유 동) 과 점수가 어긋남.
+#         대학·종합병원 없는 동은 fclty 50% 디스카운트로 자동 저점.
+#         "왜 이 동이 추천 1위인지" 사용자가 접근성 점수에서 확인 불가.
 #
-# Phase C (polygon 기반 동 경계 거리 재계산) 도입 시 지하철 가중치 상향 조정 재검토.
-_W_SUBWAY_DEFAULT = 0.10
+# 현재 가중치 — 사용자 직관 우선 + 통계 근거 부분 보존:
+#   - 지하철 25%: 환승역·역세권 보유가 사용자 직관에 가장 강한 신호
+#                 (산식 한계로 R² 낮지만 UX 차원에서 가중)
+#   - 버스   40%: R² 0.48 — 중간~강한 상관, 가중치 유지
+#   - 집객   35%: R² 0.54 강한 상관이지만 50% 압도 완화
+#   합계 100%.
+#
+# Phase C (polygon 기반 동 경계 거리) 도입 시 지하철 R² 회복 가능 → 재조정 재검토.
+_W_SUBWAY_DEFAULT = 0.25
 _W_BUS_DEFAULT = 0.40
-_W_FCLTY_DEFAULT = 0.50
+_W_FCLTY_DEFAULT = 0.35
 
 # 정류장 ↔ 마포 16동 매핑 화이트리스트
 # Phase A: station_name ILIKE '%keyword%' 매칭 (TOPIS 좌표 수집은 Phase B)
@@ -145,6 +147,45 @@ def _minmax_to_100(values: dict[str, float], floor: float = 10.0) -> dict[str, f
         return {k: 50.0 for k in values}
     scale = 100.0 - floor
     return {k: floor + (v - lo) / (hi - lo) * scale for k, v in values.items()}
+
+
+def _baseline_normalize(
+    values: dict[str, float],
+    baseline: float = 60.0,
+    floor: float = 30.0,
+    ceiling: float = 100.0,
+) -> dict[str, float]:
+    """평균 기반 정규화 → 16동 raw 평균이 ``baseline`` 점이 되도록 비례 변환.
+
+    2026-05-03 도입. min-max 의 함정(우상위 1동만 100, 평균이 50 이하로 깎임)을 회피.
+    winner 동(보통 평균 이상)이 자연스럽게 60+ 점으로 나타나 "왜 추천 1위인지"
+    사용자 직관과 일치. 평균 미달 동도 floor 로 보호.
+
+    Args:
+        values: dong → raw score 매핑
+        baseline: 16동 raw 평균이 변환될 점수 (기본 60)
+        floor:   하한 (평균의 50% 미만 동도 30점 이상 유지)
+        ceiling: 상한 (평균의 1.67배 이상은 100점 클램프)
+
+    Returns:
+        dong → 변환 점수 매핑 (모든 값 ∈ [floor, ceiling])
+    """
+    if not values:
+        return {}
+    real = [v for v in values.values() if v is not None]
+    if not real:
+        return {k: baseline for k in values}
+    avg = sum(real) / len(real)
+    if avg <= 0:
+        return {k: baseline for k in values}
+    return {
+        k: (
+            baseline
+            if v is None
+            else max(floor, min(ceiling, (v / avg) * baseline))
+        )
+        for k, v in values.items()
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -359,9 +400,12 @@ async def score_all_districts(
         _fclty_raw_scores(),
     )
 
-    subway_norm = _minmax_to_100({k: v[0] for k, v in subway.items()})
-    bus_norm = _minmax_to_100({k: v[0] for k, v in bus.items()})
-    fclty_norm = _minmax_to_100({k: v[0] for k, v in fclty.items()})
+    # 2026-05-03: min-max → baseline_normalize.
+    # 16동 raw 평균이 60점이 되도록 비례 변환 — winner 가 자연스럽게 60+ 점으로 나와
+    # 추천 1위 정당성이 접근성 점수에서도 직관적으로 확인됨.
+    subway_norm = _baseline_normalize({k: v[0] for k, v in subway.items()})
+    bus_norm = _baseline_normalize({k: v[0] for k, v in bus.items()})
+    fclty_norm = _baseline_normalize({k: v[0] for k, v in fclty.items()})
 
     results: dict[str, InflowResult] = {}
     for dong in MAPO_DONG_CODES:

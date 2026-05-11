@@ -30,12 +30,16 @@ class AgentState(TypedDict):
     target_district: str  # 분석 대상 행정동 (초기 입력 혹은 최종 승자)
     target_districts: list[str]  # 사용자가 선택한 후보 행정동 전체 목록
     commercial_radius: int  # 상권 분석 반경 (m)
+    # 자사 영업구역 거리(m) — 가맹사업법 제12조의4 인접 출점 룰. None=specialists 기본 500m.
+    territory_radius_m: int | None
     monthly_rent_budget: int  # 월 임대료 예산 (원)
     store_area: float  # 점포 면적 (평)
     population_weight: bool  # 인구 가중치 반영 여부
     target_price_range: str  # 목표 객단가 구간
     operating_hours: list[str]  # 주 타겟 시간대
     initial_capital: int  # 초기 자본금 (원)
+    lat: float | None  # 출점 후보지 위도 (학교환경위생정화구역 거리 룰 트리거)
+    lon: float | None  # 출점 후보지 경도
 
     # 3. 데이터 슬롯 (Track A 및 RAG 결과물 저장)
     market_data: MarketData  # DB에서 가져올 상권 데이터 객체
@@ -46,7 +50,13 @@ class AgentState(TypedDict):
     top_3_candidates: list[str]  # 선별된 상위 3개 행정동 리스트
     winner_district: str  # 최종 선정된 1순위 지역명 (Winner)
     brand_analysis: dict[str, Any]  # 브랜드 전국 평균 vs 지역 분석 결과
-    vacancy_spots: list[dict[str, Any]]  # 추천 동들의 실제 공실 좌표 목록
+    # 추천 동들의 실제 공실 좌표 목록.
+    # 공통 필드: id, lat, lon, dong_name, listing_count
+    # winner_district spot 한정 추가 필드 (district_ranking._score_winner_spots):
+    #   - score (0~100, winner 동 내부 상대 점수)
+    #   - subway_distance_m (가장 가까운 마포 지하철역까지 m)
+    #   - competitor_count_500m (반경 500m 동종업종 매장 수)
+    vacancy_spots: list[dict[str, Any]]
     vacancy_applied: bool  # 공실 DB 반영 여부
 
     # 5. 분석 결과 및 상태 제어

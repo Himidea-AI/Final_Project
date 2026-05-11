@@ -1,6 +1,9 @@
 # Git worktrees (평행 작업 디렉토리)
 .worktrees/
 
+# Superpowers brainstorming companion 산출물
+.superpowers/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -20,6 +23,7 @@ venv/
 
 # Environment
 .env
+.env.txt
 
 # Data
 data/raw/
@@ -76,6 +80,10 @@ scripts/jira_update.py
 backend/scripts/_*.txt
 backend/scripts/verify/_*.txt
 
+# cProfile/pstats 출력 (재생성 가능, 바이너리)
+*.prof
+*.pstats
+
 # ABM 시뮬 결과물 (재현 가능, 용량 큼 — 77MB+)
 data/processed/sim_policy_*.json
 data/processed/policy_cache_*.json
@@ -113,12 +121,72 @@ tmp_*.py
 tmp_*.json
 tmp_*.txt
 tmp_*.png
+.tmp_*
+
+# DB/CSV 백업 파일 (운영 DB에 만들면 안 되며 repo 비포함)
+*_backup_*.csv
+*_backup_*.sql
+
+# 로컬 프리뷰 HTML (개인 검증용, repo 비포함)
+tools/sensitivity_preview.html
+frontend/public/sensitivity_preview.html
+
+# 일회성 핸드오프 문서 (메신저로 직접 전달 — repo 비포함)
+docs/superpowers/specs/*-handoff.md
+
+# B2 개인 작업 플랜·설계 (브레인스토밍 산출물, 로컬 메모용 — repo 비포함)
+docs/superpowers/plans/2026-04-30-tcn-dms-upgrade.md
+docs/superpowers/plans/2026-05-01-model-evaluator.md
+docs/superpowers/specs/2026-04-30-tcn-sales-forecast-upgrade-design.md
+docs/superpowers/specs/2026-05-01-model-evaluator-design.md
+
+# /predict 엔드포인트 응답 덤프 (디버깅 산출물 — repo 비포함)
+predict_resp*.json
+
+# B2 개인 검증/메모 산출물 (루트 한정, 명시적 이름)
+/comparison.txt
+/coverage_result.txt
+/dong_codes.txt
+/district_combos.txt
+/kakao_cats.txt
+/kakao_dongs.txt
+/kakao_full_coverage.txt
+/sq_review.txt
+/tables.txt
+/test.txt
+/test2.txt
+/kill_port.ps1
+reports/
+
+# 모델 학습 보조 산출물 (재생성 가능)
+models/emerging_district/weights.zip
+models/tcn_forecast/regen_*.py
+models/tcn_forecast/weights/*.bak*
+models/closure_risk/weights/*.bak*
 
 # 모델 학습 산출물 (재현 가능, 용량 큼)
 models/**/weights/*.pkl
+models/**/weights/*.json
 validation/results/*.db
 validation/results/imputed_mapo_*.csv
 validation/results/checkpoints_v4/
+validation/results/multi_brand_*/
+validation/results/sweep_boost_*/
+
+# 벤치마크 결과 (재실행 가능 — repo에 보관 X)
+bench_ragas.json
+bench_*.json
+bench_*.md
+
+# 시뮬레이션 임시 결과 (루트 디렉토리)
+sim_*.json
+
+# 법률 RAG 빌드 산출물 (build_parent_articles.py로 재생성 가능)
+backend/data/legal/processed/parent_articles.json
+backend/data/legal/processed/_embedding_cache.pkl
+
+# RAG 검색 trace JSONL (디버깅용, 대용량)
+validation/results/rag_trace/
 
 # Claude Code 로컬 설정 (frontend 하위)
 frontend/.claude/

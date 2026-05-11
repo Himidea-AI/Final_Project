@@ -4,10 +4,14 @@
 
 /** 시뮬레이션 요청 입력 */
 export interface SimulationInput {
-  business_type: string; // "cafe" | "restaurant" | "convenience" 등 확장 가능성 고려
+  // 백엔드 SUPPORTED_BUSINESS_TYPES = {cafe, restaurant, pub} (편의점 제거, 주점 신설).
+  // BIZ_NORMALIZE 가 한식/주점/호프-간이주점 등 한글 라벨도 정규화하므로 string 유지.
+  business_type: string; // "cafe" | "restaurant" | "pub" 등 (BIZ_NORMALIZE 매핑)
   business_subtype?: string;
   brand_name: string;
   target_district: string;
+  /** 다중 동 비교 시 선택 동 리스트 (1~4개). target_district 는 대표(=0번) 동. App.tsx:1242 에서 항상 동시 전송. */
+  target_districts?: string[];
   existing_stores: ExistingStore[];
   monthly_rent: number;
   scenarios: string[];
@@ -18,6 +22,13 @@ export interface SimulationInput {
   initial_capital?: number;
   population_weight?: boolean;
   commercial_radius?: number;
+  // 자사 영업구역 거리(m) — 가맹사업법 제12조의4 인접 출점 평가용.
+  // 사용자 입력 (예: 메가 250m, 빽다방 350m). 미입력 시 backend 기본 500m.
+  territory_radius_m?: number;
+  // 출점 후보지 좌표 — 학교환경위생정화구역(rule_school_zone) 거리 룰 트리거.
+  // null/미입력 시 backend 가 보수적 caution 처리.
+  lat?: number | null;
+  lon?: number | null;
   // [customer_revenue] 타겟 고객 프로필 (A1 찬영 P1-C 연동)
   // 값은 SegmentProfile 스펙 그대로 한글/내부키 혼용 (age: "30대", time: "time_11_14", day: "weekday|weekend")
   target_age_groups?: string[];
@@ -32,7 +43,8 @@ export interface CustomerSegment {
   segment_ratio: number;
   segment_sales: number | null;
   identified_sales: number | null;
-  total_sales_ref: number | null;
+  /** 점포당 분기 매출 참고값 (원) — TCN 매출예측 탭과 동일 단위. backend predict 입력 echo. */
+  total_sales_per_store: number | null;
   profile_summary: string;
   dimension_ratios: Record<string, number>;
 }
@@ -98,17 +110,59 @@ export interface DistrictComparison {
 export interface LegalRiskArticle {
   article_ref: string;
   content: string;
+  /**
+   * 항목 종류 — backend specialist agents가 articles에 법조문과 판례를 mixed로 반환.
+   * - 'article' (default): 법조문 본문
+   * - 'precedent': 판례 인용
+   * 미설정 시 기존 데이터 호환을 위해 'article' 로 폴백.
+   */
+  kind?: 'article' | 'precedent';
+  /**
+   * B 단계 — backend specialist 가 LLM 으로 풀어쓴 케이스 맞춤 1~2문장 설명.
+   * 사용자가 200~300자 본문 (content) 직접 읽기 부담 제거.
+   * 미설정/빈 문자열 시 frontend 는 content 만 표시 (graceful).
+   */
+  explanation?: string;
+}
+
+/**
+ * 입지 후보 spot 영업구역 침해 평가 (가맹사업법 제12조의4) —
+ * backend legal node 가 vacancy_spot_analyses 를 rank/level/summary 로 가공한 결과.
+ * franchise_law 리스크에 attach 되어 1등~4등 후보 동의 영업구역 침해 여부를 한눈에 표시.
+ */
+export interface LegalSpotEvaluation {
+  rank: number | null;
+  rank_label: string;
+  dong_name: string;
+  lat: number;
+  lon: number;
+  territory_radius_m: number | null;
+  same_brand_within_territory: number | null;
+  same_brand_500m: number;
+  same_brand_2000m: number;
+  closest_m: number | null;
+  level: 'safe' | 'caution' | 'danger';
+  summary: string;
 }
 
 /** 법률 리스크 */
 export interface LegalRisk {
   type: string;
   risk_level: string;
+  /**
+   * 카테고리 그룹 — backend `LEGAL_CATEGORY_GROUP` 매핑 결과.
+   * - location: 출점 결정 critical (입지/면적/임대차/가맹 영업지역 등)
+   * - operation: 운영 단계 일상 의무 (식품위생/노동/세무/개인정보/하수도)
+   * 구버전 응답엔 미포함 — 누락 시 frontend 에서 'operation' 으로 폴백.
+   */
+  group?: 'location' | 'operation';
   detail: string;
   recommendation?: string;
   articles?: LegalRiskArticle[];
   checklist?: LegalChecklistItem[];
   is_fallback?: boolean;
+  /** franchise_law 전용 — 후보지 4곳 영업구역 침해 평가 (legal node attach). */
+  spot_evaluations?: LegalSpotEvaluation[];
 }
 
 /** 폐업 위험도 기여 피처 (LightGBM·TCN 공통 구조) */
@@ -166,6 +220,7 @@ export interface TrendForecast {
     dong_name?: string;
     recent_score?: number | null;
     slope_pct?: number | null;
+    max_quarter?: string | null;
     samples?: number[]; // 분기별 점수
     data_staleness_note?: string;
   };
@@ -190,6 +245,8 @@ export interface CompetitorIntel {
     count?: number;
     /** 백엔드 v2: count의 별칭(레거시). main.py에서 둘 다 채울 수 있음. */
     total_competitors?: number;
+    /** 분석에 사용된 반경 (m). saturation 임계값 면적 보정에 사용. 기본 500. */
+    radius_m?: number;
     franchise_count?: number;
     independent_count?: number;
     saturation_level?: 'low' | 'medium' | 'high' | string;
@@ -204,6 +261,7 @@ export interface CompetitorIntel {
   };
   cannibalization?: {
     estimated_revenue_impact_pct?: number | null;
+    impact_is_capped?: boolean | null;
     distance_bins?: Record<string, number> | null;
     closest_distance_m?: number | null;
   };
@@ -226,6 +284,25 @@ export interface CompetitorIntel {
   narrative?: string;
 }
 
+/** 사용자 입력 타겟 vs 동·업종 실측 매출 분포 미스매치 알림. */
+export interface TargetAlignmentAlert {
+  dimension: 'age' | 'gender' | 'hours' | 'day' | 'price';
+  severity: 'high' | 'medium' | 'low';
+  user_input: string;
+  actual: string;
+  message: string;
+}
+
+/** alert high 발생 시 실측 기반 권장 타겟 프로필(역제안). */
+export interface ReverseTargetSuggestion {
+  recommended_age_groups: string[];
+  recommended_gender: string | null;
+  recommended_hours: string[];
+  recommended_day_type: string | null;
+  recommended_price_range: string | null;
+  rationale: string;
+}
+
 /** 인구통계 심층 분석 (demographic_depth 에이전트) */
 export interface DemographicReport {
   core_demographic: { age: string; gender: string; share: number };
@@ -241,6 +318,12 @@ export interface DemographicReport {
   narrative: string;
   // Track B #106 — 백엔드 peak_hour_matrix [7][24] 제공 시 자동 활성화
   peak_hour_matrix?: number[][] | null;
+  // 사용자 입력 타겟(연령·성별·시간·요일·객단가) 정렬도 0-100. 입력 없으면 null.
+  target_alignment_score?: number | null;
+  // 정렬 미스매치 alert 목록. 입력 없거나 모든 차원 매치면 빈 배열.
+  target_alignment?: TargetAlignmentAlert[];
+  // high severity alert 발생 시 실측 기반 권장 타겟 프로필(역제안). 정렬 양호 시 null.
+  reverse_target_suggestion?: ReverseTargetSuggestion | null;
 }
 
 /**
@@ -276,19 +359,34 @@ export interface LivingPopForecast {
 }
 
 /**
- * [E — emerging_district] 신흥 상권 조기 감지 (LSTM Autoencoder)
+ * [E — emerging_district] 상권 조기 감지 (LSTM Autoencoder + 4-tier fallback)
  *
- * predict(dong_code, industry_code) 반환 EmergingResult dict.
- * threshold p95 = 0.041380 기준 anomaly_score 0~1 정규화.
+ * predict 응답. 4-tier fallback (change_ix → classifier → b1_trend → slope → none)
+ * 이 signal/summary/tier/raw 를 1차 결정, autoencoder 가 anomaly_score +
+ * consecutive_anomaly_quarters 보강.
  */
 export interface EmergingSignal {
   dong_code: string;
   industry_code: string;
-  anomaly_score: number; // 0~1 (1에 가까울수록 이상)
+  anomaly_score: number; // 0~1 (1에 가까울수록 평소 패턴과 다름)
   signal: 'emerging' | 'declining' | 'normal';
   consecutive_anomaly_quarters: number;
   summary: string;
+  tier: 'change_ix' | 'classifier' | 'b1_trend' | 'slope' | 'none';
+  raw: Record<string, number | string>;
   is_mock?: boolean;
+  // 2026-05-06 추가: backend EmergingResult TypedDict 와 동기화.
+  // 둘 다 optional null — 단계적 rollout 안전 (구버전 응답 받아도 graceful fallback).
+  quarter_history?: { quarter: string; anomaly_score: number }[] | null;
+  peer_distribution?: {
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    percentile_self: number; // 0~100
+    rank_in_total: number; // 1-based
+    total: number;
+  } | null;
 }
 
 /** 시뮬레이션 결과 출력 */
@@ -358,12 +456,27 @@ export interface SimulationOutput {
     distance_m?: number;
     is_franchise?: boolean;
     source_dong?: string;
+    place_url?: string;
+    phone?: string;
+    category?: string;
+  }>;
+  // winner + top3 4동 안 자사 브랜드 매장 좌표 (로고 아이콘 마커 + 영업구역 반경 원 표시용)
+  same_brand_locations?: Array<{
+    id: string;
+    place_name: string;
+    brand_name?: string;
+    lat: number;
+    lng: number;
+    dong_name?: string;
+    address?: string;
+    place_url?: string;
+    phone?: string;
   }>;
   // [customer_revenue] 타겟 고객 매출 분석 (스펙: dict | None)
   customer_segment?: CustomerSegment | null;
   // [D — living_pop_forecast] 유동인구 피크 시간 예측 (TCN)
   living_pop_forecast?: LivingPopForecast | null;
-  // [E — emerging_district] 신흥 상권 조기 감지 (LSTM Autoencoder)
+  // [E — emerging_district] 상권 조기 감지 (LSTM Autoencoder)
   emerging_signal?: EmergingSignal | null;
   // [synthesis.FinalStrategyResult] 종합 전략 리포트 — profit_simulation 포함
   final_report?: {
@@ -377,7 +490,10 @@ export interface SimulationOutput {
       monthly_cost?: number;
       net_profit?: number;
       margin_rate?: number;
+      /** @deprecated 2026-05-04: LLM hallucination 위험. bep_quarters 우선 사용. */
       bep_months?: number;
+      /** ML 실측 BEP — 분기 단위 (B1 LLM 응답에 추후 추가 예정, 현재는 미존재 가능). */
+      bep_quarters?: number;
     };
     competitor_analysis?: {
       count?: number;
@@ -413,7 +529,7 @@ export interface DistrictPredictionResult {
   shap_result: ShapResult | null;
   customer_segment: Record<string, unknown> | null;
   living_pop_forecast: Record<string, unknown> | null;
-  emerging_signal: Record<string, unknown> | null;
+  emerging_signal: EmergingSignal | null;
 }
 
 /** /analyze/llm 응답. SimulationOutput 의 ML 필드 빠진 subset. spec §3. */
@@ -438,6 +554,12 @@ export interface DistrictRanking {
   pop_score: number;
   avg_rent: number;
   rent_score: number;
+  /** 2026-05-02 backend 추가: 동 검색량 트렌드 점수 (0~100) */
+  trend_score?: number | null;
+  /** 경쟁 밀도 점수 (0~100, 마포 16동 정규화). IndicatorGrid '경쟁강도' 폴백 매핑. */
+  density_score?: number | null;
+  /** Hansen+E2SFCA 기반 교통/집객 접근성 점수 (0~100). IndicatorGrid '접근성' 폴백 매핑. */
+  inflow_score?: number | null;
   vacancy_rate: number;
   zoning_risk: 'safe' | 'caution' | 'danger';
   /** 2026-04-27 변경: bep_months → bep_quarters (분기 단위) */
@@ -539,6 +661,7 @@ export type PredictSubTab =
   | 'sales_forecast'
   | 'financial_sim'
   | 'customer_flow'
-  | 'emerging_district';
+  | 'emerging_district'
+  | 'scenario';
 
 export type AnalyzeSubTab = 'ai_summary' | 'market' | 'demographic' | 'legal' | 'agent_insight';

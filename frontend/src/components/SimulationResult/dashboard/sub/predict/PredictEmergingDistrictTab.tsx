@@ -1,5 +1,5 @@
 /**
- * PredictEmergingDistrictTab — 동별 신흥상권 감지 신호
+ * PredictEmergingDistrictTab — 동별 상권 조기감지 신호
  *
  * /predict 응답의 district_predictions[].emerging_signal 을 동별 카드 grid 로 렌더.
  * 2026-04-29 multi-district visual cycle (M11) — placeholder 해제.
@@ -8,24 +8,38 @@
  * 모든 동에서 null 인 경우 PlaceholderPanel 안내. mock 절대 금지.
  */
 
-import type { SimulationOutput, EmergingSignal } from '../../../../../types';
+import { Sparkles } from 'lucide-react';
+import type { SimulationOutput } from '../../../../../types';
 import { EmergingSignalCard } from '../../charts/EmergingSignalCard';
+import { EmergingFourDongTrendChart } from '../../charts/EmergingFourDongTrendChart';
 import { PlaceholderPanel } from '../../shared/PlaceholderPanel';
+import { resolveDongName } from '../../../../../constants/mapoDongs';
+import { SERIES_COLORS } from '../../../QuarterlyProjectionChart';
+import { sortByRanking } from '../../utils/rankSort';
+
+const TIER_LABEL_KO: Record<string, string> = {
+  change_ix: '공식',
+  classifier: 'AI',
+  b1_trend: '보조',
+  slope: '보조',
+  none: '검증중',
+};
 
 interface Props {
   simResult: SimulationOutput;
 }
 
 export function PredictEmergingDistrictTab({ simResult }: Props) {
-  const dpredicts = (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo);
+  // sortByRanking 으로 winner→4위 순 정렬 → SERIES_COLORS[idx] 가 다른 탭들과 동일 색 매핑.
+  const dpredicts = sortByRanking(
+    (simResult.district_predictions ?? []).filter((p) => !p.is_excluded_combo),
+    simResult,
+  );
 
   if (dpredicts.length === 0) {
     return (
       <div className="space-y-6">
-        <PlaceholderPanel
-          modelName="emerging_district (LSTM Autoencoder)"
-          description="신흥상권 감지 신호는 동별 예측 데이터(/predict)가 도착해야 활성화됩니다."
-        />
+        <PlaceholderPanel description="동별 예측 데이터가 도착하면 상권 조기감지 신호가 표시됩니다." />
       </div>
     );
   }
@@ -34,37 +48,97 @@ export function PredictEmergingDistrictTab({ simResult }: Props) {
   if (!anyData) {
     return (
       <div className="space-y-6">
-        <PlaceholderPanel
-          modelName="emerging_district (LSTM Autoencoder)"
-          description="동별 신흥상권 신호는 backend /predict 응답에서 미수신 상태입니다 — DistrictPredictionResult.emerging_signal 구현 후 활성화됩니다."
-        />
+        <PlaceholderPanel description="동별 상권 조기감지 신호 데이터를 받지 못했습니다. 잠시 후 다시 시도해주세요." />
       </div>
     );
   }
 
+  // 4동 비교 — anomaly_score 최댓값 동 1개에만 "변화 1위" 배지. 0 이하는 의미 없어 강조 안 함.
+  const topDistrict =
+    dpredicts.reduce<{ district: string; score: number } | null>((acc, p) => {
+      const s = p.emerging_signal?.anomaly_score ?? -1;
+      if (s <= 0) return acc;
+      if (!acc || s > acc.score) return { district: p.district, score: s };
+      return acc;
+    }, null)?.district ?? null;
+
+  // tier 분포 + signal 분포 — 헤더 chip strip 용
+  const tierCount: Record<string, number> = {};
+  const signalCount = { normal: 0, emerging: 0, declining: 0 };
+  dpredicts.forEach((p) => {
+    const s = p.emerging_signal;
+    if (!s) return;
+    tierCount[s.tier] = (tierCount[s.tier] ?? 0) + 1;
+    signalCount[s.signal] = (signalCount[s.signal] ?? 0) + 1;
+  });
+
   return (
     <div className="space-y-6">
-      <h4 className="text-xs font-black text-stone-500 uppercase tracking-widest">
-        동별 신흥상권 감지 신호
-      </h4>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {dpredicts.map((p) => (
-          <div
-            key={p.district}
-            className="bg-stone-900/40 border border-stone-800/60 rounded-3xl p-4 space-y-3"
-          >
-            <div className="text-xs font-black text-stone-300 uppercase tracking-widest">
-              {p.district}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-center gap-3 text-xl font-black italic leading-none tracking-tight text-foreground">
+          <Sparkles className="text-primary" /> 동별 상권 조기감지 신호
+        </h3>
+        {/* tier 분포 + 4동 신호 종합 chip strip — 한글 chip 은 sans 폰트 (JetBrains Mono 한글 fallback 글자폭 mismatch 회피) */}
+        <div className="flex flex-wrap items-center gap-3 text-[0.6875rem] font-bold tracking-wide text-muted-foreground">
+          {Object.entries(tierCount).map(([k, v]) => (
+            <span key={k}>
+              {TIER_LABEL_KO[k] ?? k} <span className="tabular-nums">{v}</span>
+            </span>
+          ))}
+          {Object.keys(tierCount).length > 0 && <span className="text-border">·</span>}
+          <span className="text-success">
+            안정 <span className="tabular-nums">{signalCount.normal}</span>
+          </span>
+          <span className="text-primary">
+            신흥 <span className="tabular-nums">{signalCount.emerging}</span>
+          </span>
+          <span className="text-danger">
+            쇠퇴 <span className="tabular-nums">{signalCount.declining}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* [1] 4동 변화도 시계열 비교 — quarter_history 활용 + 16동 사분위 reference line */}
+      <div className="bg-card border border-border rounded-3xl p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+            동별 상권 변화도 추이
+          </h4>
+          <span className="text-[0.5625rem] font-mono uppercase tracking-widest text-muted-foreground">
+            최근 2년 분기별 · 마포구 평균선 비교
+          </span>
+        </div>
+        <EmergingFourDongTrendChart dpredicts={dpredicts} />
+      </div>
+
+      {/* [2] 4동 카드 grid — 카드 안 sparkline + peer bar 는 직전 task 에서 추가됨 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {dpredicts.map((p, idx) => {
+          // p.district 가 raw code(11440660)로 올 가능성 대비 한국어 이름으로 휴머나이즈.
+          const districtLabel = resolveDongName(p.district) ?? p.district;
+          const seriesColor = SERIES_COLORS[idx % SERIES_COLORS.length];
+          return (
+            <div key={p.district} className="bg-card border border-border rounded-3xl p-5">
+              {p.emerging_signal ? (
+                <EmergingSignalCard
+                  signal={p.emerging_signal}
+                  district={districtLabel}
+                  isTopChange={topDistrict === p.district}
+                  seriesColor={seriesColor}
+                />
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-sm font-black text-foreground tracking-tight">
+                    {districtLabel}
+                  </div>
+                  <div className="rounded-2xl border border-dashed border-border bg-secondary p-4 text-[0.625rem] text-muted-foreground">
+                    상권 조기감지 신호 미수신
+                  </div>
+                </div>
+              )}
             </div>
-            {p.emerging_signal ? (
-              <EmergingSignalCard signal={p.emerging_signal as unknown as EmergingSignal} />
-            ) : (
-              <div className="rounded-2xl border border-dashed border-stone-800 bg-stone-950/40 p-4 text-[0.625rem] text-stone-500">
-                신흥상권 신호 미수신
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -131,7 +131,7 @@ class BizMapper:
             # ftc_brand_franchise 테이블 없거나 접근 불가 시 빈 결과 반환
             return []
         finally:
-            engine.dispose()
+            pass
 
         if not rows:
             return []
@@ -196,7 +196,7 @@ class BizMapper:
                 )
                 return result.scalar() or 0
         finally:
-            engine.dispose()
+            pass
 
     # ------------------------------------------------------------------
     # 통합 매핑
@@ -209,8 +209,18 @@ class BizMapper:
         Returns:
             dict: 검증 결과 + 브랜드 정보 + 마포구 점포 수
         """
-        # 1. 사업자번호 검증
-        verification = await self.verify_biz_number(biz_number)
+        # 1. 사업자번호 검증 — NTS API 장애 시 검증 skip (회원가입 차단 회피).
+        # tenacity retry 3회 모두 실패해도 graceful fallback. NTS_API_KEY 없을 때와 동일.
+        try:
+            verification = await self.verify_biz_number(biz_number)
+        except Exception as e:
+            verification = {
+                "biz_number": biz_number,
+                "status": "검증불가",
+                "tax_type": "",
+                "valid": True,
+                "fallback_reason": f"NTS API 호출 실패 → 검증 skip ({type(e).__name__})",
+            }
 
         # 2. DB에서 브랜드 검색
         brands = self.search_brand_by_company(company_name)

@@ -108,11 +108,13 @@ def _build_response(
         "new_store_visits": result.get("new_store_visits", 0),
         "new_store_revenue": result.get("new_store_revenue", 0.0),
         "new_store_visit_share_pct": result.get("new_store_visit_share_pct", 0.0),
+        "new_store_role_dist": result.get("new_store_role_dist", {}),
         "thoughts": result.get("thoughts", []),
         "thought_calls": result.get("thought_calls", 0),
         "thought_input_tokens": result.get("thought_input_tokens", 0),
         "thought_output_tokens": result.get("thought_output_tokens", 0),
         "thought_cached_tokens": result.get("thought_cached_tokens", 0),
+        "tier_s_meta": result.get("tier_s_meta"),
         "tier_s_calls": result.get("tier_s_calls", 0),
         "tier_a_calls": result.get("tier_a_calls", 0),
         "estimated_cost_usd": result.get("estimated_cost_usd", 0.0),
@@ -234,8 +236,9 @@ def _save_to_redis(*, cache_key: str, redis_url: str, response: dict[str, Any]) 
         # daemon thread 안이라 sync redis 가 안전 (asyncio loop 부재)
         client = _redis_sync.from_url(redis_url, decode_responses=True)
         try:
-            client.setex(cache_key, 3600, _json.dumps(cache_body, ensure_ascii=False))
-            logger.info(f"[ABM async] redis SET key={cache_key[:16]}... ttl=3600s")
+            # TTL 1h → 24h (2026-05-04 사용자 피드백) — main.py 와 동기.
+            client.setex(cache_key, 86400, _json.dumps(cache_body, ensure_ascii=False))
+            logger.info(f"[ABM async] redis SET key={cache_key[:16]}... ttl=86400s")
         finally:
             client.close()
     except Exception as e:

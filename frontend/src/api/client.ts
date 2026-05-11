@@ -20,16 +20,19 @@ import type {
   SimulationInput,
   SimulationOutput,
   JobStatus,
-  CustomerSegment,
   DistrictPredictionResult,
   AnalysisOutput,
 } from '../types';
 import type {
   HistoryFilterParams,
   HistoryListResponse,
+  SaveAbmPayload,
+  SaveAIPayload,
+  SaveForeseePayload,
   SaveSimulationPayload,
   SaveSimulationResponse,
   SimulationHistoryDetail,
+  SimulationHistoryItem,
 } from '../types/simulationHistory';
 import type { TokenUsageResponse } from '../types/tokenUsage';
 
@@ -124,13 +127,14 @@ export async function healthCheck() {
  * 응답 포맷 (backend 수지니 c8ea31f):
  *   { status: "success" | "error", data: DistrictPredictionResult[], message?: string }
  *
- * timeout 120_000 — 4동 병렬 ML 추론 (~10~30s 실측, 명세 일치).
+ * timeout 300_000 — /analyze/llm 동시 호출 시 cold start + SGIS sleep 누적으로
+ * 실측 120s+ 발생 → 5분 buffer (근본 해결: SGIS 토큰 싱글톤 + uvicorn worker 2개).
  */
 export async function runPredict(
   input: SimulationInput,
   signal?: AbortSignal,
 ): Promise<DistrictPredictionResult[]> {
-  const response = await apiClient.post('/predict', input, { signal, timeout: 120_000 });
+  const response = await apiClient.post('/predict', input, { signal, timeout: 300_000 });
   const body = response.data;
   if (body && body.status === 'success' && Array.isArray(body.data)) return body.data;
   if (body && body.status === 'error') throw new Error(body.message || 'Predict failed');
@@ -158,6 +162,87 @@ export async function runAnalyzeLlm(
   return body as AnalysisOutput; // legacy raw fallback
 }
 
+/**
+ * Real-time progress 폴링 — /predict/async + /predict/{job_id}/status.
+ * onProgress(ratio: 0~1) 가 매 250ms 마다 호출됨. 완료 시 final data resolve.
+ *
+ * 백엔드가 동별 _predict_single_district 완료마다 progress 갱신 → 4동 시 25%/50%/75%/100%.
+ * 가짜 시간 추정 없음 — 실측 슬라이스 완료 비율 그대로.
+ */
+export async function runPredictPolling(
+  input: SimulationInput,
+  onProgress: (ratio: number, stage: string | null) => void,
+  signal?: AbortSignal,
+): Promise<DistrictPredictionResult[]> {
+  const startResp = await apiClient.post('/predict/async', input, { signal, timeout: 30_000 });
+  const jobId = startResp.data?.job_id;
+  if (!jobId) throw new Error(startResp.data?.message || 'Predict async start failed');
+
+  return pollJobUntilDone<DistrictPredictionResult[]>(
+    `/predict/${jobId}/status`,
+    onProgress,
+    signal,
+  );
+}
+
+/**
+ * Real-time progress 폴링 — /analyze/llm/async + /analyze/llm/{job_id}/status.
+ * 백엔드가 LangGraph 4 노드 완료마다 progress 갱신 → 25%/50%/75%/100%.
+ */
+export async function runAnalyzeLlmPolling(
+  input: SimulationInput,
+  onProgress: (ratio: number, stage: string | null) => void,
+  signal?: AbortSignal,
+): Promise<AnalysisOutput> {
+  const startResp = await apiClient.post('/analyze/llm/async', input, { signal, timeout: 30_000 });
+  const jobId = startResp.data?.job_id;
+  if (!jobId) throw new Error(startResp.data?.message || 'Analyze async start failed');
+
+  return pollJobUntilDone<AnalysisOutput>(`/analyze/llm/${jobId}/status`, onProgress, signal);
+}
+
+/**
+ * 공통 polling 루프 — 250ms 간격으로 status endpoint 조회.
+ * status='done' → data resolve, 'error' → reject, 'running' → onProgress 호출 후 계속.
+ * AbortSignal 가 abort 되면 polling 중단 + reject (axios cancellation 과 동일 시맨틱).
+ */
+async function pollJobUntilDone<T>(
+  statusUrl: string,
+  onProgress: (ratio: number, stage: string | null) => void,
+  signal?: AbortSignal,
+): Promise<T> {
+  const POLL_MS = 250;
+  // 600초 (10분) 안전 cap — 백엔드 timeout 보다 길어 무한 hang 방지.
+  const MAX_POLLS = (600 * 1000) / POLL_MS;
+
+  for (let i = 0; i < MAX_POLLS; i++) {
+    if (signal?.aborted) {
+      const e = new Error('aborted');
+      e.name = 'AbortError';
+      throw e;
+    }
+    let resp;
+    try {
+      resp = await apiClient.get(statusUrl, { signal, timeout: 10_000 });
+    } catch (err) {
+      // 일시적 네트워크 오류는 재시도. 단 abort 는 즉시 propagate.
+      if (signal?.aborted) throw err;
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      continue;
+    }
+    const body = resp.data;
+    const ratio = typeof body?.progress === 'number' ? body.progress : 0;
+    const stage = typeof body?.stage === 'string' ? body.stage : null;
+    onProgress(ratio, stage);
+
+    if (body?.status === 'done') return body.data as T;
+    if (body?.status === 'error') throw new Error(body.error || 'Job failed');
+
+    await new Promise((r) => setTimeout(r, POLL_MS));
+  }
+  throw new Error('Polling timeout — job 이 600초 안에 완료되지 않음');
+}
+
 /** 시뮬레이션 리포트 조회 */
 export async function getReport(requestId: string): Promise<SimulationOutput> {
   const response = await apiClient.get(`/report/${requestId}`);
@@ -177,28 +262,39 @@ export async function getLivePopulation(dongs?: string[]): Promise<any> {
   return response.data;
 }
 
-// ─────────────────────────────────────────────────────────
-// customer_segment — /simulate와 무관한 독립 호출 (~100ms MLP 미리보기)
-// ─────────────────────────────────────────────────────────
-
-export interface CustomerSegmentRequest {
-  target_district: string;
-  business_type: string;
-  target_age_groups: string[];
-  target_gender: 'male' | 'female' | null;
-  target_time_slots: string[];
-  target_day_type: 'weekday' | 'weekend' | null;
-  target_monthly_sales: number | null;
-  quarter_num?: number;
+/**
+ * 회사 운영 업종/브랜드 list — 시뮬 폼 mount 시 호출.
+ * 토큰의 user → users.biz_number → ftc_brand_franchise.corpNm 매칭 결과.
+ *
+ * - industries=null: 비회원 또는 corp 미등록 — 모든 업종 허용
+ * - industries=[...] : 운영 업종만 enable, 그 외는 dropdown 에서 disable
+ */
+export interface OperatedIndustriesResponse {
+  company_name: string | null;
+  industries: string[] | null;
+  brands?: { name: string; industry: string; stores: number }[];
+  error?: string;
+  message?: string;
 }
 
-/** customer_revenue MLP 직접 호출 — /simulate와 무관, ~100ms */
-export async function fetchCustomerSegment(
-  req: CustomerSegmentRequest,
-  signal?: AbortSignal,
-): Promise<CustomerSegment> {
-  const response = await apiClient.post('/customer-segment', req, { signal });
-  return response.data;
+export async function getOperatedIndustries(userId?: string): Promise<OperatedIndustriesResponse> {
+  // userId query param 으로 명시 전달 — JWT interceptor 실패/legacy localStorage 케이스 보완.
+  // backend 는 user_id 우선, 없으면 JWT 의 current_user 폴백 사용.
+  const params = userId ? { user_id: userId } : undefined;
+  try {
+    const response = await apiClient.get('/corp/operated-industries', { params });
+    const data = response.data as OperatedIndustriesResponse;
+    if (data.industries === null) {
+      console.warn(
+        '[operated-industries] backend 가 industries=null 반환. ' +
+          `userId=${userId ?? '없음'}, error=${data.error ?? '없음'}, message=${data.message ?? '없음'}, brands=${data.brands?.length ?? 0}`,
+      );
+    }
+    return data;
+  } catch (e) {
+    console.error('[operated-industries] fetch 실패:', e);
+    return { company_name: null, industries: null, brands: [] };
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -216,16 +312,279 @@ export async function listSimulationHistory(
   filter: HistoryFilterParams = {},
 ): Promise<HistoryListResponse> {
   const response = await apiClient.get('/simulation-history', { params: filter });
-  return response.data;
+  // legacy row → kind 'ai' 기본 (legacy simulation_history 가 통합이므로 두 슬라이스 다 들어있음).
+  const data = response.data ?? { items: [], total: 0, page: 1, size: 20 };
+  if (Array.isArray(data.items)) {
+    data.items = data.items.map((it: Record<string, unknown>) => ({
+      ...it,
+      kind: it.kind ?? 'ai',
+    }));
+  }
+  return data as HistoryListResponse;
 }
 
 export async function getSimulationHistoryDetail(id: number): Promise<SimulationHistoryDetail> {
   const response = await apiClient.get(`/simulation-history/${id}`);
-  return response.data;
+  // legacy row 는 kind 컬럼이 없음 — 'ai' 기본값 (legacy simulation_history 가 통합 result 였으나
+  // 대시보드 hub 진입 시 기존 3-card 그대로 — kind 분기는 신규 라우트만 적용).
+  // SimulationHistoryDetail 의 kind 필수성을 만족시키기 위해 주입.
+  const data = response.data ?? {};
+  if (!data.kind) data.kind = 'ai';
+  return data as SimulationHistoryDetail;
 }
 
 export async function deleteSimulationHistory(id: number): Promise<void> {
   await apiClient.delete(`/simulation-history/${id}`);
+}
+
+// ─────────────────────────────────────────────────────────
+// 신규 분리 endpoint (2026-05-02) — /simulation-foresee + /simulation-ai
+// ML 예측과 LLM 분석을 별개 row 로 저장. 통합 list 는 useSimulationHistory 가 양쪽 머지.
+// ─────────────────────────────────────────────────────────
+
+/** POST /simulation-foresee — ML 예측 슬라이스 저장 */
+export async function saveForeseeHistory(
+  payload: SaveForeseePayload,
+): Promise<SaveSimulationResponse> {
+  const response = await apiClient.post('/simulation-foresee', payload);
+  return response.data;
+}
+
+/** POST /simulation-ai — LLM 분석 슬라이스 저장 */
+export async function saveAIHistory(payload: SaveAIPayload): Promise<SaveSimulationResponse> {
+  const response = await apiClient.post('/simulation-ai', payload);
+  return response.data;
+}
+
+/** GET /simulation-foresee — 예측 이력 목록 */
+export async function listForeseeHistory(
+  filter: HistoryFilterParams = {},
+): Promise<HistoryListResponse> {
+  const response = await apiClient.get('/simulation-foresee', { params: filter });
+  return response.data;
+}
+
+/** GET /simulation-ai — AI 분석 이력 목록 */
+export async function listAIHistory(
+  filter: HistoryFilterParams = {},
+): Promise<HistoryListResponse> {
+  const response = await apiClient.get('/simulation-ai', { params: filter });
+  return response.data;
+}
+
+/**
+ * GET /simulation-foresee/{id} — 예측 row 상세.
+ * Raw row(컬럼 그대로) 를 SimulationHistoryDetail (SimulationOutput 컨테이너) 로 매핑.
+ * SimulationOutput 의 LLM 슬라이스 필드는 null/undefined 채움 (HistoryDashboardView kind='foresee' 분기에서 미사용).
+ */
+export async function getForeseeDetail(id: number): Promise<SimulationHistoryDetail> {
+  const response = await apiClient.get(`/simulation-foresee/${id}`);
+  return mapForeseeDetailToHistoryDetail(response.data);
+}
+
+/** GET /simulation-ai/{id} — AI 분석 row 상세 */
+export async function getAIDetail(id: number): Promise<SimulationHistoryDetail> {
+  const response = await apiClient.get(`/simulation-ai/${id}`);
+  return mapAIDetailToHistoryDetail(response.data);
+}
+
+/** DELETE /simulation-foresee/{id} */
+export async function deleteForeseeHistory(id: number): Promise<void> {
+  await apiClient.delete(`/simulation-foresee/${id}`);
+}
+
+/** DELETE /simulation-ai/{id} */
+export async function deleteAIHistory(id: number): Promise<void> {
+  await apiClient.delete(`/simulation-ai/${id}`);
+}
+
+// ─────────────────────────────────────────────────────────
+// ABM 시뮬 영구 저장 (Phase 4-A) — /history/abm
+// /simulate-abm/{job_id}/result 응답을 result JSONB 로 그대로 저장.
+// ─────────────────────────────────────────────────────────
+
+/** POST /history/abm — ABM 시뮬 결과 저장 */
+export async function saveAbmHistory(payload: SaveAbmPayload): Promise<SaveSimulationResponse> {
+  const response = await apiClient.post('/history/abm', payload);
+  return response.data;
+}
+
+/** GET /history/abm — ABM 이력 목록 */
+export async function listAbmHistory(
+  filter: HistoryFilterParams = {},
+): Promise<HistoryListResponse> {
+  const response = await apiClient.get('/history/abm', { params: filter });
+  return response.data;
+}
+
+/** GET /history/abm/{id} — ABM row 상세 (raw row 그대로 반환) */
+export async function getAbmDetail(id: number): Promise<Record<string, unknown>> {
+  const response = await apiClient.get(`/history/abm/${id}`);
+  return response.data;
+}
+
+/** DELETE /history/abm/{id} */
+export async function deleteAbmHistory(id: number): Promise<void> {
+  await apiClient.delete(`/history/abm/${id}`);
+}
+
+/**
+ * Raw simulation_foresee row → SimulationHistoryDetail (SimulationOutput 컨테이너).
+ * Backend 컬럼 분산 (district_predictions, quarterly_projection, ...) 을 SimulationOutput 형태로 합성.
+ * 빠진 LLM 슬라이스 필드는 undefined/null 로 채움.
+ */
+export function mapForeseeDetailToHistoryDetail(row: Record<string, any>): SimulationHistoryDetail {
+  const districts: string[] = Array.isArray(row.districts)
+    ? row.districts
+    : row.target_district
+      ? [row.target_district]
+      : [];
+  const simulationResult: SimulationOutput = {
+    request_id: String(row.id ?? ''),
+    target_district: row.target_district ?? row.winner_district ?? districts[0] ?? '',
+    target_districts: districts,
+    analysis_report: '',
+    analysis_metrics: {
+      district_grade: 'NORMAL',
+      growth_rate: 0,
+      competition_score: 0,
+      rent_affordability: '',
+    },
+    quarterly_projection: row.quarterly_projection ?? [],
+    comparison: [],
+    legal_risks: [],
+    winner_district: row.winner_district ?? undefined,
+    market_report: row.market_report ?? undefined,
+    shap_result: row.shap_result ?? null,
+    scenarios: row.scenarios ?? null,
+    closure_rate: row.closure_rate ?? null,
+    closure_risk: row.closure_risk ?? null,
+    customer_segment: row.customer_segment ?? null,
+    living_pop_forecast: row.living_pop_forecast ?? null,
+    final_report: row.final_report ?? null,
+    district_predictions: row.district_predictions ?? undefined,
+    bep_months: row.bep_months ?? null,
+    predicted_monthly_revenue: row.predicted_monthly_revenue ?? null,
+  };
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? districts[0] ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: null,
+    market_entry_signal: null,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? null,
+    kind: 'foresee',
+    scenario: row.scenario ?? null,
+    simulation_result: simulationResult,
+  };
+}
+
+/**
+ * Raw simulation_ai row → SimulationHistoryDetail.
+ * 빠진 ML 슬라이스(quarterly_projection 등) 는 빈 배열/null 로 채움.
+ */
+export function mapAIDetailToHistoryDetail(row: Record<string, any>): SimulationHistoryDetail {
+  const simulationResult: SimulationOutput = {
+    request_id: String(row.id ?? ''),
+    target_district: row.target_district ?? row.winner_district ?? '',
+    target_districts: row.target_district ? [row.target_district] : [],
+    analysis_report: row.analysis_report ?? '',
+    analysis_metrics: {
+      district_grade: 'NORMAL',
+      growth_rate: 0,
+      competition_score: 0,
+      rent_affordability: '',
+    },
+    quarterly_projection: [],
+    comparison: [],
+    legal_risks: row.legal_risks ?? [],
+    ai_recommendation: row.ai_recommendation ?? undefined,
+    winner_district: row.winner_district ?? undefined,
+    top_3_candidates: row.top_3_candidates ?? undefined,
+    district_rankings: row.district_rankings ?? undefined,
+    overall_legal_risk: row.overall_legal_risk ?? undefined,
+    vacancy_applied: row.vacancy_applied ?? undefined,
+    market_report: row.market_report ?? undefined,
+    trend_forecast: row.trend_forecast ?? null,
+    competitor_intel: row.competitor_intel ?? null,
+    demographic_report: row.demographic_report ?? null,
+    agent_attributions: row.agent_attributions ?? undefined,
+    all_competitor_locations: row.all_competitor_locations ?? undefined,
+  };
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: row.ai_verdict_summary ?? null,
+    market_entry_signal: (row.market_entry_signal as 'green' | 'yellow' | 'red' | null) ?? null,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? null,
+    kind: 'ai',
+    scenario: row.scenario ?? null,
+    simulation_result: simulationResult,
+  };
+}
+
+/**
+ * List 응답 row → SimulationHistoryItem (kind 주입).
+ * Backend list_foresee/list_ai 는 row 컬럼 일부만 select → 누락 필드는 빈 값/null 로.
+ */
+export function mapForeseeListItem(row: Record<string, any>): SimulationHistoryItem {
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: null, // foresee row 엔 LLM verdict 컬럼 없음
+    market_entry_signal: null,
+    created_at: row.created_at ?? '',
+    kind: 'foresee',
+  };
+}
+
+export function mapAIListItem(row: Record<string, any>): SimulationHistoryItem {
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? row.winner_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: row.ai_verdict_summary ?? null,
+    market_entry_signal: (row.market_entry_signal as 'green' | 'yellow' | 'red' | null) ?? null,
+    created_at: row.created_at ?? '',
+    kind: 'ai',
+  };
+}
+
+/** ABM list row → 통합 list item. simulation_abm 테이블 row 구조 매핑. */
+export function mapAbmListItem(row: Record<string, any>): SimulationHistoryItem {
+  return {
+    id: Number(row.id),
+    manager_id: String(row.manager_id ?? ''),
+    manager_name: row.manager_name ?? null,
+    client_name: row.client_name ?? '',
+    district: row.target_district ?? '',
+    brand_name: row.brand_name ?? '',
+    business_type: row.business_type ?? null,
+    ai_verdict_summary: null,
+    market_entry_signal: null,
+    created_at: row.created_at ?? '',
+    kind: 'abm',
+  };
 }
 
 // ─────────────────────────────────────────────────────────

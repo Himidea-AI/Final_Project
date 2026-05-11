@@ -3,11 +3,12 @@
  *
  * 데이터 소스: quarterly_projection[].cumulative_profit (동별)
  * - 각 동별 별도 Line (indigo / cyan / amber / rose)
- * - BEP 도달 시점(ReferenceLine): 첫 번째 동(series[0]) cumulative_profit ≥ 0 첫 분기
+ * - BEP 도달 시점(ReferenceLine): 동별 cumulative_profit ≥ 0 첫 분기 — 각 동의 라인 색과 동일 색의 세로 점선
  * - y=0 ReferenceLine 으로 BEP 기준선 강조
  *
  * Round 2 / M6 (2026-04-29): 단일 동 → 다중 동 시리즈 전환.
  *   B4/M5 (QuarterlyProjectionChart) 패턴을 그대로 따름.
+ * 2026-05-04: BEP ReferenceLine 을 series[0] 단일 → 동별 N개로 확장 (각 동의 색상으로 표시).
  */
 
 import {
@@ -22,17 +23,30 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { QuarterlyProjection } from '../../../../types';
+import { SERIES_COLORS } from '../../QuarterlyProjectionChart';
 
-/** 동별 분기 누적이익 시리즈 1건 */
-type ChartSeries = { district: string; projection: QuarterlyProjection[] };
+/** 동별 분기 누적이익 시리즈 1건.
+ * bepQuarters: 백엔드 산출 BEP 분기 수.
+ *   -1 = 분기 영업이익 ≤ 0 → 영구 도달 불가 (현 비용 가정 기준).
+ *   >20 = 도달 가능하지만 가시범위(5년) 외.
+ *   1~20 = 정상 도달.
+ *   chart 가 cumulative_profit 만 보고 가시범위 밖 미도달을 일률 "20+분기" 로
+ *   라벨링하던 문제를 차단하기 위해 backend bep_quarters 직접 동봉.
+ */
+type ChartSeries = {
+  district: string;
+  projection: QuarterlyProjection[];
+  bepQuarters?: number | null;
+};
 
 interface Props {
   series: ChartSeries[];
   height?: number;
 }
 
-// indigo / cyan / amber / rose — QuarterlyProjectionChart 와 동일
-const COLORS = ['#818cf8', '#22d3ee', '#fbbf24', '#fb7185'] as const;
+// 4동 차트 팔레트 — QuarterlyProjectionChart 와 동일 (Deep Blue Sequential 4-tier).
+// idx 0 = winner (rank-1 Deep Blue) … idx 3 = 4위 (rank-4 Ice Blue, dashed).
+const COLORS = SERIES_COLORS;
 
 const formatKRW = (value: number): string => {
   const abs = Math.abs(value);
@@ -47,20 +61,27 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
   const validSeries = (series ?? []).filter((s) => s.projection && s.projection.length > 0);
   if (validSeries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-800 bg-stone-950/40 p-6 text-center text-xs text-stone-500">
+      <div className="rounded-lg border border-dashed border-border bg-secondary p-6 text-center text-xs text-muted-foreground">
         투자 회수 데이터 없음
       </div>
     );
   }
 
-  // 각 동의 첫 4분기만 + quarter 1~4 강제 라벨 (quarterly_projection 필드 보존)
+  // 2026-05-04: 4분기 hard cap → 최대 20분기(5년) 동적 길이.
+  // BEP 도달 시점이 4분기 이후인 경우 그래프에서 잘리던 회귀 차단.
+  // 각 series의 projection 최대 길이 → 20으로 cap. 동마다 길이 다르면 가장 긴 동 기준.
+  const QUARTER_CAP = 20;
+  const maxLen = Math.max(...validSeries.map((s) => s.projection.length));
+  const visibleLen = Math.min(QUARTER_CAP, maxLen);
   const trimmedSeries = validSeries.map((s) => ({
     district: s.district,
-    data: s.projection.slice(0, 4).map((d, i) => ({ ...d, quarter: i + 1 })),
+    data: s.projection.slice(0, visibleLen).map((d, i) => ({ ...d, quarter: i + 1 })),
+    bepQuarters: s.bepQuarters ?? null,
   }));
 
-  // wide format: row = { quarter, [동]_cumulative, ... }
-  const chartData = [1, 2, 3, 4].map((q) => {
+  // wide format: row = { quarter, [동]_cumulative, ... } — 트림된 길이로 동적 생성
+  const quarterAxis = Array.from({ length: visibleLen }, (_, i) => i + 1);
+  const chartData = quarterAxis.map((q) => {
     const row: Record<string, number | null> = { quarter: q };
     trimmedSeries.forEach((s) => {
       const point = s.data.find((p) => p.quarter === q);
@@ -69,56 +90,107 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
     return row;
   });
 
-  // BEP 기준 = series[0] cumulative_profit ≥ 0 첫 분기
-  const bepQuarter =
-    trimmedSeries[0]?.data.find((d) => (d.cumulative_profit ?? -1) >= 0)?.quarter ?? null;
+  // BEP 도달 분기 — 동별 계산. 각 동의 색상으로 세로 점선 + 라벨 표시.
+  // bepQuarter null + backend bep_quarters 로 분기:
+  //   - bepQuarters === -1 → "도달 불가" (분기 영업이익 ≤ 0)
+  //   - bepQuarters > 20 → "5년+ 소요" (가시범위 외)
+  //   - 둘 다 아님 → 기존 fallback "5년+ 소요" (백엔드 정보 부재 시 보수적)
+  const bepPerSeries = trimmedSeries.map((s, idx) => ({
+    district: s.district,
+    color: COLORS[idx % COLORS.length]!,
+    bepQuarter: s.data.find((d) => (d.cumulative_profit ?? -1) >= 0)?.quarter ?? null,
+    backendBepQuarters: s.bepQuarters,
+  }));
+  const reachedBeps = bepPerSeries.filter((b) => b.bepQuarter !== null);
+  const unreachableBeps = bepPerSeries.filter(
+    (b) => b.bepQuarter === null && b.backendBepQuarters === -1,
+  );
+  const beyondCapBeps = bepPerSeries.filter(
+    (b) =>
+      b.bepQuarter === null &&
+      b.backendBepQuarters !== -1 &&
+      (maxLen >= QUARTER_CAP || (b.backendBepQuarters ?? 0) > QUARTER_CAP),
+  );
 
   // mock 배지 — 임의 동에 mock 분기가 하나라도 있으면 표시
   const hasMockQuarters = trimmedSeries.some((s) => s.data.some((d) => d.is_mock === true));
 
   return (
-    <div className="mt-3 rounded-lg border border-stone-800/60 bg-stone-950/40 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[0.625rem] font-black uppercase tracking-widest text-stone-500 flex items-center gap-2">
-          <span>분기별 투자 회수 곡선</span>
-          <span className="text-[0.5625rem] font-bold text-stone-600 normal-case tracking-normal">
-            cumulative_profit · BEP 도달 시점 강조 (기준: {trimmedSeries[0]?.district ?? '—'})
+    <div className="rounded-2xl border border-border bg-secondary p-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        {hasMockQuarters && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest text-warning">
+            <span className="h-1 w-1 rounded-full bg-warning" />
+            일부 분기 mock
           </span>
-          {hasMockQuarters && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[0.5625rem] font-bold normal-case tracking-normal text-amber-300">
-              <span className="h-1 w-1 rounded-full bg-amber-400" />
-              일부 분기 mock
-            </span>
-          )}
-        </div>
-        {bepQuarter !== null && (
-          <span className="text-[0.625rem] font-black tabular-nums text-emerald-400">
-            BEP Q{bepQuarter}
-          </span>
+        )}
+        {(reachedBeps.length > 0 || beyondCapBeps.length > 0 || unreachableBeps.length > 0) && (
+          <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.625rem] font-black tabular-nums">
+            {reachedBeps.map((b) => (
+              <span
+                key={`bep-${b.district}`}
+                className="inline-flex items-center gap-1"
+                style={{ color: b.color }}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: b.color }}
+                />
+                {b.district} BEP {b.bepQuarter}분기
+              </span>
+            ))}
+            {beyondCapBeps.map((b) => (
+              <span
+                key={`bep-beyond-${b.district}`}
+                className="inline-flex items-center gap-1 text-warning"
+                title={`BEP 도달까지 ${b.backendBepQuarters ?? '?'}분기 (5년 이상)`}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: b.color }}
+                />
+                {b.district} BEP 5년+ 소요
+              </span>
+            ))}
+            {unreachableBeps.map((b) => (
+              <span
+                key={`bep-unreachable-${b.district}`}
+                className="inline-flex items-center gap-1 text-warning"
+                title="현재 비용 가정 기준 분기 영업이익 ≤ 0 — 임대료/초기자본 조정 시 달라질 수 있습니다."
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: b.color }}
+                />
+                {b.district} BEP 도달 불가
+              </span>
+            ))}
+          </div>
         )}
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#292524" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="quarter"
-            tickFormatter={(q: number) => `Q${q}`}
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tickFormatter={(q: number) => `${q}분기`}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
           />
           <YAxis
             tickFormatter={formatKRW}
-            tick={{ fontSize: 10, fill: '#a8a29e' }}
-            axisLine={{ stroke: '#44403c' }}
+            tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
             width={60}
           />
           <Tooltip
-            cursor={{ stroke: '#44403c' }}
+            cursor={{ stroke: 'var(--border)' }}
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #44403c',
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
               fontSize: 12,
+              color: 'var(--card-foreground)',
             }}
             formatter={(value: number, name: string) => {
               // {동}_cumulative → "{동} 누적이익"
@@ -131,39 +203,56 @@ export function BepCumulativeProfitChart({ series, height = 240 }: Props) {
             labelFormatter={(q: number) => `${q}분기`}
           />
           <Legend
-            verticalAlign="top"
-            height={24}
-            wrapperStyle={{ paddingBottom: 4, fontSize: 11 }}
+            verticalAlign="bottom"
+            height={28}
+            wrapperStyle={{ paddingTop: 8, fontSize: 11 }}
             iconType="circle"
           />
           {/* y=0 기준선 — BEP 도달 시각화 */}
-          <ReferenceLine y={0} stroke="#a8a29e" strokeDasharray="2 2" />
+          <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="2 2" />
 
-          {/* 동별 누적이익 라인 — 4 색상 순환 */}
-          {trimmedSeries.map((s, idx) => (
-            <Line
-              key={s.district}
-              type="monotone"
-              dataKey={`${s.district}_cumulative`}
-              name={s.district}
-              stroke={COLORS[idx % COLORS.length]}
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5, stroke: '#fff', strokeWidth: 1 }}
-              isAnimationActive={false}
-              connectNulls
-            />
-          ))}
+          {/* 동별 누적이익 라인 — categorical 4색(Deep Blue / Rose / Amber / Emerald) 모두 solid.
+              winner(idx 0)만 stroke 3px / dot r 5 강조, 나머지는 stroke 2.5px / dot r 4.
+              호출처(PredictFinancialSimTab) 에서 sortByRanking 으로 ranking 정렬 후 전달. */}
+          {trimmedSeries.map((s, idx) => {
+            const isWinner = idx === 0;
+            const strokeWidth = isWinner ? 3 : 2.5;
+            const dotR = isWinner ? 5 : 4;
+            return (
+              <Line
+                key={s.district}
+                type="monotone"
+                dataKey={`${s.district}_cumulative`}
+                name={s.district}
+                stroke={COLORS[idx % COLORS.length]}
+                strokeWidth={strokeWidth}
+                dot={{ r: dotR }}
+                activeDot={{ r: 6, stroke: 'var(--card)', strokeWidth: 1 }}
+                isAnimationActive={false}
+                connectNulls
+              />
+            );
+          })}
 
-          {/* BEP ReferenceLine — series[0] 기준 */}
-          {bepQuarter !== null && (
-            <ReferenceLine
-              x={bepQuarter}
-              stroke="#10b981"
-              strokeDasharray="3 3"
-              label={{ value: 'BEP', fill: '#10b981', fontSize: 11 }}
-            />
-          )}
+          {/* BEP ReferenceLine — 동별로 각 동의 색상으로 세로 점선.
+              같은 분기에 여러 동의 BEP가 겹치면 라벨이 쌓이므로,
+              라벨은 첫 번째 동에만 'BEP' 텍스트를 표시하고 나머지는 점선만 그림. */}
+          {(() => {
+            const labeledBepQuarters = new Set<number>();
+            return reachedBeps.map((b) => {
+              const showLabel = !labeledBepQuarters.has(b.bepQuarter as number);
+              labeledBepQuarters.add(b.bepQuarter as number);
+              return (
+                <ReferenceLine
+                  key={`bep-line-${b.district}`}
+                  x={b.bepQuarter as number}
+                  stroke={b.color}
+                  strokeDasharray="3 3"
+                  label={showLabel ? { value: 'BEP', fill: b.color, fontSize: 11 } : undefined}
+                />
+              );
+            });
+          })()}
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { runAnalyzeLlm, runPredict } from '../api/client';
+import { runAnalyzeLlmPolling, runPredictPolling } from '../api/client';
 import type {
   AnalysisOutput,
   DistrictPredictionResult,
@@ -18,12 +18,21 @@ export interface PredictionSlice {
   status: SliceStatus;
   data: DistrictPredictionResult[] | null;
   error: string | null;
+  /** done/error 로 전환된 시점 (Date.now()). running 중에는 null. UI 의 elapsed 카운터 계산용. */
+  finishedAt: number | null;
+  /** 실측 진행률 0~1 — backend polling 에서 받은 값. running 중 단계적으로 climb, done 시 1.0. */
+  progress: number;
+  /** 현재 진행 중인 stage 라벨 (backend 전달, 예: "서교동 분석 완료 (1/4)"). */
+  stage: string | null;
 }
 
 export interface AnalysisSlice {
   status: SliceStatus;
   data: AnalysisOutput | null;
   error: string | null;
+  finishedAt: number | null;
+  progress: number;
+  stage: string | null;
 }
 
 interface SimulationState {
@@ -35,8 +44,16 @@ interface SimulationState {
   error: string | null;
   params: SimulationInput | null;
   startedAt: number | null;
-  /** 매니저가 [저장] 버튼으로 저장한 이력 ID (SPTR-000142). null이면 DRAFT. R1: store = Single Source of Truth. */
+  /** 매니저가 [저장] 버튼으로 저장한 이력 ID (SPTR-000142). null이면 DRAFT. R1: store = Single Source of Truth.
+   *  legacy 단일 ID — 호환용. 신규 분기 코드는 savedForeseeId / savedAIId 사용.
+   */
   savedHistoryId: number | null;
+  /** ML 예측 (DashboardPredictPage) 저장 이력 ID. /simulation-foresee row. */
+  savedForeseeId: number | null;
+  /** AI 분석 (DashboardAnalyzePage) 저장 이력 ID. /simulation-ai row. */
+  savedAIId: number | null;
+  /** ABM 시뮬 (AbmTab) 저장 이력 ID. /history/abm row. */
+  savedAbmId: number | null;
 
   /** /predict 응답 슬라이스 (IM3-259 분리 호출). */
   prediction: PredictionSlice;
@@ -52,11 +69,28 @@ interface SimulationState {
   cancelSimulation: () => void;
   dismissResult: () => void;
   setSavedHistoryId: (id: number | null) => void;
+  setSavedForeseeId: (id: number | null) => void;
+  setSavedAIId: (id: number | null) => void;
+  setSavedAbmId: (id: number | null) => void;
   reset: () => void;
 }
 
-const initialPrediction: PredictionSlice = { status: 'idle', data: null, error: null };
-const initialAnalysis: AnalysisSlice = { status: 'idle', data: null, error: null };
+const initialPrediction: PredictionSlice = {
+  status: 'idle',
+  data: null,
+  error: null,
+  finishedAt: null,
+  progress: 0,
+  stage: null,
+};
+const initialAnalysis: AnalysisSlice = {
+  status: 'idle',
+  data: null,
+  error: null,
+  finishedAt: null,
+  progress: 0,
+  stage: null,
+};
 
 const INITIAL_STATE = {
   status: 'idle' as SimulationStatus,
@@ -67,6 +101,9 @@ const INITIAL_STATE = {
   params: null,
   startedAt: null,
   savedHistoryId: null,
+  savedForeseeId: null,
+  savedAIId: null,
+  savedAbmId: null,
   prediction: initialPrediction,
   analysis: initialAnalysis,
   _abortController: null,
@@ -108,9 +145,11 @@ function stageFor(progress: number): string {
   return current;
 }
 
-// sessionStorage persist — F5 새로고침 시 result 복원, 탭 닫으면 자연 휘발(DRAFT 의도 유지).
-// status='running'/'error' 상태는 idle로 강제 복원 — 진행 중이던 timer/abortController는
-// in-memory 전용이라 복원 시 가짜 진행률에 멈춤. result만 살아있는 'done' 케이스만 복원 의미가 있다.
+// localStorage persist — F5/탭 닫기/직접 URL 진입(/dashboard/predict 북마크 등) 시도 result 복원.
+//   2026-05-02: sessionStorage → localStorage 전환. /dashboard 직접 URL 진입 시 simulator 로
+//   redirect 되던 UX 문제 해결 (DashboardOutlet null guard + sessionStorage 휘발 조합).
+//   status='done' 일 때만 partialize 라 outdated 위험 낮음 — dismiss/새 시뮬로 자연 cleanup.
+//   running/error 상태는 idle로 강제 복원 (in-memory timer/abortController 라 진행률 가짜 stuck 방지).
 export const useSimulationStore = create<SimulationState>()(
   persist(
     (set, get) => ({
@@ -125,105 +164,237 @@ export const useSimulationStore = create<SimulationState>()(
         const abortController = new AbortController();
         const startedAt = nextStartedAt();
 
+        // Fake-progress timer — 1%/s, cap 90%. Real-progress (slice 평균) 가 더 높으면 덮어씀.
+        // pending API 의 UX 정체 방지 + history 가시성.
+        const timer = setInterval(() => {
+          if (get().startedAt !== startedAt) return;
+          const cur = get().progress;
+          if (cur < 90) {
+            const next = cur + 1;
+            set({ progress: next, stage: stageFor(next) });
+          }
+        }, 1000);
+
         set({
           status: 'running',
           progress: 0,
-          stage: 'INITIALIZING AI ENGINE',
+          stage: 'INITIALIZING',
           result: null,
           error: null,
           params,
           startedAt,
           savedHistoryId: null, // 새 시뮬 시작 시 이전 저장 이력 ID 초기화 (Document ID = DRAFT)
-          prediction: { status: 'running', data: null, error: null },
-          analysis: { status: 'running', data: null, error: null },
+          savedForeseeId: null,
+          savedAIId: null,
+          savedAbmId: null,
+          prediction: { ...initialPrediction, status: 'running' },
+          analysis: { ...initialAnalysis, status: 'running' },
           _abortController: abortController,
-          _progressTimer: null,
+          _progressTimer: timer,
         });
-
-        // Fake-progress ticker: climbs to 90% over ~100s so the user feels motion
-        // while the real request is in flight. Capped at 90 so the jump to 100
-        // on success remains perceptible.
-        const timer = setInterval(() => {
-          const elapsed = (Date.now() - startedAt) / 1000;
-          const p = Math.min(90, elapsed * 0.9);
-          set({ progress: p, stage: stageFor(p) });
-        }, 500);
-        set({ _progressTimer: timer });
 
         const isAbortError = (e: unknown): boolean => {
           const name = (e as { name?: string })?.name;
           return name === 'CanceledError' || name === 'AbortError' || axios.isCancel(e);
         };
 
-        // /analyze/llm — 백그라운드 실행. /predict 완료 후 대시보드 진입, 분석 완료 시 자동 갱신.
-        runAnalyzeLlm(params, abortController.signal)
+        let predictAborted = false;
+        let analyzeAborted = false;
+
+        // 글로벌 progress = (prediction.progress + analysis.progress) / 2 — 양 슬라이스
+        // 평균치. Fake timer 가 이미 더 높이 올렸으면 유지.
+        const recalcGlobal = () => {
+          const { prediction, analysis, progress: cur } = get();
+          const avg = (prediction.progress + analysis.progress) / 2;
+          const realPct = Math.round(avg * 100);
+          if (realPct > cur) set({ progress: realPct, stage: stageFor(realPct) });
+        };
+
+        // /predict polling — 동별 완료마다 backend progress 갱신, 250ms 폴링.
+        const predictPromise = runPredictPolling(
+          params,
+          (ratio, stage) => {
+            if (get().startedAt !== startedAt) return; // stale guard
+            const cur = get().prediction;
+            set({ prediction: { ...cur, progress: ratio, stage } });
+            recalcGlobal();
+          },
+          abortController.signal,
+        )
           .then((data) => {
             if (get().startedAt !== startedAt) return;
-            const { _progressTimer: t } = get();
-            if (t) clearInterval(t);
             set({
-              analysis: { status: 'done', data, error: null },
-              status: 'done',
-              progress: 100,
-              stage: 'COMPLETE',
-              _progressTimer: null,
+              prediction: {
+                status: 'done',
+                data,
+                error: null,
+                finishedAt: Date.now(),
+                progress: 1,
+                stage: 'done',
+              },
             });
+            recalcGlobal();
           })
           .catch((err) => {
             if (get().startedAt !== startedAt) return;
-            if (isAbortError(err)) return;
-            const { _progressTimer: t } = get();
-            if (t) clearInterval(t);
-            const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
-            // prediction 이 이미 done 이면 status 도 done 유지 (부분 성공).
-            const predDone = get().prediction.status === 'done';
+            if (isAbortError(err)) {
+              predictAborted = true;
+              return;
+            }
+            const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
+            const cur = get().prediction;
             set({
-              analysis: { status: 'error', data: null, error: msg },
-              ...(predDone
-                ? { status: 'done', progress: 100, stage: 'COMPLETE' }
-                : { status: 'error', stage: '시뮬 실패', error: msg }),
-              _progressTimer: null,
+              prediction: {
+                status: 'error',
+                data: null,
+                error: msg,
+                finishedAt: Date.now(),
+                progress: cur.progress,
+                stage: cur.stage,
+              },
             });
           });
 
-        // /predict — await 후 즉시 prediction 슬라이스 확정 → App.tsx 게이트 통과 → 대시보드 진입 (≈15s).
-        // analyze 는 백그라운드에서 계속 실행 중이므로 status 는 아직 'running' 유지.
-        // (analyze .then()/.catch() 에서 'done'/'error' 로 전환 + 타이머 정리)
-        try {
-          const data = await runPredict(params, abortController.signal);
-          if (get().startedAt !== startedAt) return; // stale guard
-          set({ prediction: { status: 'done', data, error: null } });
-        } catch (err) {
-          if (get().startedAt !== startedAt) return;
-          if (isAbortError(err)) return;
-          const msg = (err as { message?: string })?.message ?? '예측(/predict) 실패';
-          set({ prediction: { status: 'error', data: null, error: msg } });
+        // /analyze/llm polling — LangGraph 노드 완료마다 progress (25%/50%/75%/100%).
+        const analyzePromise = runAnalyzeLlmPolling(
+          params,
+          (ratio, stage) => {
+            if (get().startedAt !== startedAt) return;
+            const cur = get().analysis;
+            set({ analysis: { ...cur, progress: ratio, stage } });
+            recalcGlobal();
+          },
+          abortController.signal,
+        )
+          .then((data) => {
+            if (get().startedAt !== startedAt) return;
+            set({
+              analysis: {
+                status: 'done',
+                data,
+                error: null,
+                finishedAt: Date.now(),
+                progress: 1,
+                stage: 'done',
+              },
+            });
+            recalcGlobal();
+          })
+          .catch((err) => {
+            if (get().startedAt !== startedAt) return;
+            if (isAbortError(err)) {
+              analyzeAborted = true;
+              return;
+            }
+            const msg = (err as { message?: string })?.message ?? '분석(/analyze/llm) 실패';
+            const cur = get().analysis;
+            set({
+              analysis: {
+                status: 'error',
+                data: null,
+                error: msg,
+                finishedAt: Date.now(),
+                progress: cur.progress,
+                stage: cur.stage,
+              },
+            });
+          });
+
+        // 양쪽 settle 후 글로벌 status 결정.
+        await Promise.allSettled([predictPromise, analyzePromise]);
+        if (get().startedAt !== startedAt) return;
+        const { _progressTimer: doneTimer } = get();
+        if (doneTimer) clearInterval(doneTimer);
+        const { prediction: p, analysis: a } = get();
+        const anyDone = p.status === 'done' || a.status === 'done';
+        const anyError = p.status === 'error' || a.status === 'error';
+        if (anyDone) {
+          set({ status: 'done', progress: 100, stage: 'COMPLETE', _progressTimer: null });
+        } else if (anyError) {
+          const combined = [p.error, a.error].filter(Boolean).join(' / ');
+          set({ status: 'error', stage: '시뮬 실패', error: combined, _progressTimer: null });
+        } else if (predictAborted && analyzeAborted) {
+          // 양쪽 모두 abort — 사용자 cancel 등. error 가 아닌 idle 로 복귀.
+          set({
+            status: 'idle',
+            progress: 0,
+            stage: '',
+            prediction: initialPrediction,
+            analysis: initialAnalysis,
+            _progressTimer: null,
+          });
+        } else {
+          set({ _progressTimer: null });
         }
       },
 
       retryPrediction: async () => {
         const params = get().params;
         if (!params) return;
-        set({ prediction: { status: 'running', data: null, error: null } });
+        set({ prediction: { ...initialPrediction, status: 'running' } });
         try {
-          const data = await runPredict(params);
-          set({ prediction: { status: 'done', data, error: null } });
+          const data = await runPredictPolling(params, (ratio, stage) => {
+            const cur = get().prediction;
+            set({ prediction: { ...cur, progress: ratio, stage } });
+          });
+          set({
+            prediction: {
+              status: 'done',
+              data,
+              error: null,
+              finishedAt: Date.now(),
+              progress: 1,
+              stage: 'done',
+            },
+          });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '예측 재시도 실패';
-          set({ prediction: { status: 'error', data: null, error: msg } });
+          const cur = get().prediction;
+          set({
+            prediction: {
+              status: 'error',
+              data: null,
+              error: msg,
+              finishedAt: Date.now(),
+              progress: cur.progress,
+              stage: cur.stage,
+            },
+          });
         }
       },
 
       retryAnalysis: async () => {
         const params = get().params;
         if (!params) return;
-        set({ analysis: { status: 'running', data: null, error: null } });
+        set({ analysis: { ...initialAnalysis, status: 'running' } });
         try {
-          const data = await runAnalyzeLlm(params);
-          set({ analysis: { status: 'done', data, error: null } });
+          const data = await runAnalyzeLlmPolling(params, (ratio, stage) => {
+            const cur = get().analysis;
+            set({ analysis: { ...cur, progress: ratio, stage } });
+          });
+          set({
+            analysis: {
+              status: 'done',
+              data,
+              error: null,
+              finishedAt: Date.now(),
+              progress: 1,
+              stage: 'done',
+            },
+          });
         } catch (e) {
           const msg = e instanceof Error ? e.message : '분석 재시도 실패';
-          set({ analysis: { status: 'error', data: null, error: msg } });
+          const cur = get().analysis;
+          set({
+            analysis: {
+              status: 'error',
+              data: null,
+              error: msg,
+              finishedAt: Date.now(),
+              progress: cur.progress,
+              stage: cur.stage,
+            },
+          });
         }
       },
 
@@ -241,6 +412,9 @@ export const useSimulationStore = create<SimulationState>()(
           params: null,
           startedAt: null,
           savedHistoryId: null,
+          savedForeseeId: null,
+          savedAIId: null,
+          savedAbmId: null,
           prediction: initialPrediction,
           analysis: initialAnalysis,
           _abortController: null,
@@ -259,11 +433,17 @@ export const useSimulationStore = create<SimulationState>()(
           params: null,
           startedAt: null,
           savedHistoryId: null,
+          savedForeseeId: null,
+          savedAIId: null,
+          savedAbmId: null,
           prediction: initialPrediction,
           analysis: initialAnalysis,
         });
       },
       setSavedHistoryId: (id) => set({ savedHistoryId: id }),
+      setSavedForeseeId: (id) => set({ savedForeseeId: id }),
+      setSavedAIId: (id) => set({ savedAIId: id }),
+      setSavedAbmId: (id) => set({ savedAbmId: id }),
       reset: () => {
         const { _abortController, _progressTimer } = get();
         _abortController?.abort();
@@ -273,7 +453,7 @@ export const useSimulationStore = create<SimulationState>()(
     }),
     {
       name: 'mapo-simulation-store',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       // 'done' 상태에서 result/params/savedHistoryId만 직렬화. running/error는 idle로 강제.
       // _abortController, _progressTimer는 비-직렬화 (반환에서 자동 제외).
       partialize: (state) => ({
@@ -281,6 +461,9 @@ export const useSimulationStore = create<SimulationState>()(
         result: state.status === 'done' ? state.result : null,
         params: state.status === 'done' ? state.params : null,
         savedHistoryId: state.status === 'done' ? state.savedHistoryId : null,
+        savedForeseeId: state.status === 'done' ? state.savedForeseeId : null,
+        savedAIId: state.status === 'done' ? state.savedAIId : null,
+        savedAbmId: state.status === 'done' ? state.savedAbmId : null,
         startedAt: state.status === 'done' ? state.startedAt : null,
         stage: state.status === 'done' ? state.stage : '',
         progress: state.status === 'done' ? 100 : 0,

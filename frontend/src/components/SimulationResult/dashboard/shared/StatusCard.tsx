@@ -11,23 +11,23 @@ interface StatusCardProps {
 }
 
 const STATUS_DOT: Record<StatusColor, string> = {
-  indigo: 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]',
-  emerald: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]',
-  amber: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]',
-  rose: 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]',
+  indigo: 'bg-primary shadow-[0_0_8px_rgba(0,44,209,0.6)]',
+  emerald: 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.6)]',
+  amber: 'bg-warning shadow-[0_0_8px_rgba(245,158,11,0.6)]',
+  rose: 'bg-danger shadow-[0_0_8px_rgba(244,63,94,0.6)]',
 };
 
 const VALUE_COLOR: Record<StatusColor, string> = {
-  indigo: 'text-stone-100',
-  emerald: 'text-stone-100',
-  amber: 'text-amber-500',
-  rose: 'text-rose-400',
+  indigo: 'text-foreground',
+  emerald: 'text-foreground',
+  amber: 'text-warning',
+  rose: 'text-danger',
 };
 
 export function StatusCard({ title, value, subValue, status, desc, drivers }: StatusCardProps) {
   return (
-    <div className="p-7 bg-stone-900/40 border border-stone-800/60 rounded-3xl flex flex-col h-full group hover:border-indigo-500/30 transition-all duration-300 shadow-xl text-left overflow-hidden">
-      <div className="text-[0.625rem] font-black text-stone-500 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+    <div className="p-7 bg-card/40 border border-border/60 rounded-3xl flex flex-col h-full group hover:border-primary/30 transition-all duration-300 shadow-xl text-left overflow-hidden">
+      <div className="text-[0.625rem] font-black text-muted-foreground uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
         <div className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} />
         {title}
       </div>
@@ -37,18 +37,18 @@ export function StatusCard({ title, value, subValue, status, desc, drivers }: St
         {value}
       </div>
       {subValue && (
-        <div className="text-[0.6875rem] font-bold text-stone-500 tabular-nums mb-4">
+        <div className="text-[0.6875rem] font-bold text-muted-foreground tabular-nums mb-4">
           {subValue}
         </div>
       )}
-      <p className="text-[0.6875rem] text-stone-400 leading-relaxed mb-8 flex-grow font-medium">
+      <p className="text-[0.6875rem] text-muted-foreground leading-relaxed mb-8 flex-grow font-medium">
         {desc}
       </p>
-      <div className="flex flex-wrap gap-1.5 pt-5 border-t border-stone-800/50">
+      <div className="flex flex-wrap gap-1.5 pt-5 border-t border-border/50">
         {drivers.map((d, i) => (
           <span
             key={i}
-            className="text-[0.5rem] font-black text-stone-500 bg-stone-900/50 px-2.5 py-1 rounded-md border border-stone-800 uppercase tracking-tighter group-hover:text-stone-400 transition-colors"
+            className="text-[0.5rem] font-black text-muted-foreground bg-card/50 px-2.5 py-1 rounded-md border border-border uppercase tracking-tighter group-hover:text-muted-foreground transition-colors"
           >
             {d}
           </span>

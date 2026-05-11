@@ -1,3 +1,14 @@
+# ─── Windows event loop policy 강제 (가장 먼저 — 다른 import 전에) ────────────
+# psycopg 3 async 가 Windows default ProactorEventLoop 와 충돌해 legal RAG 호출 시
+# psycopg.InterfaceError 발생. uvicorn 이 자체 loop 만들기 전에 정책 변경 필수.
+# https://sqlalche.me/e/20/rvf5
+import sys as _sys
+
+if _sys.platform == "win32":
+    import asyncio as _asyncio
+
+    _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
+
 import asyncio
 import logging
 import math
@@ -5,7 +16,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 # Windows cp949 콘솔 인코딩 이슈 방지 — ABM simulation 이모지/em-dash 출력 crash 회피
 if sys.platform == "win32":
@@ -14,6 +25,21 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
     except AttributeError:
         pass
+
+# Python root logger 구성 — backend 코드의 logger.info() / logger.warning() 화면 출력 활성화.
+# LOG_LEVEL env (DEBUG/INFO/WARNING/ERROR) 로 조정. 미설정 시 INFO.
+# force=True: uvicorn이 먼저 root logger에 핸들러 등록한 경우 덮어씀.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    datefmt="%H:%M:%S",
+    force=True,
+)
+# 외부 라이브러리 noise 줄임
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -27,14 +53,12 @@ _project_root = str(Path(__file__).parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-logger = logging.getLogger(__name__)
-
 import redis.asyncio as aioredis
 
 # LangSmith 트레이싱: langchain import 전에 os.environ 주입 필수
 # (langchain SDK는 import 시점에 LANGCHAIN_TRACING_V2를 읽으므로 순서가 중요)
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -64,6 +88,7 @@ from src.config.settings import settings
 from src.schemas.simulation_input import SimulationInput
 from src.services.auth import AuthService
 from src.services.biz_mapper import BizMapper
+from src.services.jwt_auth import UserContext, get_optional_user
 
 from models.explainability.shap_analysis import explain_tcn_prediction
 from models.explainability.simulation import (
@@ -126,10 +151,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Tenant-ID"],
 )
 
-# --- simulation_history REST (JWT Bearer 요구) ---
-from src.api.simulation_history import router as _sim_history_router  # noqa: E402
-
-app.include_router(_sim_history_router)
 
 # --- vacancy_evaluation REST (ABM PSE 평가, 무인증) ---
 from src.api.vacancy_evaluation import router as _vacancy_eval_router  # noqa: E402
@@ -140,6 +161,26 @@ app.include_router(_vacancy_eval_router)
 from src.api.customer_segment import router as _customer_segment_router  # noqa: E402
 
 app.include_router(_customer_segment_router)
+
+# --- simulation_foresee REST (예측 결과 저장, JWT Bearer 요구) ---
+from src.api.simulation_foresee import router as _sim_foresee_router  # noqa: E402
+
+app.include_router(_sim_foresee_router)
+
+# --- simulation_ai REST (AI 분석 저장, JWT Bearer 요구) ---
+from src.api.simulation_ai import router as _sim_ai_router  # noqa: E402
+
+app.include_router(_sim_ai_router)
+
+# --- simulation_abm history REST (ABM 시뮬 결과 영구 저장, JWT Bearer 요구) ---
+from src.api.simulation_abm_history import router as _sim_abm_history_router  # noqa: E402
+
+app.include_router(_sim_abm_history_router)
+
+# --- sensitivity REST (TCN 시나리오 시뮬레이터 탄성치 캐시 서빙) ---
+from src.api.sensitivity import router as _sensitivity_router  # noqa: E402
+
+app.include_router(_sensitivity_router)
 
 
 # customer_revenue MLP 모델 startup 시 워밍업 — 첫 미리보기 호출 latency 0.5~1초 → ~100ms.
@@ -153,6 +194,20 @@ def _warmup_customer_revenue() -> None:
         print("[STARTUP] customer_revenue MLP 워밍업 완료")
     except Exception as exc:  # noqa: BLE001
         print(f"[STARTUP] customer_revenue 워밍업 skip: {exc}")
+
+
+# 마포구 build_timeseries 캐시 사전 적재 — emerging_ae(3.8s) + closure_risk + TCN + SHAP
+# 가 공유하는 load_timeseries TTL=300s 캐시를 부팅 시 1회 채워두면 첫 /predict 부터 hit.
+# 측정값: 첫 /predict 한 동 generate ~8.1s → ~4.4s (-46%)
+@app.on_event("startup")
+def _warmup_timeseries_cache() -> None:
+    try:
+        from models.lstm_forecast.data_prep import load_timeseries
+
+        load_timeseries(dong_prefix="11440")
+        print("[STARTUP] 마포구 timeseries 캐시 워밍업 완료")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[STARTUP] timeseries 캐시 워밍업 skip: {exc}")
 
 
 @app.middleware("http")
@@ -186,6 +241,12 @@ DEFAULT_LNG = 126.9015
 # 동일 파라미터 동시 요청 중복 실행 방지 (simulate + analyze 동시 호출 시 파이프라인 공유)
 _pending_pipelines: dict[str, "asyncio.Task[Any]"] = {}
 
+# /predict/async + /analyze/llm/async 의 background task strong ref.
+# asyncio.create_task() 결과를 어디에도 보관 안 하면 event loop 가 weak ref 만 유지 →
+# GC 가 task 를 도중에 수거할 수 있음 (Python docs 공식 함정). progress=0 무한 멈춤 회귀.
+# 완료 시 done_callback 으로 자동 discard.
+_async_job_tasks: set["asyncio.Task[Any]"] = set()
+
 
 def _pipeline_key(input_data: Any) -> str:
     radius = getattr(input_data, "commercial_radius", 500)
@@ -193,6 +254,80 @@ def _pipeline_key(input_data: Any) -> str:
     rent = getattr(input_data, "monthly_rent", 0)
     area = getattr(input_data, "store_area", 15.0)
     return f"{input_data.target_district}:{input_data.business_type}:{input_data.brand_name}:{rent}:{area}:{radius}:{pop_w}"
+
+
+def _resolve_user_biz_number(user: UserContext | None) -> str | None:
+    """JWT user → users.biz_number 조회. master 는 본인, manager 는 owner 의 biz_number."""
+    if user is None:
+        return None
+    target_id = user.owner_id if user.role == "manager" else user.user_id
+    if not target_id:
+        return None
+    try:
+        import sqlalchemy as sa
+
+        engine = sa.create_engine(settings.postgres_url)
+        with engine.connect() as conn:
+            row = conn.execute(
+                sa.text("SELECT biz_number FROM users WHERE id = :id"),
+                {"id": target_id},
+            ).first()
+        return row._mapping["biz_number"] if row else None
+    except Exception as ex:
+        logger.warning(f"[brand_resolver] biz_number 조회 실패: {ex}")
+        return None
+
+
+def _validate_and_resolve_brand(
+    input_data: SimulationInput,
+    current_user: UserContext | None = None,
+) -> None:
+    """biz_number 입력 시 corp 검증 + 다업종 corp 의 brand auto-resolve.
+
+    biz_number 우선순위:
+    1. ``input_data.biz_number`` (frontend 명시 입력)
+    2. JWT ``current_user`` 토큰에서 자동 추출 (master.user_id 또는 manager.owner_id)
+    3. 없으면 검증 skip (개인사업자 / 비회원 호환)
+
+    동작:
+    1. business_type 이 사용자 corp 의 운영 업종인지 검증.
+    2. 운영 외 업종 → HTTPException(400) + 운영 가능 업종 list 응답.
+    3. 운영 내 업종 + corp 의 해당 업종 brand 가 다른 brand 면 brand_name override.
+    """
+    biz_number = input_data.biz_number or _resolve_user_biz_number(current_user)
+    if not biz_number:
+        return
+
+    from src.services.corp_brand_resolver import resolve_brand_for_industry
+
+    result = resolve_brand_for_industry(biz_number, input_data.business_type)
+
+    if result.get("error") == "INDUSTRY_NOT_OPERATED":
+        raise HTTPException(status_code=400, detail=result)
+
+    if result.get("error") in {"USER_NOT_FOUND", "CORP_NOT_IN_FTC", "INVALID_COMPANY_NAME"}:
+        # 비회원 / FTC 미등록 → 검증 skip, 사용자 brand_name 그대로
+        logger.warning(f"[brand_resolver] {result['error']} biz={biz_number} — fallback to input.brand_name")
+        return
+
+    # 사용자 명시 선택 우선 — input.brand_name 이 해당 업종 후보 (top + alternatives) 안에 있으면 그대로 사용.
+    # 동업종 다brand corp (예: 더본 한식 = 한신포차/새마을식당/본가) 에서 frontend dropdown 선택 보존.
+    valid_brands = {result["brand_name"], *result.get("alternatives", [])}
+    if input_data.brand_name in valid_brands:
+        if input_data.brand_name != result["brand_name"]:
+            logger.info(
+                f"[brand_resolver] honor-input: input.brand_name='{input_data.brand_name}' "
+                f"(top='{result['brand_name']}' but valid alternative)"
+            )
+        return
+
+    # 사용자 입력이 후보에 없음 → corp top brand 로 override.
+    resolved_brand = result["brand_name"]
+    logger.info(
+        f"[brand_resolver] auto-resolve: input.brand_name='{input_data.brand_name}' → '{resolved_brand}' "
+        f"(corp={result['company_name']}, industry={input_data.business_type})"
+    )
+    input_data.brand_name = resolved_brand
 
 
 _BIZ_TYPE_NORMALIZE: dict[str, str] = {
@@ -214,49 +349,338 @@ from src.services.dong_resolver import resolve_dong_code as _resolve_dong_code
 
 _BIZ_TO_INDUSTRY_CODE: dict[str, str] = _MarketDataTool._SALES_CODE_MAP
 
-# 업종 → kakao 검색 키워드 매핑
-_BIZ_TO_KAKAO_KW: dict[str, str] = {
-    "치킨전문점": "치킨",
-    "커피-음료": "커피",
-    "한식음식점": "한식",
-    "중식음식점": "중식",
-    "일식음식점": "일식",
-    "양식음식점": "양식",
-    "제과점": "베이커리",
-    "패스트푸드점": "버거",
-    "분식전문점": "분식",
-    "호프-간이주점": "주점",
-    "치킨": "치킨",
-    "커피": "커피",
-    "카페": "커피",
-    "한식": "한식",
-    "중식": "중식",
-    "일식": "일식",
-    "양식": "양식",
-    "베이커리": "베이커리",
-    "버거": "버거",
-    "분식": "분식",
-    "주점": "주점",
-    "chicken": "치킨",
-    "cafe": "커피",
-    "coffee": "커피",
-    "burger": "버거",
-    "bakery": "베이커리",
-    "korean": "한식",
-}
+# 업종 → kakao 검색 키워드 매핑은 통합 dict 로 이관.
+# config/business_type_mapping.kakao_keyword_of() 사용 — 단일 source of truth.
+
+
+def _resolve_top_spot_coords(result: dict, max_n: int = 4) -> list[tuple[float, float]]:
+    """vacancy_spots 중 top N 좌표 list 반환 (frontend buildBestVacancies 와 동일 로직).
+
+    선정 규칙:
+      A) winner 동 spot → score 정렬 (tie-breaker: listing_count)
+      B) top3 동 spot → listing_count 정렬
+      C) A + B 합집합 → 50m 근접 dedup → 상위 max_n 개
+    """
+    spots = result.get("vacancy_spots") or []
+    if not isinstance(spots, list) or not spots:
+        return []
+    winner = result.get("winner_district") or result.get("target_district")
+    top3 = result.get("top_3_candidates") or []
+
+    def _is_valid(s: dict) -> bool:
+        lat, lon = s.get("lat"), s.get("lon")
+        return isinstance(lat, (int, float)) and isinstance(lon, (int, float))
+
+    def _haversine(a: tuple[float, float], b: tuple[float, float]) -> float:
+        import math
+
+        R = 6_371_000.0
+        rlat1, rlat2 = math.radians(a[0]), math.radians(b[0])
+        dlat = math.radians(b[0] - a[0])
+        dlon = math.radians(b[1] - a[1])
+        h = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+        return 2 * R * math.asin(math.sqrt(h))
+
+    winner_spots = [s for s in spots if isinstance(s, dict) and s.get("dong_name") == winner and _is_valid(s)]
+    winner_spots.sort(
+        key=lambda s: (
+            -(s.get("score") if isinstance(s.get("score"), (int, float)) else float("-inf")),
+            -(s.get("listing_count") or 0),
+        )
+    )
+    top3_set = set(top3)
+    top3_spots = [
+        s
+        for s in spots
+        if isinstance(s, dict) and s.get("dong_name") in top3_set and s.get("dong_name") != winner and _is_valid(s)
+    ]
+    top3_spots.sort(key=lambda s: -(s.get("listing_count") or 0))
+
+    candidates = [(float(s["lat"]), float(s["lon"])) for s in (winner_spots + top3_spots)]
+    DEDUP_RADIUS_M = 50.0
+    deduped: list[tuple[float, float]] = []
+    for cand in candidates:
+        if any(_haversine(kept, cand) <= DEDUP_RADIUS_M for kept in deduped):
+            continue
+        deduped.append(cand)
+        if len(deduped) >= max_n:
+            break
+    return deduped
+
+
+def _resolve_spot1_coord(result: dict) -> tuple[float, float] | None:
+    """spot 1위 좌표 (구버전 호환 wrapper)."""
+    coords = _resolve_top_spot_coords(result, max_n=1)
+    return coords[0] if coords else None
+
+
+def _query_kakao_store_by_coord(
+    center_lat: float, center_lon: float, keyword: str, radius_m: int, limit: int
+) -> list[dict]:
+    """spot 좌표 기준 kakao_store 동종 매장 검색 (analyze_competition 의 좌표 기반 변형).
+
+    bounding box → haversine 정확 필터 → 거리순 정렬 → 상위 limit 개.
+    SQL 에 ORDER BY kakao_id 명시 (PG 자연순서 비결정 차단).
+    프론트 관례에 맞춰 lon → lng rename.
+    """
+    import math
+    import os
+    from sqlalchemy import text
+
+    from src.database.sync_engine import get_sync_engine
+
+    # bounding box (작은 영역에서 평면 근사)
+    deg_lat = radius_m / 111_000.0
+    deg_lon = radius_m / (111_000.0 * max(math.cos(math.radians(center_lat)), 1e-6))
+    lat_min, lat_max = center_lat - deg_lat, center_lat + deg_lat
+    lon_min, lon_max = center_lon - deg_lon, center_lon + deg_lon
+
+    sql = text(
+        """
+        SELECT kakao_id, place_name, brand_name, category,
+               lat, lon, is_franchise, place_url, phone, dong_name
+          FROM kakao_store
+         WHERE lat BETWEEN :lat_min AND :lat_max
+           AND lon BETWEEN :lon_min AND :lon_max
+           AND (category ILIKE :kw OR category_detail ILIKE :kw)
+         ORDER BY kakao_id
+        """
+    )
+    engine = get_sync_engine(os.environ["POSTGRES_URL"])
+    with engine.connect() as conn:
+        rows = (
+            conn.execute(
+                sql,
+                {"lat_min": lat_min, "lat_max": lat_max, "lon_min": lon_min, "lon_max": lon_max, "kw": f"%{keyword}%"},
+            )
+            .mappings()
+            .all()
+        )
+
+    def _haversine(lat1, lon1, lat2, lon2):
+        R = 6_371_000.0
+        rlat1, rlat2 = math.radians(lat1), math.radians(lat2)
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+        return 2 * R * math.asin(math.sqrt(a))
+
+    within: list[dict] = []
+    for r in rows:
+        d = _haversine(center_lat, center_lon, r["lat"], r["lon"])
+        if d <= radius_m:
+            within.append(
+                {
+                    "id": r["kakao_id"] or f"{r['place_name']}_{r['lat']}_{r['lon']}",
+                    "place_name": r["place_name"] or "",
+                    "brand_name": r["brand_name"] or "",
+                    "lat": r["lat"],
+                    "lng": r["lon"],
+                    "distance_m": round(d, 1),
+                    "is_franchise": bool(r["is_franchise"]),
+                    "category": r["category"] or "",
+                    "place_url": r["place_url"],
+                    "phone": r["phone"],
+                    # kakao_store.dong_name 직접 — 후처리 행정동 필터에 사용 (선택 4동 외 인접 동 매장 컷).
+                    "source_dong": r.get("dong_name"),
+                }
+            )
+    within.sort(key=lambda x: (x["distance_m"], x["id"]))  # 거리 + id tie-breaker
+    return within[:limit]
+
+
+def _query_kakao_store_by_dong(dong_name: str, keyword: str, limit: int = 800) -> list[dict]:
+    """행정동(dong_name) 안 동종 kakao_store 매장 전수 조회.
+
+    좌표 반경 무시 — 행정동 경계 자체가 필터. 거리 컬럼은 호출자가 spot 기준으로 후처리.
+    kakao_store.dong_name 컬럼은 행정동/법정동 혼합 (예: 망원1동 행정동 매장
+    대부분이 '망원동' 법정동으로 등록). MAPO_ADSTRD_TO_KAKAO_DONG_NAMES 로
+    행정동에 속하는 모든 dong_name (행정 + 법정) 조회 → 누락 차단.
+    """
+    import os
+    from sqlalchemy import text
+
+    from src.config.constants import MAPO_ADSTRD_TO_KAKAO_DONG_NAMES
+    from src.database.sync_engine import get_sync_engine
+
+    dong_names = MAPO_ADSTRD_TO_KAKAO_DONG_NAMES.get(dong_name, [dong_name])
+
+    sql = text(
+        """
+        SELECT kakao_id, place_name, brand_name, category,
+               lat, lon, is_franchise, place_url, phone, dong_name
+          FROM kakao_store
+         WHERE dong_name = ANY(:dongs)
+           AND (category ILIKE :kw OR category_detail ILIKE :kw)
+         ORDER BY kakao_id
+         LIMIT :lim
+        """
+    )
+    engine = get_sync_engine(os.environ["POSTGRES_URL"])
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {"dongs": dong_names, "kw": f"%{keyword}%", "lim": limit}).mappings().all()
+
+    out: list[dict] = []
+    for r in rows:
+        if r["lat"] is None or r["lon"] is None:
+            continue
+        out.append(
+            {
+                "id": r["kakao_id"] or f"{r['place_name']}_{r['lat']}_{r['lon']}",
+                "place_name": r["place_name"] or "",
+                "brand_name": r["brand_name"] or "",
+                "lat": r["lat"],
+                "lng": r["lon"],
+                "distance_m": None,  # spot 무관 — frontend 에서 haversine 재계산
+                "is_franchise": bool(r["is_franchise"]),
+                "category": r["category"] or "",
+                "place_url": r["place_url"],
+                "phone": r["phone"],
+                "source_dong": r.get("dong_name"),
+            }
+        )
+    return out
 
 
 async def _collect_all_competitor_locations(
     winner: str,
     top3: list,
     business_type: str,
+    *,
+    spot_lat: float | None = None,
+    spot_lon: float | None = None,
+    spot_coords: list[tuple[float, float]] | None = None,
+    spot_radius_m: int = 1500,
+    spot_limit: int = 800,
+    include_dong: bool = True,
+    dong_limit: int = 800,
 ) -> list[dict]:
-    """winner + top3 추천 동 각각의 500m 반경 경쟁업체 좌표를 수집해 통합 반환."""
-    keyword = _BIZ_TO_KAKAO_KW.get(business_type, business_type)
-    districts = list({winner} | set(top3 or []))
-    print(f"[all_competitors] 수집 시작 — business_type={business_type} keyword={keyword} districts={districts}")
+    """경쟁업체 좌표 수집 — 지도 마커용.
+
+    분기 우선순위:
+      · spot_coords (4 spot list) → 각 spot 별 1.5km 검색 후 합집합 + dedup
+        (사용자 요청: "공실 spot 1~4 모두 기준으로 경쟁점 표시")
+      · spot_lat/lon (단일 spot) → 단일 검색 (구버전 호환)
+      · 둘 다 없으면 → fallback: winner+top3 4동 centroid 1.5km 검색
+
+    SQL 에 ORDER BY kakao_id 명시 → 결정적. spot 좌표 list 도 결정적이라
+    합집합 결과의 dedup ordering 도 입력 spot 순서 (= score 순) 결정.
+    """
+    from src.config.business_type_mapping import kakao_keyword_of
+    from src.config.constants import MAPO_ADSTRD_TO_KAKAO_DONG_NAMES
+
+    keyword = kakao_keyword_of(business_type) or business_type
+
+    # 선택 4동 (winner+top3) 의 kakao_store dong_name 허용 set — spot bbox 가 인접 동까지
+    # 침범하는 매장 컷용. 각 행정동의 매핑된 법정동 모두 포함.
+    selected_districts = {winner} | set(top3 or [])
+    allowed_dongs: set[str] = set()
+    for d in selected_districts:
+        allowed_dongs.update(MAPO_ADSTRD_TO_KAKAO_DONG_NAMES.get(d, [d]))
+
+    def _filter_allowed(rows: list[dict]) -> list[dict]:
+        """source_dong 이 allowed set 안 매장만 통과. None / 매핑 외 동 = 컷."""
+        before = len(rows)
+        out = [r for r in rows if r.get("source_dong") in allowed_dongs]
+        print(f"[all_competitors:filter] dong filter {before} → {len(out)} (allowed={sorted(allowed_dongs)})")
+        return out
+
+    # 행정동 기준 전수 매장 수집 (winner+top3) — spot/centroid 모드와 합집합.
+    # include_dong=True 면 spot 1.5km 반경 안 매장 + 행정동 안 모든 매장 = 합집합.
+    # 색깔 진하기/연하기 = frontend 가 spot 좌표 기준 haversine 으로 재계산 (radius 안 = 진함).
+    async def _gather_dong_rows() -> list[dict]:
+        if not include_dong:
+            return []
+        districts = sorted(selected_districts)
+        out: list[dict] = []
+        for d in districts:
+            try:
+                rows = await asyncio.to_thread(_query_kakao_store_by_dong, d, keyword, dong_limit)
+                print(f"[all_competitors:dong] {d} → {len(rows)}개")
+                out.extend(rows)
+            except Exception as e:
+                print(f"[all_competitors:dong] {d} 수집 실패: {e}")
+        return out
+
+    # 4 spot 모드 — 각 spot 별 1.5km 풀 + 행정동 안 매장 합집합 (가장 우선)
+    if spot_coords:
+        print(
+            f"[all_competitors:spots] {len(spot_coords)} spot 좌표 기준 검색 — "
+            f"keyword={keyword} per-spot radius={spot_radius_m}m limit={spot_limit} "
+            f"include_dong={include_dong}"
+        )
+        merged: list[dict] = []
+        seen_ids: set = set()
+        for idx, (s_lat, s_lon) in enumerate(spot_coords, 1):
+            rows = await asyncio.to_thread(
+                _query_kakao_store_by_coord, s_lat, s_lon, keyword, spot_radius_m, spot_limit
+            )
+            print(f"[all_competitors:spots] spot{idx} ({s_lat:.5f},{s_lon:.5f}) → {len(rows)}개")
+            for r in rows:
+                rid = r.get("id")
+                if rid in seen_ids:
+                    continue
+                seen_ids.add(rid)
+                merged.append(r)
+        spot_only_count = len(merged)
+        # 행정동 안 추가 매장 합치기 (dedup by kakao_id)
+        for r in await _gather_dong_rows():
+            rid = r.get("id")
+            if rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            merged.append(r)
+        # 결정적 정렬 — 1번 spot 좌표 기준 거리순 (frontend 도 spot1 기준 haversine 으로 sort 하니 정합성).
+        if spot_coords:
+            anchor_lat, anchor_lon = spot_coords[0]
+            import math
+
+            def _hv(la, lo):
+                R = 6_371_000.0
+                rlat1, rlat2 = math.radians(anchor_lat), math.radians(la)
+                dlat = math.radians(la - anchor_lat)
+                dlon = math.radians(lo - anchor_lon)
+                a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+                return 2 * R * math.asin(math.sqrt(a))
+
+            merged.sort(key=lambda r: (_hv(r["lat"], r["lng"]), str(r.get("id"))))
+        print(
+            f"[all_competitors:spots] 최종 합집합 {len(merged)}개 "
+            f"(spot {spot_only_count} + dong 추가 {len(merged) - spot_only_count})"
+        )
+        return _filter_allowed(merged)
+
+    # 단일 spot 모드 (구버전 호환) + 행정동 합집합
+    if spot_lat is not None and spot_lon is not None:
+        print(
+            f"[all_competitors:spot] 좌표 기준 검색 — ({spot_lat:.5f},{spot_lon:.5f}) "
+            f"keyword={keyword} radius={spot_radius_m}m limit={spot_limit} "
+            f"include_dong={include_dong}"
+        )
+        rows = await asyncio.to_thread(
+            _query_kakao_store_by_coord, spot_lat, spot_lon, keyword, spot_radius_m, spot_limit
+        )
+        seen_ids: set = {r.get("id") for r in rows}
+        spot_only_count = len(rows)
+        for r in await _gather_dong_rows():
+            rid = r.get("id")
+            if rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            rows.append(r)
+        print(
+            f"[all_competitors:spot] 최종 {len(rows)}개 "
+            f"(spot {spot_only_count} + dong 추가 {len(rows) - spot_only_count})"
+        )
+        return _filter_allowed(rows)
+
+    # fallback — 4동 centroid 분기 (spot 좌표 결정 못 한 경우)
+    districts = sorted({winner} | set(top3 or []))  # set ordering 결정성
+    print(f"[all_competitors:fallback] 4동 centroid 검색 — districts={districts}")
     results: list[dict] = []
     seen_ids: set = set()
+    # 단계별 카운터 — raw → dedupe drop → coord drop → 최종
+    _stats = {"raw": 0, "dedupe_drop": 0, "coord_drop": 0}
 
     async def _fetch_one(dong_name: str):
         try:
@@ -264,35 +688,142 @@ async def _collect_all_competitor_locations(
             if not dong_code:
                 print(f"[all_competitors] dong_code 없음: {dong_name}")
                 return
-            data = await asyncio.to_thread(_analyze_competition, dong_code, keyword, 500)
+            # 검색 반경 1500m + sample 100개 — 1위 spot 이 동 centroid 와 떨어진 경우에도
+            # spot 주변 500m 매장이 모이도록 검색 영역 충분히 확보. 거리순 정렬 후 cap.
+            data = await asyncio.to_thread(_analyze_competition, dong_code, keyword, 1500, 100)
             samples = data.get("samples") or []
             print(f"[all_competitors] {dong_name}({dong_code}) → {len(samples)}개 샘플")
+            _stats["raw"] += len(samples)
             for s in samples:
-                cid = s.get("kakao_id") or f"{s.get('place_name')}_{s.get('lat')}_{s.get('lon')}"
+                # 'lon' 은 commercial_intelligence 가 rename 후 제거한 키 — 'lng' 로 일치.
+                lat_v = s.get("lat")
+                lng_v = s.get("lng")
+                cid = s.get("kakao_id") or f"{s.get('place_name')}_{lat_v}_{lng_v}"
                 if cid in seen_ids:
+                    _stats["dedupe_drop"] += 1
                     continue
                 seen_ids.add(cid)
-                if s.get("lat") and s.get("lon"):
+                if lat_v and lng_v:
                     results.append(
                         {
                             "id": cid,
                             "place_name": s.get("place_name", ""),
                             "brand_name": s.get("brand_name", ""),
-                            "lat": s["lat"],
-                            "lng": s["lon"],
+                            "lat": lat_v,
+                            "lng": lng_v,
                             "distance_m": s.get("distance_m"),
                             "is_franchise": s.get("is_franchise", False),
                             "category": s.get("category", ""),
+                            "place_url": s.get("place_url"),
+                            "phone": s.get("phone"),
                             "source_dong": dong_name,
                         }
                     )
+                else:
+                    _stats["coord_drop"] += 1
         except Exception as e:
             import traceback
 
             print(f"[all_competitors] {dong_name} 수집 실패: {e}\n{traceback.format_exc()}")
 
     await asyncio.gather(*[_fetch_one(d) for d in districts])
-    print(f"[all_competitors] 최종 결과: {len(results)}개")
+    pre_dong_count = len(results)
+    # fallback 모드도 행정동 안 추가 매장 합치기
+    for r in await _gather_dong_rows():
+        rid = r.get("id")
+        if rid in seen_ids:
+            continue
+        seen_ids.add(rid)
+        results.append(r)
+    print(
+        f"[all_competitors] 단계별 — raw {_stats['raw']} / dedupe drop {_stats['dedupe_drop']} / "
+        f"coord drop {_stats['coord_drop']} / centroid {pre_dong_count} + dong 추가 "
+        f"{len(results) - pre_dong_count} / 최종 {len(results)}개"
+    )
+    return results
+
+
+async def _collect_same_brand_locations(
+    winner: str,
+    top3: list,
+    brand_name: str,
+    business_type: str | None = None,
+) -> list[dict]:
+    """winner + top3 4동 안에 위치한 자사 브랜드 매장 좌표 수집.
+
+    상권분석탭 지도에 자사 매장 마커 표시용. 데이터 소스: brand_mapping_resolver.
+
+    옵션 A 정책 (2026-05-05): 사용자 입력 business_type 의 kakao_category 와
+    매장 category 가 일치할 때만 별표 표시. 메가커피 계정이 치킨 시뮬 돌리면
+    자사 매장 0개 반환 (자사 업종 != 시뮬 업종이면 misalign — 별표 숨김).
+    business_type=None 또는 매핑 실패 시 카테고리 필터 비활성 (구버전 호환).
+    """
+    if not brand_name:
+        return []
+    districts = list({winner} | set(top3 or []))
+
+    # 입력 업종 → 자사 매장 카테고리 매칭 기준
+    target_category: str | None = None
+    if business_type:
+        from src.config.business_type_mapping import kakao_category_of
+
+        target_category = kakao_category_of(business_type)
+
+    print(
+        f"[same_brand] 수집 시작 — brand={brand_name} biz={business_type} "
+        f"target_cat={target_category} districts={districts}"
+    )
+    try:
+        from src.services.brand_mapping_resolver import get_all_mapo_stores_by_brand
+
+        all_stores = await asyncio.to_thread(get_all_mapo_stores_by_brand, brand_name)
+    except Exception as e:
+        import traceback
+
+        print(f"[same_brand] 조회 실패: {e}\n{traceback.format_exc()}")
+        return []
+
+    # 4동 + 카테고리 매칭 필터. dong_name NULL 매장은 SQL 단계에서 이미 제외됨.
+    target_set = set(districts)
+    _stats = {"total": len(all_stores), "dong_drop": 0, "cat_drop": 0, "coord_drop": 0}
+    results: list[dict] = []
+    for s in all_stores:
+        if s.get("dong_name") not in target_set:
+            _stats["dong_drop"] += 1
+            continue
+        # 옵션 A: target_category 지정 시 매장 category 일치 필수 — misalign 차단용
+        # (메가커피 계정이 치킨 시뮬 돌리면 자사 매장 0개).
+        # 단 "기타" 는 카카오 분류 누락 케이스 (브랜드 명확하지만 category 미지정).
+        # brand 매칭으로 이미 정확히 골라진 매장이라 통과시킴 (cat misalign 아님).
+        # target_category 미지정 (구버전 또는 admin) 시 필터 비활성.
+        if target_category is not None:
+            store_cat = s.get("category") or ""
+            if store_cat != target_category and store_cat != "기타":
+                _stats["cat_drop"] += 1
+                continue
+        lat_v = s.get("lat")
+        lon_v = s.get("lon")
+        if not lat_v or not lon_v:
+            _stats["coord_drop"] += 1
+            continue
+        results.append(
+            {
+                "id": s.get("kakao_id") or f"{s.get('place_name')}_{lat_v}_{lon_v}",
+                "place_name": s.get("place_name", ""),
+                "brand_name": s.get("brand_name", ""),
+                "lat": lat_v,
+                "lng": lon_v,
+                "dong_name": s.get("dong_name", ""),
+                "address": s.get("address", ""),
+                "place_url": s.get("place_url"),
+                "phone": s.get("phone"),
+            }
+        )
+    print(
+        f"[same_brand] 4동({','.join(districts)}) 안 자사 매장 {len(results)}개 "
+        f"(전체 {_stats['total']} / 동 drop {_stats['dong_drop']} / "
+        f"cat drop {_stats['cat_drop']} / 좌표 drop {_stats['coord_drop']})"
+    )
     return results
 
 
@@ -312,6 +843,7 @@ def _build_initial_state(input_data: Any) -> dict[str, Any]:
         "target_districts": getattr(input_data, "target_districts", None) or [input_data.target_district],
         "industry_filter": getattr(input_data, "industry_filter", None),
         "commercial_radius": getattr(input_data, "commercial_radius", 500),
+        "territory_radius_m": getattr(input_data, "territory_radius_m", None),
         "monthly_rent_budget": getattr(input_data, "monthly_rent", 0),
         "store_area": getattr(input_data, "store_area", 15.0),
         "population_weight": getattr(input_data, "population_weight", True),
@@ -368,6 +900,7 @@ def _safe_json(obj: Any) -> Any:
     """
     try:
         import numpy as np  # numpy가 없는 환경 방어
+
         _has_numpy = True
     except ImportError:
         _has_numpy = False
@@ -409,12 +942,19 @@ async def _predict_single_district(
     industry_name: str,
     cost_config: dict,
     segment_profile: dict | None = None,
+    progress_cb: "Callable[[str], None] | None" = None,
 ) -> DistrictPredictionResult:
-    """단일 동 ML 예측 실행 (/predict 병렬 호출용)"""
+    """단일 동 ML 예측 실행 (/predict 병렬 호출용).
+
+    progress_cb 가 주어지면 4 sub-stage 끝마다 호출됨 (ModelOutput/projection/SHAP/조립).
+    /predict/async 의 real-time progress 와이어링용 — 동 단위 보다 세분화된 % 표시.
+    """
     from models.interface import ModelOutput
 
     dong_code = _resolve_dong_code(dong_name)
     if not dong_code:
+        if progress_cb:
+            progress_cb("dong_code_missing")
         return DistrictPredictionResult(district=dong_name)
 
     try:
@@ -428,10 +968,16 @@ async def _predict_single_district(
             segment_profile,
         )
     except ExcludedComboError:
+        if progress_cb:
+            progress_cb("excluded_combo")
         return DistrictPredictionResult(district=dong_name, dong_code=dong_code, is_excluded_combo=True)
     except Exception as e:
         print(f"[PREDICT] {dong_name} ML 실패: {e}")
+        if progress_cb:
+            progress_cb("ml_failed")
         return DistrictPredictionResult(district=dong_name, dong_code=dong_code)
+    if progress_cb:
+        progress_cb("ml_done")
 
     # quarterly_projection + 시나리오 빌드
     quarterly: list = []
@@ -451,6 +997,8 @@ async def _predict_single_district(
         )
     except Exception as e:
         print(f"[PREDICT] {dong_name} projection 빌드 실패: {e}")
+    if progress_cb:
+        progress_cb("projection_done")
 
     # SHAP 빌드
     shap_result = None
@@ -459,10 +1007,12 @@ async def _predict_single_district(
         shap_result = shap_raw if shap_raw else None
     except Exception as e:
         print(f"[PREDICT] {dong_name} SHAP 실패 (무시): {e}")
+    if progress_cb:
+        progress_cb("shap_done")
 
     is_mock = sim_result["revenue_forecast"].get("is_mock", False)
 
-    return DistrictPredictionResult(
+    result = DistrictPredictionResult(
         district=dong_name,
         dong_code=dong_code,
         is_excluded_combo=False,
@@ -477,6 +1027,9 @@ async def _predict_single_district(
         living_pop_forecast=sim_result.get("living_pop_forecast"),
         emerging_signal=sim_result.get("emerging_signal"),
     )
+    if progress_cb:
+        progress_cb("assembled")
+    return result
 
 
 def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> dict[str, Any]:
@@ -504,6 +1057,7 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
     legal_risks_raw = analysis.get("legal_risks") or []
 
     # 벌칙 조문 자동 매핑 — 캐시/비캐시 모두 대응 (legal_node 내부 캐시 경유 시에도 적용)
+    from src.agents.legal.categories import get_legal_group
     from src.agents.nodes.legal import _enrich_penalty_info
 
     _enrich_penalty_info(legal_risks_raw)
@@ -514,6 +1068,8 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
             "risk_level": {"safe": "LOW", "caution": "MEDIUM", "danger": "HIGH"}.get(
                 r.get("level", "safe").lower(), "LOW"
             ),
+            # 입지(location) vs 운영(operation) 그룹 — frontend 분리 UI 에서 사용
+            "group": get_legal_group(r.get("type", "")),
             "detail": r.get("summary", ""),
             "recommendation": r.get("recommendation", ""),
             "articles": [{"article_ref": a, "content": ""} if isinstance(a, str) else a for a in r.get("articles", [])],
@@ -533,10 +1089,11 @@ def map_state_to_simulation_output(state: dict[str, Any], request_id: str) -> di
             return {k: _sanitize(v) for k, v in val.items()}
         return val
 
-    # 랭킹 데이터
-    district_rankings = _sanitize(analysis.get("district_rankings", []))
-    winner_district = _sanitize(analysis.get("winner_district", target_dist))
-    top_3_candidates = _sanitize(analysis.get("top_3_candidates", []))
+    # 랭킹 데이터 — analysis_results 누락 시 state top-level (ranking_phase) 폴백.
+    # synthesis 캐시 히트 등으로 analysis_results 에 ranking 결과가 안 실리는 케이스 방어.
+    district_rankings = _sanitize(analysis.get("district_rankings") or state.get("scouting_results") or [])
+    winner_district = _sanitize(analysis.get("winner_district") or state.get("winner_district") or target_dist)
+    top_3_candidates = _sanitize(analysis.get("top_3_candidates") or state.get("top_3_candidates") or [])
     vacancy_spots = _sanitize(state.get("vacancy_spots", []))
 
     # ai_recommendation — synthesis FinalStrategyResult.summary
@@ -798,7 +1355,11 @@ async def get_status(job_id: str):
 
 
 @app.post("/analyze")
-async def analyze_location(input_data: SimulationInput, response: Response):
+async def analyze_location(
+    input_data: SimulationInput,
+    response: Response,
+    current_user: UserContext | None = Depends(get_optional_user),
+):
     """[DEPRECATED] 풀파이프 상권 분석 — 전환 기간 동안만 유지.
 
     IM3-259로 endpoint를 분리(/predict + /analyze/llm)했으므로 신규 호출은
@@ -810,6 +1371,9 @@ async def analyze_location(input_data: SimulationInput, response: Response):
     # IM3-259: deprecation 헤더 — 클라이언트가 /predict + /analyze/llm 으로 옮길 것을 알림
     response.headers["Deprecation"] = "true"
     response.headers["Link"] = '</predict>; rel="successor-version", </analyze/llm>; rel="successor-version"'
+
+    # corp 다업종 brand auto-resolve + 운영 외 업종 차단 (biz_number 입력 시만)
+    _validate_and_resolve_brand(input_data, current_user)
 
     if input_data.target_district not in MAPO_DISTRICTS:
         return {
@@ -834,9 +1398,13 @@ async def analyze_location(input_data: SimulationInput, response: Response):
         # 추천 동 전체(winner + top3)의 경쟁업체 좌표 수집 — 지도 멀티핀용
         winner = result.get("winner_district") or input_data.target_district
         top3 = result.get("top_3_candidates") or []
-        print(f"[all_competitors] winner={winner}, top3={top3}")
+        _spot_coords = _resolve_top_spot_coords(result, max_n=4)
+        print(f"[all_competitors] winner={winner}, top3={top3}, top_spots={len(_spot_coords)}개")
         result["all_competitor_locations"] = await _collect_all_competitor_locations(
-            winner, top3, input_data.business_type
+            winner, top3, input_data.business_type, spot_coords=_spot_coords
+        )
+        result["same_brand_locations"] = await _collect_same_brand_locations(
+            winner, top3, input_data.brand_name, input_data.business_type
         )
         return {"status": "success", "data": result}
     except Exception as e:
@@ -854,13 +1422,19 @@ async def analyze_location(input_data: SimulationInput, response: Response):
 
 
 @app.post("/analyze/llm")
-async def analyze_llm(input_data: SimulationInput):
+async def analyze_llm(
+    input_data: SimulationInput,
+    current_user: UserContext | None = Depends(get_optional_user),
+):
     """AI 분석 전용 endpoint — slow_graph 실행 (~80-140초).
 
     /predict와 독립 병렬 호출 가능. winner는 ranking 단계에서 자체 결정.
     """
     from src.config.constants import MAPO_DISTRICTS
     from src.schemas.simulation_output import AnalysisOutput
+
+    # corp 다업종 brand auto-resolve + 운영 외 업종 차단
+    _validate_and_resolve_brand(input_data, current_user)
 
     if input_data.target_district not in MAPO_DISTRICTS:
         return {
@@ -894,21 +1468,169 @@ async def analyze_llm(input_data: SimulationInput):
     # 경쟁업체 좌표 수집 (지도 멀티핀용) — winner 기준
     winner = full.get("winner_district") or input_data.target_district
     top3 = full.get("top_3_candidates") or []
+    _spot_coords = _resolve_top_spot_coords(full, max_n=4)
     try:
         full["all_competitor_locations"] = await _collect_all_competitor_locations(
-            winner, top3, input_data.business_type
+            winner, top3, input_data.business_type, spot_coords=_spot_coords
         )
     except Exception as e:
         print(f"[ANALYZE/LLM] all_competitor_locations 수집 실패 (무시): {e}")
         full["all_competitor_locations"] = []
+    try:
+        full["same_brand_locations"] = await _collect_same_brand_locations(
+            winner, top3, input_data.brand_name, input_data.business_type
+        )
+    except Exception as e:
+        print(f"[ANALYZE/LLM] same_brand_locations 수집 실패 (무시): {e}")
+        full["same_brand_locations"] = []
 
     # AnalysisOutput에 정의된 필드만 추출하여 응답 (PR 후 추가/제거 시 schema가 source of truth)
     analysis_keys = set(AnalysisOutput.model_fields.keys())
     payload = {k: v for k, v in full.items() if k in analysis_keys}
     payload["request_id"] = request_id
     payload["target_district"] = full.get("target_district") or input_data.target_district
+    # 다업종 corp brand auto-resolve 후 input_data.brand_name 이 정답 — UI Target 라벨 SoT.
+    # state echo 가 비면 input_data 값 그대로 (frontend authBrand fallback = 등록 brand 빽다방으로 오인 방지).
+    payload["brand_name"] = full.get("brand_name") or input_data.brand_name
+    payload["business_type"] = full.get("business_type") or input_data.business_type
 
     return {"status": "success", "data": payload}
+
+
+# ---------------------------------------------------------------------------
+# Real-time progress 지원 — /analyze/llm/async + /analyze/llm/{job_id}/status.
+# slow_graph.astream(stream_mode="updates") 로 노드 완료 이벤트 hook.
+# 4 노드 (inflow → ranking_phase → llm_analysis_phase → synthesis) 기준 25%/50%/75%/100%.
+# stream_mode="values" 와 동시 수신해 final_state 도 같은 루프에서 캡처.
+# ---------------------------------------------------------------------------
+_SLOW_GRAPH_NODE_TOTAL = 4
+
+
+@app.post("/analyze/llm/async")
+async def analyze_llm_async(
+    input_data: SimulationInput,
+    current_user: UserContext | None = Depends(get_optional_user),
+) -> dict[str, Any]:
+    """AI 분석 비동기 시작 — 즉시 job_id 반환. LangGraph 노드별 진행률 추적."""
+    from src.config.constants import MAPO_DISTRICTS
+    from src.schemas.simulation_output import AnalysisOutput
+    from src.services.job_progress_store import (
+        create_job,
+        set_done,
+        set_error,
+        set_progress,
+    )
+
+    # corp 다업종 brand auto-resolve + 운영 외 업종 차단
+    _validate_and_resolve_brand(input_data, current_user)
+
+    if input_data.target_district not in MAPO_DISTRICTS:
+        return {
+            "status": "error",
+            "message": f"지원하지 않는 행정동입니다: {input_data.target_district}.",
+        }
+
+    job_id = create_job("analyze_llm")
+    request_id = str(uuid.uuid4())
+    logger.info(
+        f"[/analyze/llm/async] 시작 job={job_id[:8]} target={input_data.target_district} biz={input_data.business_type}"
+    )
+
+    async def _run() -> None:
+        logger.info(f"[/analyze/llm/async] _run 진입 job={job_id[:8]}")
+        try:
+            if os.getenv("LLM_AGENTS_DISABLED", "").strip() == "1":
+                # mock 경로도 진행률 시뮬 (인스턴트 done)
+                payload = _mock_simulation_response(input_data.target_district, request_id)
+                set_done(job_id, payload)
+                return
+
+            initial_state = _build_initial_state(input_data)
+            done_count = 0
+            final_state: dict[str, Any] | None = None
+
+            # multi-mode stream — "updates" 로 노드 완료 이벤트, "values" 로 누적 state.
+            async for mode, chunk in slow_graph.astream(initial_state, stream_mode=["updates", "values"]):
+                if mode == "updates":
+                    # chunk = {"node_name": state_diff_dict}
+                    for node_name in chunk.keys():
+                        if node_name.startswith("__"):  # langgraph internal
+                            continue
+                        done_count += 1
+                        set_progress(
+                            job_id,
+                            min(1.0, done_count / _SLOW_GRAPH_NODE_TOTAL),
+                            stage=node_name,
+                        )
+                elif mode == "values":
+                    # 매 yield 가 누적 state — 마지막이 최종.
+                    if isinstance(chunk, dict):
+                        final_state = chunk
+
+            if final_state is None:
+                set_error(job_id, "LangGraph stream 이 final state 를 반환하지 않음")
+                return
+
+            full = map_state_to_simulation_output(final_state, request_id)
+            winner = full.get("winner_district") or input_data.target_district
+            top3 = full.get("top_3_candidates") or []
+            _spot_coords = _resolve_top_spot_coords(full, max_n=4)
+            try:
+                full["all_competitor_locations"] = await _collect_all_competitor_locations(
+                    winner, top3, input_data.business_type, spot_coords=_spot_coords
+                )
+            except Exception as ce:
+                logger.warning(f"[/analyze/llm/async] all_competitor_locations 실패 (무시): {ce}")
+                full["all_competitor_locations"] = []
+            try:
+                full["same_brand_locations"] = await _collect_same_brand_locations(
+                    winner, top3, input_data.brand_name, input_data.business_type
+                )
+            except Exception as ce:
+                logger.warning(f"[/analyze/llm/async] same_brand_locations 실패 (무시): {ce}")
+                full["same_brand_locations"] = []
+
+            analysis_keys = set(AnalysisOutput.model_fields.keys())
+            payload = {k: v for k, v in full.items() if k in analysis_keys}
+            payload["request_id"] = request_id
+            payload["target_district"] = full.get("target_district") or input_data.target_district
+            # 다업종 corp brand auto-resolve 후 input_data.brand_name 이 정답 — UI Target 라벨 SoT.
+            payload["brand_name"] = full.get("brand_name") or input_data.brand_name
+            payload["business_type"] = full.get("business_type") or input_data.business_type
+            # DEBUG: payload 직전 same_brand_locations 검증 (frontend 측 누락 의심 시)
+            logger.info(
+                f"[/analyze/llm/async] payload check job={job_id[:8]} "
+                f"same_brand={len(payload.get('same_brand_locations', []) or [])} "
+                f"all_competitor={len(payload.get('all_competitor_locations', []) or [])} "
+                f"keys_count={len(payload)}"
+            )
+            set_done(job_id, _safe_json(payload))
+            logger.info(f"[/analyze/llm/async] 완료 job={job_id[:8]}")
+        except Exception as e:
+            import traceback
+
+            logger.error(f"[/analyze/llm/async] 오류: {e}\n{traceback.format_exc()}")
+            set_error(job_id, str(e))
+
+    # GC race 방지 — strong ref 보관, 완료 시 자동 discard.
+    task = asyncio.create_task(_run())
+    _async_job_tasks.add(task)
+    task.add_done_callback(_async_job_tasks.discard)
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/analyze/llm/{job_id}/status")
+async def analyze_llm_job_status(job_id: str) -> dict[str, Any]:
+    """AI 분석 async job 상태 조회."""
+    from src.services.job_progress_store import get_job, serialize_status
+
+    job = get_job(job_id)
+    if job is None or job["kind"] != "analyze_llm":
+        return JSONResponse(
+            status_code=404,
+            content={"status": "error", "message": f"job {job_id} not found"},
+        )
+    return serialize_status(job)
 
 
 # ---------------------------------------------------------------------------
@@ -917,7 +1639,10 @@ async def analyze_llm(input_data: SimulationInput):
 
 
 @app.post("/analyze/quick")
-async def analyze_quick(input_data: SimulationInput):
+async def analyze_quick(
+    input_data: SimulationInput,
+    current_user: UserContext | None = Depends(get_optional_user),
+):
     """
     LLM 없는 경량 랭킹 엔드포인트 (district_ranking 에이전트만 실행).
 
@@ -928,6 +1653,9 @@ async def analyze_quick(input_data: SimulationInput):
     """
     from src.agents.nodes.district_ranking import district_ranking_node
     from src.agents.nodes.market_analyst import db_client
+
+    # corp 다업종 brand auto-resolve + 운영 외 업종 차단
+    _validate_and_resolve_brand(input_data, current_user)
 
     normalized_biz = _BIZ_TYPE_NORMALIZE.get(input_data.business_type.lower(), input_data.business_type)
 
@@ -970,6 +1698,112 @@ class BizLookupRequest(BaseModel):
     company_name: str = ""
 
 
+@app.get("/corp/operated-industries")
+async def get_operated_industries(
+    biz_number: str | None = None,
+    user_id: str | None = None,
+    current_user: UserContext | None = Depends(get_optional_user),
+) -> dict:
+    """사용자 corp 의 운영 업종/브랜드 list 반환.
+
+    Frontend 시뮬 입력 폼이 mount 시 호출 — dropdown 에서 운영 외 업종 disable 용.
+
+    biz_number 우선순위:
+    1. query param ``biz_number`` (frontend 명시)
+    2. query param ``user_id`` → users.biz_number 직접 lookup (JWT interceptor 실패 폴백, 2026-05-07)
+    3. JWT 토큰의 user.user_id → users.biz_number 자동 추출
+
+    Returns:
+        성공: ``{"company_name": str, "industries": [str, ...], "brands": [{name, industry, stores}, ...]}``
+        실패 (USER_NOT_FOUND/CORP_NOT_IN_FTC): ``{"industries": null, "error": ..., "company_name": ...}``
+        비회원 (biz_number 미입력 + 토큰 없음): ``{"industries": null}`` — 모든 업종 허용
+    """
+    from src.services.corp_brand_resolver import get_corp_industries
+
+    biz = biz_number
+    if not biz and user_id:
+        # user_id query param 으로 직접 lookup — JWT 미주입 케이스 폴백.
+        try:
+            import sqlalchemy as sa
+
+            engine = sa.create_engine(settings.postgres_url)
+            with engine.connect() as conn:
+                row = conn.execute(
+                    sa.text("SELECT biz_number FROM users WHERE id = :id"),
+                    {"id": user_id},
+                ).first()
+            if row:
+                biz = row._mapping["biz_number"]
+        except Exception as ex:
+            logger.warning(f"[operated-industries] user_id lookup 실패: {ex}")
+    if not biz:
+        biz = _resolve_user_biz_number(current_user)
+    if not biz:
+        return {"industries": None, "company_name": None, "brands": []}
+
+    portfolio = get_corp_industries(biz)
+    if "error" in portfolio:
+        return {
+            "industries": None,
+            "error": portfolio["error"],
+            "company_name": portfolio.get("company_name"),
+            "message": portfolio.get("message"),
+        }
+    return {
+        "company_name": portfolio["company_name"],
+        "industries": portfolio["industries"],
+        "brands": portfolio["brands"],
+    }
+
+
+@app.get("/stores/count-by-dongs")
+async def stores_count_by_dongs(
+    dongs: str = Query("", max_length=500),
+    category: str | None = Query(None, max_length=100),
+) -> dict[str, Any]:
+    """선택된 행정동들의 kakao_store 매장 수 합계 + 동별 카운트.
+
+    프론트 ScopeHint 동적 표시용 — `selectedDongs` 변경 시 실제 매장 수 산출.
+
+    Args:
+        dongs: 콤마 구분 행정동 이름 (예: "서교동,상암동").
+        category: 카카오 카테고리 prefix 매칭 (옵션, 예: "음식점", "카페").
+
+    Returns:
+        ``{"total": int, "by_dong": {동: count}, "dongs": [동...]}``.
+    """
+    from sqlalchemy import text as sa_text
+
+    dong_list = [d.strip() for d in dongs.split(",") if d.strip()]
+    if not dong_list:
+        return {"total": 0, "by_dong": {}, "dongs": []}
+
+    sql = """
+        SELECT dong_name, COUNT(*) AS n
+        FROM kakao_store
+        WHERE dong_name = ANY(:dongs)
+    """
+    params: dict[str, Any] = {"dongs": dong_list}
+    if category:
+        sql += " AND category ILIKE :cat"
+        params["cat"] = f"%{category}%"
+    sql += " GROUP BY dong_name"
+
+    from sqlalchemy.exc import SQLAlchemyError
+    from src.database.sync_engine import get_sync_engine
+
+    try:
+        engine = get_sync_engine(settings.postgres_url)
+        with engine.connect() as conn:
+            rows = conn.execute(sa_text(sql), params).fetchall()
+        by_dong = {r._mapping["dong_name"]: r._mapping["n"] for r in rows}
+        total = sum(by_dong.values())
+        return {"total": total, "by_dong": by_dong, "dongs": dong_list}
+    except SQLAlchemyError as ex:
+        logger.warning(f"[stores/count-by-dongs] DB error: {ex}")
+        raise HTTPException(status_code=503, detail=f"DB unavailable: {ex.__class__.__name__}")
+
+
 @app.post("/biz/lookup")
 async def biz_lookup(req: BizLookupRequest):
     """사업자등록번호 + 기업명으로 프랜차이즈 브랜드 매핑.
@@ -998,7 +1832,6 @@ async def biz_lookup(req: BizLookupRequest):
                     ),
                     {"biz": biz_clean},
                 ).fetchone()
-            engine.dispose()
             if row:
                 d = dict(row._mapping)
                 return {
@@ -1058,6 +1891,7 @@ async def signup(req: SignupRequest):
         result = await auth.signup(req.model_dump())
         if result.get("status") == "success" and result.get("user"):
             u = result["user"]
+            # 회원가입 직후 권한은 항상 master 고정. 신규 가입자에 superadmin 자동 부여 금지.
             result["access_token"] = create_access_token(
                 user_id=str(u["id"]),
                 role="master",
@@ -1088,9 +1922,12 @@ async def login(req: LoginRequest):
         result = await run_in_threadpool(auth.login, req.email, req.password)
         if result.get("status") == "success" and result.get("user"):
             u = result["user"]
+            login_role = u.get("role", "master")
+            if login_role not in {"master", "superadmin"}:
+                login_role = "master"
             result["access_token"] = create_access_token(
                 user_id=str(u["id"]),
-                role="master",
+                role=login_role,
                 email=u.get("email", req.email),
             )
         return result
@@ -1401,7 +2238,10 @@ def _mock_simulation_response(target_district: str, request_id: str) -> dict:
 
 
 @app.post("/predict")
-async def predict_districts(input_data: SimulationInput):
+async def predict_districts(
+    input_data: SimulationInput,
+    current_user: UserContext | None = Depends(get_optional_user),
+):
     """
     선택 동 1~4개 ML 예측 전용 엔드포인트 (LangGraph 미사용)
 
@@ -1410,6 +2250,9 @@ async def predict_districts(input_data: SimulationInput):
     - 응답: 동별 예측 결과 리스트 (프론트 멀티라인 차트용)
     """
     from src.config.constants import MAPO_DISTRICTS
+
+    # corp 다업종 brand auto-resolve + 운영 외 업종 차단
+    _validate_and_resolve_brand(input_data, current_user)
 
     target_districts = getattr(input_data, "target_districts", None) or [input_data.target_district]
     target_districts = [d for d in target_districts if d in MAPO_DISTRICTS][:4]
@@ -1433,14 +2276,20 @@ async def predict_districts(input_data: SimulationInput):
 
         segment_profile = _build_segment_profile(input_data)
 
-        results: list[DistrictPredictionResult] = list(
-            await asyncio.gather(
-                *[
-                    _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
-                    for dong in target_districts
-                ]
-            )
+        raw = await asyncio.gather(
+            *[
+                _predict_single_district(dong, industry_code, normalized_biz, cost_config, segment_profile)
+                for dong in target_districts
+            ],
+            return_exceptions=True,
         )
+        results: list[DistrictPredictionResult] = []
+        for dong, res in zip(target_districts, raw):
+            if isinstance(res, Exception):
+                print(f"[/predict] {dong} 예외 (부분 실패 처리): {res}")
+                results.append(DistrictPredictionResult(district=dong))
+            else:
+                results.append(res)
 
         print(f"--- [/predict] 완료 ({len(results)}개 동) ---")
 
@@ -1449,6 +2298,7 @@ async def predict_districts(input_data: SimulationInput):
 
     except Exception as e:
         import traceback
+
         print(f"[/predict] 예상치 못한 오류: {e}\n{traceback.format_exc()}")
         return JSONResponse(
             status_code=500,
@@ -1456,13 +2306,147 @@ async def predict_districts(input_data: SimulationInput):
         )
 
 
+# ---------------------------------------------------------------------------
+# Real-time progress 지원 — /predict/async + /predict/{job_id}/status.
+# 기존 sync /predict 는 회귀 방지 위해 그대로 유지. frontend 가 async 모드로
+# 전환 후 실측 진행률(슬라이스 완료 비율)을 250ms polling 으로 받음.
+# 단계: 동별 _predict_single_district 가 끝날 때마다 progress = done/total.
+# ---------------------------------------------------------------------------
+@app.post("/predict/async")
+async def predict_districts_async(
+    input_data: SimulationInput,
+    current_user: UserContext | None = Depends(get_optional_user),
+) -> dict[str, Any]:
+    """ML 예측 비동기 시작 — 즉시 job_id 반환. 진행률은 status endpoint 폴링."""
+    from src.config.constants import MAPO_DISTRICTS
+    from src.services.job_progress_store import (
+        create_job,
+        set_done,
+        set_error,
+        set_progress,
+    )
+
+    # corp 다업종 brand auto-resolve + 운영 외 업종 차단
+    _validate_and_resolve_brand(input_data, current_user)
+
+    target_districts = getattr(input_data, "target_districts", None) or [input_data.target_district]
+    target_districts = [d for d in target_districts if d in MAPO_DISTRICTS][:4]
+    if not target_districts:
+        return {"status": "error", "message": "유효한 마포구 행정동이 없습니다."}
+
+    job_id = create_job("predict")
+    logger.info(f"[/predict/async] 시작 job={job_id[:8]} dongs={target_districts} biz={input_data.business_type}")
+
+    async def _run() -> None:
+        logger.info(f"[/predict/async] _run 진입 job={job_id[:8]}")
+        try:
+            normalized_biz = _BIZ_TYPE_NORMALIZE.get(
+                (input_data.business_type or "").lower(),
+                input_data.business_type or "커피-음료",
+            )
+            industry_code = _BIZ_TO_INDUSTRY_CODE.get(normalized_biz, "CS100010")
+            cost_config = BEPCalculator.get_default_costs(
+                normalized_biz,
+                initial_capital=getattr(input_data, "initial_capital", 50_000_000),
+                monthly_rent=getattr(input_data, "monthly_rent", 2_000_000),
+            )
+            segment_profile = _build_segment_profile(input_data)
+
+            total = len(target_districts)
+            # 동별 4 sub-stage (ml_done / projection_done / shap_done / assembled).
+            # 단일 동 시뮬도 0% → 25% → 50% → 75% → 100% 단계로 보임.
+            # 4동 병렬이면 16 step 누적 — 매 sub-step 마다 6.25%p 진행.
+            sub_total = total * 4
+            sub_done = 0
+
+            def make_cb(dong: str) -> Callable[[str], None]:
+                def cb(label: str) -> None:
+                    nonlocal sub_done
+                    sub_done += 1
+                    set_progress(
+                        job_id,
+                        min(1.0, sub_done / sub_total),
+                        stage=f"{dong} {label}",
+                    )
+
+                return cb
+
+            async def _one(dong: str) -> tuple[str, Any]:
+                # 진입 즉시 stage 갱신 — progress 는 sub_done 누적 그대로(가짜 % 안 만듦),
+                # stage 만 "ML 모델 로딩 중" 으로 변경해 0% 머무는 동안의 시각 신호 제공.
+                # ModelOutput.generate 가 가장 무거워 첫 sub-stage(ml_done)까지 5~30s 걸릴 수 있음.
+                set_progress(
+                    job_id,
+                    sub_done / sub_total,
+                    stage=f"{dong} ML 모델 추론 중",
+                )
+                try:
+                    r = await _predict_single_district(
+                        dong,
+                        industry_code,
+                        normalized_biz,
+                        cost_config,
+                        segment_profile,
+                        progress_cb=make_cb(dong),
+                    )
+                except Exception as exc:
+                    r = exc
+                return dong, r
+
+            raw = await asyncio.gather(*[_one(d) for d in target_districts])
+
+            results: list[DistrictPredictionResult] = []
+            for dong, res in raw:
+                if isinstance(res, Exception):
+                    logger.warning(f"[/predict/async] {dong} 예외 (부분 실패 처리): {res}")
+                    results.append(DistrictPredictionResult(district=dong))
+                else:
+                    results.append(res)
+
+            payload = _safe_json([r.model_dump() for r in results])
+            set_done(job_id, payload)
+            logger.info(f"[/predict/async] 완료 job={job_id[:8]} count={len(results)}")
+        except Exception as e:
+            import traceback
+
+            logger.error(f"[/predict/async] 예상치 못한 오류: {e}\n{traceback.format_exc()}")
+            set_error(job_id, str(e))
+
+    # GC race 방지 — strong ref 보관, 완료 시 자동 discard.
+    task = asyncio.create_task(_run())
+    _async_job_tasks.add(task)
+    task.add_done_callback(_async_job_tasks.discard)
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/predict/{job_id}/status")
+async def predict_job_status(job_id: str) -> dict[str, Any]:
+    """ML 예측 async job 상태 조회 — running/done/error + progress 0~1."""
+    from src.services.job_progress_store import get_job, serialize_status
+
+    job = get_job(job_id)
+    if job is None or job["kind"] != "predict":
+        return JSONResponse(
+            status_code=404,
+            content={"status": "error", "message": f"job {job_id} not found"},
+        )
+    return serialize_status(job)
+
+
 @app.post("/simulate", deprecated=True)
-async def run_simulation(input_data: SimulationInput, response: Response):
+async def run_simulation(
+    input_data: SimulationInput,
+    response: Response,
+    current_user: UserContext | None = Depends(get_optional_user),
+):
     """기본 시뮬레이션 엔드포인트"""
     response.headers["Deprecation"] = "true"
     response.headers["Link"] = '</predict>; rel="successor-version", </analyze/llm>; rel="successor-version"'
 
     from src.config.constants import MAPO_DISTRICTS
+
+    # corp 다업종 brand auto-resolve + 운영 외 업종 차단
+    _validate_and_resolve_brand(input_data, current_user)
 
     if input_data.target_district not in MAPO_DISTRICTS:
         return {
@@ -1486,8 +2470,16 @@ async def run_simulation(input_data: SimulationInput, response: Response):
         winner = result.get("winner_district") or input_data.target_district
         top3 = result.get("top_3_candidates") or []
         try:
+            result["same_brand_locations"] = await _collect_same_brand_locations(
+                winner, top3, input_data.brand_name, input_data.business_type
+            )
+        except Exception as ce:
+            logger.warning(f"[/simulate] same_brand_locations 실패 (무시): {ce}")
+            result["same_brand_locations"] = []
+        try:
+            _spot_coords = _resolve_top_spot_coords(result, max_n=4)
             result["all_competitor_locations"] = await _collect_all_competitor_locations(
-                winner, top3, input_data.business_type
+                winner, top3, input_data.business_type, spot_coords=_spot_coords
             )
         except Exception as ce:
             print(f"[SIMULATE] all_competitor_locations 수집 실패 (무시): {ce}")
@@ -1694,14 +2686,14 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         )
     else:
         tier = TierDistribution(tier_s=5, tier_a=20, tier_b=75)
-    # 전 Tier OpenAI gpt-4.1-mini 통일 — Anthropic/Gemini 키 분기 제거,
+    # 전 Tier OpenAI gpt-5.4-nano 통일 — Anthropic/Gemini 키 분기 제거,
     # 단일 provider 로 비용·rate-limit 단순화. generate_thought 도 동일 모델 사용 중.
     cfg = ModelConfig(
         n_personas=req.n_agents,
         tier_s_provider="openai",
-        tier_s_model="gpt-4.1-mini",
+        tier_s_model="gpt-5.4-nano",
         tier_a_provider="openai",
-        tier_a_model="gpt-4.1-mini",
+        tier_a_model="gpt-5.4-nano",
     )
     # A1 Scenario dataclass — weather_override / date_override / weekend_force / rent_shock_pct
     scenario = Scenario(
@@ -1736,10 +2728,12 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     # v2: collect_trajectory=True 회귀 fix + thoughts 필드 (2026-04-28).
     # v3: 신규 매장 popularity_boost=5.0 적용 (visits=0 회귀 fix, 2026-04-28).
     # v4: Tier S/A LLM decisions 도입 (use_llm_decisions, 2026-04-29).
-    # v5: 전 Tier OpenAI gpt-4.1-mini 통일 (Haiku/Gemini 제거, 2026-04-29).
+    # v5: 전 Tier OpenAI gpt-5.4-nano 통일 (Haiku/Gemini 제거, 2026-04-29 v5; 2026-05-09 nano 전환).
     # v6: Tier S 50 전용 LLM 모드 (Tier A/B → policy_decide, 2026-04-29).
+    # v7: ext_commuter LLM plan 활성 + new_store_role_dist + tier_s_meta 응답 추가 (2026-05-03).
+    # v8: hourly_visits (24h 분포) 응답 추가 — 시간대 막대/필터용 (2026-05-10).
     cache_key = (
-        "abm_sim:v6:"
+        "abm_sim:v8:"
         + hashlib.sha256(_json.dumps(cache_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:32]
     )
 
@@ -1867,6 +2861,8 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "total_daily_visits": result.get("daily_visits", 0),
         "total_daily_revenue": result.get("daily_revenue", 0),
         "peak_hours": result.get("peak_hours", []),
+        # 24시간 visits 분포 (length 24, 0~23). frontend 시간대 막대/필터용.
+        "hourly_visits": result.get("hourly_visits", []),
         "customer_profile_dist": result.get("customer_profile_dist", {}),
         "dong_totals": dong_totals,  # 프론트에서 동별 비교 차트용
         "cannibalization": result.get("cannibalization", {}),
@@ -1878,12 +2874,14 @@ async def run_abm_simulation(req: AbmSimulationRequest):
         "new_store_visits": result.get("new_store_visits", 0),
         "new_store_revenue": result.get("new_store_revenue", 0.0),
         "new_store_visit_share_pct": result.get("new_store_visit_share_pct", 0.0),
+        "new_store_role_dist": result.get("new_store_role_dist", {}),
         # Tier S thought (시각화용 내적 독백) — enable_llm_thought=True 일 때만 채워짐
         "thoughts": result.get("thoughts", []),
         "thought_calls": result.get("thought_calls", 0),
         "thought_input_tokens": result.get("thought_input_tokens", 0),
         "thought_output_tokens": result.get("thought_output_tokens", 0),
         "thought_cached_tokens": result.get("thought_cached_tokens", 0),
+        "tier_s_meta": result.get("tier_s_meta"),
         "tier_s_calls": result.get("tier_s_calls", 0),
         "tier_a_calls": result.get("tier_a_calls", 0),
         "estimated_cost_usd": result.get("estimated_cost_usd", 0.0),
@@ -1898,8 +2896,10 @@ async def run_abm_simulation(req: AbmSimulationRequest):
     try:
         async with aioredis.from_url(settings.redis_url, decode_responses=True) as r:
             cache_body = {k: v for k, v in response.items() if k != "trajectory"}
-            await r.setex(cache_key, 3600, _json.dumps(cache_body, ensure_ascii=False))
-            logger.info(f"[ABM] cache SET key={cache_key[:16]}... ttl=3600s")
+            # 사용자 피드백 (2026-05-04): TTL 1h → 24h. ABM 시뮬 비용 큼 (gpt-5.4-nano ~$0.01/회) →
+            # 같은 시나리오 재시뮬 회피 위해 캐시 더 오래 유지.
+            await r.setex(cache_key, 86400, _json.dumps(cache_body, ensure_ascii=False))
+            logger.info(f"[ABM] cache SET key={cache_key[:16]}... ttl=86400s")
     except Exception as e:
         logger.warning(f"[ABM] Redis 캐시 저장 실패(무시): {e}")
 

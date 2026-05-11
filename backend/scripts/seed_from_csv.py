@@ -51,7 +51,8 @@ PROTECTED_TABLES = {
     "users",
     "manager_users",
     "invite_codes",
-    "simulation_result",
+    "simulation_ai",
+    "simulation_foresee",
     "biz_brand_mapping",
 }
 
@@ -292,7 +293,7 @@ def main() -> int:
     parser.add_argument(
         "--force-all",
         action="store_true",
-        help="모든 테이블을 TRUNCATE 후 재적재 (users/manager_users/invite_codes/simulation_result/biz_brand_mapping 포함)",
+        help="모든 테이블을 TRUNCATE 후 재적재 (users/manager_users/invite_codes/simulation_ai/simulation_foresee/biz_brand_mapping 포함)",
     )
     args = parser.parse_args()
 

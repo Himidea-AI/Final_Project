@@ -4,7 +4,7 @@ import { HistoryCard } from './HistoryCard';
 import { HistoryFilter } from './HistoryFilter';
 import { ActivityDashboard } from './ActivityDashboard';
 import { useSimulationHistory } from '../../hooks/useSimulationHistory';
-import type { HistoryFilterParams } from '../../types/simulationHistory';
+import type { HistoryFilterParams, SimulationKind } from '../../types/simulationHistory';
 
 interface HistoryListProps {
   /** 초기 필터 — 기본: 최근 30일 · 최신순 */
@@ -34,10 +34,12 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
 
   const { items, total, isLoading, error, remove, refetch } = useSimulationHistory(filter);
 
-  const handleOpen = (id: number) => navigate(`/dashboard/history/${id}`);
-  const handleDownloadPdf = (id: number) => navigate(`/dashboard/history/${id}?autopdf=1`);
-  const handleDelete = async (id: number) => {
-    await remove(id);
+  // 2026-05-02 DB 분리 — kind 별 라우트로 직접 진입 (3-card hub 우회).
+  const handleOpen = (id: number, kind: SimulationKind) => navigate(`/dashboard/${kind}/${id}`);
+  const handleDownloadPdf = (id: number, kind: SimulationKind) =>
+    navigate(`/dashboard/${kind}/${id}?autopdf=1`);
+  const handleDelete = async (id: number, kind: SimulationKind) => {
+    await remove(id, kind);
   };
 
   return (
@@ -46,14 +48,14 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
 
       <HistoryFilter value={filter} onChange={setFilter} />
 
-      <div className="flex items-center justify-between text-xs text-stone-400">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
-          총 <span className="font-mono text-stone-100">{total}</span>건
+          총 <span className="font-mono text-foreground">{total}</span>건
         </span>
         <button
           type="button"
           onClick={() => void refetch()}
-          className="text-stone-400 hover:text-stone-100"
+          className="text-muted-foreground hover:text-foreground"
           aria-label="새로고침"
         >
           새로고침
@@ -61,21 +63,37 @@ export function HistoryList({ initialFilter }: HistoryListProps) {
       </div>
 
       {error && (
-        <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+        <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
         </div>
       )}
 
       {isLoading ? (
-        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-500">
+        <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
           불러오는 중…
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-stone-700 bg-stone-900/40 p-10 text-center text-sm text-stone-400">
-          조건에 맞는 시뮬 이력이 없습니다
+        <div className="rounded-lg border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
+          <div>조건에 맞는 시뮬 이력이 없습니다</div>
+          <button
+            type="button"
+            onClick={() => {
+              const range = getInitialRange30d();
+              setFilter({
+                from_date: range.from,
+                to_date: range.to,
+                page: 1,
+                size: 20,
+                sort: 'created_at_desc',
+              });
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition-colors"
+          >
+            필터 초기화
+          </button>
         </div>
       ) : (
-        <div className="space-y-3 pb-24">
+        <div className="space-y-3 pb-6">
           {items.map((item) => (
             <HistoryCard
               key={item.id}

@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     sgis_secret_key: str = os.getenv("SGIS_SECRET_KEY", "")
     molit_api_key: str = os.getenv("MOLIT_API_KEY", "")
     ftc_api_key: str = os.getenv("FTC_API_KEY", "")
+    kakao_api_key: str = os.getenv("KAKAO_API_KEY", "")
+    ecos_api_key: str = os.getenv("ECOS_API_KEY", "")
     law_oc: str = os.getenv("LAW_OC", "")
 
     # Naver DataLab API
@@ -61,11 +63,74 @@ class Settings(BaseSettings):
     hyde_enabled: bool = os.getenv("HYDE_ENABLED", "false").lower() == "true"
 
     # RRF (Reciprocal Rank Fusion) — vector + BM25 결합 가중치
-    # SP3: 외부화 (.env로 조정 가능). 기본값은 검증 전 안전 baseline 0.5/0.5 유지.
-    # bench_rag_accuracy.py로 골든셋 측정 후 최적값 확정 예정.
+    # SP3 grid search 결과 (2026-05-01, 29 케이스 골든셋, BGE-m3 + Kiwi BM25):
+    #   vec=0.3/bm25=0.7  Recall 0.408 NDCG 0.263 Hit 62.1%
+    #   vec=0.4/bm25=0.6  Recall 0.408 NDCG 0.273 Hit 62.1%  ← 최적 (NDCG/MRR 최고)
+    #   vec=0.5/bm25=0.5  Recall 0.351 NDCG 0.248 Hit 55.2%  (이전 baseline)
+    #   vec=0.6/bm25=0.4  Recall 0.316 NDCG 0.235 Hit 48.3%
+    #   vec=0.7/bm25=0.3  Recall 0.333 NDCG 0.241 Hit 48.3%
+    # 한국어 법률 텍스트는 키워드 매칭(BM25)이 의미 매칭(vector)보다 강력.
     rrf_k: int = int(os.getenv("RRF_K", "60"))
-    rrf_vector_weight: float = float(os.getenv("RRF_VECTOR_WEIGHT", "0.5"))
-    rrf_bm25_weight: float = float(os.getenv("RRF_BM25_WEIGHT", "0.5"))
+    rrf_vector_weight: float = float(os.getenv("RRF_VECTOR_WEIGHT", "0.4"))
+    rrf_bm25_weight: float = float(os.getenv("RRF_BM25_WEIGHT", "0.6"))
+
+    # Primary-law boost — RRF 결합 시 본법 source(시행령/시행규칙/판례 제외)에 부여하는 가산점.
+    # 0.0 = 비활성, 2.0 = 본법 score *= 3.0. 시행령이 정답 본법 article을 밀어내는 현상 완화.
+    # search(prefer_primary_law=True) 시에만 적용. 기본값은 retriever default (True) 활성.
+    # Bench grid search (29 케이스 v3+, 2026-05-04):
+    #   0.15 -> Hit 86.2% MRR 0.427 NDCG 0.407
+    #   0.50 -> Hit 93.1% MRR 0.543 NDCG 0.501
+    #   1.00 -> Hit 96.6% MRR 0.561 NDCG 0.515
+    #   1.50 -> Hit 100%  MRR 0.565 NDCG 0.522
+    #   2.00 -> Hit 100%  MRR 0.570 NDCG 0.525  ← 최적 (saturate)
+    #   3.00 -> Hit 100%  MRR 0.570 NDCG 0.525  (변화 없음)
+    primary_law_boost: float = float(os.getenv("PRIMARY_LAW_BOOST", "2.0"))
+
+    # 부칙(적용례/경과조치/특례) 청크 BM25 감점 — 본문 article을 같은 번호의 부칙이 밀어내는
+    # 현상 완화. 0.0 = 비활성, 0.5 = score *= 0.5. 본법 본문 chunk 가 BM25 상위로 올라옴.
+    bm25_supplementary_penalty: float = float(os.getenv("BM25_SUPPLEMENTARY_PENALTY", "0.4"))
+
+    # Reranker — top-K 재정렬 (정밀도 ↑, 검색 속도 ↓)
+    # provider="openai" (default, gpt-5.4-nano list-wise) 또는 "local" (BGE CrossEncoder).
+    # OpenAI rerank bench (2026-05-04, K=10): MRR 0.785 → 0.931, NDCG 0.642 → 0.776 (+19%/+21%).
+    # Local CrossEncoder 는 한국어 법률 article 판정 약함 → Hit -20p 역효과.
+    rerank_enabled: bool = os.getenv("RERANK_ENABLED", "true").lower() == "true"
+    rerank_provider: str = os.getenv("RERANK_PROVIDER", "openai").lower()
+    rerank_openai_model: str = os.getenv("RERANK_OPENAI_MODEL", "gpt-5.4-nano")
+    rerank_model: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+    rerank_initial_k: int = int(os.getenv("RERANK_INITIAL_K", "30"))  # 1차 검색 K
+    rerank_final_k: int = int(os.getenv("RERANK_FINAL_K", "10"))  # 재정렬 후 반환 K
+
+    # Chunk Compression — cheap LLM으로 RAG 청크를 1~2문장 핵심 요약 → 메인 LLM 컨텍스트 ↓
+    # default OFF. CHUNK_COMPRESSION_ENABLED=true 활성화. cheap model: gemini-flash/gpt-4o-mini.
+    chunk_compression_enabled: bool = os.getenv("CHUNK_COMPRESSION_ENABLED", "false").lower() == "true"
+    chunk_compression_model: str = os.getenv("CHUNK_COMPRESSION_MODEL", "gpt-5.4-nano")
+
+    # Multi-query expansion — cheap LLM이 1쿼리 → N개 변형 → 병렬 검색 후 RRF fusion.
+    # 기대: Recall +10~15%. 비용: cheap LLM 1회 + RAG 검색 N배.
+    multi_query_enabled: bool = os.getenv("MULTI_QUERY_ENABLED", "false").lower() == "true"
+    multi_query_n: int = int(os.getenv("MULTI_QUERY_N", "3"))
+    multi_query_model: str = os.getenv("MULTI_QUERY_MODEL", "gpt-5.4-nano")
+
+    # RAG 검색 trace — 각 search() 호출 단계별 후보/점수를 JSONL로 기록
+    # default OFF (성능 영향). RAG_TRACE_ENABLED=true 활성화.
+    rag_trace_enabled: bool = os.getenv("RAG_TRACE_ENABLED", "false").lower() == "true"
+    rag_trace_dir: str = os.getenv("RAG_TRACE_DIR", "validation/results/rag_trace")
+
+    # 판례 RAG — specialist 평가 시 관련 판례 동시 검색 (default ON).
+    # category='판례' 청크 (대법원 등) 를 검색하여 summary/recommendation 에 인용.
+    legal_precedent_enabled: bool = os.getenv("LEGAL_PRECEDENT_ENABLED", "true").lower() == "true"
+    legal_precedent_top_k: int = int(os.getenv("LEGAL_PRECEDENT_TOP_K", "2"))
+
+    # Articles content 를 LLM 이 풀어쓴 1~2문장 케이스 맞춤 설명으로 변환 (default ON).
+    # specialist 당 LLM 1회 추가 호출. 비용 vs UX trade-off — 사용자가 200~300자
+    # 조문 본문을 직접 읽는 부담 제거 목적.
+    legal_article_explanation_enabled: bool = os.getenv("LEGAL_ARTICLE_EXPLANATION_ENABLED", "true").lower() == "true"
+
+    # Legal Rule Engine — 8 룰 + 4 specialist 하이브리드 (2026-05-02).
+    # 단일 모드로 전환 (legacy single-LLM batch 경로 제거). flag 자체는 호환을 위해 보존.
+    # 스펙: docs/superpowers/specs/2026-05-02-legal-rule-engine-design.md
+    legal_rule_engine_enabled: bool = os.getenv("LEGAL_RULE_ENGINE_ENABLED", "true").lower() == "true"
 
     # NTS (국세청)
     nts_api_key: str = os.getenv("NTS_API_KEY", "")

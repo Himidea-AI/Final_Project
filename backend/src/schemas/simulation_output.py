@@ -97,6 +97,11 @@ class DistrictRanking(BaseModel):
     sales_score: float = 0.0
     pop_score: float = 0.0
     rent_score: float = 0.0
+    # 2026-05-02: 프론트 "동 검색량 16동 중 N위" 표시용으로 응답에 추가.
+    # 기존엔 schema 미정의로 직렬화 시 drop 됨. None 허용 — 데이터 결측 동 대응.
+    trend_score: float | None = None
+    density_score: float | None = None
+    inflow_score: float | None = None
     vacancy_rate: float = 0.0
     zoning_risk: str | None = None
     bep_quarters: int | None = None
@@ -159,8 +164,11 @@ class SimulationOutput(BaseModel):
     demographic_report: dict | None = None
     agent_attributions: list[dict] = Field(default_factory=list)
     all_competitor_locations: list[dict] = Field(default_factory=list)
+    # winner+top3 4동 안 자사 브랜드 매장 좌표 — 지도 자사 매장 마커(로고 아이콘) + 영업구역 반경 원 표시용.
+    # 항목 키: id, place_name, brand_name, lat, lng, dong_name, address
+    same_brand_locations: list[dict] = Field(default_factory=list)
     # [customer_revenue P1-C] 타겟 고객 매출 분석 — dict | None (predict.py 반환값 그대로)
-    # 키: segment_ratio, segment_sales, identified_sales, total_sales_ref, profile_summary, dimension_ratios
+    # 키: segment_ratio, segment_sales, identified_sales, total_sales_per_store, profile_summary, dimension_ratios
     customer_segment: dict | None = None
     # [D — living_pop_forecast P1-D] 유동인구 피크 시간 예측 (TCN). dict | None
     # 키: dong_code, dong_name, n_quarters, quarters[{quarter_offset, peak_time_zone, peak_pop, all_hours}], is_mock
@@ -187,7 +195,6 @@ class DistrictPredictionResult(BaseModel):
     customer_segment: dict | None = None
     living_pop_forecast: dict | None = None
     emerging_signal: dict | None = None
-
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +240,8 @@ class AnalysisOutput(BaseModel):
     request_id: str
     target_district: str
     target_districts: list[str] = Field(default_factory=list)
+    business_type: str | None = None
+    brand_name: str | None = None
     winner_district: str | None = None
     top_3_candidates: list[str] = Field(default_factory=list)
     district_rankings: list[DistrictRanking] = Field(default_factory=list)
@@ -246,9 +255,17 @@ class AnalysisOutput(BaseModel):
     demographic_report: dict | None = None
     agent_attributions: list[dict] = Field(default_factory=list)
     all_competitor_locations: list[dict] = Field(default_factory=list)
+    same_brand_locations: list[dict] = Field(default_factory=list)
     analysis_report: str = ""
     ai_recommendation: str = ""
     final_report: dict | None = None
     financial_report: dict = Field(default_factory=dict)
     analysis_metrics: dict = Field(default_factory=dict)
     map_data: MapData | None = None
+    # IM3-144 정합 (2026-05-02): SimulationOutput 에는 있지만 AnalysisOutput 누락이던 3 필드.
+    # main.py:941 의 schema 필터 (`AnalysisOutput.model_fields.keys()`) 가 이 필드를 응답에서
+    # 제거 → frontend 의 CustomerSegmentCard / LivingPopForecast / EmergingSignal 이 placeholder
+    # 로 표시되던 회귀 차단.
+    customer_segment: dict | None = None
+    living_pop_forecast: dict | None = None
+    emerging_signal: dict | None = None

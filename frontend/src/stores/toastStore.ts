@@ -9,6 +9,11 @@ export interface Toast {
   description?: string;
   action?: { label: string; onClick: () => void };
   durationMs?: number;
+  /**
+   * 동일 dedupeKey 의 기존 토스트는 새 push 시 제거됨 (replace + duration 재시작).
+   * 재시도 연타로 같은 토스트가 stack 누적되는 회귀 방지용.
+   */
+  dedupeKey?: string;
 }
 
 interface ToastState {
@@ -22,7 +27,9 @@ export const useToastStore = create<ToastState>((set, get) => ({
   push: (t) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const toast: Toast = { durationMs: 5000, ...t, id };
-    set({ toasts: [...get().toasts, toast] });
+    const prev = get().toasts;
+    const next = toast.dedupeKey ? prev.filter((x) => x.dedupeKey !== toast.dedupeKey) : prev;
+    set({ toasts: [...next, toast] });
     if (toast.durationMs && toast.durationMs > 0) {
       setTimeout(() => get().dismiss(id), toast.durationMs);
     }

@@ -16,6 +16,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .policy_generator import PersonaPolicy, apply_personal_variation, hour_to_time_block
+from .profile_builder import age_to_group
 from .archetypes import get_multipliers as _archetype_muls
 
 if TYPE_CHECKING:
@@ -31,6 +32,49 @@ def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
 
 
 import math as _math  # noqa: E402
+
+
+# ---------------------------------------------------------------
+# Nemotron 페르소나 hobbies/persona 키워드 → 카테고리 가중치
+# spawn_agents 가 a.hobby_cat_pref dict 를 inject (1회 계산, score_store 매 호출 시 lookup).
+# 이전엔 26 컬럼 페르소나가 inject 만 되고 Tier B 규칙 의사결정에 미사용 (dead data).
+# 사용자 피드백 (2026-05-08): hobbies/persona 단어로 카테고리 선호 차등화 → 페르소나 반영.
+# ---------------------------------------------------------------
+_HOBBY_CAT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "카페": ("커피", "카페", "디저트", "베이커리", "브런치", "차"),
+    "음식점": ("요리", "미식", "맛집", "외식", "한식", "양식", "일식", "중식", "분식"),
+    "주점": ("맥주", "술", "와인", "소주", "음주", "펍", "이자카야", "와인바"),
+    "편의점": (),  # 편의점은 페르소나 영향 거의 없음 (편의 목적)
+}
+
+
+def compute_nemotron_cat_pref(agent) -> dict[str, float]:
+    """agent 의 nemotron persona 텍스트에서 카테고리별 키워드 매칭 수 → multiplier.
+
+    spawn_agents 가 페르소나 inject 직후 1회 호출 → agent.hobby_cat_pref 저장.
+    score_store 매 호출 시 dict lookup 만 (string scan 회피).
+    """
+    out: dict[str, float] = {"카페": 1.0, "음식점": 1.0, "주점": 1.0, "편의점": 1.0}
+    hobbies = getattr(agent, "hobbies", None)
+    if isinstance(hobbies, list):
+        text = " ".join(str(h) for h in hobbies)
+    elif isinstance(hobbies, str):
+        text = hobbies
+    else:
+        text = ""
+    text += " " + (getattr(agent, "persona_text", "") or "")
+    text += " " + (getattr(agent, "professional_persona_text", "") or "")
+    if not text.strip():
+        return out
+    for cat, kws in _HOBBY_CAT_KEYWORDS.items():
+        if not kws:
+            continue
+        n = sum(1 for kw in kws if kw in text)
+        if n > 0:
+            # 매치 1개당 +12%, 최대 3개 cap → 1.0~1.36
+            out[cat] = 1.0 + 0.12 * min(n, 3)
+    return out
+
 
 # 마포 중심 좌표 (대략 합정~공덕 중간)
 _MAPO_CENTER = (37.555, 126.923)
@@ -375,98 +419,124 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
 
     정책 + 개인 취향(profile) + 나이×동×시간 실측 가중치(time_age_boost) + 시간×카테고리 부스트
     를 모두 곱해서 개별성을 반영한 점수 산출.
-    """
-    # 1. 정책 카테고리 선호
-    cat_pref = {
-        "카페": policy.cafe_preference,
-        "음식점": policy.meal_preference,
-        "주점": policy.pub_preference,
-        "편의점": policy.cvs_preference,
-    }.get(store.category, 0.3)
 
-    # 2. 시간대별 카테고리 부스트 (점심 음식점 ×1.6, 야간 주점 ×2.5 등)
+    [perf] cProfile 측정 (5.7M 호출 / 90s tottime) 결과 dict literal/enum/getattr
+    오버헤드가 self-time 의 30% 차지. inline if/elif + 외부 cache 로 회귀 없는 micro-opt.
+    """
+    cat = store.category
     h = world.current_hour % 24
-    time_boost = _TIME_CATEGORY_BOOST.get(store.category, {}).get(h, 1.0)
-    cat_pref *= time_boost
+
+    # 1. 정책 카테고리 선호 — inline if/elif (dict literal 생성 회피, 5.7M × 매번)
+    if cat == "카페":
+        cat_pref = policy.cafe_preference
+    elif cat == "음식점":
+        cat_pref = policy.meal_preference
+    elif cat == "주점":
+        cat_pref = policy.pub_preference
+    elif cat == "편의점":
+        cat_pref = policy.cvs_preference
+    else:
+        cat_pref = 0.3
+
+    # 2. 시간대별 카테고리 부스트
+    inner = _TIME_CATEGORY_BOOST.get(cat)
+    if inner is not None:
+        cat_pref *= inner.get(h, 1.0)
 
     # 3. 개인 profile 취향 (AgentProfile 있으면) — 완만 적용 (0.75~1.25)
-    if agent.profile is not None:
-        profile_cat_pref = {
-            "카페": agent.profile.pref_cafe,
-            "음식점": agent.profile.pref_restaurant,
-            "주점": agent.profile.pref_pub,
-            "편의점": agent.profile.pref_convenience,
-        }.get(store.category, 0.5)
+    profile = agent.profile  # cache 1회
+    if profile is not None:
+        if cat == "카페":
+            profile_cat_pref = profile.pref_cafe
+        elif cat == "음식점":
+            profile_cat_pref = profile.pref_restaurant
+        elif cat == "주점":
+            profile_cat_pref = profile.pref_pub
+        elif cat == "편의점":
+            profile_cat_pref = profile.pref_convenience
+        else:
+            profile_cat_pref = 0.5
         cat_pref *= 0.75 + 0.5 * profile_cat_pref
+
+    # 3.5. Nemotron 페르소나 hobbies/persona 키워드 boost (spawn 시 사전 계산된 dict)
+    nemo_pref = getattr(agent, "hobby_cat_pref", None)
+    if nemo_pref is not None:
+        cat_pref *= nemo_pref.get(cat, 1.0)
 
     # 4. 실측 연령×동×시간×요일 가중치 (living_population 13,440 entries)
     age_time_boost = 1.0
-    tab = getattr(world, "time_age_boost", None)
+    tab = world.time_age_boost if hasattr(world, "time_age_boost") else None
     if tab:
-        from .profile_builder import age_to_group
-
         g = age_to_group(agent.age)
-        key = (g, store.dong, h, world.weekday)
-        age_time_boost = tab.get(key, 1.0)
+        age_time_boost = tab.get((g, store.dong, h, world.weekday), 1.0)
 
     # 5. 성별·연령별 카테고리 보정 (2024 실측 통계 기반)
     age = agent.age
     gender = agent.gender
-    age_cat_mult = _AGE_GENDER_BOOST.get((store.category, _age_bin(age), gender), 1.0)
+    age_cat_mult = _AGE_GENDER_BOOST.get((cat, _age_bin(age), gender), 1.0)
     # 시간대 × 성별·연령 특이 패턴 (20대 여성 카페, 50대 남성 아침 편의점 등)
-    age_cat_mult *= _age_gender_time_bonus(age, gender, store.category, h, world.weekday)
+    age_cat_mult *= _age_gender_time_bonus(age, gender, cat, h, world.weekday)
 
     # 6. 가격 민감도 (price_sensitivity 높으면 저가 매장 선호)
     price_mult = 1.0
-    if agent.profile is not None:
-        ps = agent.profile.price_sensitivity
+    if profile is not None:
+        ps = profile.price_sensitivity
         if ps > 0.5:
             price_mult = max(0.2, 1.3 - 0.3 * store.price_level)
         else:
             price_mult = max(0.2, 0.4 + 0.3 * store.price_level)
 
     # 기본 feature
-    indoor_score = _CATEGORY_INDOOR_SCORE.get(store.category, 0.4)
+    indoor_score = _CATEGORY_INDOOR_SCORE.get(cat, 0.4)
     # Haversine 실거리 (km) + 동 순서 거리 blend
-    dong_cost = _dong_distance(agent.current_dong, store.dong, world.dongs)
-    km = _store_distance_km(None, None, store) if store.dong != agent.current_dong else 0.2
+    store_dong = store.dong
+    agent_dong = agent.current_dong
+    dong_cost = _dong_distance(agent_dong, store_dong, world.dongs)
+    km = _store_distance_km(None, None, store) if store_dong != agent_dong else 0.2
     haversine_cost = min(1.0, km / _MAX_KM)
     distance_cost = 0.4 * dong_cost + 0.6 * haversine_cost
-    congestion_penalty = min(1.0, store.visits_today / max(store.seats, 1))
-    dong_aff = policy.dong_affinity.get(store.dong, 0.5)
+    seats = store.seats
+    congestion_penalty = min(1.0, store.visits_today / seats) if seats > 0 else 1.0
+    dong_aff = policy.dong_affinity.get(store_dong, 0.5)
     popularity = max(0.3, min(2.0, store.popularity_boost))
 
     # 재방문 보너스 + 학습된 만족도
-    repeat_bonus = policy.repeat_visit_bonus if store.store_id in agent.visited_today else 0.0
-    satisfaction = agent.store_satisfaction.get(store.store_id, 0.0)  # 0~1
+    sid = store.store_id
+    repeat_bonus = policy.repeat_visit_bonus if sid in agent.visited_today else 0.0
+    satisfaction = agent.store_satisfaction.get(sid, 0.0)  # 0~1
 
     # Layer 2 기억: visit_history 기반 누적 만족도 + habit + blacklist
-    if store.store_id in getattr(agent, "blacklist", set()):
+    blacklist = getattr(agent, "blacklist", None)
+    if blacklist is not None and sid in blacklist:
         return 0.0  # 블랙리스트 완전 배제
-    recalled = agent.recall_satisfaction(store.store_id) if hasattr(agent, "recall_satisfaction") else None
+    recalled = agent.recall_satisfaction(sid) if hasattr(agent, "recall_satisfaction") else None
     memory_bonus = 0.0
     if recalled is not None:
         memory_bonus = (recalled - 0.5) * 0.8  # 만족도>0.5 면 +, <0.5 면 -
     # 습관 (같은 시간대 자주 감)
-    habit_bonus = 0.4 if getattr(agent, "habit_store", {}).get(h) == store.store_id else 0.0
+    habit_store_map = getattr(agent, "habit_store", None)
+    habit_bonus = 0.4 if habit_store_map is not None and habit_store_map.get(h) == sid else 0.0
     # Layer 2 category 학습 선호 (exponential moving average 로 업데이트된 값)
-    learned_cat = getattr(agent, "learned_prefs", {}).get(store.category, 0.5)
+    learned_prefs = getattr(agent, "learned_prefs", None)
+    learned_cat = learned_prefs.get(cat, 0.5) if learned_prefs is not None else 0.5
     learned_mult = 0.7 + 0.6 * learned_cat  # 0.7~1.3
 
     # Layer 5 친구 추천 반영
     rec_bonus = 0.0
-    for rec in getattr(agent, "pending_recommendations", []):
-        if rec.get("store_id") == store.store_id:
-            rec_bonus = 0.3 * rec.get("strength", 0.5)
-            break
+    pending_recs = getattr(agent, "pending_recommendations", None)
+    if pending_recs:
+        for rec in pending_recs:
+            if rec.get("store_id") == sid:
+                rec_bonus = 0.3 * rec.get("strength", 0.5)
+                break
 
     # 계절 보정
-    season_mult = _SEASON_CATEGORY.get(getattr(world, "month", 4), {}).get(store.category, 1.0)
+    month = getattr(world, "month", 4)
+    season_inner = _SEASON_CATEGORY.get(month)
+    season_mult = season_inner.get(cat, 1.0) if season_inner is not None else 1.0
 
     # 영업 마감 직전 러시 (카페·편의점만, close 1시간 전)
-    close_rush = 1.0
-    if store.category in ("편의점", "카페") and h in (22, 23):  # 심플: 22-23시 약한 러시
-        close_rush = 1.15
+    close_rush = 1.15 if (cat == "편의점" or cat == "카페") and (h == 22 or h == 23) else 1.0
 
     score = (
         policy.indoor_preference * indoor_score
@@ -489,7 +559,7 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
     # Phase A (sprint 2026-04-27) 시도: 0.5+0.5 강화 → -0.007 noise, revert.
     af_boost_map = getattr(world, "adstrd_flpop_boost", None)
     if af_boost_map:
-        af = af_boost_map.get((store.dong, h, world.weekday), 1.0)
+        af = af_boost_map.get((store_dong, h, world.weekday), 1.0)
         score *= 0.9 + 0.1 * max(0.5, min(2.0, af))  # 0.95~1.10 범위 — 보수적
 
     # 평점 가중
@@ -498,19 +568,342 @@ def score_store(store: "Store", agent: "Agent", policy: PersonaPolicy, world: "W
     # OFS dong score boost (외부 입지 매력도, Option E — role별 차등)
     # 외부 agent 일수록 OFS 같은 거시 신호에 의존, 거주민은 본인 휴리스틱 사용.
     # ofs_dong_score 비어있으면 1.0 (기존 동작 보존).
-    ofs = world.ofs_dong_score.get(store.dong) if world.ofs_dong_score else None
-    if ofs is not None:
-        ofs_norm = max(0.0, min(1.0, ofs / 100.0))  # 10~100 → 0.1~1.0
-        role_v = agent.role.value if hasattr(agent.role, "value") else str(agent.role)
-        if role_v in ("ext_commuter", "ext_visitor"):
-            ofs_mult = 0.5 + 0.5 * ofs_norm  # 0.5~1.0 (강한 영향)
-        elif role_v in ("commuter", "visitor"):
-            ofs_mult = 0.85 + 0.3 * ofs_norm  # 0.85~1.15 (약한 영향)
-        else:  # resident, owner
-            ofs_mult = 1.0  # 영향 없음
-        score *= ofs_mult
+    ofs_map = world.ofs_dong_score
+    if ofs_map:
+        ofs = ofs_map.get(store_dong)
+        if ofs is not None:
+            ofs_norm = max(0.0, min(1.0, ofs / 100.0))  # 10~100 → 0.1~1.0
+            role_v = agent.role.value if hasattr(agent.role, "value") else str(agent.role)
+            if role_v == "ext_commuter" or role_v == "ext_visitor":
+                ofs_mult = 0.5 + 0.5 * ofs_norm  # 0.5~1.0 (강한 영향)
+            elif role_v == "commuter" or role_v == "visitor":
+                ofs_mult = 0.85 + 0.3 * ofs_norm  # 0.85~1.15 (약한 영향)
+            else:  # resident, owner
+                ofs_mult = 1.0  # 영향 없음
+            score *= ofs_mult
 
     return max(0.0, score)
+
+
+def score_stores_batch(
+    stores: list["Store"],
+    agent: "Agent",
+    policy: PersonaPolicy,
+    world: "World",
+) -> list[float]:
+    """score_store 의 batch 버전 — N 매장 점수 list 반환.
+
+    설계:
+        score_store 단일 호출은 매번 per-agent 상수 (pol_pref dict, age_g, role_v,
+        learned_mult per cat, age_cat_mult per cat 등) 를 재계산. cProfile 측정 시
+        5.7M 호출 / 90s tottime, 그 안에서 dict literal 생성 / getattr / enum 접근이
+        self-time 의 30% 차지.
+
+        batch 진입 시 1회만 precompute → per-store loop 는 순수 변동값 (cat/sid/
+        dong/lat/lon/visits/seats/rating/price_level) 만 처리. 호출 수 감소 X (어차피
+        매장 별 score 필요), 호출당 비용 -30~50% 기대.
+
+    수치 동치:
+        score_store 와 결과 수치 동일해야 함 (회귀 테스트 backend/tests/
+        test_score_stores_batch_equivalence.py 로 검증). 순서·우선순위 보존.
+    """
+    n = len(stores)
+    if n == 0:
+        return []
+
+    # === Per-agent / per-policy / per-world 상수 (1회 precompute) ===
+    h = world.current_hour % 24
+    weekday = world.weekday
+    month = getattr(world, "month", 4)
+    profile = agent.profile
+    age = agent.age
+    gender = agent.gender
+    age_bin_v = _age_bin(age)
+
+    # 1. cat_pref base (4 카테고리 + 기타 default 0.3)
+    pol_cafe = policy.cafe_preference
+    pol_meal = policy.meal_preference
+    pol_pub = policy.pub_preference
+    pol_cvs = policy.cvs_preference
+
+    # 2. profile_cat_pref (있는 경우)
+    if profile is not None:
+        prof_cafe = profile.pref_cafe
+        prof_meal = profile.pref_restaurant
+        prof_pub = profile.pref_pub
+        prof_cvs = profile.pref_convenience
+        ps_high = profile.price_sensitivity > 0.5  # bool 캐시
+    else:
+        prof_cafe = prof_meal = prof_pub = prof_cvs = 0.5
+        ps_high = False
+
+    # 3. time_boost per cat (h 고정)
+    tb_cafe_inner = _TIME_CATEGORY_BOOST.get("카페")
+    tb_meal_inner = _TIME_CATEGORY_BOOST.get("음식점")
+    tb_pub_inner = _TIME_CATEGORY_BOOST.get("주점")
+    tb_cvs_inner = _TIME_CATEGORY_BOOST.get("편의점")
+    tb_cafe = tb_cafe_inner.get(h, 1.0) if tb_cafe_inner else 1.0
+    tb_meal = tb_meal_inner.get(h, 1.0) if tb_meal_inner else 1.0
+    tb_pub = tb_pub_inner.get(h, 1.0) if tb_pub_inner else 1.0
+    tb_cvs = tb_cvs_inner.get(h, 1.0) if tb_cvs_inner else 1.0
+
+    # 4. season_mult per cat (month 고정)
+    season_inner = _SEASON_CATEGORY.get(month)
+    if season_inner is not None:
+        season_cafe = season_inner.get("카페", 1.0)
+        season_meal = season_inner.get("음식점", 1.0)
+        season_pub = season_inner.get("주점", 1.0)
+        season_cvs = season_inner.get("편의점", 1.0)
+    else:
+        season_cafe = season_meal = season_pub = season_cvs = 1.0
+
+    # 5. indoor_score per cat
+    indoor_cafe = _CATEGORY_INDOOR_SCORE.get("카페", 0.4)
+    indoor_meal = _CATEGORY_INDOOR_SCORE.get("음식점", 0.4)
+    indoor_pub = _CATEGORY_INDOOR_SCORE.get("주점", 0.4)
+    indoor_cvs = _CATEGORY_INDOOR_SCORE.get("편의점", 0.4)
+
+    # 6. age_cat_mult per cat (age/gender/h/weekday 고정)
+    acm_cafe = _AGE_GENDER_BOOST.get(("카페", age_bin_v, gender), 1.0) * _age_gender_time_bonus(
+        age, gender, "카페", h, weekday
+    )
+    acm_meal = _AGE_GENDER_BOOST.get(("음식점", age_bin_v, gender), 1.0) * _age_gender_time_bonus(
+        age, gender, "음식점", h, weekday
+    )
+    acm_pub = _AGE_GENDER_BOOST.get(("주점", age_bin_v, gender), 1.0) * _age_gender_time_bonus(
+        age, gender, "주점", h, weekday
+    )
+    acm_cvs = _AGE_GENDER_BOOST.get(("편의점", age_bin_v, gender), 1.0) * _age_gender_time_bonus(
+        age, gender, "편의점", h, weekday
+    )
+
+    # 7. learned_mult per cat
+    learned_prefs = getattr(agent, "learned_prefs", None)
+    if learned_prefs is not None:
+        lm_cafe = 0.7 + 0.6 * learned_prefs.get("카페", 0.5)
+        lm_meal = 0.7 + 0.6 * learned_prefs.get("음식점", 0.5)
+        lm_pub = 0.7 + 0.6 * learned_prefs.get("주점", 0.5)
+        lm_cvs = 0.7 + 0.6 * learned_prefs.get("편의점", 0.5)
+    else:
+        lm_cafe = lm_meal = lm_pub = lm_cvs = 1.0  # 0.7 + 0.6 * 0.5
+
+    # 8. role_v + ofs role factor 분기
+    role_attr = agent.role
+    role_v = role_attr.value if hasattr(role_attr, "value") else str(role_attr)
+    ofs_role_strong = role_v == "ext_commuter" or role_v == "ext_visitor"
+    ofs_role_weak = role_v == "commuter" or role_v == "visitor"
+    # 거주민/owner 는 OFS 영향 없음 (둘 다 false)
+
+    # 9. agent / world 캐시
+    agent_dong = agent.current_dong
+    dongs = world.dongs
+    visited_today = agent.visited_today
+    store_satisfaction = agent.store_satisfaction
+    blacklist = getattr(agent, "blacklist", None)
+    has_recall = hasattr(agent, "recall_satisfaction")
+    recall_fn = agent.recall_satisfaction if has_recall else None
+    habit_store_map = getattr(agent, "habit_store", None)
+    habit_sid_at_h = habit_store_map.get(h) if habit_store_map else None
+    pending_recs = getattr(agent, "pending_recommendations", None)
+    # pending_recs 평균 길이 0~3 → dict 변환 후 sid lookup 으로 N×M 회피
+    pending_rec_by_sid = {r.get("store_id"): r for r in pending_recs if isinstance(r, dict)} if pending_recs else None
+    time_age_boost = world.time_age_boost
+    age_g = age_to_group(age) if time_age_boost else None
+    af_boost_map = getattr(world, "adstrd_flpop_boost", None)
+    ofs_map = world.ofs_dong_score
+
+    # 10. policy 상수
+    indoor_pref = policy.indoor_preference
+    repeat_visit_bonus = policy.repeat_visit_bonus
+    dist_sensitivity = policy.distance_sensitivity
+    crowd_tol_inv = 1.0 - policy.crowd_tolerance
+    dong_affinity = policy.dong_affinity
+
+    # 마감 직전 close_rush (h 고정)
+    is_close_hour = h == 22 or h == 23
+
+    # === Per-store tight loop ===
+    out: list[float] = [0.0] * n
+    for i in range(n):
+        store = stores[i]
+        cat = store.category
+        sid = store.store_id
+        store_dong = store.dong
+
+        # blacklist 빠른 탈락
+        if blacklist is not None and sid in blacklist:
+            continue  # out[i] = 0.0 이미
+
+        # cat_pref + time_boost + profile_cat_pref
+        if cat == "카페":
+            cat_pref = pol_cafe * tb_cafe
+            if profile is not None:
+                cat_pref *= 0.75 + 0.5 * prof_cafe
+            indoor_score = indoor_cafe
+            age_cat_mult = acm_cafe
+            season_mult = season_cafe
+            learned_mult = lm_cafe
+        elif cat == "음식점":
+            cat_pref = pol_meal * tb_meal
+            if profile is not None:
+                cat_pref *= 0.75 + 0.5 * prof_meal
+            indoor_score = indoor_meal
+            age_cat_mult = acm_meal
+            season_mult = season_meal
+            learned_mult = lm_meal
+        elif cat == "주점":
+            cat_pref = pol_pub * tb_pub
+            if profile is not None:
+                cat_pref *= 0.75 + 0.5 * prof_pub
+            indoor_score = indoor_pub
+            age_cat_mult = acm_pub
+            season_mult = season_pub
+            learned_mult = lm_pub
+        elif cat == "편의점":
+            cat_pref = pol_cvs * tb_cvs
+            if profile is not None:
+                cat_pref *= 0.75 + 0.5 * prof_cvs
+            indoor_score = indoor_cvs
+            age_cat_mult = acm_cvs
+            season_mult = season_cvs
+            learned_mult = lm_cvs
+        else:
+            cat_pref = 0.3
+            if profile is not None:
+                cat_pref *= 0.75 + 0.5 * 0.5
+            indoor_score = 0.4
+            # 기타 카테고리: age_cat_mult 는 _AGE_GENDER_BOOST miss → 1.0 + time_bonus
+            age_cat_mult = _age_gender_time_bonus(age, gender, cat, h, weekday)
+            season_mult = season_inner.get(cat, 1.0) if season_inner is not None else 1.0
+            lc = learned_prefs.get(cat, 0.5) if learned_prefs is not None else 0.5
+            learned_mult = 0.7 + 0.6 * lc
+
+        # age_time_boost (dong 별 lookup)
+        if time_age_boost is not None:
+            age_time_boost = time_age_boost.get((age_g, store_dong, h, weekday), 1.0)
+        else:
+            age_time_boost = 1.0
+
+        # price_mult
+        if profile is not None:
+            if ps_high:
+                price_mult = 1.3 - 0.3 * store.price_level
+                if price_mult < 0.2:
+                    price_mult = 0.2
+            else:
+                price_mult = 0.4 + 0.3 * store.price_level
+                if price_mult < 0.2:
+                    price_mult = 0.2
+        else:
+            price_mult = 1.0
+
+        # 거리
+        dong_cost = _dong_distance(agent_dong, store_dong, dongs)
+        if store_dong != agent_dong:
+            km = _store_distance_km(None, None, store)
+        else:
+            km = 0.2
+        haversine_cost = km / _MAX_KM
+        if haversine_cost > 1.0:
+            haversine_cost = 1.0
+        distance_cost = 0.4 * dong_cost + 0.6 * haversine_cost
+
+        # capacity
+        seats = store.seats
+        if seats > 0:
+            congestion_penalty = store.visits_today / seats
+            if congestion_penalty > 1.0:
+                congestion_penalty = 1.0
+        else:
+            congestion_penalty = 1.0
+
+        # dong_aff / popularity
+        dong_aff = dong_affinity.get(store_dong, 0.5)
+        pop = store.popularity_boost
+        if pop < 0.3:
+            popularity = 0.3
+        elif pop > 2.0:
+            popularity = 2.0
+        else:
+            popularity = pop
+
+        # 재방문 / 만족도 / memory / habit / rec
+        repeat_bonus = repeat_visit_bonus if sid in visited_today else 0.0
+        satisfaction = store_satisfaction.get(sid, 0.0)
+
+        if recall_fn is not None:
+            recalled = recall_fn(sid)
+            memory_bonus = (recalled - 0.5) * 0.8 if recalled is not None else 0.0
+        else:
+            memory_bonus = 0.0
+
+        habit_bonus = 0.4 if habit_sid_at_h == sid else 0.0
+
+        if pending_rec_by_sid is not None:
+            r = pending_rec_by_sid.get(sid)
+            rec_bonus = 0.3 * r.get("strength", 0.5) if r is not None else 0.0
+        else:
+            rec_bonus = 0.0
+
+        # close_rush
+        close_rush = 1.15 if is_close_hour and (cat == "편의점" or cat == "카페") else 1.0
+
+        # 종합 점수
+        score = (
+            indoor_pref * indoor_score
+            + cat_pref * age_cat_mult * price_mult * season_mult * close_rush * learned_mult
+            + dong_aff
+            + popularity * 0.3
+            + repeat_bonus
+            + satisfaction * 0.5
+            + memory_bonus
+            + habit_bonus
+            + rec_bonus
+            - dist_sensitivity * distance_cost
+            - crowd_tol_inv * congestion_penalty
+        )
+
+        # age_time_boost 적용 (clamp)
+        if age_time_boost < 0.0:
+            atb_clamp = 0.0
+        elif age_time_boost > 2.0:
+            atb_clamp = 2.0
+        else:
+            atb_clamp = age_time_boost
+        score *= 0.7 + 0.3 * atb_clamp
+
+        # adstrd_flpop_boost
+        if af_boost_map is not None:
+            af = af_boost_map.get((store_dong, h, weekday), 1.0)
+            if af < 0.5:
+                af_clamp = 0.5
+            elif af > 2.0:
+                af_clamp = 2.0
+            else:
+                af_clamp = af
+            score *= 0.9 + 0.1 * af_clamp
+
+        # 평점
+        score += (store.rating - 3.0) * 0.1
+
+        # OFS dong score
+        if ofs_map:
+            ofs = ofs_map.get(store_dong)
+            if ofs is not None:
+                ofs_norm = ofs / 100.0
+                if ofs_norm < 0.0:
+                    ofs_norm = 0.0
+                elif ofs_norm > 1.0:
+                    ofs_norm = 1.0
+                if ofs_role_strong:
+                    score *= 0.5 + 0.5 * ofs_norm
+                elif ofs_role_weak:
+                    score *= 0.85 + 0.3 * ofs_norm
+                # else: resident/owner → no scaling
+
+        out[i] = score if score > 0.0 else 0.0
+
+    return out
 
 
 def should_visit(agent: "Agent", policy: PersonaPolicy, world: "World", rng: random.Random) -> bool:
@@ -556,6 +949,55 @@ def should_visit(agent: "Agent", policy: PersonaPolicy, world: "World", rng: ran
 # ---------------------------------------------------------------
 # OTR Spillover — 상위 후보 중 capacity 여유 매장 선택 (§8.5C)
 # ---------------------------------------------------------------
+def _prefilter_candidates(
+    candidates: list["Store"],
+    agent: "Agent",
+    policy: PersonaPolicy,
+) -> list["Store"]:
+    """score_store 호출 전 명백히 탈락할 매장 사전 컷.
+
+    score_store 가 0.0 반환하거나 후속 capacity check 에서 어차피 탈락하는
+    매장을 미리 거름. cProfile 측정 결과 score_store 가 5.7M 호출 / 90s
+    (cumtime 60%) bottleneck 이라 호출 자체를 줄이는 게 ROI 가장 큼.
+
+    필터 기준 (각각 score_store 안에서도 0/탈락 처리되던 케이스):
+      1. blacklist 매장 — score_store:444 score=0 반환
+      2. 만석 매장 — score_store 다 거치고 _has_capacity=False 로 탈락
+      3. 카테고리 선호도 0.05 미만 — score_store:380 cat_pref 0 가까워 score 무의미
+
+    검증 안전성:
+      - 1, 2 는 score_store 결과와 동치 (0 또는 탈락)
+      - 3 은 cat_pref < 0.05 일 때 다른 항(distance/popularity) 합으로 1~2 정도
+        score 가능 → top_k=5 진입 거의 불가능 (다른 카테고리 score 5~20)
+        보수적 기준 0.05 채택 (visit 매출 회귀 < 1%)
+    """
+    out: list[Store] = []
+    blacklist = getattr(agent, "blacklist", None) or set()
+    for s in candidates:
+        # 1. blacklist
+        if s.store_id in blacklist:
+            continue
+        # 2. 만석
+        if s.seats > 0 and s.visits_today >= s.seats:
+            continue
+        # 3. 카테고리 선호도 매우 낮음
+        cat = s.category
+        if cat == "카페":
+            cp = policy.cafe_preference
+        elif cat == "음식점":
+            cp = policy.meal_preference
+        elif cat == "주점":
+            cp = policy.pub_preference
+        elif cat == "편의점":
+            cp = policy.cvs_preference
+        else:
+            cp = 0.3  # 기타 카테고리 default
+        if cp < 0.05:
+            continue
+        out.append(s)
+    return out
+
+
 def pick_store_with_spillover(
     agent: "Agent",
     policy: PersonaPolicy,
@@ -585,9 +1027,14 @@ def pick_store_with_spillover(
     if not candidates:
         return None
 
-    # 2) 점수화 + 정렬
-    scored = [(s, score_store(s, agent, policy, world)) for s in candidates]
-    scored.sort(key=lambda x: -x[1])
+    # 1.5) Prefilter — score_store 호출 부담 -30~40% (cProfile bottleneck 완화)
+    candidates = _prefilter_candidates(candidates, agent, policy)
+    if not candidates:
+        return None
+
+    # 2) 점수화 + 정렬 — batch API (per-agent 상수 1회 precompute)
+    scores = score_stores_batch(candidates, agent, policy, world)
+    scored = sorted(zip(candidates, scores, strict=False), key=lambda x: -x[1])
 
     # 3) 상위 top_k 중 capacity 여유 첫 매장
     for store, _ in scored[:top_k]:
@@ -704,10 +1151,15 @@ def policy_decide(
             return Decision(action="work", target_dong=agent.home_dong)
         return Decision(action="rest")
 
-    # 1. 정책 조회 — weather 키 정규화 (약한비 → 비, 기본 → 맑음)
-    weather_key = world.weather if world.weather in ("맑음", "비", "눈") else "맑음"
-    if weather_key == "눈":
-        weather_key = "비"  # 눈은 비 정책 공유 (§3 스펙)
+    # 1. 정책 조회 — weather 키 정규화.
+    # 매핑: 비/눈 → "비" 정책. 그 외 (맑음/흐림/약한비/기타) → "맑음".
+    # 주의: "약한비" 는 별도 정책이 없어 맑음 정책으로 fallback. GameMaster.adjust 가
+    # 별도로 mobility 감쇠 적용. (이전 주석 "약한비 → 비" 는 코드와 모순. 정정.)
+    raw = world.weather
+    if raw in ("비", "눈"):
+        weather_key = "비"
+    else:
+        weather_key = "맑음"
     tb = hour_to_time_block(h)
     # v2: role × weather × time_block 키 우선 조회, 없으면 role × weather fallback
     policy_key_v2 = f"{agent.role.value}_{weather_key}_{tb}"
@@ -768,8 +1220,11 @@ def policy_decide(
     # 이전 30% 일괄 적용은 1-2시간 모두 동일 → 시간 decay 미반영 회귀 fix.
     friend_store = None
     if agent.friend_visits:
-        # 1시간 내 / 1~2시간 별도 분류
-        fresh_1h = [(sid, fh) for sid, fh in agent.friend_visits if (h - fh) <= 1]
+        # 1시간 내 / 1~2시간 별도 분류.
+        # 자정 경계 (예: h=1, fh=23 → diff=-22) 음수 처리 — 어제 방문이
+        # "1시간 내" 로 잘못 분류되던 버그 fix. 음수는 reset_daily 로 정리되지만
+        # 경계 시각에 잔존 가능 → 0 <= diff 가드 추가.
+        fresh_1h = [(sid, fh) for sid, fh in agent.friend_visits if 0 <= (h - fh) <= 1]
         fresh_2h = [(sid, fh) for sid, fh in agent.friend_visits if 1 < (h - fh) <= 2]
         chosen = None
         if fresh_1h and rng.random() < 0.25:
@@ -816,9 +1271,12 @@ def policy_decide(
     prev = agent.store_satisfaction.get(store.store_id, 0.3)
     agent.store_satisfaction[store.store_id] = 0.7 * prev + 0.3 * new_sat
 
-    # Realism: 친구들에게 이 방문을 알림 (peer influence)
-    for fid in agent.friends[:5]:  # 상위 5명 친구에게만 (계산 비용 제어)
-        friend = next((a for a in world.agents if a.agent_id == fid), None)
+    # Realism: 친구들에게 이 방문을 알림 (peer influence).
+    # world.agent_by_id 가 있으면 O(1), 없으면 list scan O(N) fallback.
+    # 5000 agents × 5 friends × 24h = 600K hash lookup (이전 linear scan).
+    by_id = getattr(world, "agent_by_id", None)
+    for fid in agent.friends[:5]:  # 상위 5명 친구에게만
+        friend = by_id.get(fid) if by_id else next((a for a in world.agents if a.agent_id == fid), None)
         if friend is not None:
             friend.friend_visits.append((store.store_id, h))
             # 최근 10개만 유지

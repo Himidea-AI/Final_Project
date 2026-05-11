@@ -1,8 +1,8 @@
 export default function PlanBadge({ planName }: { planName: string }) {
   return (
-    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#818cf8]/10 border border-[#818cf8]/30 text-sm">
-      <span className="text-[#a5b4fc] font-bold">선택한 요금제:</span>
-      <span className="text-[#e2e8f0] font-bold">{planName}</span>
+    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/30 text-sm">
+      <span className="text-primary/60 font-bold">선택한 요금제:</span>
+      <span className="text-foreground font-bold">{planName}</span>
     </div>
   );
 }

@@ -38,6 +38,16 @@ class EmergingFallbackResult(TypedDict):
     tier: str  # change_ix / classifier / b1_trend / slope / none
     raw: dict
     summary: str
+    # 2026-05-06 추가: 시계열 + 분포 (Task 3, 4 에서 산출 로직 추가)
+    quarter_history: list[dict] | None
+    peer_distribution: dict | None
+
+
+_SIGNAL_KO = {
+    "emerging": "신흥 상권",
+    "declining": "쇠퇴 상권",
+    "normal": "안정 상권",
+}
 
 
 _CHANGE_IX_SIGNAL = {
@@ -223,6 +233,15 @@ def _lookup_slope(dong_code: str, industry_code: str) -> dict | None:
         return None
 
 
+def _slope_verb(value: float) -> str:
+    """slope 부호별 사용자 친화 한국어 동사. 임계 0.5는 frontend chip 부호와 동일."""
+    if value > 0.5:
+        return "상승"
+    if value < -0.5:
+        return "하락"
+    return "유지"
+
+
 def _slope_to_signal(slope: dict) -> str:
     ss = slope.get("sales_slope", 0.0)
     sts = slope.get("store_slope", 0.0)
@@ -243,29 +262,32 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
     # Tier 1: change_ix 직접
     cix = _lookup_change_ix(dong_code)
     if cix is not None:
+        signal = _CHANGE_IX_SIGNAL.get(cix, "normal")
         return EmergingFallbackResult(
             dong_code=dong_code,
             industry_code=industry_code,
-            signal=_CHANGE_IX_SIGNAL.get(cix, "normal"),
+            signal=signal,
             tier="change_ix",
             raw={"change_ix": cix},
-            summary=f"{dong_code} {industry_code}: 서울시 공식 stage={cix} → {_CHANGE_IX_SIGNAL.get(cix, 'normal')}",
+            summary=f"서울시 상권변화지표 기준 — {_SIGNAL_KO[signal]}",
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 1.5: classifier 예측
     cls_result = _classifier_predict(dong_code, industry_code)
     if cls_result is not None:
         cls_stage, prob = cls_result
+        signal = _CHANGE_IX_SIGNAL.get(cls_stage, "normal")
         return EmergingFallbackResult(
             dong_code=dong_code,
             industry_code=industry_code,
-            signal=_CHANGE_IX_SIGNAL.get(cls_stage, "normal"),
+            signal=signal,
             tier="classifier",
             raw={"predicted_stage": cls_stage, "confidence": round(prob, 4)},
-            summary=(
-                f"{dong_code} {industry_code}: ML classifier 예측 stage={cls_stage} "
-                f"(신뢰 {prob * 100:.0f}%, F1=0.87) → {_CHANGE_IX_SIGNAL.get(cls_stage, 'normal')}"
-            ),
+            summary=f"AI 모델 판정 — {_SIGNAL_KO[signal]} (신뢰도 {prob * 100:.0f}%)",
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 2: B1 trend
@@ -279,25 +301,29 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
             tier="b1_trend",
             raw=b1,
             summary=(
-                f"{dong_code} {industry_code}: B1 신호 — "
-                f"지하철 {b1['subway_growth']:+.1%}, 20-30대 전입 {b1['migration_2030_rate']:+.1%} → {signal}"
+                f"지하철 {b1['subway_growth']:+.1%} · "
+                f"20·30대 유입 {b1['migration_2030_rate']:+.1%} — "
+                f"{_SIGNAL_KO[signal]} 신호"
             ),
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 3: slope
     slope = _lookup_slope(dong_code, industry_code)
     if slope is not None:
         signal = _slope_to_signal(slope)
+        sales_verb = _slope_verb(slope["sales_slope"])
+        store_verb = _slope_verb(slope["store_slope"])
         return EmergingFallbackResult(
             dong_code=dong_code,
             industry_code=industry_code,
             signal=signal,
             tier="slope",
             raw=slope,
-            summary=(
-                f"{dong_code} {industry_code}: slope baseline — "
-                f"매출 slope={slope['sales_slope']:+.1f}, 점포 slope={slope['store_slope']:+.1f} → {signal}"
-            ),
+            summary=(f"최근 3분기 매출 {sales_verb} · 점포수 {store_verb} — {_SIGNAL_KO[signal]} 신호"),
+            quarter_history=None,
+            peer_distribution=None,
         )
 
     # Tier 4: 모든 데이터 부재
@@ -307,5 +333,7 @@ def predict_emerging_4tier(dong_code: str, industry_code: str) -> EmergingFallba
         signal="normal",
         tier="none",
         raw={},
-        summary=f"{dong_code} {industry_code}: 데이터 부재 — normal 가정",
+        summary="데이터 검증 중 — 안정 상권으로 가정",
+        quarter_history=None,
+        peer_distribution=None,
     )

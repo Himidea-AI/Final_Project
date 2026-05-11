@@ -16,12 +16,13 @@ from .models import (
     DistrictSales,
     DongMapping,
     GolmokCommercial,
+    IndustryMaster,
     LivingPopulation,
+    MartBrandTerritory,
     RentCost,
     SgisBusiness,
     SgisHousehold,
     SgisPopulation,
-    SimulationResult,
     StoreInfo,
     StoreQuarterly,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "StoreQuarterly",
     "RentCost",
     "DongMapping",
-    "SimulationResult",
+    "IndustryMaster",
+    "MartBrandTerritory",
     "PostgresClient",
 ]

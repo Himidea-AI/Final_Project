@@ -32,6 +32,9 @@ class Store:
     menu_items: list[dict] = field(default_factory=list)  # [{name, price}]
     # district_sales_seoul / mapo_sns_sentiment 기반 매장 인기 가중치
     popularity_boost: float = 1.0
+    # 브랜드명 (kakao_store.brand_name) — None 이면 무브랜드(개인 사장님 등).
+    # cannibalization 분석에서 명시 skip 용 (NULL 72.8% 라 silent 0 매칭 회피).
+    brand_name: str | None = None
 
     @property
     def occupancy(self) -> float:
@@ -58,6 +61,9 @@ class World:
     stores: dict[int, Store] = field(default_factory=dict)
     stores_by_dong: dict[str, list[int]] = field(default_factory=dict)
     agents: list["Agent"] = field(default_factory=list)
+    # peer influence O(1) lookup — runner.py 가 agents 등록 후 채움.
+    # 미충전 시 policy_executor 가 list scan 으로 폴백 (O(N), 정합성 보존).
+    agent_by_id: dict[int, "Agent"] = field(default_factory=dict)
 
     # living_population 기반 실데이터 가중치
     # {(age_group, dong, hour, weekday): boost 0.5~2.0}
@@ -99,15 +105,28 @@ class World:
     # 이벤트 로그 (분석용)
     event_log: list[dict] = field(default_factory=list)
 
+    # (dong, category) → cached list[Store]. add_store 시 invalidate.
+    # cProfile 측정 시 stores_in_dong 100K calls × 21µs = 2.1s. 캐시 후 ~0.05s.
+    _stores_cache: dict = field(default_factory=dict, init=False, repr=False)
+
     def add_store(self, store: Store) -> None:
         self.stores[store.store_id] = store
         self.stores_by_dong.setdefault(store.dong, []).append(store.store_id)
+        # 캐시 무효화 — 새 매장 추가 시 해당 dong 의 모든 (category) 캐시 항목 제거.
+        # sim 시작 시 1회 add_store 가 일반적이라 손실 미미.
+        if self._stores_cache:
+            self._stores_cache = {k: v for k, v in self._stores_cache.items() if k[0] != store.dong}
 
     def stores_in_dong(self, dong: str, category: str | None = None) -> list[Store]:
+        key = (dong, category)
+        cached = self._stores_cache.get(key)
+        if cached is not None:
+            return cached
         ids = self.stores_by_dong.get(dong, [])
         out = [self.stores[i] for i in ids]
         if category:
             out = [s for s in out if s.category == category]
+        self._stores_cache[key] = out
         return out
 
     def reset_daily(self) -> None:

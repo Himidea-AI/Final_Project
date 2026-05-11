@@ -42,7 +42,8 @@ async def trend_forecaster_node(state: AgentState) -> dict:
 
     print(f"--- [TREND FORECASTER] {target_district} / {industry} (brand={brand_name or 'N/A'}) 분석 시작 ---")
 
-    cache_key = f"trend_forecast:{target_district}:{industry}:{brand_name or 'none'}"
+    # v2: samples shape 평탄화 (객체배열 → number[]) — 이전 v1 캐시 무효화
+    cache_key = f"v2:trend_forecast:{target_district}:{industry}:{brand_name or 'none'}"
 
     # [1] Redis 캐시 조회 (try/finally aclose — 누수 방지)
     _redis = None
@@ -68,7 +69,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
                 ],
                 verdict=f"12개월 전망 {_cached_forecast.get('score', 0)}/100 · {_cached_forecast.get('direction', 'N/A')}",
                 reasoning=str(_cached_narr) if _cached_narr else "추세 예측 (캐시)",
-                confidence=0.75,
+                confidence=0.85,
             )
             _cached_analysis = {
                 **state.get("analysis_results", {}),
@@ -143,6 +144,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
     change_ix_current = change_ix_data.get("current") or {}
 
     system_content = (
+        "[AGENT: trend_forecaster] 시장 트렌드 예측 에이전트 — LangSmith 식별용 라벨.\n\n"
         "당신은 프랜차이즈 본사 영업팀을 지원하는 상권 분석 전문가입니다. "
         "업종 검색량·지역 모멘텀·상권 변화 지표·거시 기준금리 4개 시계열을 "
         "종합하여 향후 12개월 시장 전망을 판단하세요.\n\n"
@@ -202,27 +204,30 @@ async def trend_forecaster_node(state: AgentState) -> dict:
         )
 
     # [5] 결과 조립
+    # IM3-144 교훈: 프론트 (TrendSparklinesPanel/Sparkline) 가 number[] 가정 →
+    # backend tools 가 [{period, ratio}] 객체 배열을 보내면 Sparkline 이 NaN.
+    # 여기서 number[] 로 평탄화하여 응답 shape 와 frontend 타입 1:1 동기.
     report = {
         "industry_trend": {
             "industry": industry,
             "current_ratio": industry_data.get("current_ratio"),
             "yoy_change_pct": industry_data.get("yoy_change_pct"),
             "direction": industry_data.get("direction"),
-            "samples": industry_data.get("samples", [])[-12:],
+            "samples": [s["ratio"] for s in industry_data.get("samples", [])][-12:],
         },
         "dong_trend": {
             "dong_name": target_district,
             "recent_score": dong_data.get("recent_score"),
             "slope_pct": dong_data.get("slope_pct"),
             "max_quarter": dong_data.get("max_quarter"),
-            "samples": dong_data.get("samples", []),
+            "samples": [s["score"] for s in dong_data.get("samples", [])],
             "data_staleness_note": "naver_trend_quarterly 최신 2024 Q4 — 참고 지표",
         },
         "change_ix": change_ix_current,
         "macro": {
             "current_base_rate": rate_data.get("current"),
             "base_rate_trend": rate_data.get("trend"),
-            "samples": rate_data.get("samples", []),
+            "samples": [s["rate"] for s in rate_data.get("samples", [])],
         },
         "forecast": {
             "score": parsed.forecast_score,
@@ -273,7 +278,7 @@ async def trend_forecaster_node(state: AgentState) -> dict:
         ],
         verdict=f"12개월 전망 {parsed.forecast_score}/100 · {parsed.forecast_direction}",
         reasoning=str(parsed.narrative) if parsed and parsed.narrative else "추세 예측 데이터 기반",
-        confidence=0.75,
+        confidence=0.85,
     )
 
     return {

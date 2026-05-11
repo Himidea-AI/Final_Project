@@ -1,7 +1,21 @@
+/**
+ * useSimulationDetail — kind 별 detail fetch.
+ *
+ * 2026-05-02 DB 분리 후 시그니처: (id, kind).
+ * - kind='foresee' → GET /simulation-foresee/{id} (mapForeseeDetailToHistoryDetail)
+ * - kind='ai'      → GET /simulation-ai/{id}      (mapAIDetailToHistoryDetail)
+ * - kind='abm'     → GET /history/abm/{id}        (raw row → ABM-shaped HistoryDetail)
+ * - kind=null      → legacy /simulation-history/{id} fallback (마이그레이션 미진행 row)
+ */
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { getSimulationHistoryDetail } from '../api/client';
-import type { SimulationHistoryDetail } from '../types/simulationHistory';
+import {
+  getAIDetail,
+  getAbmDetail,
+  getForeseeDetail,
+  getSimulationHistoryDetail,
+} from '../api/client';
+import type { SimulationHistoryDetail, SimulationKind } from '../types/simulationHistory';
 
 interface UseSimulationDetailState {
   data: SimulationHistoryDetail | null;
@@ -23,7 +37,10 @@ function parseError(err: unknown): { message: string; notFound: boolean } {
   return { message: err instanceof Error ? err.message : '알 수 없는 오류', notFound: false };
 }
 
-export function useSimulationDetail(id: number | null): UseSimulationDetailState {
+export function useSimulationDetail(
+  id: number | null,
+  kind: SimulationKind | null,
+): UseSimulationDetailState {
   const [state, setState] = useState<UseSimulationDetailState>({
     data: null,
     isLoading: id != null,
@@ -38,7 +55,49 @@ export function useSimulationDetail(id: number | null): UseSimulationDetailState
     }
     let cancelled = false;
     setState({ data: null, isLoading: true, error: null, notFound: false });
-    getSimulationHistoryDetail(id)
+
+    // ABM detail 은 raw row (Record<string, unknown>) 반환 → SimulationHistoryDetail shape 으로 wrap.
+    // ABM `result` JSONB 가 곧 simulation_result (ABM 응답 schema 그대로). HistoryDashboardView 는
+    // ABM 케이스에서는 PDF 다운로드 + 메타 헤더만 노출 — 별도 ABM 전용 view 는 추후 작업.
+    // ABM result JSONB 안에 density_grid (28×24×시간 격자) + trajectory (300 sample × 시간) +
+    // thoughts + langgraph_result 거대 키 포함 → JSON.parse 후 React render hang ("응답없음").
+    // 화면 표시에 불필요 → fetch 단계에서 strip (2026-05-10).
+    const HEAVY_KEYS = ['density_grid', 'trajectory', 'thoughts', 'langgraph_result'];
+    const stripHeavy = (result: unknown): unknown => {
+      if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(result as Record<string, unknown>)) {
+        if (HEAVY_KEYS.includes(k)) continue;
+        out[k] = v;
+      }
+      return out;
+    };
+
+    const abmFetcher = (): Promise<SimulationHistoryDetail> =>
+      getAbmDetail(id).then((row) => {
+        const r = row as Record<string, unknown>;
+        return {
+          id: Number(r.id),
+          client_name: String(r.client_name ?? ''),
+          brand_name: String(r.brand_name ?? ''),
+          district: String(r.target_district ?? '—'),
+          business_type: (r.business_type as string | null) ?? null,
+          created_at: String(r.created_at ?? new Date().toISOString()),
+          simulation_result: stripHeavy(r.result) as SimulationHistoryDetail['simulation_result'],
+          scenario: (r.scenario as SimulationHistoryDetail['scenario']) ?? null,
+        } as SimulationHistoryDetail;
+      });
+
+    const fetcher: Promise<SimulationHistoryDetail> =
+      kind === 'foresee'
+        ? getForeseeDetail(id)
+        : kind === 'ai'
+          ? getAIDetail(id)
+          : kind === 'abm'
+            ? abmFetcher()
+            : getSimulationHistoryDetail(id);
+
+    fetcher
       .then((data) => {
         if (cancelled) return;
         setState({ data, isLoading: false, error: null, notFound: false });
@@ -51,7 +110,7 @@ export function useSimulationDetail(id: number | null): UseSimulationDetailState
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, kind]);
 
   return state;
 }
